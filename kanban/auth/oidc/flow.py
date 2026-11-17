@@ -39,12 +39,7 @@ from kanban.auth.oidc.discovery import (
 )
 from kanban.auth.oidc.tokens import build_private_key_jwt, validate_id_token
 from kanban.auth.sessions.cookies import (
-    build_set_cookie_header,
-    build_set_fallback_cookie_header,
-)
-from kanban.auth.sessions.csrf import (
-    build_set_csrf_cookie_header,
-    build_set_fallback_csrf_cookie_header,
+    attach_session_and_csrf_cookies,
 )
 from kanban.security.envelope import SealedSecret, StaticKekProvider, open_card_secret
 from kanban.security.keys import derive_subkey
@@ -222,6 +217,7 @@ class OidcFlow:
         link_intent_id: uuid.UUID | None = None,
         request: Request | None = None,
         ttl_seconds: int = BROWSER_BINDING_TTL_SECONDS,
+        remember_me: bool = True,
     ) -> OidcStartResponse:
         """Initialize authorization-code flow with PKCE S256 and browser-bound state."""
         card = await get_for_login(session, slug)
@@ -277,7 +273,9 @@ class OidcFlow:
             "    :p_browser_binding_hash, "
             "    :p_return_to, "
             "    :p_link_intent_id, "
-            "    :p_expires_at"
+            "    :p_expires_at, "
+            "    NULL, "
+            "    :p_remember_me"
             ")"
         )
         await session.execute(
@@ -291,6 +289,7 @@ class OidcFlow:
                 "p_return_to": sanitized_return_to,
                 "p_link_intent_id": link_intent_id,
                 "p_expires_at": expires_at,
+                "p_remember_me": remember_me,
             },
         )
         await session.commit()
@@ -406,7 +405,8 @@ class OidcFlow:
 
         # Atomically consume auth request row
         stmt = text(
-            "SELECT id, card_id, nonce, code_verifier_sealed, return_to, link_intent_id, status "
+            "SELECT id, card_id, nonce, code_verifier_sealed, return_to, link_intent_id, "
+            "remember_me, status "
             "FROM kb_auth.oidc_request_consume(:p_state_hash, :p_browser_binding_hash)"
         )
         res = await session.execute(
@@ -433,6 +433,7 @@ class OidcFlow:
         nonce_bytes: bytes = bytes(row["nonce"])
         code_verifier_sealed: bytes = bytes(row["code_verifier_sealed"])
         return_to: str = str(row["return_to"])
+        remember_me: bool = bool(row["remember_me"]) if row.get("remember_me") is not None else True
         resolved_link_intent_id: uuid.UUID | None = row["link_intent_id"] or link_intent_id
 
         # Unseal code_verifier
@@ -805,11 +806,9 @@ class OidcFlow:
         clear_cookie_hdr = build_clear_browser_binding_cookie()
         response = RedirectResponse(url=return_to, status_code=302)
         response.headers.append("Set-Cookie", clear_cookie_hdr)
-        is_http_fallback = False
         if request is not None:
             host_name = (request.headers.get("host") or "").split(":")[0].lower()
             if request.url.scheme == "http" and host_name not in ("testserver", "test"):
-                is_http_fallback = True
                 response.headers.append(
                     "Set-Cookie",
                     build_clear_fallback_browser_binding_cookie(),
@@ -826,28 +825,17 @@ class OidcFlow:
                 auth_card_id=card.id,
                 aal_level=2,
                 mfa_pending=False,
+                remember_me=remember_me,
             )
             await session.commit()
             if hasattr(session, "info") and isinstance(session.info, dict):
                 session.info["rls_bound"] = True
-            response.headers.append(
-                "Set-Cookie",
-                build_set_cookie_header(issued_session.cookie_val, issued_session.idle_expires_at),
+            attach_session_and_csrf_cookies(
+                response,
+                request,
+                issued_session,
+                issued_session.csrf_token,
+                persistent=issued_session.is_persistent,
             )
-            response.headers.append(
-                "Set-Cookie",
-                build_set_csrf_cookie_header(issued_session.csrf_token),
-            )
-            if is_http_fallback:
-                response.headers.append(
-                    "Set-Cookie",
-                    build_set_fallback_cookie_header(
-                        issued_session.cookie_val, issued_session.idle_expires_at
-                    ),
-                )
-                response.headers.append(
-                    "Set-Cookie",
-                    build_set_fallback_csrf_cookie_header(issued_session.csrf_token),
-                )
 
         return response

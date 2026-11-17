@@ -138,7 +138,6 @@ class AuthCardAdminService:
                     detail="A LOCAL_ADMIN card already exists in this workspace.",
                 )
 
-
         public_config = dict(data.public_config)
         # Handle Google OAuth JSON payload if provided
         extracted_google_secret: str | None = None
@@ -321,7 +320,6 @@ class AuthCardAdminService:
             allowed_domains = [d.strip().lower() for d in data.allowed_email_domains if d.strip()]
         else:
             allowed_domains = list(card.allowed_email_domains or [])
-
 
         # Public config & health status
         config_changed = False

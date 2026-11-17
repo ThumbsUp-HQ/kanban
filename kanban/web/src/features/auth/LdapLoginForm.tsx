@@ -6,6 +6,7 @@ import './auth.css';
 export interface LdapLoginFormProps {
   card: AuthCard;
   formId: string;
+  rememberMe?: boolean;
   onSuccess: (response: AuthLoginResponse) => void;
   onError: (formattedError: ReturnType<typeof formatAuthError>) => void;
   onCollapse: () => void;
@@ -14,12 +15,14 @@ export interface LdapLoginFormProps {
 export function LdapLoginForm({
   card,
   formId,
+  rememberMe = true,
   onSuccess,
   onError,
   onCollapse,
 }: LdapLoginFormProps): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -34,6 +37,7 @@ export function LdapLoginForm({
       const response = await submitLdapLogin(card.slug, {
         username: username.trim(),
         password: pwdToSend,
+        remember_me: rememberMe,
       });
       onSuccess(response);
     } catch (err) {
@@ -84,16 +88,28 @@ export function LdapLoginForm({
         </div>
 
         <div className="auth-field">
-          <label className="auth-label" htmlFor={`ldap-pwd-${card.slug}`}>
-            Password
-          </label>
+          <div className="auth-label-row">
+            <label className="auth-label" htmlFor={`ldap-pwd-${card.slug}`}>
+              Password
+            </label>
+            <button
+              type="button"
+              className="auth-toggle-visibility-btn"
+              onClick={() => { setShowPassword((prev) => !prev); }}
+              aria-label={showPassword ? 'Hide' : 'Show'}
+              tabIndex={0}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
           <input
             id={`ldap-pwd-${card.slug}`}
             ref={passwordInputRef}
             className="auth-input"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => { setPassword(e.target.value); }}
+            aria-label="Password"
             autoComplete="current-password"
             maxLength={1024}
             required

@@ -21,12 +21,7 @@ from kanban.auth.mfa.policy import require_aal2
 from kanban.auth.mfa.recovery import RecoveryCodeService
 from kanban.auth.mfa.totp import TotpService
 from kanban.auth.sessions.cookies import (
-    build_set_cookie_header,
-    build_set_fallback_cookie_header,
-)
-from kanban.auth.sessions.csrf import (
-    build_set_csrf_cookie_header,
-    build_set_fallback_csrf_cookie_header,
+    attach_session_and_csrf_cookies,
 )
 from kanban.security.envelope import StaticKekProvider
 from kanban.security.keys import KeyMaterialError
@@ -256,18 +251,13 @@ async def confirm_totp(
         }
         response = JSONResponse(content=resp_body)
         if elevated is not None:
-            cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
-            response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
-            csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
-            response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
-            host_name = (request.headers.get("host") or "").split(":")[0].lower()
-            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
-                fb_cookie = build_set_fallback_cookie_header(
-                    elevated.cookie_val, elevated.idle_expires_at
-                )
-                response.raw_headers.append((b"set-cookie", fb_cookie.encode("latin-1")))
-                fb_csrf = build_set_fallback_csrf_cookie_header(elevated.csrf_token)
-                response.raw_headers.append((b"set-cookie", fb_csrf.encode("latin-1")))
+            attach_session_and_csrf_cookies(
+                response,
+                request,
+                elevated,
+                elevated.csrf_token,
+                persistent=elevated.is_persistent,
+            )
         return response
 
     return JSONResponse(content={"confirmed": True})
@@ -374,19 +364,13 @@ def _build_elevated_response(
     }
     response = JSONResponse(content=response_data)
     if elevated is not None:
-        cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
-        response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
-        csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
-        response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
-        if request is not None:
-            host_name = (request.headers.get("host") or "").split(":")[0].lower()
-            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
-                fb_cookie = build_set_fallback_cookie_header(
-                    elevated.cookie_val, elevated.idle_expires_at
-                )
-                response.raw_headers.append((b"set-cookie", fb_cookie.encode("latin-1")))
-                fb_csrf = build_set_fallback_csrf_cookie_header(elevated.csrf_token)
-                response.raw_headers.append((b"set-cookie", fb_csrf.encode("latin-1")))
+        attach_session_and_csrf_cookies(
+            response,
+            request,
+            elevated,
+            elevated.csrf_token,
+            persistent=elevated.is_persistent,
+        )
     return response
 
 

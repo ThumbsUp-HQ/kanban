@@ -29,6 +29,7 @@ export function LoginPage({
   const [cards, setCards] = useState<AuthCard[]>(initialCards ?? []);
   const [loading, setLoading] = useState(!initialCards);
   const [expandedLdapSlug, setExpandedLdapSlug] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(true);
 
   // MFA second-factor state
   const [mfaChallenge, setMfaChallenge] = useState<{
@@ -209,6 +210,26 @@ export function LoginPage({
           </div>
         ) : (
           <>
+            {/* Remember Me Persistent Session Option (KANBA-186) */}
+            <div className="auth-remember-me-container">
+              <label className="auth-checkbox-label" htmlFor="login-remember-me">
+                <input
+                  id="login-remember-me"
+                  data-testid="login-remember-me-checkbox"
+                  type="checkbox"
+                  className="auth-checkbox-input"
+                  checked={rememberMe}
+                  onChange={(e) => { setRememberMe(e.target.checked); }}
+                />
+                <span className="auth-checkbox-text">Keep me signed in on this device</span>
+              </label>
+              <EmojiHint
+                kind="access"
+                label="About persistent sessions"
+                content="Keeps your session active across browser restarts for up to 30 days (7 days idle). Uncheck on public or shared computers."
+              />
+            </div>
+
             {topCards.length > 0 ? (
               <div className="auth-section">
                 <ul className="auth-card-list" role="list">
@@ -223,6 +244,7 @@ export function LoginPage({
                           card={card}
                           isPrimary={isPrimary}
                           next={safeNext}
+                          rememberMe={rememberMe}
                           isLdapExpanded={isExpanded}
                           onToggleLdap={() => { setExpandedLdapSlug((prev) => (prev === card.slug ? null : card.slug)); }
                           }
@@ -232,6 +254,7 @@ export function LoginPage({
                           <LdapLoginForm
                             card={card}
                             formId={formId}
+                            rememberMe={rememberMe}
                             onSuccess={handleLoginResponse}
                             onError={(err) => { setError(err); }}
                             onCollapse={() => { setExpandedLdapSlug(null); }}
@@ -252,6 +275,7 @@ export function LoginPage({
                   </div>
                 ) : null}
                 <LocalAdminDisclosure
+                  rememberMe={rememberMe}
                   onSuccess={handleLoginResponse}
                   onError={(err) => { setError(err); }}
                 />

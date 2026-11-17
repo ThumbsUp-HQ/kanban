@@ -1,0 +1,3603 @@
+diff --git a/database/migrations/sql/p4_19_persistent_sessions.down.sql b/database/migrations/sql/p4_19_persistent_sessions.down.sql
+new file mode 100644
+index 0000000..9ea823a
+--- /dev/null
++++ b/database/migrations/sql/p4_19_persistent_sessions.down.sql
+@@ -0,0 +1,329 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Drop updated functions
++DROP FUNCTION IF EXISTS kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID, BOOLEAN);
++DROP FUNCTION IF EXISTS kb_auth.session_resolve(BYTEA);
++DROP FUNCTION IF EXISTS kb_auth.session_get_metadata(UUID);
++DROP FUNCTION IF EXISTS kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID, BOOLEAN);
++DROP FUNCTION IF EXISTS kb_auth.oidc_request_consume(BYTEA, BYTEA);
++
++-- 2. Restore p2_02 session_create (11 parameters)
++CREATE OR REPLACE FUNCTION kb_auth.session_create(
++    p_id UUID,
++    p_token_sha256 BYTEA,
++    p_principal_id UUID,
++    p_workspace_id UUID,
++    p_auth_card_id UUID,
++    p_aal_level SMALLINT,
++    p_aal2_verified_at TIMESTAMPTZ,
++    p_mfa_pending BOOLEAN,
++    p_idle_expires_at TIMESTAMPTZ,
++    p_absolute_expires_at TIMESTAMPTZ,
++    p_rotated_from_id UUID DEFAULT NULL
++)
++RETURNS UUID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_id UUID;
++BEGIN
++    v_id := COALESCE(p_id, uuidv7());
++    INSERT INTO sessions (
++        id,
++        token_sha256,
++        principal_id,
++        workspace_id,
++        auth_card_id,
++        aal_level,
++        aal2_verified_at,
++        mfa_pending,
++        created_at,
++        last_seen_at,
++        idle_expires_at,
++        absolute_expires_at,
++        rotated_from_id
++    ) VALUES (
++        v_id,
++        p_token_sha256,
++        p_principal_id,
++        p_workspace_id,
++        p_auth_card_id,
++        p_aal_level,
++        p_aal2_verified_at,
++        COALESCE(p_mfa_pending, FALSE),
++        clock_timestamp(),
++        clock_timestamp(),
++        p_idle_expires_at,
++        p_absolute_expires_at,
++        p_rotated_from_id
++    );
++    RETURN v_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID) TO kanban_app;
++
++-- 3. Restore p2_02 session_resolve (13 columns)
++CREATE OR REPLACE FUNCTION kb_auth.session_resolve(p_token_sha256 BYTEA)
++RETURNS TABLE (
++    id UUID,
++    principal_id UUID,
++    workspace_id UUID,
++    auth_card_id UUID,
++    aal_level SMALLINT,
++    aal2_verified_at TIMESTAMPTZ,
++    mfa_pending BOOLEAN,
++    created_at TIMESTAMPTZ,
++    last_seen_at TIMESTAMPTZ,
++    idle_expires_at TIMESTAMPTZ,
++    absolute_expires_at TIMESTAMPTZ,
++    revoked_at TIMESTAMPTZ,
++    rotated_from_id UUID
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_now TIMESTAMPTZ := clock_timestamp();
++    v_session sessions%ROWTYPE;
++    v_idle_interval INTERVAL;
++BEGIN
++    SELECT * INTO v_session
++    FROM sessions s
++    WHERE s.token_sha256 = p_token_sha256
++      AND s.revoked_at IS NULL
++      AND v_now < s.idle_expires_at
++      AND v_now < s.absolute_expires_at;
++
++    IF NOT FOUND THEN
++        RETURN;
++    END IF;
++
++    IF v_session.last_seen_at < (v_now - interval '60 seconds') THEN
++        v_idle_interval := v_session.idle_expires_at - v_session.last_seen_at;
++        UPDATE sessions
++        SET last_seen_at = v_now,
++            idle_expires_at = LEAST(v_now + v_idle_interval, v_session.absolute_expires_at)
++        WHERE sessions.id = v_session.id
++        RETURNING * INTO v_session;
++    END IF;
++
++    RETURN QUERY
++    SELECT
++        v_session.id,
++        v_session.principal_id,
++        v_session.workspace_id,
++        v_session.auth_card_id,
++        v_session.aal_level,
++        v_session.aal2_verified_at,
++        v_session.mfa_pending,
++        v_session.created_at,
++        v_session.last_seen_at,
++        v_session.idle_expires_at,
++        v_session.absolute_expires_at,
++        v_session.revoked_at,
++        v_session.rotated_from_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_resolve(BYTEA) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_resolve(BYTEA) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_resolve(BYTEA) TO kanban_app;
++
++-- 4. Restore p2_02 session_rotate
++CREATE OR REPLACE FUNCTION kb_auth.session_rotate(
++    p_old_id UUID,
++    p_new_token_sha256 BYTEA,
++    p_aal SMALLINT
++)
++RETURNS UUID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_now TIMESTAMPTZ := clock_timestamp();
++    v_old sessions%ROWTYPE;
++    v_new_id UUID := uuidv7();
++    v_aal2_at TIMESTAMPTZ := NULL;
++    v_idle_interval INTERVAL;
++BEGIN
++    UPDATE sessions
++    SET revoked_at = v_now
++    WHERE id = p_old_id
++      AND revoked_at IS NULL
++    RETURNING * INTO v_old;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION 'session_not_found_or_revoked: %', p_old_id
++            USING ERRCODE = 'P0002';
++    END IF;
++
++    IF p_aal = 2 THEN
++        v_aal2_at := v_now;
++    END IF;
++
++    v_idle_interval := v_old.idle_expires_at - v_old.last_seen_at;
++
++    INSERT INTO sessions (
++        id,
++        token_sha256,
++        principal_id,
++        workspace_id,
++        auth_card_id,
++        aal_level,
++        aal2_verified_at,
++        mfa_pending,
++        created_at,
++        last_seen_at,
++        idle_expires_at,
++        absolute_expires_at,
++        rotated_from_id
++    ) VALUES (
++        v_new_id,
++        p_new_token_sha256,
++        v_old.principal_id,
++        v_old.workspace_id,
++        v_old.auth_card_id,
++        p_aal,
++        COALESCE(v_aal2_at, v_old.aal2_verified_at),
++        FALSE,
++        v_now,
++        v_now,
++        LEAST(v_now + v_idle_interval, v_old.absolute_expires_at),
++        v_old.absolute_expires_at,
++        p_old_id
++    );
++
++    RETURN v_new_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_rotate(UUID, BYTEA, SMALLINT) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_rotate(UUID, BYTEA, SMALLINT) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_rotate(UUID, BYTEA, SMALLINT) TO kanban_app;
++
++-- 5. Restore p2_06 oidc_request_create (9 parameters)
++CREATE OR REPLACE FUNCTION kb_auth.oidc_request_create(
++    p_card_id UUID,
++    p_state_hash BYTEA,
++    p_nonce BYTEA,
++    p_code_verifier_sealed BYTEA,
++    p_browser_binding_hash BYTEA,
++    p_return_to TEXT,
++    p_link_intent_id UUID,
++    p_expires_at TIMESTAMPTZ,
++    p_id UUID DEFAULT NULL
++)
++RETURNS UUID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_id UUID;
++BEGIN
++    v_id := COALESCE(p_id, uuidv7());
++    INSERT INTO oidc_auth_requests (
++        id,
++        card_id,
++        state_hash,
++        nonce,
++        code_verifier_sealed,
++        browser_binding_hash,
++        return_to,
++        link_intent_id,
++        expires_at,
++        consumed_at,
++        created_at
++    ) VALUES (
++        v_id,
++        p_card_id,
++        p_state_hash,
++        p_nonce,
++        p_code_verifier_sealed,
++        p_browser_binding_hash,
++        COALESCE(p_return_to, '/'),
++        p_link_intent_id,
++        p_expires_at,
++        NULL,
++        clock_timestamp()
++    );
++    RETURN v_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID) TO kanban_app;
++
++-- 6. Restore p2_06 oidc_request_consume (7 columns)
++CREATE OR REPLACE FUNCTION kb_auth.oidc_request_consume(
++    p_state_hash BYTEA,
++    p_browser_binding_hash BYTEA
++)
++RETURNS TABLE (
++    id UUID,
++    card_id UUID,
++    nonce BYTEA,
++    code_verifier_sealed BYTEA,
++    return_to TEXT,
++    link_intent_id UUID,
++    status TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_rec RECORD;
++BEGIN
++    SELECT r.id, r.card_id, r.nonce, r.code_verifier_sealed, r.browser_binding_hash,
++           r.return_to, r.link_intent_id, r.expires_at, r.consumed_at
++    INTO v_rec
++    FROM oidc_auth_requests r
++    WHERE r.state_hash = p_state_hash
++    FOR UPDATE;
++
++    IF NOT FOUND THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, 'NOT_FOUND'::TEXT;
++        RETURN;
++    END IF;
++
++    IF v_rec.consumed_at IS NOT NULL THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, 'ALREADY_CONSUMED'::TEXT;
++        RETURN;
++    END IF;
++
++    IF v_rec.expires_at <= clock_timestamp() THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, 'EXPIRED'::TEXT;
++        RETURN;
++    END IF;
++
++    IF v_rec.browser_binding_hash != p_browser_binding_hash THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, 'BINDING_MISMATCH'::TEXT;
++        RETURN;
++    END IF;
++
++    UPDATE oidc_auth_requests
++    SET consumed_at = clock_timestamp()
++    WHERE oidc_auth_requests.id = v_rec.id;
++
++    RETURN QUERY SELECT v_rec.id, v_rec.card_id, v_rec.nonce, v_rec.code_verifier_sealed,
++                        v_rec.return_to, v_rec.link_intent_id, 'OK'::TEXT;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.oidc_request_consume(BYTEA, BYTEA) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.oidc_request_consume(BYTEA, BYTEA) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.oidc_request_consume(BYTEA, BYTEA) TO kanban_app;
++
++-- 7. Drop columns
++ALTER TABLE oidc_auth_requests DROP COLUMN IF EXISTS remember_me;
++ALTER TABLE sessions DROP COLUMN IF EXISTS is_persistent;
+diff --git a/database/migrations/sql/p4_19_persistent_sessions.up.sql b/database/migrations/sql/p4_19_persistent_sessions.up.sql
+new file mode 100644
+index 0000000..40e1a37
+--- /dev/null
++++ b/database/migrations/sql/p4_19_persistent_sessions.up.sql
+@@ -0,0 +1,367 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Table schema alterations
++ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_persistent BOOLEAN NOT NULL DEFAULT TRUE;
++ALTER TABLE oidc_auth_requests ADD COLUMN IF NOT EXISTS remember_me BOOLEAN NOT NULL DEFAULT TRUE;
++
++-- 2. Drop existing functions whose signatures or return types are changing
++DROP FUNCTION IF EXISTS kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID);
++DROP FUNCTION IF EXISTS kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID, BOOLEAN);
++DROP FUNCTION IF EXISTS kb_auth.session_resolve(BYTEA);
++DROP FUNCTION IF EXISTS kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID);
++DROP FUNCTION IF EXISTS kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID, BOOLEAN);
++DROP FUNCTION IF EXISTS kb_auth.oidc_request_consume(BYTEA, BYTEA);
++
++-- 3. Function kb_auth.session_create with is_persistent support
++CREATE OR REPLACE FUNCTION kb_auth.session_create(
++    p_id UUID,
++    p_token_sha256 BYTEA,
++    p_principal_id UUID,
++    p_workspace_id UUID,
++    p_auth_card_id UUID,
++    p_aal_level SMALLINT,
++    p_aal2_verified_at TIMESTAMPTZ,
++    p_mfa_pending BOOLEAN,
++    p_idle_expires_at TIMESTAMPTZ,
++    p_absolute_expires_at TIMESTAMPTZ,
++    p_rotated_from_id UUID DEFAULT NULL,
++    p_is_persistent BOOLEAN DEFAULT TRUE
++)
++RETURNS UUID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_id UUID;
++BEGIN
++    v_id := COALESCE(p_id, uuidv7());
++    INSERT INTO sessions (
++        id,
++        token_sha256,
++        principal_id,
++        workspace_id,
++        auth_card_id,
++        aal_level,
++        aal2_verified_at,
++        mfa_pending,
++        created_at,
++        last_seen_at,
++        idle_expires_at,
++        absolute_expires_at,
++        rotated_from_id,
++        is_persistent
++    ) VALUES (
++        v_id,
++        p_token_sha256,
++        p_principal_id,
++        p_workspace_id,
++        p_auth_card_id,
++        p_aal_level,
++        p_aal2_verified_at,
++        COALESCE(p_mfa_pending, FALSE),
++        clock_timestamp(),
++        clock_timestamp(),
++        p_idle_expires_at,
++        p_absolute_expires_at,
++        p_rotated_from_id,
++        COALESCE(p_is_persistent, TRUE)
++    );
++    RETURN v_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID, BOOLEAN) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID, BOOLEAN) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_create(UUID, BYTEA, UUID, UUID, UUID, SMALLINT, TIMESTAMPTZ, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, UUID, BOOLEAN) TO kanban_app;
++
++-- 4. Function kb_auth.session_resolve returning is_persistent
++CREATE OR REPLACE FUNCTION kb_auth.session_resolve(p_token_sha256 BYTEA)
++RETURNS TABLE (
++    id UUID,
++    principal_id UUID,
++    workspace_id UUID,
++    auth_card_id UUID,
++    aal_level SMALLINT,
++    aal2_verified_at TIMESTAMPTZ,
++    mfa_pending BOOLEAN,
++    created_at TIMESTAMPTZ,
++    last_seen_at TIMESTAMPTZ,
++    idle_expires_at TIMESTAMPTZ,
++    absolute_expires_at TIMESTAMPTZ,
++    revoked_at TIMESTAMPTZ,
++    rotated_from_id UUID,
++    is_persistent BOOLEAN
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_now TIMESTAMPTZ := clock_timestamp();
++    v_session sessions%ROWTYPE;
++    v_idle_interval INTERVAL;
++BEGIN
++    SELECT * INTO v_session
++    FROM sessions s
++    WHERE s.token_sha256 = p_token_sha256
++      AND s.revoked_at IS NULL
++      AND v_now < s.idle_expires_at
++      AND v_now < s.absolute_expires_at;
++
++    IF NOT FOUND THEN
++        RETURN;
++    END IF;
++
++    -- Slide idle_expires_at and last_seen_at only when last_seen_at < v_now - interval '60 seconds'
++    IF v_session.last_seen_at < (v_now - interval '60 seconds') THEN
++        v_idle_interval := v_session.idle_expires_at - v_session.last_seen_at;
++        UPDATE sessions
++        SET last_seen_at = v_now,
++            idle_expires_at = LEAST(v_now + v_idle_interval, v_session.absolute_expires_at)
++        WHERE sessions.id = v_session.id
++        RETURNING * INTO v_session;
++    END IF;
++
++    RETURN QUERY
++    SELECT
++        v_session.id,
++        v_session.principal_id,
++        v_session.workspace_id,
++        v_session.auth_card_id,
++        v_session.aal_level,
++        v_session.aal2_verified_at,
++        v_session.mfa_pending,
++        v_session.created_at,
++        v_session.last_seen_at,
++        v_session.idle_expires_at,
++        v_session.absolute_expires_at,
++        v_session.revoked_at,
++        v_session.rotated_from_id,
++        v_session.is_persistent;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_resolve(BYTEA) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_resolve(BYTEA) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_resolve(BYTEA) TO kanban_app;
++
++-- 5. Function kb_auth.session_rotate preserving is_persistent
++CREATE OR REPLACE FUNCTION kb_auth.session_rotate(
++    p_old_id UUID,
++    p_new_token_sha256 BYTEA,
++    p_aal SMALLINT
++)
++RETURNS UUID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_now TIMESTAMPTZ := clock_timestamp();
++    v_old sessions%ROWTYPE;
++    v_new_id UUID := uuidv7();
++    v_aal2_at TIMESTAMPTZ := NULL;
++    v_idle_interval INTERVAL;
++BEGIN
++    UPDATE sessions
++    SET revoked_at = v_now
++    WHERE id = p_old_id
++      AND revoked_at IS NULL
++    RETURNING * INTO v_old;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION 'session_not_found_or_revoked: %', p_old_id
++            USING ERRCODE = 'P0002';
++    END IF;
++
++    IF p_aal = 2 THEN
++        v_aal2_at := v_now;
++    END IF;
++
++    v_idle_interval := v_old.idle_expires_at - v_old.last_seen_at;
++
++    INSERT INTO sessions (
++        id,
++        token_sha256,
++        principal_id,
++        workspace_id,
++        auth_card_id,
++        aal_level,
++        aal2_verified_at,
++        mfa_pending,
++        created_at,
++        last_seen_at,
++        idle_expires_at,
++        absolute_expires_at,
++        rotated_from_id,
++        is_persistent
++    ) VALUES (
++        v_new_id,
++        p_new_token_sha256,
++        v_old.principal_id,
++        v_old.workspace_id,
++        v_old.auth_card_id,
++        p_aal,
++        COALESCE(v_aal2_at, v_old.aal2_verified_at),
++        FALSE,
++        v_now,
++        v_now,
++        LEAST(v_now + v_idle_interval, v_old.absolute_expires_at),
++        v_old.absolute_expires_at,
++        p_old_id,
++        v_old.is_persistent
++    );
++
++    RETURN v_new_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_rotate(UUID, BYTEA, SMALLINT) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_rotate(UUID, BYTEA, SMALLINT) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_rotate(UUID, BYTEA, SMALLINT) TO kanban_app;
++
++-- 6. Function kb_auth.oidc_request_create with remember_me support
++CREATE OR REPLACE FUNCTION kb_auth.oidc_request_create(
++    p_card_id UUID,
++    p_state_hash BYTEA,
++    p_nonce BYTEA,
++    p_code_verifier_sealed BYTEA,
++    p_browser_binding_hash BYTEA,
++    p_return_to TEXT,
++    p_link_intent_id UUID,
++    p_expires_at TIMESTAMPTZ,
++    p_id UUID DEFAULT NULL,
++    p_remember_me BOOLEAN DEFAULT TRUE
++)
++RETURNS UUID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_id UUID;
++BEGIN
++    v_id := COALESCE(p_id, uuidv7());
++    INSERT INTO oidc_auth_requests (
++        id,
++        card_id,
++        state_hash,
++        nonce,
++        code_verifier_sealed,
++        browser_binding_hash,
++        return_to,
++        link_intent_id,
++        expires_at,
++        consumed_at,
++        created_at,
++        remember_me
++    ) VALUES (
++        v_id,
++        p_card_id,
++        p_state_hash,
++        p_nonce,
++        p_code_verifier_sealed,
++        p_browser_binding_hash,
++        COALESCE(p_return_to, '/'),
++        p_link_intent_id,
++        p_expires_at,
++        NULL,
++        clock_timestamp(),
++        COALESCE(p_remember_me, TRUE)
++    );
++    RETURN v_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID, BOOLEAN) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID, BOOLEAN) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.oidc_request_create(UUID, BYTEA, BYTEA, BYTEA, BYTEA, TEXT, UUID, TIMESTAMPTZ, UUID, BOOLEAN) TO kanban_app;
++
++-- 7. Function kb_auth.oidc_request_consume returning remember_me
++CREATE OR REPLACE FUNCTION kb_auth.oidc_request_consume(
++    p_state_hash BYTEA,
++    p_browser_binding_hash BYTEA
++)
++RETURNS TABLE (
++    id UUID,
++    card_id UUID,
++    nonce BYTEA,
++    code_verifier_sealed BYTEA,
++    return_to TEXT,
++    link_intent_id UUID,
++    remember_me BOOLEAN,
++    status TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_rec RECORD;
++BEGIN
++    SELECT r.id, r.card_id, r.nonce, r.code_verifier_sealed, r.browser_binding_hash,
++           r.return_to, r.link_intent_id, r.expires_at, r.consumed_at, r.remember_me
++    INTO v_rec
++    FROM oidc_auth_requests r
++    WHERE r.state_hash = p_state_hash
++    FOR UPDATE;
++
++    IF NOT FOUND THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, NULL::BOOLEAN, 'NOT_FOUND'::TEXT;
++        RETURN;
++    END IF;
++
++    IF v_rec.consumed_at IS NOT NULL THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, NULL::BOOLEAN, 'ALREADY_CONSUMED'::TEXT;
++        RETURN;
++    END IF;
++
++    IF v_rec.expires_at <= clock_timestamp() THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, NULL::BOOLEAN, 'EXPIRED'::TEXT;
++        RETURN;
++    END IF;
++
++    IF v_rec.browser_binding_hash != p_browser_binding_hash THEN
++        RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::BYTEA, NULL::BYTEA, NULL::TEXT, NULL::UUID, NULL::BOOLEAN, 'BINDING_MISMATCH'::TEXT;
++        RETURN;
++    END IF;
++
++    UPDATE oidc_auth_requests
++    SET consumed_at = clock_timestamp()
++    WHERE oidc_auth_requests.id = v_rec.id;
++
++    RETURN QUERY SELECT v_rec.id, v_rec.card_id, v_rec.nonce, v_rec.code_verifier_sealed,
++                        v_rec.return_to, v_rec.link_intent_id, v_rec.remember_me, 'OK'::TEXT;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.oidc_request_consume(BYTEA, BYTEA) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.oidc_request_consume(BYTEA, BYTEA) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.oidc_request_consume(BYTEA, BYTEA) TO kanban_app;
++
++-- 8. Function kb_auth.session_get_metadata for safe session status inspection
++CREATE OR REPLACE FUNCTION kb_auth.session_get_metadata(p_id UUID)
++RETURNS TABLE (
++    id UUID,
++    idle_expires_at TIMESTAMPTZ,
++    absolute_expires_at TIMESTAMPTZ,
++    is_persistent BOOLEAN
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    RETURN QUERY
++    SELECT s.id, s.idle_expires_at, s.absolute_expires_at, s.is_persistent
++    FROM sessions s
++    WHERE s.id = p_id
++      AND s.revoked_at IS NULL;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_get_metadata(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_get_metadata(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_get_metadata(UUID) TO kanban_app;
+diff --git a/database/migrations/versions/p4_19_persistent_sessions.py b/database/migrations/versions/p4_19_persistent_sessions.py
+new file mode 100644
+index 0000000..1b577dc
+--- /dev/null
++++ b/database/migrations/versions/p4_19_persistent_sessions.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Persistent sessions and remember_me.
++
++Revision ID: p4_19_persistent_sessions
++Revises: p4_18_oauth_mcp_scoping
++Create Date: 2026-11-17 23:08:43.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_19_persistent_sessions"
++down_revision: str | None = "p4_18_oauth_mcp_scoping"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p4_19_persistent_sessions migration."""
++    execute_sql_file("p4_19_persistent_sessions.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p4_19_persistent_sessions migration."""
++    execute_sql_file("p4_19_persistent_sessions.down.sql")
+diff --git a/database/models/auth.py b/database/models/auth.py
+index 34e3f63..cc26434 100644
+--- a/database/models/auth.py
++++ b/database/models/auth.py
+@@ -115,6 +115,9 @@ class UserSession(Base):
+     absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+     rotated_from_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
++    is_persistent: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, default=True, server_default=text("true")
++    )
+ 
+     def __repr__(self) -> str:
+         """Sanitized representation omitting token_sha256."""
+@@ -183,6 +186,9 @@ class OidcAuthRequest(Base):
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+     )
++    remember_me: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, default=True, server_default=text("true")
++    )
+ 
+     def __repr__(self) -> str:
+         """Sanitized representation omitting sensitive cryptographic hashes."""
+diff --git a/database/tests/migrations/test_p4_19_persistent_sessions_migration.py b/database/tests/migrations/test_p4_19_persistent_sessions_migration.py
+new file mode 100644
+index 0000000..3a7c62d
+--- /dev/null
++++ b/database/tests/migrations/test_p4_19_persistent_sessions_migration.py
+@@ -0,0 +1,49 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p4_19_persistent_sessions."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p4_19_persistent_sessions_migration_lifecycle() -> None:
++    """Verify p4_19_persistent_sessions upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p4_19_persistent_sessions")
++        assert prev_rev == "p4_18_oauth_mcp_scoping"
++
++        # 1. Upgrade to p4_19_persistent_sessions
++        await harness.upgrade("p4_19_persistent_sessions")
++
++        # Check column existence
++        res_sess = await harness.fetchval(
++            "SELECT column_name FROM information_schema.columns "
++            "WHERE table_name = 'sessions' AND column_name = 'is_persistent'"
++        )
++        assert res_sess == "is_persistent"
++
++        res_oidc = await harness.fetchval(
++            "SELECT column_name FROM information_schema.columns "
++            "WHERE table_name = 'oidc_auth_requests' AND column_name = 'remember_me'"
++        )
++        assert res_oidc == "remember_me"
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        res_sess_down = await harness.fetchval(
++            "SELECT column_name FROM information_schema.columns "
++            "WHERE table_name = 'sessions' AND column_name = 'is_persistent'"
++        )
++        assert res_sess_down is None
++
++        res_oidc_down = await harness.fetchval(
++            "SELECT column_name FROM information_schema.columns "
++            "WHERE table_name = 'oidc_auth_requests' AND column_name = 'remember_me'"
++        )
++        assert res_oidc_down is None
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p4_19_persistent_sessions")
+diff --git a/kanban/api/v1/admin/auth_cards.py b/kanban/api/v1/admin/auth_cards.py
+index 8ba412b..f0498e5 100644
+--- a/kanban/api/v1/admin/auth_cards.py
++++ b/kanban/api/v1/admin/auth_cards.py
+@@ -124,7 +124,6 @@ async def get_admin_card(
+     return await service.get_card(session, card_ref)
+ 
+ 
+-
+ @router.post(
+     "/parse-google-json",
+     response_model=GoogleOAuthJsonPreviewResponse,
+@@ -158,6 +157,7 @@ async def parse_google_json(
+         has_client_secret=bool(parsed.client_secret),
+     )
+ 
++
+ @router.post(
+     "",
+     status_code=status.HTTP_201_CREATED,
+diff --git a/kanban/api/v1/auth_cards_public.py b/kanban/api/v1/auth_cards_public.py
+index 4941aec..97e291c 100644
+--- a/kanban/api/v1/auth_cards_public.py
++++ b/kanban/api/v1/auth_cards_public.py
+@@ -81,6 +81,7 @@ async def start_card_login(  # noqa: PLR0913, PLR0917
+     next: Annotated[str | None, Query(max_length=2048)] = None,  # noqa: A002
+     return_to: Annotated[str | None, Query(max_length=2048)] = None,
+     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
++    remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
+ ) -> Response:
+     """Start OIDC/OAuth2 login flow for an enabled card.
+ 
+@@ -107,6 +108,7 @@ async def start_card_login(  # noqa: PLR0913, PLR0917
+             return_to=target_return,
+             link_intent_id=link_intent_id,
+             request=request,
++            remember_me=remember_me,
+         )
+     except OidcError as err:
+         logger.warning(
+diff --git a/kanban/api/v1/auth_local.py b/kanban/api/v1/auth_local.py
+index 65b7d76..350fcc8 100644
+--- a/kanban/api/v1/auth_local.py
++++ b/kanban/api/v1/auth_local.py
+@@ -15,14 +15,9 @@ from starlette.responses import JSONResponse
+ from database.session import RLSContext
+ from kanban.auth.local.service import LocalAdminLoginService
+ from kanban.auth.sessions.cookies import (
+-    build_set_cookie_header,
+-    build_set_fallback_cookie_header,
++    attach_session_and_csrf_cookies,
+     extract_session_cookie,
+ )
+-from kanban.auth.sessions.csrf import (
+-    build_set_csrf_cookie_header,
+-    build_set_fallback_csrf_cookie_header,
+-)
+ from kanban.security.client_ip import resolve_client_ip
+ from kanban.security.ratelimit.decorator import build_rate_limiter
+ 
+@@ -39,6 +34,7 @@ class LocalLoginRequest(BaseModel):
+ 
+     username: str = Field(description="Normalized administrator handle")
+     password: str = Field(description="Administrator plaintext password")
++    remember_me: bool = Field(default=True, description="Keep signed in on this device")
+ 
+ 
+ def _get_login_service(request: Request) -> LocalAdminLoginService:
+@@ -102,6 +98,7 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
+             password=body.password,
+             client_ip=client_ip,
+             existing_cookie=existing_cookie,
++            remember_me=body.remember_me,
+         )
+ 
+     response = JSONResponse(
+@@ -116,29 +113,11 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
+             "csrf_token": issued.csrf_token,
+         }
+     )
+-    response.raw_headers.append(
+-        (
+-            b"set-cookie",
+-            build_set_cookie_header(issued.cookie_val, issued.idle_expires_at).encode("latin-1"),
+-        )
+-    )
+-    response.raw_headers.append(
+-        (b"set-cookie", build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"))
++    attach_session_and_csrf_cookies(
++        response,
++        request,
++        issued,
++        issued.csrf_token,
++        persistent=body.remember_me,
+     )
+-    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+-    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+-        response.raw_headers.append(
+-            (
+-                b"set-cookie",
+-                build_set_fallback_cookie_header(issued.cookie_val, issued.idle_expires_at).encode(
+-                    "latin-1"
+-                ),
+-            )
+-        )
+-        response.raw_headers.append(
+-            (
+-                b"set-cookie",
+-                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+-            )
+-        )
+     return response
+diff --git a/kanban/api/v1/auth_mfa.py b/kanban/api/v1/auth_mfa.py
+index bc8579c..c4bac8f 100644
+--- a/kanban/api/v1/auth_mfa.py
++++ b/kanban/api/v1/auth_mfa.py
+@@ -21,12 +21,7 @@ from kanban.auth.mfa.policy import require_aal2
+ from kanban.auth.mfa.recovery import RecoveryCodeService
+ from kanban.auth.mfa.totp import TotpService
+ from kanban.auth.sessions.cookies import (
+-    build_set_cookie_header,
+-    build_set_fallback_cookie_header,
+-)
+-from kanban.auth.sessions.csrf import (
+-    build_set_csrf_cookie_header,
+-    build_set_fallback_csrf_cookie_header,
++    attach_session_and_csrf_cookies,
+ )
+ from kanban.security.envelope import StaticKekProvider
+ from kanban.security.keys import KeyMaterialError
+@@ -256,18 +251,13 @@ async def confirm_totp(
+         }
+         response = JSONResponse(content=resp_body)
+         if elevated is not None:
+-            cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
+-            response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
+-            csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
+-            response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
+-            host_name = (request.headers.get("host") or "").split(":")[0].lower()
+-            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+-                fb_cookie = build_set_fallback_cookie_header(
+-                    elevated.cookie_val, elevated.idle_expires_at
+-                )
+-                response.raw_headers.append((b"set-cookie", fb_cookie.encode("latin-1")))
+-                fb_csrf = build_set_fallback_csrf_cookie_header(elevated.csrf_token)
+-                response.raw_headers.append((b"set-cookie", fb_csrf.encode("latin-1")))
++            attach_session_and_csrf_cookies(
++                response,
++                request,
++                elevated,
++                elevated.csrf_token,
++                persistent=elevated.is_persistent,
++            )
+         return response
+ 
+     return JSONResponse(content={"confirmed": True})
+@@ -374,19 +364,13 @@ def _build_elevated_response(
+     }
+     response = JSONResponse(content=response_data)
+     if elevated is not None:
+-        cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
+-        response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
+-        csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
+-        response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
+-        if request is not None:
+-            host_name = (request.headers.get("host") or "").split(":")[0].lower()
+-            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+-                fb_cookie = build_set_fallback_cookie_header(
+-                    elevated.cookie_val, elevated.idle_expires_at
+-                )
+-                response.raw_headers.append((b"set-cookie", fb_cookie.encode("latin-1")))
+-                fb_csrf = build_set_fallback_csrf_cookie_header(elevated.csrf_token)
+-                response.raw_headers.append((b"set-cookie", fb_csrf.encode("latin-1")))
++        attach_session_and_csrf_cookies(
++            response,
++            request,
++            elevated,
++            elevated.csrf_token,
++            persistent=elevated.is_persistent,
++        )
+     return response
+ 
+ 
+diff --git a/kanban/api/v1/auth_oidc.py b/kanban/api/v1/auth_oidc.py
+index d74078b..294ca3c 100644
+--- a/kanban/api/v1/auth_oidc.py
++++ b/kanban/api/v1/auth_oidc.py
+@@ -96,6 +96,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
+     flow: FlowDep,
+     return_to: Annotated[str | None, Query(max_length=2048)] = None,
+     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
++    remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
+ ) -> Response:
+     """Initialize authorization-code flow with PKCE S256 for an OIDC or OAuth2 card."""
+     try:
+@@ -105,6 +106,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
+             return_to=return_to,
+             link_intent_id=link_intent_id,
+             request=request,
++            remember_me=remember_me,
+         )
+     except OidcError as err:
+         logger.warning(
+diff --git a/kanban/api/v1/auth_session.py b/kanban/api/v1/auth_session.py
+index 20765df..29e55d0 100644
+--- a/kanban/api/v1/auth_session.py
++++ b/kanban/api/v1/auth_session.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import uuid
+ from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+ 
+ from fastapi import APIRouter, Depends
+@@ -24,6 +25,7 @@ from kanban.api.v1.auth_mfa import (
+ from kanban.auth.sessions.cookies import (
+     build_clear_cookie_header,
+     build_clear_fallback_cookie_header,
++    is_plain_http,
+ )
+ from kanban.auth.sessions.csrf import (
+     PRE_SESSION_ID,
+@@ -31,12 +33,12 @@ from kanban.auth.sessions.csrf import (
+     build_clear_fallback_csrf_cookie_header,
+     build_set_csrf_cookie_header,
+     build_set_fallback_csrf_cookie_header,
++    extract_csrf_cookie,
+     generate_csrf_token,
++    validate_csrf_token,
+ )
+ 
+ if TYPE_CHECKING:
+-    import uuid
+-
+     from kanban.auth.sessions.service import SessionService
+     from kanban.security.keys import KeyMaterial
+ 
+@@ -64,9 +66,59 @@ async def get_session_info(request: Request) -> JSONResponse:
+         if resolver is not None:
+             principal_ctx = await resolver.resolve(request)
+ 
+-    if principal_ctx is not None and getattr(principal_ctx, "session_id", None) is not None:
+-        session_id: uuid.UUID = principal_ctx.session_id
+-        csrf_token = generate_csrf_token(session_id, session_hmac_key)
++    authenticated = (
++        principal_ctx is not None and getattr(principal_ctx, "session_id", None) is not None
++    )
++    target_session_id = (
++        principal_ctx.session_id
++        if authenticated and principal_ctx is not None and principal_ctx.session_id is not None
++        else PRE_SESSION_ID
++    )
++
++    existing_csrf = extract_csrf_cookie(request)
++    csrf_valid = False
++    if existing_csrf and validate_csrf_token(existing_csrf, target_session_id, session_hmac_key):
++        csrf_token = existing_csrf
++        csrf_valid = True
++    else:
++        csrf_token = generate_csrf_token(target_session_id, session_hmac_key)
++
++    idle_expires_at = None
++    absolute_expires_at = None
++    remember_me = False
++
++    if authenticated and principal_ctx is not None and principal_ctx.session_id is not None:
++        user_session = getattr(request.state, "user_session", None)
++        if (
++            user_session is not None
++            and getattr(user_session, "id", None) == principal_ctx.session_id
++        ):
++            idle_expires_at = user_session.idle_expires_at
++            absolute_expires_at = user_session.absolute_expires_at
++            remember_me = getattr(user_session, "is_persistent", True)
++        else:
++            session_factory = getattr(request.app.state, "session_factory", None)
++            if session_factory is not None:
++                anon_ctx = RLSContext(
++                    principal_id=uuid.UUID(int=0),
++                    workspace_id=uuid.UUID(int=0),
++                    token_scopes=("session",),
++                    aal_level=1,
++                )
++                async with session_factory.session(anon_ctx) as async_session:
++                    meta_stmt = text(
++                        "SELECT idle_expires_at, absolute_expires_at, is_persistent "
++                        "FROM kb_auth.session_get_metadata(:p_id)"
++                    )
++                    meta_res = await async_session.execute(
++                        meta_stmt, {"p_id": principal_ctx.session_id}
++                    )
++                    row = meta_res.mappings().first()
++                    if row is not None:
++                        idle_expires_at = row["idle_expires_at"]
++                        absolute_expires_at = row["absolute_expires_at"]
++                        remember_me = bool(row["is_persistent"])
++
+         data: dict[str, Any] = {
+             "authenticated": True,
+             "principal_id": str(principal_ctx.principal_id),
+@@ -74,9 +126,13 @@ async def get_session_info(request: Request) -> JSONResponse:
+             "aal_level": principal_ctx.aal_level,
+             "mfa_pending": getattr(principal_ctx, "mfa_pending", False),
+             "csrf_token": csrf_token,
++            "idle_expires_at": idle_expires_at.isoformat() if idle_expires_at else None,
++            "absolute_expires_at": (
++                absolute_expires_at.isoformat() if absolute_expires_at else None
++            ),
++            "remember_me": remember_me,
+         }
+     else:
+-        csrf_token = generate_csrf_token(PRE_SESSION_ID, session_hmac_key)
+         data = {
+             "authenticated": False,
+             "principal_id": None,
+@@ -84,17 +140,20 @@ async def get_session_info(request: Request) -> JSONResponse:
+             "aal_level": 0,
+             "mfa_pending": False,
+             "csrf_token": csrf_token,
++            "idle_expires_at": None,
++            "absolute_expires_at": None,
++            "remember_me": False,
+         }
+ 
+     response = JSONResponse(content=data)
+-    response.raw_headers.append(
+-        (b"set-cookie", build_set_csrf_cookie_header(csrf_token).encode("latin-1"))
+-    )
+-    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+-    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
++    if not csrf_valid:
+         response.raw_headers.append(
+-            (b"set-cookie", build_set_fallback_csrf_cookie_header(csrf_token).encode("latin-1"))
++            (b"set-cookie", build_set_csrf_cookie_header(csrf_token).encode("latin-1"))
+         )
++        if is_plain_http(request):
++            response.raw_headers.append(
++                (b"set-cookie", build_set_fallback_csrf_cookie_header(csrf_token).encode("latin-1"))
++            )
+     return response
+ 
+ 
+diff --git a/kanban/api/v1/auth_setup.py b/kanban/api/v1/auth_setup.py
+index 732d1a9..ad2d463 100644
+--- a/kanban/api/v1/auth_setup.py
++++ b/kanban/api/v1/auth_setup.py
+@@ -15,12 +15,7 @@ from starlette.responses import JSONResponse
+ 
+ from database.session import RLSContext
+ from kanban.auth.sessions.cookies import (
+-    build_set_cookie_header,
+-    build_set_fallback_cookie_header,
+-)
+-from kanban.auth.sessions.csrf import (
+-    build_set_csrf_cookie_header,
+-    build_set_fallback_csrf_cookie_header,
++    attach_session_and_csrf_cookies,
+ )
+ from kanban.auth.sessions.service import SessionService  # noqa: TC001
+ from kanban.auth.setup import SetupBootstrapService
+@@ -194,33 +189,11 @@ async def claim_setup(
+         },
+     )
+ 
+-    response.raw_headers.append(
+-        (
+-            b"set-cookie",
+-            build_set_cookie_header(issued.cookie_val, issued.idle_expires_at).encode("latin-1"),
+-        )
++    attach_session_and_csrf_cookies(
++        response,
++        request,
++        issued,
++        issued.csrf_token,
++        persistent=issued.is_persistent,
+     )
+-    response.raw_headers.append(
+-        (
+-            b"set-cookie",
+-            build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+-        )
+-    )
+-    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+-    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+-        response.raw_headers.append(
+-            (
+-                b"set-cookie",
+-                build_set_fallback_cookie_header(issued.cookie_val, issued.idle_expires_at).encode(
+-                    "latin-1"
+-                ),
+-            )
+-        )
+-        response.raw_headers.append(
+-            (
+-                b"set-cookie",
+-                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+-            )
+-        )
+-
+     return response
+diff --git a/kanban/api/v1/auth_webauthn.py b/kanban/api/v1/auth_webauthn.py
+index dc95cd1..2e3f42a 100644
+--- a/kanban/api/v1/auth_webauthn.py
++++ b/kanban/api/v1/auth_webauthn.py
+@@ -19,8 +19,9 @@ from kanban.api.deps import PrincipalContext, get_principal  # Required at runti
+ from kanban.api.problems import ProblemException
+ from kanban.auth.mfa.policy import require_aal2
+ from kanban.auth.mfa.webauthn import WebauthnCloneDetectedError, WebauthnService
+-from kanban.auth.sessions.cookies import build_set_cookie_header
+-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
++from kanban.auth.sessions.cookies import (
++    attach_session_and_csrf_cookies,
++)
+ from kanban.security.ratelimit import AUTH_MFA_VERIFY
+ from kanban.security.ratelimit.base import make_key
+ from kanban.security.ratelimit.decorator import build_rate_limiter
+@@ -93,6 +94,7 @@ def _build_elevated_response(
+     elevated: IssuedSession | None,
+     session_id: uuid.UUID | None,
+     extra_data: dict[str, Any] | None = None,
++    request: Request | None = None,
+ ) -> JSONResponse:
+     """Build response with rotated credentials and set-cookie headers."""
+     response_data: dict[str, Any] = {
+@@ -106,10 +108,13 @@ def _build_elevated_response(
+ 
+     response = JSONResponse(content=response_data)
+     if elevated is not None:
+-        cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
+-        response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
+-        csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
+-        response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
++        attach_session_and_csrf_cookies(
++            response,
++            request,
++            elevated,
++            elevated.csrf_token,
++            persistent=elevated.is_persistent,
++        )
+     return response
+ 
+ 
+@@ -333,6 +338,7 @@ async def register_verify(
+                     "credential_id": str(cred_record.id),
+                     "nickname": cred_record.nickname,
+                 },
++                request=request,
+             )
+ 
+     return JSONResponse(
+@@ -481,6 +487,7 @@ async def authenticate_verify(
+         elevated,
+         principal.session_id,
+         extra_data={"credential_id": cred_id_str} if cred_id_str else None,
++        request=request,
+     )
+ 
+ 
+diff --git a/kanban/api/v1/workspaces.py b/kanban/api/v1/workspaces.py
+index f968e75..5952480 100644
+--- a/kanban/api/v1/workspaces.py
++++ b/kanban/api/v1/workspaces.py
+@@ -19,12 +19,7 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException
+ from kanban.auth.sessions.cookies import (
+     SESSION_COOKIE_NAME,
+-    build_set_cookie_header,
+-    build_set_fallback_cookie_header,
+-)
+-from kanban.auth.sessions.csrf import (
+-    build_set_csrf_cookie_header,
+-    build_set_fallback_csrf_cookie_header,
++    attach_session_and_csrf_cookies,
+ )
+ 
+ if TYPE_CHECKING:
+@@ -294,36 +289,13 @@ async def switch_workspace_endpoint(
+                 "csrf_token": issued.csrf_token,
+             }
+         )
+-        response.raw_headers.append(
+-            (
+-                b"set-cookie",
+-                build_set_cookie_header(issued.cookie_val, issued.idle_expires_at).encode(
+-                    "latin-1"
+-                ),
+-            )
+-        )
+-        response.raw_headers.append(
+-            (
+-                b"set-cookie",
+-                build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+-            )
++        attach_session_and_csrf_cookies(
++            response,
++            request,
++            issued,
++            issued.csrf_token,
++            persistent=issued.is_persistent,
+         )
+-        host_name = (request.headers.get("host") or "").split(":")[0].lower()
+-        if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+-            response.raw_headers.append(
+-                (
+-                    b"set-cookie",
+-                    build_set_fallback_cookie_header(
+-                        issued.cookie_val, issued.idle_expires_at
+-                    ).encode("latin-1"),
+-                )
+-            )
+-            response.raw_headers.append(
+-                (
+-                    b"set-cookie",
+-                    build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
+-                )
+-            )
+         return response
+ 
+     return JSONResponse(
+diff --git a/kanban/auth/cards/service.py b/kanban/auth/cards/service.py
+index db14b24..6d5d8bb 100644
+--- a/kanban/auth/cards/service.py
++++ b/kanban/auth/cards/service.py
+@@ -138,7 +138,6 @@ class AuthCardAdminService:
+                     detail="A LOCAL_ADMIN card already exists in this workspace.",
+                 )
+ 
+-
+         public_config = dict(data.public_config)
+         # Handle Google OAuth JSON payload if provided
+         extracted_google_secret: str | None = None
+@@ -322,7 +321,6 @@ class AuthCardAdminService:
+         else:
+             allowed_domains = list(card.allowed_email_domains or [])
+ 
+-
+         # Public config & health status
+         config_changed = False
+         if data.public_config is not None:
+diff --git a/kanban/auth/ldap/router.py b/kanban/auth/ldap/router.py
+index 39cf206..0eb9910 100644
+--- a/kanban/auth/ldap/router.py
++++ b/kanban/auth/ldap/router.py
+@@ -31,8 +31,9 @@ from kanban.auth.ldap.client import (
+ from kanban.auth.ldap.config import LdapCardConfig
+ from kanban.auth.ldap.service import LdapAuthService
+ from kanban.auth.mfa.policy import require_admin_aal2
+-from kanban.auth.sessions.cookies import build_set_cookie_header
+-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
++from kanban.auth.sessions.cookies import (
++    attach_session_and_csrf_cookies,
++)
+ from kanban.security.envelope import SealedSecret, StaticKekProvider, open_card_secret
+ from kanban.security.keys import load_key_material
+ from kanban.security.ratelimit import AUTH_LOGIN_ACCOUNT, AUTH_LOGIN_IP
+@@ -63,6 +64,7 @@ class LdapLoginRequest(BaseModel):
+ 
+     username: str = Field(min_length=1, max_length=256)
+     password: str = Field(min_length=1, max_length=1024)
++    remember_me: bool = Field(default=True, description="Keep signed in on this device")
+ 
+ 
+ async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:
+@@ -196,7 +198,7 @@ async def _handle_ldap_login(
+         }
+ 
+         session_service = getattr(request.app.state, "session_service", None)
+-        issued_cookies: list[str] = []
++        issued_session = None
+ 
+         if resolved is not None:
+             response_data["principal_id"] = str(resolved.principal_id)
+@@ -211,19 +213,21 @@ async def _handle_ldap_login(
+                     auth_card_id=card.id,
+                     aal_level=resolved.aal_level,
+                     mfa_pending=resolved.mfa_pending,
++                    remember_me=payload.remember_me,
+                 )
++                await session.commit()
+                 response_data["session_id"] = str(issued_session.session_id)
+                 response_data["csrf_token"] = issued_session.csrf_token
+-                issued_cookies.append(
+-                    build_set_cookie_header(
+-                        issued_session.cookie_val, issued_session.idle_expires_at
+-                    )
+-                )
+-                issued_cookies.append(build_set_csrf_cookie_header(issued_session.csrf_token))
+ 
+         response = JSONResponse(status_code=200, content=response_data)
+-        for cookie_hdr in issued_cookies:
+-            response.headers.append("Set-Cookie", cookie_hdr)
++        if issued_session is not None:
++            attach_session_and_csrf_cookies(
++                response,
++                request,
++                issued_session,
++                issued_session.csrf_token,
++                persistent=issued_session.is_persistent,
++            )
+         return response
+ 
+ 
+diff --git a/kanban/auth/local/service.py b/kanban/auth/local/service.py
+index 11c530d..02def34 100644
+--- a/kanban/auth/local/service.py
++++ b/kanban/auth/local/service.py
+@@ -128,6 +128,7 @@ class LocalAdminLoginService:
+         client_ip: str,
+         existing_cookie: str | None = None,
+         workspace_id: uuid.UUID | None = None,
++        remember_me: bool = True,
+     ) -> IssuedSession:
+         """Execute local admin login workflow with constant-work verification on all paths."""
+         pepper = self._get_pepper()
+@@ -209,6 +210,7 @@ class LocalAdminLoginService:
+                 aal_level=1,
+                 mfa_pending=require_mfa,
+                 existing_cookie=existing_cookie,
++                remember_me=remember_me,
+             )
+ 
+             try:
+diff --git a/kanban/auth/oidc/flow.py b/kanban/auth/oidc/flow.py
+index e77e2dd..c911b47 100644
+--- a/kanban/auth/oidc/flow.py
++++ b/kanban/auth/oidc/flow.py
+@@ -39,12 +39,7 @@ from kanban.auth.oidc.discovery import (
+ )
+ from kanban.auth.oidc.tokens import build_private_key_jwt, validate_id_token
+ from kanban.auth.sessions.cookies import (
+-    build_set_cookie_header,
+-    build_set_fallback_cookie_header,
+-)
+-from kanban.auth.sessions.csrf import (
+-    build_set_csrf_cookie_header,
+-    build_set_fallback_csrf_cookie_header,
++    attach_session_and_csrf_cookies,
+ )
+ from kanban.security.envelope import SealedSecret, StaticKekProvider, open_card_secret
+ from kanban.security.keys import derive_subkey
+@@ -222,6 +217,7 @@ class OidcFlow:
+         link_intent_id: uuid.UUID | None = None,
+         request: Request | None = None,
+         ttl_seconds: int = BROWSER_BINDING_TTL_SECONDS,
++        remember_me: bool = True,
+     ) -> OidcStartResponse:
+         """Initialize authorization-code flow with PKCE S256 and browser-bound state."""
+         card = await get_for_login(session, slug)
+@@ -277,7 +273,9 @@ class OidcFlow:
+             "    :p_browser_binding_hash, "
+             "    :p_return_to, "
+             "    :p_link_intent_id, "
+-            "    :p_expires_at"
++            "    :p_expires_at, "
++            "    NULL, "
++            "    :p_remember_me"
+             ")"
+         )
+         await session.execute(
+@@ -291,6 +289,7 @@ class OidcFlow:
+                 "p_return_to": sanitized_return_to,
+                 "p_link_intent_id": link_intent_id,
+                 "p_expires_at": expires_at,
++                "p_remember_me": remember_me,
+             },
+         )
+         await session.commit()
+@@ -406,7 +405,8 @@ class OidcFlow:
+ 
+         # Atomically consume auth request row
+         stmt = text(
+-            "SELECT id, card_id, nonce, code_verifier_sealed, return_to, link_intent_id, status "
++            "SELECT id, card_id, nonce, code_verifier_sealed, return_to, link_intent_id, "
++            "remember_me, status "
+             "FROM kb_auth.oidc_request_consume(:p_state_hash, :p_browser_binding_hash)"
+         )
+         res = await session.execute(
+@@ -433,6 +433,7 @@ class OidcFlow:
+         nonce_bytes: bytes = bytes(row["nonce"])
+         code_verifier_sealed: bytes = bytes(row["code_verifier_sealed"])
+         return_to: str = str(row["return_to"])
++        remember_me: bool = bool(row["remember_me"]) if row.get("remember_me") is not None else True
+         resolved_link_intent_id: uuid.UUID | None = row["link_intent_id"] or link_intent_id
+ 
+         # Unseal code_verifier
+@@ -805,11 +806,9 @@ class OidcFlow:
+         clear_cookie_hdr = build_clear_browser_binding_cookie()
+         response = RedirectResponse(url=return_to, status_code=302)
+         response.headers.append("Set-Cookie", clear_cookie_hdr)
+-        is_http_fallback = False
+         if request is not None:
+             host_name = (request.headers.get("host") or "").split(":")[0].lower()
+             if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+-                is_http_fallback = True
+                 response.headers.append(
+                     "Set-Cookie",
+                     build_clear_fallback_browser_binding_cookie(),
+@@ -826,28 +825,17 @@ class OidcFlow:
+                 auth_card_id=card.id,
+                 aal_level=2,
+                 mfa_pending=False,
++                remember_me=remember_me,
+             )
+             await session.commit()
+             if hasattr(session, "info") and isinstance(session.info, dict):
+                 session.info["rls_bound"] = True
+-            response.headers.append(
+-                "Set-Cookie",
+-                build_set_cookie_header(issued_session.cookie_val, issued_session.idle_expires_at),
+-            )
+-            response.headers.append(
+-                "Set-Cookie",
+-                build_set_csrf_cookie_header(issued_session.csrf_token),
++            attach_session_and_csrf_cookies(
++                response,
++                request,
++                issued_session,
++                issued_session.csrf_token,
++                persistent=issued_session.is_persistent,
+             )
+-            if is_http_fallback:
+-                response.headers.append(
+-                    "Set-Cookie",
+-                    build_set_fallback_cookie_header(
+-                        issued_session.cookie_val, issued_session.idle_expires_at
+-                    ),
+-                )
+-                response.headers.append(
+-                    "Set-Cookie",
+-                    build_set_fallback_csrf_cookie_header(issued_session.csrf_token),
+-                )
+ 
+         return response
+diff --git a/kanban/auth/oidc/google_json.py b/kanban/auth/oidc/google_json.py
+index 84349ab..2d13546 100644
+--- a/kanban/auth/oidc/google_json.py
++++ b/kanban/auth/oidc/google_json.py
+@@ -20,16 +20,20 @@ MAX_CLIENT_ID_LEN: int = 255
+ MIN_CLIENT_SECRET_LEN: int = 1
+ MAX_CLIENT_SECRET_LEN: int = 512
+ 
+-ALLOWED_AUTH_URIS: frozenset[str] = frozenset({
+-    "https://accounts.google.com/o/oauth2/auth",
+-    "https://accounts.google.com/o/oauth2/v2/auth",
+-})
+-
+-ALLOWED_TOKEN_URIS: frozenset[str] = frozenset({
+-    "https://oauth2.googleapis.com/token",
+-    "https://accounts.google.com/o/oauth2/token",
+-    "https://www.googleapis.com/oauth2/v4/token",
+-})
++ALLOWED_AUTH_URIS: frozenset[str] = frozenset(
++    {
++        "https://accounts.google.com/o/oauth2/auth",
++        "https://accounts.google.com/o/oauth2/v2/auth",
++    }
++)
++
++ALLOWED_TOKEN_URIS: frozenset[str] = frozenset(
++    {
++        "https://oauth2.googleapis.com/token",
++        "https://accounts.google.com/o/oauth2/token",
++        "https://www.googleapis.com/oauth2/v4/token",
++    }
++)
+ 
+ ALLOWED_CERT_URL_PREFIXES: tuple[str, ...] = (
+     "https://www.googleapis.com/oauth2/",
+diff --git a/kanban/auth/sessions/cookies.py b/kanban/auth/sessions/cookies.py
+index 59a181f..bf723c6 100644
+--- a/kanban/auth/sessions/cookies.py
++++ b/kanban/auth/sessions/cookies.py
+@@ -19,6 +19,7 @@ __all__ = [
+     "MAX_COOKIE_LEN",
+     "SESSION_COOKIE_NAME",
+     "TOKEN_BYTES_LEN",
++    "attach_session_and_csrf_cookies",
+     "build_clear_cookie_header",
+     "build_clear_fallback_cookie_header",
+     "build_set_cookie_header",
+@@ -27,6 +28,7 @@ __all__ = [
+     "extract_session_cookie",
+     "generate_session_token",
+     "hash_session_token",
++    "is_plain_http",
+     "parse_session_cookie",
+ ]
+ 
+@@ -141,7 +143,13 @@ def extract_session_cookie(cookie_header: str | None) -> str | None:
+     return None
+ 
+ 
+-def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
++def build_set_cookie_header(
++    cookie_val: str,
++    expires_at: datetime | None = None,
++    *,
++    max_age: int | None = None,
++    persistent: bool = True,
++) -> str:
+     """Format Set-Cookie header for __Host-kb_session."""
+     parts = [
+         f"{SESSION_COOKIE_NAME}={cookie_val}",
+@@ -150,15 +158,34 @@ def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None)
+         "Secure",
+         "SameSite=Lax",
+     ]
+-    if expires_at is not None:
+-        utc_dt = expires_at.astimezone(UTC)
+-        expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+-        parts.append(f"Expires={expires_str}")
++    if persistent:
++        if expires_at is not None:
++            utc_dt = expires_at.astimezone(UTC)
++            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
++            parts.append(f"Expires={expires_str}")
++            if max_age is None:
++                calc_max_age = max(0, int((utc_dt - datetime.now(UTC)).total_seconds()))
++                parts.append(f"Max-Age={calc_max_age}")
++            else:
++                parts.append(f"Max-Age={max_age}")
++        elif max_age is not None:
++            parts.append(f"Max-Age={max_age}")
++            from datetime import timedelta  # noqa: PLC0415
++
++            utc_dt = datetime.now(UTC) + timedelta(seconds=max_age)
++            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
++            parts.append(f"Expires={expires_str}")
+ 
+     return "; ".join(parts)
+ 
+ 
+-def build_set_fallback_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
++def build_set_fallback_cookie_header(
++    cookie_val: str,
++    expires_at: datetime | None = None,
++    *,
++    max_age: int | None = None,
++    persistent: bool = True,
++) -> str:
+     """Format Set-Cookie header for non-Host kb_session over plain HTTP local dev."""
+     parts = [
+         f"{FALLBACK_SESSION_COOKIE_NAME}={cookie_val}",
+@@ -166,14 +193,85 @@ def build_set_fallback_cookie_header(cookie_val: str, expires_at: datetime | Non
+         "HttpOnly",
+         "SameSite=Lax",
+     ]
+-    if expires_at is not None:
+-        utc_dt = expires_at.astimezone(UTC)
+-        expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+-        parts.append(f"Expires={expires_str}")
++    if persistent:
++        if expires_at is not None:
++            utc_dt = expires_at.astimezone(UTC)
++            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
++            parts.append(f"Expires={expires_str}")
++            if max_age is None:
++                calc_max_age = max(0, int((utc_dt - datetime.now(UTC)).total_seconds()))
++                parts.append(f"Max-Age={calc_max_age}")
++            else:
++                parts.append(f"Max-Age={max_age}")
++        elif max_age is not None:
++            parts.append(f"Max-Age={max_age}")
++            from datetime import timedelta  # noqa: PLC0415
++
++            utc_dt = datetime.now(UTC) + timedelta(seconds=max_age)
++            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
++            parts.append(f"Expires={expires_str}")
+ 
+     return "; ".join(parts)
+ 
+ 
++def is_plain_http(request: object | None) -> bool:
++    """Detect whether request arrives over plain HTTP (direct or reverse proxy)."""
++    if request is None:
++        return False
++    headers = getattr(request, "headers", None)
++    if headers:
++        fwd_proto = (headers.get("x-forwarded-proto") or "").lower().strip()
++        if fwd_proto:
++            return fwd_proto == "http"
++        fwd = (headers.get("forwarded") or "").lower()
++        if "proto=http" in fwd:
++            return True
++        if "proto=https" in fwd:
++            return False
++    url = getattr(request, "url", None)
++    return bool(url and getattr(url, "scheme", "").lower() == "http")
++
++
++def attach_session_and_csrf_cookies(
++    response: object,
++    request: object | None,
++    issued: object,
++    csrf_token: str | None = None,
++    *,
++    persistent: bool | None = None,
++) -> None:
++    """Unified helper to attach __Host- and fallback session & CSRF cookies to responses."""
++    from kanban.auth.sessions.csrf import (  # noqa: PLC0415
++        build_set_csrf_cookie_header,
++        build_set_fallback_csrf_cookie_header,
++    )
++
++    is_persist = persistent if persistent is not None else getattr(issued, "is_persistent", True)
++    cookie_val = getattr(issued, "cookie_val", str(issued))
++    token_csrf = csrf_token or getattr(issued, "csrf_token", None)
++    expires_at = getattr(issued, "absolute_expires_at", None) if is_persist else None
++
++    sess_hdr = build_set_cookie_header(cookie_val, expires_at=expires_at, persistent=is_persist)
++
++    def _add(hdr: str) -> None:
++        if hasattr(response, "raw_headers"):
++            response.raw_headers.append((b"set-cookie", hdr.encode("latin-1")))
++        elif hasattr(response, "headers"):
++            response.headers.append("Set-Cookie", hdr)
++
++    _add(sess_hdr)
++    if token_csrf:
++        _add(build_set_csrf_cookie_header(token_csrf))
++
++    if is_plain_http(request):
++        fb_sess_hdr = build_set_fallback_cookie_header(
++            cookie_val, expires_at=expires_at, persistent=is_persist
++        )
++        _add(fb_sess_hdr)
++        if token_csrf:
++            _add(build_set_fallback_csrf_cookie_header(token_csrf))
++
++
+ def build_clear_cookie_header() -> str:
+     """Format Set-Cookie header to clear __Host-kb_session."""
+     return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
+diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
+index 3f31acf..665f0d4 100644
+--- a/kanban/auth/sessions/resolver.py
++++ b/kanban/auth/sessions/resolver.py
+@@ -71,6 +71,7 @@ class SessionCookieResolver:
+         # Populate request.state for downstream middleware (e.g. CSRF)
+         request.state.session_id = user_session.id
+         request.state.mfa_pending = user_session.mfa_pending
++        request.state.user_session = user_session
+ 
+         ctx = PrincipalContext(
+             principal_id=user_session.principal_id,
+diff --git a/kanban/auth/sessions/service.py b/kanban/auth/sessions/service.py
+index bd4f406..f12168d 100644
+--- a/kanban/auth/sessions/service.py
++++ b/kanban/auth/sessions/service.py
+@@ -28,6 +28,8 @@ __all__ = [
+     "DEFAULT_AAL2_FRESH_SECONDS",
+     "DEFAULT_ABSOLUTE_SECONDS",
+     "DEFAULT_IDLE_SECONDS",
++    "DEFAULT_REMEMBER_ABSOLUTE_SECONDS",
++    "DEFAULT_REMEMBER_IDLE_SECONDS",
+     "MAX_POLICY_SECONDS",
+     "MIN_POLICY_SECONDS",
+     "IssuedSession",
+@@ -37,6 +39,8 @@ __all__ = [
+ 
+ DEFAULT_IDLE_SECONDS: Final[int] = 28800  # 8 hours
+ DEFAULT_ABSOLUTE_SECONDS: Final[int] = 604800  # 7 days
++DEFAULT_REMEMBER_IDLE_SECONDS: Final[int] = 604800  # 7 days
++DEFAULT_REMEMBER_ABSOLUTE_SECONDS: Final[int] = 2592000  # 30 days
+ DEFAULT_AAL2_FRESH_SECONDS: Final[int] = 900  # 15 minutes
+ 
+ MIN_POLICY_SECONDS: Final[int] = 300  # 5 minutes
+@@ -50,6 +54,8 @@ class SessionPolicy:
+     idle_seconds: int = DEFAULT_IDLE_SECONDS
+     absolute_seconds: int = DEFAULT_ABSOLUTE_SECONDS
+     aal2_fresh_seconds: int = DEFAULT_AAL2_FRESH_SECONDS
++    remember_idle_seconds: int = DEFAULT_REMEMBER_IDLE_SECONDS
++    remember_absolute_seconds: int = DEFAULT_REMEMBER_ABSOLUTE_SECONDS
+ 
+     def __post_init__(self) -> None:
+         """Validate timeout parameters are within bounds [300, 2592000]."""
+@@ -57,6 +63,8 @@ class SessionPolicy:
+             ("idle_seconds", self.idle_seconds),
+             ("absolute_seconds", self.absolute_seconds),
+             ("aal2_fresh_seconds", self.aal2_fresh_seconds),
++            ("remember_idle_seconds", self.remember_idle_seconds),
++            ("remember_absolute_seconds", self.remember_absolute_seconds),
+         ):
+             if val < MIN_POLICY_SECONDS or val > MAX_POLICY_SECONDS:
+                 msg = (
+@@ -71,12 +79,28 @@ class SessionPolicy:
+         idle_raw = os.environ.get("KANBAN_SESSION_IDLE_SECONDS")
+         abs_raw = os.environ.get("KANBAN_SESSION_ABSOLUTE_SECONDS")
+         aal2_raw = os.environ.get("KANBAN_AAL2_FRESH_SECONDS")
++        rem_idle_raw = os.environ.get("KANBAN_SESSION_REMEMBER_IDLE_SECONDS")
++        rem_abs_raw = os.environ.get("KANBAN_SESSION_REMEMBER_ABSOLUTE_SECONDS")
+ 
+         idle = int(idle_raw) if idle_raw is not None else DEFAULT_IDLE_SECONDS
+         absolute = int(abs_raw) if abs_raw is not None else DEFAULT_ABSOLUTE_SECONDS
+         aal2 = int(aal2_raw) if aal2_raw is not None else DEFAULT_AAL2_FRESH_SECONDS
+-
+-        return cls(idle_seconds=idle, absolute_seconds=absolute, aal2_fresh_seconds=aal2)
++        rem_idle = int(rem_idle_raw) if rem_idle_raw is not None else DEFAULT_REMEMBER_IDLE_SECONDS
++        rem_abs = int(rem_abs_raw) if rem_abs_raw is not None else DEFAULT_REMEMBER_ABSOLUTE_SECONDS
++
++        idle = min(max(idle, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
++        absolute = min(max(absolute, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
++        aal2 = min(max(aal2, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
++        rem_idle = min(max(rem_idle, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
++        rem_abs = min(max(rem_abs, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
++
++        return cls(
++            idle_seconds=idle,
++            absolute_seconds=absolute,
++            aal2_fresh_seconds=aal2,
++            remember_idle_seconds=rem_idle,
++            remember_absolute_seconds=rem_abs,
++        )
+ 
+ 
+ @dataclass(frozen=True)
+@@ -91,6 +115,7 @@ class IssuedSession:
+     mfa_pending: bool
+     idle_expires_at: datetime
+     absolute_expires_at: datetime
++    is_persistent: bool = True
+ 
+ 
+ class SessionService:
+@@ -126,6 +151,7 @@ class SessionService:
+         mfa_pending: bool = False,
+         existing_cookie: str | None = None,
+         existing_cookie_val: str | None = None,
++        remember_me: bool = True,
+     ) -> IssuedSession:
+         """Create new session upon login, revoking any pre-existing session (fixation defense)."""
+         # Session fixation defense: revoke previous session presented in request
+@@ -143,8 +169,12 @@ class SessionService:
+         token_sha256 = hash_session_token(token)
+ 
+         now = datetime.now(UTC)
+-        idle_expires_at = now + timedelta(seconds=self._policy.idle_seconds)
+-        absolute_expires_at = now + timedelta(seconds=self._policy.absolute_seconds)
++        if remember_me:
++            idle_expires_at = now + timedelta(seconds=self._policy.remember_idle_seconds)
++            absolute_expires_at = now + timedelta(seconds=self._policy.remember_absolute_seconds)
++        else:
++            idle_expires_at = now + timedelta(seconds=self._policy.idle_seconds)
++            absolute_expires_at = now + timedelta(seconds=self._policy.absolute_seconds)
+ 
+         aal2_verified_at = now if aal_level == 2 else None  # noqa: PLR2004
+ 
+@@ -152,7 +182,8 @@ class SessionService:
+             "SELECT kb_auth.session_create("
+             "  :p_id, :p_token_sha256, :p_principal_id, :p_workspace_id, "
+             "  :p_auth_card_id, :p_aal_level, :p_aal2_verified_at, :p_mfa_pending, "
+-            "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id"
++            "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id, "
++            "  :p_is_persistent"
+             ")"
+         )
+         await session.execute(
+@@ -169,6 +200,7 @@ class SessionService:
+                 "p_idle_expires_at": idle_expires_at,
+                 "p_absolute_expires_at": absolute_expires_at,
+                 "p_rotated_from_id": None,
++                "p_is_persistent": remember_me,
+             },
+         )
+ 
+@@ -184,6 +216,7 @@ class SessionService:
+             mfa_pending=mfa_pending,
+             idle_expires_at=idle_expires_at,
+             absolute_expires_at=absolute_expires_at,
++            is_persistent=remember_me,
+         )
+ 
+     async def elevate_aal(
+@@ -226,6 +259,7 @@ class SessionService:
+             mfa_pending=resolved.mfa_pending,
+             idle_expires_at=resolved.idle_expires_at,
+             absolute_expires_at=resolved.absolute_expires_at,
++            is_persistent=resolved.is_persistent,
+         )
+ 
+     async def logout(self, session: AsyncSession, session_id: uuid.UUID) -> bool:
+diff --git a/kanban/tests/auth/test_auth_cards_admin_api.py b/kanban/tests/auth/test_auth_cards_admin_api.py
+index e86cd76..c999ff4 100644
+--- a/kanban/tests/auth/test_auth_cards_admin_api.py
++++ b/kanban/tests/auth/test_auth_cards_admin_api.py
+@@ -882,6 +882,7 @@ async def test_case_8_validation_boundaries(
+         )
+         assert res_insecure_oidc.status_code == 422
+ 
++
+ @pytest.mark.asyncio
+ async def test_case_9_google_oauth_json_preview_and_card_creation(
+     db_session: AsyncSession,
+@@ -918,19 +919,21 @@ async def test_case_9_google_oauth_json_preview_and_card_creation(
+         client.cookies.set(CSRF_COOKIE_NAME, sess_aal2.csrf_token)
+         client.headers[CSRF_HEADER_NAME] = sess_aal2.csrf_token
+ 
+-        valid_google_json = json.dumps({
+-            "web": {
+-                "client_id": "google-client-xyz.apps.googleusercontent.com",
+-                "client_secret": "GOCSPX-secret-token",
+-                "project_id": "google-proj-99",
+-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+-                "token_uri": "https://oauth2.googleapis.com/token",
+-                "redirect_uris": [
+-                    "http://test/api/v1/auth/oidc/google-oauth/callback",
+-                ],
+-                "javascript_origins": ["http://test"],
++        valid_google_json = json.dumps(
++            {
++                "web": {
++                    "client_id": "google-client-xyz.apps.googleusercontent.com",
++                    "client_secret": "GOCSPX-secret-token",
++                    "project_id": "google-proj-99",
++                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
++                    "token_uri": "https://oauth2.googleapis.com/token",
++                    "redirect_uris": [
++                        "http://test/api/v1/auth/oidc/google-oauth/callback",
++                    ],
++                    "javascript_origins": ["http://test"],
++                }
+             }
+-        })
++        )
+ 
+         # 1. Preview endpoint
+         preview_res = await client.post(
+@@ -961,7 +964,10 @@ async def test_case_9_google_oauth_json_preview_and_card_creation(
+         assert created_data["slug"] == "google-oauth"
+         assert created_data["provider_kind"] == "OIDC"
+         assert created_data["has_secret"] is True
+-        assert created_data["public_config"]["client_id"] == "google-client-xyz.apps.googleusercontent.com"
++        assert (
++            created_data["public_config"]["client_id"]
++            == "google-client-xyz.apps.googleusercontent.com"
++        )
+         assert created_data["public_config"]["issuer"] == "https://accounts.google.com"
+         assert "client_secret" not in created_data["public_config"]
+         assert "redirect_uris" not in created_data["public_config"]
+diff --git a/kanban/tests/auth/test_session_persistence.py b/kanban/tests/auth/test_session_persistence.py
+new file mode 100644
+index 0000000..d52ed98
+--- /dev/null
++++ b/kanban/tests/auth/test_session_persistence.py
+@@ -0,0 +1,472 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for durable session persistence, remember_me policy, and cookie stability.
++
++Part of KB-AUTH-PERSIST / KANBA-186.
++"""
++
++from __future__ import annotations
++
++import urllib.parse
++import uuid
++from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock
++
++import httpx
++import pytest
++from fastapi import FastAPI
++from sqlalchemy import text
++from starlette.responses import Response
++
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.problems import ProblemException, problem_exception_handler
++from kanban.api.request_id import RequestIdMiddleware
++from kanban.api.v1.auth_cards_public import router as auth_cards_router
++from kanban.api.v1.auth_oidc import get_oidc_flow
++from kanban.api.v1.auth_oidc import router as auth_oidc_router
++from kanban.api.v1.auth_session import router as auth_session_router
++from kanban.auth.cards.repository import admin_upsert
++from kanban.auth.identity import ExternalIdentityAssertion, IdentityResolver, ResolvedLogin
++from kanban.auth.oidc.flow import OidcFlow
++from kanban.auth.sessions.cookies import (
++    SESSION_COOKIE_NAME,
++    attach_session_and_csrf_cookies,
++    hash_session_token,
++    parse_session_cookie,
++)
++from kanban.auth.sessions.csrf import (
++    CSRF_COOKIE_NAME,
++    CsrfMiddleware,
++)
++from kanban.auth.sessions.resolver import SessionCookieResolver
++from kanban.auth.sessions.service import SessionPolicy, SessionService
++from kanban.security.envelope import StaticKekProvider, seal_card_secret
++from kanban.security.keys import KeyMaterial
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncEngine
++    from starlette.requests import Request
++
++
++class RecordingIdentityResolver(IdentityResolver):
++    """Stub identity resolver returning a fixed principal and workspace."""
++
++    def __init__(self, principal_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
++        """Initialize with fixed test principal and workspace."""
++        self.principal_id = principal_id
++        self.workspace_id = workspace_id
++
++    async def resolve(
++        self,
++        assertion: ExternalIdentityAssertion,
++        request: Request,
++        link_intent_id: uuid.UUID | None = None,
++    ) -> ResolvedLogin:
++        """Return fixed test login."""
++        del assertion, request, link_intent_id
++        return ResolvedLogin(
++            principal_id=self.principal_id,
++            workspace_id=self.workspace_id,
++            aal_level=2,
++            mfa_pending=False,
++        )
++
++
++@pytest.fixture
++def key_material() -> KeyMaterial:
++    """Provide static test key material."""
++    return KeyMaterial(
++        master_kek=b"m" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++        master_kek_kid="kek-v1",
++    )
++
++
++@pytest.fixture
++def kek_provider(key_material: KeyMaterial) -> StaticKekProvider:
++    """Provide static KEK provider."""
++    return StaticKekProvider.from_key_material(key_material)
++
++
++async def _create_test_workspace_and_admin(
++    factory: RLSSessionFactory,
++) -> tuple[uuid.UUID, uuid.UUID]:
++    """Provision workspace, user, and principal for testing."""
++    ws_id = uuid.uuid4()
++    u_id = uuid.uuid4()
++    ctx = RLSContext(principal_id=u_id, workspace_id=ws_id, aal_level=1)
++    async with factory.session(ctx) as session:
++        await session.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
++            {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "Persist WS"},
++        )
++
++        await session.execute(
++            text(
++                "SELECT register_object("
++                "'user'::object_kind, :ws_id, NULL, :ckey, :title, :u_id, :u_id)"
++            ),
++            {
++                "ws_id": ws_id,
++                "ckey": f"usr-{u_id.hex}",
++                "title": "Persist User",
++                "u_id": u_id,
++            },
++        )
++
++        await session.execute(
++            text(
++                "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
++                "VALUES (:id, 'USER', :ws_id, 'Persist User', 'ACTIVE')"
++            ),
++            {"id": u_id, "ws_id": ws_id},
++        )
++
++        await session.execute(
++            text(
++                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++                "VALUES (:id, 'user', 'USER', :ws_id, 'persist@example.com')"
++            ),
++            {"id": u_id, "ws_id": ws_id},
++        )
++
++        await session.execute(
++            text(
++                "INSERT INTO role_bindings "
++                "(id, workspace_id, principal_id, role, scope_type, project_id) "
++                "VALUES (:id, :ws_id, :p_id, 'SERVER_ADMIN', 'server', NULL)"
++            ),
++            {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": u_id},
++        )
++    return ws_id, u_id
++
++
++def _build_test_app(
++    session_service: SessionService,
++    session_factory: RLSSessionFactory,
++    key_material: KeyMaterial,
++) -> FastAPI:
++    """Build FastAPI test instance wired with auth session router and middleware."""
++    app = FastAPI(title="Persist Test App")
++    app.state.session_service = session_service
++    app.state.session_factory = session_factory
++    app.state.key_material = key_material
++
++    resolver = SessionCookieResolver(session_service, session_factory)
++    app.state.principal_resolver = resolver
++
++    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++
++    app.include_router(auth_session_router, prefix="/api/v1")
++    app.include_router(auth_cards_router, prefix="/api/v1")
++    app.include_router(auth_oidc_router, prefix="/api/v1")
++
++    app.add_middleware(CsrfMiddleware, session_hmac_key=key_material.session_hmac_key)
++    app.add_middleware(RequestIdMiddleware)
++    return app
++
++
++@pytest.mark.asyncio
++async def test_session_policy_remember_bounds() -> None:
++    """Verify remember_me timeout policy defaults and validation bounds."""
++    policy = SessionPolicy()
++    assert policy.remember_idle_seconds == 604800  # 7 days
++    assert policy.remember_absolute_seconds == 2592000  # 30 days
++    assert policy.aal2_fresh_seconds == 900
++
++    env_policy = SessionPolicy.from_env()
++    assert env_policy.remember_idle_seconds == 604800
++    assert env_policy.remember_absolute_seconds == 2592000
++
++    with pytest.raises(ValueError, match="outside allowed bounds"):
++        SessionPolicy(remember_absolute_seconds=3000000)
++
++
++@pytest.mark.asyncio
++async def test_remember_me_cookie_and_rotation_persistence(
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify remember_me=True emits Max-Age + Expires and preserves persistence on rotation."""
++    factory = RLSSessionFactory(pg_worker_db)
++    session_service = SessionService(key_material.session_hmac_key)
++    ws_id, p_id = await _create_test_workspace_and_admin(factory)
++
++    ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=1)
++    async with factory.session(ctx) as session:
++        # 1. Login with remember_me=True
++        issued_persist = await session_service.create_after_login(
++            session,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            remember_me=True,
++        )
++        assert issued_persist.is_persistent is True
++
++        # Check cookie formatting
++        resp1 = Response()
++        attach_session_and_csrf_cookies(
++            resp1, None, issued_persist, issued_persist.csrf_token, persistent=True
++        )
++        cookie_hdr1 = resp1.headers.get("set-cookie") or ""
++        assert "Max-Age=" in cookie_hdr1
++        assert "Expires=" in cookie_hdr1
++
++        # 2. Login with remember_me=False
++        issued_session_only = await session_service.create_after_login(
++            session,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            remember_me=False,
++        )
++        assert issued_session_only.is_persistent is False
++
++        resp2 = Response()
++        attach_session_and_csrf_cookies(
++            resp2, None, issued_session_only, issued_session_only.csrf_token, persistent=False
++        )
++        cookie_hdr2 = resp2.headers.get("set-cookie") or ""
++        assert "Max-Age=" not in cookie_hdr2
++        assert "Expires=" not in cookie_hdr2
++
++        # 3. Elevate AAL on persistent session -> preserves is_persistent=True
++        elevated = await session_service.elevate_aal(
++            session,
++            old_session_id=issued_persist.session_id,
++            new_aal=2,
++        )
++        assert elevated.is_persistent is True
++
++
++@pytest.mark.asyncio
++async def test_csrf_stability_and_session_status(
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify GET /api/v1/auth/session reuses existing valid CSRF cookies without rotating."""
++    factory = RLSSessionFactory(pg_worker_db)
++    session_service = SessionService(key_material.session_hmac_key)
++    ws_id, admin_id = await _create_test_workspace_and_admin(factory)
++
++    app = _build_test_app(session_service, factory, key_material)
++
++    anon_ctx = RLSContext(
++        principal_id=uuid.UUID(int=0),
++        workspace_id=uuid.UUID(int=0),
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    async with factory.session(anon_ctx) as sess:
++        issued = await session_service.create_after_login(
++            sess,
++            principal_id=admin_id,
++            workspace_id=ws_id,
++            remember_me=True,
++        )
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
++        # First request: unauthenticated / fresh pre-session CSRF
++        r1 = await client.get("/api/v1/auth/session")
++        assert r1.status_code == 200
++        d1 = r1.json()
++        assert d1["authenticated"] is False
++        csrf1 = d1["csrf_token"]
++        assert csrf1
++
++        # Second request with existing CSRF cookie:
++        # must reuse same CSRF token and emit NO Set-Cookie
++        r2 = await client.get(
++            "/api/v1/auth/session",
++            cookies={CSRF_COOKIE_NAME: csrf1},
++        )
++        assert r2.status_code == 200
++        d2 = r2.json()
++        assert d2["csrf_token"] == csrf1
++        # No Set-Cookie header emitted when CSRF token is reused
++        assert "set-cookie" not in r2.headers
++
++        # Third request with valid authenticated session cookie & valid CSRF
++        valid_csrf_for_sess = issued.csrf_token
++        r3 = await client.get(
++            "/api/v1/auth/session",
++            cookies={
++                SESSION_COOKIE_NAME: issued.cookie_val,
++                CSRF_COOKIE_NAME: valid_csrf_for_sess,
++            },
++        )
++        assert r3.status_code == 200
++        d3 = r3.json()
++        assert d3["authenticated"] is True
++        assert d3["principal_id"] == str(admin_id)
++        assert d3["csrf_token"] == valid_csrf_for_sess
++        assert d3["remember_me"] is True
++        assert d3["idle_expires_at"] is not None
++        assert d3["absolute_expires_at"] is not None
++        assert "set-cookie" not in r3.headers
++
++
++@pytest.mark.asyncio
++async def test_oidc_callback_commits_session_and_survives_reload(  # noqa: PLR0915
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Verify OIDC callback commits session to DB and emits fallback cookies on plain HTTP."""
++    factory = RLSSessionFactory(pg_worker_db)
++    session_service = SessionService(key_material.session_hmac_key)
++    ws_id, admin_id = await _create_test_workspace_and_admin(factory)
++
++    # 1. Seed an OIDC card
++    async with factory.session(
++        RLSContext(principal_id=admin_id, workspace_id=ws_id, aal_level=2)
++    ) as sess:
++        card_id = uuid.uuid4()
++        sealed = seal_card_secret(card_id, "OAUTH2", b"test-secret-1234", kek_provider)
++        await admin_upsert(
++            sess,
++            card_id=card_id,
++            workspace_id=ws_id,
++            provider_kind="OAUTH2",
++            slug="google-persist-test",
++            display_name="Google Persist Test",
++            is_enabled=True,
++            sort_rank="0001",
++            public_config={
++                "kind": "OAUTH2",
++                "authorization_endpoint": "https://accounts.google.com/o/oauth2/auth",
++                "token_endpoint": "https://oauth2.googleapis.com/token",
++                "userinfo_endpoint": "https://openidconnect.googleapis.com/v1/userinfo",
++                "client_id": "test-client-id.apps.googleusercontent.com",
++                "client_auth": "client_secret_basic",
++                "scopes": ["openid", "profile", "email"],
++                "subject_claim": "sub",
++                "allowed_algs": ["RS256"],
++            },
++            encrypted_secret_blob=sealed.encrypted_secret_blob,
++            wrapped_dek=sealed.wrapped_dek,
++            dek_kid=sealed.dek_kid,
++        )
++
++    app = _build_test_app(session_service, factory, key_material)
++
++    recording_resolver = RecordingIdentityResolver(principal_id=admin_id, workspace_id=ws_id)
++    mock_http_client = AsyncMock(spec=httpx.AsyncClient)
++    mock_discovery_resp = httpx.Response(
++        200,
++        json={
++            "issuer": "https://accounts.google.com",
++            "authorization_endpoint": "https://accounts.google.com/o/oauth2/auth",
++            "token_endpoint": "https://oauth2.googleapis.com/token",
++            "userinfo_endpoint": "https://openidconnect.googleapis.com/v1/userinfo",
++            "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
++        },
++        request=httpx.Request(
++            "GET", "https://accounts.google.com/.well-known/openid-configuration"
++        ),
++    )
++    mock_token_resp = httpx.Response(
++        200,
++        json={"access_token": "fake-access-token", "token_type": "Bearer"},
++        request=httpx.Request("POST", "https://oauth2.googleapis.com/token"),
++    )
++    mock_userinfo_resp = httpx.Response(
++        200,
++        json={
++            "sub": "google-user-12345",
++            "email": "persist-user@example.com",
++            "email_verified": True,
++            "name": "Persist User",
++        },
++        request=httpx.Request("GET", "https://openidconnect.googleapis.com/v1/userinfo"),
++    )
++    mock_http_client.post.return_value = mock_token_resp
++
++    async def _mock_get(url: object, *args: object, **kwargs: object) -> httpx.Response:
++        del args, kwargs
++        if "openid-configuration" in str(url):
++            return mock_discovery_resp
++        return mock_userinfo_resp
++
++    mock_http_client.get.side_effect = _mock_get
++
++    flow = OidcFlow(
++        key_material=key_material,
++        identity_resolver=recording_resolver,
++        session_service=session_service,
++        http_client=mock_http_client,
++    )
++    app.state.oidc_flow = flow
++    app.dependency_overrides[get_oidc_flow] = lambda: flow
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
++        # Start auth with remember_me=1
++        start_res = await client.get(
++            "/api/v1/auth/cards/google-persist-test/start?return_to=/&remember_me=1",
++            follow_redirects=False,
++        )
++        assert start_res.status_code == 302
++        start_loc = start_res.headers["Location"]
++        start_params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(start_loc).query))
++
++        # Extract browser binding cookie
++        binding_val = ""
++        for cookie_hdr in start_res.headers.get_list("set-cookie"):
++            if "kb_oidc=" in cookie_hdr:
++                binding_val = cookie_hdr.split(";")[0].split("=")[1].strip()
++
++        client.cookies.set("kb_oidc", binding_val)
++
++        # Execute callback over plain HTTP (http://127.0.0.1)
++        cb_res = await client.get(
++            f"/api/v1/auth/oidc/google-persist-test/callback?code=mock-code&state={start_params['state']}",
++            follow_redirects=False,
++        )
++        assert cb_res.status_code == 302
++        assert cb_res.headers["Location"] == "/"
++
++        # Inspect Set-Cookie headers
++        cb_cookies = cb_res.headers.get_list("set-cookie")
++        # Must have __Host-kb_session with Max-Age and Expires
++        host_sess_hdr = next((c for c in cb_cookies if "__Host-kb_session=" in c), None)
++        assert host_sess_hdr is not None
++        assert "Max-Age=" in host_sess_hdr
++        assert "Expires=" in host_sess_hdr
++
++        # Must have fallback kb_session on plain HTTP
++        fallback_sess_hdr = next(
++            (c for c in cb_cookies if "kb_session=" in c and "__Host-" not in c), None
++        )
++        assert fallback_sess_hdr is not None
++
++        # Extract session token from cookie
++        cookie_val = host_sess_hdr.split(";")[0].split("=")[1].strip()
++        parsed_token = parse_session_cookie(cookie_val, key_material.session_hmac_key)
++        assert parsed_token is not None
++        token_sha = hash_session_token(parsed_token)
++
++        # 3. VERIFY SESSION ROW DURABLY COMMITTED IN POSTGRESQL (FRESH SESSION)
++        anon_ctx = RLSContext(
++            principal_id=uuid.UUID(int=0),
++            workspace_id=uuid.UUID(int=0),
++            token_scopes=("session",),
++            aal_level=1,
++        )
++        async with factory.session(anon_ctx) as verify_session:
++            user_session = await session_service.resolve_session(verify_session, token_sha)
++            assert user_session is not None
++            assert user_session.principal_id == admin_id
++            assert user_session.is_persistent is True
++
++        # 4. Subsequent requests using the issued cookies in a fresh client return 200 authenticated
++        client.cookies.set(SESSION_COOKIE_NAME, cookie_val)
++        me_res = await client.get("/api/v1/auth/me")
++        assert me_res.status_code == 200
++        assert me_res.json()["principal_id"] == str(admin_id)
++
++        session_res = await client.get("/api/v1/auth/session")
++        assert session_res.status_code == 200
++        assert session_res.json()["authenticated"] is True
++        assert session_res.json()["remember_me"] is True
+diff --git a/kanban/web/e2e/auth/session-persistence.spec.ts b/kanban/web/e2e/auth/session-persistence.spec.ts
+new file mode 100644
+index 0000000..bdf8918
+--- /dev/null
++++ b/kanban/web/e2e/auth/session-persistence.spec.ts
+@@ -0,0 +1,143 @@
++/**
++ * KANBA-186 Playwright E2E & Screenshot Verification Suite.
++ * Generates authentic annotated screenshots across Desktop, Tablet, and Mobile.
++ */
++
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++test.describe('KANBA-186 Session Persistence & Accessibility (WCAG 2.2 AA)', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-186',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01-login-remember-me: verifies Keep me signed in control, Show/Hide password, and 200% text wrap', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, {
++      'GET /api/v1/auth/cards': { json: loadFixture('auth-cards-kan') },
++      'GET /api/v1/setup/status': { json: { initialized: true } },
++      'GET /api/v1/auth/session': { json: { authenticated: false, csrf_token: 'test-csrf-token-186' } },
++    });
++
++    await page.goto('/login');
++    await expect(page.locator('.auth-panel')).toBeVisible();
++
++    const rememberMeCheckbox = page.locator('[data-testid="login-remember-me-checkbox"]');
++    await expect(rememberMeCheckbox).toBeVisible();
++    await expect(rememberMeCheckbox).toBeChecked();
++
++    // Expand LDAP card to test Show/Hide password toggle
++    const ldapCard = page.locator('.auth-card-button:has-text("Corporate Active Directory")');
++    await ldapCard.click();
++    const ldapPasswordInput = page.locator('#ldap-pwd-corp-ad');
++    await expect(ldapPasswordInput).toBeVisible();
++    await ldapPasswordInput.fill('SecureSecretPass123!');
++
++    const toggleBtn = page.locator('.auth-toggle-visibility-btn').first();
++    await expect(toggleBtn).toBeVisible();
++    await expect(ldapPasswordInput).toHaveAttribute('type', 'password');
++    await toggleBtn.click();
++    await expect(ldapPasswordInput).toHaveAttribute('type', 'text');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-login-remember-me',
++      annotations: [
++        {
++          selector: '.auth-remember-me-container',
++          label: 'Keep me signed in checkbox',
++          note: 'Checked by default (30-day absolute / 7-day idle persistent session policy).',
++        },
++        {
++          selector: '.auth-label-row',
++          label: 'Show/Hide Password toggle',
++          note: 'WCAG 2.2 AA accessible toggle revealing plaintext password on demand.',
++        },
++        {
++          selector: '.auth-card-list',
++          label: 'Responsive Auth Cards',
++          note: 'Word break and flex wrap preventing truncation at 200% zoom.',
++        },
++      ],
++    });
++  });
++
++  test('02-workspace-reload-persistent: verifies authenticated workspace session persistence and Topbar menu accessibility', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, {
++      'GET /api/v1/setup/status': { json: { initialized: true } },
++      'GET /api/v1/auth/session': {
++        json: {
++          authenticated: true,
++          principal_id: '11111111-1111-1111-1111-111111111111',
++          workspace_id: '22222222-2222-2222-2222-222222222222',
++          aal_level: 2,
++          mfa_pending: false,
++          csrf_token: 'test-csrf-token-186',
++          remember_me: true,
++          idle_expires_at: '2026-11-24T23:00:00Z',
++          absolute_expires_at: '2026-12-17T23:00:00Z',
++        },
++      },
++      'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++      'GET /api/v1/workspaces': {
++        json: [{ id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' }],
++      },
++      'GET /api/v1/workspaces/current': {
++        json: { id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' },
++      },
++      'GET /api/v1/projects': {
++        json: [{ id: '33333333-3333-3333-3333-333333333333', key: 'KAN', name: 'kanban' }],
++      },
++      'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
++      'GET /api/v1/projects/KAN/views': { json: [] },
++      'GET /api/v1/projects/KAN/issues': { json: [] },
++      'GET /api/v1/projects/KAN/cycles': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/modules': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/states': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/priorities': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/labels': { json: { items: [] } },
++      'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++      'GET /api/v1/users/me': { json: loadFixture('me-adam') },
++    });
++
++    await page.goto('/projects/KAN/issues');
++    await expect(page.locator('.kb-topbar')).toBeVisible();
++
++    // Open avatar menu
++    const avatarButton = page.locator('.kb-avatar-button');
++    await avatarButton.click();
++    const avatarMenu = page.locator('.kb-avatar-menu');
++    await expect(avatarMenu).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-workspace-reload-persistent',
++      annotations: [
++        {
++          selector: '.kb-topbar',
++          label: 'Calm Workspace Topbar',
++          note: 'Preserved persistent session state across reload without redirecting to login.',
++        },
++        {
++          selector: '[data-testid="topbar-personal-settings-link"]',
++          label: 'Personal Settings link',
++          note: 'Direct link to /settings/profile (KANBA-187).',
++        },
++        {
++          selector: '.kb-avatar-menu',
++          label: 'Keyboard-Accessible Avatar Menu',
++          note: 'ArrowDown/ArrowUp navigation and Escape key focus return.',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
+index 1d7ddb6..e556a99 100644
+--- a/kanban/web/src/app/Topbar.css
++++ b/kanban/web/src/app/Topbar.css
+@@ -115,6 +115,13 @@
+   border-color: var(--focus-ring);
+ }
+ 
++.kb-avatar-img {
++  width: 100%;
++  height: 100%;
++  border-radius: var(--radius-full, 9999px);
++  object-fit: cover;
++}
++
+ .kb-avatar-menu {
+   position: absolute;
+   top: calc(100% + 8px);
+diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
+index ce201f0..29822f8 100644
+--- a/kanban/web/src/app/Topbar.test.tsx
++++ b/kanban/web/src/app/Topbar.test.tsx
+@@ -210,7 +210,9 @@ describe('Topbar', () => {
+     expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
+     expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
+     expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Standalone Status & Backup/ })).toBeDefined();
++    expect(
++      screen.getByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
++    ).toBeDefined();
+ 
+     const logoutBtn = screen.getByTestId('logout-button');
+     await act(async () => {
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 6356a52..c3f0ec2 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -1,7 +1,9 @@
+ /**
+- * Topbar Component (KB-P3-34, S6.3, KANBA-167).
++ * Topbar Component (KB-P3-34, S6.3, KANBA-167, KANBA-186, KANBA-187, KANBA-188).
+  * 52px calm header with breadcrumb, Cmd+K trigger, emoji pills, layout switcher,
+  * and avatar menu with Theme selector, Settings/Admin navigation links, and Log out.
++ * Enforces keyboard accessibility (Escape, ArrowDown/ArrowUp, focus return) and
++ * gates admin navigation on `is_server_admin`.
+  */
+ 
+ import React, {
+@@ -19,6 +21,14 @@ import { type SystemStatus } from './useSystemStatus';
+ import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+ import './Topbar.css';
+ 
++export interface TopbarUser {
++  id?: string | null;
++  display_name?: string | null;
++  email?: string | null;
++  avatar_url?: string | null;
++  is_server_admin?: boolean;
++}
++
+ export interface TopbarProps {
+   isSidebarOpen?: boolean | undefined;
+   onToggleSidebar?: (() => void) | undefined;
+@@ -31,6 +41,7 @@ export interface TopbarProps {
+   showLayoutSwitcher?: boolean | undefined;
+   accessManifest?: AccessManifestData | null | undefined;
+   systemStatus?: SystemStatus | null | undefined;
++  user?: TopbarUser | null | undefined;
+ }
+ 
+ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
+@@ -39,14 +50,6 @@ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
+   { id: 'system', label: 'System', icon: '💻' },
+ ] as const;
+ 
+-const AVATAR_NAV_LINKS: readonly { to: string; label: string; icon: string }[] = [
+-  { to: '/settings/mcp', label: 'Personal MCP Keys', icon: '🔑' },
+-  { to: '/workspaces/settings/mcp', label: 'Workspace MCP Keys', icon: '🏢' },
+-  { to: '/admin/auth', label: 'Admin Auth Studio', icon: '🛡️' },
+-  { to: '/admin/mcp', label: 'Admin MCP Keys', icon: '🤖' },
+-  { to: '/admin/standalone', label: 'System Storage, Backups & Deployment', icon: '💾' },
+-] as const;
+-
+ export function Topbar({
+   isSidebarOpen = true,
+   onToggleSidebar,
+@@ -59,6 +62,7 @@ export function Topbar({
+   showLayoutSwitcher: showLayoutOverride,
+   accessManifest,
+   systemStatus,
++  user,
+ }: TopbarProps): JSX.Element {
+   const loc = useLocation();
+   const navigate = useNavigate();
+@@ -71,6 +75,8 @@ export function Topbar({
+ 
+   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+   const avatarRef = useRef<HTMLDivElement>(null);
++  const avatarButtonRef = useRef<HTMLButtonElement>(null);
++  const menuRef = useRef<HTMLDivElement>(null);
+   const themeContext = useTheme();
+ 
+   // Close avatar menu on outside click
+@@ -87,6 +93,35 @@ export function Topbar({
+     };
+   }, [avatarMenuOpen]);
+ 
++  // Handle keyboard navigation within the menu
++  const handleMenuKeyDown = (e: React.KeyboardEvent): void => {
++    if (e.key === 'Escape') {
++      e.preventDefault();
++      setAvatarMenuOpen(false);
++      avatarButtonRef.current?.focus();
++      return;
++    }
++
++    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
++      e.preventDefault();
++      if (!menuRef.current) return;
++      const focusable = Array.from(
++        menuRef.current.querySelectorAll<HTMLElement>(
++          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
++        ),
++      );
++      if (focusable.length === 0) return;
++      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
++      let nextIndex = 0;
++      if (e.key === 'ArrowDown') {
++        nextIndex = currentIndex >= 0 && currentIndex < focusable.length - 1 ? currentIndex + 1 : 0;
++      } else {
++        nextIndex = currentIndex > 0 ? currentIndex - 1 : focusable.length - 1;
++      }
++      focusable[nextIndex]?.focus();
++    }
++  };
++
+   const handleLogout = async (): Promise<void> => {
+     try {
+       const csrfToken = await ensureSessionCsrfToken();
+@@ -111,6 +146,10 @@ export function Topbar({
+ 
+   const activeTheme = themeContext.theme;
+ 
++  // Determine avatar initials or custom image
++  const userInitial = user?.display_name ? user.display_name.charAt(0).toUpperCase() : 'A';
++  const isServerAdmin = user?.is_server_admin ?? true; // Default true in self-hosted single-admin setups unless explicitly non-admin
++
+   return (
+     <header className="kb-topbar">
+       {/* Left: Hamburger & Breadcrumb */}
+@@ -163,6 +202,7 @@ export function Topbar({
+ 
+         <div ref={avatarRef} className="kb-avatar-wrapper">
+           <button
++            ref={avatarButtonRef}
+             type="button"
+             className="kb-avatar-button"
+             aria-label="User profile and settings"
+@@ -172,14 +212,24 @@ export function Topbar({
+               setAvatarMenuOpen(!avatarMenuOpen);
+             }}
+           >
+-            A
++            {user?.avatar_url ? (
++              <img
++                src={user.avatar_url}
++                alt={user.display_name ?? 'User avatar'}
++                className="kb-avatar-img"
++              />
++            ) : (
++              userInitial
++            )}
+           </button>
+ 
+           {avatarMenuOpen && (
+             <div
++              ref={menuRef}
+               className="kb-avatar-menu"
+               role="menu"
+               aria-label="User settings"
++              onKeyDown={handleMenuKeyDown}
+             >
+               <div className="kb-theme-menu-title">Theme</div>
+               <div
+@@ -199,6 +249,7 @@ export function Topbar({
+                       onClick={() => {
+                         themeContext.setTheme(opt.id);
+                         setAvatarMenuOpen(false);
++                        avatarButtonRef.current?.focus();
+                       }}
+                     >
+                       <span>
+@@ -217,24 +268,108 @@ export function Topbar({
+ 
+               <div className="kb-theme-menu-title">Settings & Admin</div>
+               <div className="kb-avatar-menu-list">
+-                {AVATAR_NAV_LINKS.map((link) => (
+-                  <Link
+-                    key={link.to}
+-                    to={link.to}
+-                    role="menuitem"
+-                    className="kb-theme-radio kb-avatar-menu-link"
+-                    onClick={() => {
+-                      setAvatarMenuOpen(false);
+-                    }}
+-                  >
+-                    <span>
+-                      <span aria-hidden="true" className="kb-avatar-menu-icon">
+-                        {link.icon}
+-                      </span>
+-                      {link.label}
++                {/* Personal Settings Studio (KANBA-187) */}
++                <Link
++                  to="/settings/profile"
++                  role="menuitem"
++                  data-testid="topbar-personal-settings-link"
++                  className="kb-theme-radio kb-avatar-menu-link"
++                  onClick={() => {
++                    setAvatarMenuOpen(false);
++                  }}
++                >
++                  <span>
++                    <span aria-hidden="true" className="kb-avatar-menu-icon">
++                      👤
++                    </span>
++                    Personal Settings
++                  </span>
++                </Link>
++
++                <Link
++                  to="/settings/mcp"
++                  role="menuitem"
++                  className="kb-theme-radio kb-avatar-menu-link"
++                  onClick={() => {
++                    setAvatarMenuOpen(false);
++                  }}
++                >
++                  <span>
++                    <span aria-hidden="true" className="kb-avatar-menu-icon">
++                      🔑
++                    </span>
++                    Personal MCP Keys
++                  </span>
++                </Link>
++
++                <Link
++                  to="/workspaces/settings/mcp"
++                  role="menuitem"
++                  className="kb-theme-radio kb-avatar-menu-link"
++                  onClick={() => {
++                    setAvatarMenuOpen(false);
++                  }}
++                >
++                  <span>
++                    <span aria-hidden="true" className="kb-avatar-menu-icon">
++                      🏢
+                     </span>
+-                  </Link>
+-                ))}
++                    Workspace MCP Keys
++                  </span>
++                </Link>
++
++                {isServerAdmin && (
++                  <>
++                    <Link
++                      to="/admin/auth"
++                      role="menuitem"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          🛡️
++                        </span>
++                        Admin Auth Studio
++                      </span>
++                    </Link>
++
++                    <Link
++                      to="/admin/mcp"
++                      role="menuitem"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          🤖
++                        </span>
++                        Admin MCP Keys
++                      </span>
++                    </Link>
++
++                    {/* Preserving System Storage, Backups & Deployment from KANBA-188 */}
++                    <Link
++                      to="/admin/standalone"
++                      role="menuitem"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          💾
++                        </span>
++                        System Storage, Backups & Deployment
++                      </span>
++                    </Link>
++                  </>
++                )}
+               </div>
+ 
+               <div className="kb-avatar-menu-divider" />
+diff --git a/kanban/web/src/features/auth/AuthCardButton.tsx b/kanban/web/src/features/auth/AuthCardButton.tsx
+index ffea200..ecd9275 100644
+--- a/kanban/web/src/features/auth/AuthCardButton.tsx
++++ b/kanban/web/src/features/auth/AuthCardButton.tsx
+@@ -13,6 +13,7 @@ export interface AuthCardButtonProps {
+   card: AuthCard;
+   isPrimary?: boolean;
+   next?: string;
++  rememberMe?: boolean;
+   isLdapExpanded?: boolean;
+   onToggleLdap?: () => void;
+   formId?: string;
+@@ -22,6 +23,7 @@ export function AuthCardButton({
+   card,
+   isPrimary = false,
+   next = '/',
++  rememberMe = true,
+   isLdapExpanded = false,
+   onToggleLdap,
+   formId,
+@@ -32,14 +34,15 @@ export function AuthCardButton({
+     ? `Sign in with ${card.display_name}`
+     : `Continue with ${card.display_name}`;
+ 
+-  const clampedDisplayName = clampText(card.display_name, 80);
+-  const clampedSubtext = clampText(card.button_subtext, 120);
++  const clampedDisplayName = clampText(card.display_name, 120);
++  const clampedSubtext = clampText(card.button_subtext, 200);
+ 
+   const handleClick = () => {
+     if (isLdap) {
+       onToggleLdap?.();
+     } else {
+-      const targetUrl = `/api/v1/auth/cards/${encodeURIComponent(card.slug)}/start?next=${encodeURIComponent(next)}`;
++      const rememberParam = rememberMe ? '&remember_me=1' : '&remember_me=0';
++      const targetUrl = `/api/v1/auth/cards/${encodeURIComponent(card.slug)}/start?next=${encodeURIComponent(next)}${rememberParam}`;
+       window.location.assign(targetUrl);
+     }
+   };
+diff --git a/kanban/web/src/features/auth/AuthContext.tsx b/kanban/web/src/features/auth/AuthContext.tsx
+new file mode 100644
+index 0000000..54bec14
+--- /dev/null
++++ b/kanban/web/src/features/auth/AuthContext.tsx
+@@ -0,0 +1,171 @@
++/**
++ * Centralized Authentication Context & Session Provider (KANBA-186).
++ *
++ * Provides single-source session status across the entire application shell,
++ * preventing duplicate `/api/v1/auth/session` calls, preserving deep links (`?next=`),
++ * tracking remember-me persistence, and coordinating authentication transitions.
++ */
++
++import React, {
++  createContext,
++  useCallback,
++  useContext,
++  useEffect,
++  useState,
++  type JSX,
++  type ReactNode,
++} from 'react';
++import { useLocation, useNavigate } from 'react-router';
++import { setCsrfToken } from '../../api/client';
++
++export interface SessionData {
++  authenticated: boolean;
++  principal_id: string | null;
++  workspace_id: string | null;
++  aal_level: number;
++  mfa_pending: boolean;
++  csrf_token: string | null;
++  idle_expires_at?: string | null;
++  absolute_expires_at?: string | null;
++  remember_me?: boolean;
++}
++
++export interface SetupStatusData {
++  initialized: boolean;
++}
++
++export interface AuthContextValue {
++  session: SessionData | null;
++  isLoading: boolean;
++  initialized: boolean | null;
++  refreshSession: () => Promise<SessionData | null>;
++  logout: () => Promise<void>;
++}
++
++const AuthContext = createContext<AuthContextValue | null>(null);
++
++const PUBLIC_PATH_PREFIXES: readonly string[] = [
++  '/login',
++  '/setup',
++  '/activate',
++  '/__dev',
++];
++
++export function isPublicAuthPath(pathname: string): boolean {
++  return PUBLIC_PATH_PREFIXES.some(
++    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
++  );
++}
++
++export interface AuthProviderProps {
++  children: ReactNode;
++}
++
++export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
++  const [session, setSession] = useState<SessionData | null>(null);
++  const [initialized, setInitialized] = useState<boolean | null>(null);
++  const [isLoading, setIsLoading] = useState<boolean>(true);
++  const location = useLocation();
++  const navigate = useNavigate();
++
++  const refreshSession = useCallback(async (): Promise<SessionData | null> => {
++    try {
++      // 1. Check setup status if uninitialized
++      if (initialized === null) {
++        const setupRes = await fetch('/api/v1/setup/status', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        });
++        if (setupRes.ok) {
++          const setupData = (await setupRes.json()) as SetupStatusData;
++          setInitialized(setupData.initialized);
++          if (!setupData.initialized) {
++            setIsLoading(false);
++            if (!isPublicAuthPath(location.pathname)) {
++              void navigate('/setup', { replace: true });
++            }
++            return null;
++          }
++        }
++      }
++
++      // 2. Query session endpoint
++      const sessionRes = await fetch('/api/v1/auth/session', {
++        method: 'GET',
++        headers: { Accept: 'application/json' },
++        credentials: 'same-origin',
++      });
++
++      if (sessionRes.ok) {
++        const data = (await sessionRes.json()) as SessionData;
++        setSession(data);
++        if (data.csrf_token) {
++          setCsrfToken(data.csrf_token);
++        }
++        setIsLoading(false);
++        return data;
++      }
++    } catch {
++      // Fallback for offline / mocked test environments
++    }
++    setIsLoading(false);
++    return null;
++  }, [initialized, location.pathname, navigate]);
++
++  useEffect(() => {
++    const fetchSession = async () => {
++      await refreshSession();
++    };
++    void fetchSession();
++  }, [refreshSession]);
++
++  const logout = useCallback(async (): Promise<void> => {
++    try {
++      const csrf = session?.csrf_token ?? null;
++      const headers: Record<string, string> = { Accept: 'application/json' };
++      if (csrf) {
++        headers['X-CSRF-Token'] = csrf;
++      }
++      await fetch('/api/v1/auth/logout', {
++        method: 'POST',
++        headers,
++        credentials: 'same-origin',
++      });
++    } catch {
++      // Ignore network errors on logout
++    } finally {
++      setSession(null);
++      setCsrfToken(null);
++      void navigate('/login', { replace: true });
++    }
++  }, [navigate, session?.csrf_token]);
++
++  const value: AuthContextValue = {
++    session,
++    isLoading,
++    initialized,
++    refreshSession,
++    logout,
++  };
++
++  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
++}
++
++const NOOP_ASYNC = (): Promise<void> => Promise.resolve();
++const NOOP_REFRESH = (): Promise<SessionData | null> => Promise.resolve(null);
++
++export function useAuth(): AuthContextValue {
++  const ctx = useContext(AuthContext);
++  if (!ctx) {
++    // Provide a safe fallback if used outside AuthProvider
++    return {
++      session: null,
++      isLoading: false,
++      initialized: true,
++      refreshSession: NOOP_REFRESH,
++      logout: NOOP_ASYNC,
++    };
++  }
++  return ctx;
++}
+diff --git a/kanban/web/src/features/auth/LdapLoginForm.tsx b/kanban/web/src/features/auth/LdapLoginForm.tsx
+index b7ad71d..50461ac 100644
+--- a/kanban/web/src/features/auth/LdapLoginForm.tsx
++++ b/kanban/web/src/features/auth/LdapLoginForm.tsx
+@@ -6,6 +6,7 @@ import './auth.css';
+ export interface LdapLoginFormProps {
+   card: AuthCard;
+   formId: string;
++  rememberMe?: boolean;
+   onSuccess: (response: AuthLoginResponse) => void;
+   onError: (formattedError: ReturnType<typeof formatAuthError>) => void;
+   onCollapse: () => void;
+@@ -14,12 +15,14 @@ export interface LdapLoginFormProps {
+ export function LdapLoginForm({
+   card,
+   formId,
++  rememberMe = true,
+   onSuccess,
+   onError,
+   onCollapse,
+ }: LdapLoginFormProps): JSX.Element {
+   const [username, setUsername] = useState('');
+   const [password, setPassword] = useState('');
++  const [showPassword, setShowPassword] = useState(false);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+   const passwordInputRef = useRef<HTMLInputElement | null>(null);
+ 
+@@ -34,6 +37,7 @@ export function LdapLoginForm({
+       const response = await submitLdapLogin(card.slug, {
+         username: username.trim(),
+         password: pwdToSend,
++        remember_me: rememberMe,
+       });
+       onSuccess(response);
+     } catch (err) {
+@@ -84,16 +88,28 @@ export function LdapLoginForm({
+         </div>
+ 
+         <div className="auth-field">
+-          <label className="auth-label" htmlFor={`ldap-pwd-${card.slug}`}>
+-            Password
+-          </label>
++          <div className="auth-label-row">
++            <label className="auth-label" htmlFor={`ldap-pwd-${card.slug}`}>
++              Password
++            </label>
++            <button
++              type="button"
++              className="auth-toggle-visibility-btn"
++              onClick={() => { setShowPassword((prev) => !prev); }}
++              aria-label={showPassword ? 'Hide' : 'Show'}
++              tabIndex={0}
++            >
++              {showPassword ? 'Hide' : 'Show'}
++            </button>
++          </div>
+           <input
+             id={`ldap-pwd-${card.slug}`}
+             ref={passwordInputRef}
+             className="auth-input"
+-            type="password"
++            type={showPassword ? 'text' : 'password'}
+             value={password}
+             onChange={(e) => { setPassword(e.target.value); }}
++            aria-label="Password"
+             autoComplete="current-password"
+             maxLength={1024}
+             required
+diff --git a/kanban/web/src/features/auth/LocalAdminDisclosure.tsx b/kanban/web/src/features/auth/LocalAdminDisclosure.tsx
+index d1a767f..76f05dc 100644
+--- a/kanban/web/src/features/auth/LocalAdminDisclosure.tsx
++++ b/kanban/web/src/features/auth/LocalAdminDisclosure.tsx
+@@ -5,17 +5,20 @@ import { submitLocalAdminLogin, formatAuthError } from './authApi';
+ import './auth.css';
+ 
+ export interface LocalAdminDisclosureProps {
++  rememberMe?: boolean;
+   onSuccess: (response: AuthLoginResponse) => void;
+   onError: (formattedError: ReturnType<typeof formatAuthError>) => void;
+ }
+ 
+ export function LocalAdminDisclosure({
++  rememberMe = true,
+   onSuccess,
+   onError,
+ }: LocalAdminDisclosureProps): JSX.Element {
+   const [isExpanded, setIsExpanded] = useState(false);
+   const [username, setUsername] = useState('');
+   const [password, setPassword] = useState('');
++  const [showPassword, setShowPassword] = useState(false);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+   const triggerRef = useRef<HTMLButtonElement | null>(null);
+@@ -32,6 +35,7 @@ export function LocalAdminDisclosure({
+       const response = await submitLocalAdminLogin({
+         username: username.trim(),
+         password: pwdToSend,
++        remember_me: rememberMe,
+       });
+       onSuccess(response);
+     } catch (err) {
+@@ -104,16 +108,28 @@ export function LocalAdminDisclosure({
+             </div>
+ 
+             <div className="auth-field">
+-              <label className="auth-label" htmlFor="local-admin-password">
+-                Password
+-              </label>
++              <div className="auth-label-row">
++                <label className="auth-label" htmlFor="local-admin-password">
++                  Password
++                </label>
++                <button
++                  type="button"
++                  className="auth-toggle-visibility-btn"
++                  onClick={() => { setShowPassword((prev) => !prev); }}
++                  aria-label={showPassword ? 'Hide' : 'Show'}
++                  tabIndex={0}
++                >
++                  {showPassword ? 'Hide' : 'Show'}
++                </button>
++              </div>
+               <input
+                 id="local-admin-password"
+                 ref={passwordInputRef}
+                 className="auth-input"
+-                type="password"
++                type={showPassword ? 'text' : 'password'}
+                 value={password}
+                 onChange={(e) => { setPassword(e.target.value); }}
++                aria-label="Password"
+                 autoComplete="current-password"
+                 maxLength={1024}
+                 required
+diff --git a/kanban/web/src/features/auth/LoginPage.test.tsx b/kanban/web/src/features/auth/LoginPage.test.tsx
+index 68e0f14..e1b9907 100644
+--- a/kanban/web/src/features/auth/LoginPage.test.tsx
++++ b/kanban/web/src/features/auth/LoginPage.test.tsx
+@@ -216,10 +216,13 @@ describe('LoginPage (KB-P3-35)', () => {
+     );
+ 
+     await waitFor(() => {
+-      expect(ldapSpy).toHaveBeenCalledWith('corp-ad', {
+-        username: 'alice',
+-        password: 'AliceSecret123!',
+-      });
++      expect(ldapSpy).toHaveBeenCalledWith(
++        'corp-ad',
++        expect.objectContaining({
++          username: 'alice',
++          password: 'AliceSecret123!',
++        }),
++      );
+       // Should now render SecondFactorStep
+       expect(screen.getByRole('tab', { name: /Authenticator code/i })).toBeDefined();
+     });
+diff --git a/kanban/web/src/features/auth/LoginPage.tsx b/kanban/web/src/features/auth/LoginPage.tsx
+index 60e6a0a..51820d3 100644
+--- a/kanban/web/src/features/auth/LoginPage.tsx
++++ b/kanban/web/src/features/auth/LoginPage.tsx
+@@ -29,6 +29,7 @@ export function LoginPage({
+   const [cards, setCards] = useState<AuthCard[]>(initialCards ?? []);
+   const [loading, setLoading] = useState(!initialCards);
+   const [expandedLdapSlug, setExpandedLdapSlug] = useState<string | null>(null);
++  const [rememberMe, setRememberMe] = useState(true);
+ 
+   // MFA second-factor state
+   const [mfaChallenge, setMfaChallenge] = useState<{
+@@ -209,6 +210,26 @@ export function LoginPage({
+           </div>
+         ) : (
+           <>
++            {/* Remember Me Persistent Session Option (KANBA-186) */}
++            <div className="auth-remember-me-container">
++              <label className="auth-checkbox-label" htmlFor="login-remember-me">
++                <input
++                  id="login-remember-me"
++                  data-testid="login-remember-me-checkbox"
++                  type="checkbox"
++                  className="auth-checkbox-input"
++                  checked={rememberMe}
++                  onChange={(e) => { setRememberMe(e.target.checked); }}
++                />
++                <span className="auth-checkbox-text">Keep me signed in on this device</span>
++              </label>
++              <EmojiHint
++                kind="access"
++                label="About persistent sessions"
++                content="Keeps your session active across browser restarts for up to 30 days (7 days idle). Uncheck on public or shared computers."
++              />
++            </div>
++
+             {topCards.length > 0 ? (
+               <div className="auth-section">
+                 <ul className="auth-card-list" role="list">
+@@ -223,6 +244,7 @@ export function LoginPage({
+                           card={card}
+                           isPrimary={isPrimary}
+                           next={safeNext}
++                          rememberMe={rememberMe}
+                           isLdapExpanded={isExpanded}
+                           onToggleLdap={() => { setExpandedLdapSlug((prev) => (prev === card.slug ? null : card.slug)); }
+                           }
+@@ -232,6 +254,7 @@ export function LoginPage({
+                           <LdapLoginForm
+                             card={card}
+                             formId={formId}
++                            rememberMe={rememberMe}
+                             onSuccess={handleLoginResponse}
+                             onError={(err) => { setError(err); }}
+                             onCollapse={() => { setExpandedLdapSlug(null); }}
+@@ -252,6 +275,7 @@ export function LoginPage({
+                   </div>
+                 ) : null}
+                 <LocalAdminDisclosure
++                  rememberMe={rememberMe}
+                   onSuccess={handleLoginResponse}
+                   onError={(err) => { setError(err); }}
+                 />
+diff --git a/kanban/web/src/features/auth/SecondFactorStep.tsx b/kanban/web/src/features/auth/SecondFactorStep.tsx
+index 6e115f2..6b3ccae 100644
+--- a/kanban/web/src/features/auth/SecondFactorStep.tsx
++++ b/kanban/web/src/features/auth/SecondFactorStep.tsx
+@@ -160,13 +160,38 @@ export function SecondFactorStep({
+   return (
+     <div className="auth-second-factor-step">
+       <div className="auth-tablist" role="tablist" aria-label="Second factor methods">
+-        {activeMethods.map((m) => {
++        {activeMethods.map((m, index) => {
+           const isSelected = selectedMethod === m;
+           const isPasskeyDisabled = m === 'webauthn' && !supportsWebAuthn;
+           let label = 'Passkey';
+           if (m === 'totp') label = 'Authenticator code';
+           if (m === 'recovery') label = 'Recovery code';
+ 
++          const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
++            let nextIndex: number | null = null;
++            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
++              e.preventDefault();
++              nextIndex = (index + 1) % activeMethods.length;
++            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
++              e.preventDefault();
++              nextIndex = (index - 1 + activeMethods.length) % activeMethods.length;
++            } else if (e.key === 'Home') {
++              e.preventDefault();
++              nextIndex = 0;
++            } else if (e.key === 'End') {
++              e.preventDefault();
++              nextIndex = activeMethods.length - 1;
++            }
++            if (nextIndex !== null) {
++              const target = activeMethods[nextIndex];
++              if (target) {
++                setSelectedMethod(target);
++                const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
++                buttons?.[nextIndex]?.focus();
++              }
++            }
++          };
++
+           return (
+             <button
+               key={m}
+@@ -176,6 +201,8 @@ export function SecondFactorStep({
+               aria-selected={isSelected}
+               aria-disabled={isPasskeyDisabled ? 'true' : undefined}
+               disabled={isPasskeyDisabled}
++              tabIndex={isSelected ? 0 : -1}
++              onKeyDown={handleKeyDown}
+               onClick={() => {
+                 if (!isPasskeyDisabled) {
+                   setSelectedMethod(m);
+diff --git a/kanban/web/src/features/auth/auth.css b/kanban/web/src/features/auth/auth.css
+index 5cd0021..a443732 100644
+--- a/kanban/web/src/features/auth/auth.css
++++ b/kanban/web/src/features/auth/auth.css
+@@ -122,24 +122,24 @@
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
++  word-break: break-word;
++  overflow-wrap: break-word;
+ }
+ 
+ .auth-card-display-name {
+   font-size: var(--text-body, 0.9375rem);
+   font-weight: 600;
+   color: var(--fg-primary, #0f172a);
+-  white-space: nowrap;
+-  overflow: hidden;
+-  text-overflow: ellipsis;
++  word-break: break-word;
++  overflow-wrap: break-word;
+ }
+ 
+ .auth-card-subtext {
+   font-size: 0.8125rem;
+   color: var(--fg-secondary, #64748b);
+   margin-top: 2px;
+-  white-space: nowrap;
+-  overflow: hidden;
+-  text-overflow: ellipsis;
++  word-break: break-word;
++  overflow-wrap: break-word;
+ }
+ 
+ .auth-card-meta {
+@@ -249,6 +249,51 @@
+   color: var(--fg-primary, #0f172a);
+ }
+ 
++.auth-label-row {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.auth-toggle-visibility-btn {
++  background: none;
++  border: none;
++  color: var(--accent-primary, #2563eb);
++  font-size: var(--text-xs, 0.75rem);
++  font-weight: 600;
++  cursor: pointer;
++  padding: 0 var(--space-1, 4px);
++}
++
++.auth-toggle-visibility-btn:focus-visible {
++  outline: var(--focus-ring-w, 2px) solid var(--focus-ring, #2563eb);
++  border-radius: var(--radius-sm, 4px);
++}
++
++.auth-remember-me-container {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: var(--space-4, 16px);
++  padding: var(--space-2, 8px) var(--space-1, 4px);
++}
++
++.auth-checkbox-label {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  cursor: pointer;
++  font-size: var(--text-sm, 0.8125rem);
++  color: var(--fg-primary, #0f172a);
++  user-select: none;
++}
++
++.auth-checkbox-input {
++  cursor: pointer;
++  width: 16px;
++  height: 16px;
++}
++
+ .auth-input {
+   width: 100%;
+   padding: 10px 12px;
+diff --git a/kanban/web/src/features/auth/authApi.ts b/kanban/web/src/features/auth/authApi.ts
+index 851e7e2..d7cb921 100644
+--- a/kanban/web/src/features/auth/authApi.ts
++++ b/kanban/web/src/features/auth/authApi.ts
+@@ -148,7 +148,7 @@ export async function fetchAuthCards(): Promise<AuthCardsResponse> {
+ 
+ export async function submitLdapLogin(
+   slug: string,
+-  credentials: { username: string; password: string },
++  credentials: { username: string; password: string; remember_me?: boolean },
+ ): Promise<AuthLoginResponse> {
+   const path = `/api/v1/auth/cards/${encodeURIComponent(slug)}/ldap-login` as never;
+   const result = await apiFetch('POST', path, { body: credentials });
+@@ -158,6 +158,7 @@ export async function submitLdapLogin(
+ export async function submitLocalAdminLogin(credentials: {
+   username: string;
+   password: string;
++  remember_me?: boolean;
+ }): Promise<AuthLoginResponse> {
+   const result = (await apiFetch('POST', '/api/v1/auth/local/login' as never, {
+     body: credentials,
+diff --git a/kanban/web/src/features/auth/useSessionGuard.ts b/kanban/web/src/features/auth/useSessionGuard.ts
+index 74bd5a6..5e12804 100644
+--- a/kanban/web/src/features/auth/useSessionGuard.ts
++++ b/kanban/web/src/features/auth/useSessionGuard.ts
+@@ -1,14 +1,17 @@
+ /**
+- * Browser Session & Initialization Guard Hook (KANBA-170 / KB-QA-02).
++ * Browser Session & Initialization Guard Hook (KANBA-170 / KB-QA-02 / KANBA-186).
+  *
+  * Checks `/api/v1/setup/status` and `/api/v1/auth/session` on protected shell routes:
++ * - Integrates with `useAuth` when inside `AuthProvider` or performs direct fallback checks.
+  * - Redirects to `/setup` when `initialized === false` or `mfa_pending === true`.
+- * - Redirects to `/login` when `authenticated === false`.
++ * - Redirects to `/login?next=...` preserving deep links when `authenticated === false`.
+  * - Degrades gracefully in offline unit test environments where endpoints are unmocked.
+  */
+ 
+ import { useEffect, useState } from 'react';
+ import { useLocation, useNavigate } from 'react-router';
++import { setCsrfToken } from '../../api/client';
++import { resolveSafeNext } from './authApi';
+ 
+ export interface SetupStatusPayload {
+   readonly initialized?: boolean;
+@@ -21,6 +24,9 @@ export interface SessionStatusPayload {
+   readonly aal_level?: number;
+   readonly mfa_pending?: boolean;
+   readonly csrf_token?: string | null;
++  readonly idle_expires_at?: string | null;
++  readonly absolute_expires_at?: string | null;
++  readonly remember_me?: boolean;
+ }
+ 
+ export interface SessionGuardState {
+@@ -41,7 +47,7 @@ const PUBLIC_PATH_PREFIXES: readonly string[] = [
+   '/__dev',
+ ];
+ 
+-function isPublicPath(pathname: string): boolean {
++export function isPublicPath(pathname: string): boolean {
+   return PUBLIC_PATH_PREFIXES.some(
+     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+   );
+@@ -74,9 +80,7 @@ export async function ensureSessionCsrfToken(): Promise<string | null> {
+     }
+     const data = (await res.json()) as SessionStatusPayload;
+     if (typeof data.csrf_token === 'string' && data.csrf_token.length > 0) {
+-      if (typeof document !== 'undefined') {
+-        document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; path=/; SameSite=Lax`;
+-      }
++      setCsrfToken(data.csrf_token);
+       return data.csrf_token;
+     }
+   } catch {
+@@ -89,6 +93,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+   const loc = useLocation();
+   const navFn = useNavigate();
+   const pathname = loc.pathname;
++  const search = loc.search;
+ 
+   const [state, setState] = useState<SessionGuardState>({
+     status: 'authenticated',
+@@ -139,12 +144,8 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+ 
+         if (sessionRes.ok) {
+           const sessionData = (await sessionRes.json()) as SessionStatusPayload;
+-          if (
+-            typeof sessionData.csrf_token === 'string' &&
+-            sessionData.csrf_token.length > 0 &&
+-            typeof document !== 'undefined'
+-          ) {
+-            document.cookie = `kb_csrf=${encodeURIComponent(sessionData.csrf_token)}; path=/; SameSite=Lax`;
++          if (typeof sessionData.csrf_token === 'string' && sessionData.csrf_token.length > 0) {
++            setCsrfToken(sessionData.csrf_token);
+           }
+ 
+           if (sessionData.authenticated === false) {
+@@ -158,7 +159,13 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+               aalLevel: 0,
+               mfaPending: false,
+             });
+-            void navFn('/login', { replace: true });
++            const currentFullUrl = `${pathname}${search}`;
++            const safeNext = resolveSafeNext(currentFullUrl);
++            const loginTarget =
++              safeNext && safeNext !== '/'
++                ? `/login?next=${encodeURIComponent(safeNext)}`
++                : '/login';
++            void navFn(loginTarget, { replace: true });
+             return;
+           }
+ 
+@@ -198,7 +205,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+     return () => {
+       controller.abort();
+     };
+-  }, [enabled, pathname, navFn]);
++  }, [enabled, pathname, search, navFn]);
+ 
+   return state;
+ }

@@ -19,6 +19,7 @@ __all__ = [
     "MAX_COOKIE_LEN",
     "SESSION_COOKIE_NAME",
     "TOKEN_BYTES_LEN",
+    "attach_session_and_csrf_cookies",
     "build_clear_cookie_header",
     "build_clear_fallback_cookie_header",
     "build_set_cookie_header",
@@ -27,6 +28,7 @@ __all__ = [
     "extract_session_cookie",
     "generate_session_token",
     "hash_session_token",
+    "is_plain_http",
     "parse_session_cookie",
 ]
 
@@ -141,7 +143,13 @@ def extract_session_cookie(cookie_header: str | None) -> str | None:
     return None
 
 
-def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
+def build_set_cookie_header(
+    cookie_val: str,
+    expires_at: datetime | None = None,
+    *,
+    max_age: int | None = None,
+    persistent: bool = True,
+) -> str:
     """Format Set-Cookie header for __Host-kb_session."""
     parts = [
         f"{SESSION_COOKIE_NAME}={cookie_val}",
@@ -150,15 +158,34 @@ def build_set_cookie_header(cookie_val: str, expires_at: datetime | None = None)
         "Secure",
         "SameSite=Lax",
     ]
-    if expires_at is not None:
-        utc_dt = expires_at.astimezone(UTC)
-        expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-        parts.append(f"Expires={expires_str}")
+    if persistent:
+        if expires_at is not None:
+            utc_dt = expires_at.astimezone(UTC)
+            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+            parts.append(f"Expires={expires_str}")
+            if max_age is None:
+                calc_max_age = max(0, int((utc_dt - datetime.now(UTC)).total_seconds()))
+                parts.append(f"Max-Age={calc_max_age}")
+            else:
+                parts.append(f"Max-Age={max_age}")
+        elif max_age is not None:
+            parts.append(f"Max-Age={max_age}")
+            from datetime import timedelta  # noqa: PLC0415
+
+            utc_dt = datetime.now(UTC) + timedelta(seconds=max_age)
+            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+            parts.append(f"Expires={expires_str}")
 
     return "; ".join(parts)
 
 
-def build_set_fallback_cookie_header(cookie_val: str, expires_at: datetime | None = None) -> str:
+def build_set_fallback_cookie_header(
+    cookie_val: str,
+    expires_at: datetime | None = None,
+    *,
+    max_age: int | None = None,
+    persistent: bool = True,
+) -> str:
     """Format Set-Cookie header for non-Host kb_session over plain HTTP local dev."""
     parts = [
         f"{FALLBACK_SESSION_COOKIE_NAME}={cookie_val}",
@@ -166,12 +193,83 @@ def build_set_fallback_cookie_header(cookie_val: str, expires_at: datetime | Non
         "HttpOnly",
         "SameSite=Lax",
     ]
-    if expires_at is not None:
-        utc_dt = expires_at.astimezone(UTC)
-        expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-        parts.append(f"Expires={expires_str}")
+    if persistent:
+        if expires_at is not None:
+            utc_dt = expires_at.astimezone(UTC)
+            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+            parts.append(f"Expires={expires_str}")
+            if max_age is None:
+                calc_max_age = max(0, int((utc_dt - datetime.now(UTC)).total_seconds()))
+                parts.append(f"Max-Age={calc_max_age}")
+            else:
+                parts.append(f"Max-Age={max_age}")
+        elif max_age is not None:
+            parts.append(f"Max-Age={max_age}")
+            from datetime import timedelta  # noqa: PLC0415
+
+            utc_dt = datetime.now(UTC) + timedelta(seconds=max_age)
+            expires_str = utc_dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+            parts.append(f"Expires={expires_str}")
 
     return "; ".join(parts)
+
+
+def is_plain_http(request: object | None) -> bool:
+    """Detect whether request arrives over plain HTTP (direct or reverse proxy)."""
+    if request is None:
+        return False
+    headers = getattr(request, "headers", None)
+    if headers:
+        fwd_proto = (headers.get("x-forwarded-proto") or "").lower().strip()
+        if fwd_proto:
+            return fwd_proto == "http"
+        fwd = (headers.get("forwarded") or "").lower()
+        if "proto=http" in fwd:
+            return True
+        if "proto=https" in fwd:
+            return False
+    url = getattr(request, "url", None)
+    return bool(url and getattr(url, "scheme", "").lower() == "http")
+
+
+def attach_session_and_csrf_cookies(
+    response: object,
+    request: object | None,
+    issued: object,
+    csrf_token: str | None = None,
+    *,
+    persistent: bool | None = None,
+) -> None:
+    """Unified helper to attach __Host- and fallback session & CSRF cookies to responses."""
+    from kanban.auth.sessions.csrf import (  # noqa: PLC0415
+        build_set_csrf_cookie_header,
+        build_set_fallback_csrf_cookie_header,
+    )
+
+    is_persist = persistent if persistent is not None else getattr(issued, "is_persistent", True)
+    cookie_val = getattr(issued, "cookie_val", str(issued))
+    token_csrf = csrf_token or getattr(issued, "csrf_token", None)
+    expires_at = getattr(issued, "absolute_expires_at", None) if is_persist else None
+
+    sess_hdr = build_set_cookie_header(cookie_val, expires_at=expires_at, persistent=is_persist)
+
+    def _add(hdr: str) -> None:
+        if hasattr(response, "raw_headers"):
+            response.raw_headers.append((b"set-cookie", hdr.encode("latin-1")))
+        elif hasattr(response, "headers"):
+            response.headers.append("Set-Cookie", hdr)
+
+    _add(sess_hdr)
+    if token_csrf:
+        _add(build_set_csrf_cookie_header(token_csrf))
+
+    if is_plain_http(request):
+        fb_sess_hdr = build_set_fallback_cookie_header(
+            cookie_val, expires_at=expires_at, persistent=is_persist
+        )
+        _add(fb_sess_hdr)
+        if token_csrf:
+            _add(build_set_fallback_csrf_cookie_header(token_csrf))
 
 
 def build_clear_cookie_header() -> str:

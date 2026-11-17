@@ -1,14 +1,17 @@
 /**
- * Browser Session & Initialization Guard Hook (KANBA-170 / KB-QA-02).
+ * Browser Session & Initialization Guard Hook (KANBA-170 / KB-QA-02 / KANBA-186).
  *
  * Checks `/api/v1/setup/status` and `/api/v1/auth/session` on protected shell routes:
+ * - Integrates with `useAuth` when inside `AuthProvider` or performs direct fallback checks.
  * - Redirects to `/setup` when `initialized === false` or `mfa_pending === true`.
- * - Redirects to `/login` when `authenticated === false`.
+ * - Redirects to `/login?next=...` preserving deep links when `authenticated === false`.
  * - Degrades gracefully in offline unit test environments where endpoints are unmocked.
  */
 
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { setCsrfToken } from '../../api/client';
+import { resolveSafeNext } from './authApi';
 
 export interface SetupStatusPayload {
   readonly initialized?: boolean;
@@ -21,6 +24,9 @@ export interface SessionStatusPayload {
   readonly aal_level?: number;
   readonly mfa_pending?: boolean;
   readonly csrf_token?: string | null;
+  readonly idle_expires_at?: string | null;
+  readonly absolute_expires_at?: string | null;
+  readonly remember_me?: boolean;
 }
 
 export interface SessionGuardState {
@@ -41,7 +47,7 @@ const PUBLIC_PATH_PREFIXES: readonly string[] = [
   '/__dev',
 ];
 
-function isPublicPath(pathname: string): boolean {
+export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
@@ -74,9 +80,7 @@ export async function ensureSessionCsrfToken(): Promise<string | null> {
     }
     const data = (await res.json()) as SessionStatusPayload;
     if (typeof data.csrf_token === 'string' && data.csrf_token.length > 0) {
-      if (typeof document !== 'undefined') {
-        document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; path=/; SameSite=Lax`;
-      }
+      setCsrfToken(data.csrf_token);
       return data.csrf_token;
     }
   } catch {
@@ -89,6 +93,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
   const loc = useLocation();
   const navFn = useNavigate();
   const pathname = loc.pathname;
+  const search = loc.search;
 
   const [state, setState] = useState<SessionGuardState>({
     status: 'authenticated',
@@ -139,12 +144,8 @@ export function useSessionGuard(enabled = true): SessionGuardState {
 
         if (sessionRes.ok) {
           const sessionData = (await sessionRes.json()) as SessionStatusPayload;
-          if (
-            typeof sessionData.csrf_token === 'string' &&
-            sessionData.csrf_token.length > 0 &&
-            typeof document !== 'undefined'
-          ) {
-            document.cookie = `kb_csrf=${encodeURIComponent(sessionData.csrf_token)}; path=/; SameSite=Lax`;
+          if (typeof sessionData.csrf_token === 'string' && sessionData.csrf_token.length > 0) {
+            setCsrfToken(sessionData.csrf_token);
           }
 
           if (sessionData.authenticated === false) {
@@ -158,7 +159,13 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               aalLevel: 0,
               mfaPending: false,
             });
-            void navFn('/login', { replace: true });
+            const currentFullUrl = `${pathname}${search}`;
+            const safeNext = resolveSafeNext(currentFullUrl);
+            const loginTarget =
+              safeNext && safeNext !== '/'
+                ? `/login?next=${encodeURIComponent(safeNext)}`
+                : '/login';
+            void navFn(loginTarget, { replace: true });
             return;
           }
 
@@ -198,7 +205,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
     return () => {
       controller.abort();
     };
-  }, [enabled, pathname, navFn]);
+  }, [enabled, pathname, search, navFn]);
 
   return state;
 }

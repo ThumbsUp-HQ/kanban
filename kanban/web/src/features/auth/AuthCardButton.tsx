@@ -13,6 +13,7 @@ export interface AuthCardButtonProps {
   card: AuthCard;
   isPrimary?: boolean;
   next?: string;
+  rememberMe?: boolean;
   isLdapExpanded?: boolean;
   onToggleLdap?: () => void;
   formId?: string;
@@ -22,6 +23,7 @@ export function AuthCardButton({
   card,
   isPrimary = false,
   next = '/',
+  rememberMe = true,
   isLdapExpanded = false,
   onToggleLdap,
   formId,
@@ -32,14 +34,15 @@ export function AuthCardButton({
     ? `Sign in with ${card.display_name}`
     : `Continue with ${card.display_name}`;
 
-  const clampedDisplayName = clampText(card.display_name, 80);
-  const clampedSubtext = clampText(card.button_subtext, 120);
+  const clampedDisplayName = clampText(card.display_name, 120);
+  const clampedSubtext = clampText(card.button_subtext, 200);
 
   const handleClick = () => {
     if (isLdap) {
       onToggleLdap?.();
     } else {
-      const targetUrl = `/api/v1/auth/cards/${encodeURIComponent(card.slug)}/start?next=${encodeURIComponent(next)}`;
+      const rememberParam = rememberMe ? '&remember_me=1' : '&remember_me=0';
+      const targetUrl = `/api/v1/auth/cards/${encodeURIComponent(card.slug)}/start?next=${encodeURIComponent(next)}${rememberParam}`;
       window.location.assign(targetUrl);
     }
   };

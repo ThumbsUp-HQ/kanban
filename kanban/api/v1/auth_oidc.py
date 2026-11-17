@@ -96,6 +96,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
     flow: FlowDep,
     return_to: Annotated[str | None, Query(max_length=2048)] = None,
     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
+    remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
 ) -> Response:
     """Initialize authorization-code flow with PKCE S256 for an OIDC or OAuth2 card."""
     try:
@@ -105,6 +106,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
             return_to=return_to,
             link_intent_id=link_intent_id,
             request=request,
+            remember_me=remember_me,
         )
     except OidcError as err:
         logger.warning(

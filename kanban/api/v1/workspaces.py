@@ -19,12 +19,7 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.auth.sessions.cookies import (
     SESSION_COOKIE_NAME,
-    build_set_cookie_header,
-    build_set_fallback_cookie_header,
-)
-from kanban.auth.sessions.csrf import (
-    build_set_csrf_cookie_header,
-    build_set_fallback_csrf_cookie_header,
+    attach_session_and_csrf_cookies,
 )
 
 if TYPE_CHECKING:
@@ -294,36 +289,13 @@ async def switch_workspace_endpoint(
                 "csrf_token": issued.csrf_token,
             }
         )
-        response.raw_headers.append(
-            (
-                b"set-cookie",
-                build_set_cookie_header(issued.cookie_val, issued.idle_expires_at).encode(
-                    "latin-1"
-                ),
-            )
+        attach_session_and_csrf_cookies(
+            response,
+            request,
+            issued,
+            issued.csrf_token,
+            persistent=issued.is_persistent,
         )
-        response.raw_headers.append(
-            (
-                b"set-cookie",
-                build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
-            )
-        )
-        host_name = (request.headers.get("host") or "").split(":")[0].lower()
-        if request.url.scheme == "http" and host_name not in ("testserver", "test"):
-            response.raw_headers.append(
-                (
-                    b"set-cookie",
-                    build_set_fallback_cookie_header(
-                        issued.cookie_val, issued.idle_expires_at
-                    ).encode("latin-1"),
-                )
-            )
-            response.raw_headers.append(
-                (
-                    b"set-cookie",
-                    build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
-                )
-            )
         return response
 
     return JSONResponse(

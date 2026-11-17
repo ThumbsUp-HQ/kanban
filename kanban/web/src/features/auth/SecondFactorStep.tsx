@@ -160,12 +160,37 @@ export function SecondFactorStep({
   return (
     <div className="auth-second-factor-step">
       <div className="auth-tablist" role="tablist" aria-label="Second factor methods">
-        {activeMethods.map((m) => {
+        {activeMethods.map((m, index) => {
           const isSelected = selectedMethod === m;
           const isPasskeyDisabled = m === 'webauthn' && !supportsWebAuthn;
           let label = 'Passkey';
           if (m === 'totp') label = 'Authenticator code';
           if (m === 'recovery') label = 'Recovery code';
+
+          const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+            let nextIndex: number | null = null;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+              e.preventDefault();
+              nextIndex = (index + 1) % activeMethods.length;
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              nextIndex = (index - 1 + activeMethods.length) % activeMethods.length;
+            } else if (e.key === 'Home') {
+              e.preventDefault();
+              nextIndex = 0;
+            } else if (e.key === 'End') {
+              e.preventDefault();
+              nextIndex = activeMethods.length - 1;
+            }
+            if (nextIndex !== null) {
+              const target = activeMethods[nextIndex];
+              if (target) {
+                setSelectedMethod(target);
+                const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                buttons?.[nextIndex]?.focus();
+              }
+            }
+          };
 
           return (
             <button
@@ -176,6 +201,8 @@ export function SecondFactorStep({
               aria-selected={isSelected}
               aria-disabled={isPasskeyDisabled ? 'true' : undefined}
               disabled={isPasskeyDisabled}
+              tabIndex={isSelected ? 0 : -1}
+              onKeyDown={handleKeyDown}
               onClick={() => {
                 if (!isPasskeyDisabled) {
                   setSelectedMethod(m);

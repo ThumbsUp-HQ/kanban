@@ -128,6 +128,7 @@ class LocalAdminLoginService:
         client_ip: str,
         existing_cookie: str | None = None,
         workspace_id: uuid.UUID | None = None,
+        remember_me: bool = True,
     ) -> IssuedSession:
         """Execute local admin login workflow with constant-work verification on all paths."""
         pepper = self._get_pepper()
@@ -209,6 +210,7 @@ class LocalAdminLoginService:
                 aal_level=1,
                 mfa_pending=require_mfa,
                 existing_cookie=existing_cookie,
+                remember_me=remember_me,
             )
 
             try:

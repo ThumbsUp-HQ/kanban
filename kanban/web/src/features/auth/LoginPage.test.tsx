@@ -216,10 +216,13 @@ describe('LoginPage (KB-P3-35)', () => {
     );
 
     await waitFor(() => {
-      expect(ldapSpy).toHaveBeenCalledWith('corp-ad', {
-        username: 'alice',
-        password: 'AliceSecret123!',
-      });
+      expect(ldapSpy).toHaveBeenCalledWith(
+        'corp-ad',
+        expect.objectContaining({
+          username: 'alice',
+          password: 'AliceSecret123!',
+        }),
+      );
       // Should now render SecondFactorStep
       expect(screen.getByRole('tab', { name: /Authenticator code/i })).toBeDefined();
     });

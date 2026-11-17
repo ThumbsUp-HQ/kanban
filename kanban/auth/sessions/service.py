@@ -28,6 +28,8 @@ __all__ = [
     "DEFAULT_AAL2_FRESH_SECONDS",
     "DEFAULT_ABSOLUTE_SECONDS",
     "DEFAULT_IDLE_SECONDS",
+    "DEFAULT_REMEMBER_ABSOLUTE_SECONDS",
+    "DEFAULT_REMEMBER_IDLE_SECONDS",
     "MAX_POLICY_SECONDS",
     "MIN_POLICY_SECONDS",
     "IssuedSession",
@@ -37,6 +39,8 @@ __all__ = [
 
 DEFAULT_IDLE_SECONDS: Final[int] = 28800  # 8 hours
 DEFAULT_ABSOLUTE_SECONDS: Final[int] = 604800  # 7 days
+DEFAULT_REMEMBER_IDLE_SECONDS: Final[int] = 604800  # 7 days
+DEFAULT_REMEMBER_ABSOLUTE_SECONDS: Final[int] = 2592000  # 30 days
 DEFAULT_AAL2_FRESH_SECONDS: Final[int] = 900  # 15 minutes
 
 MIN_POLICY_SECONDS: Final[int] = 300  # 5 minutes
@@ -50,6 +54,8 @@ class SessionPolicy:
     idle_seconds: int = DEFAULT_IDLE_SECONDS
     absolute_seconds: int = DEFAULT_ABSOLUTE_SECONDS
     aal2_fresh_seconds: int = DEFAULT_AAL2_FRESH_SECONDS
+    remember_idle_seconds: int = DEFAULT_REMEMBER_IDLE_SECONDS
+    remember_absolute_seconds: int = DEFAULT_REMEMBER_ABSOLUTE_SECONDS
 
     def __post_init__(self) -> None:
         """Validate timeout parameters are within bounds [300, 2592000]."""
@@ -57,6 +63,8 @@ class SessionPolicy:
             ("idle_seconds", self.idle_seconds),
             ("absolute_seconds", self.absolute_seconds),
             ("aal2_fresh_seconds", self.aal2_fresh_seconds),
+            ("remember_idle_seconds", self.remember_idle_seconds),
+            ("remember_absolute_seconds", self.remember_absolute_seconds),
         ):
             if val < MIN_POLICY_SECONDS or val > MAX_POLICY_SECONDS:
                 msg = (
@@ -71,12 +79,28 @@ class SessionPolicy:
         idle_raw = os.environ.get("KANBAN_SESSION_IDLE_SECONDS")
         abs_raw = os.environ.get("KANBAN_SESSION_ABSOLUTE_SECONDS")
         aal2_raw = os.environ.get("KANBAN_AAL2_FRESH_SECONDS")
+        rem_idle_raw = os.environ.get("KANBAN_SESSION_REMEMBER_IDLE_SECONDS")
+        rem_abs_raw = os.environ.get("KANBAN_SESSION_REMEMBER_ABSOLUTE_SECONDS")
 
         idle = int(idle_raw) if idle_raw is not None else DEFAULT_IDLE_SECONDS
         absolute = int(abs_raw) if abs_raw is not None else DEFAULT_ABSOLUTE_SECONDS
         aal2 = int(aal2_raw) if aal2_raw is not None else DEFAULT_AAL2_FRESH_SECONDS
+        rem_idle = int(rem_idle_raw) if rem_idle_raw is not None else DEFAULT_REMEMBER_IDLE_SECONDS
+        rem_abs = int(rem_abs_raw) if rem_abs_raw is not None else DEFAULT_REMEMBER_ABSOLUTE_SECONDS
 
-        return cls(idle_seconds=idle, absolute_seconds=absolute, aal2_fresh_seconds=aal2)
+        idle = min(max(idle, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
+        absolute = min(max(absolute, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
+        aal2 = min(max(aal2, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
+        rem_idle = min(max(rem_idle, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
+        rem_abs = min(max(rem_abs, MIN_POLICY_SECONDS), MAX_POLICY_SECONDS)
+
+        return cls(
+            idle_seconds=idle,
+            absolute_seconds=absolute,
+            aal2_fresh_seconds=aal2,
+            remember_idle_seconds=rem_idle,
+            remember_absolute_seconds=rem_abs,
+        )
 
 
 @dataclass(frozen=True)
@@ -91,6 +115,7 @@ class IssuedSession:
     mfa_pending: bool
     idle_expires_at: datetime
     absolute_expires_at: datetime
+    is_persistent: bool = True
 
 
 class SessionService:
@@ -126,6 +151,7 @@ class SessionService:
         mfa_pending: bool = False,
         existing_cookie: str | None = None,
         existing_cookie_val: str | None = None,
+        remember_me: bool = True,
     ) -> IssuedSession:
         """Create new session upon login, revoking any pre-existing session (fixation defense)."""
         # Session fixation defense: revoke previous session presented in request
@@ -143,8 +169,12 @@ class SessionService:
         token_sha256 = hash_session_token(token)
 
         now = datetime.now(UTC)
-        idle_expires_at = now + timedelta(seconds=self._policy.idle_seconds)
-        absolute_expires_at = now + timedelta(seconds=self._policy.absolute_seconds)
+        if remember_me:
+            idle_expires_at = now + timedelta(seconds=self._policy.remember_idle_seconds)
+            absolute_expires_at = now + timedelta(seconds=self._policy.remember_absolute_seconds)
+        else:
+            idle_expires_at = now + timedelta(seconds=self._policy.idle_seconds)
+            absolute_expires_at = now + timedelta(seconds=self._policy.absolute_seconds)
 
         aal2_verified_at = now if aal_level == 2 else None  # noqa: PLR2004
 
@@ -152,7 +182,8 @@ class SessionService:
             "SELECT kb_auth.session_create("
             "  :p_id, :p_token_sha256, :p_principal_id, :p_workspace_id, "
             "  :p_auth_card_id, :p_aal_level, :p_aal2_verified_at, :p_mfa_pending, "
-            "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id"
+            "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id, "
+            "  :p_is_persistent"
             ")"
         )
         await session.execute(
@@ -169,6 +200,7 @@ class SessionService:
                 "p_idle_expires_at": idle_expires_at,
                 "p_absolute_expires_at": absolute_expires_at,
                 "p_rotated_from_id": None,
+                "p_is_persistent": remember_me,
             },
         )
 
@@ -184,6 +216,7 @@ class SessionService:
             mfa_pending=mfa_pending,
             idle_expires_at=idle_expires_at,
             absolute_expires_at=absolute_expires_at,
+            is_persistent=remember_me,
         )
 
     async def elevate_aal(
@@ -226,6 +259,7 @@ class SessionService:
             mfa_pending=resolved.mfa_pending,
             idle_expires_at=resolved.idle_expires_at,
             absolute_expires_at=resolved.absolute_expires_at,
+            is_persistent=resolved.is_persistent,
         )
 
     async def logout(self, session: AsyncSession, session_id: uuid.UUID) -> bool:

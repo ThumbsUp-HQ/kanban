@@ -115,6 +115,9 @@ class UserSession(Base):
     absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rotated_from_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    is_persistent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
 
     def __repr__(self) -> str:
         """Sanitized representation omitting token_sha256."""
@@ -182,6 +185,9 @@ class OidcAuthRequest(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    remember_me: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
 
     def __repr__(self) -> str:

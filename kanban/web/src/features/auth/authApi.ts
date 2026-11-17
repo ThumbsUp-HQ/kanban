@@ -148,7 +148,7 @@ export async function fetchAuthCards(): Promise<AuthCardsResponse> {
 
 export async function submitLdapLogin(
   slug: string,
-  credentials: { username: string; password: string },
+  credentials: { username: string; password: string; remember_me?: boolean },
 ): Promise<AuthLoginResponse> {
   const path = `/api/v1/auth/cards/${encodeURIComponent(slug)}/ldap-login` as never;
   const result = await apiFetch('POST', path, { body: credentials });
@@ -158,6 +158,7 @@ export async function submitLdapLogin(
 export async function submitLocalAdminLogin(credentials: {
   username: string;
   password: string;
+  remember_me?: boolean;
 }): Promise<AuthLoginResponse> {
   const result = (await apiFetch('POST', '/api/v1/auth/local/login' as never, {
     body: credentials,

@@ -1,7 +1,9 @@
 /**
- * Topbar Component (KB-P3-34, S6.3, KANBA-167).
+ * Topbar Component (KB-P3-34, S6.3, KANBA-167, KANBA-186, KANBA-187, KANBA-188).
  * 52px calm header with breadcrumb, Cmd+K trigger, emoji pills, layout switcher,
  * and avatar menu with Theme selector, Settings/Admin navigation links, and Log out.
+ * Enforces keyboard accessibility (Escape, ArrowDown/ArrowUp, focus return) and
+ * gates admin navigation on `is_server_admin`.
  */
 
 import React, {
@@ -19,6 +21,14 @@ import { type SystemStatus } from './useSystemStatus';
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
 import './Topbar.css';
 
+export interface TopbarUser {
+  id?: string | null;
+  display_name?: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
+  is_server_admin?: boolean;
+}
+
 export interface TopbarProps {
   isSidebarOpen?: boolean | undefined;
   onToggleSidebar?: (() => void) | undefined;
@@ -31,20 +41,13 @@ export interface TopbarProps {
   showLayoutSwitcher?: boolean | undefined;
   accessManifest?: AccessManifestData | null | undefined;
   systemStatus?: SystemStatus | null | undefined;
+  user?: TopbarUser | null | undefined;
 }
 
 const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
   { id: 'light', label: 'Light', icon: '☀️' },
   { id: 'dark', label: 'Dark', icon: '🌙' },
   { id: 'system', label: 'System', icon: '💻' },
-] as const;
-
-const AVATAR_NAV_LINKS: readonly { to: string; label: string; icon: string }[] = [
-  { to: '/settings/mcp', label: 'Personal MCP Keys', icon: '🔑' },
-  { to: '/workspaces/settings/mcp', label: 'Workspace MCP Keys', icon: '🏢' },
-  { to: '/admin/auth', label: 'Admin Auth Studio', icon: '🛡️' },
-  { to: '/admin/mcp', label: 'Admin MCP Keys', icon: '🤖' },
-  { to: '/admin/standalone', label: 'System Storage, Backups & Deployment', icon: '💾' },
 ] as const;
 
 export function Topbar({
@@ -59,6 +62,7 @@ export function Topbar({
   showLayoutSwitcher: showLayoutOverride,
   accessManifest,
   systemStatus,
+  user,
 }: TopbarProps): JSX.Element {
   const loc = useLocation();
   const navigate = useNavigate();
@@ -71,6 +75,8 @@ export function Topbar({
 
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const themeContext = useTheme();
 
   // Close avatar menu on outside click
@@ -86,6 +92,35 @@ export function Topbar({
       document.removeEventListener('mousedown', handleOutside);
     };
   }, [avatarMenuOpen]);
+
+  // Handle keyboard navigation within the menu
+  const handleMenuKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setAvatarMenuOpen(false);
+      avatarButtonRef.current?.focus();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!menuRef.current) return;
+      const focusable = Array.from(
+        menuRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      let nextIndex = 0;
+      if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex >= 0 && currentIndex < focusable.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : focusable.length - 1;
+      }
+      focusable[nextIndex]?.focus();
+    }
+  };
 
   const handleLogout = async (): Promise<void> => {
     try {
@@ -110,6 +145,10 @@ export function Topbar({
   };
 
   const activeTheme = themeContext.theme;
+
+  // Determine avatar initials or custom image
+  const userInitial = user?.display_name ? user.display_name.charAt(0).toUpperCase() : 'A';
+  const isServerAdmin = user?.is_server_admin ?? true; // Default true in self-hosted single-admin setups unless explicitly non-admin
 
   return (
     <header className="kb-topbar">
@@ -163,6 +202,7 @@ export function Topbar({
 
         <div ref={avatarRef} className="kb-avatar-wrapper">
           <button
+            ref={avatarButtonRef}
             type="button"
             className="kb-avatar-button"
             aria-label="User profile and settings"
@@ -172,14 +212,24 @@ export function Topbar({
               setAvatarMenuOpen(!avatarMenuOpen);
             }}
           >
-            A
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.display_name ?? 'User avatar'}
+                className="kb-avatar-img"
+              />
+            ) : (
+              userInitial
+            )}
           </button>
 
           {avatarMenuOpen && (
             <div
+              ref={menuRef}
               className="kb-avatar-menu"
               role="menu"
               aria-label="User settings"
+              onKeyDown={handleMenuKeyDown}
             >
               <div className="kb-theme-menu-title">Theme</div>
               <div
@@ -199,6 +249,7 @@ export function Topbar({
                       onClick={() => {
                         themeContext.setTheme(opt.id);
                         setAvatarMenuOpen(false);
+                        avatarButtonRef.current?.focus();
                       }}
                     >
                       <span>
@@ -217,24 +268,108 @@ export function Topbar({
 
               <div className="kb-theme-menu-title">Settings & Admin</div>
               <div className="kb-avatar-menu-list">
-                {AVATAR_NAV_LINKS.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    role="menuitem"
-                    className="kb-theme-radio kb-avatar-menu-link"
-                    onClick={() => {
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span>
-                      <span aria-hidden="true" className="kb-avatar-menu-icon">
-                        {link.icon}
-                      </span>
-                      {link.label}
+                {/* Personal Settings Studio (KANBA-187) */}
+                <Link
+                  to="/settings/profile"
+                  role="menuitem"
+                  data-testid="topbar-personal-settings-link"
+                  className="kb-theme-radio kb-avatar-menu-link"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                  }}
+                >
+                  <span>
+                    <span aria-hidden="true" className="kb-avatar-menu-icon">
+                      👤
                     </span>
-                  </Link>
-                ))}
+                    Personal Settings
+                  </span>
+                </Link>
+
+                <Link
+                  to="/settings/mcp"
+                  role="menuitem"
+                  className="kb-theme-radio kb-avatar-menu-link"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                  }}
+                >
+                  <span>
+                    <span aria-hidden="true" className="kb-avatar-menu-icon">
+                      🔑
+                    </span>
+                    Personal MCP Keys
+                  </span>
+                </Link>
+
+                <Link
+                  to="/workspaces/settings/mcp"
+                  role="menuitem"
+                  className="kb-theme-radio kb-avatar-menu-link"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                  }}
+                >
+                  <span>
+                    <span aria-hidden="true" className="kb-avatar-menu-icon">
+                      🏢
+                    </span>
+                    Workspace MCP Keys
+                  </span>
+                </Link>
+
+                {isServerAdmin && (
+                  <>
+                    <Link
+                      to="/admin/auth"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🛡️
+                        </span>
+                        Admin Auth Studio
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/admin/mcp"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🤖
+                        </span>
+                        Admin MCP Keys
+                      </span>
+                    </Link>
+
+                    {/* Preserving System Storage, Backups & Deployment from KANBA-188 */}
+                    <Link
+                      to="/admin/standalone"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          💾
+                        </span>
+                        System Storage, Backups & Deployment
+                      </span>
+                    </Link>
+                  </>
+                )}
               </div>
 
               <div className="kb-avatar-menu-divider" />

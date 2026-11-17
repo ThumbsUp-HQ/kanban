@@ -31,8 +31,9 @@ from kanban.auth.ldap.client import (
 from kanban.auth.ldap.config import LdapCardConfig
 from kanban.auth.ldap.service import LdapAuthService
 from kanban.auth.mfa.policy import require_admin_aal2
-from kanban.auth.sessions.cookies import build_set_cookie_header
-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
+from kanban.auth.sessions.cookies import (
+    attach_session_and_csrf_cookies,
+)
 from kanban.security.envelope import SealedSecret, StaticKekProvider, open_card_secret
 from kanban.security.keys import load_key_material
 from kanban.security.ratelimit import AUTH_LOGIN_ACCOUNT, AUTH_LOGIN_IP
@@ -63,6 +64,7 @@ class LdapLoginRequest(BaseModel):
 
     username: str = Field(min_length=1, max_length=256)
     password: str = Field(min_length=1, max_length=1024)
+    remember_me: bool = Field(default=True, description="Keep signed in on this device")
 
 
 async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -196,7 +198,7 @@ async def _handle_ldap_login(
         }
 
         session_service = getattr(request.app.state, "session_service", None)
-        issued_cookies: list[str] = []
+        issued_session = None
 
         if resolved is not None:
             response_data["principal_id"] = str(resolved.principal_id)
@@ -211,19 +213,21 @@ async def _handle_ldap_login(
                     auth_card_id=card.id,
                     aal_level=resolved.aal_level,
                     mfa_pending=resolved.mfa_pending,
+                    remember_me=payload.remember_me,
                 )
+                await session.commit()
                 response_data["session_id"] = str(issued_session.session_id)
                 response_data["csrf_token"] = issued_session.csrf_token
-                issued_cookies.append(
-                    build_set_cookie_header(
-                        issued_session.cookie_val, issued_session.idle_expires_at
-                    )
-                )
-                issued_cookies.append(build_set_csrf_cookie_header(issued_session.csrf_token))
 
         response = JSONResponse(status_code=200, content=response_data)
-        for cookie_hdr in issued_cookies:
-            response.headers.append("Set-Cookie", cookie_hdr)
+        if issued_session is not None:
+            attach_session_and_csrf_cookies(
+                response,
+                request,
+                issued_session,
+                issued_session.csrf_token,
+                persistent=issued_session.is_persistent,
+            )
         return response
 
 

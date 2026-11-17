@@ -71,6 +71,7 @@ class SessionCookieResolver:
         # Populate request.state for downstream middleware (e.g. CSRF)
         request.state.session_id = user_session.id
         request.state.mfa_pending = user_session.mfa_pending
+        request.state.user_session = user_session
 
         ctx = PrincipalContext(
             principal_id=user_session.principal_id,

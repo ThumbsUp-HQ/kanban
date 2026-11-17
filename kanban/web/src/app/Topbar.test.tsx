@@ -210,7 +210,9 @@ describe('Topbar', () => {
     expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
     expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
     expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
-    expect(screen.getByRole('menuitem', { name: /Standalone Status & Backup/ })).toBeDefined();
+    expect(
+      screen.getByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
+    ).toBeDefined();
 
     const logoutBtn = screen.getByTestId('logout-button');
     await act(async () => {

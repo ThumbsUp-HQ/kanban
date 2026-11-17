@@ -124,7 +124,6 @@ async def get_admin_card(
     return await service.get_card(session, card_ref)
 
 
-
 @router.post(
     "/parse-google-json",
     response_model=GoogleOAuthJsonPreviewResponse,
@@ -157,6 +156,7 @@ async def parse_google_json(
         callback_uri_matched=parsed.callback_uri_matched,
         has_client_secret=bool(parsed.client_secret),
     )
+
 
 @router.post(
     "",

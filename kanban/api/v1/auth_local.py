@@ -15,13 +15,8 @@ from starlette.responses import JSONResponse
 from database.session import RLSContext
 from kanban.auth.local.service import LocalAdminLoginService
 from kanban.auth.sessions.cookies import (
-    build_set_cookie_header,
-    build_set_fallback_cookie_header,
+    attach_session_and_csrf_cookies,
     extract_session_cookie,
-)
-from kanban.auth.sessions.csrf import (
-    build_set_csrf_cookie_header,
-    build_set_fallback_csrf_cookie_header,
 )
 from kanban.security.client_ip import resolve_client_ip
 from kanban.security.ratelimit.decorator import build_rate_limiter
@@ -39,6 +34,7 @@ class LocalLoginRequest(BaseModel):
 
     username: str = Field(description="Normalized administrator handle")
     password: str = Field(description="Administrator plaintext password")
+    remember_me: bool = Field(default=True, description="Keep signed in on this device")
 
 
 def _get_login_service(request: Request) -> LocalAdminLoginService:
@@ -102,6 +98,7 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
             password=body.password,
             client_ip=client_ip,
             existing_cookie=existing_cookie,
+            remember_me=body.remember_me,
         )
 
     response = JSONResponse(
@@ -116,29 +113,11 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
             "csrf_token": issued.csrf_token,
         }
     )
-    response.raw_headers.append(
-        (
-            b"set-cookie",
-            build_set_cookie_header(issued.cookie_val, issued.idle_expires_at).encode("latin-1"),
-        )
+    attach_session_and_csrf_cookies(
+        response,
+        request,
+        issued,
+        issued.csrf_token,
+        persistent=body.remember_me,
     )
-    response.raw_headers.append(
-        (b"set-cookie", build_set_csrf_cookie_header(issued.csrf_token).encode("latin-1"))
-    )
-    host_name = (request.headers.get("host") or "").split(":")[0].lower()
-    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
-        response.raw_headers.append(
-            (
-                b"set-cookie",
-                build_set_fallback_cookie_header(issued.cookie_val, issued.idle_expires_at).encode(
-                    "latin-1"
-                ),
-            )
-        )
-        response.raw_headers.append(
-            (
-                b"set-cookie",
-                build_set_fallback_csrf_cookie_header(issued.csrf_token).encode("latin-1"),
-            )
-        )
     return response

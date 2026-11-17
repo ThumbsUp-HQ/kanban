@@ -19,8 +19,9 @@ from kanban.api.deps import PrincipalContext, get_principal  # Required at runti
 from kanban.api.problems import ProblemException
 from kanban.auth.mfa.policy import require_aal2
 from kanban.auth.mfa.webauthn import WebauthnCloneDetectedError, WebauthnService
-from kanban.auth.sessions.cookies import build_set_cookie_header
-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
+from kanban.auth.sessions.cookies import (
+    attach_session_and_csrf_cookies,
+)
 from kanban.security.ratelimit import AUTH_MFA_VERIFY
 from kanban.security.ratelimit.base import make_key
 from kanban.security.ratelimit.decorator import build_rate_limiter
@@ -93,6 +94,7 @@ def _build_elevated_response(
     elevated: IssuedSession | None,
     session_id: uuid.UUID | None,
     extra_data: dict[str, Any] | None = None,
+    request: Request | None = None,
 ) -> JSONResponse:
     """Build response with rotated credentials and set-cookie headers."""
     response_data: dict[str, Any] = {
@@ -106,10 +108,13 @@ def _build_elevated_response(
 
     response = JSONResponse(content=response_data)
     if elevated is not None:
-        cookie_hdr = build_set_cookie_header(elevated.cookie_val, elevated.idle_expires_at)
-        response.raw_headers.append((b"set-cookie", cookie_hdr.encode("latin-1")))
-        csrf_hdr = build_set_csrf_cookie_header(elevated.csrf_token)
-        response.raw_headers.append((b"set-cookie", csrf_hdr.encode("latin-1")))
+        attach_session_and_csrf_cookies(
+            response,
+            request,
+            elevated,
+            elevated.csrf_token,
+            persistent=elevated.is_persistent,
+        )
     return response
 
 
@@ -333,6 +338,7 @@ async def register_verify(
                     "credential_id": str(cred_record.id),
                     "nickname": cred_record.nickname,
                 },
+                request=request,
             )
 
     return JSONResponse(
@@ -481,6 +487,7 @@ async def authenticate_verify(
         elevated,
         principal.session_id,
         extra_data={"credential_id": cred_id_str} if cred_id_str else None,
+        request=request,
     )
 
 

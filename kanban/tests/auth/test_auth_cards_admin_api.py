@@ -882,6 +882,7 @@ async def test_case_8_validation_boundaries(
         )
         assert res_insecure_oidc.status_code == 422
 
+
 @pytest.mark.asyncio
 async def test_case_9_google_oauth_json_preview_and_card_creation(
     db_session: AsyncSession,
@@ -918,19 +919,21 @@ async def test_case_9_google_oauth_json_preview_and_card_creation(
         client.cookies.set(CSRF_COOKIE_NAME, sess_aal2.csrf_token)
         client.headers[CSRF_HEADER_NAME] = sess_aal2.csrf_token
 
-        valid_google_json = json.dumps({
-            "web": {
-                "client_id": "google-client-xyz.apps.googleusercontent.com",
-                "client_secret": "GOCSPX-secret-token",
-                "project_id": "google-proj-99",
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [
-                    "http://test/api/v1/auth/oidc/google-oauth/callback",
-                ],
-                "javascript_origins": ["http://test"],
+        valid_google_json = json.dumps(
+            {
+                "web": {
+                    "client_id": "google-client-xyz.apps.googleusercontent.com",
+                    "client_secret": "GOCSPX-secret-token",
+                    "project_id": "google-proj-99",
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [
+                        "http://test/api/v1/auth/oidc/google-oauth/callback",
+                    ],
+                    "javascript_origins": ["http://test"],
+                }
             }
-        })
+        )
 
         # 1. Preview endpoint
         preview_res = await client.post(
@@ -961,7 +964,10 @@ async def test_case_9_google_oauth_json_preview_and_card_creation(
         assert created_data["slug"] == "google-oauth"
         assert created_data["provider_kind"] == "OIDC"
         assert created_data["has_secret"] is True
-        assert created_data["public_config"]["client_id"] == "google-client-xyz.apps.googleusercontent.com"
+        assert (
+            created_data["public_config"]["client_id"]
+            == "google-client-xyz.apps.googleusercontent.com"
+        )
         assert created_data["public_config"]["issuer"] == "https://accounts.google.com"
         assert "client_secret" not in created_data["public_config"]
         assert "redirect_uris" not in created_data["public_config"]

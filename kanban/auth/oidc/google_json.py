@@ -20,16 +20,20 @@ MAX_CLIENT_ID_LEN: int = 255
 MIN_CLIENT_SECRET_LEN: int = 1
 MAX_CLIENT_SECRET_LEN: int = 512
 
-ALLOWED_AUTH_URIS: frozenset[str] = frozenset({
-    "https://accounts.google.com/o/oauth2/auth",
-    "https://accounts.google.com/o/oauth2/v2/auth",
-})
+ALLOWED_AUTH_URIS: frozenset[str] = frozenset(
+    {
+        "https://accounts.google.com/o/oauth2/auth",
+        "https://accounts.google.com/o/oauth2/v2/auth",
+    }
+)
 
-ALLOWED_TOKEN_URIS: frozenset[str] = frozenset({
-    "https://oauth2.googleapis.com/token",
-    "https://accounts.google.com/o/oauth2/token",
-    "https://www.googleapis.com/oauth2/v4/token",
-})
+ALLOWED_TOKEN_URIS: frozenset[str] = frozenset(
+    {
+        "https://oauth2.googleapis.com/token",
+        "https://accounts.google.com/o/oauth2/token",
+        "https://www.googleapis.com/oauth2/v4/token",
+    }
+)
 
 ALLOWED_CERT_URL_PREFIXES: tuple[str, ...] = (
     "https://www.googleapis.com/oauth2/",
