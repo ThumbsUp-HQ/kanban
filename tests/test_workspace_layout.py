@@ -66,6 +66,25 @@ def test_workspace_layout_and_manifests() -> None:
             f"Symlink {agents_link} targets {readlink_val}, expected GEMINI.md"
         )
 
+    # Root workspace instruction symlinks
+    root_claude = REPO_ROOT / "CLAUDE.md"
+    assert os.path.islink(root_claude), (  # noqa: PTH114
+        f"Expected {root_claude} to be a symlink"
+    )
+    readlink_claude = os.readlink(root_claude)  # noqa: PTH115
+    assert readlink_claude == "AGENTS.md", (
+        f"Symlink {root_claude} targets {readlink_claude}, expected AGENTS.md"
+    )
+
+    root_gemini = REPO_ROOT / "GEMINI.md"
+    assert os.path.islink(root_gemini), (  # noqa: PTH114
+        f"Expected {root_gemini} to be a symlink"
+    )
+    readlink_gemini = os.readlink(root_gemini)  # noqa: PTH115
+    assert readlink_gemini == "AGENTS.md", (
+        f"Symlink {root_gemini} targets {readlink_gemini}, expected AGENTS.md"
+    )
+
 
 def test_import_linter_negative_contract_violation(tmp_path: Path) -> None:
     """Test Case 3: Negative/security test asserting reverse imports fail lint-imports."""

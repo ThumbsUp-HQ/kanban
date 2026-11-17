@@ -375,10 +375,10 @@ class OAuthDeviceCode(Base):
         nullable=False,
         index=True,
     )
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     resource: Mapped[str] = mapped_column(

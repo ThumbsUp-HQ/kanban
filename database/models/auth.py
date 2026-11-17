@@ -366,8 +366,8 @@ class UserIdentity(Base):
     __tablename__ = "user_identities"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
     )
     principal_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
@@ -376,7 +376,13 @@ class UserIdentity(Base):
         ForeignKey("auth_provider_cards.id", ondelete="RESTRICT"), nullable=False
     )
     immutable_subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    email_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
     subject_email_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
+    display_name_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )

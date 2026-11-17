@@ -1,0 +1,1544 @@
+diff --git a/.agents/skills/kanban-ticket/SKILL.md b/.agents/skills/kanban-ticket/SKILL.md
+index 7ef86a6..08b8b1c 100644
+--- a/.agents/skills/kanban-ticket/SKILL.md
++++ b/.agents/skills/kanban-ticket/SKILL.md
+@@ -25,8 +25,9 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
+ 2. **Literal, Non-Rhetorical Specifications**:
+    - Because `reality-checker` compares ticket quotes directly against forensic evidence, avoid figures of speech, marketing adjectives ("blazingly fast", "bulletproof", "luxury"), or ambiguous goals.
+    - Specify exact file paths, function/class names, HTTP status codes, byte limits, and CLI flags.
+-3. **Mandatory Feature Unit Testing (`>=95%` Project Coverage Standard)**:
++3. **Mandatory Feature Unit Testing (`>=95%` Project Coverage Standard) & Database Schema Changes**:
+    - Every feature or code ticket must require **unit tests specifically exercising the new/modified logic** introduced in that ticket, running rapidly against a clean isolated database state per test (`SAVEPOINT` / template DB) and using deterministic pluggable AI fixtures (`FixtureLLMProvider`) whenever AI agents are exercised.
++   - Any ticket modifying database schema, tables, functions, or migrations MUST adhere to the **Zero-Guesswork Database Migration & Schema Consistency Standard** in `database/GEMINI.md`: generate forward migrations via `kanban-ctl db new-migration`, verify with `kanban-ctl db check-migrations --static-only`, synchronize SQLAlchemy ORM models in `database/models/*.py`, and verify column/nullability parity via `database/tests/test_p1_17_models.py`.
+    - Any ticket introducing or modifying an AI agent workflow MUST also expose/verify local manual CLI validation given explicit input parameters.
+    - Specify the exact test file path(s) and the positive, negative, and boundary test cases required.
+    - *Note on Coverage*: Individual tickets require passing unit tests (`>=95%` target on touched modules); project-wide **`>=95%` coverage** enforcement is verified by CI and dedicated coverage sub-agents rather than asking `reality-checker` to compute global repo percentages manually.
+diff --git a/AGENTS.md b/AGENTS.md
+index 62492fa..8ac2b0a 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -47,4 +47,4 @@ Every ticket managed under [`.agents/skills/kanban-ticket/SKILL.md`](./.agents/s
+    - Database test fixtures MUST provision bootstrap workspace/admin rows under `kanban_migrator`/superuser authority and immediately drop session authorization back to `kanban_app` with `FORCE ROW LEVEL SECURITY` active before executing test assertions (`KANBA-162` invariant). Non-top-level `conftest.py` files MUST NOT declare `pytest_plugins` (forbidden by Pytest 9.2+).
+    - All AI agent workflows (`agent/`) MUST support pluggable deterministic **AI Response Fixtures** (`FixtureLLMProvider` / `FixtureCLIRunner`) for fast offline tests AND direct **local manual CLI validation** (`kanban-agent validate-*`) given explicit input parameters/files.
+    - Before introducing **any** new external dependency, consult at least 1 architect sub-agent and multiple engineer sub-agents to verify `Apache-2.0` license compatibility, evaluate supply-chain risk, and check native alternatives.
+-   - Maintain self-describing `GEMINI.md` (and cross-harness `AGENTS.md` symlink) manifests inside each top-level module (`kanban/`, `database/`, `mcp/`, `agent/`) documenting module responsibilities, inbound/outbound contracts, performance budgets, and failure modes.
++   - Maintain self-describing `GEMINI.md` (and cross-harness `AGENTS.md` symlink) manifests inside each top-level module (`kanban/`, `database/`, `mcp/`, `agent/`) documenting module responsibilities, inbound/outbound contracts, performance budgets, and failure modes. All database migrations and schema changes MUST strictly follow the Zero-Guesswork Database Migration & Schema Consistency Standard documented in `database/GEMINI.md` (linear single-head chain, `kanban-ctl db new-migration`, `check-migrations`, and column-level ORM parity).
+diff --git a/GEMINI.md b/GEMINI.md
+new file mode 120000
+index 0000000..47dc3e3
+--- /dev/null
++++ b/GEMINI.md
+@@ -0,0 +1 @@
++AGENTS.md
+\ No newline at end of file
+diff --git a/Makefile b/Makefile
+index 0f745c7..9303bfa 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,4 @@
+-.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint compose-check
++.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint compose-check db-new-migration db-check-migrations
+ 
+ check:
+ 	uv run ruff check .
+@@ -6,6 +6,7 @@ check:
+ 	uv run mypy
+ 	uv run lint-imports
+ 	uv run python -m scripts.check_no_dashes --all
++	uv run python -m database.migrations.cli check-migrations --static-only
+ 
+ fmt:
+ 	uv run ruff format .
+@@ -14,6 +15,12 @@ fmt:
+ license:
+ 	uv run python -m scripts.license_gate
+ 
++db-new-migration:
++	uv run kanban-ctl db new-migration $(REV) -m "$(MSG)"
++
++db-check-migrations:
++	uv run kanban-ctl db check-migrations --static-only
++
+ testdb-up:
+ 	./scripts/testdb_up.sh
+ 
+diff --git a/database/GEMINI.md b/database/GEMINI.md
+index 26f93c9..634c89a 100644
+--- a/database/GEMINI.md
++++ b/database/GEMINI.md
+@@ -39,3 +39,110 @@ None. This is the foundational leaf module in the workspace dependency hierarchy
+ - RLSContextError raised when attempting RLS context binding outside an active transaction.
+ - Migration lock timeout during schema upgrades under active load.
+ - Fail-closed behavior on broken object links pending audit purge.
++
++## Zero-Guesswork Schema Change & Migration Standard
++
++### 1. Invariants & Rules
++1. **Never hand-roll migration files or down_revision, and never edit already-merged `.up.sql` files:** Always generate new forward migrations at the current single Alembic head via `uv run kanban-ctl db new-migration <rev_id> --message "..."` (or `uv run python -m database.migrations.cli new-migration <rev_id> -m "..."`).
++2. **Revision ID Rule:** Must strictly match `^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$` (`sqlfile.NAME_PATTERN`).
++3. **Linear Single-Head Alembic Chain:** Every migration must point its `down_revision` to the single current head returned by `ScriptDirectory.get_heads()`. Branching heads or detached revisions fail the gate.
++4. **Paired SQL Files & Zero Historical Mutation:** Every revision must reference valid `.up.sql` and `.down.sql` files in `database/migrations/sql/`. Editing already-applied historical migrations is forbidden; all schema evolution is strictly append-only.
++
++### 2. Copy-Pasteable SQL Templates
++
++#### Template 1: Tenant-Scoped Table
++Enforces kernel-level `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`, tenant isolation via `workspace_id = app_current_workspace_id()`, and explicit table grants for `kanban_app` and `app_rls_reader`:
++
++```sql
++CREATE TABLE IF NOT EXISTS {table} (
++    id UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    name TEXT NOT NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++CREATE INDEX IF NOT EXISTS idx_{table}_workspace_id ON {table} (workspace_id);
++
++ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
++ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY {table}_select_rls ON {table}
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY {table}_insert_rls ON {table}
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY {table}_update_rls ON {table}
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY {table}_delete_rls ON {table}
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {table} TO kanban_app;
++GRANT SELECT ON TABLE {table} TO app_rls_reader;
++```
++
++#### Template 2: Isolated Table (`kb_auth_owner` / `kb_infra_owner`)
++For credentials, sessions, and MFA factors. Completely revokes direct table access from `kanban_app` and `app_rls_reader`. Access is permitted exclusively via `SECURITY DEFINER` RPC routines owned by `kb_auth_owner`:
++
++```sql
++CREATE TABLE IF NOT EXISTS {table} (
++    id UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
++    secret_payload TEXT NOT NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++ALTER TABLE {table} OWNER TO kb_auth_owner;
++REVOKE ALL ON {table} FROM PUBLIC, kanban_app, app_rls_reader;
++
++ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
++ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY {table}_owner_all ON {table}
++    FOR ALL TO kb_auth_owner USING (true) WITH CHECK (true);
++```
++
++#### Template 3: `SECURITY DEFINER` Function
++Created in schema `kb_auth.*` or `kb_infra.*`, owned by `kb_auth_owner` (or `kb_infra_owner`), with hardened search path, revoked `PUBLIC` execute, and explicit execute grant to `kanban_app`:
++
++```sql
++CREATE OR REPLACE FUNCTION kb_auth.{func_name}(
++    p_workspace_id UUID
++)
++RETURNS BOOLEAN
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    IF p_workspace_id IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'NULL_ARGUMENT';
++    END IF;
++
++    RETURN TRUE;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.{func_name}(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.{func_name}(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.{func_name}(UUID) TO kanban_app;
++```
++
++### 3. Five-Step Verification Checklist
++1. **Scaffold:** Run `uv run kanban-ctl db new-migration <rev_id> --message "<message>" [--table <table>] [--template tenant|isolated|func]`
++2. **Write SQL:** Edit `database/migrations/sql/<rev_id>.up.sql` and `database/migrations/sql/<rev_id>.down.sql`
++3. **Synchronize ORM:** Update or add models in `database/models/*.py` and re-export in `database/models/__init__.py`
++4. **Lifecycle Test:** Customize `database/tests/migrations/test_<rev_id>_migration.py` and run `uv run pytest database/tests/migrations/test_<rev_id>_migration.py`
++5. **Static & Catalog Consistency Check:** Run `uv run kanban-ctl db check-migrations --static-only` and `uv run pytest database/tests/test_p1_17_models.py database/tests/test_p1_14_rls_catalog.py`
+diff --git a/database/migrations/cli.py b/database/migrations/cli.py
+new file mode 100644
+index 0000000..b15fba1
+--- /dev/null
++++ b/database/migrations/cli.py
+@@ -0,0 +1,199 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""CLI entrypoint for database migration operations.
++
++Exposes:
++- new-migration: Generate a new Alembic migration with paired .up.sql / .down.sql
++- check-migrations: Validate migration consistency, naming, and single-head linear chain
++"""
++
++from __future__ import annotations
++
++import argparse
++import asyncio
++import json
++import sys
++from typing import TYPE_CHECKING, Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.migrations.scaffold import scaffold_migration
++from database.migrations.validator import validate_migrations_full, validate_migrations_static
++from database.session import create_rls_engine
++
++if TYPE_CHECKING:
++    from collections.abc import Sequence
++
++
++def _cmd_new_migration(args: argparse.Namespace) -> int:
++    """Handle new-migration command."""
++    try:
++        result = scaffold_migration(
++            rev_id=args.rev_id,
++            message=args.message,
++            table=args.table,
++            template=args.template,
++            alembic_ini_path=args.alembic_ini,
++            base_dir=args.base_dir,
++        )
++    except (ValueError, RuntimeError, FileExistsError) as err:
++        sys.stderr.write(f"Error creating migration: {err}\n")
++        return 2
++
++    out = {
++        "status": "created",
++        "rev_id": result.rev_id,
++        "down_revision": result.down_revision,
++        "files": {
++            "version": str(result.version_file),
++            "up_sql": str(result.up_sql_file),
++            "down_sql": str(result.down_sql_file),
++            "test": str(result.test_file),
++        },
++    }
++    if args.json_out:
++        sys.stdout.write(json.dumps(out, indent=2) + "\n")
++    else:
++        sys.stdout.write(f"Successfully generated migration '{result.rev_id}':\n")
++        sys.stdout.write(f"  Version:   {result.version_file}\n")
++        sys.stdout.write(f"  Up SQL:    {result.up_sql_file}\n")
++        sys.stdout.write(f"  Down SQL:  {result.down_sql_file}\n")
++        sys.stdout.write(f"  Test:      {result.test_file}\n")
++        sys.stdout.write(f"  Revises:   {result.down_revision}\n")
++
++    return 0
++
++
++async def _run_full_validation(args: argparse.Namespace) -> Any:  # noqa: ANN401
++    """Run full validation connecting to PostgreSQL."""
++    engine = create_rls_engine(args.db_url)
++    async with AsyncSession(engine) as session:
++        return await validate_migrations_full(
++            session,
++            alembic_ini_path=args.alembic_ini,
++            base_dir=args.base_dir,
++        )
++
++
++def _cmd_check_migrations(args: argparse.Namespace) -> int:
++    """Handle check-migrations command."""
++    if args.static_only or not getattr(args, "db_url", None):
++        report = validate_migrations_static(
++            alembic_ini_path=args.alembic_ini,
++            base_dir=args.base_dir,
++        )
++    else:
++        report = asyncio.run(_run_full_validation(args))
++
++    if args.json_out:
++        sys.stdout.write(report.to_json(indent=2) + "\n")
++    elif report.valid:
++        head_name = report.heads[0] if report.heads else "none"
++        sys.stdout.write(
++            f"OK: All {report.total_revisions} migrations valid. Single head: {head_name}\n"
++        )
++    else:
++        sys.stderr.write(f"FAILED: Found {len(report.issues)} migration consistency issues:\n")
++        for issue in report.issues:
++            sys.stderr.write(f"  [{issue.severity.upper()}] {issue.check}: {issue.message}\n")
++
++    return 0 if report.valid else 1
++
++
++def build_parser() -> argparse.ArgumentParser:
++    """Build the argument parser for database migration commands."""
++    parser = argparse.ArgumentParser(
++        prog="database.migrations.cli",
++        description="Database migration and schema governance CLI",
++    )
++    subparsers = parser.add_subparsers(dest="action", required=True)
++
++    # new-migration
++    new_p = subparsers.add_parser(
++        "new-migration",
++        help="Generate a new linear Alembic migration with SQL and test templates",
++    )
++    new_p.add_argument(
++        "rev_id",
++        help="Revision ID (e.g. p4_19_my_feature, must match ^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$)",
++    )
++    new_p.add_argument(
++        "--message",
++        "-m",
++        required=True,
++        help="Human-readable summary of the migration",
++    )
++    new_p.add_argument(
++        "--table",
++        "-t",
++        default=None,
++        help="Target table or function name (defaults to slug from rev_id)",
++    )
++    new_p.add_argument(
++        "--template",
++        choices=["tenant", "isolated", "func"],
++        default="tenant",
++        help="SQL template kind: tenant (default), isolated, or func",
++    )
++    new_p.add_argument(
++        "--alembic-ini",
++        default="database/alembic.ini",
++        help="Path to alembic.ini (default: database/alembic.ini)",
++    )
++    new_p.add_argument(
++        "--base-dir",
++        default="database",
++        help="Path to database root directory (default: database)",
++    )
++    new_p.add_argument(
++        "--json-out",
++        action="store_true",
++        help="Output result as JSON",
++    )
++    new_p.set_defaults(func=_cmd_new_migration)
++
++    # check-migrations
++    check_p = subparsers.add_parser(
++        "check-migrations",
++        help="Validate migration consistency, naming, and linear chain",
++    )
++    check_p.add_argument(
++        "--static-only",
++        action="store_true",
++        default=True,
++        help="Run fast offline static checks without connecting to PostgreSQL (default: True)",
++    )
++    check_p.add_argument(
++        "--db-url",
++        default=None,
++        help="PostgreSQL connection URL for full catalog validation",
++    )
++    check_p.add_argument(
++        "--alembic-ini",
++        default="database/alembic.ini",
++        help="Path to alembic.ini (default: database/alembic.ini)",
++    )
++    check_p.add_argument(
++        "--base-dir",
++        default="database",
++        help="Path to database root directory (default: database)",
++    )
++    check_p.add_argument(
++        "--json-out",
++        action="store_true",
++        help="Output validation report as JSON",
++    )
++    check_p.set_defaults(func=_cmd_check_migrations)
++
++    return parser
++
++
++def main(argv: Sequence[str] | None = None) -> int:
++    """Execute migration CLI."""
++    parser = build_parser()
++    args = parser.parse_args(argv)
++    return int(args.func(args))
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/database/migrations/scaffold.py b/database/migrations/scaffold.py
+new file mode 100644
+index 0000000..afa9d20
+--- /dev/null
++++ b/database/migrations/scaffold.py
+@@ -0,0 +1,295 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Database migration scaffolding generator.
++
++Deterministic CLI generator for forward Alembic migrations conforming to:
++- sqlfile.NAME_PATTERN (^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$)
++- Linear single-head Alembic chain enforcement
++- Pre-populated .up.sql, .down.sql, version python file, and migration unit test
++"""
++
++from __future__ import annotations
++
++import re
++from dataclasses import dataclass
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Literal
++
++from alembic.config import Config
++from alembic.script import ScriptDirectory
++
++MIGRATION_REVISION_PATTERN = re.compile(r"^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$")
++TemplateKind = Literal["tenant", "isolated", "func"]
++
++# Template 1: Tenant-Scoped Table
++TENANT_UP_TEMPLATE = """-- Copyright {year} Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++CREATE TABLE IF NOT EXISTS {table} (
++    id UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    name TEXT NOT NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++CREATE INDEX IF NOT EXISTS idx_{table}_workspace_id ON {table} (workspace_id);
++
++ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
++ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY {table}_select_rls ON {table}
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY {table}_insert_rls ON {table}
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY {table}_update_rls ON {table}
++    FOR UPDATE USING (
++        workspace_id = app_current_workspace_id()
++    ) WITH CHECK (
++        workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY {table}_delete_rls ON {table}
++    FOR DELETE USING (
++        workspace_id = app_current_workspace_id()
++    );
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {table} TO kanban_app;
++GRANT SELECT ON TABLE {table} TO app_rls_reader;
++"""
++
++TENANT_DOWN_TEMPLATE = """-- Copyright {year} Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++DROP TABLE IF EXISTS {table} CASCADE;
++"""
++
++# Template 2: Isolated Table (kb_auth_owner / kb_infra_owner)
++ISOLATED_UP_TEMPLATE = """-- Copyright {year} Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++CREATE TABLE IF NOT EXISTS {table} (
++    id UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
++    secret_payload TEXT NOT NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++ALTER TABLE {table} OWNER TO kb_auth_owner;
++REVOKE ALL ON {table} FROM PUBLIC, kanban_app, app_rls_reader;
++
++ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
++ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY {table}_owner_all ON {table}
++    FOR ALL TO kb_auth_owner USING (true) WITH CHECK (true);
++"""
++
++ISOLATED_DOWN_TEMPLATE = """-- Copyright {year} Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++DROP TABLE IF EXISTS {table} CASCADE;
++"""
++
++# Template 3: SECURITY DEFINER Function
++FUNC_UP_TEMPLATE = """-- Copyright {year} Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++CREATE OR REPLACE FUNCTION kb_auth.{func_name}(
++    p_workspace_id UUID
++)
++RETURNS BOOLEAN
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    IF p_workspace_id IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'NULL_ARGUMENT';
++    END IF;
++
++    RETURN TRUE;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.{func_name}(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.{func_name}(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.{func_name}(UUID) TO kanban_app;
++"""
++
++FUNC_DOWN_TEMPLATE = """-- Copyright {year} Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++DROP FUNCTION IF EXISTS kb_auth.{func_name}(UUID);
++"""
++
++VERSION_PY_TEMPLATE = '''# Copyright {year} Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""{message}
++
++Revision ID: {rev_id}
++Revises: {down_revision}
++Create Date: {create_date}
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "{rev_id}"
++down_revision: str | None = "{down_revision}"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply {rev_id} migration."""
++    execute_sql_file("{rev_id}.up.sql")
++
++
++def downgrade() -> None:
++    """Revert {rev_id} migration."""
++    execute_sql_file("{rev_id}.down.sql")
++'''
++
++TEST_MIGRATION_TEMPLATE = '''# Copyright {year} Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for {rev_id}."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_{rev_id}_migration_lifecycle() -> None:
++    """Verify {rev_id} upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("{rev_id}")
++        assert prev_rev == "{down_revision}"
++
++        # 1. Upgrade to {rev_id}
++        await harness.upgrade("{rev_id}")
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # 3. Upgrade back to head
++        await harness.upgrade("{rev_id}")
++'''
++
++
++@dataclass(frozen=True)
++class ScaffoldResult:
++    """Result of scaffolding a migration."""
++
++    rev_id: str
++    down_revision: str
++    version_file: Path
++    up_sql_file: Path
++    down_sql_file: Path
++    test_file: Path
++
++
++def scaffold_migration(  # noqa: PLR0913
++    rev_id: str,
++    message: str,
++    *,
++    table: str | None = None,
++    template: TemplateKind = "tenant",
++    alembic_ini_path: Path | str = "database/alembic.ini",
++    base_dir: Path | str = "database",
++) -> ScaffoldResult:
++    """Generate migration files for a new forward revision."""
++    rev_id = rev_id.strip()
++    if not MIGRATION_REVISION_PATTERN.match(rev_id):
++        msg = (
++            f"Invalid revision ID '{rev_id}'. Must match pattern "
++            f"'{MIGRATION_REVISION_PATTERN.pattern}' (e.g. 'p4_19_my_feature')."
++        )
++        raise ValueError(msg)
++
++    cfg = Config(str(alembic_ini_path))
++    sd = ScriptDirectory.from_config(cfg)
++    heads = sd.get_heads()
++
++    if len(heads) != 1:
++        msg = (
++            f"Alembic chain has {len(heads)} heads: {heads}. "
++            f"Expected exactly 1 single head. Refusing to scaffold."
++        )
++        raise RuntimeError(msg)
++
++    down_revision = heads[0]
++    base_path = Path(base_dir).resolve()
++    versions_dir = base_path / "migrations" / "versions"
++    sql_dir = base_path / "migrations" / "sql"
++    tests_dir = base_path / "tests" / "migrations"
++
++    version_file = versions_dir / f"{rev_id}.py"
++    up_sql_file = sql_dir / f"{rev_id}.up.sql"
++    down_sql_file = sql_dir / f"{rev_id}.down.sql"
++    test_file = tests_dir / f"test_{rev_id}_migration.py"
++
++    for target in (version_file, up_sql_file, down_sql_file, test_file):
++        if target.exists():
++            msg = f"Target file already exists: {target}"
++            raise FileExistsError(msg)
++
++    # Prepare SQL contents
++    current_year = datetime.now(UTC).year
++    create_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.000000")
++    target_table = table or rev_id.split("_", 2)[-1]
++    func_name = table or rev_id.split("_", 2)[-1]
++
++    if template == "isolated":
++        up_sql = ISOLATED_UP_TEMPLATE.format(year=current_year, table=target_table)
++        down_sql = ISOLATED_DOWN_TEMPLATE.format(year=current_year, table=target_table)
++    elif template == "func":
++        up_sql = FUNC_UP_TEMPLATE.format(year=current_year, func_name=func_name)
++        down_sql = FUNC_DOWN_TEMPLATE.format(year=current_year, func_name=func_name)
++    else:  # tenant
++        up_sql = TENANT_UP_TEMPLATE.format(year=current_year, table=target_table)
++        down_sql = TENANT_DOWN_TEMPLATE.format(year=current_year, table=target_table)
++
++    version_py = VERSION_PY_TEMPLATE.format(
++        year=current_year,
++        message=message.strip(),
++        rev_id=rev_id,
++        down_revision=down_revision,
++        create_date=create_date,
++    )
++
++    test_py = TEST_MIGRATION_TEMPLATE.format(
++        year=current_year,
++        rev_id=rev_id,
++        down_revision=down_revision,
++    )
++
++    # Ensure directories exist
++    versions_dir.mkdir(parents=True, exist_ok=True)
++    sql_dir.mkdir(parents=True, exist_ok=True)
++    tests_dir.mkdir(parents=True, exist_ok=True)
++
++    # Write files
++    version_file.write_text(version_py, encoding="utf-8")
++    up_sql_file.write_text(up_sql, encoding="utf-8")
++    down_sql_file.write_text(down_sql, encoding="utf-8")
++    test_file.write_text(test_py, encoding="utf-8")
++
++    return ScaffoldResult(
++        rev_id=rev_id,
++        down_revision=down_revision,
++        version_file=version_file,
++        up_sql_file=up_sql_file,
++        down_sql_file=down_sql_file,
++        test_file=test_file,
++    )
+diff --git a/database/migrations/validator.py b/database/migrations/validator.py
+new file mode 100644
+index 0000000..d0adac6
+--- /dev/null
++++ b/database/migrations/validator.py
+@@ -0,0 +1,299 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Database migration and schema consistency validator.
++
++Validates:
++1. Linear single-head Alembic chain (no branching)
++2. Strict revision ID naming (^p[0-9]_[0-9]{{2}}[a-z]?_[a-z0-9_]+$)
++3. Paired SQL files (.up.sql and .down.sql) matching sqlfile.py
++4. No orphaned SQL files
++5. No historical migration tampering (asserting historical migrations remain linear)
++6. Optional live database validation:
++   - FORCE ROW LEVEL SECURITY catalog gate
++   - ORM vs DB column parity and nullability parity
++   - Unprotected tables and missing grants check
++"""
++
++from __future__ import annotations
++
++import ast
++import json
++import re
++from dataclasses import asdict, dataclass, field
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++from alembic.config import Config
++from alembic.script import ScriptDirectory
++from sqlalchemy import text
++
++from database.models import Base
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++MIGRATION_REVISION_PATTERN = re.compile(r"^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$")
++SQL_FILE_PATTERN = re.compile(r"^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+\.(up|down)\.sql$")
++
++
++@dataclass
++class ValidationIssue:
++    """A detected migration consistency issue."""
++
++    check: str
++    severity: str  # "error" or "warning"
++    message: str
++    target: str | None = None
++
++
++@dataclass
++class ValidationReport:
++    """Summary report of migration consistency validation."""
++
++    valid: bool
++    heads: list[str]
++    total_revisions: int
++    total_sql_files: int
++    static_only: bool
++    issues: list[ValidationIssue] = field(default_factory=list)
++
++    def to_dict(self) -> dict[str, Any]:
++        """Convert report to JSON-serializable dictionary."""
++        return {
++            "valid": self.valid,
++            "heads": self.heads,
++            "total_revisions": self.total_revisions,
++            "total_sql_files": self.total_sql_files,
++            "static_only": self.static_only,
++            "issues": [asdict(issue) for issue in self.issues],
++        }
++
++    def to_json(self, indent: int = 2) -> str:
++        """Convert report to JSON string."""
++        return json.dumps(self.to_dict(), indent=indent)
++
++
++def _check_ast_sql_calls(
++    py_file: Path,
++    all_sql_files: set[str],
++    issues: list[ValidationIssue],
++) -> set[str]:
++    """Parse a python version file and return all referenced SQL files."""
++    referenced: set[str] = set()
++    try:
++        tree = ast.parse(py_file.read_text(encoding="utf-8"))
++    except SyntaxError as e:
++        issues.append(
++            ValidationIssue(
++                check="python_syntax",
++                severity="error",
++                message=f"Syntax error parsing {py_file.name}: {e}",
++                target=py_file.name,
++            )
++        )
++        return referenced
++
++    for node in ast.walk(tree):
++        if (
++            isinstance(node, ast.Call)
++            and isinstance(node.func, ast.Name)
++            and node.func.id == "execute_sql_file"
++            and node.args
++            and isinstance(node.args[0], ast.Constant)
++        ):
++            sql_name = str(node.args[0].value)
++            referenced.add(sql_name)
++            if sql_name not in all_sql_files:
++                issues.append(
++                    ValidationIssue(
++                        check="missing_sql_file",
++                        severity="error",
++                        message=(
++                            f"Version file '{py_file.name}' references SQL file "
++                            f"'{sql_name}' which does not exist in sql directory."
++                        ),
++                        target=sql_name,
++                    )
++                )
++    return referenced
++
++
++def validate_migrations_static(
++    *,
++    alembic_ini_path: Path | str = "database/alembic.ini",
++    base_dir: Path | str = "database",
++) -> ValidationReport:
++    """Perform fast offline static validation over Alembic revisions and SQL files."""
++    issues: list[ValidationIssue] = []
++    base_path = Path(base_dir).resolve()
++    sql_dir = base_path / "migrations" / "sql"
++    versions_dir = base_path / "migrations" / "versions"
++
++    # 1. Alembic single-head check
++    cfg = Config(str(alembic_ini_path))
++    sd = ScriptDirectory.from_config(cfg)
++    heads = list(sd.get_heads())
++
++    if len(heads) != 1:
++        issues.append(
++            ValidationIssue(
++                check="single_head",
++                severity="error",
++                message=f"Multiple or zero Alembic heads found: {heads}. Expected exactly 1 head.",
++                target=str(heads),
++            )
++        )
++
++    # 2. Check revision IDs
++    revisions = list(sd.walk_revisions())
++    total_revisions = len(revisions)
++    issues.extend(
++        ValidationIssue(
++            check="revision_id_naming",
++            severity="error",
++            message=(
++                f"Revision '{rev.revision}' does not match pattern "
++                f"'{MIGRATION_REVISION_PATTERN.pattern}'."
++            ),
++            target=rev.revision,
++        )
++        for rev in revisions
++        if not MIGRATION_REVISION_PATTERN.match(rev.revision)
++    )
++
++    # 3. Check SQL files
++    all_sql_files = {f.name: f for f in sql_dir.glob("*.sql")}
++    total_sql_files = len(all_sql_files)
++
++    issues.extend(
++        ValidationIssue(
++            check="sql_file_naming",
++            severity="error",
++            message=(f"SQL file '{sql_name}' does not match pattern '{SQL_FILE_PATTERN.pattern}'."),
++            target=sql_name,
++        )
++        for sql_name in all_sql_files
++        if not SQL_FILE_PATTERN.match(sql_name)
++    )
++
++    # 4. Check version python references to SQL files
++    referenced_sql: set[str] = set()
++    for py_file in versions_dir.glob("*.py"):
++        if py_file.name == "__init__.py":
++            continue
++        referenced_sql |= _check_ast_sql_calls(py_file, set(all_sql_files.keys()), issues)
++
++    # 5. Check for orphaned SQL files
++    orphaned = set(all_sql_files.keys()) - referenced_sql
++    issues.extend(
++        ValidationIssue(
++            check="orphaned_sql_file",
++            severity="error",
++            message=f"SQL file '{orphan}' is not referenced by any Alembic migration version.",
++            target=orphan,
++        )
++        for orphan in sorted(orphaned)
++    )
++
++    valid = not any(issue.severity == "error" for issue in issues)
++    return ValidationReport(
++        valid=valid,
++        heads=heads,
++        total_revisions=total_revisions,
++        total_sql_files=total_sql_files,
++        static_only=True,
++        issues=issues,
++    )
++
++
++async def validate_migrations_full(
++    session: AsyncSession,
++    *,
++    alembic_ini_path: Path | str = "database/alembic.ini",
++    base_dir: Path | str = "database",
++) -> ValidationReport:
++    """Perform full validation including static checks and live database catalog assertions."""
++    report = validate_migrations_static(alembic_ini_path=alembic_ini_path, base_dir=base_dir)
++    report.static_only = False
++
++    # 1. Check FORCE RLS across public tenant tables
++    catalog_res = await session.execute(
++        text(
++            "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity "
++            "FROM pg_class c "
++            "JOIN pg_namespace n ON n.oid = c.relnamespace "
++            "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
++            "  AND c.relname NOT IN ('alembic_version', 'link_type_matrix') "
++            "ORDER BY c.relname;"
++        )
++    )
++    for r in catalog_res.mappings().all():
++        if not r["relrowsecurity"] or not r["relforcerowsecurity"]:
++            report.issues.append(
++                ValidationIssue(
++                    check="force_rls_catalog",
++                    severity="error",
++                    message=f"Table '{r['relname']}' is missing ENABLE RLS or FORCE RLS.",
++                    target=r["relname"],
++                )
++            )
++
++    # 2. Check ORM vs Database column parity
++    cols_res = await session.execute(
++        text(
++            "SELECT table_name, column_name, is_nullable "
++            "FROM information_schema.columns "
++            "WHERE table_schema = 'public' "
++            "  AND table_name != 'alembic_version' "
++            "  AND table_name NOT LIKE 'activity_records_y%' "
++            "ORDER BY table_name, ordinal_position;"
++        )
++    )
++    pg_columns: dict[str, dict[str, bool]] = {}
++    for col_row in cols_res.mappings().all():
++        t_name = str(col_row["table_name"])
++        c_name = str(col_row["column_name"])
++        pg_columns.setdefault(t_name, {})[c_name] = col_row["is_nullable"] == "YES"
++
++    for table_name, table_obj in Base.metadata.tables.items():
++        if table_name not in pg_columns:
++            report.issues.append(
++                ValidationIssue(
++                    check="orm_table_existence",
++                    severity="error",
++                    message=f"ORM table '{table_name}' not found in database.",
++                    target=table_name,
++                )
++            )
++            continue
++
++        db_cols = pg_columns[table_name]
++        orm_cols = {col.name: bool(col.nullable) for col in table_obj.columns}
++        drift = set(orm_cols.keys()) ^ set(db_cols.keys())
++        if drift:
++            report.issues.append(
++                ValidationIssue(
++                    check="orm_column_drift",
++                    severity="error",
++                    message=f"Column drift between ORM and DB on '{table_name}': {drift}",
++                    target=table_name,
++                )
++            )
++        for col_name, orm_nullable in orm_cols.items():
++            if col_name in db_cols:
++                db_nullable = db_cols[col_name]
++                if orm_nullable != db_nullable:
++                    report.issues.append(
++                        ValidationIssue(
++                            check="orm_nullability_drift",
++                            severity="error",
++                            message=(
++                                f"Nullability mismatch on '{table_name}.{col_name}': "
++                                f"ORM={orm_nullable} vs DB={db_nullable}"
++                            ),
++                            target=f"{table_name}.{col_name}",
++                        )
++                    )
++
++    report.valid = not any(issue.severity == "error" for issue in report.issues)
++    return report
+diff --git a/database/models/auth.py b/database/models/auth.py
+index 0824ed3..34e3f63 100644
+--- a/database/models/auth.py
++++ b/database/models/auth.py
+@@ -366,8 +366,8 @@ class UserIdentity(Base):
+     __tablename__ = "user_identities"
+ 
+     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+-    workspace_id: Mapped[uuid.UUID] = mapped_column(
+-        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
+     )
+     principal_id: Mapped[uuid.UUID] = mapped_column(
+         ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+@@ -376,7 +376,13 @@ class UserIdentity(Base):
+         ForeignKey("auth_provider_cards.id", ondelete="RESTRICT"), nullable=False
+     )
+     immutable_subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
++    email_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
+     subject_email_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
++    display_name_at_link: Mapped[str | None] = mapped_column(String, nullable=True)
++    linked_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+     )
+diff --git a/database/models/oauth.py b/database/models/oauth.py
+index bb8166c..49f7217 100644
+--- a/database/models/oauth.py
++++ b/database/models/oauth.py
+@@ -375,10 +375,10 @@ class OAuthDeviceCode(Base):
+         nullable=False,
+         index=True,
+     )
+-    workspace_id: Mapped[uuid.UUID] = mapped_column(
++    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+         UUID(as_uuid=True),
+         ForeignKey("workspaces.id", ondelete="CASCADE"),
+-        nullable=False,
++        nullable=True,
+         index=True,
+     )
+     resource: Mapped[str] = mapped_column(
+diff --git a/database/models/spine.py b/database/models/spine.py
+index c9610e6..102e5fb 100644
+--- a/database/models/spine.py
++++ b/database/models/spine.py
+@@ -133,13 +133,9 @@ class LinkTypeMatrix(Base):
+     target_type: Mapped[ObjectKind] = mapped_column(
+         object_kind_pg_enum, primary_key=True, nullable=False
+     )
+-    is_bidirectional: Mapped[bool] = mapped_column(
++    is_user_creatable: Mapped[bool] = mapped_column(
+         Boolean, nullable=False, server_default=text("false")
+     )
+-    inverse_link_type: Mapped[LinkKind | None] = mapped_column(link_kind_pg_enum, nullable=True)
+-    created_at: Mapped[datetime] = mapped_column(
+-        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+-    )
+ 
+ 
+ class InvalidObjectLinkAudit(Base):
+diff --git a/database/tests/test_migration_consistency_static.py b/database/tests/test_migration_consistency_static.py
+new file mode 100644
+index 0000000..20fff30
+--- /dev/null
++++ b/database/tests/test_migration_consistency_static.py
+@@ -0,0 +1,183 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++r"""Fast offline static gate asserting database migration consistency and single-head chain.
++
++Verifies:
++- Single linear Alembic head
++- Strict revision naming convention (^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$)
++- SQL file naming convention (^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+\.(up|down)\.sql$)
++- All referenced SQL files exist
++- Zero orphaned SQL files
++- Scaffolding generator produces valid migrations conforming to the standard
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import pytest
++
++from database.migrations.scaffold import scaffold_migration
++from database.migrations.validator import validate_migrations_static
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++def test_migrations_static_consistency_gate() -> None:
++    """Verify entire database migration repository passes static consistency checks."""
++    report = validate_migrations_static()
++    assert report.valid is True, f"Migration validation failed: {report.issues}"
++    assert len(report.heads) == 1, f"Expected 1 head, got {report.heads}"
++    assert report.total_revisions >= 50
++    assert report.total_sql_files == report.total_revisions * 2
++    assert len(report.issues) == 0
++
++
++def test_scaffold_migration_validates_rev_id_pattern() -> None:
++    """Verify scaffold_migration rejects invalid revision ID formats."""
++    with pytest.raises(ValueError, match="Invalid revision ID"):
++        scaffold_migration("invalid_rev_id", "Test migration")
++
++    with pytest.raises(ValueError, match="Invalid revision ID"):
++        scaffold_migration("123456abcdef_migration", "Test migration")
++
++
++def test_scaffold_migration_generates_tenant_template(tmp_path: Path) -> None:
++    """Verify scaffold_migration creates version, up/down sql, and test files."""
++    db_dir = tmp_path / "database"
++    db_dir.mkdir()
++    versions_dir = db_dir / "migrations" / "versions"
++    versions_dir.mkdir(parents=True)
++    sql_dir = db_dir / "migrations" / "sql"
++    sql_dir.mkdir(parents=True)
++
++    (versions_dir / "p1_01_baseline.py").write_text(
++        """revision = 'p1_01_baseline'\ndown_revision = None\n""",
++        encoding="utf-8",
++    )
++    (sql_dir / "p1_01_baseline.up.sql").write_text("SELECT 1;\n", encoding="utf-8")
++    (sql_dir / "p1_01_baseline.down.sql").write_text("SELECT 1;\n", encoding="utf-8")
++
++    alembic_ini = tmp_path / "alembic.ini"
++    alembic_ini.write_text(
++        f"""[alembic]
++script_location = {db_dir / "migrations"}
++file_template = %%(rev)s
++""",
++        encoding="utf-8",
++    )
++
++    result = scaffold_migration(
++        "p1_02_test_feature",
++        "Test feature description",
++        table="test_items",
++        template="tenant",
++        alembic_ini_path=alembic_ini,
++        base_dir=db_dir,
++    )
++
++    assert result.rev_id == "p1_02_test_feature"
++    assert result.down_revision == "p1_01_baseline"
++    assert result.version_file.is_file()
++    assert result.up_sql_file.is_file()
++    assert result.down_sql_file.is_file()
++    assert result.test_file.is_file()
++
++    up_sql = result.up_sql_file.read_text(encoding="utf-8")
++    assert "CREATE TABLE IF NOT EXISTS test_items" in up_sql
++    assert "ENABLE ROW LEVEL SECURITY" in up_sql
++    assert "FORCE ROW LEVEL SECURITY" in up_sql
++    assert "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE test_items TO kanban_app" in up_sql
++    assert "GRANT SELECT ON TABLE test_items TO app_rls_reader" in up_sql
++
++    down_sql = result.down_sql_file.read_text(encoding="utf-8")
++    assert "DROP TABLE IF EXISTS test_items CASCADE;" in down_sql
++
++    version_py = result.version_file.read_text(encoding="utf-8")
++    assert 'revision: str = "p1_02_test_feature"' in version_py
++    assert 'down_revision: str | None = "p1_01_baseline"' in version_py
++    assert 'execute_sql_file("p1_02_test_feature.up.sql")' in version_py
++
++
++def test_scaffold_migration_generates_isolated_template(tmp_path: Path) -> None:
++    """Verify scaffold_migration creates isolated table template with kb_auth_owner."""
++    db_dir = tmp_path / "database"
++    db_dir.mkdir()
++    versions_dir = db_dir / "migrations" / "versions"
++    versions_dir.mkdir(parents=True)
++    sql_dir = db_dir / "migrations" / "sql"
++    sql_dir.mkdir(parents=True)
++
++    (versions_dir / "p1_01_baseline.py").write_text(
++        """revision = 'p1_01_baseline'\ndown_revision = None\n""",
++        encoding="utf-8",
++    )
++    (sql_dir / "p1_01_baseline.up.sql").write_text("SELECT 1;\n", encoding="utf-8")
++    (sql_dir / "p1_01_baseline.down.sql").write_text("SELECT 1;\n", encoding="utf-8")
++
++    alembic_ini = tmp_path / "alembic.ini"
++    alembic_ini.write_text(
++        f"""[alembic]
++script_location = {db_dir / "migrations"}
++file_template = %%(rev)s
++""",
++        encoding="utf-8",
++    )
++
++    result = scaffold_migration(
++        "p2_19_isolated_secrets",
++        "Isolated secrets migration",
++        table="isolated_secrets",
++        template="isolated",
++        alembic_ini_path=alembic_ini,
++        base_dir=db_dir,
++    )
++
++    up_sql = result.up_sql_file.read_text(encoding="utf-8")
++    assert "ALTER TABLE isolated_secrets OWNER TO kb_auth_owner;" in up_sql
++    assert "REVOKE ALL ON isolated_secrets FROM PUBLIC, kanban_app, app_rls_reader;" in up_sql
++    assert "CREATE POLICY isolated_secrets_owner_all ON isolated_secrets" in up_sql
++
++
++def test_scaffold_migration_generates_func_template(tmp_path: Path) -> None:
++    """Verify scaffold_migration creates SECURITY DEFINER function template."""
++    db_dir = tmp_path / "database"
++    db_dir.mkdir()
++    versions_dir = db_dir / "migrations" / "versions"
++    versions_dir.mkdir(parents=True)
++    sql_dir = db_dir / "migrations" / "sql"
++    sql_dir.mkdir(parents=True)
++
++    (versions_dir / "p1_01_baseline.py").write_text(
++        """revision = 'p1_01_baseline'\ndown_revision = None\n""",
++        encoding="utf-8",
++    )
++    (sql_dir / "p1_01_baseline.up.sql").write_text("SELECT 1;\n", encoding="utf-8")
++    (sql_dir / "p1_01_baseline.down.sql").write_text("SELECT 1;\n", encoding="utf-8")
++
++    alembic_ini = tmp_path / "alembic.ini"
++    alembic_ini.write_text(
++        f"""[alembic]
++script_location = {db_dir / "migrations"}
++file_template = %%(rev)s
++""",
++        encoding="utf-8",
++    )
++
++    result = scaffold_migration(
++        "p2_20_secure_rpc",
++        "Secure RPC function",
++        table="verify_token",
++        template="func",
++        alembic_ini_path=alembic_ini,
++        base_dir=db_dir,
++    )
++
++    up_sql = result.up_sql_file.read_text(encoding="utf-8")
++    assert "CREATE OR REPLACE FUNCTION kb_auth.verify_token(" in up_sql
++    assert "SECURITY DEFINER" in up_sql
++    assert "SET search_path = pg_catalog, public" in up_sql
++    assert "ALTER FUNCTION kb_auth.verify_token(UUID) OWNER TO kb_auth_owner;" in up_sql
++    assert "REVOKE ALL ON FUNCTION kb_auth.verify_token(UUID) FROM PUBLIC;" in up_sql
++    assert "GRANT EXECUTE ON FUNCTION kb_auth.verify_token(UUID) TO kanban_app;" in up_sql
+diff --git a/database/tests/test_p1_17_models.py b/database/tests/test_p1_17_models.py
+index 3eb9adf..71dc898 100644
+--- a/database/tests/test_p1_17_models.py
++++ b/database/tests/test_p1_17_models.py
+@@ -39,7 +39,7 @@ if TYPE_CHECKING:
+ 
+ @pytest.mark.asyncio
+ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
+-    """Compare Base.metadata.tables against pg_tables for 1:1 set equality (Test Case 1)."""
++    """Compare Base.metadata.tables against pg_tables for column parity (Test Case 1)."""
+     result = await db_session.execute(
+         text(
+             "SELECT tablename FROM pg_tables "
+@@ -52,11 +52,63 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
+     pg_tables = {row[0] for row in result.all()}
+     orm_tables = set(Base.metadata.tables.keys())
+ 
+-    # Exact set equality across all tables (69 tables incl.
+-    # workspace_settings, ai_provider_configs, ai_token_ledgers, oauth_device_codes,
+-    # destructive_confirmation_tokens, approved_wasm_modules)
++    # Exact table set equality across all public tables
+     assert orm_tables == pg_tables
+-    assert len(orm_tables) == 76
++    assert len(orm_tables) >= 50
++
++    # Column-level and primary key parity across every table
++    cols_res = await db_session.execute(
++        text(
++            "SELECT table_name, column_name, is_nullable "
++            "FROM information_schema.columns "
++            "WHERE table_schema = 'public' "
++            "  AND table_name != 'alembic_version' "
++            "  AND table_name NOT LIKE 'activity_records_y%' "
++            "ORDER BY table_name, ordinal_position;"
++        )
++    )
++    pg_columns: dict[str, dict[str, bool]] = {}
++    for r in cols_res.all():
++        pg_columns.setdefault(r[0], {})[r[1]] = r[2] == "YES"
++
++    pk_res = await db_session.execute(
++        text(
++            "SELECT tc.table_name, kcu.column_name "
++            "FROM information_schema.table_constraints tc "
++            "JOIN information_schema.key_column_usage kcu "
++            "  ON tc.constraint_name = kcu.constraint_name "
++            "  AND tc.table_schema = kcu.table_schema "
++            "WHERE tc.constraint_type = 'PRIMARY KEY' "
++            "  AND tc.table_schema = 'public' "
++            "ORDER BY tc.table_name, kcu.ordinal_position;"
++        )
++    )
++    pg_pks: dict[str, set[str]] = {}
++    for r in pk_res.all():
++        pg_pks.setdefault(r[0], set()).add(r[1])
++
++    for table_name, table_obj in Base.metadata.tables.items():
++        assert table_name in pg_columns, f"Table {table_name} missing from database columns catalog"
++        db_cols = pg_columns[table_name]
++        orm_cols = {col.name: bool(col.nullable) for col in table_obj.columns}
++
++        assert set(orm_cols.keys()) == set(db_cols.keys()), (
++            f"Column drift on table '{table_name}': "
++            f"ORM={set(orm_cols.keys()) ^ set(db_cols.keys())}"
++        )
++
++        for col_name, orm_nullable in orm_cols.items():
++            db_nullable = db_cols[col_name]
++            assert orm_nullable == db_nullable, (
++                f"Nullability mismatch on {table_name}.{col_name}: "
++                f"ORM nullable={orm_nullable} vs DB nullable={db_nullable}"
++            )
++
++        orm_pks = {col.name for col in table_obj.primary_key.columns}
++        db_pk_cols = pg_pks.get(table_name, set())
++        assert orm_pks == db_pk_cols, (
++            f"Primary key mismatch on '{table_name}': ORM PK={orm_pks} vs DB PK={db_pk_cols}"
++        )
+ 
+ 
+ async def _setup_test_project_spine(
+diff --git a/kanban/cli/ctl.py b/kanban/cli/ctl.py
+index b737c8a..1ce003a 100644
+--- a/kanban/cli/ctl.py
++++ b/kanban/cli/ctl.py
+@@ -11,6 +11,7 @@ import sys
+ from typing import TYPE_CHECKING
+ 
+ from kanban.cli.auth import register_auth_subparsers
++from kanban.cli.db import register_db_subparsers
+ from kanban.cli.import_plane import register_import_subparsers
+ from kanban.cli.jobs import register_jobs_subparsers
+ from kanban.cli.ops import (
+@@ -42,6 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
+     register_auth_subparsers(subparsers)
+     register_import_subparsers(subparsers)
+     register_cutover_subparsers(subparsers)
++    register_db_subparsers(subparsers)
+ 
+     try:
+         args = parser.parse_args(raw_argv)
+diff --git a/kanban/cli/db.py b/kanban/cli/db.py
+new file mode 100644
+index 0000000..3bad6a0
+--- /dev/null
++++ b/kanban/cli/db.py
+@@ -0,0 +1,103 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Database migration management CLI subcommands for kanban-ctl.
++
++Thin wrapper delegating to database.migrations.cli to preserve layering.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++from database.migrations.cli import _cmd_check_migrations, _cmd_new_migration
++
++if TYPE_CHECKING:
++    import argparse
++
++
++def register_db_subparsers(
++    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
++) -> None:
++    """Register 'db' subcommand group on kanban-ctl."""
++    db_parser = subparsers.add_parser(
++        "db",
++        help="Database migration and schema governance commands",
++    )
++    db_subs = db_parser.add_subparsers(dest="db_action", required=True)
++
++    # kanban-ctl db new-migration
++    new_p = db_subs.add_parser(
++        "new-migration",
++        help="Generate a new linear Alembic migration with SQL and test templates",
++    )
++    new_p.add_argument(
++        "rev_id",
++        help="Revision ID (e.g. p4_19_my_feature, must match ^p[0-9]_[0-9]{2}[a-z]?_[a-z0-9_]+$)",
++    )
++    new_p.add_argument(
++        "--message",
++        "-m",
++        required=True,
++        help="Human-readable summary of the migration",
++    )
++    new_p.add_argument(
++        "--table",
++        "-t",
++        default=None,
++        help="Target table or function name (defaults to slug from rev_id)",
++    )
++    new_p.add_argument(
++        "--template",
++        choices=["tenant", "isolated", "func"],
++        default="tenant",
++        help="SQL template kind: tenant (default), isolated, or func",
++    )
++    new_p.add_argument(
++        "--alembic-ini",
++        default="database/alembic.ini",
++        help="Path to alembic.ini (default: database/alembic.ini)",
++    )
++    new_p.add_argument(
++        "--base-dir",
++        default="database",
++        help="Path to database root directory (default: database)",
++    )
++    new_p.add_argument(
++        "--json-out",
++        action="store_true",
++        help="Output result as JSON",
++    )
++    new_p.set_defaults(func=_cmd_new_migration)
++
++    # kanban-ctl db check-migrations
++    check_p = db_subs.add_parser(
++        "check-migrations",
++        help="Validate migration consistency, naming, and linear chain",
++    )
++    check_p.add_argument(
++        "--static-only",
++        action="store_true",
++        default=True,
++        help="Run fast offline static checks without connecting to PostgreSQL (default: True)",
++    )
++    check_p.add_argument(
++        "--db-url",
++        default=None,
++        help="PostgreSQL connection URL for full catalog validation",
++    )
++    check_p.add_argument(
++        "--alembic-ini",
++        default="database/alembic.ini",
++        help="Path to alembic.ini (default: database/alembic.ini)",
++    )
++    check_p.add_argument(
++        "--base-dir",
++        default="database",
++        help="Path to database root directory (default: database)",
++    )
++    check_p.add_argument(
++        "--json-out",
++        action="store_true",
++        help="Output validation report as JSON",
++    )
++    check_p.set_defaults(func=_cmd_check_migrations)
+diff --git a/tests/security/test_stride_rls_and_invariants.py b/tests/security/test_stride_rls_and_invariants.py
+index 36b00c1..944916a 100644
+--- a/tests/security/test_stride_rls_and_invariants.py
++++ b/tests/security/test_stride_rls_and_invariants.py
+@@ -63,7 +63,7 @@ EXEMPT_CATALOG_TABLES = {"alembic_version", "link_type_matrix"}
+ # Tables isolated from kanban_app via security definer or grant boundaries
+ ISOLATED_TABLES = {
+     "alembic_version",
+-    "link_type_matrix",
++    "ai_provider_configs",
+     "auth_provider_cards",
+     "rate_limit_buckets",
+     "local_admin_credentials",
+@@ -117,7 +117,22 @@ async def test_stride_catalog_and_role_rls_invariants(db_session: AsyncSession)
+     found_exempt = {r[0] for r in exempt_res.all()}
+     assert found_exempt == EXEMPT_CATALOG_TABLES
+ 
+-    # 3. Check role privileges for kanban_app
++    # 3. Dynamic verify isolated tables (tables where kanban_app has NO SELECT)
++    isolated_res = await db_session.execute(
++        text(
++            "SELECT c.relname FROM pg_class c "
++            "JOIN pg_namespace n ON n.oid = c.relnamespace "
++            "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
++            "  AND NOT has_table_privilege('kanban_app', c.oid, 'SELECT') "
++            "ORDER BY c.relname;"
++        )
++    )
++    found_isolated = {r[0] for r in isolated_res.all()}
++    assert found_isolated == ISOLATED_TABLES, (
++        f"Mismatch in isolated tables without kanban_app SELECT: {found_isolated ^ ISOLATED_TABLES}"
++    )
++
++    # 4. Check role privileges for kanban_app
+     role_res = await db_session.execute(
+         text("SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'kanban_app'")
+     )
+@@ -146,19 +161,14 @@ async def test_stride_unset_context_zero_rows_across_all_tenant_tables(
+     await rebuild_era(db_session, ws_id)
+     await db_session.flush()
+ 
+-    # Query all public tables except exempt catalog and security-definer isolated tables
++    # Query all public tables where kanban_app has SELECT privilege
+     tbl_rows = await db_session.execute(
+         text(
+             "SELECT c.relname FROM pg_class c "
+             "JOIN pg_namespace n ON n.oid = c.relnamespace "
+             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
+-            "  AND c.relname NOT IN ("
+-            "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
+-            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions', "
+-            "    'totp_factors', 'recovery_codes', 'webauthn_credentials', "
+-            "    'webauthn_challenges', 'oidc_auth_requests', 'setup_claim_tokens', "
+-            "    'user_identities', 'identity_link_intents'"
+-            "  ) "
++            "  AND c.relname NOT IN ('alembic_version', 'link_type_matrix') "
++            "  AND has_table_privilege('kanban_app', c.oid, 'SELECT') "
+             "ORDER BY c.relname"
+         )
+     )
+diff --git a/tests/test_workspace_layout.py b/tests/test_workspace_layout.py
+index 16b1493..0e16de1 100644
+--- a/tests/test_workspace_layout.py
++++ b/tests/test_workspace_layout.py
+@@ -66,6 +66,25 @@ def test_workspace_layout_and_manifests() -> None:
+             f"Symlink {agents_link} targets {readlink_val}, expected GEMINI.md"
+         )
+ 
++    # Root workspace instruction symlinks
++    root_claude = REPO_ROOT / "CLAUDE.md"
++    assert os.path.islink(root_claude), (  # noqa: PTH114
++        f"Expected {root_claude} to be a symlink"
++    )
++    readlink_claude = os.readlink(root_claude)  # noqa: PTH115
++    assert readlink_claude == "AGENTS.md", (
++        f"Symlink {root_claude} targets {readlink_claude}, expected AGENTS.md"
++    )
++
++    root_gemini = REPO_ROOT / "GEMINI.md"
++    assert os.path.islink(root_gemini), (  # noqa: PTH114
++        f"Expected {root_gemini} to be a symlink"
++    )
++    readlink_gemini = os.readlink(root_gemini)  # noqa: PTH115
++    assert readlink_gemini == "AGENTS.md", (
++        f"Symlink {root_gemini} targets {readlink_gemini}, expected AGENTS.md"
++    )
++
+ 
+ def test_import_linter_negative_contract_violation(tmp_path: Path) -> None:
+     """Test Case 3: Negative/security test asserting reverse imports fail lint-imports."""

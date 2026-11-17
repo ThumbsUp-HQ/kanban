@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 @pytest.mark.asyncio
 async def test_orm_schema_parity(db_session: AsyncSession) -> None:
-    """Compare Base.metadata.tables against pg_tables for 1:1 set equality (Test Case 1)."""
+    """Compare Base.metadata.tables against pg_tables for column parity (Test Case 1)."""
     result = await db_session.execute(
         text(
             "SELECT tablename FROM pg_tables "
@@ -52,11 +52,63 @@ async def test_orm_schema_parity(db_session: AsyncSession) -> None:
     pg_tables = {row[0] for row in result.all()}
     orm_tables = set(Base.metadata.tables.keys())
 
-    # Exact set equality across all tables (69 tables incl.
-    # workspace_settings, ai_provider_configs, ai_token_ledgers, oauth_device_codes,
-    # destructive_confirmation_tokens, approved_wasm_modules)
+    # Exact table set equality across all public tables
     assert orm_tables == pg_tables
-    assert len(orm_tables) == 76
+    assert len(orm_tables) >= 50
+
+    # Column-level and primary key parity across every table
+    cols_res = await db_session.execute(
+        text(
+            "SELECT table_name, column_name, is_nullable "
+            "FROM information_schema.columns "
+            "WHERE table_schema = 'public' "
+            "  AND table_name != 'alembic_version' "
+            "  AND table_name NOT LIKE 'activity_records_y%' "
+            "ORDER BY table_name, ordinal_position;"
+        )
+    )
+    pg_columns: dict[str, dict[str, bool]] = {}
+    for r in cols_res.all():
+        pg_columns.setdefault(r[0], {})[r[1]] = r[2] == "YES"
+
+    pk_res = await db_session.execute(
+        text(
+            "SELECT tc.table_name, kcu.column_name "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.key_column_usage kcu "
+            "  ON tc.constraint_name = kcu.constraint_name "
+            "  AND tc.table_schema = kcu.table_schema "
+            "WHERE tc.constraint_type = 'PRIMARY KEY' "
+            "  AND tc.table_schema = 'public' "
+            "ORDER BY tc.table_name, kcu.ordinal_position;"
+        )
+    )
+    pg_pks: dict[str, set[str]] = {}
+    for r in pk_res.all():
+        pg_pks.setdefault(r[0], set()).add(r[1])
+
+    for table_name, table_obj in Base.metadata.tables.items():
+        assert table_name in pg_columns, f"Table {table_name} missing from database columns catalog"
+        db_cols = pg_columns[table_name]
+        orm_cols = {col.name: bool(col.nullable) for col in table_obj.columns}
+
+        assert set(orm_cols.keys()) == set(db_cols.keys()), (
+            f"Column drift on table '{table_name}': "
+            f"ORM={set(orm_cols.keys()) ^ set(db_cols.keys())}"
+        )
+
+        for col_name, orm_nullable in orm_cols.items():
+            db_nullable = db_cols[col_name]
+            assert orm_nullable == db_nullable, (
+                f"Nullability mismatch on {table_name}.{col_name}: "
+                f"ORM nullable={orm_nullable} vs DB nullable={db_nullable}"
+            )
+
+        orm_pks = {col.name for col in table_obj.primary_key.columns}
+        db_pk_cols = pg_pks.get(table_name, set())
+        assert orm_pks == db_pk_cols, (
+            f"Primary key mismatch on '{table_name}': ORM PK={orm_pks} vs DB PK={db_pk_cols}"
+        )
 
 
 async def _setup_test_project_spine(

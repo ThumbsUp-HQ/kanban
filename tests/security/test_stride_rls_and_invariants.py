@@ -63,7 +63,7 @@ EXEMPT_CATALOG_TABLES = {"alembic_version", "link_type_matrix"}
 # Tables isolated from kanban_app via security definer or grant boundaries
 ISOLATED_TABLES = {
     "alembic_version",
-    "link_type_matrix",
+    "ai_provider_configs",
     "auth_provider_cards",
     "rate_limit_buckets",
     "local_admin_credentials",
@@ -117,7 +117,22 @@ async def test_stride_catalog_and_role_rls_invariants(db_session: AsyncSession) 
     found_exempt = {r[0] for r in exempt_res.all()}
     assert found_exempt == EXEMPT_CATALOG_TABLES
 
-    # 3. Check role privileges for kanban_app
+    # 3. Dynamic verify isolated tables (tables where kanban_app has NO SELECT)
+    isolated_res = await db_session.execute(
+        text(
+            "SELECT c.relname FROM pg_class c "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
+            "  AND NOT has_table_privilege('kanban_app', c.oid, 'SELECT') "
+            "ORDER BY c.relname;"
+        )
+    )
+    found_isolated = {r[0] for r in isolated_res.all()}
+    assert found_isolated == ISOLATED_TABLES, (
+        f"Mismatch in isolated tables without kanban_app SELECT: {found_isolated ^ ISOLATED_TABLES}"
+    )
+
+    # 4. Check role privileges for kanban_app
     role_res = await db_session.execute(
         text("SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'kanban_app'")
     )
@@ -146,19 +161,14 @@ async def test_stride_unset_context_zero_rows_across_all_tenant_tables(
     await rebuild_era(db_session, ws_id)
     await db_session.flush()
 
-    # Query all public tables except exempt catalog and security-definer isolated tables
+    # Query all public tables where kanban_app has SELECT privilege
     tbl_rows = await db_session.execute(
         text(
             "SELECT c.relname FROM pg_class c "
             "JOIN pg_namespace n ON n.oid = c.relnamespace "
             "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') "
-            "  AND c.relname NOT IN ("
-            "    'alembic_version', 'link_type_matrix', 'auth_provider_cards', "
-            "    'rate_limit_buckets', 'local_admin_credentials', 'sessions', "
-            "    'totp_factors', 'recovery_codes', 'webauthn_credentials', "
-            "    'webauthn_challenges', 'oidc_auth_requests', 'setup_claim_tokens', "
-            "    'user_identities', 'identity_link_intents'"
-            "  ) "
+            "  AND c.relname NOT IN ('alembic_version', 'link_type_matrix') "
+            "  AND has_table_privilege('kanban_app', c.oid, 'SELECT') "
             "ORDER BY c.relname"
         )
     )

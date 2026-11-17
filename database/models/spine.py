@@ -133,12 +133,8 @@ class LinkTypeMatrix(Base):
     target_type: Mapped[ObjectKind] = mapped_column(
         object_kind_pg_enum, primary_key=True, nullable=False
     )
-    is_bidirectional: Mapped[bool] = mapped_column(
+    is_user_creatable: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
-    )
-    inverse_link_type: Mapped[LinkKind | None] = mapped_column(link_kind_pg_enum, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
 
 

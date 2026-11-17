@@ -25,8 +25,9 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
 2. **Literal, Non-Rhetorical Specifications**:
    - Because `reality-checker` compares ticket quotes directly against forensic evidence, avoid figures of speech, marketing adjectives ("blazingly fast", "bulletproof", "luxury"), or ambiguous goals.
    - Specify exact file paths, function/class names, HTTP status codes, byte limits, and CLI flags.
-3. **Mandatory Feature Unit Testing (`>=95%` Project Coverage Standard)**:
+3. **Mandatory Feature Unit Testing (`>=95%` Project Coverage Standard) & Database Schema Changes**:
    - Every feature or code ticket must require **unit tests specifically exercising the new/modified logic** introduced in that ticket, running rapidly against a clean isolated database state per test (`SAVEPOINT` / template DB) and using deterministic pluggable AI fixtures (`FixtureLLMProvider`) whenever AI agents are exercised.
+   - Any ticket modifying database schema, tables, functions, or migrations MUST adhere to the **Zero-Guesswork Database Migration & Schema Consistency Standard** in `database/GEMINI.md`: generate forward migrations via `kanban-ctl db new-migration`, verify with `kanban-ctl db check-migrations --static-only`, synchronize SQLAlchemy ORM models in `database/models/*.py`, and verify column/nullability parity via `database/tests/test_p1_17_models.py`.
    - Any ticket introducing or modifying an AI agent workflow MUST also expose/verify local manual CLI validation given explicit input parameters.
    - Specify the exact test file path(s) and the positive, negative, and boundary test cases required.
    - *Note on Coverage*: Individual tickets require passing unit tests (`>=95%` target on touched modules); project-wide **`>=95%` coverage** enforcement is verified by CI and dedicated coverage sub-agents rather than asking `reality-checker` to compute global repo percentages manually.

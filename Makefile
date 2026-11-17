@@ -1,4 +1,4 @@
-.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint compose-check
+.PHONY: check fmt testdb-up testdb-down license image-slim image-standalone hadolint compose-check db-new-migration db-check-migrations
 
 check:
 	uv run ruff check .
@@ -6,6 +6,7 @@ check:
 	uv run mypy
 	uv run lint-imports
 	uv run python -m scripts.check_no_dashes --all
+	uv run python -m database.migrations.cli check-migrations --static-only
 
 fmt:
 	uv run ruff format .
@@ -13,6 +14,12 @@ fmt:
 
 license:
 	uv run python -m scripts.license_gate
+
+db-new-migration:
+	uv run kanban-ctl db new-migration $(REV) -m "$(MSG)"
+
+db-check-migrations:
+	uv run kanban-ctl db check-migrations --static-only
 
 testdb-up:
 	./scripts/testdb_up.sh
