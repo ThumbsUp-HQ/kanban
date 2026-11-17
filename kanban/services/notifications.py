@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final
 
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import insert, select, tuple_, update
 
 from database.models import (
     ActivityRecord,
@@ -414,19 +414,22 @@ async def _deliver_notifications(
         )
         session.add(notif)
 
-        # Transactional outbox event (payload contains ids only, zero issue summary/body text)
-        outbox_ev = OutboxEvent(
-            workspace_id=envelope.workspace_id,
-            project_id=project_id,
-            object_id=issue_id,
-            topic="notification.created",
-            payload={
-                "topic": "notification.created",
-                "recipient_principal_id": str(rec_id),
-                "notification_id": str(notif_id),
-            },
+        # Transactional outbox event (payload contains ids only, zero issue summary/body text).
+        # Use Core insert() without RETURNING so non-admin MEMBER callers satisfy
+        # outbox_events_insert_rls without requiring outbox_events_select_rls (admin-only).
+        await session.execute(
+            insert(OutboxEvent).values(
+                workspace_id=envelope.workspace_id,
+                project_id=project_id,
+                object_id=issue_id,
+                topic="notification.created",
+                payload={
+                    "topic": "notification.created",
+                    "recipient_principal_id": str(rec_id),
+                    "notification_id": str(notif_id),
+                },
+            )
         )
-        session.add(outbox_ev)
 
     await session.flush()
 
