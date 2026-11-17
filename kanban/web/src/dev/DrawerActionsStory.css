@@ -3,7 +3,7 @@
   max-width: 960px;
   margin: 0 auto;
   font-family: var(--font-sans, system-ui, sans-serif);
-  color: var(--text-primary, #1e293b);
+  color: var(--fg-primary);
 }
 
 .drawer-actions-story__header {
@@ -20,7 +20,7 @@
 }
 
 .drawer-actions-story__surface {
-  background: var(--surface-bg, #ffffff);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: var(--radius-lg, 10px);
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
@@ -33,7 +33,7 @@
   justify-content: space-between;
   padding: var(--space-3, 12px) var(--space-4, 16px);
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
-  background: var(--surface-subtle, #f8fafc);
+  background: var(--bg-canvas);
 }
 
 .drawer-actions-story__issue-title {
@@ -45,12 +45,12 @@
 .drawer-actions-story__key {
   font-weight: 600;
   font-size: var(--text-sm, 14px);
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
 }
 
 .drawer-actions-story__summary {
   font-size: var(--text-sm, 14px);
-  color: var(--text-primary, #1e293b);
+  color: var(--fg-primary);
 }
 
 .drawer-actions-story__actions-slot {

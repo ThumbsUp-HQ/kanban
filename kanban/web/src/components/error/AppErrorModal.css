@@ -18,9 +18,9 @@
 .app-error-modal {
   width: 100%;
   max-width: 720px;
-  background-color: var(--surface-bg, #1a1a1a);
-  color: var(--text-primary, #ffffff);
-  border: 2px solid var(--danger-border, #d32f2f);
+  background-color: var(--bg-surface);
+  color: var(--fg-primary);
+  border: 2px solid var(--danger-fg);
   border-radius: 8px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(211, 47, 47, 0.3);
   display: flex;
@@ -84,7 +84,7 @@
 
 .app-error-modal__url {
   font-size: 0.875rem;
-  color: var(--text-secondary, #b0bec5);
+  color: var(--fg-secondary);
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
@@ -93,7 +93,7 @@
 
 .app-error-modal__label {
   font-weight: 600;
-  color: var(--text-primary, #ffffff);
+  color: var(--fg-primary);
 }
 
 .app-error-modal__url code {

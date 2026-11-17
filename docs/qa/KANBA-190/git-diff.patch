@@ -1,0 +1,2627 @@
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index 1a2b62a..d5a130b 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -18,7 +18,7 @@
+   position: absolute;
+   top: -9999px;
+   left: 16px;
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   padding: 8px 16px;
+   border-radius: var(--radius-md, 6px);
+@@ -114,7 +114,7 @@
+   padding: 8px 14px;
+   border-radius: 6px;
+   border: none;
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 600;
+@@ -174,7 +174,7 @@
+ .kb-project-card-primary-link {
+   font-size: 12px;
+   font-weight: 600;
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   text-decoration: none;
+ }
+ 
+@@ -237,8 +237,8 @@
+ .kb-form-input {
+   height: 32px;
+   padding: 0 10px;
+-  background: var(--bg-surface-elevated, #0d1117);
+-  border: 1px solid var(--border-default, #30363d);
++  background: var(--bg-surface-raised);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-sm, 4px);
+   color: var(--fg-primary, #ffffff);
+   font-size: 13px;
+@@ -247,7 +247,7 @@
+ .kb-btn-primary {
+   height: 32px;
+   padding: 0 14px;
+-  background: var(--primary, #238636);
++  background: var(--accent-primary);
+   border: 1px solid rgba(240, 246, 252, 0.1);
+   border-radius: var(--radius-sm, 4px);
+   color: #ffffff;
+diff --git a/kanban/web/src/app/Sidebar.css b/kanban/web/src/app/Sidebar.css
+index bf9f230..7c8c470 100644
+--- a/kanban/web/src/app/Sidebar.css
++++ b/kanban/web/src/app/Sidebar.css
+@@ -118,7 +118,7 @@
+ }
+ 
+ .kb-workspace-dropdown-check {
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   font-size: 12px;
+ }
+ 
+@@ -138,7 +138,7 @@
+   border-radius: 4px;
+   border: none;
+   background: transparent;
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   font-size: 12px;
+   font-weight: 600;
+   cursor: pointer;
+@@ -163,7 +163,7 @@
+   justify-content: center;
+   gap: 8px;
+   padding: var(--space-2, 8px) var(--space-3, 12px);
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   border: none;
+   border-radius: var(--radius-md, 6px);
+@@ -174,7 +174,7 @@
+ }
+ 
+ .kb-new-item-btn:hover {
+-  background: var(--color-brand-hover, #2563eb);
++  background: var(--accent-primary);
+ }
+ 
+ .kb-sidebar-section {
+diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
+index 7096a11..1d7ddb6 100644
+--- a/kanban/web/src/app/Topbar.css
++++ b/kanban/web/src/app/Topbar.css
+@@ -62,7 +62,7 @@
+ }
+ 
+ .kb-search-trigger:hover {
+-  border-color: var(--border-focus, #3b82f6);
++  border-color: var(--focus-ring);
+   background: var(--bg-hover, #2c313a);
+   color: var(--fg-primary, #f8fafc);
+ }
+@@ -97,7 +97,7 @@
+   width: 32px;
+   height: 32px;
+   border-radius: var(--radius-full, 9999px);
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   border: 2px solid transparent;
+   cursor: pointer;
+@@ -112,7 +112,7 @@
+ 
+ .kb-avatar-button:hover,
+ .kb-avatar-button:focus-visible {
+-  border-color: var(--border-focus, #60a5fa);
++  border-color: var(--focus-ring);
+ }
+ 
+ .kb-avatar-menu {
+diff --git a/kanban/web/src/components/error/AppErrorModal.css b/kanban/web/src/components/error/AppErrorModal.css
+index 213a578..d6ee714 100644
+--- a/kanban/web/src/components/error/AppErrorModal.css
++++ b/kanban/web/src/components/error/AppErrorModal.css
+@@ -18,9 +18,9 @@
+ .app-error-modal {
+   width: 100%;
+   max-width: 720px;
+-  background-color: var(--surface-bg, #1a1a1a);
+-  color: var(--text-primary, #ffffff);
+-  border: 2px solid var(--danger-border, #d32f2f);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
++  border: 2px solid var(--danger-fg);
+   border-radius: 8px;
+   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(211, 47, 47, 0.3);
+   display: flex;
+@@ -84,7 +84,7 @@
+ 
+ .app-error-modal__url {
+   font-size: 0.875rem;
+-  color: var(--text-secondary, #b0bec5);
++  color: var(--fg-secondary);
+   display: flex;
+   align-items: baseline;
+   gap: 0.5rem;
+@@ -93,7 +93,7 @@
+ 
+ .app-error-modal__label {
+   font-weight: 600;
+-  color: var(--text-primary, #ffffff);
++  color: var(--fg-primary);
+ }
+ 
+ .app-error-modal__url code {
+diff --git a/kanban/web/src/dev/DrawerActionsStory.css b/kanban/web/src/dev/DrawerActionsStory.css
+index 4c4487a..ceb5dc9 100644
+--- a/kanban/web/src/dev/DrawerActionsStory.css
++++ b/kanban/web/src/dev/DrawerActionsStory.css
+@@ -3,7 +3,7 @@
+   max-width: 960px;
+   margin: 0 auto;
+   font-family: var(--font-sans, system-ui, sans-serif);
+-  color: var(--text-primary, #1e293b);
++  color: var(--fg-primary);
+ }
+ 
+ .drawer-actions-story__header {
+@@ -20,7 +20,7 @@
+ }
+ 
+ .drawer-actions-story__surface {
+-  background: var(--surface-bg, #ffffff);
++  background: var(--bg-surface);
+   border: 1px solid var(--border-subtle, #e2e8f0);
+   border-radius: var(--radius-lg, 10px);
+   box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+@@ -33,7 +33,7 @@
+   justify-content: space-between;
+   padding: var(--space-3, 12px) var(--space-4, 16px);
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+-  background: var(--surface-subtle, #f8fafc);
++  background: var(--bg-canvas);
+ }
+ 
+ .drawer-actions-story__issue-title {
+@@ -45,12 +45,12 @@
+ .drawer-actions-story__key {
+   font-weight: 600;
+   font-size: var(--text-sm, 14px);
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+ }
+ 
+ .drawer-actions-story__summary {
+   font-size: var(--text-sm, 14px);
+-  color: var(--text-primary, #1e293b);
++  color: var(--fg-primary);
+ }
+ 
+ .drawer-actions-story__actions-slot {
+diff --git a/kanban/web/src/dev/StickiesStory.css b/kanban/web/src/dev/StickiesStory.css
+index c1d33ff..e324bc2 100644
+--- a/kanban/web/src/dev/StickiesStory.css
++++ b/kanban/web/src/dev/StickiesStory.css
+@@ -7,7 +7,7 @@
+   flex-direction: column;
+   min-height: 100vh;
+   width: 100%;
+-  background-color: var(--bg-surface-elevated, #f8fafc);
++  background-color: var(--bg-surface-raised);
+   box-sizing: border-box;
+ }
+ 
+diff --git a/kanban/web/src/editor/clipboard/SanitizedPastePill.css b/kanban/web/src/editor/clipboard/SanitizedPastePill.css
+index 6673db3..e5f13dd 100644
+--- a/kanban/web/src/editor/clipboard/SanitizedPastePill.css
++++ b/kanban/web/src/editor/clipboard/SanitizedPastePill.css
+@@ -16,8 +16,8 @@
+   align-items: center;
+   gap: 8px;
+   padding: 4px 10px;
+-  background-color: var(--bg-surface-elevated, #ffffff);
+-  border: 1px solid var(--border-default, #e2e8f0);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-strong);
+   border-radius: 9999px;
+   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+diff --git a/kanban/web/src/editor/sparkle/sparkle.css b/kanban/web/src/editor/sparkle/sparkle.css
+index a965c05..9049f7c 100644
+--- a/kanban/web/src/editor/sparkle/sparkle.css
++++ b/kanban/web/src/editor/sparkle/sparkle.css
+@@ -41,7 +41,7 @@
+   .sparkle-badge {
+     animation: none;
+     opacity: 1;
+-    box-shadow: 0 0 8px var(--color-sparkle-glow, rgba(234, 179, 8, 0.6));
++    box-shadow: 0 0 8px var(--focus-ring);
+   }
+ }
+ 
+@@ -49,7 +49,7 @@
+   pointer-events: none;
+   opacity: 0.45;
+   user-select: none;
+-  color: var(--color-ghost-text, #888888);
++  color: var(--fg-muted);
+ }
+ 
+ .sparkle-sr-only {
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.css b/kanban/web/src/features/access/AccessInspectorPopover.css
+index 0384153..aa67d2f 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.css
++++ b/kanban/web/src/features/access/AccessInspectorPopover.css
+@@ -20,7 +20,7 @@
+   width: min(520px, calc(100vw - 32px));
+   max-height: min(680px, 85vh);
+   background-color: var(--bg-surface-raised, #ffffff);
+-  color: var(--text-primary, #0f172a);
++  color: var(--fg-primary);
+   border: 1px solid var(--border-subtle, #e2e8f0);
+   border-radius: var(--radius-lg, 10px);
+   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+@@ -59,7 +59,7 @@
+   font-weight: 700;
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+-  color: var(--text-primary, #0f172a);
++  color: var(--fg-primary);
+   display: flex;
+   align-items: center;
+   gap: 6px;
+@@ -80,15 +80,15 @@
+   padding: 6px 8px;
+   border-radius: 6px;
+   cursor: pointer;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+ }
+ 
+ .access-inspector__close-btn:hover {
+-  background-color: var(--bg-surface-hover, #f1f5f9);
+-  color: var(--text-primary, #0f172a);
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
+ }
+ 
+ .access-inspector__scope-banner {
+@@ -96,7 +96,7 @@
+   align-items: center;
+   gap: 8px;
+   padding: 10px 20px;
+-  background-color: var(--bg-surface-sunken, #f8fafc);
++  background-color: var(--bg-canvas);
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+   font-size: 13px;
+   flex-shrink: 0;
+@@ -104,11 +104,11 @@
+ 
+ .access-inspector__scope-label {
+   font-weight: 600;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+ }
+ 
+ .access-inspector__scope-badge {
+-  color: var(--text-primary, #0f172a);
++  color: var(--fg-primary);
+   font-weight: 500;
+ }
+ 
+@@ -133,7 +133,7 @@
+   justify-content: space-between;
+   font-size: 12px;
+   font-weight: 700;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+   margin-bottom: 2px;
+@@ -177,7 +177,7 @@
+ 
+ .access-inspector__empty {
+   font-size: 13px;
+-  color: var(--text-muted, #94a3b8);
++  color: var(--fg-muted);
+   font-style: italic;
+   padding: 6px 16px;
+ }
+@@ -189,8 +189,8 @@
+   border-radius: 4px;
+   font-size: 11px;
+   font-weight: 600;
+-  background-color: var(--bg-surface-sunken, #f1f5f9);
+-  color: var(--text-secondary, #475569);
++  background-color: var(--bg-canvas);
++  color: var(--fg-secondary);
+   border: 1px solid var(--border-subtle, #cbd5e1);
+ }
+ 
+@@ -220,7 +220,7 @@
+ 
+ .access-inspector__tag {
+   font-size: 11px;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+   font-weight: 500;
+ }
+ 
+@@ -238,9 +238,9 @@
+ }
+ 
+ .access-inspector__row--redacted {
+-  background-color: var(--bg-surface-sunken, #f8fafc);
++  background-color: var(--bg-canvas);
+   border-style: dashed;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+ }
+ 
+ .access-inspector__redacted-label {
+@@ -262,22 +262,22 @@
+ }
+ 
+ .access-inspector__btn--primary {
+-  background-color: var(--primary, #2563eb);
++  background-color: var(--accent-primary);
+   color: #ffffff;
+ }
+ 
+ .access-inspector__btn--primary:hover {
+-  background-color: var(--primary-hover, #1d4ed8);
++  background-color: var(--accent-primary);
+ }
+ 
+ .access-inspector__btn--secondary {
+   background-color: var(--bg-surface, #ffffff);
+   border-color: var(--border-subtle, #cbd5e1);
+-  color: var(--text-primary, #0f172a);
++  color: var(--fg-primary);
+ }
+ 
+ .access-inspector__btn--secondary:hover {
+-  background-color: var(--bg-surface-hover, #f1f5f9);
++  background-color: var(--bg-hover);
+ }
+ 
+ .access-inspector__btn--danger {
+@@ -344,7 +344,7 @@
+ .access-inspector__loading {
+   padding: 32px;
+   text-align: center;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary);
+   font-size: 13px;
+ }
+ 
+diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
+index eb7884a..a18fa7c 100644
+--- a/kanban/web/src/features/activity/activity.css
++++ b/kanban/web/src/features/activity/activity.css
+@@ -51,14 +51,14 @@
+ }
+ 
+ .activity-tab:focus-visible {
+-  outline: 2px solid var(--color-brand-primary, #3b82f6);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: 2px;
+ }
+ 
+ .activity-tab--active {
+   color: var(--fg-primary, #f8fafc);
+   font-weight: 600;
+-  border-bottom: 2px solid var(--color-brand-primary, #3b82f6);
++  border-bottom: 2px solid var(--accent-primary);
+   border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0;
+ }
+ 
+@@ -68,7 +68,7 @@
+ }
+ 
+ .activity-tab--active .activity-tab__badge {
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+ }
+ 
+ /* Activity Feed Container */
+@@ -94,7 +94,7 @@
+ .activity-feed__load-older {
+   align-self: center;
+   margin-top: var(--space-2, 8px);
+-  background: var(--bg-subtle, rgba(255, 255, 255, 0.04));
++  background: var(--bg-hover);
+   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+   color: var(--fg-secondary, #94a3b8);
+   font-size: 13px;
+@@ -146,7 +146,7 @@
+   background: none;
+   border: none;
+   padding: 0;
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   font-size: 12px;
+   cursor: pointer;
+   text-decoration: underline;
+@@ -173,12 +173,12 @@
+ }
+ 
+ .gate-tooltip__status {
+-  color: var(--color-success, #22c55e);
++  color: var(--ok-fg);
+   font-weight: 500;
+ }
+ 
+ .gate-tooltip--vetoed .gate-tooltip__status {
+-  color: var(--color-danger, #ef4444);
++  color: var(--danger-fg);
+ }
+ 
+ .gate-tooltip__reason {
+@@ -219,11 +219,11 @@
+ }
+ 
+ .comment-card--reply {
+-  background: var(--bg-surface-elevated, #242930);
++  background: var(--bg-surface-raised);
+ }
+ 
+ .comment-card--targeted {
+-  border-color: var(--color-brand-primary, #3b82f6);
++  border-color: var(--accent-primary);
+   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+ }
+ 
+@@ -319,8 +319,8 @@
+ }
+ 
+ .delete-confirm-btn--danger {
+-  background: var(--color-danger, #ef4444);
+-  border-color: var(--color-danger, #ef4444);
++  background: var(--danger-fg);
++  border-color: var(--danger-fg);
+   color: #ffffff;
+ }
+ 
+@@ -343,7 +343,7 @@
+   display: inline-flex;
+   align-items: center;
+   column-gap: 4px;
+-  background: var(--bg-surface-elevated, #242930);
++  background: var(--bg-surface-raised);
+   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+   border-radius: 9999px;
+   padding: 3px 8px;
+@@ -355,13 +355,13 @@
+ 
+ .reaction-pill:hover {
+   background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+-  border-color: var(--border-hover, rgba(255, 255, 255, 0.2));
++  border-color: var(--border-strong);
+ }
+ 
+ .reaction-pill--active {
+   background: rgba(59, 130, 246, 0.15);
+-  border-color: var(--color-brand-primary, #3b82f6);
+-  color: var(--color-brand-primary, #3b82f6);
++  border-color: var(--accent-primary);
++  color: var(--accent-primary);
+ }
+ 
+ .reaction-pill__emoji {
+@@ -506,7 +506,7 @@
+ 
+ .comment-composer__textarea:focus {
+   outline: none;
+-  border-color: var(--color-brand-primary, #3b82f6);
++  border-color: var(--accent-primary);
+   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+ }
+ 
+@@ -544,7 +544,7 @@
+ 
+ .composer-suggestion__handle {
+   font-weight: 500;
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   font-family: var(--font-mono, monospace);
+ }
+ 
+@@ -566,7 +566,7 @@
+ }
+ 
+ .comment-composer__warning-banner:focus {
+-  border-color: var(--color-warning, #f59e0b);
++  border-color: var(--warn-fg);
+   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+ }
+ 
+@@ -639,8 +639,8 @@
+ }
+ 
+ .composer-submit-btn {
+-  background: var(--color-brand-primary, #3b82f6);
+-  border: 1px solid var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
++  border: 1px solid var(--accent-primary);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 500;
+@@ -683,7 +683,7 @@
+ }
+ 
+ .safe-md__link {
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   text-decoration: underline;
+ }
+ 
+diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
+index e4b1e3a..fcd1b76 100644
+--- a/kanban/web/src/features/admin-auth/adminAuth.css
++++ b/kanban/web/src/features/admin-auth/adminAuth.css
+@@ -28,7 +28,7 @@
+   margin: 0;
+   font-size: 1.5rem;
+   font-weight: 600;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-studio-add-btn {
+@@ -39,7 +39,7 @@
+   font-size: 0.875rem;
+   font-weight: 500;
+   border-radius: var(--radius-md, 6px);
+-  background: var(--brand-primary, #2563eb);
++  background: var(--accent-primary);
+   color: #fff;
+   border: none;
+   cursor: pointer;
+@@ -79,7 +79,7 @@
+ }
+ 
+ .auth-card-row:hover {
+-  border-color: var(--border-default);
++  border-color: var(--border-strong);
+ }
+ 
+ .auth-card-row--dragging {
+@@ -88,7 +88,7 @@
+ }
+ 
+ .auth-card-row--drag-over {
+-  border-top: 2px solid var(--brand-primary, #2563eb);
++  border-top: 2px solid var(--accent-primary);
+ }
+ 
+ .auth-card-row--pinned {
+@@ -144,7 +144,7 @@
+ 
+ .auth-reorder-btn:hover:not(:disabled) {
+   background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-reorder-btn:disabled {
+@@ -179,7 +179,7 @@
+ .auth-card-title {
+   font-weight: 600;
+   font-size: 0.95rem;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+   margin: 0;
+ }
+ 
+@@ -195,8 +195,8 @@
+ .auth-badge-primary {
+   font-size: 0.7rem;
+   font-weight: 600;
+-  color: var(--brand-primary, #2563eb);
+-  background: var(--brand-subtle, rgba(37, 99, 235, 0.1));
++  color: var(--focus-ring);
++  background: var(--bg-hover);
+   padding: 1px 6px;
+   border-radius: var(--radius-sm, 4px);
+   text-transform: uppercase;
+@@ -237,7 +237,7 @@
+ 
+ .auth-health-chip--healthy {
+   color: var(--ok-fg, #15803d);
+-  background: var(--ok-subtle, rgba(21, 128, 61, 0.1));
++  background: var(--bg-hover);
+ }
+ 
+ .auth-health-chip--unverified {
+@@ -247,14 +247,14 @@
+ 
+ .auth-health-chip--failed {
+   color: var(--danger-fg, #b91c1c);
+-  background: var(--danger-subtle, rgba(185, 28, 28, 0.1));
++  background: var(--danger-bg);
+ }
+ 
+ .auth-btn-secondary {
+   background: var(--bg-surface);
+-  border: 1px solid var(--border-default, #d1d5db);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-md, 6px);
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+   padding: 6px 12px;
+   font-size: 0.8rem;
+   font-weight: 500;
+@@ -277,11 +277,11 @@
+ 
+ .auth-btn-danger {
+   color: var(--danger-fg, #b91c1c);
+-  border-color: var(--danger-border, #fca5a5);
++  border-color: var(--danger-fg);
+ }
+ 
+ .auth-btn-danger:hover:not(:disabled) {
+-  background: var(--danger-subtle, rgba(185, 28, 28, 0.08));
++  background: var(--danger-bg);
+ }
+ 
+ /* Switch toggle */
+@@ -303,7 +303,7 @@
+ .auth-toggle-track {
+   width: 36px;
+   height: 20px;
+-  background: var(--border-default, #d1d5db);
++  background: var(--border-strong);
+   border-radius: 20px;
+   transition: background-color 0.2s ease;
+   position: relative;
+@@ -330,7 +330,7 @@
+ }
+ 
+ .auth-toggle-input:focus-visible + .auth-toggle-track {
+-  outline: 2px solid var(--brand-primary, #2563eb);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: 2px;
+ }
+ 
+@@ -341,8 +341,8 @@
+ 
+ /* LOCKOUT_PREVENTED Banner */
+ .auth-lockout-banner {
+-  border: 1px solid var(--danger-border, #f87171);
+-  background: var(--danger-subtle, #fef2f2);
++  border: 1px solid var(--danger-fg);
++  background: var(--danger-bg);
+   border-radius: var(--radius-lg, 10px);
+   padding: 16px 20px;
+   margin-bottom: 24px;
+@@ -368,11 +368,11 @@
+   margin: 8px 0 12px 0;
+   font-size: 0.875rem;
+   line-height: 1.5;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-lockout-disclosure {
+-  border-top: 1px solid var(--danger-border, #fecaca);
++  border-top: 1px solid var(--danger-fg);
+   padding-top: 10px;
+   margin-top: 8px;
+ }
+@@ -398,7 +398,7 @@
+   border: 1px solid var(--border-subtle);
+   padding: 6px 10px;
+   border-radius: var(--radius-sm, 4px);
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+   flex-grow: 1;
+   word-break: break-all;
+ }
+@@ -436,7 +436,7 @@
+   margin: 0;
+   font-size: 1.25rem;
+   font-weight: 600;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-editor-prop-row {
+@@ -451,7 +451,7 @@
+ .auth-editor-label {
+   font-size: 0.875rem;
+   font-weight: 500;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+   min-width: 140px;
+ }
+ 
+@@ -460,10 +460,10 @@
+ .auth-editor-textarea {
+   flex-grow: 1;
+   padding: 6px 10px;
+-  border: 1px solid var(--border-default, #d1d5db);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-md, 6px);
+   font-size: 0.875rem;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+   background: var(--bg-surface);
+ }
+ 
+@@ -481,7 +481,7 @@
+   width: 28px;
+   height: 28px;
+   flex-shrink: 0;
+-  color: var(--fg-default);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-preset-icon {
+@@ -499,7 +499,7 @@
+ .auth-editor-input:focus,
+ .auth-editor-select:focus,
+ .auth-editor-textarea:focus {
+-  outline: 2px solid var(--brand-primary, #2563eb);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: 1px;
+ }
+ 
+@@ -540,8 +540,8 @@
+ .auth-presets-bar {
+   margin-bottom: 20px;
+   padding: 12px;
+-  background: var(--bg-surface-elevated, #f8fafc);
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-md, 6px);
+ }
+ 
+@@ -558,45 +558,48 @@
+ .auth-presets-list {
+   display: flex;
+   flex-wrap: wrap;
+-  gap: 8px;
++  gap: var(--space-2, 8px);
+ }
+ 
+ .auth-preset-btn {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
+   padding: 6px 12px;
+   font-size: 0.8125rem;
+   font-weight: 500;
+   border-radius: var(--radius-sm, 4px);
+-  border: 1px solid var(--border-subtle, #cbd5e1);
+-  background: var(--bg-surface, #ffffff);
+-  color: var(--fg-default, #1e293b);
++  border: 1px solid var(--border-strong);
++  background: var(--bg-surface-raised);
++  color: var(--fg-primary);
+   cursor: pointer;
+   transition: all 0.15s ease;
+ }
+ 
+ .auth-preset-btn:hover {
+   background: var(--bg-hover, #f1f5f9);
+-  border-color: var(--brand-primary, #2563eb);
++  border-color: var(--accent-primary);
+ }
+ 
+ .auth-preset-btn--active {
+-  background: var(--brand-primary, #2563eb);
+-  color: #ffffff;
+-  border-color: var(--brand-primary, #2563eb);
++  background: var(--accent-primary);
++  color: var(--accent-primary-fg);
++  border-color: var(--accent-primary);
+ }
+ 
+ /* Optional / Advanced Settings Accordion */
+ .auth-advanced-accordion {
+   margin-top: 20px;
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-md, 6px);
+   padding: 8px 12px;
+-  background: var(--bg-surface-elevated, #f8fafc);
++  background: var(--bg-canvas);
+ }
+ 
+ .auth-advanced-summary {
+   font-size: 0.875rem;
+   font-weight: 600;
+-  color: var(--fg-default, #1e293b);
++  color: var(--fg-primary);
+   cursor: pointer;
+   padding: 4px 0;
+   user-select: none;
+@@ -631,12 +634,12 @@
+ }
+ 
+ .auth-tab-btn:hover {
+-  color: var(--fg-default, #1e293b);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-tab-btn--active {
+-  color: var(--brand-primary, #2563eb);
+-  border-bottom-color: var(--brand-primary, #2563eb);
++  color: var(--focus-ring);
++  border-bottom-color: var(--focus-ring);
+   font-weight: 600;
+ }
+ 
+@@ -670,14 +673,14 @@
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+   color: var(--fg-muted, #64748b);
+-  background: var(--bg-surface-elevated, #f8fafc);
++  background: var(--bg-surface-raised);
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+ }
+ 
+ .auth-users-td {
+   padding: 12px 16px;
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+-  color: var(--fg-default, #1e293b);
++  color: var(--fg-primary);
+   vertical-align: middle;
+ }
+ 
+@@ -691,47 +694,51 @@
+   align-items: center;
+   gap: 4px;
+   padding: 2px 8px;
+-  border-radius: 9999px;
+-  font-size: 0.75rem;
+-  font-weight: 500;
++  border-radius: var(--radius-full, 9999px);
++  font-size: var(--text-xs, 0.75rem);
++  font-weight: var(--font-medium, 500);
+   text-transform: uppercase;
+   letter-spacing: 0.03em;
++  background: var(--bg-surface-raised);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-subtle);
+ }
+ 
+ .auth-badge-provider--local {
+-  background: #f1f5f9;
+-  color: #475569;
+-  border: 1px solid #cbd5e1;
++  background: var(--bg-surface-raised);
++  color: var(--fg-secondary);
++  border-color: var(--border-subtle);
+ }
+ 
+ .auth-badge-provider--google {
+-  background: #fee2e2;
+-  color: #b91c1c;
+-  border: 1px solid #fca5a5;
++  background: var(--danger-bg);
++  color: var(--danger-fg);
++  border-color: var(--danger-fg);
+ }
+ 
+ .auth-badge-provider--github {
+-  background: #f3f4f6;
+-  color: #111827;
+-  border: 1px solid #d1d5db;
++  background: var(--bg-hover);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
+ }
+ 
+-.auth-badge-provider--active-directory {
+-  background: #dbeafe;
+-  color: #1d4ed8;
+-  border: 1px solid #93c5fd;
++.auth-badge-provider--active-directory,
++.auth-badge-provider--ad {
++  background: var(--bg-hover);
++  color: var(--focus-ring);
++  border-color: var(--focus-ring);
+ }
+ 
+ .auth-badge-provider--ldap {
+-  background: #e0e7ff;
+-  color: #4338ca;
+-  border: 1px solid #a5b4fc;
++  background: var(--bg-hover);
++  color: var(--accent-primary);
++  border-color: var(--border-subtle);
+ }
+ 
+ .auth-badge-provider--oauth {
+-  background: #fef3c7;
+-  color: #b45309;
+-  border: 1px solid #fde68a;
++  background: var(--warn-bg);
++  color: var(--warn-fg);
++  border-color: var(--warn-fg);
+ }
+ 
+ /* Inline Role Grant Selector */
+@@ -742,7 +749,7 @@
+   border-radius: var(--radius-sm, 4px);
+   border: 1px solid var(--border-subtle, #cbd5e1);
+   background: var(--bg-surface, #ffffff);
+-  color: var(--fg-default, #1e293b);
++  color: var(--fg-primary);
+   cursor: pointer;
+ }
+ 
+@@ -777,7 +784,7 @@
+   margin: 0;
+   font-size: 1.125rem;
+   font-weight: 600;
+-  color: var(--fg-default, #1e293b);
++  color: var(--fg-primary);
+ }
+ 
+ .auth-modal-body {
+@@ -793,7 +800,7 @@
+ /* Mobile Responsiveness & Hit Target Bounds */
+ @media (max-width: 767px) {
+   .auth-studio-page {
+-    padding: 16px;
++    padding: var(--space-4, 16px);
+   }
+ 
+   .auth-card-row {
+@@ -804,8 +811,8 @@
+   .auth-card-right {
+     width: 100%;
+     justify-content: space-between;
+-    margin-top: 8px;
+-    padding-top: 8px;
++    margin-top: var(--space-2, 8px);
++    padding-top: var(--space-2, 8px);
+     border-top: 1px solid var(--border-subtle);
+   }
+ 
+@@ -813,26 +820,127 @@
+   .auth-card-drag-handle,
+   .auth-btn-secondary,
+   .auth-studio-add-btn {
+-    min-height: 44px;
+-    min-width: 44px;
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
+   }
+ 
+   .auth-editor-drawer {
+     width: 100vw;
+-    padding: 24px 20px;
++    padding: var(--space-6, 24px) var(--space-5, 20px);
+   }
+ 
+   .auth-editor-prop-row {
+     flex-direction: column;
+-    align-items: flex-start;
++    align-items: stretch;
++    gap: var(--space-2, 8px);
+     min-height: var(--prop-row-h, 38px);
+   }
+ 
++  .auth-editor-label {
++    width: 100%;
++    min-width: 0;
++  }
++
++  .auth-editor-input-group {
++    width: 100%;
++    min-width: 0;
++  }
++
++  .auth-editor-input-group .auth-editor-input {
++    flex: 1 1 0;
++    min-width: 0;
++  }
++
++  .auth-editor-input-group .auth-btn-secondary {
++    flex-shrink: 0;
++  }
++
+   .auth-editor-input,
+   .auth-editor-select,
+   .auth-editor-textarea {
+     width: 100%;
+     box-sizing: border-box;
+-    min-height: 44px;
++    min-height: var(--tap-min, 44px);
+   }
+ }
++/* Additional Auth Studio & Dialog Layout Classes */
++.auth-success-banner {
++  background: var(--bg-surface-raised);
++  color: var(--ok-fg);
++  border: 1px solid var(--ok-fg);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-3, 12px) var(--space-4, 16px);
++  margin-bottom: var(--space-4, 16px);
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  font-size: var(--text-sm, 0.875rem);
++}
++
++.auth-users-container {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 16px);
++}
++
++.auth-user-name-cell {
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.auth-user-display-name {
++  font-weight: var(--font-semibold, 600);
++  color: var(--fg-primary);
++}
++
++.auth-user-handle {
++  font-family: var(--font-mono, monospace);
++  font-size: var(--text-xs, 0.75rem);
++  color: var(--fg-muted);
++}
++
++.auth-user-email {
++  font-size: var(--text-sm, 0.8125rem);
++  color: var(--fg-secondary);
++}
++
++.auth-editor-field {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++  margin-bottom: var(--space-3, 12px);
++}
++
++.auth-editor-required {
++  color: var(--danger-fg);
++  font-weight: bold;
++}
++
++.auth-empty-state {
++  padding: var(--space-8, 32px);
++  text-align: center;
++  color: var(--fg-muted);
++  background: var(--bg-surface);
++  border: 1px dashed var(--border-subtle);
++  border-radius: var(--radius-lg, 10px);
++}
++
++.auth-panel {
++  background: var(--bg-surface);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg, 10px);
++  box-shadow: var(--shadow-xl);
++  padding: var(--space-6, 24px);
++  max-width: 480px;
++  width: 90%;
++  margin: auto;
++}
++
++.auth-title {
++  margin: 0 0 var(--space-3, 12px);
++  font-size: var(--text-xl, 1.25rem);
++  font-weight: var(--font-semibold, 600);
++  color: var(--fg-primary);
++}
+diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
+index 87cbb6d..2d86c46 100644
+--- a/kanban/web/src/features/board/board.css
++++ b/kanban/web/src/features/board/board.css
+@@ -73,7 +73,7 @@
+ }
+ 
+ .board-column--warn {
+-  border-color: var(--warn-border, #f59e0b);
++  border-color: var(--border-strong);
+   background: var(--warn-bg, rgba(245, 158, 11, 0.05));
+ }
+ 
+@@ -146,7 +146,7 @@
+ 
+ .board-column-add-workflow-btn:hover {
+   color: var(--fg-primary, #ffffff);
+-  border-color: var(--primary, #3b82f6);
++  border-color: var(--accent-primary);
+   background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+ }
+ 
+@@ -188,12 +188,12 @@
+ }
+ 
+ .board-card:focus-visible {
+-  outline: 2px solid var(--color-primary, #2563eb);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: 2px;
+ }
+ 
+ .board-card:hover {
+-  border-color: var(--border-hover, rgba(0, 0, 0, 0.2));
++  border-color: var(--border-strong);
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+ }
+ 
+@@ -202,11 +202,11 @@
+ }
+ 
+ .board-card[data-drop-target='top'] {
+-  border-top: 2px solid var(--color-primary, #2563eb);
++  border-top: 2px solid var(--accent-primary);
+ }
+ 
+ .board-card[data-drop-target='bottom'] {
+-  border-bottom: 2px solid var(--color-primary, #2563eb);
++  border-bottom: 2px solid var(--accent-primary);
+ }
+ 
+ .board-card-top {
+@@ -220,7 +220,7 @@
+   font-family: var(--font-mono, ui-monospace, monospace);
+   font-size: 0.8125rem;
+   font-weight: 600;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+   text-decoration: none;
+ }
+ 
+@@ -271,7 +271,7 @@
+ }
+ 
+ .board-card-chip--due-overdue {
+-  color: var(--color-danger, #dc2626);
++  color: var(--danger-fg);
+   background: rgba(220, 38, 38, 0.1);
+   font-weight: 600;
+ }
+@@ -356,7 +356,7 @@
+ }
+ 
+ .hard-wip-textarea:focus {
+-  outline: 2px solid var(--color-primary, #2563eb);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: -1px;
+ }
+ 
+@@ -366,7 +366,7 @@
+ }
+ 
+ .hard-wip-hint--error {
+-  color: var(--color-danger, #dc2626);
++  color: var(--danger-fg);
+ }
+ 
+ .hard-wip-actions {
+@@ -392,7 +392,7 @@
+ 
+ .hard-wip-btn--submit {
+   border: none;
+-  background: var(--color-primary, #2563eb);
++  background: var(--accent-primary);
+   color: #ffffff;
+ }
+ 
+@@ -407,8 +407,8 @@
+   bottom: 24px;
+   right: 24px;
+   background: var(--bg-surface, #ffffff);
+-  border: 1px solid var(--color-danger, #dc2626);
+-  border-left: 4px solid var(--color-danger, #dc2626);
++  border: 1px solid var(--danger-fg);
++  border-left: 4px solid var(--danger-fg);
+   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+   border-radius: var(--radius-md, 6px);
+   padding: var(--space-3, 12px) var(--space-4, 16px);
+diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
+index 430d58a..5c981e7 100644
+--- a/kanban/web/src/features/custom-fields/custom-fields.css
++++ b/kanban/web/src/features/custom-fields/custom-fields.css
+@@ -449,8 +449,8 @@
+ }
+ 
+ .custom-fields-tab-btn--active {
+-  color: var(--primary, #3b82f6);
+-  border-bottom-color: var(--primary, #3b82f6);
++  color: var(--accent-primary);
++  border-bottom-color: var(--accent-primary);
+   font-weight: 600;
+ }
+ 
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.css b/kanban/web/src/features/docs/DocsWorkspaceView.css
+index cc1c057..3155d6b 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.css
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.css
+@@ -107,13 +107,13 @@
+ }
+ 
+ .docs-tree-btn--primary {
+-  background: var(--primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+-  border-color: var(--primary, #3b82f6);
++  border-color: var(--accent-primary);
+ }
+ 
+ .docs-tree-btn--primary:hover:not(:disabled) {
+-  background: var(--primary-hover, #2563eb);
++  background: var(--accent-primary);
+ }
+ 
+ .docs-tree-btn:disabled {
+@@ -131,7 +131,7 @@
+ }
+ 
+ .docs-tree-pane__error {
+-  color: var(--color-danger, #ef4444);
++  color: var(--danger-fg);
+ }
+ 
+ .docs-tree-view {
+@@ -162,8 +162,8 @@
+ }
+ 
+ .docs-tree-item--selected {
+-  background: var(--bg-selected, #e0f2fe);
+-  color: var(--primary-strong, #0369a1);
++  background: var(--bg-hover);
++  color: var(--accent-primary);
+   font-weight: 500;
+ }
+ 
+@@ -191,7 +191,7 @@
+   margin-right: 4px;
+   border: none;
+   background: transparent;
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+   font-size: 9px;
+   cursor: pointer;
+   padding: 0;
+@@ -319,7 +319,7 @@
+ }
+ 
+ .docs-breadcrumbs__separator {
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+ }
+ 
+ .docs-breadcrumbs__label {
+@@ -377,8 +377,8 @@
+ }
+ 
+ .docs-rail-toggle-btn--active {
+-  background: var(--bg-selected, #e0f2fe);
+-  border-color: var(--primary, #3b82f6);
++  background: var(--bg-hover);
++  border-color: var(--accent-primary);
+ }
+ 
+ .docs-copy-markdown-btn {
+@@ -399,7 +399,7 @@
+ .docs-copy-markdown-btn:hover {
+   background: var(--bg-hover, #f8fafc);
+   color: var(--fg-primary, #1e293b);
+-  border-color: var(--border-default, #cbd5e1);
++  border-color: var(--border-strong);
+ }
+ 
+ .docs-version-pill-btn {
+@@ -413,7 +413,7 @@
+ 
+ .docs-version-pill-btn:hover {
+   background: var(--bg-hover, #f8fafc);
+-  border-color: var(--border-default, #cbd5e1);
++  border-color: var(--border-strong);
+ }
+ 
+ /* 412 Conflict Alert Banner */
+@@ -492,7 +492,7 @@
+ }
+ 
+ .docs-title-input::placeholder {
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+ }
+ 
+ .docs-title-input:focus-visible {
+@@ -506,7 +506,7 @@
+ 
+ .docs-autosave-status {
+   font-size: 11px;
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+   margin-top: 8px;
+   text-align: right;
+ }
+@@ -550,8 +550,8 @@
+ }
+ 
+ .docs-rail-tab--active {
+-  color: var(--primary, #3b82f6);
+-  border-bottom-color: var(--primary, #3b82f6);
++  color: var(--accent-primary);
++  border-bottom-color: var(--accent-primary);
+   font-weight: 600;
+ }
+ 
+@@ -567,13 +567,13 @@
+   font-weight: 600;
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+   margin: 0 0 8px 0;
+ }
+ 
+ .docs-rail-empty {
+   font-size: 12px;
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+   margin: 0;
+ }
+ 
+@@ -617,8 +617,8 @@
+ }
+ 
+ .docs-outline-link--active {
+-  color: var(--primary-strong, #0369a1);
+-  background: var(--bg-selected, #e0f2fe);
++  color: var(--accent-primary);
++  background: var(--bg-hover);
+   font-weight: 500;
+ }
+ 
+@@ -646,7 +646,7 @@
+   border-radius: var(--radius-sm, 4px);
+   background: var(--bg-hover, #f1f5f9);
+   border: 1px solid var(--border-subtle, #e2e8f0);
+-  color: var(--primary, #3b82f6);
++  color: var(--accent-primary);
+ }
+ 
+ .docs-linked-title {
+@@ -688,8 +688,8 @@
+ }
+ 
+ .docs-version-item--selected {
+-  border-color: var(--primary, #3b82f6);
+-  background: var(--bg-selected, #f0f9ff);
++  border-color: var(--accent-primary);
++  background: var(--bg-hover);
+ }
+ 
+ .docs-version-item__top {
+@@ -707,7 +707,7 @@
+ 
+ .docs-version-item__digest {
+   font-size: 11px;
+-  color: var(--fg-tertiary, #94a3b8);
++  color: var(--fg-muted);
+ }
+ 
+ .docs-version-item__meta {
+diff --git a/kanban/web/src/features/drawer-actions/drawerActions.css b/kanban/web/src/features/drawer-actions/drawerActions.css
+index ed37fb5..375aa73 100644
+--- a/kanban/web/src/features/drawer-actions/drawerActions.css
++++ b/kanban/web/src/features/drawer-actions/drawerActions.css
+@@ -17,7 +17,7 @@
+   font-size: var(--text-sm, 13px);
+   font-weight: 500;
+   line-height: 1;
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   background: var(--bg-surface-raised, #1e293b);
+   border: 1px solid var(--border-subtle, #334155);
+   border-radius: var(--radius-sm, 6px);
+@@ -29,12 +29,12 @@
+ 
+ .drawer-action-btn:hover:not(:disabled) {
+   background: var(--bg-hover, #334155);
+-  color: var(--text-primary, #f8fafc);
+-  border-color: var(--border-default, #475569);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
+ }
+ 
+ .drawer-action-btn:focus-visible {
+-  outline: 2px solid var(--color-focus, #38bdf8);
++  outline: 2px solid var(--focus-ring);
+   outline-offset: 2px;
+ }
+ 
+@@ -44,9 +44,9 @@
+ }
+ 
+ .drawer-action-btn--active {
+-  background: var(--color-primary-subtle, rgba(56, 189, 248, 0.15));
+-  color: var(--color-primary, #38bdf8);
+-  border-color: var(--color-primary, #38bdf8);
++  background: var(--bg-hover);
++  color: var(--accent-primary);
++  border-color: var(--accent-primary);
+ }
+ 
+ /* --- Subscribe Split Button & Popover --- */
+@@ -76,7 +76,7 @@
+   right: 0;
+   width: 260px;
+   background: var(--bg-surface-raised, #1e293b);
+-  border: 1px solid var(--border-default, #475569);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-md, 8px);
+   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+   padding: var(--space-3, 12px);
+@@ -89,7 +89,7 @@
+   font-weight: 600;
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+ }
+ 
+ .mute-popover__list {
+@@ -106,7 +106,7 @@
+   align-items: center;
+   gap: var(--space-2, 8px);
+   font-size: var(--text-sm, 13px);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   cursor: pointer;
+   user-select: none;
+ }
+@@ -114,7 +114,7 @@
+ .mute-checkbox-label input[type="checkbox"] {
+   width: 16px;
+   height: 16px;
+-  accent-color: var(--color-primary, #38bdf8);
++  accent-color: var(--accent-primary);
+   cursor: pointer;
+ }
+ 
+@@ -132,7 +132,7 @@
+   width: 360px;
+   max-width: calc(100vw - 32px);
+   background: var(--bg-surface-raised, #1e293b);
+-  border: 1px solid var(--border-default, #475569);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-md, 8px);
+   box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.6);
+   padding: var(--space-4, 16px);
+@@ -163,7 +163,7 @@
+   font-weight: 600;
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+ }
+ 
+ .link-graph-list {
+@@ -203,18 +203,18 @@
+   background: var(--bg-surface-raised, #1e293b);
+   border: 1px solid var(--border-subtle, #334155);
+   border-radius: 4px;
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   white-space: nowrap;
+ }
+ 
+ .link-item-key {
+   font-family: var(--font-mono, monospace);
+   font-weight: 600;
+-  color: var(--color-primary, #38bdf8);
++  color: var(--accent-primary);
+ }
+ 
+ .link-item-title {
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+@@ -224,14 +224,14 @@
+   display: flex;
+   align-items: center;
+   gap: var(--space-1, 4px);
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   font-style: italic;
+ }
+ 
+ .link-delete-btn {
+   background: none;
+   border: none;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   cursor: pointer;
+   padding: 2px 4px;
+   font-size: 14px;
+@@ -239,7 +239,7 @@
+ }
+ 
+ .link-delete-btn:hover {
+-  color: var(--color-danger, #f43f5e);
++  color: var(--danger-fg);
+ }
+ 
+ .add-link-form {
+@@ -256,7 +256,7 @@
+   background: var(--bg-surface, #0f172a);
+   border: 1px solid var(--border-subtle, #334155);
+   border-radius: var(--radius-sm, 6px);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   padding: 0 var(--space-2, 8px);
+ }
+ 
+@@ -282,7 +282,7 @@
+   right: 0;
+   width: 240px;
+   background: var(--bg-surface-raised, #1e293b);
+-  border: 1px solid var(--border-default, #475569);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-md, 8px);
+   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+   padding: var(--space-1, 4px) 0;
+@@ -298,7 +298,7 @@
+   min-height: 38px;
+   padding: var(--space-2, 8px) var(--space-3, 12px);
+   font-size: var(--text-sm, 13px);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   background: transparent;
+   border: none;
+   text-align: left;
+@@ -314,7 +314,7 @@
+ }
+ 
+ .overflow-menu__item--danger {
+-  color: var(--color-danger, #f43f5e);
++  color: var(--danger-fg);
+ }
+ 
+ .overflow-menu__item--danger:hover:not([aria-disabled="true"]) {
+@@ -334,7 +334,7 @@
+ 
+ .overflow-menu__sublabel {
+   font-size: 11px;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   margin-top: 2px;
+   margin-left: 20px;
+ }
+@@ -355,7 +355,7 @@
+ 
+ .modal-card {
+   background: var(--bg-surface-raised, #1e293b);
+-  border: 1px solid var(--border-default, #475569);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-lg, 12px);
+   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+   padding: 32px;
+@@ -384,13 +384,13 @@
+   margin: 0;
+   font-size: var(--text-lg, 18px);
+   font-weight: 600;
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .modal-close-btn {
+   background: none;
+   border: none;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   font-size: 20px;
+   cursor: pointer;
+   line-height: 1;
+@@ -398,7 +398,7 @@
+ }
+ 
+ .modal-close-btn:hover {
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .copy-preview-title {
+@@ -408,7 +408,7 @@
+   background: var(--bg-surface, #0f172a);
+   border: 1px solid var(--border-subtle, #334155);
+   border-radius: var(--radius-sm, 6px);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   word-break: break-all;
+ }
+ 
+@@ -425,7 +425,7 @@
+ 
+ .copy-notice {
+   font-size: var(--text-xs, 12px);
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   margin: 0;
+ }
+ 
+@@ -439,7 +439,7 @@
+ .blast-radius-text {
+   font-size: var(--text-sm, 14px);
+   font-weight: 600;
+-  color: var(--color-warning, #f59e0b);
++  color: var(--warn-fg);
+   margin: 0 0 var(--space-2, 8px) 0;
+ }
+ 
+@@ -447,13 +447,13 @@
+   display: flex;
+   gap: var(--space-3, 12px);
+   font-size: var(--text-xs, 12px);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   margin: 0;
+ }
+ 
+ .soft-trash-notice {
+   font-size: var(--text-xs, 12px);
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   margin: 0;
+ }
+ 
+@@ -466,13 +466,13 @@
+ .modal-alert--warning {
+   background: rgba(245, 158, 11, 0.15);
+   border: 1px solid rgba(245, 158, 11, 0.4);
+-  color: var(--color-warning, #f59e0b);
++  color: var(--warn-fg);
+ }
+ 
+ .modal-alert--danger {
+   background: rgba(244, 63, 94, 0.15);
+   border: 1px solid rgba(244, 63, 94, 0.4);
+-  color: var(--color-danger, #f43f5e);
++  color: var(--danger-fg);
+ }
+ 
+ .modal-actions {
+@@ -487,9 +487,9 @@
+   padding: 0 var(--space-3, 12px);
+   font-size: var(--text-sm, 13px);
+   font-weight: 500;
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   background: var(--bg-surface, #0f172a);
+-  border: 1px solid var(--border-default, #475569);
++  border: 1px solid var(--border-strong);
+   border-radius: var(--radius-sm, 6px);
+   cursor: pointer;
+ }
+@@ -504,7 +504,7 @@
+   font-size: var(--text-sm, 13px);
+   font-weight: 500;
+   color: #0f172a;
+-  background: var(--color-primary, #38bdf8);
++  background: var(--accent-primary);
+   border: 1px solid transparent;
+   border-radius: var(--radius-sm, 6px);
+   cursor: pointer;
+@@ -525,7 +525,7 @@
+   font-size: var(--text-sm, 13px);
+   font-weight: 500;
+   color: #ffffff;
+-  background: var(--color-danger, #e11d48);
++  background: var(--danger-fg);
+   border: 1px solid transparent;
+   border-radius: var(--radius-sm, 6px);
+   cursor: pointer;
+diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.css b/kanban/web/src/features/drawer-rail/PropertiesRail.css
+index 11f3051..90d353a 100644
+--- a/kanban/web/src/features/drawer-rail/PropertiesRail.css
++++ b/kanban/web/src/features/drawer-rail/PropertiesRail.css
+@@ -25,7 +25,7 @@
+ 
+ .prop-row__label {
+   font-size: var(--text-sm, 13px);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   font-weight: var(--font-medium, 500);
+   user-select: none;
+   display: flex;
+@@ -49,12 +49,12 @@
+   border-radius: var(--radius-sm, 4px);
+   border: 1px solid var(--border-subtle, #334155);
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   font-size: var(--text-sm, 13px);
+ }
+ 
+ .prop-row__select:focus {
+-  outline: 2px solid var(--color-primary, #3b82f6);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: 1px;
+ }
+ 
+@@ -69,13 +69,13 @@
+   border-radius: var(--radius-sm, 4px);
+   border: 1px solid var(--border-subtle, #334155);
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   font-size: var(--text-sm, 13px);
+   box-sizing: border-box;
+ }
+ 
+ .prop-row__input:focus {
+-  outline: 2px solid var(--color-primary, #3b82f6);
++  outline: 2px solid var(--accent-primary);
+   outline-offset: 1px;
+ }
+ 
+@@ -86,7 +86,7 @@
+ 
+ .prop-row__alert {
+   font-size: var(--text-xs, 11px);
+-  color: var(--color-danger, #ef4444);
++  color: var(--danger-fg);
+   grid-column: 1 / -1;
+   padding-top: 2px;
+ }
+@@ -105,19 +105,19 @@
+ .assignee-pill--principal {
+   border: 1px solid var(--border-subtle, #334155);
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .assignee-pill--external {
+   border: 1px dashed var(--border-strong, #64748b);
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .assignee-pill__remove {
+   background: transparent;
+   border: none;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   cursor: pointer;
+   padding: 0 2px;
+   font-size: 14px;
+@@ -127,7 +127,7 @@
+ }
+ 
+ .assignee-pill__remove:hover {
+-  color: var(--color-danger, #ef4444);
++  color: var(--danger-fg);
+ }
+ 
+ /* Creator Row */
+@@ -142,7 +142,7 @@
+   background: transparent;
+   border: 1px solid var(--border-subtle, #334155);
+   border-radius: var(--radius-sm, 4px);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   font-size: var(--text-xs, 11px);
+   padding: 2px 6px;
+   cursor: pointer;
+@@ -150,7 +150,7 @@
+ 
+ .creator-row__change-btn:hover {
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ /* Dates */
+@@ -176,7 +176,7 @@
+   border-radius: var(--radius-sm, 4px);
+   background-color: var(--bg-surface-raised, #1e293b);
+   border: 1px solid var(--border-subtle, #334155);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   font-size: var(--text-xs, 12px);
+   font-style: italic;
+ }
+@@ -196,7 +196,7 @@
+   align-items: center;
+   font-size: var(--text-xs, 12px);
+   font-weight: var(--font-medium, 500);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+ }
+ 
+ .sub-issues-rollup__bar {
+@@ -210,7 +210,7 @@
+ 
+ .sub-issues-rollup__fill {
+   height: 100%;
+-  background-color: var(--color-success, #22c55e);
++  background-color: var(--ok-fg);
+   transition: width 0.2s ease-in-out;
+ }
+ 
+@@ -242,7 +242,7 @@
+   margin: 0;
+   font-size: var(--text-base, 15px);
+   font-weight: var(--font-semibold, 600);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .override-modal__textarea {
+@@ -252,7 +252,7 @@
+   border-radius: var(--radius-sm, 4px);
+   border: 1px solid var(--border-subtle, #334155);
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   font-size: var(--text-sm, 13px);
+   resize: vertical;
+   box-sizing: border-box;
+@@ -296,7 +296,7 @@
+ .assignees-menu__loading {
+   padding: 6px 12px;
+   font-size: var(--text-xs, 12px);
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+ }
+ 
+ .assignees-menu__item-btn {
+@@ -305,7 +305,7 @@
+   padding: 6px 12px;
+   background: transparent;
+   border: none;
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   font-size: var(--text-xs, 12px);
+   cursor: pointer;
+   display: flex;
+@@ -318,7 +318,7 @@
+ }
+ 
+ .assignees-menu__item-name {
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   font-size: 11px;
+   margin-left: auto;
+ }
+@@ -333,7 +333,7 @@
+   padding: 6px 12px;
+   background: transparent;
+   border: none;
+-  color: var(--color-primary, #60a5fa);
++  color: var(--accent-primary);
+   font-size: var(--text-xs, 12px);
+   cursor: pointer;
+ }
+@@ -352,7 +352,7 @@
+ .override-modal__label {
+   display: block;
+   font-size: var(--text-xs, 12px);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   margin-bottom: 4px;
+ }
+ 
+@@ -361,7 +361,7 @@
+ }
+ 
+ .override-modal__submit-btn {
+-  background-color: var(--color-primary, #3b82f6);
++  background-color: var(--accent-primary);
+   color: #fff;
+   border: none;
+   border-radius: var(--radius-sm, 4px);
+@@ -379,7 +379,7 @@
+   background: transparent;
+   border: 1px solid var(--border-subtle, #334155);
+   border-radius: var(--radius-sm, 4px);
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   padding: 6px 12px;
+   font-size: var(--text-sm, 13px);
+   cursor: pointer;
+@@ -405,12 +405,12 @@
+ }
+ 
+ .parent-row__none {
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   font-size: var(--text-sm, 13px);
+ }
+ 
+ .parent-row__badge {
+-  color: var(--text-secondary, #94a3b8);
++  color: var(--fg-secondary);
+   font-size: var(--text-xs, 12px);
+   font-family: monospace;
+ }
+@@ -418,7 +418,7 @@
+ .parent-row__clear-btn {
+   background: transparent;
+   border: none;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   cursor: pointer;
+ }
+ 
+@@ -438,11 +438,11 @@
+ }
+ 
+ .sub-issues-rollup__progress::-webkit-progress-value {
+-  background-color: var(--color-success, #22c55e);
++  background-color: var(--ok-fg);
+ }
+ 
+ .sub-issues-rollup__progress::-moz-progress-bar {
+-  background-color: var(--color-success, #22c55e);
++  background-color: var(--ok-fg);
+ }
+ 
+ .labels-dropdown__container {
+@@ -483,7 +483,7 @@
+   padding: 4px 6px;
+   background: transparent;
+   border: none;
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+   font-size: var(--text-xs, 12px);
+   cursor: pointer;
+   display: flex;
+@@ -497,12 +497,12 @@
+ }
+ 
+ .labels-dropdown__item-name {
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .labels-dropdown__item-exclusive {
+   font-size: 10px;
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   margin-left: auto;
+ }
+ 
+@@ -512,7 +512,7 @@
+   padding: 4px;
+   background: transparent;
+   border: 1px dashed var(--border-subtle, #334155);
+-  color: var(--text-muted, #64748b);
++  color: var(--fg-muted);
+   border-radius: var(--radius-sm, 4px);
+   font-size: 11px;
+   cursor: pointer;
+@@ -528,20 +528,20 @@
+   line-height: 1.2;
+   border: 1px solid var(--border-subtle, #334155);
+   background-color: var(--bg-surface-raised, #1e293b);
+-  color: var(--text-primary, #f8fafc);
++  color: var(--fg-primary);
+ }
+ 
+ .label-pill__dot {
+   width: 6px;
+   height: 6px;
+   border-radius: 50%;
+-  background-color: var(--color-primary, #3b82f6);
++  background-color: var(--accent-primary);
+ }
+ 
+ .kb-issue-key-link {
+   font-family: var(--font-mono, monospace);
+   font-size: var(--text-xs, 12px);
+-  color: var(--color-primary, #60a5fa);
++  color: var(--accent-primary);
+   text-decoration: none;
+ }
+ 
+diff --git a/kanban/web/src/features/drawer/AccessPill.css b/kanban/web/src/features/drawer/AccessPill.css
+index 93d8441..c9a5788 100644
+--- a/kanban/web/src/features/drawer/AccessPill.css
++++ b/kanban/web/src/features/drawer/AccessPill.css
+@@ -6,6 +6,6 @@
+ 
+ .surface__access-label {
+   font-size: var(--text-sm);
+-  color: var(--text-secondary);
++  color: var(--fg-secondary);
+   white-space: nowrap;
+ }
+diff --git a/kanban/web/src/features/gates/gates.css b/kanban/web/src/features/gates/gates.css
+index 173b80b..6729f9a 100644
+--- a/kanban/web/src/features/gates/gates.css
++++ b/kanban/web/src/features/gates/gates.css
+@@ -13,7 +13,7 @@
+ 
+ /* Card provisional state during pending transition gate */
+ .board-card--pending-gate {
+-  border: 1px dashed var(--border-accent-subtle);
++  border: 1px dashed var(--border-subtle);
+   background: var(--bg-surface, #ffffff);
+ }
+ 
+@@ -119,7 +119,7 @@
+   align-self: flex-start;
+   font-size: 0.75rem;
+   font-weight: 500;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+   background: none;
+   border: none;
+   padding: 0;
+diff --git a/kanban/web/src/features/oauth/DeviceActivatePage.css b/kanban/web/src/features/oauth/DeviceActivatePage.css
+index b648886..6ddf582 100644
+--- a/kanban/web/src/features/oauth/DeviceActivatePage.css
++++ b/kanban/web/src/features/oauth/DeviceActivatePage.css
+@@ -7,15 +7,15 @@
+   align-items: center;
+   justify-content: center;
+   padding: var(--prose-pad);
+-  background-color: var(--surface-bg, #0d1117);
+-  color: var(--text-primary, #e6edf3);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
+   font-family: var(--font-sans);
+ }
+ 
+ .kb-device-activate-card {
+   width: 100%;
+   max-width: 580px;
+-  background-color: var(--card-bg, #161b22);
++  background-color: var(--bg-surface);
+   border: 1px solid var(--border-subtle, #30363d);
+   border-radius: 8px;
+   padding: 32px 40px;
+@@ -31,13 +31,13 @@
+   font-size: 1.5rem;
+   font-weight: 600;
+   margin: 0 0 8px;
+-  color: var(--text-primary, #ffffff);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-device-activate-subtitle {
+   font-size: var(--text-body);
+   line-height: var(--leading-prose);
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+   margin: 0;
+ }
+ 
+@@ -50,7 +50,7 @@
+   font-size: 0.875rem;
+   font-weight: 500;
+   margin-bottom: 8px;
+-  color: var(--text-primary, #c9d1d9);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-device-code-input {
+@@ -64,8 +64,8 @@
+   padding: 12px 16px;
+   border-radius: 6px;
+   border: 1px solid var(--border-subtle, #30363d);
+-  background-color: var(--input-bg, #0d1117);
+-  color: var(--text-primary, #58a6ff);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-device-code-input:focus {
+@@ -78,7 +78,7 @@
+   margin-top: 12px;
+   width: 100%;
+   height: var(--prop-row-h);
+-  background-color: var(--btn-primary-bg, #238636);
++  background-color: var(--accent-primary);
+   color: #ffffff;
+   border: 1px solid rgba(240, 246, 252, 0.1);
+   border-radius: 6px;
+@@ -125,13 +125,13 @@
+ 
+ .kb-device-app-prop-label {
+   font-size: 0.875rem;
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+ }
+ 
+ .kb-device-app-prop-value {
+   font-size: 0.875rem;
+   font-weight: 500;
+-  color: var(--text-primary, #e6edf3);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-device-aal2-banner {
+@@ -156,7 +156,7 @@
+ .kb-device-group-title {
+   font-size: 0.875rem;
+   font-weight: 600;
+-  color: var(--text-primary, #c9d1d9);
++  color: var(--fg-primary);
+   margin-bottom: 4px;
+ }
+ 
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.css b/kanban/web/src/features/projects/CreateProjectModal.css
+index 4711822..37f0298 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.css
++++ b/kanban/web/src/features/projects/CreateProjectModal.css
+@@ -128,7 +128,7 @@
+   padding: 8px 16px;
+   border-radius: 6px;
+   border: none;
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 600;
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 6864e10..72990b6 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -5,7 +5,7 @@
+   padding: var(--prose-pad);
+   max-width: 1100px;
+   margin: 0 auto;
+-  color: var(--text-primary, #e6edf3);
++  color: var(--fg-primary);
+   font-family: var(--font-sans);
+ }
+ 
+@@ -22,13 +22,13 @@
+   font-size: 1.75rem;
+   font-weight: 600;
+   margin: 0 0 8px;
+-  color: var(--text-primary, #ffffff);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-mcp-studio-subtitle {
+   font-size: var(--text-body);
+   line-height: var(--leading-prose);
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+   margin: 0;
+ }
+ 
+@@ -49,7 +49,7 @@
+ 
+ .kb-mcp-studio-section {
+   margin-bottom: var(--section-gap);
+-  background-color: var(--card-bg, #161b22);
++  background-color: var(--bg-surface);
+   border: 1px solid var(--border-subtle, #30363d);
+   border-radius: 8px;
+   padding: 24px 32px;
+@@ -79,7 +79,7 @@
+   min-height: var(--prop-row-h);
+   padding: 12px 16px;
+   border-bottom: 1px solid var(--border-subtle, #30363d);
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+   font-size: 0.8125rem;
+   font-weight: 600;
+   text-transform: uppercase;
+@@ -201,7 +201,7 @@
+ .kb-mcp-empty-state {
+   text-align: center;
+   padding: 32px;
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+   font-size: 0.875rem;
+ }
+ 
+@@ -231,7 +231,7 @@
+ .kb-mcp-form-label {
+   font-size: 0.8125rem;
+   font-weight: 500;
+-  color: var(--text-primary, #c9d1d9);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-mcp-form-input,
+diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.css b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+index 0d6485f..99c687b 100644
+--- a/kanban/web/src/features/settings/McpConfigSnippetModal.css
++++ b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+@@ -16,7 +16,7 @@
+ .kb-snippet-modal-card {
+   width: 100%;
+   max-width: 640px;
+-  background-color: var(--card-bg, #161b22);
++  background-color: var(--bg-surface);
+   border: 1px solid var(--border-subtle, #30363d);
+   border-radius: 8px;
+   padding: 32px 40px;
+@@ -24,7 +24,7 @@
+   display: flex;
+   flex-direction: column;
+   gap: 20px;
+-  color: var(--text-primary, #e6edf3);
++  color: var(--fg-primary);
+   font-family: var(--font-sans);
+ }
+ 
+@@ -38,7 +38,7 @@
+   font-size: 1.25rem;
+   font-weight: 600;
+   margin: 0;
+-  color: var(--text-primary, #ffffff);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-snippet-modal-close-btn {
+@@ -46,7 +46,7 @@
+   border: none;
+   font-size: 1.5rem;
+   line-height: 1;
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+   cursor: pointer;
+ }
+ 
+@@ -125,7 +125,7 @@
+   border: none;
+   padding: 6px 12px;
+   border-radius: 6px;
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+   font-size: 0.875rem;
+   font-weight: 500;
+   cursor: pointer;
+@@ -148,7 +148,7 @@
+ 
+ .kb-snippet-url-label {
+   font-size: 0.875rem;
+-  color: var(--text-secondary, #8b949e);
++  color: var(--fg-secondary);
+ }
+ 
+ .kb-snippet-url-select {
+diff --git a/kanban/web/src/features/stickies/StickiesGrid.css b/kanban/web/src/features/stickies/StickiesGrid.css
+index 8be37cc..b85673c 100644
+--- a/kanban/web/src/features/stickies/StickiesGrid.css
++++ b/kanban/web/src/features/stickies/StickiesGrid.css
+@@ -44,7 +44,7 @@
+ }
+ 
+ .stickies-container__new-btn:hover {
+-  background-color: var(--accent-primary-hover, #2563eb);
++  background-color: var(--accent-primary);
+ }
+ 
+ .stickies-grid {
+@@ -221,7 +221,7 @@
+ }
+ 
+ .sticky-card__menu-item--danger {
+-  color: var(--accent-danger, #ef4444);
++  color: var(--danger-fg);
+ }
+ 
+ .sticky-card__menu-item--danger:hover {
+@@ -291,7 +291,7 @@
+ }
+ 
+ .sticky-promotion-banner__promote-btn:hover {
+-  background-color: var(--accent-primary-hover, #2563eb);
++  background-color: var(--accent-primary);
+ }
+ 
+ .sticky-promotion-banner__snooze-btn {
+diff --git a/kanban/web/src/features/timeline/calendarTimeline.css b/kanban/web/src/features/timeline/calendarTimeline.css
+index 72bc719..c223796 100644
+--- a/kanban/web/src/features/timeline/calendarTimeline.css
++++ b/kanban/web/src/features/timeline/calendarTimeline.css
+@@ -116,7 +116,7 @@
+ }
+ 
+ .calendar-day-cell--today {
+-  box-shadow: inset 0 0 0 2px var(--color-primary, #2563eb);
++  box-shadow: inset 0 0 0 2px var(--accent-primary);
+ }
+ 
+ .calendar-day-cell--drag-over {
+@@ -139,7 +139,7 @@
+ 
+ .calendar-day-cell--today .calendar-day-number {
+   font-weight: 700;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+ }
+ 
+ .calendar-today-badge {
+@@ -147,7 +147,7 @@
+   font-weight: 600;
+   padding: 1px 6px;
+   border-radius: var(--radius-sm, 4px);
+-  background: var(--color-primary, #2563eb);
++  background: var(--accent-primary);
+   color: #ffffff;
+ }
+ 
+@@ -198,7 +198,7 @@
+   font-family: var(--font-mono, monospace);
+   font-weight: 600;
+   flex-shrink: 0;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+ }
+ 
+ .calendar-issue-pill-summary {
+@@ -213,7 +213,7 @@
+   border: none;
+   padding: 2px 4px;
+   font-size: 0.75rem;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+   font-weight: 600;
+   cursor: pointer;
+   text-align: left;
+@@ -330,9 +330,9 @@
+   }
+ 
+   .calendar-week-day-btn--selected {
+-    background: var(--color-primary, #2563eb);
++    background: var(--accent-primary);
+     color: #ffffff;
+-    border-color: var(--color-primary, #2563eb);
++    border-color: var(--accent-primary);
+   }
+ 
+   .calendar-week-day-name {
+@@ -446,7 +446,7 @@
+ }
+ 
+ .timeline-zoom-btn--active {
+-  background: var(--color-primary, #2563eb);
++  background: var(--accent-primary);
+   color: #ffffff;
+ }
+ 
+@@ -529,7 +529,7 @@
+   font-family: var(--font-mono, monospace);
+   font-weight: 600;
+   font-size: 0.8125rem;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+   text-decoration: none;
+   flex-shrink: 0;
+ }
+@@ -635,7 +635,7 @@
+ 
+ .timeline-scale-cell--today {
+   font-weight: 700;
+-  color: var(--color-primary, #2563eb);
++  color: var(--accent-primary);
+   background: rgba(37, 99, 235, 0.05);
+ }
+ 
+@@ -664,7 +664,7 @@
+   padding-left: var(--space-4, 16px);
+   height: 46px;
+   font-size: 0.75rem;
+-  color: var(--fg-subtle);
++  color: var(--fg-muted);
+   font-style: italic;
+   cursor: pointer;
+   user-select: none;
+@@ -680,7 +680,7 @@
+   top: 9px;
+   height: 28px;
+   border-radius: var(--radius-md, 6px);
+-  background: var(--color-primary, #2563eb);
++  background: var(--accent-primary);
+   color: #ffffff;
+   display: flex;
+   align-items: center;
+@@ -757,7 +757,7 @@
+   width: 20px;
+   height: 20px;
+   transform: rotate(45deg);
+-  background: var(--color-primary, #2563eb);
++  background: var(--accent-primary);
+   border-radius: 2px;
+   z-index: 2;
+   cursor: pointer;
+@@ -783,7 +783,7 @@
+ 
+ .gantt-arrow {
+   fill: none;
+-  stroke: var(--color-primary, #2563eb);
++  stroke: var(--accent-primary);
+   stroke-width: 2px;
+ }
+ 
+diff --git a/kanban/web/src/features/views/listTable.css b/kanban/web/src/features/views/listTable.css
+index 20e9ebb..a9406e6 100644
+--- a/kanban/web/src/features/views/listTable.css
++++ b/kanban/web/src/features/views/listTable.css
+@@ -138,7 +138,7 @@
+ .list-section-add-workflow-btn:hover {
+   background: var(--bg-hover);
+   color: var(--fg-primary);
+-  border-color: var(--primary, #3b82f6);
++  border-color: var(--accent-primary);
+ }
+ 
+ /* ==========================================================================
+@@ -807,7 +807,7 @@
+   align-items: center;
+   gap: 6px;
+   padding: 6px 14px;
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   border: none;
+   border-radius: var(--radius-sm, 4px);
+@@ -818,7 +818,7 @@
+ }
+ 
+ .list-new-btn:hover {
+-  background: var(--color-brand-hover, #2563eb);
++  background: var(--accent-primary);
+ }
+ 
+ .list-filter-popover {
+@@ -894,7 +894,7 @@
+ 
+ .list-filter-input:focus,
+ .list-filter-select:focus {
+-  border-color: var(--color-brand-primary, #3b82f6);
++  border-color: var(--accent-primary);
+ }
+ 
+ .list-filter-footer {
+@@ -907,7 +907,7 @@
+ .list-filter-reset-btn {
+   background: transparent;
+   border: none;
+-  color: var(--color-brand-primary, #3b82f6);
++  color: var(--accent-primary);
+   font-size: 12px;
+   font-weight: 500;
+   cursor: pointer;
+@@ -920,7 +920,7 @@
+ 
+ .list-row.list-row--active {
+   background: var(--bg-hover, #2c313a);
+-  border-left: 3px solid var(--color-brand-primary, #3b82f6);
++  border-left: 3px solid var(--accent-primary);
+ }
+ 
+ .list-row-priority-icon {
+diff --git a/kanban/web/src/features/workspaces/CreateWorkspaceModal.css b/kanban/web/src/features/workspaces/CreateWorkspaceModal.css
+index bb46f16..5261a14 100644
+--- a/kanban/web/src/features/workspaces/CreateWorkspaceModal.css
++++ b/kanban/web/src/features/workspaces/CreateWorkspaceModal.css
+@@ -78,7 +78,7 @@
+ }
+ 
+ .kb-create-workspace-req {
+-  color: var(--color-danger, #ef4444);
++  color: var(--danger-fg);
+ }
+ 
+ .kb-create-workspace-input {
+@@ -94,7 +94,7 @@
+ 
+ .kb-create-workspace-input:focus {
+   outline: none;
+-  border-color: var(--color-brand-primary, #3b82f6);
++  border-color: var(--accent-primary);
+ }
+ 
+ .kb-create-workspace-slug {
+@@ -143,7 +143,7 @@
+   padding: 8px 16px;
+   border-radius: 6px;
+   border: none;
+-  background: var(--color-brand-primary, #3b82f6);
++  background: var(--accent-primary);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 600;
+@@ -152,7 +152,7 @@
+ }
+ 
+ .kb-create-workspace-submit-btn:hover:not(:disabled) {
+-  background: var(--color-brand-hover, #2563eb);
++  background: var(--accent-primary);
+ }
+ 
+ .kb-create-workspace-submit-btn:disabled {
+diff --git a/kanban/web/src/styles/base.css b/kanban/web/src/styles/base.css
+index f83f599..062a0b7 100644
+--- a/kanban/web/src/styles/base.css
++++ b/kanban/web/src/styles/base.css
+@@ -3,6 +3,20 @@ html {
+   box-sizing: border-box;
+ }
+ 
++:root {
++  color-scheme: light;
++}
++
++[data-theme="dark"] {
++  color-scheme: dark;
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme="light"]) {
++    color-scheme: dark;
++  }
++}
++
+ *, *::before, *::after {
+   box-sizing: inherit;
+ }
+@@ -17,6 +31,11 @@ body {
+   -webkit-font-smoothing: antialiased;
+ }
+ 
++button, input, select, textarea {
++  color: inherit;
++  font-family: inherit;
++}
++
+ .mono, kbd, code {
+   font-family: var(--font-mono);
+   font-variant-numeric: tabular-nums;
+diff --git a/kanban/web/src/styles/spacing.css b/kanban/web/src/styles/spacing.css
+index 644cef3..0efb389 100644
+--- a/kanban/web/src/styles/spacing.css
++++ b/kanban/web/src/styles/spacing.css
+@@ -14,8 +14,31 @@
+   --radius-sm: 4px;
+   --radius-md: 6px;
+   --radius-lg: 10px;
++  --radius-full: 9999px;
+ 
+-  /* Interactive Elements & Touch Targets */
++  /* Typography Scale */
++  --text-xs: 0.75rem;
++  --text-sm: 0.8125rem;
++  --text-base: 0.9375rem;
++  --text-lg: 1.125rem;
++  --text-xl: 1.25rem;
++  --text-2xl: 1.5rem;
++  --text-h2: 1.25rem;
++
++  /* Font Weights */
++  --font-medium: 500;
++  --font-semibold: 600;
++
++  /* Elevation Shadows & Overlays */
++  --scrim-bg: rgba(0, 0, 0, 0.65);
++  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
++  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
++  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
++  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.25);
++
++  /* Animation & Interactive Elements & Touch Targets */
++  --gate-snapback-duration: 240ms;
++  --gate-snapback-timing: cubic-bezier(0.2, 0, 0, 1);
+   --emoji-pill: 24px;
+   --hint-max-w: 360px;
+   --hint-pad: 12px 14px;

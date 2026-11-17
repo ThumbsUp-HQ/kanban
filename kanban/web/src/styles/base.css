@@ -3,6 +3,20 @@ html {
   box-sizing: border-box;
 }
 
+:root {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
 *, *::before, *::after {
   box-sizing: inherit;
 }
@@ -15,6 +29,11 @@ body {
   font-size: var(--text-body);
   line-height: var(--leading-prose);
   -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea {
+  color: inherit;
+  font-family: inherit;
 }
 
 .mono, kbd, code {

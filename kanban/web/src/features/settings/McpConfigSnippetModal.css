@@ -16,7 +16,7 @@
 .kb-snippet-modal-card {
   width: 100%;
   max-width: 640px;
-  background-color: var(--card-bg, #161b22);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle, #30363d);
   border-radius: 8px;
   padding: 32px 40px;
@@ -24,7 +24,7 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  color: var(--text-primary, #e6edf3);
+  color: var(--fg-primary);
   font-family: var(--font-sans);
 }
 
@@ -38,7 +38,7 @@
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0;
-  color: var(--text-primary, #ffffff);
+  color: var(--fg-primary);
 }
 
 .kb-snippet-modal-close-btn {
@@ -46,7 +46,7 @@
   border: none;
   font-size: 1.5rem;
   line-height: 1;
-  color: var(--text-secondary, #8b949e);
+  color: var(--fg-secondary);
   cursor: pointer;
 }
 
@@ -125,7 +125,7 @@
   border: none;
   padding: 6px 12px;
   border-radius: 6px;
-  color: var(--text-secondary, #8b949e);
+  color: var(--fg-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -148,7 +148,7 @@
 
 .kb-snippet-url-label {
   font-size: 0.875rem;
-  color: var(--text-secondary, #8b949e);
+  color: var(--fg-secondary);
 }
 
 .kb-snippet-url-select {

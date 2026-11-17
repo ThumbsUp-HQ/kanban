@@ -7,15 +7,15 @@
   align-items: center;
   justify-content: center;
   padding: var(--prose-pad);
-  background-color: var(--surface-bg, #0d1117);
-  color: var(--text-primary, #e6edf3);
+  background-color: var(--bg-surface);
+  color: var(--fg-primary);
   font-family: var(--font-sans);
 }
 
 .kb-device-activate-card {
   width: 100%;
   max-width: 580px;
-  background-color: var(--card-bg, #161b22);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle, #30363d);
   border-radius: 8px;
   padding: 32px 40px;
@@ -31,13 +31,13 @@
   font-size: 1.5rem;
   font-weight: 600;
   margin: 0 0 8px;
-  color: var(--text-primary, #ffffff);
+  color: var(--fg-primary);
 }
 
 .kb-device-activate-subtitle {
   font-size: var(--text-body);
   line-height: var(--leading-prose);
-  color: var(--text-secondary, #8b949e);
+  color: var(--fg-secondary);
   margin: 0;
 }
 
@@ -50,7 +50,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   margin-bottom: 8px;
-  color: var(--text-primary, #c9d1d9);
+  color: var(--fg-primary);
 }
 
 .kb-device-code-input {
@@ -64,8 +64,8 @@
   padding: 12px 16px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle, #30363d);
-  background-color: var(--input-bg, #0d1117);
-  color: var(--text-primary, #58a6ff);
+  background-color: var(--bg-surface);
+  color: var(--fg-primary);
 }
 
 .kb-device-code-input:focus {
@@ -78,7 +78,7 @@
   margin-top: 12px;
   width: 100%;
   height: var(--prop-row-h);
-  background-color: var(--btn-primary-bg, #238636);
+  background-color: var(--accent-primary);
   color: #ffffff;
   border: 1px solid rgba(240, 246, 252, 0.1);
   border-radius: 6px;
@@ -125,13 +125,13 @@
 
 .kb-device-app-prop-label {
   font-size: 0.875rem;
-  color: var(--text-secondary, #8b949e);
+  color: var(--fg-secondary);
 }
 
 .kb-device-app-prop-value {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--text-primary, #e6edf3);
+  color: var(--fg-primary);
 }
 
 .kb-device-aal2-banner {
@@ -156,7 +156,7 @@
 .kb-device-group-title {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--text-primary, #c9d1d9);
+  color: var(--fg-primary);
   margin-bottom: 4px;
 }
 

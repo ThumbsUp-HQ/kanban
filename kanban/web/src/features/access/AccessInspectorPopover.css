@@ -20,7 +20,7 @@
   width: min(520px, calc(100vw - 32px));
   max-height: min(680px, 85vh);
   background-color: var(--bg-surface-raised, #ffffff);
-  color: var(--text-primary, #0f172a);
+  color: var(--fg-primary);
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: var(--radius-lg, 10px);
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
@@ -59,7 +59,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-primary, #0f172a);
+  color: var(--fg-primary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -80,15 +80,15 @@
   padding: 6px 8px;
   border-radius: 6px;
   cursor: pointer;
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .access-inspector__close-btn:hover {
-  background-color: var(--bg-surface-hover, #f1f5f9);
-  color: var(--text-primary, #0f172a);
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
 }
 
 .access-inspector__scope-banner {
@@ -96,7 +96,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background-color: var(--bg-surface-sunken, #f8fafc);
+  background-color: var(--bg-canvas);
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
   font-size: 13px;
   flex-shrink: 0;
@@ -104,11 +104,11 @@
 
 .access-inspector__scope-label {
   font-weight: 600;
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
 }
 
 .access-inspector__scope-badge {
-  color: var(--text-primary, #0f172a);
+  color: var(--fg-primary);
   font-weight: 500;
 }
 
@@ -133,7 +133,7 @@
   justify-content: space-between;
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 2px;
@@ -177,7 +177,7 @@
 
 .access-inspector__empty {
   font-size: 13px;
-  color: var(--text-muted, #94a3b8);
+  color: var(--fg-muted);
   font-style: italic;
   padding: 6px 16px;
 }
@@ -189,8 +189,8 @@
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  background-color: var(--bg-surface-sunken, #f1f5f9);
-  color: var(--text-secondary, #475569);
+  background-color: var(--bg-canvas);
+  color: var(--fg-secondary);
   border: 1px solid var(--border-subtle, #cbd5e1);
 }
 
@@ -220,7 +220,7 @@
 
 .access-inspector__tag {
   font-size: 11px;
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
   font-weight: 500;
 }
 
@@ -238,9 +238,9 @@
 }
 
 .access-inspector__row--redacted {
-  background-color: var(--bg-surface-sunken, #f8fafc);
+  background-color: var(--bg-canvas);
   border-style: dashed;
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
 }
 
 .access-inspector__redacted-label {
@@ -262,22 +262,22 @@
 }
 
 .access-inspector__btn--primary {
-  background-color: var(--primary, #2563eb);
+  background-color: var(--accent-primary);
   color: #ffffff;
 }
 
 .access-inspector__btn--primary:hover {
-  background-color: var(--primary-hover, #1d4ed8);
+  background-color: var(--accent-primary);
 }
 
 .access-inspector__btn--secondary {
   background-color: var(--bg-surface, #ffffff);
   border-color: var(--border-subtle, #cbd5e1);
-  color: var(--text-primary, #0f172a);
+  color: var(--fg-primary);
 }
 
 .access-inspector__btn--secondary:hover {
-  background-color: var(--bg-surface-hover, #f1f5f9);
+  background-color: var(--bg-hover);
 }
 
 .access-inspector__btn--danger {
@@ -344,7 +344,7 @@
 .access-inspector__loading {
   padding: 32px;
   text-align: center;
-  color: var(--text-secondary, #64748b);
+  color: var(--fg-secondary);
   font-size: 13px;
 }
 
