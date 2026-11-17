@@ -387,7 +387,12 @@ class TransitionEngine:
             limits = WasmRunLimits(timeout_ms=min(500, timeout_int))
             try:
                 res = self.wasm_runner.run_sync(wasm_bytes, hook_input_bytes, limits=limits)
-                hook_ms = (time.perf_counter() - t0) * 1000.0
+                raw_dur_ms = getattr(res, "duration_ms", None)
+                hook_ms = (
+                    float(raw_dur_ms)
+                    if isinstance(raw_dur_ms, (int, float))
+                    else (time.perf_counter() - t0) * 1000.0
+                )
                 cumulative_wasm_ms += hook_ms
                 duration_us = max(1, int(hook_ms * 1_000.0))
                 output_raw = (

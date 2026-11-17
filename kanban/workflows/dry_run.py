@@ -389,7 +389,13 @@ async def run_dry_run(
                     timeout_int = max(1, int(remaining_ms))
                     limits = WasmRunLimits(timeout_ms=min(500, timeout_int))
                     res = runner.run_sync(wasm_bytes, input_json_bytes, limits=limits)
-                    dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+                    raw_dur_ms = getattr(res, "duration_ms", None)
+                    hook_ms = (
+                        float(raw_dur_ms)
+                        if isinstance(raw_dur_ms, (int, float))
+                        else (time.perf_counter() - t0) * 1000.0
+                    )
+                    dur_us = max(1, int(hook_ms * 1000.0))
                     cumulative_us += dur_us
 
                     output_raw = res.output_bytes if hasattr(res, "output_bytes") else res

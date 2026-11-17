@@ -265,7 +265,7 @@ class TierAWasmRunner:
             tables=1,
             memories=1,
         )
-        ticks = max(1, math.ceil(effective_limits.timeout_ms / 5.0))
+        ticks = max(2, math.ceil(effective_limits.timeout_ms / 5.0) + 1)
         store.set_epoch_deadline(ticks)
 
         captured_output: list[bytes] = []
@@ -324,6 +324,7 @@ class TierAWasmRunner:
             msg = "Exported 'memory' is not a valid Memory object"
             raise WasmRunError(msg, code="WASM_BINARY_INVALID")
 
+        store.set_epoch_deadline(ticks)
         start_time = time.perf_counter()
         try:
             # Allocate guest buffer and copy input bytes
