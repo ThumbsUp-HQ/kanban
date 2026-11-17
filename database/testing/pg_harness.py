@@ -367,3 +367,28 @@ async def committed_db_session(
             async with pg_worker_db.connect() as conn:
                 await conn.execute(text(truncate_stmt))
                 await conn.commit()
+
+
+@pytest.fixture(autouse=True)
+async def _auto_cleanup_direct_pg_worker_db(
+    request: pytest.FixtureRequest,
+) -> AsyncGenerator[None, None]:
+    """Truncate worker DB when a test uses pg_worker_db directly without db_session."""
+    yield
+    fixturenames = request.fixturenames
+    if "committed_db_session" in fixturenames:
+        return
+    has_committed_marker = request.node.get_closest_marker("committed_db") is not None
+    uses_direct_engine = (
+        "pg_worker_db" in fixturenames
+        and "_test_db_context" not in fixturenames
+        and "db_session" not in fixturenames
+        and "db_conn" not in fixturenames
+    )
+    if (has_committed_marker or uses_direct_engine) and "pg_worker_db" in fixturenames:
+        engine: AsyncEngine = request.getfixturevalue("pg_worker_db")
+        truncate_stmt = _TRUNCATE_STATEMENTS.get(engine)
+        if truncate_stmt:
+            async with engine.connect() as conn:
+                await conn.execute(text(truncate_stmt))
+                await conn.commit()
