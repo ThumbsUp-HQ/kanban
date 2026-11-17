@@ -5,7 +5,7 @@ import '../views/listTable.css';
 
 export interface ListViewProps {
   issues: IssueItem[];
-  projectKey: string;
+  projectKey?: string;
   modulesEnabled?: boolean;
   selectedIds?: string[];
   onToggleSelect?: (key: string, selected: boolean) => void;
@@ -27,6 +27,7 @@ interface GroupSection {
 
 export function ListView({
   issues,
+  projectKey = 'KAN',
   modulesEnabled = true,
   selectedIds = [],
   onToggleSelect,
@@ -403,14 +404,32 @@ export function ListView({
                 <span className="list-section-count">{section.items.length}</span>
               </button>
 
-              <button
-                type="button"
-                className="list-section-new-btn"
-                onClick={onCreateIssue}
-                aria-label={`New work item in ${section.name}`}
-              >
-                + New work item
-              </button>
+              <div className="list-section-actions">
+                <button
+                  type="button"
+                  className="list-section-add-workflow-btn"
+                  data-testid={`section-add-workflow-btn-${section.name}`}
+                  title={`Attach workflow transition to ${section.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (typeof window !== 'undefined') {
+                      window.location.assign(
+                        `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(section.name)}&attach=1`,
+                      );
+                    }
+                  }}
+                >
+                  + Workflow
+                </button>
+                <button
+                  type="button"
+                  className="list-section-new-btn"
+                  onClick={onCreateIssue}
+                  aria-label={`New work item in ${section.name}`}
+                >
+                  + New work item
+                </button>
+              </div>
             </div>
 
             {!isCollapsed && (

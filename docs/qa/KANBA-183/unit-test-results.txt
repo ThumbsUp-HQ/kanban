@@ -1,0 +1,284 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 174 items
+
+kanban/tests/oauth/test_device_flow.py::test_user_code_generator_and_normalizer PASSED [  0%]
+kanban/tests/oauth/test_device_flow.py::test_rate_limiting_helpers PASSED [  1%]
+kanban/tests/oauth/test_device_flow.py::test_case_1_positive_device_flow PASSED [  1%]
+kanban/tests/oauth/test_device_flow.py::test_case_2_device_flow_abuse_and_security PASSED [  2%]
+kanban/tests/oauth/test_device_flow.py::test_case_3_personal_mcp_keys_lifecycle PASSED [  2%]
+kanban/tests/oauth/test_device_flow.py::test_device_flow_edge_cases PASSED [  3%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_1_positive_oauth_flow PASSED [  4%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_2_pkce_security PASSED  [  4%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_3_audience_binding_and_alg_confusion PASSED [  5%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_4_boundary_conditions PASSED [  5%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_5_admin_aal_and_approval_gate PASSED [  6%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_6_consent_narrowing_and_deauthorization PASSED [  6%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_7_metadata_and_security_invariants PASSED [  7%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_8_rfc7591_dynamic_registration_metadata_and_validation PASSED [  8%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_9_unauthenticated_authorize_browser_redirect_vs_json_api PASSED [  8%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_10_scoped_resource_indicators_and_bare_mcp PASSED [  9%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_11_mcp_api_key_label_and_project_scoping PASSED [  9%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [ 10%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [ 10%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [ 11%]
+kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [ 12%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 12%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 13%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 13%]
+kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 14%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_fragments_and_userinfo PASSED [ 14%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_resource_target_scenarios PASSED [ 15%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_descriptions_and_principal PASSED [ 16%]
+kanban/tests/oauth/test_oauth_unit.py::test_auth_card_config_normalizers PASSED [ 16%]
+kanban/tests/oauth/test_oauth_unit.py::test_format_validation_error PASSED [ 17%]
+kanban/tests/security/test_access_manifest.py::test_case_5_positive_access_manifest PASSED [ 17%]
+kanban/tests/security/test_access_manifest.py::test_case_6_anti_enumeration_redaction PASSED [ 18%]
+kanban/tests/security/test_access_manifest.py::test_case_access_manifest_branches PASSED [ 18%]
+kanban/tests/security/test_access_manifest.py::test_access_manifest_edge_cases PASSED [ 19%]
+kanban/tests/security/test_client_ip.py::test_case_04_xff_spoof_and_trusted_traversal PASSED [ 20%]
+kanban/tests/security/test_client_ip.py::test_case_05_ipv6_rotation_subnet_bucketing PASSED [ 20%]
+kanban/tests/security/test_client_ip.py::test_ipv4_mapped_ipv6_normalization PASSED [ 21%]
+kanban/tests/security/test_client_ip.py::test_env_var_trusted_proxies PASSED [ 21%]
+kanban/tests/security/test_client_ip.py::test_empty_or_malformed_scope_handling PASSED [ 22%]
+kanban/tests/security/test_client_ip.py::test_trusted_proxy_string_and_sequence_formats PASSED [ 22%]
+kanban/tests/security/test_client_ip.py::test_env_var_with_invalid_entries_and_empty PASSED [ 23%]
+kanban/tests/security/test_client_ip.py::test_xff_edge_cases PASSED      [ 24%]
+kanban/tests/security/test_client_ip.py::test_format_ip_and_header_scanning PASSED [ 24%]
+kanban/tests/security/test_envelope.py::test_01_positive_seal_and_open_round_trip PASSED [ 25%]
+kanban/tests/security/test_envelope.py::test_02_gcm_tag_tamper PASSED    [ 25%]
+kanban/tests/security/test_envelope.py::test_03_cut_and_paste_resistance PASSED [ 26%]
+kanban/tests/security/test_envelope.py::test_04_kid_downgrade_and_tampering PASSED [ 27%]
+kanban/tests/security/test_envelope.py::test_05_boundaries_and_limits PASSED [ 27%]
+kanban/tests/security/test_envelope.py::test_06_kek_rotation_via_rewrap_dek PASSED [ 28%]
+kanban/tests/security/test_envelope.py::test_10_logging_zero_leakage PASSED [ 28%]
+kanban/tests/security/test_envelope.py::test_static_kek_provider_validations PASSED [ 29%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_1_positive_mint_and_token_format PASSED [ 29%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_2_validation_and_db_checks PASSED [ 30%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_3_surface_isolation_and_revocation PASSED [ 31%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_4_triple_intersection_and_project_pin PASSED [ 31%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_5_internal_endpoints_and_mtls_boundary PASSED [ 32%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_6_concurrent_budget_exhaustion PASSED [ 32%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_7_edge_cases_and_branch_coverage PASSED [ 33%]
+kanban/tests/security/test_keys.py::test_decode_b64url_key_valid PASSED  [ 33%]
+kanban/tests/security/test_keys.py::test_decode_b64url_key_invalid PASSED [ 34%]
+kanban/tests/security/test_keys.py::test_case_11_keyring_file_valid_and_repr PASSED [ 35%]
+kanban/tests/security/test_keys.py::test_case_11_file_mode_0644_rejected PASSED [ 35%]
+kanban/tests/security/test_keys.py::test_case_11_symlink_keyring_rejected PASSED [ 36%]
+kanban/tests/security/test_keys.py::test_case_11_31_byte_key_rejected PASSED [ 36%]
+kanban/tests/security/test_keys.py::test_case_11_no_source_raises PASSED [ 37%]
+kanban/tests/security/test_keys.py::test_keyring_file_missing_or_directory PASSED [ 37%]
+kanban/tests/security/test_keys.py::test_keyring_file_missing_fields PASSED [ 38%]
+kanban/tests/security/test_keys.py::test_load_from_env PASSED            [ 39%]
+kanban/tests/security/test_keys.py::test_load_from_env_empty_kid PASSED  [ 39%]
+kanban/tests/security/test_keys.py::test_case_12_purpose_separation PASSED [ 40%]
+kanban/tests/security/test_keys.py::test_case_12_invalid_purpose PASSED  [ 40%]
+kanban/tests/security/test_keys.py::test_case_12_short_root_key PASSED   [ 41%]
+kanban/tests/security/test_keys.py::test_case_12_rfc5869_test_vector_1_primitive_match PASSED [ 41%]
+kanban/tests/security/test_mcp_keys.py::test_case_1_positive_mint_and_catalog PASSED [ 42%]
+kanban/tests/security/test_mcp_keys.py::test_case_2_surface_binding_and_forgery PASSED [ 43%]
+kanban/tests/security/test_mcp_keys.py::test_case_3_scope_negatives PASSED [ 43%]
+kanban/tests/security/test_mcp_keys.py::test_case_4_boundaries_and_lifecycle PASSED [ 44%]
+kanban/tests/security/test_mcp_keys.py::test_case_5_session_token_binding PASSED [ 44%]
+kanban/tests/security/test_mcp_keys.py::test_case_6_rls_isolation PASSED [ 45%]
+kanban/tests/security/test_mcp_keys.py::test_introspection_result_to_dict_and_helpers PASSED [ 45%]
+kanban/tests/security/test_mcp_keys.py::test_mint_and_revoke_edge_cases PASSED [ 46%]
+kanban/tests/security/test_mcp_scopable_keys.py::test_case_1_positive_global_bot_key PASSED [ 47%]
+kanban/tests/security/test_mcp_scopable_keys.py::test_case_2_positive_per_project_key PASSED [ 47%]
+kanban/tests/security/test_mcp_scopable_keys.py::test_case_3_personal_key_lifecycle_and_tool_narrowing PASSED [ 48%]
+kanban/tests/security/test_mcp_scopable_keys.py::test_case_4_privilege_escalation_blocked PASSED [ 48%]
+kanban/tests/security/test_mcp_scopable_keys.py::test_case_5_cidr_pin_and_shape_check_constraints PASSED [ 49%]
+kanban/tests/security/test_mcp_scopable_keys.py::test_case_6_unlimited_key_gate PASSED [ 50%]
+kanban/tests/security/test_permissions_and_obo.py::test_token_scope_parsing_and_names PASSED [ 50%]
+kanban/tests/security/test_permissions_and_obo.py::test_case_1_rbac_and_direct_acl_union PASSED [ 51%]
+kanban/tests/security/test_permissions_and_obo.py::test_case_2_explicit_deny_precedence_and_group_closure PASSED [ 51%]
+kanban/tests/security/test_permissions_and_obo.py::test_case_3_obo_intersection_narrowing PASSED [ 52%]
+kanban/tests/security/test_permissions_and_obo.py::test_case_4_disabled_principal_and_unknown_scope PASSED [ 52%]
+kanban/tests/security/test_permissions_and_obo.py::test_case_7_404_vs_403_discipline PASSED [ 53%]
+kanban/tests/security/test_ratelimit_decorator.py::test_case_08_fail_mode_closed_and_open PASSED [ 54%]
+kanban/tests/security/test_ratelimit_decorator.py::test_case_09_decorator_deny_contract PASSED [ 54%]
+kanban/tests/security/test_ratelimit_decorator.py::test_case_11_policy_validation_boundaries PASSED [ 55%]
+kanban/tests/security/test_ratelimit_decorator.py::test_predefined_policy_constants PASSED [ 55%]
+kanban/tests/security/test_ratelimit_decorator.py::test_build_rate_limiter_factory PASSED [ 56%]
+kanban/tests/security/test_ratelimit_decorator.py::test_decorator_default_factory_construction PASSED [ 56%]
+kanban/tests/security/test_ratelimit_decorator.py::test_deferred_valkey_client_eval_rejection PASSED [ 57%]
+kanban/tests/security/test_ratelimit_decorator.py::test_make_key_resolution_branches PASSED [ 58%]
+kanban/tests/security/test_ratelimit_decorator.py::test_decorator_app_state_dependencies PASSED [ 58%]
+kanban/tests/security/test_ratelimit_decorator.py::test_async_key_func_support PASSED [ 59%]
+kanban/tests/security/test_ratelimit_pg.py::test_case_01_pg_positive_sliding_window PASSED [ 59%]
+kanban/tests/security/test_ratelimit_pg.py::test_case_03_credential_stuffing_prevention PASSED [ 60%]
+kanban/tests/security/test_ratelimit_pg.py::test_case_06_privacy_pseudonymization PASSED [ 60%]
+kanban/tests/security/test_ratelimit_pg.py::test_case_07_window_slide_overlap_weighting PASSED [ 61%]
+kanban/tests/security/test_ratelimit_pg.py::test_case_10_pg_concurrency PASSED [ 62%]
+kanban/tests/security/test_ratelimit_pg.py::test_pg_reset_and_validation PASSED [ 62%]
+kanban/tests/security/test_ratelimit_pg.py::test_pg_constructor_and_engine_paths PASSED [ 63%]
+kanban/tests/security/test_ratelimit_pg.py::test_pg_rate_limiter_get_engine_resolution PASSED [ 63%]
+kanban/tests/security/test_ratelimit_valkey.py::test_case_02_valkey_positive_sliding_window PASSED [ 64%]
+kanban/tests/security/test_ratelimit_valkey.py::test_valkey_window_slide_overlap PASSED [ 64%]
+kanban/tests/security/test_ratelimit_valkey.py::test_valkey_reset_and_validation PASSED [ 65%]
+kanban/tests/security/test_ratelimit_valkey.py::test_valkey_timestamp_parameter_types PASSED [ 66%]
+kanban/tests/security/test_ratelimit_valkey.py::test_shared_contract_pg_and_valkey PASSED [ 66%]
+kanban/tests/security/test_read_taint.py::test_case_1_positive_read_taint_recorded PASSED [ 67%]
+kanban/tests/security/test_read_taint.py::test_case_2_canary_exfiltration_blocked PASSED [ 67%]
+kanban/tests/security/test_read_taint.py::test_case_3_session_escape_prevented PASSED [ 68%]
+kanban/tests/security/test_read_taint.py::test_case_4_allowed_paths_and_link_guard PASSED [ 68%]
+kanban/tests/security/test_read_taint.py::test_case_5_taint_expiry_allows_write PASSED [ 69%]
+kanban/tests/security/test_read_taint.py::test_case_6_missing_session_header_rejected PASSED [ 70%]
+kanban/tests/security/test_read_taint.py::test_case_7_unit_coverage_read_taint PASSED [ 70%]
+kanban/tests/security/test_scrubber.py::test_case_1_positive_sk_variants PASSED [ 71%]
+kanban/tests/security/test_scrubber.py::test_case_2_positive_github_and_aws PASSED [ 71%]
+kanban/tests/security/test_scrubber.py::test_case_3_positive_and_boundary_pem_private_keys PASSED [ 72%]
+kanban/tests/security/test_scrubber.py::test_case_4_positive_bearer_jwt_and_kanban_keys PASSED [ 72%]
+kanban/tests/security/test_scrubber.py::test_case_5_multi_secret_and_overlapping_spans PASSED [ 73%]
+kanban/tests/security/test_scrubber.py::test_case_6_false_positive_guard_corpus PASSED [ 74%]
+kanban/tests/security/test_scrubber.py::test_case_7_secret_non_retention_in_metadata PASSED [ 74%]
+kanban/tests/security/test_scrubber.py::test_case_8_redos_and_linear_time_boundary PASSED [ 75%]
+kanban/tests/security/test_scrubber.py::test_edge_cases_and_branch_coverage PASSED [ 75%]
+kanban/tests/mcp/test_live_mcp_mount.py::test_rfc9728_protected_resource_metadata_endpoints PASSED [ 76%]
+kanban/tests/mcp/test_live_mcp_mount.py::test_mcp_surfaces_unauthenticated_401 PASSED [ 77%]
+kanban/tests/mcp/test_live_mcp_mount.py::test_live_mcp_authenticated_session_and_tools PASSED [ 77%]
+kanban/tests/mcp/test_live_mcp_mount.py::test_live_mcp_bearer_token_whitespace_tolerance PASSED [ 78%]
+kanban/tests/mcp/test_live_mcp_mount.py::test_in_process_client_security_headers_and_loopback PASSED [ 78%]
+kanban/tests/api/test_workspaces_api.py::test_case_1_list_workspaces_server_admin_and_member PASSED [ 79%]
+kanban/tests/api/test_workspaces_api.py::test_case_2_create_workspace_and_role_bindings PASSED [ 79%]
+kanban/tests/api/test_workspaces_api.py::test_case_3_switch_workspace_lifecycle_and_cookies PASSED [ 80%]
+kanban/tests/api/test_workspaces_api.py::test_case_4_member_cross_workspace_matching_email_and_switching PASSED [ 81%]
+kanban/tests/api/test_workspaces_api.py::test_case_5_workspace_edge_cases_and_error_branches PASSED [ 81%]
+kanban/tests/api/test_workspaces_api.py::test_case_6_coverage_direct_switch_and_fallback_cookies PASSED [ 82%]
+kanban/tests/api/test_workspaces_api.py::test_case_7_unit_coverage_direct_invocations PASSED [ 82%]
+kanban/tests/api/test_workspaces_api.py::test_case_8_workspaces_under_kanban_app_force_rls PASSED [ 83%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_01_admin_crud_lifecycle_all_7_formats PASSED [ 83%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_02_member_redacted_view_and_mutation_denial PASSED [ 84%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_03_aal2_required_gate PASSED [ 85%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_04_schema_and_integrity_errors PASSED [ 85%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_05_anti_enumeration_discipline PASSED [ 86%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_06_service_branches_and_edge_cases PASSED [ 86%]
+kanban/tests/custom_fields/test_custom_fields_api.py::test_07_non_admin_redaction_tier_target_scope_credential_mode PASSED [ 87%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_1_ldap_any_user_config_defaults PASSED [ 87%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_1_ldap_any_user_evaluates_allowed_standard_member PASSED [ 88%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_2_ldap_admin_group_grants_server_admin PASSED [ 89%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_2_ldap_user_group_grants_workspace_member PASSED [ 89%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_2_ldap_group_restricted_rejects_unlisted PASSED [ 90%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_3_active_directory_preset_and_fallback_email PASSED [ 90%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_4_github_oauth_config_and_claims_logic PASSED [ 91%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_5_oauth_admin_and_user_allowlists PASSED [ 91%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_6_local_user_provisioning_and_login_mfa_rules PASSED [ 92%]
+kanban/tests/auth/test_auth_use_cases.py::test_use_case_7_principal_helpers_and_password_reset PASSED [ 93%]
+mcp/tests/test_connection_scoping.py::test_case_1_positive_global_meatloaf_bot_flow PASSED [ 93%]
+mcp/tests/test_connection_scoping.py::test_case_2_positive_ambiguous_global_key_disambiguation PASSED [ 94%]
+mcp/tests/test_connection_scoping.py::test_case_3_positive_project_pinned_repo_config PASSED [ 94%]
+mcp/tests/test_connection_scoping.py::test_case_4_security_monotonic_narrowing_and_cross_project_block PASSED [ 95%]
+mcp/tests/test_connection_scoping.py::test_case_5_security_conflicting_headers_and_session_replay PASSED [ 95%]
+mcp/tests/test_connection_scoping.py::test_scoping_header_path_project_mismatch PASSED [ 96%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_token_inheritance PASSED [ 97%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_violations PASSED [ 97%]
+mcp/tests/test_connection_scoping.py::test_enforce_connection_scope_auto_fill_and_parent_identifier PASSED [ 98%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_workspace_valid PASSED [ 98%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_slug_vs_uuid_matching PASSED [ 99%]
+mcp/tests/test_connection_scoping.py::test_bare_mcp_routing_and_unauthorized_metadata PASSED [100%]
+
+============================= 174 passed in 15.44s =============================
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+
+ ✓ src/api/problem.test.ts (11 tests) 33ms
+ ✓ src/features/auth/AuthCardButton.test.tsx (5 tests) 343ms
+ ✓ src/features/board/BoardColumn.test.tsx (6 tests) 268ms
+ ✓ src/features/admin-auth/AuthCardRow.test.tsx (7 tests) 497ms
+   ✓ AuthCardRow (KB-P3-36) (7)
+     ✓ renders card row with Primary badge, latency chip, and triggers edit/toggle 320ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (8 tests) 533ms
+ ✓ src/features/docs/DocsTreeNav.test.tsx (9 tests) 789ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs/PageEditorPane.test.tsx (10 tests) 682ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (10 tests) 1019ms
+ ✓ src/app/AppShell.test.tsx (3 tests) 965ms
+   ✓ AppShell (3)
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 527ms
+     ✓ toggles mobile sidebar via hamburger button and closes it 304ms
+ ✓ src/features/docs/DocsWorkspaceView.test.tsx (7 tests) 422ms
+ ✓ src/features/list/ListView.test.tsx (10 tests) 1498ms
+   ✓ ListView (10)
+     ✓ renders external assignee with literal hint and links KAN-142 to peek 393ms
+     ✓ renders Single Filter Card Dropdown and handles search, state, priority, and + New (KANBA-174) 315ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (8 tests) 662ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (20 tests) 865ms
+stderr | src/app/Sidebar.test.tsx > Sidebar > fetches dynamic projects from /api/v1/projects and opens CreateProjectModal via + Project button or custom event
+An update to Sidebar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/app/Sidebar.test.tsx > Sidebar > fetches workspaces, toggles dropdown menu, switches workspace, and opens CreateWorkspaceModal
+An update to MemoryRouter inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/app/Sidebar.test.tsx (14 tests) 1937ms
+   ✓ Sidebar (14)
+     ✓ renders sidebar navigation items in the specified order with [👍] 👍kanban branding 552ms
+     ✓ sets aria-current on active workspace and project subitem links 531ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (20 tests) 2293ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (20)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 420ms
+stderr | src/app/routes.test.tsx > routes and AppShell integration > renders WorkspaceHomeView projects from /api/v1/projects and opens CreateProjectModal
+An update to Sidebar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/app/routes.test.tsx > routes and AppShell integration > renders WorkspaceHomeView projects from /api/v1/projects and opens CreateProjectModal
+An update to IssuesWorkspaceRoute inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to IssuesWorkspaceRoute inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/app/routes.test.tsx (17 tests) 1874ms
+   ✓ routes and AppShell integration (13)
+     ✓ renders AppShell with sidebar items, breadcrumb, and layout=board selection 610ms
+     ✓ renders various project routes, auth routes, and dev story routes 524ms
+
+ Test Files  16 passed (16)
+      Tests  165 passed (165)
+   Start at  19:09:17
+   Duration  4.94s (environment 47%, tests 30%, import 15%, transform 7%, worker 1%)
+

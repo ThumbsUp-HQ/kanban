@@ -90,6 +90,8 @@ export function BoardColumn({
   onNewItem,
   dropTargetFactory = dropTargetForElements,
 }: BoardColumnProps): JSX.Element {
+  const pathMatch = typeof window !== 'undefined' ? /\/projects\/([^/]+)/.exec(window.location.pathname) : null;
+  const projectKey = pathMatch?.[1] ?? 'KAN';
   const colRef = useRef<HTMLDivElement | null>(null);
   const parentRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -190,6 +192,22 @@ export function BoardColumn({
           {wipLabel && <span className="board-column-wip">{wipLabel}</span>}
         </div>
         <div className="board-column-header-right">
+          <button
+            type="button"
+            className="board-column-add-workflow-btn"
+            data-testid={`section-add-workflow-btn-${state.name}`}
+            title={`Attach workflow transition to ${state.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (typeof window !== 'undefined') {
+                window.location.assign(
+                  `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
+                );
+              }
+            }}
+          >
+            + Workflow
+          </button>
           {isWipExceeded && (
             <EmojiHint
               kind="warning"

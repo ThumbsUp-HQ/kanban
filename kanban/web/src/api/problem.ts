@@ -27,7 +27,40 @@ export class ApiProblem extends Error {
     const title = pickString(obj, 'title');
     const detail = pickString(obj, 'detail');
     const resolvedCode = code !== undefined && code.trim() !== '' ? code : 'UNKNOWN';
-    super(detail ?? title ?? `API error ${String(status)} (${resolvedCode})`);
+    let message = detail ?? title ?? `API error ${String(status)} (${resolvedCode})`;
+    if (Array.isArray(obj.errors) && obj.errors.length > 0) {
+      const errorSummaries = obj.errors
+        .map((entry) => {
+          if (entry !== null && typeof entry === 'object') {
+            const p = (entry as Record<string, unknown>).path;
+            const m = (entry as Record<string, unknown>).message;
+            if (p !== undefined && m !== undefined) {
+              let pathStr = '';
+              if (Array.isArray(p)) {
+                pathStr = p
+                  .map((x) => (typeof x === 'string' ? x : typeof x === 'number' ? String(x) : ''))
+                  .filter((x) => x !== '')
+                  .join('.');
+              } else if (typeof p === 'string') {
+                pathStr = p;
+              } else if (typeof p === 'number') {
+                pathStr = String(p);
+              }
+              const msgStr = typeof m === 'string' ? m : typeof m === 'number' ? String(m) : '';
+              if (pathStr && msgStr) {
+                return `${pathStr}: ${msgStr}`;
+              }
+            }
+          }
+          return null;
+        })
+        .filter((s): s is string => s !== null);
+
+      if (errorSummaries.length > 0) {
+        message = `${message}: ${errorSummaries.join(', ')}`;
+      }
+    }
+    super(message);
     this.data = obj;
     this.name = 'ApiProblem';
     this.status = status;

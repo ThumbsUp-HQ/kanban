@@ -11,6 +11,9 @@ import uuid
 import pytest
 from joserfc import jwt
 
+from kanban.api.problems import format_validation_error
+from kanban.auth.ldap.config import LdapCardConfig
+from kanban.auth.oidc.config import OidcCardConfig
 from kanban.oauth.jwt import (
     OAuthTokenError,
     _get_signing_eckey,
@@ -23,6 +26,7 @@ from kanban.oauth.server import (
     OAuth2Error,
     RegistrationRateLimiter,
     check_registration_rate_limit,
+    parse_resource_target,
     parse_surface_from_resource,
     render_consent_screen,
     validate_redirect_uri,
@@ -199,3 +203,118 @@ def test_get_jwks_cache() -> None:
     jwks2 = get_jwks()
     assert jwks1 == jwks2
     assert len(jwks1["keys"]) >= 1
+
+
+def test_validate_registration_redirect_uris_fragments_and_userinfo() -> None:
+    """Test rejection of fragment and userinfo in redirect URIs and IPv6 loopback acceptance."""
+    # Fragment rejection
+    with pytest.raises(OAuth2Error) as exc_frag:
+        validate_registration_redirect_uris(["https://example.com/cb#fragment"])
+    assert exc_frag.value.status_code == 400
+    assert "fragment" in exc_frag.value.description
+
+    # Userinfo rejection
+    with pytest.raises(OAuth2Error) as exc_user:
+        validate_registration_redirect_uris(["http://user:pass@127.0.0.1/cb"])
+    assert exc_user.value.status_code == 400
+    assert "userinfo" in exc_user.value.description
+
+    # IPv6 loopback acceptance
+    validate_registration_redirect_uris(
+        [
+            "http://[::1]:8080/callback",
+            "http://::1:8080/callback",
+        ]
+    )
+
+
+def test_parse_resource_target_scenarios() -> None:
+    """Test parsing bare /mcp and scoped resource indicators."""
+    assert parse_resource_target("https://auth.kanban/mcp") == ("agent", None, None)
+    assert parse_resource_target("https://auth.kanban/mcp/w/demo-ws") == ("agent", "demo-ws", None)
+    assert parse_resource_target("https://auth.kanban/mcp/w/demo-ws/p/PROJ") == (
+        "agent",
+        "demo-ws",
+        "PROJ",
+    )
+    assert parse_resource_target("https://auth.kanban/mcp/agent/w/demo-ws/p/PROJ") == (
+        "agent",
+        "demo-ws",
+        "PROJ",
+    )
+    assert parse_resource_target("https://auth.kanban/mcp/docs/w/demo-ws") == (
+        "docs",
+        "demo-ws",
+        None,
+    )
+    assert parse_resource_target("https://auth.kanban/mcp/admin") == ("admin", None, None)
+
+    # Invalid target
+    with pytest.raises(OAuth2Error) as exc:
+        parse_resource_target("https://auth.kanban/not-mcp")
+    assert exc.value.status_code == 400
+    assert exc.value.error == "invalid_target"
+
+
+def test_render_consent_screen_with_descriptions_and_principal() -> None:
+    """Test consent screen rendering with scope descriptions and signed-in principal display."""
+    resp = render_consent_screen(
+        client_name="Test Tool",
+        redirect_uri="https://example.com/cb",
+        surface="agent",
+        requested_scopes=["agent:read", "agent:write"],
+        state="st123",
+        code_challenge="chal",
+        code_challenge_method="S256",
+        resource="https://auth.kanban/mcp",
+        client_id="cid-99",
+        csrf_token="csrf-99",  # noqa: S106
+        principal_display="alice@test.local",
+    )
+    assert resp.status_code == 200
+    body = bytes(resp.body).decode("utf-8")
+    assert "Signed in as <strong>alice@test.local</strong>" in body
+    assert "Read-only access to boards" in body
+    assert "Read and write access to tickets" in body
+
+
+def test_auth_card_config_normalizers() -> None:
+    """Test alias normalization in OidcCardConfig and LdapCardConfig."""
+    # OidcCardConfig
+    oidc = OidcCardConfig.model_validate(
+        {
+            "kind": "OIDC",
+            "issuer_url": "https://accounts.google.com",
+            "token_auth_method": "private_key_jwt",
+            "pkce_method": "S256",
+            "client_id": "google-client-id",
+        }
+    )
+    assert oidc.issuer == "https://accounts.google.com"
+    assert oidc.client_auth == "private_key_jwt"
+
+    # LdapCardConfig
+    ldap = LdapCardConfig.model_validate(
+        {
+            "kind": "LDAP",
+            "server_url": "ldap://ldap.example.com",
+            "start_tls": True,
+            "bind_dn": "cn=admin,dc=example,dc=com",
+            "user_filter": "(&(objectClass=user)(sAMAccountName={username}))",
+            "base_dn": "dc=example,dc=com",
+            "spki_sha256_pin": "a" * 64,
+        }
+    )
+    assert ldap.url == "ldap://ldap.example.com"
+    assert ldap.transport_mode == "starttls"
+    assert ldap.service_bind_dn == "cn=admin,dc=example,dc=com"
+    assert ldap.user_search_filter == "(&(objectClass=user)(sAMAccountName={username}))"
+    assert ldap.spki_sha256_pins == ["a" * 64]
+
+
+def test_format_validation_error() -> None:
+    """Test that format_validation_error strips pydantic documentation URLs."""
+    raw = "Value error, extra field not permitted [URL: https://errors.pydantic.dev/2.10/v/extra_forbidden]"
+    cleaned = format_validation_error(Exception(raw))
+    assert "https://errors.pydantic.dev" not in cleaned
+    assert "extra field not permitted" in cleaned

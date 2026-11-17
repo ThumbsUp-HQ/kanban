@@ -22,10 +22,16 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
     vi.restoreAllMocks();
   });
 
-  function renderPage(props: { isAdmin?: boolean; projectKey?: string } = {}) {
+  function renderPage(
+    props: { isAdmin?: boolean; projectKey?: string; initialEntries?: string[] } = {},
+  ) {
     return render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/projects/${props.projectKey ?? 'KAN'}/settings/workflows`]}>
+        <MemoryRouter
+          initialEntries={
+            props.initialEntries ?? [`/projects/${props.projectKey ?? 'KAN'}/settings/workflows`]
+          }
+        >
           <WorkflowStudioPage
             projectKeyOverride={props.projectKey ?? 'KAN'}
             isAdmin={props.isAdmin ?? true}
@@ -236,6 +242,23 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('422 REORDER_SET_MISMATCH');
+    });
+  });
+
+  it('reads ?to_state= and ?attach=1 on mount to auto-open AttachHookDialog', async () => {
+    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
+    vi.spyOn(api, 'fetchProjectStates').mockResolvedValue([
+      { id: 'st-1', name: 'Backlog' },
+      { id: 'st-2', name: 'In Progress' },
+      { id: 'st-3', name: 'Done' },
+    ]);
+
+    renderPage({
+      initialEntries: ['/projects/KAN/settings/workflows?to_state=In%20Progress&attach=1'],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /Attach Workflow/i })).toBeDefined();
     });
   });
 });

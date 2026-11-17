@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import logging
+import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
 
     from mcp.internal_client import KanbanApiClient
+    from mcp.scoping import ConnectionScope
 
 __all__ = [
     "DEFAULT_CACHE_TTL_S",
@@ -119,6 +121,7 @@ class McpAuthContext:
     scope_tier: str | None = None
     owner_kind: str | None = None
     allowed_projects: list[str] | None = None
+    allowed_project_keys: list[str] | None = None
     allowed_workspace_ids: list[str] | None = None
     allowed_project_ids: list[str] | None = None
     capability_mask: int = 7
@@ -223,18 +226,36 @@ class McpAuthMiddleware:
         if self.surface is not None:
             return self.surface
 
-        if "/mcp/agent" in path:
-            return Surface.AGENT
         if "/mcp/docs" in path:
             return Surface.DOCS
         if "/mcp/admin" in path:
             return Surface.ADMIN
+        if "/mcp/agent" in path or path == "/mcp" or path.startswith("/mcp/"):
+            return Surface.AGENT
         return None
 
-    def _unauthorized_response(self, surface: Surface) -> Response:
+    def _unauthorized_response(
+        self,
+        surface: Surface,
+        req_scope: ConnectionScope | None = None,
+        headers: Headers | None = None,
+    ) -> Response:
         """Return 401 with WWW-Authenticate header carrying protected-resource metadata."""
-        base_url = self.settings.kanban_api_base_url.rstrip("/")
+        env_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN", "").strip()
+        if env_origin:
+            base_url = env_origin.rstrip("/")
+        elif headers and headers.get("x-forwarded-proto") and headers.get("x-forwarded-host"):
+            proto = headers["x-forwarded-proto"]
+            host = headers["x-forwarded-host"]
+            base_url = f"{proto}://{host}".rstrip("/")
+        else:
+            base_url = self.settings.kanban_api_base_url.rstrip("/")
+
         metadata_url = f"{base_url}/.well-known/oauth-protected-resource/mcp/{surface.value}"
+        if req_scope and getattr(req_scope, "workspace_slug", None):
+            metadata_url += f"/w/{req_scope.workspace_slug}"
+            if getattr(req_scope, "project_key", None):
+                metadata_url += f"/p/{req_scope.project_key}"
         challenge = f'Bearer realm="kanban-mcp", resource_metadata="{metadata_url}"'
         return JSONResponse(
             {"error": "unauthorized", "message": "Bearer authentication required"},
@@ -280,13 +301,13 @@ class McpAuthMiddleware:
         auth_header = headers.get("authorization", "").strip()
         parts = auth_header.split(maxsplit=1)
         if len(parts) != 2 or parts[0].lower() != "bearer":  # noqa: PLR2004
-            resp = self._unauthorized_response(surface)
+            resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
             await resp(scope, receive, send)
             return
 
         token = parts[1].strip()
         if not token:
-            resp = self._unauthorized_response(surface)
+            resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
             await resp(scope, receive, send)
             return
 
@@ -346,17 +367,17 @@ class McpAuthMiddleware:
                     resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
                     await resp(scope, receive, send)
                     return
-                resp = self._unauthorized_response(surface)
+                resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
                 await resp(scope, receive, send)
                 return
             except Exception:
                 _logger.exception("Introspection request failed")
-                resp = self._unauthorized_response(surface)
+                resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
                 await resp(scope, receive, send)
                 return
 
             if not isinstance(res_data, dict):
-                resp = self._unauthorized_response(surface)
+                resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
                 await resp(scope, receive, send)
                 return
 
@@ -369,7 +390,9 @@ class McpAuthMiddleware:
                 if reason == "EPHEMERAL_CALL_BUDGET_EXCEEDED":
                     intro_result = res_data
                 else:
-                    resp = self._unauthorized_response(surface)
+                    resp = self._unauthorized_response(
+                        surface, req_scope=req_scope, headers=headers
+                    )
                     await resp(scope, receive, send)
                     return
             else:
@@ -442,6 +465,12 @@ class McpAuthMiddleware:
             if isinstance(allowed_projects_raw, list)
             else None
         )
+        allowed_project_keys_raw = intro_result.get("allowed_project_keys")
+        allowed_project_keys = (
+            [str(k) for k in allowed_project_keys_raw]
+            if isinstance(allowed_project_keys_raw, list)
+            else None
+        )
         aal = int(intro_result.get("aal_level", 2))
         auth_context = McpAuthContext(
             token=token,
@@ -463,6 +492,7 @@ class McpAuthMiddleware:
             scope_tier=intro_result.get("scope_tier"),
             owner_kind=intro_result.get("owner_kind"),
             allowed_projects=allowed_projects,
+            allowed_project_keys=allowed_project_keys,
             allowed_workspace_ids=(
                 [str(w) for w in intro_result["allowed_workspace_ids"]]
                 if intro_result.get("allowed_workspace_ids")

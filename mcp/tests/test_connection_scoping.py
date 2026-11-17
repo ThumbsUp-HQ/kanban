@@ -925,3 +925,109 @@ def test_intersect_key_and_connection_scope_workspace_valid() -> None:
     # parse_connection_scope without headers
     res_no_headers = parse_connection_scope("/mcp/agent", None)
     assert res_no_headers.is_global
+
+
+def test_intersect_key_and_connection_scope_slug_vs_uuid_matching() -> None:
+    """Ensure key with workspace_id UUID matches connection using workspace_slug or UUID."""
+    ws_uuid = "00000000-0000-0000-0000-000000000002"
+    ctx_ws = McpAuthContext(
+        token="test",  # noqa: S106
+        token_sha256=b"123",
+        surface=Surface.AGENT,
+        scopes=frozenset({"agent:read"}),
+        workspace_id=ws_uuid,
+        workspace_slug="kanban",
+        scope_tier="workspace",
+    )
+
+    # 1. Matches connection by slug
+    res_slug = intersect_key_and_connection_scope(
+        ctx_ws, ConnectionScope(ScopeMode.WORKSPACE, workspace_slug="kanban")
+    )
+    assert res_slug.workspace_slug == "kanban"
+
+    # 2. Matches connection by UUID string
+    res_uuid = intersect_key_and_connection_scope(
+        ctx_ws, ConnectionScope(ScopeMode.WORKSPACE, workspace_slug=ws_uuid)
+    )
+    assert res_uuid.workspace_slug == ws_uuid
+
+    # 3. Rejects connection to different workspace
+    with pytest.raises(KbMcpError) as exc_ws:
+        intersect_key_and_connection_scope(
+            ctx_ws, ConnectionScope(ScopeMode.WORKSPACE, workspace_slug="other-workspace")
+        )
+    assert exc_ws.value.code == McpErrorCode.KEY_SCOPE_VIOLATION
+
+    # Project context
+    ctx_proj = McpAuthContext(
+        token="test",  # noqa: S106
+        token_sha256=b"123",
+        surface=Surface.AGENT,
+        scopes=frozenset({"agent:read"}),
+        workspace_id=ws_uuid,
+        workspace_slug="kanban",
+        scope_tier="project",
+        allowed_projects=["KANBA"],
+        allowed_project_keys=["KANBA"],
+    )
+
+    # 4. Matches project scope by project key
+    res_proj = intersect_key_and_connection_scope(
+        ctx_proj,
+        ConnectionScope(
+            ScopeMode.PROJECT,
+            workspace_slug="kanban",
+            project_key="KANBA",
+        ),
+    )
+    assert res_proj.project_key == "KANBA"
+
+    # 5. Rejects foreign project scope
+    with pytest.raises(KbMcpError) as exc_proj:
+        intersect_key_and_connection_scope(
+            ctx_proj,
+            ConnectionScope(
+                ScopeMode.PROJECT,
+                workspace_slug="kanban",
+                project_key="FOREIGN",
+            ),
+        )
+    assert exc_proj.value.code == McpErrorCode.KEY_SCOPE_VIOLATION
+
+
+@pytest.mark.asyncio
+async def test_bare_mcp_routing_and_unauthorized_metadata() -> None:
+    """Test bare /mcp and /mcp/w/... return 401 with WWW-Authenticate carrying scoped metadata."""
+    client, _ = _build_scoping_test_env()
+
+    # 1. Bare /mcp returns 401 with resource_metadata for agent surface
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    resp_bare = await client.post("/mcp", json=body)
+    assert resp_bare.status_code == 401
+    auth_bare = resp_bare.headers["www-authenticate"]
+    expected_bare = (
+        'resource_metadata="https://127.0.0.1:8443/'
+        '.well-known/oauth-protected-resource/mcp/agent"'
+    )
+    assert expected_bare in auth_bare
+
+    # 2. Scoped /mcp/w/kanban returns 401 with /w/kanban suffix
+    resp_scoped = await client.post("/mcp/w/kanban", json=body)
+    assert resp_scoped.status_code == 401
+    auth_scoped = resp_scoped.headers["www-authenticate"]
+    expected_scoped = (
+        'resource_metadata="https://127.0.0.1:8443/'
+        '.well-known/oauth-protected-resource/mcp/agent/w/kanban"'
+    )
+    assert expected_scoped in auth_scoped
+
+    # 3. Scoped /mcp/w/kanban/p/KANBA returns 401 with /w/kanban/p/KANBA suffix
+    resp_proj = await client.post("/mcp/w/kanban/p/KANBA", json=body)
+    assert resp_proj.status_code == 401
+    auth_proj = resp_proj.headers["www-authenticate"]
+    expected_proj = (
+        'resource_metadata="https://127.0.0.1:8443/'
+        '.well-known/oauth-protected-resource/mcp/agent/w/kanban/p/KANBA"'
+    )
+    assert expected_proj in auth_proj

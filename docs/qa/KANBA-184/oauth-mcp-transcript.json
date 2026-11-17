@@ -1,0 +1,31 @@
+[
+  {
+    "step": "discovery",
+    "url": "/.well-known/oauth-protected-resource",
+    "status": 200,
+    "resource": "http://test/mcp/agent",
+    "scopes_supported": [
+      "agent:read",
+      "agent:write"
+    ]
+  },
+  {
+    "step": "registration",
+    "url": "/oauth/register",
+    "status": 201,
+    "client_id": "client_sHLJjhev9E_djYNBivnZgg",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token",
+      "urn:ietf:params:oauth:grant-type:device_code"
+    ],
+    "token_endpoint_auth_method": "none"
+  },
+  {
+    "step": "authorization",
+    "url": "/oauth/authorize",
+    "status": 200,
+    "consent_rendered": true,
+    "signed_in_badge": true
+  }
+]

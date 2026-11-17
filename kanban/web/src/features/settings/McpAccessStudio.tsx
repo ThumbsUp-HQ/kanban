@@ -81,6 +81,7 @@ export function McpAccessStudio({
   const [confirmUnlimited, setConfirmUnlimited] = useState<boolean>(false);
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [minting, setMinting] = useState<boolean>(false);
+  const [mintError, setMintError] = useState<string | null>(null);
 
   // Snippet modal state (ephemeral secret)
   const [activeSnippetKey, setActiveSnippetKey] = useState<string | undefined>(undefined);
@@ -124,11 +125,13 @@ export function McpAccessStudio({
       return;
     }
     setMinting(true);
+    setMintError(null);
     try {
       const minted = await mintPersonalMcpKey({
         label: newKeyLabel.trim(),
         surface: newKeySurface,
         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
+        scope_tier: tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
         ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
         ...(isUnlimited
           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
@@ -148,8 +151,13 @@ export function McpAccessStudio({
       setConfirmUnlimited(false);
       setDisabledTools([]);
       setNewKeyExpiry(60);
-    } catch {
-      // Handle error
+      setMintError(null);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setMintError(err.message);
+      } else {
+        setMintError('Failed to mint MCP key.');
+      }
     } finally {
       setMinting(false);
     }
@@ -457,6 +465,7 @@ export function McpAccessStudio({
                 className="kb-snippet-modal-close-btn"
                 onClick={() => {
                   setShowMintModal(false);
+                  setMintError(null);
                 }}
               >
                 x
@@ -468,6 +477,11 @@ export function McpAccessStudio({
               }}
               className="kb-mcp-mint-form"
             >
+              {mintError && (
+                <div className="kb-mcp-mint-error" role="alert" data-testid="mint-error-banner">
+                  {mintError}
+                </div>
+              )}
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-label-input" className="kb-mcp-form-label">
                   Key Label:
@@ -595,6 +609,7 @@ export function McpAccessStudio({
                   className="kb-snippet-copy-btn"
                   onClick={() => {
                     setShowMintModal(false);
+                    setMintError(null);
                     setIsUnlimited(false);
                     setConfirmUnlimited(false);
                     setDisabledTools([]);

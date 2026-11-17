@@ -46,7 +46,7 @@ class SessionCookieResolver:
         cookie_header = request.headers.get("cookie")
         cookie_val = extract_session_cookie(cookie_header)
         if not cookie_val:
-            return None
+            return await self._resolve_subject_token(request)
 
         # Verify HMAC signature and bounds (rejects without DB access on invalid signature)
         token = parse_session_cookie(cookie_val, self._service.session_hmac_key)
@@ -80,6 +80,69 @@ class SessionCookieResolver:
             session_id=user_session.id,
             mfa_pending=user_session.mfa_pending,
             aal2_verified_at=user_session.aal2_verified_at,
+        )
+        request.state.principal = ctx
+        return ctx
+
+    async def _resolve_subject_token(self, request: Request) -> PrincipalContext | None:
+        """Resolve MCP API key, ephemeral token, or OAuth JWT from X-KB-Subject-Token or Bearer."""
+        raw_token = request.headers.get("x-kb-subject-token")
+        if not raw_token:
+            auth_hdr = request.headers.get("authorization") or ""
+            if auth_hdr.lower().startswith("bearer "):
+                raw_token = auth_hdr[7:].strip()
+        if not raw_token:
+            return None
+
+        from sqlalchemy import text  # noqa: PLC0415
+
+        from kanban.security.mcp_keys import introspect_subject_token  # noqa: PLC0415
+
+        anon_ctx = RLSContext(
+            principal_id=uuid.UUID(int=0),
+            workspace_id=uuid.UUID(int=0),
+            token_scopes=("auth",),
+            aal_level=1,
+        )
+        async with self._session_factory.session(anon_ctx) as async_session:
+            intro = await introspect_subject_token(async_session, raw_token)
+            if not intro.active or intro.principal_id is None:
+                return None
+            scope_ws = request.headers.get("x-kb-scope-workspace")
+            if scope_ws:
+                scope_ws_clean = scope_ws.strip()
+                try:
+                    target_ws = uuid.UUID(scope_ws_clean)
+                except ValueError:
+                    target_ws = (
+                        await async_session.execute(
+                            text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
+                            {"ident": scope_ws_clean},
+                        )
+                    ).scalar_one_or_none()
+                ws_id = target_ws or intro.workspace_id
+            else:
+                ws_id = intro.workspace_id
+
+            if ws_id is None or ws_id == uuid.UUID(int=0):
+                def_ws = (
+                    await async_session.execute(
+                        text("SELECT get_default_workspace_id()")
+                    )
+                ).scalar_one_or_none()
+                ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
+
+        is_ephemeral = intro.token_kind == "ephemeral" or raw_token.startswith("kb_agt_eph_")  # noqa: S105
+        ctx = PrincipalContext(
+            principal_id=intro.principal_id,
+            workspace_id=ws_id,
+            token_scopes=tuple(intro.scopes or ()),
+            aal_level=2 if intro.surface == "admin" else 1,
+            agent_principal_id=intro.agent_principal_id,
+            ephemeral_project_id=intro.project_id if is_ephemeral else None,
+            read_only=is_ephemeral,
+            scope_tier=intro.scope_tier,
+            scoped_project_id=intro.project_id,
         )
         request.state.principal = ctx
         return ctx

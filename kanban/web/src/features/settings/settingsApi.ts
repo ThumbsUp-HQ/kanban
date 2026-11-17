@@ -31,6 +31,7 @@ export interface MintMcpKeyRequest {
   label: string;
   surface: 'agent' | 'docs' | 'admin';
   scopes: string[];
+  scope_tier?: ScopeTier | undefined;
   allowed_projects?: string[] | undefined;
   expires_in_days?: number | null | undefined;
   unlimited?: boolean | undefined;

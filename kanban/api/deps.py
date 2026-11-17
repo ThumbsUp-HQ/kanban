@@ -113,10 +113,27 @@ async def get_rls_session(
     target_ws_id = principal.workspace_id
     scope_ws = request.headers.get("x-kb-scope-workspace")
     if scope_ws:
-        import contextlib  # noqa: PLC0415
+        scope_ws_clean = scope_ws.strip()
+        try:
+            target_ws_id = uuid.UUID(scope_ws_clean)
+        except ValueError:
+            from sqlalchemy import text  # noqa: PLC0415
 
-        with contextlib.suppress(ValueError):
-            target_ws_id = uuid.UUID(scope_ws)
+            lookup_ctx = RLSContext(
+                principal_id=principal.principal_id,
+                workspace_id=uuid.UUID(int=0),
+                token_scopes=("auth",),
+                aal_level=1,
+            )
+            async with session_factory.session(lookup_ctx) as lookup_session:
+                res_ws = (
+                    await lookup_session.execute(
+                        text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
+                        {"ident": scope_ws_clean},
+                    )
+                ).scalar_one_or_none()
+                if res_ws:
+                    target_ws_id = res_ws
 
     user_access_hash = principal.user_access_hash
     if user_access_hash is None:

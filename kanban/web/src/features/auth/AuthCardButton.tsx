@@ -1,18 +1,7 @@
 import React, { type JSX } from 'react';
 import type { AuthCard } from './authApi';
+import { renderAuthIcon } from '../../components/icons/KanbanIcons';
 import './auth.css';
-
-const ICON_PRESET_MAP: Readonly<Record<string, string>> = Object.freeze({
-  key: '🔑',
-  building: '🏢',
-  github: '🐙',
-  gitlab: '🦊',
-  lock: '🔐',
-});
-
-function resolveIcon(preset: string): string {
-  return ICON_PRESET_MAP[preset] ?? '🔑';
-}
 
 function clampText(text: string | null | undefined, maxLen: number): string {
   if (!text) return '';
@@ -37,7 +26,6 @@ export function AuthCardButton({
   onToggleLdap,
   formId,
 }: AuthCardButtonProps): JSX.Element {
-  const iconGlyph = resolveIcon(card.icon_preset);
   const isLdap = card.provider_kind === 'LDAP';
 
   const accessibleName = isLdap
@@ -67,7 +55,7 @@ export function AuthCardButton({
     >
       <div className="auth-card-main-content">
         <span className="auth-card-icon" aria-hidden="true">
-          {iconGlyph}
+          {renderAuthIcon(card.icon_preset, 20)}
         </span>
         <div className="auth-card-text-wrap">
           <span className="auth-card-display-name" title={card.display_name}>

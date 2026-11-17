@@ -25,6 +25,7 @@ from kanban.api.v1.workspaces import (
     CreateWorkspaceRequest,
     create_workspace_endpoint,
     list_workspaces_endpoint,
+    switch_workspace_endpoint,
 )
 from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
 from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, CsrfMiddleware
@@ -610,7 +611,7 @@ async def test_case_7_unit_coverage_direct_invocations(
     )
 
     # 1. list_workspaces_endpoint fallback when session_factory is None
-    req = Request(scope={"type": "http", "app": app, "headers": []})
+    req = Request(scope={"type": "http", "app": app, "path": "/api/v1/workspaces", "headers": []})
     app.state.session_factory = None
     fallback_res = await list_workspaces_endpoint(caller=caller, session=db_session, request=req)
     assert len(fallback_res) == 1
@@ -651,3 +652,51 @@ async def test_case_7_unit_coverage_direct_invocations(
         request=req_valid,
     )
     assert created.name == "Agent WS"
+
+
+@pytest.mark.asyncio
+async def test_case_8_workspaces_under_kanban_app_force_rls(
+    db_session: AsyncSession,
+    key_material: KeyMaterial,
+) -> None:
+    """Case 8: Ensure workspaces endpoints succeed under kanban_app role with FORCE RLS."""
+    ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    session_service = SessionService(key_material.session_hmac_key)
+    app = _create_test_app(factory, key_material, session_service)
+
+    caller = PrincipalContext(
+        principal_id=admin_id,
+        workspace_id=ws_id,
+        aal_level=2,
+    )
+
+    # Drop privileges to kanban_app
+    await db_session.execute(text("SET LOCAL ROLE kanban_app"))
+
+    req = Request(scope={"type": "http", "app": app, "path": "/api/v1/workspaces", "headers": []})
+
+    # 1. List workspaces under kanban_app
+    ws_list = await list_workspaces_endpoint(caller=caller, session=db_session, request=req)
+    assert len(ws_list) >= 1
+    assert any(w.id == ws_id for w in ws_list)
+
+    # 2. Create workspace under kanban_app
+    new_slug = f"ws-rls-{uuid.uuid4().hex[:8]}"
+    created = await create_workspace_endpoint(
+        body=CreateWorkspaceRequest(name="RLS App WS", slug=new_slug),
+        caller=caller,
+        session=db_session,
+        request=req,
+    )
+    assert created.slug == new_slug
+    assert created.role == "WORKSPACE_ADMIN"
+
+    # 3. Switch workspace under kanban_app
+    switched_resp = await switch_workspace_endpoint(
+        workspace_id=created.id,
+        caller=caller,
+        session=db_session,
+        request=req,
+    )
+    assert switched_resp.status_code == 200

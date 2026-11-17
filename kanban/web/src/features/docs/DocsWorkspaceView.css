@@ -381,6 +381,41 @@
   border-color: var(--primary, #3b82f6);
 }
 
+.docs-copy-markdown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: var(--radius-sm, 4px);
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-secondary, #64748b);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.docs-copy-markdown-btn:hover {
+  background: var(--bg-hover, #f8fafc);
+  color: var(--fg-primary, #1e293b);
+  border-color: var(--border-default, #cbd5e1);
+}
+
+.docs-version-pill-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 6px;
+  transition: all 120ms ease;
+}
+
+.docs-version-pill-btn:hover {
+  background: var(--bg-hover, #f8fafc);
+  border-color: var(--border-default, #cbd5e1);
+}
+
 /* 412 Conflict Alert Banner */
 .docs-conflict-banner {
   display: flex;
@@ -829,6 +864,14 @@
   .docs-center-pane {
     flex: 1 1 0;
     min-width: 0;
+  }
+  .docs-rail-wrapper {
+    display: none;
+  }
+  .docs-rail-wrapper.docs-rail-pane--open {
+    display: flex;
+    flex: 0 0 240px;
+    width: 240px;
   }
   .docs-rail-pane {
     width: 240px;

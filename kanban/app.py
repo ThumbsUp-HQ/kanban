@@ -175,13 +175,18 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
             target = getattr(self._owner_app.state, "mcp_app", None) or self._default_target
             if scope["type"] == "http":
                 scope_copy = dict(scope)
+                path = scope.get("path", "")
+                root_path = scope.get("root_path", "")
+                if root_path and not path.startswith(root_path):
+                    path = root_path + path
+                scope_copy["path"] = path
                 scope_copy["root_path"] = ""
                 await target(scope_copy, receive, send)
             else:
                 await target(scope, receive, send)
 
     proxy = _McpProxyApp(app, mcp_app)
-    app.mount("/.well-known/oauth-protected-resource/mcp", proxy)
+    app.mount("/.well-known/oauth-protected-resource", proxy)
     app.mount("/mcp", proxy)
 
 
@@ -266,6 +271,16 @@ def create_app(
     @app.get("/sse", include_in_schema=False)
     async def sse_endpoint(request: Request) -> Response:
         return await handle_sse_endpoint(request)
+
+    # RFC 9728 Protected-Resource Metadata
+    @app.get("/.well-known/oauth-protected-resource", include_in_schema=False)
+    @app.get("/.well-known/oauth-protected-resource/{subpath:path}", include_in_schema=False)
+    async def oauth_protected_resource_endpoint(
+        request: Request, subpath: str | None = None
+    ) -> Response:
+        del subpath
+        mcp_meta = importlib.import_module("mcp.metadata")
+        return await mcp_meta.protected_resource_metadata_endpoint(request)
 
     # Mount live MCP surfaces and RFC 9728 metadata endpoints
     _mount_mcp_surfaces(app, mcp_settings)

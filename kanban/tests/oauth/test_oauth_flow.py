@@ -1093,3 +1093,244 @@ async def test_case_7_metadata_and_security_invariants(
         assert resp.json()["error"] == "invalid_request"
         err_desc = resp.json()["error_description"]
         assert "access_token parameter in query string is strictly forbidden" in err_desc
+
+
+async def test_case_8_rfc7591_dynamic_registration_metadata_and_validation(
+    api_env: ApiEnv,
+) -> None:
+    """Test Case 8: RFC 7591 dynamic client registration fields, defaults & validation."""
+    client = api_env.client
+    redirect_uri = "http://127.0.0.1:8080/cb"
+
+    # 1. Extra fields ignored cleanly without 422 error
+    resp_extra = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Test Extra App",
+            "redirect_uris": [redirect_uri],
+            "arbitrary_client_field": "some_extra_metadata",
+            "software_id": "test-client-1.0",
+        },
+    )
+    assert resp_extra.status_code == 201
+    data_extra = resp_extra.json()
+    assert data_extra["client_name"] == "Test Extra App"
+    assert data_extra["token_endpoint_auth_method"] == "none"
+    assert "authorization_code" in data_extra["grant_types"]
+
+    # 2. Blank or omitted client_name defaults to 'MCP Client'
+    resp_blank = await client.post(
+        "/oauth/register",
+        json={"redirect_uris": [redirect_uri]},
+    )
+    assert resp_blank.status_code == 201
+    assert resp_blank.json()["client_name"] == "MCP Client"
+
+    # 3. Valid grant_types accepted
+    resp_grants = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Grants App",
+            "redirect_uris": [redirect_uri],
+            "grant_types": ["authorization_code", "refresh_token"],
+        },
+    )
+    assert resp_grants.status_code == 201
+    assert resp_grants.json()["grant_types"] == ["authorization_code", "refresh_token"]
+
+    # 4. Invalid grant_types rejected with 400 invalid_client_metadata
+    resp_bad_grant = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Bad Grant App",
+            "redirect_uris": [redirect_uri],
+            "grant_types": ["password", "implicit"],
+        },
+    )
+    assert resp_bad_grant.status_code == 400
+    assert resp_bad_grant.json()["error"] == "invalid_client_metadata"
+
+    # 5. Invalid token_endpoint_auth_method rejected
+    resp_bad_auth = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Bad Auth App",
+            "redirect_uris": [redirect_uri],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    )
+    assert resp_bad_auth.status_code == 400
+    assert resp_bad_auth.json()["error"] == "invalid_client_metadata"
+
+
+async def test_case_9_unauthenticated_authorize_browser_redirect_vs_json_api(
+    api_env: ApiEnv,
+) -> None:
+    """Test Case 9: Unauthenticated /oauth/authorize redirects browser or returns 401 for JSON."""
+    client = api_env.client
+    redirect_uri = "http://127.0.0.1:8080/callback"
+    _verifier, challenge = _generate_pkce()
+
+    # Register client
+    resp_reg = await client.post(
+        "/oauth/register",
+        json={"client_name": "Login Test App", "redirect_uris": [redirect_uri]},
+    )
+    client_id = resp_reg.json()["client_id"]
+
+    # Ensure unauthenticated caller
+    api_env.resolver.principal = None
+
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": "state-login-test",
+        "resource": "http://test/mcp/agent",
+    }
+
+    # 1. Browser request (Accept: text/html) -> Redirects 302 to /login?next=...
+    resp_browser = await client.get(
+        "/oauth/authorize",
+        params=params,
+        headers={"Accept": "text/html,application/xhtml+xml"},
+        follow_redirects=False,
+    )
+    assert resp_browser.status_code == 302
+    assert resp_browser.headers["location"].startswith("/login?next=")
+
+    # 2. JSON API request (Accept: application/json) -> Returns 401 ProblemException
+    resp_json = await client.get(
+        "/oauth/authorize",
+        params=params,
+        headers={"Accept": "application/json"},
+    )
+    assert resp_json.status_code == 401
+    assert resp_json.json()["code"] == "AUTHENTICATION_REQUIRED"
+
+    # 3. Invalid parameter unauthenticated -> Still returns OAuth error (checked before auth)
+    bad_params = dict(params)
+    bad_params["code_challenge_method"] = "plain"
+    resp_bad = await client.get(
+        "/oauth/authorize",
+        params=bad_params,
+        headers={"Accept": "text/html"},
+    )
+    assert resp_bad.status_code == 400
+    assert resp_bad.json()["error"] == "invalid_request"
+
+
+async def test_case_10_scoped_resource_indicators_and_bare_mcp(
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Test Case 10: Scoped resource indicators (/mcp, /mcp/w/..., /mcp/agent/w/.../p/...)."""
+    client = api_env.client
+    redirect_uri = "http://127.0.0.1:8080/callback"
+    resource = "http://test/mcp"
+
+    user = await make_user("george", workspace_role="WORKSPACE_MEMBER")
+    as_principal(user)
+    _verifier, challenge = _generate_pkce()
+
+    resp_reg = await client.post(
+        "/oauth/register",
+        json={"client_name": "Bare MCP App", "redirect_uris": [redirect_uri]},
+    )
+    client_id = resp_reg.json()["client_id"]
+
+    # 1. Authorize with bare /mcp resource (defaults to agent surface)
+    resp_auth = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-bare",
+            "resource": resource,
+        },
+    )
+    assert resp_auth.status_code == 200
+    assert "AGENT" in resp_auth.text
+    assert "Signed in as" in resp_auth.text
+
+    # 2. RFC 9728 metadata at /.well-known/oauth-protected-resource
+    resp_meta = await client.get("/.well-known/oauth-protected-resource")
+    assert resp_meta.status_code == 200
+    meta = resp_meta.json()
+    assert meta["resource"].endswith("/mcp/agent")
+    assert "agent:read" in meta["scopes_supported"]
+
+    # 3. Record QA proof transcript
+    import json  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+    out_dir = Path("docs/qa/KANBA-184")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    transcript = [
+        {
+            "step": "discovery",
+            "url": "/.well-known/oauth-protected-resource",
+            "status": resp_meta.status_code,
+            "resource": meta["resource"],
+            "scopes_supported": meta["scopes_supported"],
+        },
+        {
+            "step": "registration",
+            "url": "/oauth/register",
+            "status": resp_reg.status_code,
+            "client_id": client_id,
+            "grant_types": resp_reg.json().get("grant_types"),
+            "token_endpoint_auth_method": resp_reg.json().get("token_endpoint_auth_method"),
+        },
+        {
+            "step": "authorization",
+            "url": "/oauth/authorize",
+            "status": resp_auth.status_code,
+            "consent_rendered": "AGENT" in resp_auth.text,
+            "signed_in_badge": "Signed in as" in resp_auth.text,
+        },
+    ]
+    (out_dir / "oauth-mcp-transcript.json").write_text(
+        json.dumps(transcript, indent=2), encoding="utf-8"
+    )
+
+
+async def test_case_11_mcp_api_key_label_and_project_scoping(
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    make_project: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Test Case 11: Personal MCP key minting with label and allowed_projects."""
+    client = api_env.client
+    user = await make_user("helen", workspace_role="WORKSPACE_ADMIN")
+    _project = await make_project("HEL", created_by=user)
+    as_principal(user)
+
+    # 1. Mint personal key with label and project key
+    resp_mint = await client.post(
+        "/api/v1/auth/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read", "agent:write"],
+            "label": "My Personal Assistant Key",
+            "allowed_projects": ["HEL"],
+        },
+    )
+    assert resp_mint.status_code == 201
+    mint_data = resp_mint.json()
+    assert mint_data["label"] == "My Personal Assistant Key"
+    assert "HEL" in (mint_data["allowed_projects"] or [])
+
+    # 2. List personal keys
+    resp_list = await client.get("/api/v1/auth/mcp-keys")
+    assert resp_list.status_code == 200
+    keys = resp_list.json()["keys"]
+    target_key = next((k for k in keys if k["id"] == mint_data["id"]), None)
+    assert target_key is not None
+    assert target_key["label"] == "My Personal Assistant Key"

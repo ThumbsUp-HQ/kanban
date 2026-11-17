@@ -23,6 +23,7 @@ export interface PageEditorPaneProps {
   pageId: string;
   projectKey: string;
   onToggleRail?: (() => void) | undefined;
+  onOpenHistory?: (() => void) | undefined;
   isRailOpen?: boolean | undefined;
   onAnnounce?: ((message: string) => void) | undefined;
   onMarkdownChange?: ((markdown: string) => void) | undefined;
@@ -33,6 +34,7 @@ interface InnerEditorFormProps {
   pageId: string;
   projectKey: string;
   onToggleRail?: (() => void) | undefined;
+  onOpenHistory?: (() => void) | undefined;
   isRailOpen?: boolean | undefined;
   onAnnounce?: ((message: string) => void) | undefined;
   onMarkdownChange?: ((markdown: string) => void) | undefined;
@@ -44,6 +46,7 @@ function InnerEditorForm({
   pageId,
   projectKey,
   onToggleRail,
+  onOpenHistory,
   isRailOpen = true,
   onAnnounce,
   onMarkdownChange,
@@ -58,6 +61,7 @@ function InnerEditorForm({
   const [conflictRemoteVersion, setConflictRemoteVersion] = useState<number | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
 
   const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -230,10 +234,23 @@ function InnerEditorForm({
     await refetch();
   };
 
+  const handleCopyMarkdown = () => {
+    try {
+      void navigator.clipboard.writeText(markdown);
+      setCopiedMarkdown(true);
+      setTimeout(() => {
+        setCopiedMarkdown(false);
+      }, 2000);
+      onAnnounce?.('Markdown copied to clipboard');
+    } catch {
+      // Fallback
+    }
+  };
+
   const handleAccessPillClick = () => {
     window.dispatchEvent(
       new CustomEvent('kb:open-access-inspector', {
-        detail: { object_id: page.id },
+        detail: { objectId: page.id, object_id: page.id },
       }),
     );
   };
@@ -258,9 +275,26 @@ function InnerEditorForm({
         </nav>
 
         <div className="docs-metadata-bar__actions">
-          <span className="docs-version-pill mono" data-testid="page-version-pill">
+          <button
+            type="button"
+            className="docs-copy-markdown-btn"
+            data-testid="copy-doc-markdown-btn"
+            onClick={handleCopyMarkdown}
+            title="Copy Markdown content to clipboard"
+          >
+            📋 {copiedMarkdown ? 'Copied!' : 'Copy Markdown'}
+          </button>
+
+          <button
+            type="button"
+            className="docs-version-pill mono docs-version-pill-btn"
+            data-testid="page-version-pill"
+            onClick={onOpenHistory}
+            title="View version history"
+            aria-label={`Version ${String(page.version_seq)} - view history`}
+          >
             v{page.version_seq}
-          </span>
+          </button>
 
           <span
             className="docs-access-pill-wrapper"
@@ -377,6 +411,7 @@ export function PageEditorPane({
   pageId,
   projectKey,
   onToggleRail,
+  onOpenHistory,
   isRailOpen = true,
   onAnnounce,
   onMarkdownChange,
@@ -419,6 +454,7 @@ export function PageEditorPane({
       pageId={pageId}
       projectKey={projectKey}
       onToggleRail={onToggleRail}
+      onOpenHistory={onOpenHistory}
       isRailOpen={isRailOpen}
       onAnnounce={onAnnounce}
       onMarkdownChange={onMarkdownChange}

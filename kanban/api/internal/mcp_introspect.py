@@ -43,13 +43,15 @@ class McpIntrospectResponse(BaseModel):
     principal_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
+    workspace_slug: str | None = None
     project_id: uuid.UUID | None = None
     execution_id: uuid.UUID | None = None
     surface: str | None = None
     scopes: list[str] | None = None
     token_kind: str | None = None
     reason: str | None = None
-    allowed_projects: list[uuid.UUID] | None = None
+    allowed_projects: list[uuid.UUID | str] | None = None
+    allowed_project_keys: list[str] | None = None
     allowed_tools: list[str] | None = None
     disabled_tools: list[str] | None = None
     calls_used: int | None = None

@@ -137,6 +137,36 @@ def create_mcp_app(  # noqa: PLR0913
     routes = [
         # RFC 9728 Protected-Resource Metadata
         Route(
+            "/.well-known/oauth-protected-resource",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/mcp",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/mcp/w/{workspace_slug}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/mcp/w/{workspace_slug}/p/{project_key}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/w/{workspace_slug}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/w/{workspace_slug}/p/{project_key}",
+            protected_resource_metadata_endpoint,
+            methods=["GET"],
+        ),
+        Route(
             "/.well-known/oauth-protected-resource/mcp/{surface}",
             protected_resource_metadata_endpoint,
             methods=["GET"],
@@ -150,6 +180,18 @@ def create_mcp_app(  # noqa: PLR0913
             "/.well-known/oauth-protected-resource/mcp/{surface}/w/{workspace_slug}/p/{project_key}",
             protected_resource_metadata_endpoint,
             methods=["GET"],
+        ),
+        # Bare /mcp routes (default to agent surface)
+        Route("/mcp", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+        Route(
+            "/mcp/w/{workspace_slug}",
+            agent_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        Route(
+            "/mcp/w/{workspace_slug}/p/{project_key}",
+            agent_handler.handle_request,
+            methods=["GET", "POST", "DELETE"],
         ),
         # Explicit direct routes for /mcp/<surface>
         Route("/mcp/agent", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),

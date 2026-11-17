@@ -11,7 +11,7 @@ import React, {
   type JSX,
   type ReactNode,
 } from 'react';
-import { Outlet } from 'react-router';
+import { Outlet, useLocation } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
@@ -42,6 +42,43 @@ export interface AppShellProps {
   cachedIssues?: readonly CachedIssue[] | undefined;
 }
 
+export function computeCurrentSection(pathname: string, fallback = 'Work Items'): string {
+  if (pathname.includes('/settings/workflows') || pathname.endsWith('/workflows')) {
+    return 'Workflows';
+  }
+  if (pathname.includes('/settings/custom-fields')) {
+    return 'Custom Fields';
+  }
+  if (pathname.includes('/settings')) {
+    return 'Settings';
+  }
+  if (pathname.includes('/cycles')) {
+    return 'Cycles';
+  }
+  if (pathname.includes('/modules')) {
+    return 'Modules';
+  }
+  if (pathname.includes('/docs')) {
+    return 'Docs';
+  }
+  if (pathname.includes('/stickies')) {
+    return 'Stickies';
+  }
+  if (pathname.includes('/views')) {
+    return 'Views';
+  }
+  if (pathname.includes('/activity')) {
+    return 'Activity';
+  }
+  if (pathname.includes('/overview')) {
+    return 'Overview';
+  }
+  if (pathname.includes('/issues')) {
+    return 'Work Items';
+  }
+  return fallback;
+}
+
 export function AppShell({
   children,
   projectKey = 'KAN',
@@ -54,6 +91,15 @@ export function AppShell({
   cachedIssues,
 }: AppShellProps): JSX.Element {
   useSessionGuard();
+  const location = useLocation();
+  const match = /\/projects\/([^/]+)/.exec(location.pathname);
+  const activeProjectKey = match?.[1] ?? projectKey;
+  const isInsideProject = Boolean(match) || location.pathname.startsWith('/projects');
+  const computedSection =
+    currentSection && currentSection !== 'Work Items'
+      ? currentSection
+      : computeCurrentSection(location.pathname, currentSection);
+
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -99,7 +145,7 @@ export function AppShell({
         <Sidebar
           isOpen={mobileSidebarOpen}
           onClose={() => { setMobileSidebarOpen(false); }}
-          projectKey={projectKey}
+          projectKey={activeProjectKey}
           projectName={projectName}
           modulesEnabled={modulesEnabled}
           triggerButtonRef={hamburgerButtonRef}
@@ -110,9 +156,10 @@ export function AppShell({
           isSidebarOpen={mobileSidebarOpen}
           onToggleSidebar={toggleMobileSidebar}
           onOpenPalette={() => { setPaletteOpen(true); }}
-          projectKey={projectKey}
+          workspaceName={isInsideProject ? 'kanban' : undefined}
+          projectKey={activeProjectKey}
           projectName={projectName}
-          currentSection={currentSection}
+          currentSection={computedSection}
           issueCount={issueCount}
           accessManifest={accessManifest}
           systemStatus={systemStatus}

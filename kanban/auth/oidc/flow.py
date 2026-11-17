@@ -164,6 +164,29 @@ class OidcFlow:
         """Return canonical public origin for callback redirects."""
         return self._public_origin
 
+    def _resolve_public_origin(self, request: Request | None = None) -> str:
+        """Derive scheme/host from KANBAN_PUBLIC_ORIGIN, headers, or request.base_url."""
+        env_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN", "").strip()
+        if env_origin:
+            return env_origin.rstrip("/")
+
+        if request is not None:
+            proto = request.headers.get("x-forwarded-proto")
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+            if proto and host:
+                return f"{proto}://{host}".rstrip("/")
+            if host:
+                scheme = (
+                    request.url.scheme
+                    if hasattr(request, "url") and request.url.scheme
+                    else "http"
+                )
+                return f"{scheme}://{host}".rstrip("/")
+            if hasattr(request, "base_url"):
+                return str(request.base_url).rstrip("/")
+
+        return self._public_origin
+
     async def start(  # noqa: PLR0913
         self,
         session: AsyncSession,
@@ -175,7 +198,6 @@ class OidcFlow:
         ttl_seconds: int = BROWSER_BINDING_TTL_SECONDS,
     ) -> OidcStartResponse:
         """Initialize authorization-code flow with PKCE S256 and browser-bound state."""
-        del request  # Unused for start redirect generation
         card = await get_for_login(session, slug)
         if card is None or card.provider_kind not in ("OIDC", "OAUTH2"):
             raise ProblemException(
@@ -254,7 +276,8 @@ class OidcFlow:
         else:
             auth_endpoint = str(config.authorization_endpoint)
 
-        redirect_uri = f"{self._public_origin}/api/v1/auth/oidc/{slug}/callback"
+        public_origin = self._resolve_public_origin(request)
+        redirect_uri = f"{public_origin}/api/v1/auth/oidc/{slug}/callback"
 
         query_params: dict[str, str] = {
             "response_type": "code",
@@ -442,7 +465,8 @@ class OidcFlow:
             issuer_pinned = None
             userinfo_endpoint = str(config.userinfo_endpoint)
 
-        redirect_uri = f"{self._public_origin}/api/v1/auth/oidc/{slug}/callback"
+        public_origin = self._resolve_public_origin(request)
+        redirect_uri = f"{public_origin}/api/v1/auth/oidc/{slug}/callback"
 
         # Exchange authorization code for token
         token_payload: dict[str, str] = {

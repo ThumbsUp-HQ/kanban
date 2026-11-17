@@ -273,6 +273,8 @@ describe('CustomFieldDefinitionEditor', () => {
 
     fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
 
+    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+
     fireEvent.change(screen.getByTestId('execution-tier-select'), {
       target: { value: 'nsjail' },
     });
@@ -288,6 +290,23 @@ describe('CustomFieldDefinitionEditor', () => {
     expect(screen.getByTestId<HTMLSelectElement>('credential-mode-select').value).toBe(
       'PROJECT_ADMIN_SP',
     );
+  });
+
+  it('renders Basic and Advanced tabs for admin and switches panels', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+
+    renderEditor(true);
+
+    expect(await screen.findByTestId('custom-fields-basic-tab')).toBeDefined();
+    const advTab = screen.getByTestId('custom-fields-advanced-tab');
+    expect(advTab).toBeDefined();
+
+    expect(screen.getByTestId('custom-fields-basic-panel').hasAttribute('hidden')).toBe(false);
+    expect(screen.getByTestId('custom-fields-advanced-panel').hasAttribute('hidden')).toBe(true);
+
+    fireEvent.click(advTab);
+    expect(screen.getByTestId('custom-fields-basic-panel').hasAttribute('hidden')).toBe(true);
+    expect(screen.getByTestId('custom-fields-advanced-panel').hasAttribute('hidden')).toBe(false);
   });
 
   it('cancels tamper confirmation dialog without saving', async () => {

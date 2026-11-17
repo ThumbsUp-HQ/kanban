@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import {
+  Google,
+  GitHub,
+  ActiveDirectory,
+  Ldap,
+  Key,
+  renderAuthIcon,
+} from '../../components/icons/KanbanIcons';
 import type {
   AdminAuthCard,
   CreateAuthCardPayload,
@@ -76,7 +84,7 @@ export function AuthCardEditorDrawer({
   });
 
   // OIDC / OAuth2 fields
-  const [issuerUrl, setIssuerUrl] = useState(() => (typeof card?.public_config.issuer_url === 'string' ? card.public_config.issuer_url : (typeof card?.public_config.issuer === 'string' ? card.public_config.issuer : '')));
+  const [issuerUrl, setIssuerUrl] = useState(() => (typeof card?.public_config.issuer === 'string' ? card.public_config.issuer : (typeof card?.public_config.issuer_url === 'string' ? card.public_config.issuer_url : '')));
   const [clientId, setClientId] = useState(() => (typeof card?.public_config.client_id === 'string' ? card.public_config.client_id : ''));
   const [authorizationEndpoint, setAuthorizationEndpoint] = useState(() => (typeof card?.public_config.authorization_endpoint === 'string' ? card.public_config.authorization_endpoint : ''));
   const [tokenEndpoint, setTokenEndpoint] = useState(() => (typeof card?.public_config.token_endpoint === 'string' ? card.public_config.token_endpoint : ''));
@@ -88,13 +96,15 @@ export function AuthCardEditorDrawer({
     return 'openid, profile, email';
   });
   const [tokenAuthMethod, setTokenAuthMethod] = useState<'client_secret_basic' | 'private_key_jwt'>(() =>
-    card?.public_config.token_auth_method === 'private_key_jwt' ? 'private_key_jwt' : 'client_secret_basic',
+    card?.public_config.client_auth === 'private_key_jwt' || card?.public_config.token_auth_method === 'private_key_jwt'
+      ? 'private_key_jwt'
+      : 'client_secret_basic',
   );
 
   // LDAP fields
-  const [serverUrl, setServerUrl] = useState(() => (typeof card?.public_config.server_url === 'string' ? card.public_config.server_url : (typeof card?.public_config.url === 'string' ? card.public_config.url : '')));
-  const [startTls, setStartTls] = useState(() => Boolean(card?.public_config.start_tls ?? card?.public_config.transport_mode === 'starttls'));
-  const [bindDn, setBindDn] = useState(() => (typeof card?.public_config.bind_dn === 'string' ? card.public_config.bind_dn : (typeof card?.public_config.service_bind_dn === 'string' ? card.public_config.service_bind_dn : '')));
+  const [serverUrl, setServerUrl] = useState(() => (typeof card?.public_config.url === 'string' ? card.public_config.url : (typeof card?.public_config.server_url === 'string' ? card.public_config.server_url : '')));
+  const [startTls, setStartTls] = useState(() => Boolean(card?.public_config.transport_mode === 'starttls' || card?.public_config.start_tls));
+  const [bindDn, setBindDn] = useState(() => (typeof card?.public_config.service_bind_dn === 'string' ? card.public_config.service_bind_dn : (typeof card?.public_config.bind_dn === 'string' ? card.public_config.bind_dn : '')));
   const [baseDn, setBaseDn] = useState(() => (typeof card?.public_config.base_dn === 'string' ? card.public_config.base_dn : ''));
   const [userFilter, setUserFilter] = useState(() =>
     typeof card?.public_config.user_search_filter === 'string'
@@ -120,6 +130,7 @@ export function AuthCardEditorDrawer({
   // Secret input and write-only state
   const [secretInput, setSecretInput] = useState('');
   const [replaceSecret, setReplaceSecret] = useState(() => !card);
+  const [copiedCallback, setCopiedCallback] = useState(false);
 
   // Submission & Validation errors
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,7 +160,7 @@ export function AuthCardEditorDrawer({
     setAdminGroups(Array.isArray(pub?.admin_groups) ? pub.admin_groups.join(', ') : '');
     setUserGroups(Array.isArray(pub?.user_groups) ? pub.user_groups.join(', ') : '');
 
-    setIssuerUrl(typeof pub?.issuer_url === 'string' ? pub.issuer_url : (typeof pub?.issuer === 'string' ? pub.issuer : ''));
+    setIssuerUrl(typeof pub?.issuer === 'string' ? pub.issuer : (typeof pub?.issuer_url === 'string' ? pub.issuer_url : ''));
     setClientId(typeof pub?.client_id === 'string' ? pub.client_id : '');
     setAuthorizationEndpoint(typeof pub?.authorization_endpoint === 'string' ? pub.authorization_endpoint : '');
     setTokenEndpoint(typeof pub?.token_endpoint === 'string' ? pub.token_endpoint : '');
@@ -157,11 +168,15 @@ export function AuthCardEditorDrawer({
 
     const rawScopes = pub?.scopes;
     setScopes(Array.isArray(rawScopes) ? rawScopes.join(', ') : (typeof rawScopes === 'string' ? rawScopes : 'openid, profile, email'));
-    setTokenAuthMethod(pub?.token_auth_method === 'private_key_jwt' ? 'private_key_jwt' : 'client_secret_basic');
+    setTokenAuthMethod(
+      pub?.client_auth === 'private_key_jwt' || pub?.token_auth_method === 'private_key_jwt'
+        ? 'private_key_jwt'
+        : 'client_secret_basic',
+    );
 
-    setServerUrl(typeof pub?.server_url === 'string' ? pub.server_url : (typeof pub?.url === 'string' ? pub.url : ''));
-    setStartTls(Boolean(pub?.start_tls ?? pub?.transport_mode === 'starttls'));
-    setBindDn(typeof pub?.bind_dn === 'string' ? pub.bind_dn : (typeof pub?.service_bind_dn === 'string' ? pub.service_bind_dn : ''));
+    setServerUrl(typeof pub?.url === 'string' ? pub.url : (typeof pub?.server_url === 'string' ? pub.server_url : ''));
+    setStartTls(Boolean(pub?.transport_mode === 'starttls' || pub?.start_tls));
+    setBindDn(typeof pub?.service_bind_dn === 'string' ? pub.service_bind_dn : (typeof pub?.bind_dn === 'string' ? pub.bind_dn : ''));
     setBaseDn(typeof pub?.base_dn === 'string' ? pub.base_dn : '');
     setUserFilter(
       typeof pub?.user_search_filter === 'string'
@@ -355,9 +370,8 @@ export function AuthCardEditorDrawer({
         kind: providerKind,
         client_id: clientId.trim(),
         scopes: scopeList.length > 0 ? scopeList : ['openid', 'profile', 'email'],
-        pkce_method: 'S256',
-        token_auth_method: tokenAuthMethod,
-        ...(issuerUrl.trim() ? { issuer: issuerUrl.trim(), issuer_url: issuerUrl.trim() } : {}),
+        client_auth: tokenAuthMethod,
+        ...(issuerUrl.trim() ? { issuer: issuerUrl.trim() } : {}),
         ...(authorizationEndpoint.trim() ? { authorization_endpoint: authorizationEndpoint.trim() } : {}),
         ...(tokenEndpoint.trim() ? { token_endpoint: tokenEndpoint.trim() } : {}),
         ...(userinfoEndpoint.trim() ? { userinfo_endpoint: userinfoEndpoint.trim() } : {}),
@@ -370,22 +384,18 @@ export function AuthCardEditorDrawer({
       publicConfig = {
         kind: 'LDAP',
         url: serverUrl.trim(),
-        server_url: serverUrl.trim(),
         transport_mode: transportMode,
-        start_tls: isLdapScheme ? true : startTls,
         service_bind_dn: bindDn.trim(),
-        bind_dn: bindDn.trim(),
         base_dn: baseDn.trim(),
         user_search_filter: userFilter.trim(),
-        user_filter: userFilter.trim(),
         subject_attribute: subjectAttribute.trim() || 'objectGUID',
         email_attribute: emailAttribute.trim() || 'mail',
         display_name_attribute: displayNameAttribute.trim() || 'displayName',
         access_mode: accessPolicyMode === 'restricted' ? 'group_restricted' : 'any_user',
         admin_groups: accessPolicyMode === 'restricted' ? parseList(adminGroups) : [],
         user_groups: accessPolicyMode === 'restricted' ? parseList(userGroups) : [],
-        ...(caPem.trim() ? { ca_cert_pem: caPem.trim(), ca_pem: caPem.trim() } : {}),
-        ...(spkiPin.trim() ? { spki_sha256_pins: [spkiPin.trim()], spki_sha256_pin: spkiPin.trim() } : {}),
+        ...(caPem.trim() ? { ca_cert_pem: caPem.trim() } : {}),
+        ...(spkiPin.trim() ? { spki_sha256_pins: [spkiPin.trim()] } : {}),
       };
     } else {
       publicConfig = card?.public_config ?? {};
@@ -406,7 +416,6 @@ export function AuthCardEditorDrawer({
 
         if (replaceSecret && secretInput.trim()) {
           payload.secret = secretInput.trim();
-          payload.secret_input = secretInput.trim();
         }
 
         await onSave(payload, true);
@@ -420,7 +429,7 @@ export function AuthCardEditorDrawer({
           auto_provision_users: autoProvisionUsers,
           allowed_email_domains: domains,
           public_config: publicConfig,
-          ...(secretInput.trim() ? { secret: secretInput.trim(), secret_input: secretInput.trim() } : {}),
+          ...(secretInput.trim() ? { secret: secretInput.trim() } : {}),
         };
 
         await onSave(payload, false);
@@ -484,35 +493,40 @@ export function AuthCardEditorDrawer({
                 className={`auth-preset-btn ${activePreset === 'google' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('google'); }}
               >
-                Google (OAuth 2.0)
+                <Google size={14} className="auth-preset-icon" />
+                <span>Google (OAuth 2.0)</span>
               </button>
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'github' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('github'); }}
               >
-                GitHub (OAuth 2.0)
+                <GitHub size={14} className="auth-preset-icon" />
+                <span>GitHub (OAuth 2.0)</span>
               </button>
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'active-directory' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('active-directory'); }}
               >
-                Active Directory (sAMAccountName)
+                <ActiveDirectory size={14} className="auth-preset-icon" />
+                <span>Active Directory (sAMAccountName)</span>
               </button>
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'openldap' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('openldap'); }}
               >
-                Standard LDAP (OpenLDAP)
+                <Ldap size={14} className="auth-preset-icon" />
+                <span>Standard LDAP (OpenLDAP)</span>
               </button>
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'custom-oauth' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('custom-oauth'); }}
               >
-                Custom OAuth 2.0 / OIDC
+                <Key size={14} className="auth-preset-icon" />
+                <span>Custom OAuth 2.0 / OIDC</span>
               </button>
             </div>
           </div>
@@ -541,6 +555,44 @@ export function AuthCardEditorDrawer({
 
               {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
             <div>
+              <div className="auth-editor-prop-row">
+                <label className="auth-editor-label" htmlFor="card-callback-url">
+                  Authorized Redirect URI (Callback URL)
+                </label>
+                <div className="auth-editor-input-group">
+                  <input
+                    id="card-callback-url"
+                    data-testid="oauth-callback-url"
+                    type="text"
+                    className="auth-editor-input"
+                    value={
+                      `${window.location.origin}/api/v1/auth/oidc/${slug.trim() || 'oauth1'}/callback`
+                    }
+                    readOnly
+                  />
+                  <button
+                    type="button"
+                    className="auth-btn-secondary"
+                    onClick={() => {
+                      const url = `${window.location.origin}/api/v1/auth/oidc/${slug.trim() || 'oauth1'}/callback`;
+                      void navigator.clipboard.writeText(url);
+                      setCopiedCallback(true);
+                      setTimeout(() => { setCopiedCallback(false); }, 2000);
+                    }}
+                    data-testid="copy-callback-url-btn"
+                  >
+                    {copiedCallback ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="auth-editor-prop-row">
+                <span className="auth-editor-label">Authorized JavaScript Origin</span>
+                <span className="auth-field-helper" data-testid="oauth-js-origin">
+                  {window.location.origin}
+                </span>
+              </div>
+
               <div className="auth-editor-prop-row">
                 <label className="auth-editor-label" htmlFor="card-client-id">
                   Client ID
@@ -893,24 +945,28 @@ export function AuthCardEditorDrawer({
               <label className="auth-editor-label" htmlFor="card-icon-preset">
                 Icon Preset
               </label>
-              <select
-                id="card-icon-preset"
-                className="auth-editor-select"
-                value={iconPreset}
-                onChange={(e) => { setIconPreset(e.target.value); }}
-                disabled={isSubmitting}
-              >
-                <option value="shield">🛡️ Shield</option>
-                <option value="key">🔑 Key</option>
-                <option value="lock">🔒 Lock</option>
-                <option value="globe">🌐 Globe</option>
-                <option value="google">🔴 Google</option>
-                <option value="github">🐙 GitHub</option>
-                <option value="active-directory">🏢 Active Directory</option>
-                <option value="ldap">🗂️ LDAP</option>
-                <option value="server">🖥️ Server</option>
-                <option value="user-check">👤 User Check</option>
-              </select>
+              <div className="auth-editor-input-group">
+                <select
+                  id="card-icon-preset"
+                  className="auth-editor-select"
+                  value={iconPreset}
+                  onChange={(e) => { setIconPreset(e.target.value); }}
+                  disabled={isSubmitting}
+                >
+                  <option value="shield">Shield</option>
+                  <option value="key">Key</option>
+                  <option value="lock">Lock</option>
+                  <option value="globe">Globe</option>
+                  <option value="google">Google</option>
+                  <option value="github">GitHub</option>
+                  <option value="active-directory">Active Directory</option>
+                  <option value="ldap">LDAP</option>
+                  <option value="local-admin">Local Administrator</option>
+                </select>
+                <span className="auth-card-icon-preview" aria-hidden="true">
+                  {renderAuthIcon(iconPreset, 20)}
+                </span>
+              </div>
             </div>
 
             <div className="auth-editor-prop-row">

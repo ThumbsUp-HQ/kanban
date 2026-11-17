@@ -31,6 +31,20 @@ describe('ApiProblem', () => {
     },
   );
 
+  it('appends path: message from data.errors to error message', () => {
+    const p = new ApiProblem(422, {
+      code: 'VALIDATION_ERROR',
+      detail: 'Validation failed',
+      errors: [
+        { path: 'client_id', message: 'Field required' },
+        { path: ['public_config', 'issuer'], message: 'Extra fields not permitted' },
+      ],
+    });
+    expect(p.message).toBe(
+      'Validation failed: client_id: Field required, public_config.issuer: Extra fields not permitted',
+    );
+  });
+
   it('classifies 404 uniformly and 412 precondition failures', () => {
     expect(isNotFound(new ApiProblem(404))).toBe(true);
     expect(isNotFound(new ApiProblem(403))).toBe(false);

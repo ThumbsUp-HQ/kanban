@@ -1038,6 +1038,57 @@ export function LocalAdmin({ size, className, ...props }: IconProps): JSX.Elemen
   );
 }
 
+export function Globe({ size, className, ...props }: IconProps): JSX.Element {
+  return (
+    <svg
+      width={size ?? 16}
+      height={size ?? 16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </svg>
+  );
+}
+
+export function renderAuthIcon(preset: string | undefined, size = 16): JSX.Element {
+  const p = (preset ?? '').toLowerCase().replace(/[\s_]+/g, '-');
+  switch (p) {
+    case 'google':
+      return <Google size={size} />;
+    case 'github':
+      return <GitHub size={size} />;
+    case 'active-directory':
+    case 'activedirectory':
+    case 'building':
+      return <ActiveDirectory size={size} />;
+    case 'ldap':
+    case 'openldap':
+      return <Ldap size={size} />;
+    case 'local-admin':
+    case 'localadmin':
+      return <LocalAdmin size={size} />;
+    case 'shield':
+      return <Shield size={size} />;
+    case 'lock':
+      return <Lock size={size} />;
+    case 'globe':
+      return <Globe size={size} />;
+    case 'key':
+    default:
+      return <Key size={size} />;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Curated Utility & Navigation Icons (Lucide-compatible)
 // ---------------------------------------------------------------------------
@@ -1600,6 +1651,7 @@ export type KanbanIconName =
   | 'ActiveDirectory'
   | 'Ldap'
   | 'LocalAdmin'
+  | 'Globe'
   | 'ChevronDown'
   | 'ChevronUp'
   | 'ChevronLeft'
@@ -1669,6 +1721,7 @@ export const KANBAN_ICON_MAP: Record<KanbanIconName, (props: IconProps) => JSX.E
   ActiveDirectory,
   Ldap,
   LocalAdmin,
+  Globe,
   ChevronDown,
   ChevronUp,
   ChevronLeft,

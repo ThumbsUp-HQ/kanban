@@ -102,8 +102,8 @@ describe('AuthCardButton (KB-P3-35)', () => {
     expect(container.querySelectorAll('img').length).toBe(0);
     expect(container.querySelectorAll('script').length).toBe(0);
 
-    // Hostile icon preset falls back to 🔑
-    expect(screen.getByText('🔑')).toBeDefined();
+    // Hostile icon preset falls back to Key vector SVG
+    expect(container.querySelector('.auth-card-icon svg')).toBeDefined();
   });
 
   it('clamps 200-char name to 80 chars + ... with full value in title (Mandatory Test Case 2)', () => {
@@ -119,7 +119,7 @@ describe('AuthCardButton (KB-P3-35)', () => {
       icon_preset: 'github',
     };
 
-    render(<AuthCardButton card={longCard} />);
+    const { container } = render(<AuthCardButton card={longCard} />);
 
     const clampedDisplayName = 'A'.repeat(80) + '...';
     const clampedSubtext = 'B'.repeat(120) + '...';
@@ -133,7 +133,7 @@ describe('AuthCardButton (KB-P3-35)', () => {
     expect(subElem.getAttribute('title')).toBe(longSubtext);
 
     // Correct icon for github
-    expect(screen.getByText('🐙')).toBeDefined();
+    expect(container.querySelector('.auth-card-icon svg')).toBeDefined();
   });
 
   it('handles card without button_subtext and uses window.location.assign', () => {

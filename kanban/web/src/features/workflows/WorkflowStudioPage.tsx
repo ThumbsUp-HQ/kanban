@@ -92,12 +92,16 @@ export function WorkflowStudioPage({
   const generalError = rulesQuery.error ? rulesQuery.error.message : null;
 
   // Dialog and drawer state
-  const [isAttachDialogOpen, setIsAttachDialogOpen] = useState(false);
+  const attachParam = searchParams.get('attach');
+  const toStateParam = searchParams.get('to_state');
+  const shouldAutoOpen = attachParam === '1' || attachParam === 'true';
+
+  const [isAttachDialogOpen, setIsAttachDialogOpen] = useState(() => shouldAutoOpen);
   const [editingHook, setEditingHook] = useState<WorkflowHook | null>(null);
   const [activeTransition, setActiveTransition] = useState<{
     from_state: string | null;
     to_state: string;
-  } | null>(null);
+  } | null>(() => (shouldAutoOpen && toStateParam ? { from_state: null, to_state: toStateParam } : null));
 
   const [dryRunTransition, setDryRunTransition] = useState<{
     from_state: string | null;

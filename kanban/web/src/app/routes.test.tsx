@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { RouterProvider } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as client from '../api/client';
 import {
   createAppRouter,
   PROJECT_KEY_REGEX,
@@ -57,7 +58,8 @@ describe('routes and AppShell integration', () => {
     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Views/ })).toBeDefined();
-    expect(screen.getByRole('link', { name: /Docs \(Pages\)/ })).toBeDefined();
+    expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
 
     // Breadcrumb
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeDefined();
@@ -385,5 +387,91 @@ describe('IssuesWorkspaceRoute', () => {
     );
 
     expect(screen.getByRole('table')).toBeDefined();
+  });
+
+  it('ProjectCyclesView creates new cycle and calls POST /api/v1/projects/{projectKey}/cycles', async () => {
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(client, 'apiFetch').mockImplementation((method: string, path: string) => {
+      if (method === 'GET' && path.includes('cycles')) {
+        return Promise.resolve([{ id: 'cyc-1', name: 'Sprint 1', status: 'active' }]);
+      }
+      if (method === 'POST' && path.includes('cycles')) {
+        return Promise.resolve({ id: 'cyc-2', name: 'Sprint 2', status: 'upcoming' });
+      }
+      return Promise.resolve([]);
+    });
+
+    const router = createAppRouter(['/projects/KAN/cycles']);
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-cycles-view')).toBeDefined();
+    });
+
+    const input = screen.getByTestId('new-cycle-name-input');
+    fireEvent.change(input, { target: { value: 'Sprint 2' } });
+
+    const createBtn = screen.getByTestId('create-cycle-btn');
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(client.apiFetch).toHaveBeenCalledWith(
+        'POST',
+        '/api/v1/projects/{project_ref}/cycles',
+        expect.objectContaining({
+          params: { project_ref: 'KAN' },
+          body: (expect.objectContaining({ name: 'Sprint 2' }) as unknown) as Record<string, unknown>,
+        }),
+      );
+    });
+  });
+
+  it('ProjectModulesView creates new module and calls POST /api/v1/projects/{projectKey}/modules', async () => {
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(client, 'apiFetch').mockImplementation((method: string, path: string) => {
+      if (method === 'GET' && path.includes('modules')) {
+        return Promise.resolve([{ id: 'mod-1', name: 'Auth Module', status: 'active' }]);
+      }
+      if (method === 'POST' && path.includes('modules')) {
+        return Promise.resolve({ id: 'mod-2', name: 'Billing Module', status: 'planned' });
+      }
+      return Promise.resolve([]);
+    });
+
+    const router = createAppRouter(['/projects/KAN/modules']);
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-modules-view')).toBeDefined();
+    });
+
+    const input = screen.getByTestId('new-module-name-input');
+    fireEvent.change(input, { target: { value: 'Billing Module' } });
+
+    const createBtn = screen.getByTestId('create-module-btn');
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(client.apiFetch).toHaveBeenCalledWith(
+        'POST',
+        '/api/v1/projects/{project_ref}/modules',
+        expect.objectContaining({
+          params: { project_ref: 'KAN' },
+          body: (expect.objectContaining({ name: 'Billing Module' }) as unknown) as Record<string, unknown>,
+        }),
+      );
+    });
   });
 });

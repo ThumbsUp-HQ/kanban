@@ -424,6 +424,36 @@
   color: var(--fg-primary, #111827);
 }
 
+.custom-fields-tabs-bar {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.custom-fields-tab-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted, #525866);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.custom-fields-tab-btn:hover {
+  color: var(--fg-primary, #111827);
+}
+
+.custom-fields-tab-btn--active {
+  color: var(--primary, #3b82f6);
+  border-bottom-color: var(--primary, #3b82f6);
+  font-weight: 600;
+}
+
 .custom-fields-sha-chip {
   display: inline-flex;
   align-items: center;

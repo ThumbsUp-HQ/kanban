@@ -7,6 +7,11 @@ import type { AdminAuthCard } from './adminAuthApi';
 describe('AuthCardEditorDrawer (KB-P3-36)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   const existingOidcCard: AdminAuthCard = {
@@ -84,14 +89,52 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({
-          secret_input: 'NewSecretValue12345!',
+          secret: 'NewSecretValue12345!',
         }),
         true,
       );
     });
 
+    const secondPayload = onSave.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(secondPayload).toBeDefined();
+    expect('secret_input' in secondPayload).toBe(false);
+
     // Password value in DOM input must be cleared
     expect(secretInput.value).toBe('');
+  });
+
+  it('displays authorized redirect URI and copies dynamically on click', () => {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={existingOidcCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    const callbackInput = screen.getByTestId<HTMLInputElement>('oauth-callback-url');
+    expect(callbackInput.value).toBe(
+      `${window.location.origin}/api/v1/auth/oidc/okta-workforce/callback`,
+    );
+    expect(callbackInput.readOnly).toBe(true);
+
+    const originDisplay = screen.getByTestId('oauth-js-origin');
+    expect(originDisplay.textContent).toBe(window.location.origin);
+
+    const copyBtn = screen.getByTestId('copy-callback-url-btn');
+    expect(copyBtn.textContent).toBe('Copy');
+    fireEvent.click(copyBtn);
+    expect(writeTextMock).toHaveBeenCalledWith(
+      `${window.location.origin}/api/v1/auth/oidc/okta-workforce/callback`,
+    );
   });
 
   it('rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3)', () => {
@@ -432,10 +475,10 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({
           display_name: 'Corp Directory',
-          secret_input: 'new-bind-password-secret',
+          secret: 'new-bind-password-secret',
           public_config: expect.objectContaining({
-            user_filter: '(uid={username})',
-            ca_pem: '-----BEGIN CERTIFICATE-----UPDATED-----END CERTIFICATE-----',
+            user_search_filter: '(uid={username})',
+            ca_cert_pem: '-----BEGIN CERTIFICATE-----UPDATED-----END CERTIFICATE-----',
           }) as unknown,
         }),
         true,
@@ -498,7 +541,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
           allowed_email_domains: ['corp.com', 'partner.org'],
           public_config: expect.objectContaining({
             scopes: ['openid', 'email'],
-            token_auth_method: 'private_key_jwt',
+            client_auth: 'private_key_jwt',
           }) as unknown,
         }),
         false,
@@ -601,7 +644,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({
           slug: 'secret-card',
-          secret_input: 'super-create-secret',
+          secret: 'super-create-secret',
         }),
         false,
       );
@@ -720,7 +763,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
         expect.objectContaining({
           slug: 'insecure-ldap',
           public_config: expect.objectContaining({
-            start_tls: true,
+            transport_mode: 'starttls',
           }) as unknown,
         }),
         false,

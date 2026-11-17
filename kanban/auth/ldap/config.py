@@ -50,6 +50,36 @@ class LdapCardConfig(BaseModel):
     user_groups: list[str] = Field(default_factory=list)
     timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_ui_aliases(cls, data: object) -> object:
+        """Normalize frontend UI alias keys before validation."""
+        if not isinstance(data, dict):
+            return data
+        d = dict(data)
+        renames = {
+            "server_url": "url",
+            "bind_dn": "service_bind_dn",
+            "user_filter": "user_search_filter",
+            "ca_pem": "ca_cert_pem",
+        }
+        for old_k, new_k in renames.items():
+            if old_k in d:
+                val = d.pop(old_k)
+                if new_k not in d:
+                    d[new_k] = val
+
+        if "start_tls" in d:
+            st = d.pop("start_tls")
+            if "transport_mode" not in d:
+                d["transport_mode"] = "starttls" if st in (True, "true", "starttls") else "ldaps"
+
+        if "spki_sha256_pin" in d:
+            pin = d.pop("spki_sha256_pin")
+            if "spki_sha256_pins" not in d:
+                d["spki_sha256_pins"] = [pin] if isinstance(pin, str) else list(pin)
+        return d
+
     @field_validator("url")
     @classmethod
     def validate_url(cls, v: str) -> str:

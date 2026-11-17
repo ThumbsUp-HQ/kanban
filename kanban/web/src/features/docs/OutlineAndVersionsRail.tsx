@@ -25,6 +25,8 @@ export interface OutlineAndVersionsRailProps {
   page?: PageResponse | undefined;
   markdownContent?: string | undefined;
   onAnnounce?: ((message: string) => void) | undefined;
+  activeTab?: ('outline' | 'history') | undefined;
+  onTabChange?: ((tab: 'outline' | 'history') => void) | undefined;
 }
 
 export interface ExtractedHeading {
@@ -129,9 +131,17 @@ export function OutlineAndVersionsRail({
   page,
   markdownContent,
   onAnnounce,
+  activeTab: propActiveTab,
+  onTabChange,
 }: OutlineAndVersionsRailProps): JSX.Element {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'outline' | 'history'>('outline');
+  const [internalTab, setInternalTab] = useState<'outline' | 'history'>('outline');
+  const activeTab = propActiveTab ?? internalTab;
+
+  const setActiveTab = (tab: 'outline' | 'history') => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
   const [activeHeadingAnchor, setActiveHeadingAnchor] = useState<string | null>(null);
   const [selectedVersionSeq, setSelectedVersionSeq] = useState<number | null>(null);
 

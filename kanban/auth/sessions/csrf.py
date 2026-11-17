@@ -57,6 +57,8 @@ CSRF_EXEMPT_PATHS: Final[tuple[str, ...]] = (
     "/oauth/register",
     "/oauth/token",
     "/oauth/revoke",
+    "/oauth/device/authorize",
+    "/oauth/authorize/decision",
     # Internal MCP introspection
     "/internal/v1/mcp/introspect",
     "/internal/mcp/introspect",

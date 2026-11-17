@@ -244,6 +244,9 @@ describe('DocsTreeNav', () => {
     const titleInput = screen.getByTestId('new-page-title-input');
     const submitBtn = screen.getByTestId('submit-create-page-btn');
 
+    // Check placeholder prompt
+    expect(titleInput.getAttribute('placeholder')).toBe('What do you want to call this doc?');
+
     // Empty validation
     fireEvent.change(titleInput, { target: { value: '   ' } });
     fireEvent.click(submitBtn);
@@ -256,6 +259,7 @@ describe('DocsTreeNav', () => {
     await waitFor(() => {
       expect(createSpy).toHaveBeenCalledWith('KAN', {
         title: 'My Root Doc',
+        body_markdown: docsApi.DEFAULT_DOC_MARKDOWN_TEMPLATE,
         parent_page_id: null,
       });
       expect(onSelectPage).toHaveBeenCalledWith('page-new');

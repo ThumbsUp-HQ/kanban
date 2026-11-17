@@ -88,6 +88,7 @@ class McpIntrospectionResult:
     principal_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
+    workspace_slug: str | None = None
     project_id: uuid.UUID | None = None
     execution_id: uuid.UUID | None = None
     surface: str | None = None
@@ -95,6 +96,7 @@ class McpIntrospectionResult:
     token_kind: str | None = "api_key"  # noqa: S105
     reason: str | None = None
     allowed_projects: list[uuid.UUID] | None = None
+    allowed_project_keys: list[str] | None = None
     allowed_tools: list[str] | None = None
     disabled_tools: list[str] | None = None
     calls_used: int | None = None
@@ -126,6 +128,8 @@ class McpIntrospectionResult:
             "scopes": self.scopes or [],
             "token_kind": self.token_kind,
         }
+        if self.workspace_slug is not None:
+            payload["workspace_slug"] = self.workspace_slug
         if self.agent_principal_id is not None:
             payload["agent_principal_id"] = str(self.agent_principal_id)
         if self.project_id is not None:
@@ -142,6 +146,8 @@ class McpIntrospectionResult:
             payload["allowed_project_ids"] = [str(p) for p in self.allowed_project_ids]
         if self.allowed_projects is not None:
             payload["allowed_projects"] = [str(p) for p in self.allowed_projects]
+        if self.allowed_project_keys is not None:
+            payload["allowed_project_keys"] = self.allowed_project_keys
         if self.capability_mask is not None:
             payload["capability_mask"] = self.capability_mask
         if self.allowed_tools is not None:
@@ -258,6 +264,7 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
     unlimited: bool = False,
     confirm_unlimited: bool = False,
     caller_aal_level: int | None = None,
+    label: str | None = None,
 ) -> tuple[McpApiKey, str]:
     """Mint an MCP API key, enforce surface, tier, and role constraints, and persist digest."""
     if surface not in ALLOWED_SURFACES:
@@ -545,6 +552,7 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
         created_by_id=created_by_id,
         created_at=now,
         expires_at=effective_expires,
+        label=label,
     )
     session.add(key_record)
     await session.flush()
@@ -650,8 +658,13 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         # Check surface match
         token_surface = claims.get("surface")
         token_aud = str(claims.get("aud", ""))
+        from kanban.oauth.server import parse_surface_from_resource  # noqa: PLC0415
+        aud_surface = None
+        with contextlib.suppress(Exception):
+            aud_surface = parse_surface_from_resource(token_aud)
+
         if surface is not None and (
-            token_surface != surface or not token_aud.endswith(f"/mcp/{surface}")
+            token_surface != surface or aud_surface != surface
         ):
             return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
 
@@ -715,15 +728,39 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             with contextlib.suppress(ValueError):
                 allowed_projects = [uuid.UUID(str(p)) for p in allowed_projects_raw]
 
+        ws_slug: str | None = None
+        if ws_uuid:
+            ws_slug_res = (
+                await session.execute(
+                    text("SELECT resolve_workspace_slug(:ws_id)"),
+                    {"ws_id": ws_uuid},
+                )
+            ).scalar_one_or_none()
+            if ws_slug_res:
+                ws_slug = ws_slug_res
+
+        resolved_proj_keys: list[str] = []
+        if allowed_projects:
+            keys_res = (
+                await session.execute(
+                    text("SELECT resolve_project_keys(:p_ids)"),
+                    {"p_ids": allowed_projects},
+                )
+            ).scalar_one_or_none()
+            if keys_res:
+                resolved_proj_keys = [str(pk) for pk in keys_res]
+
         return McpIntrospectionResult(
             active=True,
             principal_id=principal_uuid,
             workspace_id=ws_uuid,
+            workspace_slug=ws_slug,
             surface=token_surface or surface,
             scopes=scopes_list,
             token_kind="oauth",  # noqa: S106
             allowed_projects=allowed_projects,
             allowed_project_ids=allowed_projects,
+            allowed_project_keys=resolved_proj_keys or None,
         )
 
     digest = hash_mcp_api_key(token)
@@ -735,7 +772,8 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         "SELECT id, workspace_id, principal_id, surface, key_prefix, "
         "scopes, created_at, expires_at, revoked_at, last_used_at, principal_status, "
         "scope_tier, owner_kind, project_id, allowed_workspace_ids, allowed_project_ids, "
-        "capability_mask, allowed_tools, disabled_tools, allowed_cidrs "
+        "capability_mask, allowed_tools, disabled_tools, allowed_cidrs, "
+        "workspace_slug, project_key "
         "FROM introspect_mcp_api_key(:digest)"
     )
     result = await session.execute(stmt, {"digest": digest})
@@ -768,6 +806,8 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         allowed_tools,
         disabled_tools,
         allowed_cidrs,
+        workspace_slug,
+        project_key,
     ) = row
 
     if revoked_at is not None:
@@ -788,10 +828,26 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
     if not token.startswith(key_prefix) or prefix_mismatch:
         return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
 
+    resolved_proj_keys: list[str] = []
+    if project_key:
+        resolved_proj_keys.append(str(project_key))
+    if allowed_project_ids:
+        keys_res = (
+            await session.execute(
+                text("SELECT resolve_project_keys(:p_ids)"),
+                {"p_ids": list(allowed_project_ids)},
+            )
+        ).scalar_one_or_none()
+        if keys_res:
+            for k in keys_res:
+                if str(k) not in resolved_proj_keys:
+                    resolved_proj_keys.append(str(k))
+
     return McpIntrospectionResult(
         active=True,
         principal_id=principal_id,
         workspace_id=workspace_id,
+        workspace_slug=workspace_slug,
         surface=key_surface,
         scopes=list(key_scopes),
         token_kind="api_key",  # noqa: S106
@@ -801,6 +857,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         allowed_workspace_ids=list(allowed_workspace_ids) if allowed_workspace_ids else None,
         allowed_project_ids=list(allowed_project_ids) if allowed_project_ids else None,
         allowed_projects=list(allowed_project_ids) if allowed_project_ids else None,
+        allowed_project_keys=resolved_proj_keys or None,
         capability_mask=capability_mask if capability_mask is not None else 7,
         allowed_tools=list(allowed_tools) if allowed_tools is not None else None,
         disabled_tools=list(disabled_tools) if disabled_tools is not None else [],

@@ -12,7 +12,7 @@ import React, {
   useState,
   type JSX,
 } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 import {
   IssuesWorkspaceRoute,
@@ -44,7 +44,7 @@ import { IconStory } from '../dev/IconStory';
 import { ProjectOverviewView } from '../features/stickies/ProjectOverviewView';
 import { WorkspaceStickiesView } from '../features/stickies/WorkspaceStickiesView';
 import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom-fields';
-import { apiClient } from '../api/client';
+import { apiClient, apiFetch } from '../api/client';
 import { RouteErrorBoundary } from '../components/error/AppErrorModal';
 import type { IssueDetail } from '../features/drawer/slots';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -485,26 +485,258 @@ export function YourWorkView(): JSX.Element {
   );
 }
 
+export interface ProjectCycleItem {
+  id: string;
+  name: string;
+  status?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
 export function ProjectCyclesView(): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
   const key = projectKey ?? 'KAN';
+  const queryClient = useQueryClient();
+
+  const [newName, setNewName] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data: cycles = [], isLoading } = useQuery<ProjectCycleItem[]>({
+    queryKey: ['projects', key, 'cycles'],
+    queryFn: async () => {
+      const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/cycles' as never, {
+        params: { project_ref: key },
+      });
+      const data = res as { items?: ProjectCycleItem[] } | ProjectCycleItem[];
+      return Array.isArray(data) ? data : data.items ?? [];
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      setErrorMsg(null);
+      return await apiFetch('POST', '/api/v1/projects/{project_ref}/cycles' as never, {
+        params: { project_ref: key },
+        body: {
+          name: newName.trim(),
+          ...(startDate ? { start_date: startDate } : {}),
+          ...(endDate ? { end_date: endDate } : {}),
+        },
+      });
+    },
+    onSuccess: () => {
+      setNewName('');
+      setStartDate('');
+      setEndDate('');
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'cycles'] });
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to create cycle');
+    },
+  });
+
+  const handleSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    createMutation.mutate();
+  };
+
   return (
     <section data-testid="project-cycles-view" className="kb-workspace-section">
-      <h1>Cycles ({key})</h1>
-      <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
-      <Link to={`/projects/${key}/issues`}>Filter work items by cycle →</Link>
+      <div className="kb-workspace-section-header">
+        <h1>Cycles ({key})</h1>
+        <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
+        <h3>Create New Cycle</h3>
+        {errorMsg && (
+          <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
+            {errorMsg}
+          </div>
+        )}
+        <div className="kb-form-row">
+          <input
+            type="text"
+            className="kb-form-input"
+            data-testid="new-cycle-name-input"
+            placeholder="Sprint / Cycle name..."
+            value={newName}
+            onChange={(e) => { setNewName(e.target.value); }}
+            required
+          />
+          <input
+            type="date"
+            className="kb-form-input"
+            data-testid="new-cycle-start-input"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); }}
+            title="Start date"
+          />
+          <input
+            type="date"
+            className="kb-form-input"
+            data-testid="new-cycle-end-input"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); }}
+            title="End date"
+          />
+          <button
+            type="submit"
+            className="kb-btn-primary"
+            data-testid="create-cycle-btn"
+            disabled={createMutation.isPending || !newName.trim()}
+          >
+            {createMutation.isPending ? 'Creating...' : '+ Create Cycle'}
+          </button>
+        </div>
+      </form>
+
+      <div className="kb-cycles-list-wrapper">
+        {isLoading && <p>Loading cycles...</p>}
+        {!isLoading && cycles.length === 0 && (
+          <p className="kb-empty-text">No cycles defined yet. Create your first sprint cycle above.</p>
+        )}
+        <ul className="kb-cycles-list" data-testid="cycles-list">
+          {cycles.map((cyc) => (
+            <li key={cyc.id} className="kb-cycle-item" data-testid={`cycle-item-${cyc.id}`}>
+              <div className="kb-cycle-info">
+                <strong>{cyc.name}</strong>
+                {cyc.status && <span className="kb-cycle-status-badge">{cyc.status}</span>}
+                {Boolean(cyc.start_date ?? cyc.end_date) && (
+                  <span className="kb-cycle-dates">
+                    {cyc.start_date ?? 'TBD'} → {cyc.end_date ?? 'TBD'}
+                  </span>
+                )}
+              </div>
+              <Link to={`/projects/${key}/issues?cycle=${cyc.id}`}>Filter work items →</Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
+}
+
+export interface ProjectModuleItem {
+  id: string;
+  name: string;
+  status?: string;
+  description_markdown?: string;
 }
 
 export function ProjectModulesView(): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
   const key = projectKey ?? 'KAN';
+  const queryClient = useQueryClient();
+
+  const [newName, setNewName] = useState('');
+  const [description, setDescription] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data: modules = [], isLoading } = useQuery<ProjectModuleItem[]>({
+    queryKey: ['projects', key, 'modules'],
+    queryFn: async () => {
+      const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/modules' as never, {
+        params: { project_ref: key },
+      });
+      const data = res as { items?: ProjectModuleItem[] } | ProjectModuleItem[];
+      return Array.isArray(data) ? data : data.items ?? [];
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      setErrorMsg(null);
+      return await apiFetch('POST', '/api/v1/projects/{project_ref}/modules' as never, {
+        params: { project_ref: key },
+        body: {
+          name: newName.trim(),
+          ...(description.trim() ? { description_markdown: description.trim() } : {}),
+        },
+      });
+    },
+    onSuccess: () => {
+      setNewName('');
+      setDescription('');
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'modules'] });
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to create module');
+    },
+  });
+
+  const handleSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    createMutation.mutate();
+  };
+
   return (
     <section data-testid="project-modules-view" className="kb-workspace-section">
-      <h1>Modules ({key})</h1>
-      <p>Feature modules and sub-project groupings for {key}.</p>
-      <Link to={`/projects/${key}/issues`}>View module work items →</Link>
+      <div className="kb-workspace-section-header">
+        <h1>Modules ({key})</h1>
+        <p>Feature modules and sub-project groupings for {key}.</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
+        <h3>Create New Module</h3>
+        {errorMsg && (
+          <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
+            {errorMsg}
+          </div>
+        )}
+        <div className="kb-form-row">
+          <input
+            type="text"
+            className="kb-form-input"
+            data-testid="new-module-name-input"
+            placeholder="Module name..."
+            value={newName}
+            onChange={(e) => { setNewName(e.target.value); }}
+            required
+          />
+          <input
+            type="text"
+            className="kb-form-input"
+            data-testid="new-module-desc-input"
+            placeholder="Description (optional)..."
+            value={description}
+            onChange={(e) => { setDescription(e.target.value); }}
+          />
+          <button
+            type="submit"
+            className="kb-btn-primary"
+            data-testid="create-module-btn"
+            disabled={createMutation.isPending || !newName.trim()}
+          >
+            {createMutation.isPending ? 'Creating...' : '+ Create Module'}
+          </button>
+        </div>
+      </form>
+
+      <div className="kb-modules-list-wrapper">
+        {isLoading && <p>Loading modules...</p>}
+        {!isLoading && modules.length === 0 && (
+          <p className="kb-empty-text">No modules defined yet. Create your first module above.</p>
+        )}
+        <ul className="kb-modules-list" data-testid="modules-list">
+          {modules.map((mod) => (
+            <li key={mod.id} className="kb-module-item" data-testid={`module-item-${mod.id}`}>
+              <div className="kb-module-info">
+                <strong>{mod.name}</strong>
+                {mod.status && <span className="kb-module-status-badge">{mod.status}</span>}
+                {mod.description_markdown && (
+                  <p className="kb-module-desc">{mod.description_markdown}</p>
+                )}
+              </div>
+              <Link to={`/projects/${key}/issues?module=${mod.id}`}>View module work items →</Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }

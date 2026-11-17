@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
 
-from kanban.api.problems import ProblemException
+from kanban.api.problems import ProblemException, format_validation_error
 from kanban.auth.cards.handshake import probe_auth_card_handshake
 from kanban.auth.cards.lockout import (
     LockoutPreventedError,
@@ -145,21 +145,23 @@ class AuthCardAdminService:
             try:
                 OidcCardConfig(**public_config)
             except Exception as exc:
+                clean_err = format_validation_error(exc)
                 raise ProblemException(
                     code="INVALID_CARD_CONFIG",
                     status=422,
                     title="Invalid Card Configuration",
-                    detail=f"Invalid OIDC/OAuth2 configuration: {exc}",
+                    detail=f"Invalid OIDC/OAuth2 configuration: {clean_err}",
                 ) from exc
         elif kind == "LDAP":
             try:
                 LdapCardConfig(**public_config)
             except Exception as exc:
+                clean_err = format_validation_error(exc)
                 raise ProblemException(
                     code="INVALID_CARD_CONFIG",
                     status=422,
                     title="Invalid Card Configuration",
-                    detail=f"Invalid LDAP configuration: {exc}",
+                    detail=f"Invalid LDAP configuration: {clean_err}",
                 ) from exc
 
         # Check allowed_email_domains bound
@@ -313,21 +315,23 @@ class AuthCardAdminService:
                 try:
                     OidcCardConfig(**public_config)
                 except Exception as exc:
+                    clean_err = format_validation_error(exc)
                     raise ProblemException(
                         code="INVALID_CARD_CONFIG",
                         status=422,
                         title="Invalid Card Configuration",
-                        detail=f"Invalid OIDC/OAuth2 configuration: {exc}",
+                        detail=f"Invalid OIDC/OAuth2 configuration: {clean_err}",
                     ) from exc
             elif kind == "LDAP":
                 try:
                     LdapCardConfig(**public_config)
                 except Exception as exc:
+                    clean_err = format_validation_error(exc)
                     raise ProblemException(
                         code="INVALID_CARD_CONFIG",
                         status=422,
                         title="Invalid Card Configuration",
-                        detail=f"Invalid LDAP configuration: {exc}",
+                        detail=f"Invalid LDAP configuration: {clean_err}",
                     ) from exc
         else:
             public_config = dict(card.public_config or {})

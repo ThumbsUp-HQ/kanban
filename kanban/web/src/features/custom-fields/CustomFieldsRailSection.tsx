@@ -12,6 +12,7 @@ import {
   qk,
   type CustomFieldDefinition,
   type CustomFieldExecutionResult,
+  type CustomFieldTier,
 } from './api';
 import { CustomFieldValue } from './CustomFieldValue';
 import './custom-fields.css';
@@ -129,7 +130,9 @@ function CustomFieldsRailSectionInner({
           const result = resultsByFieldId.get(def.id);
           const isInFlight = inFlightFieldIds.has(def.id);
 
-          const tier = result?.tier ?? (def.tier === 'wasm' ? 'Wasmtime' : 'nsjail');
+          const defTier = def.tier as CustomFieldTier | null | undefined;
+          const tier: string | null | undefined =
+            result?.tier ?? (defTier === 'wasm' ? 'Wasmtime' : defTier === 'nsjail' ? 'nsjail' : defTier);
           const tokenScope = result?.token_scope ?? def.target_scope;
           const credentialMode = result?.credential_mode ?? def.credential_mode;
           const latencyMs = result?.last_latency_ms;
@@ -156,15 +159,19 @@ function CustomFieldsRailSectionInner({
                       className="custom-field-hint-content"
                       data-testid={`custom-field-hint-popover-${def.slug}`}
                     >
-                      <div className="custom-field-hint-line">
-                        <strong>Tier:</strong> {tier}
-                      </div>
-                      <div className="custom-field-hint-line">
-                        <strong>Scope:</strong> {tokenScope}
-                      </div>
-                      <div className="custom-field-hint-line">
-                        <strong>Principal:</strong> {credentialMode}
-                      </div>
+                      {tier !== null && tier !== undefined && (
+                        <>
+                          <div className="custom-field-hint-line">
+                            <strong>Tier:</strong> {tier}
+                          </div>
+                          <div className="custom-field-hint-line">
+                            <strong>Scope:</strong> {tokenScope}
+                          </div>
+                          <div className="custom-field-hint-line">
+                            <strong>Principal:</strong> {credentialMode}
+                          </div>
+                        </>
+                      )}
                       <div className="custom-field-hint-line">
                         <strong>Latency:</strong>{' '}
                         {latencyMs !== undefined ? `${String(latencyMs)}ms` : 'N/A'}

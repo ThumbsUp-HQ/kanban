@@ -23,6 +23,7 @@ export interface TopbarProps {
   isSidebarOpen?: boolean | undefined;
   onToggleSidebar?: (() => void) | undefined;
   onOpenPalette?: (() => void) | undefined;
+  workspaceName?: string | undefined;
   projectKey?: string | undefined;
   projectName?: string | undefined;
   currentSection?: string | undefined;
@@ -50,6 +51,7 @@ export function Topbar({
   isSidebarOpen = true,
   onToggleSidebar,
   onOpenPalette,
+  workspaceName = 'kanban',
   projectKey = 'KAN',
   projectName = 'kanban',
   currentSection = 'Work Items',
@@ -123,6 +125,7 @@ export function Topbar({
           ☰
         </button>
         <Breadcrumb
+          workspaceName={workspaceName}
           projectKey={projectKey}
           projectName={projectName}
           currentSection={currentSection}

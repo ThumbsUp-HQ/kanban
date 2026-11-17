@@ -24,10 +24,16 @@ export function parseAccessTarget(arg: unknown): AccessInspectorTarget | null {
     return { objectId: arg };
   }
   if (typeof arg === 'object' && arg !== null) {
-    const candidate = arg as { objectId?: unknown; anchorEl?: unknown };
-    if (typeof candidate.objectId === 'string' && UUID_REGEX.test(candidate.objectId)) {
+    const candidate = arg as { objectId?: unknown; object_id?: unknown; anchorEl?: unknown };
+    const rawId =
+      typeof candidate.objectId === 'string'
+        ? candidate.objectId
+        : typeof candidate.object_id === 'string'
+          ? candidate.object_id
+          : null;
+    if (typeof rawId === 'string' && UUID_REGEX.test(rawId)) {
       return {
-        objectId: candidate.objectId,
+        objectId: rawId,
         anchorEl: candidate.anchorEl instanceof HTMLElement ? candidate.anchorEl : null,
       };
     }

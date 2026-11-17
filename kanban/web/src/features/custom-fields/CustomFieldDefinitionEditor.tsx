@@ -70,6 +70,7 @@ export function CustomFieldDefinitionEditor({
   const [isEnabled, setIsEnabled] = useState(true);
 
   // UI / Dialog states
+  const [activeTab, setActiveTab] = useState<'basic' | 'advanced'>('basic');
   const [copiedSha, setCopiedSha] = useState(false);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -333,184 +334,234 @@ export function CustomFieldDefinitionEditor({
           </div>
         )}
 
+        {/* Tab switcher: Basic vs Advanced */}
+        <div className="custom-fields-tabs-bar" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            id="custom-fields-basic-tab"
+            aria-selected={activeTab === 'basic'}
+            aria-controls="custom-fields-basic-panel"
+            className={`custom-fields-tab-btn ${activeTab === 'basic' ? 'custom-fields-tab-btn--active' : ''}`}
+            onClick={() => {
+              setActiveTab('basic');
+            }}
+            data-testid="custom-fields-basic-tab"
+          >
+            Basic
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="custom-fields-advanced-tab"
+            aria-selected={activeTab === 'advanced'}
+            aria-controls="custom-fields-advanced-panel"
+            className={`custom-fields-tab-btn ${activeTab === 'advanced' ? 'custom-fields-tab-btn--active' : ''}`}
+            onClick={() => {
+              setActiveTab('advanced');
+            }}
+            data-testid="custom-fields-advanced-tab"
+          >
+            Advanced
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="custom-fields-editor-form">
-          <div className="custom-fields-form-grid">
-            {/* Field Name */}
+          <div
+            role="tabpanel"
+            id="custom-fields-basic-panel"
+            aria-labelledby="custom-fields-basic-tab"
+            data-testid="custom-fields-basic-panel"
+            hidden={activeTab !== 'basic'}
+          >
+            <div className="custom-fields-form-grid">
+              {/* Field Name */}
+              <div className="custom-field-form-group">
+                <label htmlFor="field-name" className="custom-field-form-label">
+                  Field Name
+                </label>
+                <input
+                  id="field-name"
+                  type="text"
+                  className="custom-field-input"
+                  maxLength={80}
+                  required
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                  }}
+                  data-testid="field-name-input"
+                  placeholder="e.g. CVSS Score"
+                />
+              </div>
+
+              {/* Field Slug */}
+              <div className="custom-field-form-group">
+                <label htmlFor="field-slug" className="custom-field-form-label">
+                  Identifier Slug (a-z0-9-)
+                </label>
+                <input
+                  id="field-slug"
+                  type="text"
+                  className="custom-field-input mono"
+                  maxLength={63}
+                  pattern="^[a-z0-9][a-z0-9-]{1,62}$"
+                  required
+                  disabled={Boolean(selectedField)}
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value.toLowerCase());
+                  }}
+                  data-testid="field-slug-input"
+                  placeholder="cvss-score"
+                />
+              </div>
+
+              {/* Output Format */}
+              <div className="custom-field-form-group">
+                <label htmlFor="output-format" className="custom-field-form-label">
+                  Output Format
+                </label>
+                <select
+                  id="output-format"
+                  className="custom-field-select"
+                  value={outputFormat}
+                  onChange={(e) => {
+                    handleFormatChange(e.target.value as OutputFormatType);
+                  }}
+                  data-testid="output-format-select"
+                >
+                  <option value="text">Text (max 280 chars)</option>
+                  <option value="number">Number (Intl formatted)</option>
+                  <option value="badge">Badge (Design Token Pill)</option>
+                  <option value="markdown_snippet">Markdown Snippet (Sanitized)</option>
+                  <option value="url">URL (Safe Hostname Anchor)</option>
+                  <option value="json_table">JSON Table (Max 50x10)</option>
+                  <option value="severity_pill">Severity Pill (low/med/high/crit)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Format Metadata JSON */}
             <div className="custom-field-form-group">
-              <label htmlFor="field-name" className="custom-field-form-label">
-                Field Name
+              <label htmlFor="format-metadata" className="custom-field-form-label">
+                Format Configuration Metadata (JSON)
               </label>
-              <input
-                id="field-name"
-                type="text"
-                className="custom-field-input"
-                maxLength={80}
+              <textarea
+                id="format-metadata"
+                className="custom-field-textarea mono"
+                rows={4}
+                value={metadataText}
+                onChange={(e) => {
+                  setMetadataText(e.target.value);
+                }}
+                data-testid="format-metadata-textarea"
+              />
+              {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
+            </div>
+
+            {/* Script Source Code */}
+            <div className="custom-field-form-group">
+              <label htmlFor="script-source" className="custom-field-form-label">
+                Script Source Code (Sandboxed, never executed client-side)
+              </label>
+              <textarea
+                id="script-source"
+                className="custom-field-textarea mono custom-field-source-editor"
+                rows={8}
                 required
-                value={name}
+                value={scriptSource}
                 onChange={(e) => {
-                  setName(e.target.value);
+                  setScriptSource(e.target.value);
                 }}
-                data-testid="field-name-input"
-                placeholder="e.g. CVSS Score"
+                data-testid="script-source-textarea"
               />
             </div>
 
-            {/* Field Slug */}
+            {/* Is Enabled */}
             <div className="custom-field-form-group">
-              <label htmlFor="field-slug" className="custom-field-form-label">
-                Identifier Slug (a-z0-9-)
+              <label className="custom-field-checkbox-label">
+                <input
+                  id="is-enabled"
+                  type="checkbox"
+                  checked={isEnabled}
+                  onChange={(e) => {
+                    setIsEnabled(e.target.checked);
+                  }}
+                  data-testid="is-enabled-checkbox"
+                />
+                Enabled
               </label>
-              <input
-                id="field-slug"
-                type="text"
-                className="custom-field-input mono"
-                maxLength={63}
-                pattern="^[a-z0-9][a-z0-9-]{1,62}$"
-                required
-                disabled={Boolean(selectedField)}
-                value={slug}
-                onChange={(e) => {
-                  setSlug(e.target.value.toLowerCase());
-                }}
-                data-testid="field-slug-input"
-                placeholder="cvss-score"
-              />
-            </div>
-
-            {/* Output Format */}
-            <div className="custom-field-form-group">
-              <label htmlFor="output-format" className="custom-field-form-label">
-                Output Format
-              </label>
-              <select
-                id="output-format"
-                className="custom-field-select"
-                value={outputFormat}
-                onChange={(e) => {
-                  handleFormatChange(e.target.value as OutputFormatType);
-                }}
-                data-testid="output-format-select"
-              >
-                <option value="text">Text (max 280 chars)</option>
-                <option value="number">Number (Intl formatted)</option>
-                <option value="badge">Badge (Design Token Pill)</option>
-                <option value="markdown_snippet">Markdown Snippet (Sanitized)</option>
-                <option value="url">URL (Safe Hostname Anchor)</option>
-                <option value="json_table">JSON Table (Max 50x10)</option>
-                <option value="severity_pill">Severity Pill (low/med/high/crit)</option>
-              </select>
-            </div>
-
-            {/* Execution Tier */}
-            <div className="custom-field-form-group">
-              <label htmlFor="execution-tier" className="custom-field-form-label">
-                Execution Tier (S13.3)
-              </label>
-              <select
-                id="execution-tier"
-                className="custom-field-select"
-                value={tier}
-                onChange={(e) => {
-                  setTier(e.target.value as CustomFieldTier);
-                }}
-                data-testid="execution-tier-select"
-              >
-                <option value="wasm">Tier A: Wasmtime (Sub-millisecond Wasm)</option>
-                <option value="nsjail">Tier B: nsjail (Linux Isolated Cgroup)</option>
-              </select>
-            </div>
-
-            {/* Target Scope */}
-            <div className="custom-field-form-group">
-              <label htmlFor="target-scope" className="custom-field-form-label">
-                Token Scope (S13.2)
-              </label>
-              <select
-                id="target-scope"
-                className="custom-field-select"
-                value={targetScope}
-                onChange={(e) => {
-                  setTargetScope(e.target.value as CustomFieldTargetScope);
-                }}
-                data-testid="target-scope-select"
-              >
-                <option value="PROJECT">Project (Default)</option>
-                <option value="WORKSPACE">Workspace (Requires Workspace Admin)</option>
-                <option value="SERVER">Server (Requires Server Admin Dual-Control)</option>
-              </select>
-            </div>
-
-            {/* Credential Mode */}
-            <div className="custom-field-form-group">
-              <label htmlFor="credential-mode" className="custom-field-form-label">
-                Credential Mode (S13.2)
-              </label>
-              <select
-                id="credential-mode"
-                className="custom-field-select"
-                value={credentialMode}
-                onChange={(e) => {
-                  setCredentialMode(e.target.value as CustomFieldCredentialMode);
-                }}
-                data-testid="credential-mode-select"
-              >
-                <option value="INVOKING_USER">Invoking User (Default)</option>
-                <option value="PROJECT_ADMIN_SP">Project Admin Service Principal (SP)</option>
-                <option value="SERVER_ADMIN_SP">Server Admin Service Principal (SP)</option>
-              </select>
             </div>
           </div>
 
-          {/* Format Metadata JSON */}
-          <div className="custom-field-form-group">
-            <label htmlFor="format-metadata" className="custom-field-form-label">
-              Format Configuration Metadata (JSON)
-            </label>
-            <textarea
-              id="format-metadata"
-              className="custom-field-textarea mono"
-              rows={4}
-              value={metadataText}
-              onChange={(e) => {
-                setMetadataText(e.target.value);
-              }}
-              data-testid="format-metadata-textarea"
-            />
-            {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
-          </div>
+          <div
+            role="tabpanel"
+            id="custom-fields-advanced-panel"
+            aria-labelledby="custom-fields-advanced-tab"
+            data-testid="custom-fields-advanced-panel"
+            hidden={activeTab !== 'advanced'}
+          >
+            <div className="custom-fields-form-grid">
+              {/* Execution Tier */}
+              <div className="custom-field-form-group">
+                <label htmlFor="execution-tier" className="custom-field-form-label">
+                  Execution Tier (S13.3)
+                </label>
+                <select
+                  id="execution-tier"
+                  className="custom-field-select"
+                  value={tier}
+                  onChange={(e) => {
+                    setTier(e.target.value as CustomFieldTier);
+                  }}
+                  data-testid="execution-tier-select"
+                >
+                  <option value="wasm">Tier A: Wasmtime (Sub-millisecond Wasm)</option>
+                  <option value="nsjail">Tier B: nsjail (Linux Isolated Cgroup)</option>
+                </select>
+              </div>
 
-          {/* Script Source Code */}
-          <div className="custom-field-form-group">
-            <label htmlFor="script-source" className="custom-field-form-label">
-              Script Source Code (Sandboxed, never executed client-side)
-            </label>
-            <textarea
-              id="script-source"
-              className="custom-field-textarea mono custom-field-source-editor"
-              rows={8}
-              required
-              value={scriptSource}
-              onChange={(e) => {
-                setScriptSource(e.target.value);
-              }}
-              data-testid="script-source-textarea"
-            />
-          </div>
+              {/* Target Scope */}
+              <div className="custom-field-form-group">
+                <label htmlFor="target-scope" className="custom-field-form-label">
+                  Token Scope (S13.2)
+                </label>
+                <select
+                  id="target-scope"
+                  className="custom-field-select"
+                  value={targetScope}
+                  onChange={(e) => {
+                    setTargetScope(e.target.value as CustomFieldTargetScope);
+                  }}
+                  data-testid="target-scope-select"
+                >
+                  <option value="PROJECT">Project (Default)</option>
+                  <option value="WORKSPACE">Workspace (Requires Workspace Admin)</option>
+                  <option value="SERVER">Server (Requires Server Admin Dual-Control)</option>
+                </select>
+              </div>
 
-          {/* Is Enabled */}
-          <div className="custom-field-form-group">
-            <label className="custom-field-checkbox-label">
-              <input
-                id="is-enabled"
-                type="checkbox"
-                checked={isEnabled}
-                onChange={(e) => {
-                  setIsEnabled(e.target.checked);
-                }}
-                data-testid="is-enabled-checkbox"
-              />
-              Enabled
-            </label>
+              {/* Credential Mode */}
+              <div className="custom-field-form-group">
+                <label htmlFor="credential-mode" className="custom-field-form-label">
+                  Credential Mode (S13.2)
+                </label>
+                <select
+                  id="credential-mode"
+                  className="custom-field-select"
+                  value={credentialMode}
+                  onChange={(e) => {
+                    setCredentialMode(e.target.value as CustomFieldCredentialMode);
+                  }}
+                  data-testid="credential-mode-select"
+                >
+                  <option value="INVOKING_USER">Invoking User (Default)</option>
+                  <option value="PROJECT_ADMIN_SP">Project Admin Service Principal (SP)</option>
+                  <option value="SERVER_ADMIN_SP">Server Admin Service Principal (SP)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           {/* Form Actions */}

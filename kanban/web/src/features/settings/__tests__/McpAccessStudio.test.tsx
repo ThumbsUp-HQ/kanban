@@ -232,6 +232,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
         label: 'CI Bot Token',
         surface: 'agent',
         scopes: ['agent:read', 'agent:write'],
+        scope_tier: 'project',
         allowed_projects: ['KANBA'],
         expires_in_days: 60,
       });
@@ -526,6 +527,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
         label: 'Unlimited Token',
         surface: 'agent',
         scopes: ['agent:read', 'agent:write'],
+        scope_tier: 'workspace',
         unlimited: true,
         confirm_unlimited: true,
       });
@@ -602,9 +604,41 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
         label: 'Narrowed Agent Key',
         surface: 'agent',
         scopes: ['agent:read', 'agent:write'],
+        scope_tier: 'workspace',
         expires_in_days: 60,
         disabled_tools: ['complete_work', 'add_comment'],
       });
+    });
+  });
+
+  it('renders visible role="alert" error banner inside mint modal when API fails', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValue(
+      new Error('Forbidden: Insufficient privileges to mint key'),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Failing Key' },
+    });
+
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeDefined();
+      expect(alert.textContent).toContain('Forbidden: Insufficient privileges to mint key');
     });
   });
 });

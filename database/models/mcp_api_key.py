@@ -66,6 +66,10 @@ class McpApiKey(Base):
         String(4),
         nullable=False,
     )
+    label: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+    )
     scopes: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
         nullable=False,

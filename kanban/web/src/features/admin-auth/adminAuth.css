@@ -467,6 +467,28 @@
   background: var(--bg-surface);
 }
 
+.auth-editor-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.auth-card-icon-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--fg-default);
+}
+
+.auth-preset-icon {
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
 .auth-editor-textarea {
   min-height: 80px;
   font-family: var(--font-mono, monospace);

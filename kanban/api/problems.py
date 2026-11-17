@@ -22,6 +22,21 @@ _CODE_REGEX = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
 
+def format_validation_error(exc: Exception) -> str:
+    """Format a Pydantic ValidationError or similar error cleanly without URLs or raw inputs."""
+    if hasattr(exc, "errors") and callable(exc.errors):
+        messages: list[str] = []
+        for err in exc.errors():
+            loc = err.get("loc", ())
+            path_segments = [str(elem) for elem in loc if elem != "body"]
+            path_str = ".".join(path_segments) if path_segments else ""
+            msg = err.get("msg", "Invalid value")
+            msg = re.sub(r"\s*\[URL:\s*https://errors\.pydantic\.dev/[^\]]+\]", "", msg).strip()
+            messages.append(f"{path_str}: {msg}" if path_str else msg)
+        return "; ".join(messages) if messages else "Invalid configuration"
+    return re.sub(r"\s*\[URL:\s*https://errors\.pydantic\.dev/[^\]]+\]", "", str(exc)).strip()
+
+
 class FieldError(BaseModel):
     """Validation failure on an individual request field without echoing raw user input."""
 
@@ -154,6 +169,14 @@ async def problem_exception_handler(
     """Format an explicit ProblemException into application/problem+json."""
     del request
     req_id = get_request_id()
+    if exc.status in range(400, 500):
+        logger.warning(
+            "Client error [%s / %d] [request_id=%s]: %s",
+            exc.code,
+            exc.status,
+            req_id,
+            exc.detail or exc.title,
+        )
     extra_fields = dict(exc.extra or {})
     extra_field = extra_fields.pop("field", None)
     problem = Problem(
@@ -200,15 +223,27 @@ async def validation_exception_handler(
         path_segments = [str(elem) for elem in loc if elem != "body"]
         path_str = ".".join(path_segments) if path_segments else "body"
         msg = err.get("msg", "Invalid value")
-        # Ensure submitted value is strictly excluded
+        msg = re.sub(r"\s*\[URL:\s*https://errors\.pydantic\.dev/[^\]]+\]", "", msg).strip()
         field_errors.append(FieldError(path=path_str, message=msg))
+
+    summary = (
+        "; ".join(f"{fe.path}: {fe.message}" for fe in field_errors)
+        if field_errors
+        else None
+    )
+    detail = f"Request validation failed: {summary}" if summary else "Request validation failed"
+    logger.warning(
+        "Request validation failed [request_id=%s]: %s",
+        req_id,
+        summary or "validation error",
+    )
 
     problem = Problem(
         type="urn:kanban:problem:VALIDATION_FAILED",
         title="Validation Failed",
         status=422,
         code="VALIDATION_FAILED",
-        detail="Request validation failed",
+        detail=detail,
         request_id=req_id,
         errors=field_errors or None,
     )

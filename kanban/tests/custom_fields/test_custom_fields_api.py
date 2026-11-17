@@ -618,3 +618,57 @@ async def test_06_service_branches_and_edge_cases(
     resp_get_after = await client.get("/api/v1/projects/EDGE/custom-fields")
     assert resp_get_after.status_code == 200
     assert len(resp_get_after.json()) == 0
+
+
+async def test_07_non_admin_redaction_tier_target_scope_credential_mode(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """Non-admin readers have tier, target_scope, credential_mode, and script_source redacted."""
+    admin = await make_user("admin7", workspace_role="WORKSPACE_ADMIN")
+    member = await make_user("member7", workspace_role="WORKSPACE_MEMBER")
+    _proj_id = await make_project(
+        "RED",
+        created_by=admin,
+        roles={admin: "PROJECT_ADMIN", member: "VIEWER"},
+    )
+
+    admin_client = _as_admin_aal2(api_env, admin)
+    resp_create = await admin_client.post(
+        "/api/v1/projects/RED/custom-fields",
+        json={
+            "slug": "redacted-field",
+            "name": "Redacted Field",
+            "tier": "wasm",
+            "output_format": "text",
+            "output_format_metadata": {"max_length": 50},
+            "script_source": "export default function() { return 'secret logic'; }",
+            "target_scope": "PROJECT",
+            "credential_mode": "INVOKING_USER",
+        },
+    )
+    assert resp_create.status_code == 201
+
+    # Member reads definitions: sensitive execution parameters are redacted to None
+    member_client = _as_user_aal1(api_env, member)
+    resp_member = await member_client.get("/api/v1/projects/RED/custom-fields")
+    assert resp_member.status_code == 200
+    fields = resp_member.json()
+    assert len(fields) == 1
+    f = fields[0]
+    assert f["tier"] is None
+    assert f["target_scope"] is None
+    assert f["credential_mode"] is None
+    assert f["script_source"] is None
+    assert f["manifest_sha256"] is None
+
+    # Admin reads definitions: all execution parameters are populated
+    _as_admin_aal2(api_env, admin)
+    resp_admin = await admin_client.get("/api/v1/projects/RED/custom-fields")
+    assert resp_admin.status_code == 200
+    af = resp_admin.json()[0]
+    assert af["tier"] == "wasm"
+    assert af["target_scope"] == "PROJECT"
+    assert af["credential_mode"] == "INVOKING_USER"
+    assert af["script_source"] is not None

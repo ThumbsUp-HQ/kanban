@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import html
 import logging
+import os
 import time
 import uuid  # noqa: TC003
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ from kanban.services.activity import ActivityEventType, record_activity
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+    from starlette.requests import Request
 
 _logger: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -97,15 +99,113 @@ def validate_registration_redirect_uris(uris: list[str]) -> None:
 
     for uri in uris:
         parsed = urlparse(uri)
+        if parsed.fragment:
+            raise OAuth2Error(err, f"Redirect URI {uri!r} must not contain a fragment", 400)
+        if parsed.username or parsed.password:
+            raise OAuth2Error(err, f"Redirect URI {uri!r} must not contain userinfo", 400)
         if parsed.scheme == "https":
             continue
-        if parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost"):
+        if parsed.scheme == "http" and (
+            parsed.hostname in ("127.0.0.1", "localhost", "::1", "[::1]")
+            or parsed.netloc.startswith("::1")
+            or parsed.netloc.startswith("[::1]")
+        ):
             continue
         raise OAuth2Error(
             err,
-            f"Redirect URI {uri!r} must use HTTPS or loopback HTTP (127.0.0.1/localhost)",
+            f"Redirect URI {uri!r} must use HTTPS or loopback HTTP (127.0.0.1/localhost/::1)",
             400,
         )
+
+
+def resolve_public_base_url(request: Request | None = None) -> str:
+    """Resolve canonical public base URL from settings, proxy headers, or request base URL."""
+    env_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN", "").strip()
+    if env_origin:
+        return env_origin.rstrip("/")
+
+    if request is not None:
+        proto = request.headers.get("x-forwarded-proto")
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if proto and host:
+            return f"{proto}://{host}".rstrip("/")
+        if host:
+            has_url = hasattr(request, "url")
+            scheme = request.url.scheme if has_url and request.url.scheme else "http"
+            return f"{scheme}://{host}".rstrip("/")
+        if hasattr(request, "base_url"):
+            return str(request.base_url).rstrip("/")
+
+    return "http://localhost:8000"
+
+
+def parse_resource_target(
+    resource: str,
+    base_url: str | None = None,
+) -> tuple[str, str | None, str | None]:
+    """Parse resource indicator URL into (surface, workspace_slug, project_key).
+
+    Supports:
+        - /mcp
+        - /mcp/w/{workspace_slug}
+        - /mcp/w/{workspace_slug}/p/{project_key}
+        - /mcp/{surface}
+        - /mcp/{surface}/w/{workspace_slug}
+        - /mcp/{surface}/w/{workspace_slug}/p/{project_key}
+    Default surface is 'agent' when omitted.
+    """
+    del base_url
+    clean_res = resource.rstrip("/")
+    parsed = urlparse(clean_res)
+    path = (parsed.path or clean_res).rstrip("/")
+
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Check for /mcp base
+    target_err = "invalid_target"
+    idx = path.find("/mcp")
+    if idx == -1:
+        raise OAuth2Error(
+            target_err,
+            f"Resource {resource!r} must target /mcp/agent, /mcp/docs, or /mcp/admin",
+            400,
+        )
+
+    subpath = path[idx + len("/mcp") :].strip("/")
+    segments = [s for s in subpath.split("/") if s]
+
+    surface = "agent"
+    ws_slug: str | None = None
+    proj_key: str | None = None
+
+    if not segments:
+        # Bare /mcp -> surface 'agent'
+        return surface, None, None
+
+    if segments[0] in ("agent", "docs", "admin"):
+        surface = segments[0]
+        segments = segments[1:]
+
+    if segments:
+        if segments[0] == "w" and len(segments) >= 2:  # noqa: PLR2004
+            ws_slug = segments[1]
+            if len(segments) >= 4 and segments[2] == "p":  # noqa: PLR2004
+                proj_key = segments[3]
+        else:
+            raise OAuth2Error(
+                target_err,
+                f"Resource {resource!r} has invalid target scope segments",
+                400,
+            )
+
+    return surface, ws_slug, proj_key
+
+
+def parse_surface_from_resource(resource: str, base_url: str | None = None) -> str:
+    """Extract surface ('agent', 'docs', 'admin') from resource URL."""
+    surface, _, _ = parse_resource_target(resource, base_url)
+    return surface
 
 
 class RegistrationRateLimiter:
@@ -147,19 +247,6 @@ def check_registration_rate_limit(ip: str) -> None:
         )
 
 
-def parse_surface_from_resource(resource: str, base_url: str | None = None) -> str:
-    """Extract surface ('agent', 'docs', 'admin') from resource URL."""
-    del base_url
-    clean_res = resource.rstrip("/")
-    for surface in ("agent", "docs", "admin"):
-        if clean_res.endswith(f"/mcp/{surface}"):
-            return surface
-    err = "invalid_target"
-    raise OAuth2Error(
-        err,
-        f"Resource {resource!r} must target /mcp/agent, /mcp/docs, or /mcp/admin",
-        400,
-    )
 
 
 async def revoke_grant_family(
@@ -206,6 +293,17 @@ async def revoke_grant_family(
         )
 
 
+SCOPE_DESCRIPTIONS: Final[dict[str, str]] = {
+    "agent:read": "Read-only access to boards, tickets, stickies, and issues",
+    "agent:write": "Read and write access to tickets, comments, stickies, and workflows",
+    "docs:read": "Read-only access to documents and knowledge spaces",
+    "docs:write": "Read and write access to documents, stickies, and knowledge bases",
+    "admin:read": "Read-only access to system users, audit logs, and settings",
+    "admin:write": "Administrative write access to policies and configurations",
+    "admin:destructive": "Full destructive administrative control (purge and hard delete)",
+}
+
+
 def render_consent_screen(  # noqa: PLR0913
     *,
     client_name: str,
@@ -219,6 +317,7 @@ def render_consent_screen(  # noqa: PLR0913
     client_id: str,
     csrf_token: str,
     available_projects: list[tuple[uuid.UUID, str]] | None = None,
+    principal_display: str | None = None,
 ) -> HTMLResponse:
     """Render server-rendered accessible OAuth 2.1 consent and approval screen."""
     parsed_redirect = urlparse(redirect_uri)
@@ -226,15 +325,20 @@ def render_consent_screen(  # noqa: PLR0913
     safe_client_name = html.escape(client_name)
     safe_surface = html.escape(surface.upper())
     safe_resource = html.escape(resource)
+    safe_principal = html.escape(principal_display) if principal_display else None
 
-    # Scope checkboxes
+    # Scope checkboxes with human-readable descriptions
     scope_rows = []
     for sc in requested_scopes:
         safe_sc = html.escape(sc)
+        desc = html.escape(SCOPE_DESCRIPTIONS.get(sc, "Access to requested capability"))
         scope_rows.append(
             f'<label class="scope-item">'
             f'<input type="checkbox" name="scopes" value="{safe_sc}" checked /> '
+            f'<span class="scope-info">'
             f'<span class="scope-name">{safe_sc}</span>'
+            f'<span class="scope-desc">{desc}</span>'
+            f"</span>"
             f"</label>"
         )
     scopes_html = "\n".join(scope_rows)
@@ -247,6 +351,12 @@ def render_consent_screen(  # noqa: PLR0913
             safe_p_name = html.escape(p_name)
             project_options.append(f'<option value="{safe_p_id}">{safe_p_name}</option>')
     projects_html = "\n".join(project_options)
+
+    principal_badge_html = (
+        f'<div class="user-badge">Signed in as <strong>{safe_principal}</strong></div>'
+        if safe_principal
+        else ""
+    )
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -299,6 +409,15 @@ def render_consent_screen(  # noqa: PLR0913
       border-radius: 6px;
       border: 1px solid var(--border);
     }}
+    .user-badge {{
+      text-align: center;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }}
+    .user-badge strong {{
+      color: var(--text);
+    }}
     .surface-banner {{
       background: var(--badge-bg);
       color: var(--badge-text);
@@ -329,12 +448,18 @@ def render_consent_screen(  # noqa: PLR0913
     }}
     .scope-item {{
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.5rem;
       font-size: 0.875rem;
       cursor: pointer;
     }}
-    .scope-name {{ font-family: monospace; color: #cbd5e1; }}
+    .scope-info {{
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }}
+    .scope-name {{ font-family: monospace; color: #cbd5e1; font-weight: 600; }}
+    .scope-desc {{ font-size: 0.75rem; color: var(--text-muted); }}
     .project-selector {{ margin-bottom: 1.5rem; }}
     .project-selector select {{
       width: 100%;
@@ -368,6 +493,7 @@ def render_consent_screen(  # noqa: PLR0913
     <div class="header">
       <h1 class="app-title">Authorize {safe_client_name}</h1>
       <span class="host-badge">Redirects to {host_display}</span>
+      {principal_badge_html}
     </div>
 
     <div class="surface-banner">

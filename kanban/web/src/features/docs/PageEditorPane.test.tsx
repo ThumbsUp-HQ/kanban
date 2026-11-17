@@ -107,10 +107,54 @@ describe('PageEditorPane', () => {
 
     fireEvent.click(screen.getByTestId('page-access-pill'));
     expect(eventSpy).toHaveBeenCalled();
-    const event = eventSpy.mock.calls[0]?.[0] as CustomEvent<{ object_id: string }> | undefined;
+    const event = eventSpy.mock.calls[0]?.[0] as CustomEvent<{ object_id: string; objectId?: string }> | undefined;
     expect(event?.detail.object_id).toBe('page-auth-studio');
+    expect(event?.detail.objectId).toBe('page-auth-studio');
 
     window.removeEventListener('kb:open-access-inspector', eventSpy);
+  });
+
+  it('calls onOpenHistory when page-version-pill button is clicked', async () => {
+    const onOpenHistory = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PageEditorPane pageId="page-auth-studio" projectKey="KAN" onOpenHistory={onOpenHistory} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('page-version-pill')).toBeDefined();
+    });
+
+    const versionBtn = screen.getByTestId('page-version-pill');
+    expect(versionBtn.tagName.toLowerCase()).toBe('button');
+    fireEvent.click(versionBtn);
+    expect(onOpenHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies markdown content to clipboard via Copy Markdown button', async () => {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PageEditorPane pageId="page-auth-studio" projectKey="KAN" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-doc-markdown-btn')).toBeDefined();
+    });
+
+    const copyBtn = screen.getByTestId('copy-doc-markdown-btn');
+    expect(copyBtn.textContent).toContain('Copy Markdown');
+    fireEvent.click(copyBtn);
+
+    expect(writeTextMock).toHaveBeenCalledWith(mockPageData.body_markdown);
   });
 
   it('triggers debounced save with If-Match ETag on title change', async () => {

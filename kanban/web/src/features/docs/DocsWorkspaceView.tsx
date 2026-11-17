@@ -26,8 +26,14 @@ export function DocsWorkspaceView(): JSX.Element {
 
   const [currentMarkdown, setCurrentMarkdown] = useState<string | undefined>(undefined);
   const [isTreeSheetOpen, setIsTreeSheetOpen] = useState(false);
-  const [isRailSheetOpen, setIsRailSheetOpen] = useState(false);
+  const [isRailSheetOpen, setIsRailSheetOpen] = useState(true);
+  const [railTab, setRailTab] = useState<'outline' | 'history'>('outline');
   const [announcement, setAnnouncement] = useState<string | null>(null);
+
+  const handleOpenHistory = useCallback(() => {
+    setIsRailSheetOpen(true);
+    setRailTab('history');
+  }, []);
 
   useEffect(() => {
     void ensureDocsCsrfToken();
@@ -156,6 +162,7 @@ export function DocsWorkspaceView(): JSX.Element {
               onToggleRail={() => {
                 setIsRailSheetOpen((prev) => !prev);
               }}
+              onOpenHistory={handleOpenHistory}
               isRailOpen={isRailSheetOpen}
               onAnnounce={handleAnnounce}
               onMarkdownChange={setCurrentMarkdown}
@@ -187,6 +194,8 @@ export function DocsWorkspaceView(): JSX.Element {
               page={pageData}
               markdownContent={currentMarkdown}
               onAnnounce={handleAnnounce}
+              activeTab={railTab}
+              onTabChange={setRailTab}
             />
           </div>
         )}

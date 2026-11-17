@@ -9,9 +9,10 @@
  * - 24px 28px outer canvas padding (--board-canvas-pad, 16px mobile)
  */
 
-#main {
-  height: 100vh;
-  max-height: 100vh;
+.kb-main-canvas {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   padding: var(--board-canvas-pad, 24px 28px);
   box-sizing: border-box;
   overflow: hidden;
@@ -20,7 +21,7 @@
 }
 
 @media (max-width: 767px) {
-  #main {
+  .kb-main-canvas {
     padding: 16px;
   }
 }
@@ -129,6 +130,24 @@
   align-items: center;
   gap: var(--space-1, 4px);
   flex-shrink: 0;
+}
+
+.board-column-add-workflow-btn {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-muted, #94a3b8);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px dashed var(--border-subtle, #30363d);
+  transition: all 120ms ease;
+  white-space: nowrap;
+}
+
+.board-column-add-workflow-btn:hover {
+  color: var(--fg-primary, #ffffff);
+  border-color: var(--primary, #3b82f6);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
 }
 
 .board-column-scroll-area {

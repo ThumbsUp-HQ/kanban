@@ -640,8 +640,7 @@ export function IssuesWorkspaceRoute({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <main
-        id="main"
+      <div
         className="issues-workspace issues-workspace-route"
         data-testid="issues-workspace"
         data-layout={layout}
@@ -816,7 +815,7 @@ export function IssuesWorkspaceRoute({
         onSelect={handleFieldSelect}
         modulesEnabled={modulesEnabled}
       />
-    </main>
+    </div>
   </QueryClientProvider>
   );
 }

@@ -94,7 +94,15 @@ class PrecompressedSPAStaticApp:
         """Resolve index.html fallback for extensionless non-reserved paths."""
         segments = [s for s in unquoted_path.split("/") if s]
         last_segment = segments[-1] if segments else ""
-        disallowed_prefixes = ("/api", "/ws", "/sse", "/mcp")
+        disallowed_prefixes = (
+            "/api",
+            "/ws",
+            "/sse",
+            "/mcp",
+            "/.well-known",
+            "/oauth",
+            "/internal",
+        )
         is_reserved = any(
             raw_path == p or raw_path.startswith(p + "/") for p in disallowed_prefixes
         )

@@ -58,14 +58,14 @@ class CustomFieldResponse(BaseModel):
     project_id: uuid.UUID
     slug: str
     name: str
-    tier: str
+    tier: str | None = None
     output_format: str
     output_format_metadata: dict[str, Any]
     script_source: str | None = None
     wasm_module_sha256: str | None = None
     script_version: int
-    target_scope: str
-    credential_mode: str
+    target_scope: str | None = None
+    credential_mode: str | None = None
     egress_allowlist: list[str]
     manifest_sha256: str | None = None
     is_enabled: bool

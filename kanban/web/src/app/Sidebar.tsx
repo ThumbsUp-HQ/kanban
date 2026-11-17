@@ -774,7 +774,25 @@ export function Sidebar({
                           <span className="kb-sidebar-icon" aria-hidden="true">
                             📄
                           </span>
-                          <span>Docs (Pages)</span>
+                          <span>Docs</span>
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/settings/workflows`}
+                          className="kb-sidebar-nav-item"
+                          aria-current={
+                            currentPath.startsWith(
+                              `/projects/${proj.key}/settings/workflows`,
+                            )
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            🔀
+                          </span>
+                          <span>Workflows</span>
                         </NavLink>
                       </li>
                       <li>

@@ -32,7 +32,7 @@ from database.models.oauth import (
     OAuthRevokedJti,
 )
 from database.models.projects import Project
-from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+from kanban.api.deps import DenyAllResolver, PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.auth.mfa.policy import require_admin_aal2
 from kanban.oauth.device import (
@@ -56,6 +56,7 @@ from kanban.oauth.server import (
     hash_token,
     parse_surface_from_resource,
     render_consent_screen,
+    resolve_public_base_url,
     revoke_grant_family,
     validate_redirect_uri,
     validate_registration_redirect_uris,
@@ -169,11 +170,23 @@ async def _require_admin_aal2(caller: PrincipalContext, session: AsyncSession) -
 class OAuthClientRegisterRequest(BaseModel):
     """Payload for RFC 7591 dynamic client registration."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
-    client_name: str = Field(min_length=1, max_length=200)
+    client_name: str | None = Field(default=None, max_length=200)
     redirect_uris: list[str] = Field(min_length=1)
     client_type: Literal["public"] = "public"
+    grant_types: list[str] | None = None
+    response_types: list[str] | None = None
+    token_endpoint_auth_method: str | None = None
+    scope: str | None = None
+    client_uri: str | None = None
+    logo_uri: str | None = None
+    contacts: list[str] | None = None
+    tos_uri: str | None = None
+    policy_uri: str | None = None
+    jwks_uri: str | None = None
+    software_id: str | None = Field(default=None, max_length=200)
+    software_version: str | None = Field(default=None, max_length=100)
 
 
 class OAuthClientRegisterResponse(BaseModel):
@@ -186,6 +199,9 @@ class OAuthClientRegisterResponse(BaseModel):
     client_type: str = "public"
     redirect_uris: list[str]
     status: str
+    grant_types: list[str] | None = None
+    response_types: list[str] | None = None
+    token_endpoint_auth_method: str = "none"  # noqa: S105
 
 
 class OAuthGrantResponse(BaseModel):
@@ -220,10 +236,25 @@ class OAuthClientPatchRequest(BaseModel):
     "/.well-known/oauth-authorization-server",
     summary="OAuth 2.1 Authorization Server Metadata (RFC 8414)",
 )
-async def oauth_as_metadata(request: Request) -> JSONResponse:
+@oauth_root_router.get(
+    "/.well-known/oauth-authorization-server/{subpath:path}",
+    summary="OAuth 2.1 Authorization Server Metadata with Subpath (RFC 8414)",
+    include_in_schema=False,
+)
+@oauth_root_router.get(
+    "/.well-known/openid-configuration",
+    summary="OpenID Connect Discovery Metadata",
+)
+@oauth_root_router.get(
+    "/.well-known/openid-configuration/{subpath:path}",
+    summary="OpenID Connect Discovery Metadata with Subpath",
+    include_in_schema=False,
+)
+async def oauth_as_metadata(request: Request, subpath: str | None = None) -> JSONResponse:
     """Return RFC 8414 authorization server discovery metadata."""
+    del subpath
     _check_no_token_in_query(request)
-    base_url = str(request.base_url).rstrip("/")
+    base_url = resolve_public_base_url(request)
     return JSONResponse(
         {
             "issuer": base_url,
@@ -279,7 +310,53 @@ async def oauth_register_client(
     # 2. Redirect URI validation
     validate_registration_redirect_uris(payload.redirect_uris)
 
-    # 3. Check workspace policy for client approval
+    # 3. Grant types validation
+    allowed_grants = {
+        "authorization_code",
+        "refresh_token",
+        "urn:ietf:params:oauth:grant-type:device_code",
+    }
+    err_meta = "invalid_client_metadata"
+    if payload.grant_types is not None:
+        if not payload.grant_types:
+            raise OAuth2Error(err_meta, "grant_types cannot be empty", 400)
+        unsupported = [gt for gt in payload.grant_types if gt not in allowed_grants]
+        if unsupported:
+            raise OAuth2Error(
+                err_meta,
+                f"Unsupported grant_types: {unsupported}",
+                400,
+            )
+
+    # 4. Token endpoint auth method validation
+    if payload.token_endpoint_auth_method is not None:
+        if payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post"):
+            raise OAuth2Error(
+                err_meta,
+                "Public clients must use token_endpoint_auth_method 'none'",
+                400,
+            )
+        if payload.token_endpoint_auth_method not in ("none", "private_key_jwt"):
+            raise OAuth2Error(
+                err_meta,
+                f"Unsupported token_endpoint_auth_method '{payload.token_endpoint_auth_method}'",
+                400,
+            )
+
+    eff_client_name = (
+        payload.client_name.strip()
+        if payload.client_name and payload.client_name.strip()
+        else "MCP Client"
+    )
+    eff_grant_types = payload.grant_types or [
+        "authorization_code",
+        "refresh_token",
+        "urn:ietf:params:oauth:grant-type:device_code",
+    ]
+    eff_response_types = payload.response_types or ["code"]
+    eff_auth_method = "none"
+
+    # 5. Check workspace policy for client approval
     require_approval = (
         os.environ.get("KANBAN_REQUIRE_ADMIN_OAUTH_CLIENT_APPROVAL", "").lower() in ("true", "1")
         or request.headers.get("x-require-admin-oauth-client-approval", "").lower() == "true"
@@ -289,7 +366,7 @@ async def oauth_register_client(
     client_id = f"client_{secrets.token_urlsafe(16)}"
     client_record = OAuthClient(
         client_id=client_id,
-        client_name=payload.client_name,
+        client_name=eff_client_name,
         client_type="public",
         redirect_uris=payload.redirect_uris,
         status=initial_status,
@@ -306,6 +383,9 @@ async def oauth_register_client(
             "client_type": client_record.client_type,
             "redirect_uris": client_record.redirect_uris,
             "status": client_record.status,
+            "grant_types": eff_grant_types,
+            "response_types": eff_response_types,
+            "token_endpoint_auth_method": eff_auth_method,
         },
         status_code=201,
     )
@@ -331,7 +411,7 @@ async def oauth_device_authorize(
         desc = "client_id and resource required"
         raise OAuth2Error(err, desc, 400)
 
-    base_url = str(request.base_url).rstrip("/")
+    base_url = resolve_public_base_url(request)
     res = await create_device_authorization(
         session,
         client_id_str=client_id,
@@ -360,10 +440,9 @@ async def oauth_device_authorize(
     "/oauth/authorize",
     summary="OAuth 2.1 Interactive Authorization / Consent Screen",
 )
-async def oauth_authorize(  # noqa: C901, PLR0913, PLR0917
+async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     request: Request,
-    caller: Caller,
-    session: Session,
+    session: UnauthSession,
     response_type: Annotated[str, Query()],
     client_id: Annotated[str, Query()],
     redirect_uri: Annotated[str, Query()],
@@ -429,19 +508,10 @@ async def oauth_authorize(  # noqa: C901, PLR0913, PLR0917
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
     # 7. Validate resource & surface
-    base_url = str(request.base_url).rstrip("/")
+    base_url = resolve_public_base_url(request)
     surface = parse_surface_from_resource(resource, base_url)
 
-    # 8. Admin surface requires AAL2
-    if surface == "admin" and caller.aal_level < _REQUIRED_AAL_LEVEL:
-        params = {
-            "error": "access_denied",
-            "error_description": "aal2_required",
-            "state": state,
-        }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
-
-    # 9. Scopes validation
+    # 8. Scopes validation
     allowed_surface_scopes = SURFACE_SCOPES[surface]
     requested_scopes = scope.split() if scope else list(allowed_surface_scopes)
     for sc in requested_scopes:
@@ -453,12 +523,43 @@ async def oauth_authorize(  # noqa: C901, PLR0913, PLR0917
             }
             return RedirectResponse(f"{redirect_uri}?{urlencode(params)}")
 
-    # 10. Load available projects for project scope selector
+    # 9. Principal resolution
+    resolver = getattr(request.app.state, "principal_resolver", DenyAllResolver())
+    caller = await resolver.resolve(request)
+
+    if caller is None:
+        accept_hdr = request.headers.get("accept", "")
+        if "application/json" in accept_hdr and "text/html" not in accept_hdr:
+            raise ProblemException(
+                code="AUTHENTICATION_REQUIRED",
+                status=401,
+                title="Authentication Required",
+                detail="Authentication required before authorizing OAuth client.",
+            )
+        # Redirect browser to login with next parameter
+        login_url = f"/login?next={urllib.parse.quote(str(request.url), safe='')}"
+        return RedirectResponse(login_url, status_code=302)
+
+    # 10. Admin surface requires AAL2
+    if surface == "admin" and caller.aal_level < _REQUIRED_AAL_LEVEL:
+        params = {
+            "error": "access_denied",
+            "error_description": "aal2_required",
+            "state": state,
+        }
+        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+
+    # 11. Load available projects for project scope selector
     stmt_projects = select(Project.id, Project.name).where(
         Project.workspace_id == caller.workspace_id
     )
     projects_rows = (await session.execute(stmt_projects)).all()
     available_projects = [(row[0], row[1]) for row in projects_rows]
+
+    # Resolve principal display name
+    stmt_user = text("SELECT display_name FROM principals WHERE id = :p_id")
+    p_name = (await session.execute(stmt_user, {"p_id": caller.principal_id})).scalar_one_or_none()
+    principal_display = p_name or str(caller.principal_id)
 
     csrf_token = secrets.token_urlsafe(32)
 
@@ -474,6 +575,7 @@ async def oauth_authorize(  # noqa: C901, PLR0913, PLR0917
         client_id=client_id,
         csrf_token=csrf_token,
         available_projects=available_projects,
+        principal_display=principal_display,
     )
 
 
@@ -525,7 +627,7 @@ async def oauth_authorize_decision(
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
     # 3. Surface & scopes validation
-    base_url = str(request.base_url).rstrip("/")
+    base_url = resolve_public_base_url(request)
     surface = parse_surface_from_resource(resource, base_url)
     allowed_surface_scopes = SURFACE_SCOPES[surface]
     approved_scopes = [s for s in selected_scopes if s in allowed_surface_scopes]
@@ -579,11 +681,6 @@ async def oauth_authorize_decision(
     return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
 
-# =========================================================================
-# Token Exchange & RFC 7009 Revocation
-# =========================================================================
-
-
 @oauth_root_router.post(
     "/oauth/token",
     summary="OAuth 2.1 Token Exchange (Authorization Code & Refresh Token)",
@@ -609,7 +706,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
     eff_rt_val = form.get("refresh_token")
     eff_refresh_token = str(eff_rt_val) if eff_rt_val is not None else None
 
-    base_url = str(request.base_url).rstrip("/")
+    base_url = resolve_public_base_url(request)
     now = datetime.now(UTC)
 
     # 1. Authorization Code Grant

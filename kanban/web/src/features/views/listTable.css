@@ -112,6 +112,35 @@
   color: var(--fg-primary);
 }
 
+.list-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.list-section-add-workflow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  background: transparent;
+  border: 1px dashed var(--border-subtle, #30363d);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.list-section-add-workflow-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+  border-color: var(--primary, #3b82f6);
+}
+
 /* ==========================================================================
    Breathable 46px List Row (S6.1, S6.4 item 2)
    ========================================================================== */

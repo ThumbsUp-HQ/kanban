@@ -85,6 +85,24 @@ class OidcCardConfig(BaseModel):
     admin_allowlist: list[str] = Field(default_factory=list)
     user_allowlist: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_ui_aliases(cls, data: object) -> object:
+        """Normalize frontend UI alias keys before validation."""
+        if not isinstance(data, dict):
+            return data
+        d = dict(data)
+        if "issuer_url" in d and "issuer" not in d:
+            d["issuer"] = d.pop("issuer_url")
+        elif "issuer_url" in d:
+            d.pop("issuer_url")
+        if "token_auth_method" in d and "client_auth" not in d:
+            d["client_auth"] = d.pop("token_auth_method")
+        elif "token_auth_method" in d:
+            d.pop("token_auth_method")
+        d.pop("pkce_method", None)
+        return d
+
     @field_validator(
         "issuer",
         "authorization_endpoint",

@@ -1,6 +1,7 @@
 import React, { type JSX } from 'react';
 import type { AdminAuthCard } from './adminAuthApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { renderAuthIcon, LocalAdmin } from '../../components/icons/KanbanIcons';
 import './adminAuth.css';
 
 export interface AuthCardRowProps {
@@ -21,14 +22,6 @@ export interface AuthCardRowProps {
   isToggling?: boolean;
 }
 
-const ICON_MAP: Record<string, string> = {
-  key: '🔑',
-  shield: '🛡️',
-  lock: '🔒',
-  globe: '🌐',
-  'user-check': '👤',
-};
-
 export function AuthCardRow({
   card,
   index,
@@ -47,7 +40,6 @@ export function AuthCardRow({
   isToggling = false,
 }: AuthCardRowProps): JSX.Element {
   const isPinned = card.provider_kind === 'LOCAL_ADMIN';
-  const icon = ICON_MAP[card.icon_preset] ?? '🔑';
 
   const canMoveUp = !isPinned && index > 0;
   const canMoveDown = !isPinned && index < totalCards - 2; // Below non-pinned cards
@@ -103,7 +95,7 @@ export function AuthCardRow({
         </div>
 
         <div className="auth-card-icon" aria-hidden="true">
-          {icon}
+          {isPinned ? <LocalAdmin size={20} /> : renderAuthIcon(card.icon_preset, 20)}
         </div>
 
         <div className="auth-card-info">

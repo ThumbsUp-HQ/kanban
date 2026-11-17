@@ -106,6 +106,64 @@ export interface PageVersionResponse {
   created_at: string;
 }
 
+export const DEFAULT_DOC_MARKDOWN_TEMPLATE = `# Specification & Architecture Overview
+
+Welcome to your new document! This template showcases 👍kanban's rich Markdown, diagramming, and cross-linking capabilities.
+
+## Key Features & Highlights
+
+This specification demonstrates **bold text**, *italic emphasis*, and \`inline_code()\` expressions.
+Related issue reference: #KAN-1.
+
+> [!NOTE]
+> All documentation changes maintain strict immutable version history and sub-millisecond rollback capability.
+
+> [!TIP]
+> Use keyboard shortcuts or the floating sparkle cursor to generate structured document sections with AI assistance.
+
+### Architecture & Service Flow
+
+The following Mermaid diagram illustrates the service mesh flow:
+
+\`\`\`mermaid
+flowchart LR
+    Client[Web Client] --> Gateway[API Gateway]
+    Gateway --> DocsService[Docs Service]
+    DocsService --> Postgres[(PostgreSQL Object Graph)]
+\`\`\`
+
+### Implementation Checklist
+
+- [x] High-level architectural specification reviewed
+- [x] Universal object graph schema validation
+- [ ] Automated integration test coverage >= 95%
+- [ ] Security audit & threat model sign-off
+
+### Component Registry Matrix
+
+| Component | Status | Tier | SLA Target |
+| :--- | :--- | :--- | :--- |
+| \`PageEditorPane\` | Active | L1 | 99.99% |
+| \`DocsTreeNav\` | Active | L1 | 99.99% |
+| \`OutlineAndVersionsRail\` | Active | L2 | 99.95% |
+
+### Sample Integration Snippet
+
+\`\`\`ts
+import { fetchDocsTree, createPage } from './docsApi';
+
+export async function initializeProjectDocumentation(projectKey: string): Promise<void> {
+  const tree = await fetchDocsTree(projectKey);
+  if (!tree.root_pages.length) {
+    await createPage(projectKey, {
+      title: 'Getting Started',
+      body_markdown: DEFAULT_DOC_MARKDOWN_TEMPLATE,
+    });
+  }
+}
+\`\`\`
+`;
+
 export async function fetchDocsTree(projectKey: string): Promise<PageTreeNode[]> {
   try {
     return await typedFetch<PageTreeNode[]>('GET', '/api/v1/projects/{projectKey}/docs/tree', {

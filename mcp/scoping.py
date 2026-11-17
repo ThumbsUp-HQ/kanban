@@ -157,15 +157,25 @@ def intersect_key_and_connection_scope(
 
     # 2. Workspace connection mode
     if scope.is_workspace:
-        if token_tier != "global" and token_ws and str(token_ws) != scope.workspace_slug:  # noqa: S105
+        ws_match = (
+            (bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug)
+            or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
+        )
+        has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
+        if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
             msg = (
                 f"Requested workspace '{scope.workspace_slug}' is outside "
                 f"the scope boundary of this API key."
             )
+            allowed_ws = (
+                [str(auth_ctx.workspace_slug)]
+                if auth_ctx.workspace_slug
+                else ([str(auth_ctx.workspace_id)] if auth_ctx.workspace_id else [])
+            )
             raise KbMcpError(
                 McpErrorCode.KEY_SCOPE_VIOLATION,
                 msg,
-                extra={"allowed_workspaces": [str(token_ws)]},
+                extra={"allowed_workspaces": allowed_ws},
                 hint="Use an API key with global or appropriate workspace permissions.",
             )
         if allowed_projects:
@@ -180,23 +190,44 @@ def intersect_key_and_connection_scope(
         return ConnectionScope(
             mode=ScopeMode.WORKSPACE,
             workspace_slug=scope.workspace_slug,
-            workspace_id=auth_ctx.workspace_id if str(token_ws) == scope.workspace_slug else None,
+            workspace_id=auth_ctx.workspace_id if ws_match else None,
         )
 
     # 3. Project connection mode
     if scope.is_project:
-        if token_tier != "global" and token_ws and str(token_ws) != scope.workspace_slug:  # noqa: S105
+        ws_match = (
+            (bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug)
+            or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
+        )
+        has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
+        if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
             msg = (
                 f"Requested workspace '{scope.workspace_slug}' is outside "
                 f"the scope boundary of this API key."
             )
+            allowed_ws = (
+                [str(auth_ctx.workspace_slug)]
+                if auth_ctx.workspace_slug
+                else ([str(auth_ctx.workspace_id)] if auth_ctx.workspace_id else [])
+            )
             raise KbMcpError(
                 McpErrorCode.KEY_SCOPE_VIOLATION,
                 msg,
-                extra={"allowed_workspaces": [str(token_ws)]},
+                extra={"allowed_workspaces": allowed_ws},
                 hint="Use an API key with global or appropriate workspace permissions.",
             )
-        if allowed_projects and scope.project_key not in allowed_projects:
+        proj_str = str(auth_ctx.project_id) if auth_ctx.project_id is not None else None
+        allowed_proj_keys = getattr(auth_ctx, "allowed_project_keys", None) or []
+        proj_match = (
+            scope.project_key in allowed_projects
+            or scope.project_key in allowed_proj_keys
+            or (scope.project_id is not None and scope.project_id in allowed_projects)
+            or (
+                proj_str is not None
+                and proj_str in (scope.project_key, scope.project_id)
+            )
+        ) if allowed_projects else True
+        if allowed_projects and not proj_match:
             msg = (
                 f"Requested project '{scope.project_key}' is outside "
                 f"the scope boundary of this API key."
@@ -211,7 +242,8 @@ def intersect_key_and_connection_scope(
             mode=ScopeMode.PROJECT,
             workspace_slug=scope.workspace_slug,
             project_key=scope.project_key,
-            workspace_id=auth_ctx.workspace_id if str(token_ws) == scope.workspace_slug else None,
+            workspace_id=auth_ctx.workspace_id if ws_match else None,
+            project_id=scope.project_id or auth_ctx.project_id,
         )
 
     return scope

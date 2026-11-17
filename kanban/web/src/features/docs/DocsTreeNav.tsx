@@ -19,6 +19,7 @@ import {
   fetchDocsTree,
   createPage,
   movePage,
+  DEFAULT_DOC_MARKDOWN_TEMPLATE,
   type PageTreeNode,
 } from './docsApi';
 import './DocsWorkspaceView.css';
@@ -243,6 +244,7 @@ export function DocsTreeNav({
     mutationFn: async ({ parentId, title }: { parentId: string | null; title: string }) => {
       return createPage(projectKey, {
         title,
+        body_markdown: DEFAULT_DOC_MARKDOWN_TEMPLATE,
         parent_page_id: parentId,
       });
     },
@@ -496,7 +498,7 @@ export function DocsTreeNav({
                 onChange={(e) => {
                   setNewPageTitle(e.target.value);
                 }}
-                placeholder="Specification title..."
+                placeholder="What do you want to call this doc?"
                 autoFocus
                 required
                 maxLength={500}

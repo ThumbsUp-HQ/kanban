@@ -156,9 +156,10 @@ export async function fetchAdminAuthCards(): Promise<AdminAuthCardsResponse> {
 export async function createAdminAuthCard(
   payload: CreateAuthCardPayload,
 ): Promise<AdminAuthCard> {
+  const { secret_input, ...rest } = payload;
   const normalized = {
-    ...payload,
-    secret: payload.secret ?? payload.secret_input ?? null,
+    ...rest,
+    secret: payload.secret ?? secret_input ?? null,
   };
   const result = (await apiFetch(
     'POST',
@@ -172,9 +173,10 @@ export async function updateAdminAuthCard(
   cardId: string,
   payload: UpdateAuthCardPayload,
 ): Promise<AdminAuthCard> {
+  const { secret_input, ...rest } = payload;
   const normalized = {
-    ...payload,
-    secret: payload.secret ?? payload.secret_input ?? null,
+    ...rest,
+    secret: payload.secret ?? secret_input ?? null,
   };
   const result = (await apiFetch(
     'PATCH',
