@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Pydantic schemas for Multi-Card Auth Studio cards (KB-P2-03, KB-P2-10)."""
+"""Pydantic schemas for Multi-Card Auth Studio cards (KB-P2-03, KB-P2-10, KB-AUTH-JSON)."""
 
 from __future__ import annotations
 
@@ -91,6 +91,7 @@ class AuthCardCreate(BaseModel):
     allowed_email_domains: list[str] = Field(default_factory=list, max_length=50)
     public_config: dict[str, Any] = Field(default_factory=dict)
     secret: str | None = None
+    google_oauth_json: str | None = Field(default=None, max_length=32768)
 
     @field_validator("slug")
     @classmethod
@@ -115,6 +116,32 @@ class AuthCardUpdate(BaseModel):
     allowed_email_domains: list[str] | None = Field(default=None, max_length=50)
     public_config: dict[str, Any] | None = None
     secret: str | None = None
+    google_oauth_json: str | None = Field(default=None, max_length=32768)
+
+
+class GoogleOAuthJsonPreviewRequest(BaseModel):
+    """Request payload for Google OAuth client JSON preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    google_oauth_json: str = Field(min_length=1, max_length=32768)
+    slug: str | None = Field(default=None, max_length=48)
+    expected_redirect_uri: str | None = None
+
+
+class GoogleOAuthJsonPreviewResponse(BaseModel):
+    """Preview response returned from parsing Google OAuth client JSON without exposing secrets."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    client_id: str
+    project_id: str | None = None
+    issuer: str = "https://accounts.google.com"
+    redirect_uris: list[str] = Field(default_factory=list)
+    javascript_origins: list[str] = Field(default_factory=list)
+    expected_callback_uri: str | None = None
+    callback_uri_matched: bool = False
+    has_client_secret: bool = True
 
 
 class AuthCardReorderRequest(BaseModel):

@@ -64,6 +64,24 @@ export interface AdminAuthCardsResponse {
   cards: AdminAuthCard[];
 }
 
+
+export interface GoogleOAuthJsonPreviewRequest {
+  google_oauth_json: string;
+  slug?: string | null;
+  expected_redirect_uri?: string | null;
+}
+
+export interface GoogleOAuthJsonPreviewResponse {
+  client_id: string;
+  project_id?: string | null;
+  issuer: string;
+  redirect_uris: string[];
+  javascript_origins: string[];
+  expected_callback_uri?: string | null;
+  callback_uri_matched: boolean;
+  has_client_secret: boolean;
+}
+
 export interface CreateAuthCardPayload {
   provider_kind: ProviderKind;
   slug: string;
@@ -76,6 +94,7 @@ export interface CreateAuthCardPayload {
   public_config: Record<string, unknown>;
   secret?: string | null;
   secret_input?: string;
+  google_oauth_json?: string | null;
 }
 
 export interface UpdateAuthCardPayload {
@@ -88,6 +107,7 @@ export interface UpdateAuthCardPayload {
   public_config?: Record<string, unknown>;
   secret?: string | null;
   secret_input?: string;
+  google_oauth_json?: string | null;
 }
 
 export interface ReorderAuthCardPayload {
@@ -315,4 +335,16 @@ export async function updateUserRole(
       },
     },
   );
+}
+
+
+export async function parseGoogleOAuthJson(
+  payload: GoogleOAuthJsonPreviewRequest,
+): Promise<GoogleOAuthJsonPreviewResponse> {
+  const result = (await apiFetch(
+    "POST",
+    "/api/v1/admin/auth-cards/parse-google-json" as never,
+    { body: payload },
+  )) as GoogleOAuthJsonPreviewResponse;
+  return result;
 }

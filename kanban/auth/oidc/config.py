@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""OIDC and OAuth2 provider card configuration schema and SSRF validation (KB-P2-06)."""
+"""OIDC & OAuth2 card configuration schema and SSRF validation (KB-P2-06, KB-AUTH-JSON)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import urllib.parse
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from kanban.api.problems import ProblemException
 
 
 def _validate_safe_url(url_str: str | None, field_name: str) -> str | None:
@@ -63,6 +65,16 @@ def _default_allowed_algs() -> list[AllowedAlg]:
     return ["RS256", "ES256"]
 
 
+FORBIDDEN_PUBLIC_CONFIG_KEYS = {
+    "client_secret",
+    "private_key",
+    "refresh_token",
+    "google_oauth_json",
+    "redirect_uris",
+    "javascript_origins",
+}
+
+
 class OidcCardConfig(BaseModel):
     """Configuration schema for OIDC and OAuth2 authentication provider cards."""
 
@@ -87,10 +99,18 @@ class OidcCardConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_ui_aliases(cls, data: object) -> object:
-        """Normalize frontend UI alias keys before validation."""
+    def reject_secrets_and_normalize(cls, data: object) -> object:
+        """Reject secrets in public_config and normalize frontend UI alias keys."""
         if not isinstance(data, dict):
             return data
+        for forbidden in ("client_secret", "private_key", "refresh_token", "google_oauth_json"):
+            if forbidden in data and data[forbidden] is not None:
+                raise ProblemException(
+                    code="SECRET_IN_PUBLIC_CONFIG",
+                    status=422,
+                    title="Secret In Public Config",
+                    detail=f"Forbidden credential key '{forbidden}' found in public_config.",
+                )
         d = dict(data)
         if "issuer_url" in d and "issuer" not in d:
             d["issuer"] = d.pop("issuer_url")

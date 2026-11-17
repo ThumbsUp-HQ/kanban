@@ -13,6 +13,7 @@ import type {
   CreateAuthCardPayload,
   UpdateAuthCardPayload,
   ProviderKind,
+  GoogleOAuthJsonPreviewResponse,
 } from './adminAuthApi';
 import './adminAuth.css';
 
@@ -127,6 +128,14 @@ export function AuthCardEditorDrawer({
     return typeof card?.public_config.spki_sha256_pin === 'string' ? card.public_config.spki_sha256_pin : '';
   });
 
+
+  // Google OAuth JSON Importer state (KB-AUTH-JSON)
+  const [googleJsonPasteOpen, setGoogleJsonPasteOpen] = useState(false);
+  const [googleJsonPasteText, setGoogleJsonPasteText] = useState('');
+  const [googleJsonError, setGoogleJsonError] = useState<string | null>(null);
+  const [googleJsonPreview, setGoogleJsonPreview] = useState<GoogleOAuthJsonPreviewResponse | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Secret input and write-only state
   const [secretInput, setSecretInput] = useState('');
   const [replaceSecret, setReplaceSecret] = useState(() => !card);
@@ -197,6 +206,41 @@ export function AuthCardEditorDrawer({
     setFieldErrors({});
   }
 
+
+  // Accessibility: focus trap & initial focus (KB-AUTH-JSON)
+  useEffect(() => {
+    if (!isOpen) return;
+    const titleEl = document.getElementById("drawer-title");
+    titleEl?.focus();
+
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !drawerRef.current) return;
+      const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          last?.focus();
+          e.preventDefault();
+        }
+      } else {
+        if (document.activeElement === last) {
+          first?.focus();
+          e.preventDefault();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleTabKey);
+    return () => {
+      window.removeEventListener("keydown", handleTabKey);
+    };
+  }, [isOpen]);
+
   // Trap Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -214,6 +258,97 @@ export function AuthCardEditorDrawer({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+
+  const processGoogleJsonContent = (rawText: string) => {
+    setGoogleJsonError(null);
+    try {
+      if (rawText.length > 32768) {
+        setGoogleJsonError('Google OAuth JSON exceeds maximum allowed size of 32,768 bytes.');
+        return;
+      }
+      interface GoogleClientSecretWeb {
+        client_id?: unknown;
+        client_secret?: unknown;
+        auth_uri?: unknown;
+        token_uri?: unknown;
+        project_id?: unknown;
+        redirect_uris?: unknown;
+        javascript_origins?: unknown;
+      }
+      interface GoogleClientSecretPayload {
+        web?: GoogleClientSecretWeb;
+        installed?: unknown;
+      }
+      const parsed = JSON.parse(rawText) as GoogleClientSecretPayload;
+      if (parsed.installed && !parsed.web) {
+        setGoogleJsonError('Google OAuth JSON is for an Installed/Desktop client; create a Web application OAuth client in Google Cloud Console.');
+        return;
+      }
+      if (!parsed.web || typeof parsed.web !== 'object') {
+        setGoogleJsonError("Google OAuth JSON must contain a top-level 'web' configuration object.");
+        return;
+      }
+      const web = parsed.web;
+      if (typeof web.client_id !== 'string' || !web.client_id) {
+        setGoogleJsonError("Field 'client_id' is missing or invalid in Google JSON.");
+        return;
+      }
+      if (typeof web.client_secret !== 'string' || !web.client_secret) {
+        setGoogleJsonError("Field 'client_secret' is missing or invalid in Google JSON.");
+        return;
+      }
+
+      const allowedAuth = ['https://accounts.google.com/o/oauth2/auth', 'https://accounts.google.com/o/oauth2/v2/auth'];
+      const allowedToken = ['https://oauth2.googleapis.com/token', 'https://accounts.google.com/o/oauth2/token', 'https://www.googleapis.com/oauth2/v4/token'];
+      if (typeof web.auth_uri === 'string' && !allowedAuth.includes(web.auth_uri)) {
+        setGoogleJsonError("Field 'auth_uri' does not match allowed Google authorization endpoints.");
+        return;
+      }
+      if (typeof web.token_uri === 'string' && !allowedToken.includes(web.token_uri)) {
+        setGoogleJsonError("Field 'token_uri' does not match allowed Google token endpoints.");
+        return;
+      }
+
+      const activeSlug = slug.trim() || 'google-oauth';
+      const expectedCallback = `${window.location.origin}/api/v1/auth/oidc/${activeSlug}/callback`;
+      const redirectUris: string[] = Array.isArray(web.redirect_uris)
+        ? web.redirect_uris.filter((item): item is string => typeof item === 'string')
+        : [];
+      const isMatched = redirectUris.includes(expectedCallback);
+
+      setClientId(web.client_id);
+      setSecretInput(web.client_secret);
+      setReplaceSecret(true);
+      setIssuerUrl('https://accounts.google.com');
+      setProviderKind('OIDC');
+      setIconPreset('google');
+      if (!slug.trim()) setSlug('google-oauth');
+      if (!displayName.trim()) setDisplayName('Google Workspace');
+      if (!buttonSubtext.trim()) setButtonSubtext('Sign in with your Google account');
+      setScopes('openid, profile, email');
+
+      setGoogleJsonPreview({
+        client_id: web.client_id,
+        project_id: typeof web.project_id === 'string' ? web.project_id : null,
+        issuer: 'https://accounts.google.com',
+        redirect_uris: redirectUris,
+        javascript_origins: Array.isArray(web.javascript_origins)
+          ? web.javascript_origins.filter((item): item is string => typeof item === 'string')
+          : [],
+        expected_callback_uri: expectedCallback,
+        callback_uri_matched: isMatched,
+        has_client_secret: true,
+      });
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setGoogleJsonPasteText('');
+    } catch (err: unknown) {
+      setGoogleJsonError('Failed to parse JSON: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
 
   // 1-Click Preset applier
   const applyPreset = (preset: ProviderPreset) => {
@@ -491,7 +626,7 @@ export function AuthCardEditorDrawer({
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'google' ? 'auth-preset-btn--active' : ''}`}
-                onClick={() => { applyPreset('google'); }}
+                onClick={() => { applyPreset('google'); }} aria-pressed={activePreset === 'google'}
               >
                 <Google size={14} className="auth-preset-icon" />
                 <span>Google (OAuth 2.0)</span>
@@ -499,7 +634,7 @@ export function AuthCardEditorDrawer({
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'github' ? 'auth-preset-btn--active' : ''}`}
-                onClick={() => { applyPreset('github'); }}
+                onClick={() => { applyPreset('github'); }} aria-pressed={activePreset === 'github'}
               >
                 <GitHub size={14} className="auth-preset-icon" />
                 <span>GitHub (OAuth 2.0)</span>
@@ -507,7 +642,7 @@ export function AuthCardEditorDrawer({
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'active-directory' ? 'auth-preset-btn--active' : ''}`}
-                onClick={() => { applyPreset('active-directory'); }}
+                onClick={() => { applyPreset('active-directory'); }} aria-pressed={activePreset === 'active-directory'}
               >
                 <ActiveDirectory size={14} className="auth-preset-icon" />
                 <span>Active Directory (sAMAccountName)</span>
@@ -515,7 +650,7 @@ export function AuthCardEditorDrawer({
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'openldap' ? 'auth-preset-btn--active' : ''}`}
-                onClick={() => { applyPreset('openldap'); }}
+                onClick={() => { applyPreset('openldap'); }} aria-pressed={activePreset === 'openldap'}
               >
                 <Ldap size={14} className="auth-preset-icon" />
                 <span>Standard LDAP (OpenLDAP)</span>
@@ -523,7 +658,7 @@ export function AuthCardEditorDrawer({
               <button
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'custom-oauth' ? 'auth-preset-btn--active' : ''}`}
-                onClick={() => { applyPreset('custom-oauth'); }}
+                onClick={() => { applyPreset('custom-oauth'); }} aria-pressed={activePreset === 'custom-oauth'}
               >
                 <Key size={14} className="auth-preset-icon" />
                 <span>Custom OAuth 2.0 / OIDC</span>
@@ -552,6 +687,172 @@ export function AuthCardEditorDrawer({
             <>
               {/* SECTION 1: MANDATORY SETTINGS */}
               <div className="auth-editor-section-title">Mandatory Settings</div>
+
+              {/* Google OAuth JSON Importer Section (KB-AUTH-JSON) */}
+              {(providerKind === 'OIDC' || providerKind === 'OAUTH2') && (
+                <div className="auth-google-json-section" data-testid="google-json-import-section">
+                  <div className="auth-google-json-header">
+                    <span className="auth-google-json-title">
+                      <Google size={14} />
+                      <span>Google OAuth Client Secret JSON (client_secret_*.json)</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="auth-btn-secondary"
+                      data-testid="google-json-paste-toggle"
+                      aria-expanded={googleJsonPasteOpen}
+                      onClick={() => {
+                        setGoogleJsonPasteOpen(!googleJsonPasteOpen);
+                      }}
+                    >
+                      {googleJsonPasteOpen ? 'Hide Paste' : 'Paste JSON'}
+                    </button>
+                  </div>
+
+                  {googleJsonError && (
+                    <div className="auth-editor-error" role="alert" data-testid="google-json-error">
+                      {googleJsonError}
+                    </div>
+                  )}
+
+                  {/* Drag-and-drop & File Upload Button */}
+                  <div
+                    className={`auth-google-json-dropzone ${isDraggingOver ? 'auth-google-json-dropzone--active' : ''}`}
+                    data-testid="google-json-dropzone"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingOver(true);
+                    }}
+                    onDragLeave={() => {
+                      setIsDraggingOver(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingOver(false);
+                      const file = e.dataTransfer.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const text = ev.target?.result;
+                          if (typeof text === 'string') {
+                            processGoogleJsonContent(text);
+                          }
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                  >
+                    <p>Drag and drop <code>client_secret_*.json</code> here, or</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json,application/json"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const text = ev.target?.result;
+                            if (typeof text === 'string') {
+                              processGoogleJsonContent(text);
+                            }
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="auth-btn-secondary"
+                      data-testid="google-json-upload-btn"
+                      style={{ marginTop: '8px' }}
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      Upload JSON File
+                    </button>
+                  </div>
+
+                  {/* Paste JSON Disclosure */}
+                  {googleJsonPasteOpen && (
+                    <div className="auth-google-json-paste-box">
+                      <textarea
+                        className="auth-google-json-textarea"
+                        placeholder="Paste full Google Cloud Console web client JSON here..."
+                        value={googleJsonPasteText}
+                        onChange={(e) => {
+                          setGoogleJsonPasteText(e.target.value);
+                        }}
+                        aria-label="Paste Google Cloud Console client JSON"
+                      />
+                      <button
+                        type="button"
+                        className="auth-studio-add-btn"
+                        data-testid="google-json-apply-btn"
+                        onClick={() => {
+                          processGoogleJsonContent(googleJsonPasteText);
+                        }}
+                      >
+                        Apply Google JSON
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Status announcement and redirect URI match feedback */}
+                  {googleJsonPreview && (
+                    googleJsonPreview.callback_uri_matched ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="auth-google-json-status auth-google-json-status--ok"
+                        data-testid="google-json-redirect-ok"
+                      >
+                        <span>✓ Authorized Redirect URI matched in uploaded Google client configuration.</span>
+                      </div>
+                    ) : (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="auth-google-json-status auth-google-json-status--warning"
+                        data-testid="google-json-redirect-warning"
+                      >
+                        <strong>⚠️ Authorized Redirect URI mismatch</strong>
+                        <span>
+                          Expected: <code>{googleJsonPreview.expected_callback_uri}</code>
+                        </span>
+                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                          <button
+                            type="button"
+                            className="auth-btn-secondary"
+                            onClick={() => {
+                              if (googleJsonPreview.expected_callback_uri) {
+                                void navigator.clipboard.writeText(googleJsonPreview.expected_callback_uri);
+                              }
+                            }}
+                          >
+                            Copy Expected Callback URL
+                          </button>
+                        </div>
+                        {googleJsonPreview.redirect_uris.length > 0 && (
+                          <details style={{ marginTop: "6px" }}>
+                            <summary style={{ cursor: "pointer" }}>
+                              URIs found in Google JSON ({googleJsonPreview.redirect_uris.length})
+                            </summary>
+                            <ul className="auth-google-json-uris-list">
+                              {googleJsonPreview.redirect_uris.map((uri, idx) => (
+                                <li key={idx}>{uri}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
 
               {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
             <div>

@@ -1,0 +1,1090 @@
+diff --git a/kanban/api/v1/admin/auth_cards.py b/kanban/api/v1/admin/auth_cards.py
+index 98d7446..8ba412b 100644
+--- a/kanban/api/v1/admin/auth_cards.py
++++ b/kanban/api/v1/admin/auth_cards.py
+@@ -21,10 +21,13 @@ from kanban.auth.cards.schemas import (
+     AuthCardDeleteRequest,
+     AuthCardReorderRequest,
+     AuthCardUpdate,
++    GoogleOAuthJsonPreviewRequest,
++    GoogleOAuthJsonPreviewResponse,
+     HandshakeProbeResult,
+ )
+ from kanban.auth.cards.service import AuthCardAdminService
+ from kanban.auth.mfa.policy import require_admin_aal2
++from kanban.auth.oidc.google_json import parse_google_oauth_client_json
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -121,6 +124,40 @@ async def get_admin_card(
+     return await service.get_card(session, card_ref)
+ 
+ 
++
++@router.post(
++    "/parse-google-json",
++    response_model=GoogleOAuthJsonPreviewResponse,
++    summary="Parse and preview Google OAuth client JSON",
++)
++async def parse_google_json(
++    body: GoogleOAuthJsonPreviewRequest,
++    _caller: Caller,
++    request: Request,
++) -> GoogleOAuthJsonPreviewResponse:
++    """Parse Google Cloud Console client_secret_*.json and return preview without secrets."""
++    expected_callback = body.expected_redirect_uri
++    if not expected_callback:
++        slug = body.slug.strip() if body.slug else "google-oauth"
++        base_url = str(request.base_url).rstrip("/")
++        expected_callback = f"{base_url}/api/v1/auth/oidc/{slug}/callback"
++
++    parsed = parse_google_oauth_client_json(
++        body.google_oauth_json,
++        expected_redirect_uri=expected_callback,
++    )
++
++    return GoogleOAuthJsonPreviewResponse(
++        client_id=parsed.client_id,
++        project_id=parsed.project_id,
++        issuer=parsed.issuer,
++        redirect_uris=parsed.redirect_uris,
++        javascript_origins=parsed.javascript_origins,
++        expected_callback_uri=expected_callback,
++        callback_uri_matched=parsed.callback_uri_matched,
++        has_client_secret=bool(parsed.client_secret),
++    )
++
+ @router.post(
+     "",
+     status_code=status.HTTP_201_CREATED,
+diff --git a/kanban/auth/cards/schemas.py b/kanban/auth/cards/schemas.py
+index 21c539b..4232dbe 100644
+--- a/kanban/auth/cards/schemas.py
++++ b/kanban/auth/cards/schemas.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Pydantic schemas for Multi-Card Auth Studio cards (KB-P2-03, KB-P2-10)."""
++"""Pydantic schemas for Multi-Card Auth Studio cards (KB-P2-03, KB-P2-10, KB-AUTH-JSON)."""
+ 
+ from __future__ import annotations
+ 
+@@ -91,6 +91,7 @@ class AuthCardCreate(BaseModel):
+     allowed_email_domains: list[str] = Field(default_factory=list, max_length=50)
+     public_config: dict[str, Any] = Field(default_factory=dict)
+     secret: str | None = None
++    google_oauth_json: str | None = Field(default=None, max_length=32768)
+ 
+     @field_validator("slug")
+     @classmethod
+@@ -115,6 +116,32 @@ class AuthCardUpdate(BaseModel):
+     allowed_email_domains: list[str] | None = Field(default=None, max_length=50)
+     public_config: dict[str, Any] | None = None
+     secret: str | None = None
++    google_oauth_json: str | None = Field(default=None, max_length=32768)
++
++
++class GoogleOAuthJsonPreviewRequest(BaseModel):
++    """Request payload for Google OAuth client JSON preview."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    google_oauth_json: str = Field(min_length=1, max_length=32768)
++    slug: str | None = Field(default=None, max_length=48)
++    expected_redirect_uri: str | None = None
++
++
++class GoogleOAuthJsonPreviewResponse(BaseModel):
++    """Preview response returned from parsing Google OAuth client JSON without exposing secrets."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    client_id: str
++    project_id: str | None = None
++    issuer: str = "https://accounts.google.com"
++    redirect_uris: list[str] = Field(default_factory=list)
++    javascript_origins: list[str] = Field(default_factory=list)
++    expected_callback_uri: str | None = None
++    callback_uri_matched: bool = False
++    has_client_secret: bool = True
+ 
+ 
+ class AuthCardReorderRequest(BaseModel):
+diff --git a/kanban/auth/cards/service.py b/kanban/auth/cards/service.py
+index 55991fc..db14b24 100644
+--- a/kanban/auth/cards/service.py
++++ b/kanban/auth/cards/service.py
+@@ -21,6 +21,7 @@ from kanban.auth.cards.lockout import (
+ from kanban.auth.cards.repository import admin_get, admin_list, admin_upsert, to_admin_schema
+ from kanban.auth.ldap.config import LdapCardConfig
+ from kanban.auth.oidc.config import OidcCardConfig
++from kanban.auth.oidc.google_json import parse_google_oauth_client_json
+ from kanban.security.envelope import KekProvider, seal_card_secret
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.util.fractional_rank import midpoint_rank, needs_rebalance, rebalance_ranks
+@@ -137,8 +138,19 @@ class AuthCardAdminService:
+                     detail="A LOCAL_ADMIN card already exists in this workspace.",
+                 )
+ 
+-        # Validate public_config according to kind
++
+         public_config = dict(data.public_config)
++        # Handle Google OAuth JSON payload if provided
++        extracted_google_secret: str | None = None
++        if data.google_oauth_json:
++            parsed_google = parse_google_oauth_client_json(data.google_oauth_json)
++            public_config["client_id"] = parsed_google.client_id
++            public_config["issuer"] = parsed_google.issuer
++            public_config["kind"] = "OIDC"
++            extracted_google_secret = parsed_google.client_secret
++            kind = "OIDC"
++
++        # Validate public_config according to kind
+         if kind in ("OIDC", "OAUTH2"):
+             if "kind" not in public_config:
+                 public_config["kind"] = kind
+@@ -195,12 +207,13 @@ class AuthCardAdminService:
+         wrapped_dek: bytes | None = None
+         dek_kid: str = "kek-v1"
+ 
+-        if data.secret:
++        secret_to_seal = data.secret or extracted_google_secret
++        if secret_to_seal:
+             if self._kek_provider is None:
+                 msg = "No KEK provider configured for secret sealing"
+                 raise RuntimeError(msg)
+ 
+-            secret_str = data.secret
++            secret_str = secret_to_seal
+             if kind == "LDAP" and not secret_str.strip().startswith("{"):
+                 secret_bytes = json.dumps({"bind_dn_password": secret_str}).encode("utf-8")
+             else:
+@@ -309,11 +322,27 @@ class AuthCardAdminService:
+         else:
+             allowed_domains = list(card.allowed_email_domains or [])
+ 
++
+         # Public config & health status
+         config_changed = False
+         if data.public_config is not None:
+             config_changed = True
+             public_config = dict(data.public_config)
++        else:
++            public_config = dict(card.public_config or {})
++
++        # Handle Google OAuth JSON payload if provided in update
++        extracted_google_secret: str | None = None
++        if data.google_oauth_json:
++            parsed_google = parse_google_oauth_client_json(data.google_oauth_json)
++            public_config["client_id"] = parsed_google.client_id
++            public_config["issuer"] = parsed_google.issuer
++            public_config["kind"] = "OIDC"
++            config_changed = True
++            extracted_google_secret = parsed_google.client_secret
++            kind = "OIDC"
++
++        if config_changed:
+             if kind in ("OIDC", "OAUTH2"):
+                 if "kind" not in public_config:
+                     public_config["kind"] = kind
+@@ -347,13 +376,14 @@ class AuthCardAdminService:
+         wrapped_dek = card.wrapped_dek
+         dek_kid = card.dek_kid
+ 
+-        if data.secret:
++        secret_to_seal = data.secret or extracted_google_secret
++        if secret_to_seal:
+             secret_changed = True
+             if self._kek_provider is None:
+                 msg = "No KEK provider configured for secret sealing"
+                 raise RuntimeError(msg)
+ 
+-            secret_str = data.secret
++            secret_str = secret_to_seal
+             if kind == "LDAP" and not secret_str.strip().startswith("{"):
+                 secret_bytes = json.dumps({"bind_dn_password": secret_str}).encode("utf-8")
+             else:
+diff --git a/kanban/auth/oidc/config.py b/kanban/auth/oidc/config.py
+index 2d9cf8b..aedb594 100644
+--- a/kanban/auth/oidc/config.py
++++ b/kanban/auth/oidc/config.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""OIDC and OAuth2 provider card configuration schema and SSRF validation (KB-P2-06)."""
++"""OIDC & OAuth2 card configuration schema and SSRF validation (KB-P2-06, KB-AUTH-JSON)."""
+ 
+ from __future__ import annotations
+ 
+@@ -11,6 +11,8 @@ from typing import Literal
+ 
+ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+ 
++from kanban.api.problems import ProblemException
++
+ 
+ def _validate_safe_url(url_str: str | None, field_name: str) -> str | None:
+     """Validate that URL is https and does not target loopback or cloud metadata IPs."""
+@@ -63,6 +65,16 @@ def _default_allowed_algs() -> list[AllowedAlg]:
+     return ["RS256", "ES256"]
+ 
+ 
++FORBIDDEN_PUBLIC_CONFIG_KEYS = {
++    "client_secret",
++    "private_key",
++    "refresh_token",
++    "google_oauth_json",
++    "redirect_uris",
++    "javascript_origins",
++}
++
++
+ class OidcCardConfig(BaseModel):
+     """Configuration schema for OIDC and OAuth2 authentication provider cards."""
+ 
+@@ -87,10 +99,18 @@ class OidcCardConfig(BaseModel):
+ 
+     @model_validator(mode="before")
+     @classmethod
+-    def normalize_ui_aliases(cls, data: object) -> object:
+-        """Normalize frontend UI alias keys before validation."""
++    def reject_secrets_and_normalize(cls, data: object) -> object:
++        """Reject secrets in public_config and normalize frontend UI alias keys."""
+         if not isinstance(data, dict):
+             return data
++        for forbidden in ("client_secret", "private_key", "refresh_token", "google_oauth_json"):
++            if forbidden in data and data[forbidden] is not None:
++                raise ProblemException(
++                    code="SECRET_IN_PUBLIC_CONFIG",
++                    status=422,
++                    title="Secret In Public Config",
++                    detail=f"Forbidden credential key '{forbidden}' found in public_config.",
++                )
+         d = dict(data)
+         if "issuer_url" in d and "issuer" not in d:
+             d["issuer"] = d.pop("issuer_url")
+diff --git a/kanban/tests/auth/test_auth_cards_admin_api.py b/kanban/tests/auth/test_auth_cards_admin_api.py
+index 18d1b32..e86cd76 100644
+--- a/kanban/tests/auth/test_auth_cards_admin_api.py
++++ b/kanban/tests/auth/test_auth_cards_admin_api.py
+@@ -5,6 +5,7 @@
+ 
+ from __future__ import annotations
+ 
++import json
+ import os
+ import random
+ import uuid
+@@ -880,3 +881,88 @@ async def test_case_8_validation_boundaries(
+             },
+         )
+         assert res_insecure_oidc.status_code == 422
++
++@pytest.mark.asyncio
++async def test_case_9_google_oauth_json_preview_and_card_creation(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++    key_material: KeyMaterial,
++) -> None:
++    """Case 9: Google OAuth client JSON preview and card creation.
++
++    Verifies POST /api/v1/admin/auth-cards/parse-google-json and POST /api/v1/admin/auth-cards
++    with google_oauth_json:
++    - client_id is extracted and issuer pinned to accounts.google.com
++    - client_secret is sealed and never returned in response or stored in public_config
++    - redirect_uris validation and callback match detection work as expected.
++    """
++    ws_id, server_admin_id, _ = await _setup_workspace_and_principals(db_session)
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    service = AuthCardAdminService(kek_provider=kek_provider)
++    app = _create_test_app(factory, service, key_material, session_service)
++
++    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
++    async with factory.session(anon_ctx) as sess:
++        sess_aal2 = await session_service.create_after_login(
++            sess,
++            principal_id=server_admin_id,
++            workspace_id=ws_id,
++            aal_level=2,
++            mfa_pending=False,
++        )
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        client.cookies.set(SESSION_COOKIE_NAME, sess_aal2.cookie_val)
++        client.cookies.set(CSRF_COOKIE_NAME, sess_aal2.csrf_token)
++        client.headers[CSRF_HEADER_NAME] = sess_aal2.csrf_token
++
++        valid_google_json = json.dumps({
++            "web": {
++                "client_id": "google-client-xyz.apps.googleusercontent.com",
++                "client_secret": "GOCSPX-secret-token",
++                "project_id": "google-proj-99",
++                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
++                "token_uri": "https://oauth2.googleapis.com/token",
++                "redirect_uris": [
++                    "http://test/api/v1/auth/oidc/google-oauth/callback",
++                ],
++                "javascript_origins": ["http://test"],
++            }
++        })
++
++        # 1. Preview endpoint
++        preview_res = await client.post(
++            "/api/v1/admin/auth-cards/parse-google-json",
++            json={"google_oauth_json": valid_google_json, "slug": "google-oauth"},
++        )
++        assert preview_res.status_code == 200
++        preview_data = preview_res.json()
++        assert preview_data["client_id"] == "google-client-xyz.apps.googleusercontent.com"
++        assert preview_data["project_id"] == "google-proj-99"
++        assert preview_data["callback_uri_matched"] is True
++        assert preview_data["has_client_secret"] is True
++        assert "client_secret" not in preview_data
++        assert "GOCSPX-secret-token" not in preview_res.text
++
++        # 2. Create card with google_oauth_json
++        create_res = await client.post(
++            "/api/v1/admin/auth-cards",
++            json={
++                "provider_kind": "OIDC",
++                "slug": "google-oauth",
++                "display_name": "Google Workspace Sign-In",
++                "google_oauth_json": valid_google_json,
++            },
++        )
++        assert create_res.status_code == 201
++        created_data = create_res.json()
++        assert created_data["slug"] == "google-oauth"
++        assert created_data["provider_kind"] == "OIDC"
++        assert created_data["has_secret"] is True
++        assert created_data["public_config"]["client_id"] == "google-client-xyz.apps.googleusercontent.com"
++        assert created_data["public_config"]["issuer"] == "https://accounts.google.com"
++        assert "client_secret" not in created_data["public_config"]
++        assert "redirect_uris" not in created_data["public_config"]
++        assert "GOCSPX-secret-token" not in create_res.text
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
+index 8b382c9..fc5bf90 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
+@@ -889,4 +889,162 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+ 
+     expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('');
+   });
++
++  describe('Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185)', () => {
++    const validGoogleWebJson = JSON.stringify({
++      web: {
++        client_id: '1234567890-testclientid.apps.googleusercontent.com',
++        project_id: 'test-google-project',
++        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
++        token_uri: 'https://oauth2.googleapis.com/token',
++        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
++        client_secret: 'GOCSPX-supersecretkey1234567890',
++        redirect_uris: [
++          'http://localhost:3000/api/v1/auth/oidc/google-oauth/callback',
++        ],
++        javascript_origins: ['http://localhost:3000'],
++      },
++    });
++
++    const mismatchGoogleWebJson = JSON.stringify({
++      web: {
++        client_id: '1234567890-mismatch.apps.googleusercontent.com',
++        project_id: 'test-google-project',
++        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
++        token_uri: 'https://oauth2.googleapis.com/token',
++        client_secret: 'GOCSPX-supersecretkey1234567890',
++        redirect_uris: [
++          'https://other-domain.example.com/oauth2callback',
++        ],
++      },
++    });
++
++    const installedClientJson = JSON.stringify({
++      installed: {
++        client_id: 'desktop-client-id.apps.googleusercontent.com',
++        project_id: 'desktop-project',
++        client_secret: 'GOCSPX-desktopsecret',
++        redirect_uris: ['http://localhost'],
++      },
++    });
++
++    it('renders Google JSON dropzone and paste toggle for OIDC provider', () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      expect(screen.getByTestId('google-json-import-section')).toBeDefined();
++      expect(screen.getByTestId('google-json-dropzone')).toBeDefined();
++      expect(screen.getByTestId('google-json-upload-btn')).toBeDefined();
++      expect(screen.getByTestId('google-json-paste-toggle')).toBeDefined();
++    });
++
++    it('toggles paste textarea and parses valid Google JSON with matched redirect URI', async () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const pasteToggle = screen.getByTestId('google-json-paste-toggle');
++      fireEvent.click(pasteToggle);
++
++      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
++      fireEvent.change(textarea, { target: { value: validGoogleWebJson } });
++
++      const applyBtn = screen.getByTestId('google-json-apply-btn');
++      fireEvent.click(applyBtn);
++
++      await waitFor(() => {
++        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe(
++          '1234567890-testclientid.apps.googleusercontent.com',
++        );
++      });
++
++      expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i).value).toBe(
++        'GOCSPX-supersecretkey1234567890',
++      );
++      expect(screen.getByTestId('google-json-redirect-ok')).toBeDefined();
++    });
++
++    it('shows warning and details when redirect URI does not match expected callback', async () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
++      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
++      fireEvent.change(textarea, { target: { value: mismatchGoogleWebJson } });
++      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('google-json-redirect-warning')).toBeDefined();
++      });
++
++      expect(screen.getByText(/Authorized Redirect URI mismatch/i)).toBeDefined();
++      expect(screen.getByText(/URIs found in Google JSON \(1\)/i)).toBeDefined();
++    });
++
++    it('rejects installed client JSON with informative error message', async () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
++      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
++      fireEvent.change(textarea, { target: { value: installedClientJson } });
++      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('google-json-error')).toBeDefined();
++      });
++
++      expect(screen.getByTestId('google-json-error').textContent).toContain(
++        'Google OAuth JSON is for an Installed/Desktop client',
++      );
++    });
++
++    it('rejects oversized JSON exceeding 32KB payload limit', async () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const hugePayload = ' '.repeat(35000);
++      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
++      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
++      fireEvent.change(textarea, { target: { value: hugePayload } });
++      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('google-json-error')).toBeDefined();
++      });
++
++      expect(screen.getByTestId('google-json-error').textContent).toContain(
++        'exceeds maximum allowed size of 32,768 bytes',
++      );
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+index 0606a78..7120442 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+@@ -13,6 +13,7 @@ import type {
+   CreateAuthCardPayload,
+   UpdateAuthCardPayload,
+   ProviderKind,
++  GoogleOAuthJsonPreviewResponse,
+ } from './adminAuthApi';
+ import './adminAuth.css';
+ 
+@@ -127,6 +128,14 @@ export function AuthCardEditorDrawer({
+     return typeof card?.public_config.spki_sha256_pin === 'string' ? card.public_config.spki_sha256_pin : '';
+   });
+ 
++
++  // Google OAuth JSON Importer state (KB-AUTH-JSON)
++  const [googleJsonPasteOpen, setGoogleJsonPasteOpen] = useState(false);
++  const [googleJsonPasteText, setGoogleJsonPasteText] = useState('');
++  const [googleJsonError, setGoogleJsonError] = useState<string | null>(null);
++  const [googleJsonPreview, setGoogleJsonPreview] = useState<GoogleOAuthJsonPreviewResponse | null>(null);
++  const [isDraggingOver, setIsDraggingOver] = useState(false);
++  const fileInputRef = useRef<HTMLInputElement | null>(null);
+   // Secret input and write-only state
+   const [secretInput, setSecretInput] = useState('');
+   const [replaceSecret, setReplaceSecret] = useState(() => !card);
+@@ -197,6 +206,41 @@ export function AuthCardEditorDrawer({
+     setFieldErrors({});
+   }
+ 
++
++  // Accessibility: focus trap & initial focus (KB-AUTH-JSON)
++  useEffect(() => {
++    if (!isOpen) return;
++    const titleEl = document.getElementById("drawer-title");
++    titleEl?.focus();
++
++    const handleTabKey = (e: KeyboardEvent) => {
++      if (e.key !== "Tab" || !drawerRef.current) return;
++      const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
++        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
++      );
++      if (focusable.length === 0) return;
++      const first = focusable[0];
++      const last = focusable[focusable.length - 1];
++
++      if (e.shiftKey) {
++        if (document.activeElement === first) {
++          last?.focus();
++          e.preventDefault();
++        }
++      } else {
++        if (document.activeElement === last) {
++          first?.focus();
++          e.preventDefault();
++        }
++      }
++    };
++
++    window.addEventListener("keydown", handleTabKey);
++    return () => {
++      window.removeEventListener("keydown", handleTabKey);
++    };
++  }, [isOpen]);
++
+   // Trap Escape key
+   useEffect(() => {
+     if (!isOpen) return;
+@@ -215,6 +259,97 @@ export function AuthCardEditorDrawer({
+ 
+   if (!isOpen) return null;
+ 
++
++  const processGoogleJsonContent = (rawText: string) => {
++    setGoogleJsonError(null);
++    try {
++      if (rawText.length > 32768) {
++        setGoogleJsonError('Google OAuth JSON exceeds maximum allowed size of 32,768 bytes.');
++        return;
++      }
++      interface GoogleClientSecretWeb {
++        client_id?: unknown;
++        client_secret?: unknown;
++        auth_uri?: unknown;
++        token_uri?: unknown;
++        project_id?: unknown;
++        redirect_uris?: unknown;
++        javascript_origins?: unknown;
++      }
++      interface GoogleClientSecretPayload {
++        web?: GoogleClientSecretWeb;
++        installed?: unknown;
++      }
++      const parsed = JSON.parse(rawText) as GoogleClientSecretPayload;
++      if (parsed.installed && !parsed.web) {
++        setGoogleJsonError('Google OAuth JSON is for an Installed/Desktop client; create a Web application OAuth client in Google Cloud Console.');
++        return;
++      }
++      if (!parsed.web || typeof parsed.web !== 'object') {
++        setGoogleJsonError("Google OAuth JSON must contain a top-level 'web' configuration object.");
++        return;
++      }
++      const web = parsed.web;
++      if (typeof web.client_id !== 'string' || !web.client_id) {
++        setGoogleJsonError("Field 'client_id' is missing or invalid in Google JSON.");
++        return;
++      }
++      if (typeof web.client_secret !== 'string' || !web.client_secret) {
++        setGoogleJsonError("Field 'client_secret' is missing or invalid in Google JSON.");
++        return;
++      }
++
++      const allowedAuth = ['https://accounts.google.com/o/oauth2/auth', 'https://accounts.google.com/o/oauth2/v2/auth'];
++      const allowedToken = ['https://oauth2.googleapis.com/token', 'https://accounts.google.com/o/oauth2/token', 'https://www.googleapis.com/oauth2/v4/token'];
++      if (typeof web.auth_uri === 'string' && !allowedAuth.includes(web.auth_uri)) {
++        setGoogleJsonError("Field 'auth_uri' does not match allowed Google authorization endpoints.");
++        return;
++      }
++      if (typeof web.token_uri === 'string' && !allowedToken.includes(web.token_uri)) {
++        setGoogleJsonError("Field 'token_uri' does not match allowed Google token endpoints.");
++        return;
++      }
++
++      const activeSlug = slug.trim() || 'google-oauth';
++      const expectedCallback = `${window.location.origin}/api/v1/auth/oidc/${activeSlug}/callback`;
++      const redirectUris: string[] = Array.isArray(web.redirect_uris)
++        ? web.redirect_uris.filter((item): item is string => typeof item === 'string')
++        : [];
++      const isMatched = redirectUris.includes(expectedCallback);
++
++      setClientId(web.client_id);
++      setSecretInput(web.client_secret);
++      setReplaceSecret(true);
++      setIssuerUrl('https://accounts.google.com');
++      setProviderKind('OIDC');
++      setIconPreset('google');
++      if (!slug.trim()) setSlug('google-oauth');
++      if (!displayName.trim()) setDisplayName('Google Workspace');
++      if (!buttonSubtext.trim()) setButtonSubtext('Sign in with your Google account');
++      setScopes('openid, profile, email');
++
++      setGoogleJsonPreview({
++        client_id: web.client_id,
++        project_id: typeof web.project_id === 'string' ? web.project_id : null,
++        issuer: 'https://accounts.google.com',
++        redirect_uris: redirectUris,
++        javascript_origins: Array.isArray(web.javascript_origins)
++          ? web.javascript_origins.filter((item): item is string => typeof item === 'string')
++          : [],
++        expected_callback_uri: expectedCallback,
++        callback_uri_matched: isMatched,
++        has_client_secret: true,
++      });
++
++      if (fileInputRef.current) {
++        fileInputRef.current.value = '';
++      }
++      setGoogleJsonPasteText('');
++    } catch (err: unknown) {
++      setGoogleJsonError('Failed to parse JSON: ' + (err instanceof Error ? err.message : String(err)));
++    }
++  };
++
+   // 1-Click Preset applier
+   const applyPreset = (preset: ProviderPreset) => {
+     setActivePreset(preset);
+@@ -491,7 +626,7 @@ export function AuthCardEditorDrawer({
+               <button
+                 type="button"
+                 className={`auth-preset-btn ${activePreset === 'google' ? 'auth-preset-btn--active' : ''}`}
+-                onClick={() => { applyPreset('google'); }}
++                onClick={() => { applyPreset('google'); }} aria-pressed={activePreset === 'google'}
+               >
+                 <Google size={14} className="auth-preset-icon" />
+                 <span>Google (OAuth 2.0)</span>
+@@ -499,7 +634,7 @@ export function AuthCardEditorDrawer({
+               <button
+                 type="button"
+                 className={`auth-preset-btn ${activePreset === 'github' ? 'auth-preset-btn--active' : ''}`}
+-                onClick={() => { applyPreset('github'); }}
++                onClick={() => { applyPreset('github'); }} aria-pressed={activePreset === 'github'}
+               >
+                 <GitHub size={14} className="auth-preset-icon" />
+                 <span>GitHub (OAuth 2.0)</span>
+@@ -507,7 +642,7 @@ export function AuthCardEditorDrawer({
+               <button
+                 type="button"
+                 className={`auth-preset-btn ${activePreset === 'active-directory' ? 'auth-preset-btn--active' : ''}`}
+-                onClick={() => { applyPreset('active-directory'); }}
++                onClick={() => { applyPreset('active-directory'); }} aria-pressed={activePreset === 'active-directory'}
+               >
+                 <ActiveDirectory size={14} className="auth-preset-icon" />
+                 <span>Active Directory (sAMAccountName)</span>
+@@ -515,7 +650,7 @@ export function AuthCardEditorDrawer({
+               <button
+                 type="button"
+                 className={`auth-preset-btn ${activePreset === 'openldap' ? 'auth-preset-btn--active' : ''}`}
+-                onClick={() => { applyPreset('openldap'); }}
++                onClick={() => { applyPreset('openldap'); }} aria-pressed={activePreset === 'openldap'}
+               >
+                 <Ldap size={14} className="auth-preset-icon" />
+                 <span>Standard LDAP (OpenLDAP)</span>
+@@ -523,7 +658,7 @@ export function AuthCardEditorDrawer({
+               <button
+                 type="button"
+                 className={`auth-preset-btn ${activePreset === 'custom-oauth' ? 'auth-preset-btn--active' : ''}`}
+-                onClick={() => { applyPreset('custom-oauth'); }}
++                onClick={() => { applyPreset('custom-oauth'); }} aria-pressed={activePreset === 'custom-oauth'}
+               >
+                 <Key size={14} className="auth-preset-icon" />
+                 <span>Custom OAuth 2.0 / OIDC</span>
+@@ -553,6 +688,172 @@ export function AuthCardEditorDrawer({
+               {/* SECTION 1: MANDATORY SETTINGS */}
+               <div className="auth-editor-section-title">Mandatory Settings</div>
+ 
++              {/* Google OAuth JSON Importer Section (KB-AUTH-JSON) */}
++              {(providerKind === 'OIDC' || providerKind === 'OAUTH2') && (
++                <div className="auth-google-json-section" data-testid="google-json-import-section">
++                  <div className="auth-google-json-header">
++                    <span className="auth-google-json-title">
++                      <Google size={14} />
++                      <span>Google OAuth Client Secret JSON (client_secret_*.json)</span>
++                    </span>
++                    <button
++                      type="button"
++                      className="auth-btn-secondary"
++                      data-testid="google-json-paste-toggle"
++                      aria-expanded={googleJsonPasteOpen}
++                      onClick={() => {
++                        setGoogleJsonPasteOpen(!googleJsonPasteOpen);
++                      }}
++                    >
++                      {googleJsonPasteOpen ? 'Hide Paste' : 'Paste JSON'}
++                    </button>
++                  </div>
++
++                  {googleJsonError && (
++                    <div className="auth-editor-error" role="alert" data-testid="google-json-error">
++                      {googleJsonError}
++                    </div>
++                  )}
++
++                  {/* Drag-and-drop & File Upload Button */}
++                  <div
++                    className={`auth-google-json-dropzone ${isDraggingOver ? 'auth-google-json-dropzone--active' : ''}`}
++                    data-testid="google-json-dropzone"
++                    onDragOver={(e) => {
++                      e.preventDefault();
++                      setIsDraggingOver(true);
++                    }}
++                    onDragLeave={() => {
++                      setIsDraggingOver(false);
++                    }}
++                    onDrop={(e) => {
++                      e.preventDefault();
++                      setIsDraggingOver(false);
++                      const file = e.dataTransfer.files[0];
++                      if (file) {
++                        const reader = new FileReader();
++                        reader.onload = (ev) => {
++                          const text = ev.target?.result;
++                          if (typeof text === 'string') {
++                            processGoogleJsonContent(text);
++                          }
++                        };
++                        reader.readAsText(file);
++                      }
++                    }}
++                  >
++                    <p>Drag and drop <code>client_secret_*.json</code> here, or</p>
++                    <input
++                      ref={fileInputRef}
++                      type="file"
++                      accept=".json,application/json"
++                      style={{ display: 'none' }}
++                      onChange={(e) => {
++                        const file = e.target.files?.[0];
++                        if (file) {
++                          const reader = new FileReader();
++                          reader.onload = (ev) => {
++                            const text = ev.target?.result;
++                            if (typeof text === 'string') {
++                              processGoogleJsonContent(text);
++                            }
++                          };
++                          reader.readAsText(file);
++                        }
++                      }}
++                    />
++                    <button
++                      type="button"
++                      className="auth-btn-secondary"
++                      data-testid="google-json-upload-btn"
++                      style={{ marginTop: '8px' }}
++                      onClick={() => {
++                        fileInputRef.current?.click();
++                      }}
++                    >
++                      Upload JSON File
++                    </button>
++                  </div>
++
++                  {/* Paste JSON Disclosure */}
++                  {googleJsonPasteOpen && (
++                    <div className="auth-google-json-paste-box">
++                      <textarea
++                        className="auth-google-json-textarea"
++                        placeholder="Paste full Google Cloud Console web client JSON here..."
++                        value={googleJsonPasteText}
++                        onChange={(e) => {
++                          setGoogleJsonPasteText(e.target.value);
++                        }}
++                        aria-label="Paste Google Cloud Console client JSON"
++                      />
++                      <button
++                        type="button"
++                        className="auth-studio-add-btn"
++                        data-testid="google-json-apply-btn"
++                        onClick={() => {
++                          processGoogleJsonContent(googleJsonPasteText);
++                        }}
++                      >
++                        Apply Google JSON
++                      </button>
++                    </div>
++                  )}
++
++                  {/* Status announcement and redirect URI match feedback */}
++                  {googleJsonPreview && (
++                    googleJsonPreview.callback_uri_matched ? (
++                      <div
++                        role="status"
++                        aria-live="polite"
++                        className="auth-google-json-status auth-google-json-status--ok"
++                        data-testid="google-json-redirect-ok"
++                      >
++                        <span>✓ Authorized Redirect URI matched in uploaded Google client configuration.</span>
++                      </div>
++                    ) : (
++                      <div
++                        role="status"
++                        aria-live="polite"
++                        className="auth-google-json-status auth-google-json-status--warning"
++                        data-testid="google-json-redirect-warning"
++                      >
++                        <strong>⚠️ Authorized Redirect URI mismatch</strong>
++                        <span>
++                          Expected: <code>{googleJsonPreview.expected_callback_uri}</code>
++                        </span>
++                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
++                          <button
++                            type="button"
++                            className="auth-btn-secondary"
++                            onClick={() => {
++                              if (googleJsonPreview.expected_callback_uri) {
++                                void navigator.clipboard.writeText(googleJsonPreview.expected_callback_uri);
++                              }
++                            }}
++                          >
++                            Copy Expected Callback URL
++                          </button>
++                        </div>
++                        {googleJsonPreview.redirect_uris.length > 0 && (
++                          <details style={{ marginTop: "6px" }}>
++                            <summary style={{ cursor: "pointer" }}>
++                              URIs found in Google JSON ({googleJsonPreview.redirect_uris.length})
++                            </summary>
++                            <ul className="auth-google-json-uris-list">
++                              {googleJsonPreview.redirect_uris.map((uri, idx) => (
++                                <li key={idx}>{uri}</li>
++                              ))}
++                            </ul>
++                          </details>
++                        )}
++                      </div>
++                    )
++                  )}
++                </div>
++              )}
++
++
+               {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
+             <div>
+               <div className="auth-editor-prop-row">
+diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
+index fcd1b76..e5f913c 100644
+--- a/kanban/web/src/features/admin-auth/adminAuth.css
++++ b/kanban/web/src/features/admin-auth/adminAuth.css
+@@ -944,3 +944,106 @@
+   font-weight: var(--font-semibold, 600);
+   color: var(--fg-primary);
+ }
++
++/* Google OAuth JSON Importer (KB-AUTH-JSON) */
++.auth-google-json-section {
++  margin-top: var(--space-4, 16px);
++  margin-bottom: var(--space-4, 16px);
++  padding: var(--space-3, 12px) var(--space-4, 16px);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md, 6px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3, 12px);
++}
++
++.auth-google-json-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.auth-google-json-title {
++  font-size: var(--text-sm, 0.8125rem);
++  font-weight: var(--font-semibold, 600);
++  color: var(--fg-primary);
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++}
++
++.auth-google-json-dropzone {
++  border: 2px dashed var(--border-strong);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-4, 16px);
++  text-align: center;
++  background: var(--bg-surface);
++  cursor: pointer;
++  transition: border-color 0.15s ease, background 0.15s ease;
++}
++
++.auth-google-json-dropzone--active {
++  border-color: var(--focus-ring);
++  background: var(--bg-hover);
++}
++
++.auth-google-json-dropzone p {
++  margin: 0;
++  font-size: var(--text-sm, 0.8125rem);
++  color: var(--fg-secondary);
++}
++
++.auth-google-json-dropzone span {
++  font-size: var(--text-xs, 0.75rem);
++  color: var(--fg-muted);
++}
++
++.auth-google-json-paste-box {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++  margin-top: var(--space-2, 8px);
++}
++
++.auth-google-json-textarea {
++  width: 100%;
++  box-sizing: border-box;
++  font-family: var(--font-mono, monospace);
++  font-size: var(--text-xs, 0.75rem);
++  padding: var(--space-2, 8px);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-sm, 4px);
++  background: var(--bg-surface);
++  color: var(--fg-primary);
++  min-height: 80px;
++  resize: vertical;
++}
++
++.auth-google-json-status {
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  border-radius: var(--radius-sm, 4px);
++  font-size: var(--text-xs, 0.75rem);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++}
++
++.auth-google-json-status--ok {
++  background: var(--bg-surface-raised);
++  border: 1px solid var(--ok-fg);
++  color: var(--ok-fg);
++}
++
++.auth-google-json-status--warning {
++  background: var(--warn-bg);
++  border: 1px solid var(--warn-fg);
++  color: var(--warn-fg);
++}
++
++.auth-google-json-uris-list {
++  margin: 4px 0 0 16px;
++  padding: 0;
++  font-family: var(--font-mono, monospace);
++  font-size: 11px;
++}
+diff --git a/kanban/web/src/features/admin-auth/adminAuthApi.ts b/kanban/web/src/features/admin-auth/adminAuthApi.ts
+index fff5055..c75f525 100644
+--- a/kanban/web/src/features/admin-auth/adminAuthApi.ts
++++ b/kanban/web/src/features/admin-auth/adminAuthApi.ts
+@@ -64,6 +64,24 @@ export interface AdminAuthCardsResponse {
+   cards: AdminAuthCard[];
+ }
+ 
++
++export interface GoogleOAuthJsonPreviewRequest {
++  google_oauth_json: string;
++  slug?: string | null;
++  expected_redirect_uri?: string | null;
++}
++
++export interface GoogleOAuthJsonPreviewResponse {
++  client_id: string;
++  project_id?: string | null;
++  issuer: string;
++  redirect_uris: string[];
++  javascript_origins: string[];
++  expected_callback_uri?: string | null;
++  callback_uri_matched: boolean;
++  has_client_secret: boolean;
++}
++
+ export interface CreateAuthCardPayload {
+   provider_kind: ProviderKind;
+   slug: string;
+@@ -76,6 +94,7 @@ export interface CreateAuthCardPayload {
+   public_config: Record<string, unknown>;
+   secret?: string | null;
+   secret_input?: string;
++  google_oauth_json?: string | null;
+ }
+ 
+ export interface UpdateAuthCardPayload {
+@@ -88,6 +107,7 @@ export interface UpdateAuthCardPayload {
+   public_config?: Record<string, unknown>;
+   secret?: string | null;
+   secret_input?: string;
++  google_oauth_json?: string | null;
+ }
+ 
+ export interface ReorderAuthCardPayload {
+@@ -316,3 +336,15 @@ export async function updateUserRole(
+     },
+   );
+ }
++
++
++export async function parseGoogleOAuthJson(
++  payload: GoogleOAuthJsonPreviewRequest,
++): Promise<GoogleOAuthJsonPreviewResponse> {
++  const result = (await apiFetch(
++    "POST",
++    "/api/v1/admin/auth-cards/parse-google-json" as never,
++    { body: payload },
++  )) as GoogleOAuthJsonPreviewResponse;
++  return result;
++}

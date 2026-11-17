@@ -21,10 +21,13 @@ from kanban.auth.cards.schemas import (
     AuthCardDeleteRequest,
     AuthCardReorderRequest,
     AuthCardUpdate,
+    GoogleOAuthJsonPreviewRequest,
+    GoogleOAuthJsonPreviewResponse,
     HandshakeProbeResult,
 )
 from kanban.auth.cards.service import AuthCardAdminService
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.auth.oidc.google_json import parse_google_oauth_client_json
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +123,40 @@ async def get_admin_card(
     """Retrieve non-secret metadata for a specific card by slug or UUID."""
     return await service.get_card(session, card_ref)
 
+
+
+@router.post(
+    "/parse-google-json",
+    response_model=GoogleOAuthJsonPreviewResponse,
+    summary="Parse and preview Google OAuth client JSON",
+)
+async def parse_google_json(
+    body: GoogleOAuthJsonPreviewRequest,
+    _caller: Caller,
+    request: Request,
+) -> GoogleOAuthJsonPreviewResponse:
+    """Parse Google Cloud Console client_secret_*.json and return preview without secrets."""
+    expected_callback = body.expected_redirect_uri
+    if not expected_callback:
+        slug = body.slug.strip() if body.slug else "google-oauth"
+        base_url = str(request.base_url).rstrip("/")
+        expected_callback = f"{base_url}/api/v1/auth/oidc/{slug}/callback"
+
+    parsed = parse_google_oauth_client_json(
+        body.google_oauth_json,
+        expected_redirect_uri=expected_callback,
+    )
+
+    return GoogleOAuthJsonPreviewResponse(
+        client_id=parsed.client_id,
+        project_id=parsed.project_id,
+        issuer=parsed.issuer,
+        redirect_uris=parsed.redirect_uris,
+        javascript_origins=parsed.javascript_origins,
+        expected_callback_uri=expected_callback,
+        callback_uri_matched=parsed.callback_uri_matched,
+        has_client_secret=bool(parsed.client_secret),
+    )
 
 @router.post(
     "",

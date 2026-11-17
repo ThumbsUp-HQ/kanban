@@ -21,6 +21,7 @@ from kanban.auth.cards.lockout import (
 from kanban.auth.cards.repository import admin_get, admin_list, admin_upsert, to_admin_schema
 from kanban.auth.ldap.config import LdapCardConfig
 from kanban.auth.oidc.config import OidcCardConfig
+from kanban.auth.oidc.google_json import parse_google_oauth_client_json
 from kanban.security.envelope import KekProvider, seal_card_secret
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.util.fractional_rank import midpoint_rank, needs_rebalance, rebalance_ranks
@@ -137,8 +138,19 @@ class AuthCardAdminService:
                     detail="A LOCAL_ADMIN card already exists in this workspace.",
                 )
 
-        # Validate public_config according to kind
+
         public_config = dict(data.public_config)
+        # Handle Google OAuth JSON payload if provided
+        extracted_google_secret: str | None = None
+        if data.google_oauth_json:
+            parsed_google = parse_google_oauth_client_json(data.google_oauth_json)
+            public_config["client_id"] = parsed_google.client_id
+            public_config["issuer"] = parsed_google.issuer
+            public_config["kind"] = "OIDC"
+            extracted_google_secret = parsed_google.client_secret
+            kind = "OIDC"
+
+        # Validate public_config according to kind
         if kind in ("OIDC", "OAUTH2"):
             if "kind" not in public_config:
                 public_config["kind"] = kind
@@ -195,12 +207,13 @@ class AuthCardAdminService:
         wrapped_dek: bytes | None = None
         dek_kid: str = "kek-v1"
 
-        if data.secret:
+        secret_to_seal = data.secret or extracted_google_secret
+        if secret_to_seal:
             if self._kek_provider is None:
                 msg = "No KEK provider configured for secret sealing"
                 raise RuntimeError(msg)
 
-            secret_str = data.secret
+            secret_str = secret_to_seal
             if kind == "LDAP" and not secret_str.strip().startswith("{"):
                 secret_bytes = json.dumps({"bind_dn_password": secret_str}).encode("utf-8")
             else:
@@ -309,11 +322,27 @@ class AuthCardAdminService:
         else:
             allowed_domains = list(card.allowed_email_domains or [])
 
+
         # Public config & health status
         config_changed = False
         if data.public_config is not None:
             config_changed = True
             public_config = dict(data.public_config)
+        else:
+            public_config = dict(card.public_config or {})
+
+        # Handle Google OAuth JSON payload if provided in update
+        extracted_google_secret: str | None = None
+        if data.google_oauth_json:
+            parsed_google = parse_google_oauth_client_json(data.google_oauth_json)
+            public_config["client_id"] = parsed_google.client_id
+            public_config["issuer"] = parsed_google.issuer
+            public_config["kind"] = "OIDC"
+            config_changed = True
+            extracted_google_secret = parsed_google.client_secret
+            kind = "OIDC"
+
+        if config_changed:
             if kind in ("OIDC", "OAUTH2"):
                 if "kind" not in public_config:
                     public_config["kind"] = kind
@@ -347,13 +376,14 @@ class AuthCardAdminService:
         wrapped_dek = card.wrapped_dek
         dek_kid = card.dek_kid
 
-        if data.secret:
+        secret_to_seal = data.secret or extracted_google_secret
+        if secret_to_seal:
             secret_changed = True
             if self._kek_provider is None:
                 msg = "No KEK provider configured for secret sealing"
                 raise RuntimeError(msg)
 
-            secret_str = data.secret
+            secret_str = secret_to_seal
             if kind == "LDAP" and not secret_str.strip().startswith("{"):
                 secret_bytes = json.dumps({"bind_dn_password": secret_str}).encode("utf-8")
             else:

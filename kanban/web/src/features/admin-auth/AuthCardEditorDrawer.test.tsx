@@ -889,4 +889,162 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
 
     expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('');
   });
+
+  describe('Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185)', () => {
+    const validGoogleWebJson = JSON.stringify({
+      web: {
+        client_id: '1234567890-testclientid.apps.googleusercontent.com',
+        project_id: 'test-google-project',
+        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+        token_uri: 'https://oauth2.googleapis.com/token',
+        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+        client_secret: 'GOCSPX-supersecretkey1234567890',
+        redirect_uris: [
+          'http://localhost:3000/api/v1/auth/oidc/google-oauth/callback',
+        ],
+        javascript_origins: ['http://localhost:3000'],
+      },
+    });
+
+    const mismatchGoogleWebJson = JSON.stringify({
+      web: {
+        client_id: '1234567890-mismatch.apps.googleusercontent.com',
+        project_id: 'test-google-project',
+        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+        token_uri: 'https://oauth2.googleapis.com/token',
+        client_secret: 'GOCSPX-supersecretkey1234567890',
+        redirect_uris: [
+          'https://other-domain.example.com/oauth2callback',
+        ],
+      },
+    });
+
+    const installedClientJson = JSON.stringify({
+      installed: {
+        client_id: 'desktop-client-id.apps.googleusercontent.com',
+        project_id: 'desktop-project',
+        client_secret: 'GOCSPX-desktopsecret',
+        redirect_uris: ['http://localhost'],
+      },
+    });
+
+    it('renders Google JSON dropzone and paste toggle for OIDC provider', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('google-json-import-section')).toBeDefined();
+      expect(screen.getByTestId('google-json-dropzone')).toBeDefined();
+      expect(screen.getByTestId('google-json-upload-btn')).toBeDefined();
+      expect(screen.getByTestId('google-json-paste-toggle')).toBeDefined();
+    });
+
+    it('toggles paste textarea and parses valid Google JSON with matched redirect URI', async () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const pasteToggle = screen.getByTestId('google-json-paste-toggle');
+      fireEvent.click(pasteToggle);
+
+      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
+      fireEvent.change(textarea, { target: { value: validGoogleWebJson } });
+
+      const applyBtn = screen.getByTestId('google-json-apply-btn');
+      fireEvent.click(applyBtn);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe(
+          '1234567890-testclientid.apps.googleusercontent.com',
+        );
+      });
+
+      expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i).value).toBe(
+        'GOCSPX-supersecretkey1234567890',
+      );
+      expect(screen.getByTestId('google-json-redirect-ok')).toBeDefined();
+    });
+
+    it('shows warning and details when redirect URI does not match expected callback', async () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
+      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
+      fireEvent.change(textarea, { target: { value: mismatchGoogleWebJson } });
+      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-redirect-warning')).toBeDefined();
+      });
+
+      expect(screen.getByText(/Authorized Redirect URI mismatch/i)).toBeDefined();
+      expect(screen.getByText(/URIs found in Google JSON \(1\)/i)).toBeDefined();
+    });
+
+    it('rejects installed client JSON with informative error message', async () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
+      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
+      fireEvent.change(textarea, { target: { value: installedClientJson } });
+      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('google-json-error').textContent).toContain(
+        'Google OAuth JSON is for an Installed/Desktop client',
+      );
+    });
+
+    it('rejects oversized JSON exceeding 32KB payload limit', async () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const hugePayload = ' '.repeat(35000);
+      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
+      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
+      fireEvent.change(textarea, { target: { value: hugePayload } });
+      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('google-json-error').textContent).toContain(
+        'exceeds maximum allowed size of 32,768 bytes',
+      );
+    });
+  });
 });

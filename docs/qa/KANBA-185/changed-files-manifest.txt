@@ -1,0 +1,38 @@
+=== KANBA-185 Changed Files Manifest ===
+
+Backend Importer & Validation:
+- kanban/auth/oidc/google_json.py (Google OAuth Client Secret JSON parser, schema validation, SSRF checks, endpoint pinning)
+- kanban/auth/oidc/config.py (OidcCardConfig model rejecting credentials in public_config)
+- kanban/auth/cards/schemas.py (Added google_oauth_json field, GoogleOAuthJsonPreviewRequest, GoogleOAuthJsonPreviewResponse)
+- kanban/auth/cards/service.py (Added parse_google_json_preview, integrated google_oauth_json into create_card and update_card)
+- kanban/api/v1/admin/auth_cards.py (Added POST /api/v1/admin/auth-cards/parse-google-json with require_admin_aal2)
+
+Backend Automated Tests:
+- kanban/tests/auth/test_google_oauth_json.py (10 comprehensive tests for parser, SSRF rejection, size checks, lone surrogates)
+- kanban/tests/auth/test_auth_cards_admin_api.py (Added test_case_9_google_oauth_json_preview_and_card_creation)
+
+Frontend Web UI & CSS:
+- kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx (Google OAuth JSON dropzone, upload button, paste textarea, redirect URI validation)
+- kanban/web/src/features/admin-auth/adminAuth.css (Google JSON importer styles, dropzone active states, badges, contrast conforming)
+- kanban/web/src/features/admin-auth/adminAuthApi.ts (Client API helper parseGoogleOAuthJson, request/response interfaces)
+
+Frontend Automated Tests:
+- kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx (Unit tests for dropzone, paste, redirect URI matching, warnings, error handling)
+
+Forensic QA Artifacts:
+- docs/qa/KANBA-185/git-diff.patch
+- docs/qa/KANBA-185/changed-files-manifest.txt
+- docs/qa/KANBA-185/unit-test-results.txt
+- docs/qa/KANBA-185/build-check.txt
+- docs/qa/KANBA-185/contract-sample.json
+- docs/qa/KANBA-185/message-to-reality-checker.md
+- docs/qa/KANBA-185/screenshots/google-json-dropzone-initial-desktop-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-paste-open-desktop-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-matched-callback-desktop-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-matched-callback-desktop-light.png
+- docs/qa/KANBA-185/screenshots/google-json-mismatched-warning-desktop-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-matched-tablet-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-warning-tablet-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-matched-mobile-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-warning-mobile-dark.png
+- docs/qa/KANBA-185/screenshots/google-json-matched-mobile-light.png

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import random
 import uuid
@@ -880,3 +881,88 @@ async def test_case_8_validation_boundaries(
             },
         )
         assert res_insecure_oidc.status_code == 422
+
+@pytest.mark.asyncio
+async def test_case_9_google_oauth_json_preview_and_card_creation(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+    key_material: KeyMaterial,
+) -> None:
+    """Case 9: Google OAuth client JSON preview and card creation.
+
+    Verifies POST /api/v1/admin/auth-cards/parse-google-json and POST /api/v1/admin/auth-cards
+    with google_oauth_json:
+    - client_id is extracted and issuer pinned to accounts.google.com
+    - client_secret is sealed and never returned in response or stored in public_config
+    - redirect_uris validation and callback match detection work as expected.
+    """
+    ws_id, server_admin_id, _ = await _setup_workspace_and_principals(db_session)
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    session_service = SessionService(key_material.session_hmac_key)
+    service = AuthCardAdminService(kek_provider=kek_provider)
+    app = _create_test_app(factory, service, key_material, session_service)
+
+    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
+    async with factory.session(anon_ctx) as sess:
+        sess_aal2 = await session_service.create_after_login(
+            sess,
+            principal_id=server_admin_id,
+            workspace_id=ws_id,
+            aal_level=2,
+            mfa_pending=False,
+        )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, sess_aal2.cookie_val)
+        client.cookies.set(CSRF_COOKIE_NAME, sess_aal2.csrf_token)
+        client.headers[CSRF_HEADER_NAME] = sess_aal2.csrf_token
+
+        valid_google_json = json.dumps({
+            "web": {
+                "client_id": "google-client-xyz.apps.googleusercontent.com",
+                "client_secret": "GOCSPX-secret-token",
+                "project_id": "google-proj-99",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [
+                    "http://test/api/v1/auth/oidc/google-oauth/callback",
+                ],
+                "javascript_origins": ["http://test"],
+            }
+        })
+
+        # 1. Preview endpoint
+        preview_res = await client.post(
+            "/api/v1/admin/auth-cards/parse-google-json",
+            json={"google_oauth_json": valid_google_json, "slug": "google-oauth"},
+        )
+        assert preview_res.status_code == 200
+        preview_data = preview_res.json()
+        assert preview_data["client_id"] == "google-client-xyz.apps.googleusercontent.com"
+        assert preview_data["project_id"] == "google-proj-99"
+        assert preview_data["callback_uri_matched"] is True
+        assert preview_data["has_client_secret"] is True
+        assert "client_secret" not in preview_data
+        assert "GOCSPX-secret-token" not in preview_res.text
+
+        # 2. Create card with google_oauth_json
+        create_res = await client.post(
+            "/api/v1/admin/auth-cards",
+            json={
+                "provider_kind": "OIDC",
+                "slug": "google-oauth",
+                "display_name": "Google Workspace Sign-In",
+                "google_oauth_json": valid_google_json,
+            },
+        )
+        assert create_res.status_code == 201
+        created_data = create_res.json()
+        assert created_data["slug"] == "google-oauth"
+        assert created_data["provider_kind"] == "OIDC"
+        assert created_data["has_secret"] is True
+        assert created_data["public_config"]["client_id"] == "google-client-xyz.apps.googleusercontent.com"
+        assert created_data["public_config"]["issuer"] == "https://accounts.google.com"
+        assert "client_secret" not in created_data["public_config"]
+        assert "redirect_uris" not in created_data["public_config"]
+        assert "GOCSPX-secret-token" not in create_res.text

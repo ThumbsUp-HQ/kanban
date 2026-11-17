@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KANBA-185 Google OAuth Client JSON Importer & Card Provisioning Contract Sample",
+  "description": "Demonstrates preview parsing with redirect URI auditing and card creation with envelope encryption (KB-AUTH-JSON)",
+  "preview_contract": {
+    "endpoint": "POST /api/v1/admin/auth-cards/parse-google-json",
+    "sample_request": {
+      "raw_json": "{\n  \"web\": {\n    \"client_id\": \"108273645192-example.apps.googleusercontent.com\",\n    \"project_id\": \"corp-kanban-sso\",\n    \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n    \"token_uri\": \"https://oauth2.googleapis.com/token\",\n    \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n    \"client_secret\": \"GOCSPX-SampleGoogleClientSecretKey12345\",\n    \"redirect_uris\": [\n      \"https://kanban.example.com/api/v1/auth/oidc/google-oauth/callback\"\n    ],\n    \"javascript_origins\": [\n      \"https://kanban.example.com\"\n    ]\n  }\n}",
+      "slug": "google-oauth"
+    },
+    "sample_response": {
+      "client_id": "108273645192-example.apps.googleusercontent.com",
+      "project_id": "corp-kanban-sso",
+      "issuer": "https://accounts.google.com",
+      "redirect_uris": [
+        "https://kanban.example.com/api/v1/auth/oidc/google-oauth/callback"
+      ],
+      "javascript_origins": [
+        "https://kanban.example.com"
+      ],
+      "expected_callback_uri": "https://kanban.example.com/api/v1/auth/oidc/google-oauth/callback",
+      "callback_uri_matched": true,
+      "has_client_secret": true
+    },
+    "security_properties": [
+      "Zero secret leakage: raw client_secret is never echoed back in preview response",
+      "Endpoint pinning: auth_uri and token_uri strictly validated against Google account domains",
+      "SSRF prevention: private IPs, loopback, metadata services, and custom domains rejected",
+      "Format enforcement: installed/desktop client JSON rejected with 422 Unprocessable Entity",
+      "Size ceiling: payloads exceeding 32,768 bytes rejected with 413 Payload Too Large"
+    ]
+  },
+  "card_creation_contract": {
+    "endpoint": "POST /api/v1/admin/auth-cards",
+    "sample_request": {
+      "provider_kind": "OIDC",
+      "slug": "google-oauth",
+      "display_name": "Google Workspace",
+      "button_subtext": "Sign in with your Google account",
+      "icon_preset": "google",
+      "is_enabled": true,
+      "auto_provision_users": true,
+      "allowed_email_domains": [
+        "example.com"
+      ],
+      "google_oauth_json": "{\n  \"web\": {\n    \"client_id\": \"108273645192-example.apps.googleusercontent.com\",\n    \"client_secret\": \"GOCSPX-SampleGoogleClientSecretKey12345\",\n    \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n    \"token_uri\": \"https://oauth2.googleapis.com/token\"\n  }\n}"
+    },
+    "sample_response": {
+      "id": "018f-card-google",
+      "provider_kind": "OIDC",
+      "slug": "google-oauth",
+      "display_name": "Google Workspace",
+      "button_subtext": "Sign in with your Google account",
+      "icon_preset": "google",
+      "is_enabled": true,
+      "sort_rank": "2",
+      "auto_provision_users": true,
+      "allowed_email_domains": [
+        "example.com"
+      ],
+      "has_secret": true,
+      "dek_kid": "dek-oidc-10827364",
+      "last_health_status": "UNKNOWN",
+      "check_summary": null,
+      "latency_ms": null,
+      "public_config": {
+        "issuer_url": "https://accounts.google.com",
+        "client_id": "108273645192-example.apps.googleusercontent.com",
+        "scopes": [
+          "openid",
+          "profile",
+          "email"
+        ],
+        "pkce_method": "S256",
+        "token_auth_method": "client_secret_post"
+      }
+    },
+    "security_properties": [
+      "Client secret parsed server-side and encrypted into envelope_encrypted_secret using ephemeral DEK",
+      "public_config strictly sanitizes secrets away (Security Invariant KB-P3-36 & KB-AUTH-JSON)",
+      "Strict AAL2 authentication required via require_admin_aal2 dependency"
+    ]
+  }
+}
