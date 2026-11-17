@@ -6,7 +6,11 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kb_auth_owner') THEN
         CREATE ROLE kb_auth_owner WITH NOLOGIN NOINHERIT NOBYPASSRLS;
     END IF;
-    EXECUTE format('GRANT kb_auth_owner TO %I WITH SET TRUE, INHERIT TRUE', CURRENT_USER);
+    IF NOT pg_has_role(CURRENT_USER, 'kb_auth_owner', 'MEMBER') THEN
+        EXECUTE format('GRANT kb_auth_owner TO %I WITH SET TRUE, INHERIT TRUE', CURRENT_USER);
+    END IF;
+EXCEPTION
+    WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
 GRANT USAGE, CREATE ON SCHEMA public TO kb_auth_owner;
