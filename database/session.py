@@ -217,9 +217,26 @@ class RLSSessionFactory:
     async def session(self, ctx: RLSContext) -> AsyncIterator[RLSAsyncSession]:
         """Async context manager yielding an RLS-bound session inside a transaction."""
         sess = self._sessionmaker()
+
+        def _rebind_on_begin(sync_sess: Session, _trans: SessionTransaction, _conn: object) -> None:
+            sync_sess.info["rls_bound"] = True
+            sync_sess.info["rls_context"] = ctx
+
+        event.listen(sess.sync_session, "after_begin", _rebind_on_begin)
         try:
-            async with sess.begin():
-                await bind_rls_context(sess, ctx)
+            await sess.begin()
+            await bind_rls_context(sess, ctx)
+            try:
                 yield sess
+            except BaseException:
+                if sess.in_transaction():
+                    await sess.rollback()
+                raise
+            else:
+                if sess.in_transaction():
+                    await sess.commit()
         finally:
+            event.remove(sess.sync_session, "after_begin", _rebind_on_begin)
+            sess.info.pop("rls_bound", None)
+            sess.info.pop("rls_context", None)
             await sess.close()

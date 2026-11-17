@@ -194,6 +194,10 @@ async def test_set_local_binding_and_isolation_with_pool_reuse(
             issues_ws1 = (await sess1.scalars(select(Issue))).all()
             assert len(issues_ws1) == 1
             assert issues_ws1[0].id == iss1_id
+            # Mid-session commit followed by subsequent query must succeed cleanly
+            await sess1.commit()
+            post_commit_ok = await sess1.scalar(text("SELECT 1"))
+            assert post_commit_ok == 1
 
         # Transaction 2: bound to WS2 on the SAME single connection
         ctx2 = RLSContext(

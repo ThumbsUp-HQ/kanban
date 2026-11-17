@@ -84,9 +84,14 @@ def test_forgejo_jobs_exist_on_inferrence1(forgejo_jobs: dict[str, dict[str, Any
         assert job["runs-on"] == ["inferrence1"]
 
 
-def test_forgejo_permissions_are_read_only(forgejo_workflow: dict[str, Any]) -> None:
-    """Security: Forgejo top-level token permissions are contents: read only."""
-    assert forgejo_workflow["permissions"] == {"contents": "read"}
+def test_forgejo_omits_unsupported_permissions_field(
+    forgejo_workflow: dict[str, Any],
+    forgejo_jobs: dict[str, dict[str, Any]],
+) -> None:
+    """Forgejo Actions does not support `permissions:` and warns on every job when set."""
+    assert "permissions" not in forgejo_workflow
+    for name, job in forgejo_jobs.items():
+        assert "permissions" not in job, name
 
 
 def test_forgejo_every_job_has_bounded_timeout(forgejo_jobs: dict[str, dict[str, Any]]) -> None:

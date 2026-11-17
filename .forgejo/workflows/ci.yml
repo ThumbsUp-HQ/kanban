@@ -8,9 +8,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   lint-type:
     runs-on: [inferrence1]
@@ -21,19 +18,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
-
-      - name: Lint and type checks
+      - name: Lint and type checks (cached ci-base)
         shell: bash
         run: |
           scripts/ci/run_and_log.sh make-check -- \
-            bash -c 'uv sync --locked && make check'
+            scripts/ci/with_ci_base.sh 'uv sync --locked --no-build-isolation && make check'
 
       - name: Upload logs to Dash
         if: always()
@@ -61,49 +50,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
-
-      - name: Install system dependencies
-        shell: bash
-        run: |
-          if ! command -v pg_dump >/dev/null 2>&1; then
-            if command -v sudo >/dev/null 2>&1; then
-              sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client
-            elif command -v apt-get >/dev/null 2>&1; then
-              apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
-            fi
-          fi
-
-      - name: Sync Python dependencies
-        shell: bash
-        run: scripts/ci/run_and_log.sh uv-sync -- uv sync --locked
-
       - name: Start test database
         shell: bash
         run: scripts/ci/run_and_log.sh testdb-up -- make testdb-up
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (cached ci-base)
         shell: bash
         run: |
           mkdir -p reports
           scripts/ci/run_and_log.sh pytest -- \
-            uv run pytest -n 4 --dist=loadscope \
-              --ignore=tests/perf \
-              --ignore=tests/security \
-              --ignore=database/tests/migrations \
-              --ignore=database/tests/test_migration_modules.py \
-              --ignore=database/tests/test_migration_wip_limits.py \
-              --ignore=database/tests/test_p3_17_search_migration.py \
-              --ignore=tests/deploy/test_standalone_container.py \
-              --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
-              --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
-              --cov-fail-under=95 --junitxml=reports/pytest.xml
+            scripts/ci/with_ci_base.sh '
+              uv sync --locked --no-build-isolation &&
+              uv run --no-sync pytest -n 4 --dist=loadscope \
+                --ignore=tests/perf \
+                --ignore=tests/security \
+                --ignore=database/tests/migrations \
+                --ignore=database/tests/test_migration_modules.py \
+                --ignore=database/tests/test_migration_wip_limits.py \
+                --ignore=database/tests/test_p3_17_search_migration.py \
+                --ignore=tests/deploy/test_standalone_container.py \
+                --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
+                --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
+                --cov-fail-under=95 --junitxml=reports/pytest.xml
+            '
 
       - name: Stop test database
         if: always()
@@ -146,41 +115,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
-
-      - name: Install system dependencies
-        shell: bash
-        run: |
-          if ! command -v pg_dump >/dev/null 2>&1; then
-            if command -v sudo >/dev/null 2>&1; then
-              sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends postgresql-client
-            elif command -v apt-get >/dev/null 2>&1; then
-              apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-client
-            fi
-          fi
-
-      - name: Sync Python dependencies
-        shell: bash
-        run: scripts/ci/run_and_log.sh uv-sync -- uv sync --locked
-
       - name: Start test database
         shell: bash
         run: scripts/ci/run_and_log.sh testdb-up -- make testdb-up
 
-      - name: Run STRIDE security and DDL migration lifecycle tests
+      - name: Run STRIDE security and DDL migration lifecycle tests (cached ci-base)
         shell: bash
         run: |
           scripts/ci/run_and_log.sh stride-tests -- \
-            uv run pytest tests/security database/tests/migrations \
-              database/tests/test_migration_modules.py \
-              database/tests/test_migration_wip_limits.py \
-              database/tests/test_p3_17_search_migration.py -q
+            scripts/ci/with_ci_base.sh '
+              uv sync --locked --no-build-isolation &&
+              uv run --no-sync pytest tests/security database/tests/migrations \
+                database/tests/test_migration_modules.py \
+                database/tests/test_migration_wip_limits.py \
+                database/tests/test_p3_17_search_migration.py -q
+            '
 
       - name: Stop test database
         if: always()
@@ -205,6 +154,7 @@ jobs:
         continue-on-error: true
 
   web-tests:
+    needs: [docker-build]
     runs-on: [inferrence1]
     timeout-minutes: 20
     env:
@@ -213,35 +163,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "22"
-
-      - name: Install web dependencies
+      - name: Run web typecheck, lint, unit tests, and build (cached ci-base)
         shell: bash
         run: |
-          scripts/ci/run_and_log.sh pnpm-install -- \
-            pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Typecheck
-        shell: bash
-        run: scripts/ci/run_and_log.sh typecheck -- pnpm --dir kanban/web typecheck
-
-      - name: Lint
-        shell: bash
-        run: scripts/ci/run_and_log.sh lint -- pnpm --dir kanban/web lint
-
-      - name: Unit tests with coverage
-        shell: bash
-        run: scripts/ci/run_and_log.sh unit-tests -- pnpm --dir kanban/web test:unit --coverage
-
-      - name: Build
-        shell: bash
-        run: scripts/ci/run_and_log.sh build -- pnpm --dir kanban/web build
+          scripts/ci/run_and_log.sh web-suite -- \
+            scripts/ci/with_ci_base.sh '
+              pnpm install --frozen-lockfile --ignore-scripts --prefer-offline --store-dir /opt/ci-cache/pnpm-store &&
+              pnpm --dir kanban/web typecheck &&
+              pnpm --dir kanban/web lint &&
+              pnpm --dir kanban/web test:unit --coverage &&
+              pnpm --dir kanban/web build
+            '
 
       - name: Upload logs to Dash
         if: always()
@@ -269,27 +201,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "22"
-
-      - name: License gate
+      - name: License gate (cached ci-base)
         shell: bash
         run: |
           scripts/ci/run_and_log.sh license -- \
-            bash -c 'uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts && make license'
+            scripts/ci/with_ci_base.sh '
+              uv sync --locked --no-build-isolation &&
+              pnpm install --frozen-lockfile --ignore-scripts --prefer-offline --store-dir /opt/ci-cache/pnpm-store &&
+              make license
+            '
 
       - name: Upload logs to Dash
         if: always()
@@ -319,6 +239,12 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Warm cached ci-base image
+        shell: bash
+        run: |
+          scripts/ci/run_and_log.sh build-ci-base -- \
+            scripts/ci/with_ci_base.sh 'python3 --version && uv --version && node --version && pnpm --version'
 
       - name: Build runtime-slim image
         shell: bash
@@ -354,6 +280,7 @@ jobs:
         continue-on-error: true
 
   perf-budgets:
+    needs: [docker-build]
     runs-on: [inferrence1]
     timeout-minutes: 20
     env:
@@ -362,37 +289,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "22"
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          scripts/ci/run_and_log.sh deps -- \
-            bash -c 'uv sync --locked && pnpm install --frozen-lockfile --ignore-scripts'
-
       - name: Start test database
         shell: bash
         run: scripts/ci/run_and_log.sh testdb-up -- make testdb-up
 
-      - name: Run SLA Performance Budget Gate
+      - name: Run SLA Performance Budget Gate (cached ci-base)
         shell: bash
         run: |
           scripts/ci/run_and_log.sh perf-budgets -- \
-            bash -c 'uv run pytest tests/perf/test_perf_sparkle_sla.py tests/perf/test_perf_sync_hooks_sla.py tests/perf/test_perf_budget_gate_unit.py tests/perf/test_perf_clean_db_1000.py -q && uv run python scripts/perf_budget_gate.py --evaluate-only docs/qa/KANBA-151 --report-out docs/qa/KANBA-151/perf-report.json'
+            scripts/ci/with_ci_base.sh '
+              uv sync --locked --no-build-isolation &&
+              uv run --no-sync pytest tests/perf/test_perf_sparkle_sla.py tests/perf/test_perf_sync_hooks_sla.py tests/perf/test_perf_budget_gate_unit.py tests/perf/test_perf_clean_db_1000.py -q &&
+              uv run --no-sync python scripts/perf_budget_gate.py --evaluate-only docs/qa/KANBA-151 --report-out docs/qa/KANBA-151/perf-report.json
+            '
 
       - name: Stop test database
         if: always()

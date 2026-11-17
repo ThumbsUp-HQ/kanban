@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1.7
+# Cached CI base image containing Python 3.12, uv, Node 22, pnpm, postgresql-client,
+# pre-populated Python virtualenv (/opt/ci-venv) + wheel cache (/opt/ci-cache/uv),
+# and pre-fetched pnpm store (/opt/ci-cache/pnpm-store).
+
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS node-dist
+RUN corepack enable && corepack prepare pnpm@10.6.5 --activate
+
+FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS ci-base
+COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /uvx /bin/
+COPY --from=node-dist /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-dist /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack && \
+    corepack enable && \
+    apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        make \
+        postgresql-client \
+        procps && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV UV_CACHE_DIR=/opt/ci-cache/uv \
+    UV_PROJECT_ENVIRONMENT=/opt/ci-venv \
+    UV_LINK_MODE=copy \
+    PNPM_STORE_DIR=/opt/ci-cache/pnpm-store \
+    PATH="/opt/ci-venv/bin:${PATH}"
+
+WORKDIR /opt/ci-warmup
+COPY pyproject.toml uv.lock ./
+COPY database/pyproject.toml ./database/
+COPY kanban/pyproject.toml ./kanban/
+COPY mcp/pyproject.toml ./mcp/
+COPY agent/pyproject.toml ./agent/
+RUN uv sync --locked --no-install-workspace
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY kanban/web/package.json ./kanban/web/
+RUN pnpm fetch --frozen-lockfile --store-dir /opt/ci-cache/pnpm-store && \
+    rm -rf /opt/ci-warmup
+
+WORKDIR /workspace

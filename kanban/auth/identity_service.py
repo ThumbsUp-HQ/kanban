@@ -145,7 +145,7 @@ class DatabaseIdentityResolver:
         raise RuntimeError(msg)
 
     @asynccontextmanager
-    async def _open_session(
+    async def _open_session(  # noqa: C901
         self, request: Request, ctx: RLSContext | None = None
     ) -> AsyncIterator[AsyncSession]:
         """Open an RLS-bound AsyncSession from configured session_factory or app state."""
@@ -168,15 +168,24 @@ class DatabaseIdentityResolver:
                 yield sess
         elif hasattr(session_factory, "sessionmaker"):
             maker = session_factory.sessionmaker
-            async with maker() as sess, sess.begin():
+            async with maker() as sess:
                 if hasattr(sess, "sync_session"):
 
                     @event.listens_for(sess.sync_session, "after_begin")
                     def _rebind_on_begin_maker(s: Any, _trans: Any, _conn: Any) -> None:  # noqa: ANN401
                         s.info["rls_bound"] = True
 
+                await sess.begin()
                 await bind_rls_context(sess, effective_ctx)
-                yield sess
+                try:
+                    yield sess
+                except BaseException:
+                    if sess.in_transaction():
+                        await sess.rollback()
+                    raise
+                else:
+                    if sess.in_transaction():
+                        await sess.commit()
         elif callable(session_factory):
             res = session_factory()
             if hasattr(res, "__aenter__"):
