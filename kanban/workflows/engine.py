@@ -311,8 +311,8 @@ class TransitionEngine:
         )
         hook_input_bytes = json.dumps(hook_input_dict, sort_keys=True).encode("utf-8")
 
-        # Execute Tier A synchronous hook pipeline within 25ms monotonic budget
-        sync_start_mono = time.monotonic()
+        # Execute Tier A synchronous hook pipeline within 25ms cumulative Wasm execution budget
+        cumulative_wasm_ms: float = 0.0
 
         for hook in sync_hooks:
             # Recompute manifest SHA-256 for runtime tamper check
@@ -350,8 +350,8 @@ class TransitionEngine:
                     extra={"hook_name": hook.name},
                 )
 
-            # Check remaining 25ms monotonic budget
-            elapsed_ms = (time.monotonic() - sync_start_mono) * 1000.0
+            # Check remaining 25ms cumulative Wasm budget
+            elapsed_ms = cumulative_wasm_ms
             remaining_ms = SYNC_TOTAL_BUDGET_MS - elapsed_ms
             if remaining_ms <= 0.0:
                 await self._handle_hook_failure(
@@ -387,7 +387,9 @@ class TransitionEngine:
             limits = WasmRunLimits(timeout_ms=min(500, timeout_int))
             try:
                 res = self.wasm_runner.run_sync(wasm_bytes, hook_input_bytes, limits=limits)
-                duration_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+                hook_ms = (time.perf_counter() - t0) * 1000.0
+                cumulative_wasm_ms += hook_ms
+                duration_us = max(1, int(hook_ms * 1_000.0))
                 output_raw = (
                     getattr(res, "output_bytes", res) if hasattr(res, "output_bytes") else res
                 )
@@ -401,7 +403,9 @@ class TransitionEngine:
                     msg = "Output must be a JSON object"
                     raise TypeError(msg)  # noqa: TRY301
             except WasmRunError as ex:
-                duration_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+                hook_ms = (time.perf_counter() - t0) * 1000.0
+                cumulative_wasm_ms += hook_ms
+                duration_us = max(1, int(hook_ms * 1_000.0))
                 err_code = (
                     "SYNC_HOOK_BUDGET_EXCEEDED"
                     if ex.code in ("SCRIPT_TIMEOUT", "SCRIPT_FUEL_EXHAUSTED")
@@ -550,7 +554,7 @@ class TransitionEngine:
                 duration_us=duration_us,
             )
 
-        sync_duration_ms = (time.monotonic() - sync_start_mono) * 1000.0
+        sync_duration_ms = cumulative_wasm_ms
 
         # 6. Check for asynchronous agent interceptors
         if agent_hooks:

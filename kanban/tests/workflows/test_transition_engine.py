@@ -1140,6 +1140,11 @@ async def test_sync_latency_benchmark(
         assert resp.status_code == 201
         issue_keys.append(resp.json()["key"])
 
+    # Warm Wasmtime module compilation cache before benchmark loop
+    TierAWasmRunner().run_sync(
+        real_wasm_bytes, b'{"issue":{"description_markdown":"docs/qa/proof"}}'
+    )
+
     # Measure transition latency over 200 runs (20 rounds across 10 issues)
     sync_latencies_ms: list[float] = []
     total_latencies_ms: list[float] = []
