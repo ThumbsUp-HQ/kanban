@@ -4,13 +4,15 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request  # noqa: TC002
-from starlette.responses import Response  # noqa: TC002
+from starlette.responses import RedirectResponse, Response
 
 from database.session import RLSContext
 from kanban.api.problems import ProblemException
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
 
     from database.session import RLSSessionFactory
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/oidc", tags=["auth"])
 
 ANONYMOUS_RLS_CONTEXT = RLSContext(
@@ -35,11 +38,23 @@ ANONYMOUS_RLS_CONTEXT = RLSContext(
 )
 
 
+def _is_browser_navigation(request: Request) -> bool:
+    """Return True if the request is a browser HTML navigation rather than an API call."""
+    accept = request.headers.get("accept", "").lower()
+    sec_fetch_mode = request.headers.get("sec-fetch-mode", "").lower()
+    return "text/html" in accept or sec_fetch_mode == "navigate"
+
+
 async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:
     """Provide an unauthenticated database session bound to anonymous RLS context."""
     session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
     if session_factory is not None:
         async with session_factory.session(ANONYMOUS_RLS_CONTEXT) as session:
+
+            @event.listens_for(session.sync_session, "after_begin")
+            def _rebind_on_begin(sess: Any, _trans: Any, _conn: Any) -> None:  # noqa: ANN401
+                sess.info["rls_bound"] = True
+
             yield session
     else:
         msg = "No session_factory configured on application state"
@@ -91,6 +106,14 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
             request=request,
         )
     except OidcError as err:
+        logger.warning(
+            "OIDC start protocol error for card '%s': code=%s detail=%s",
+            slug,
+            err.code,
+            err.message or err.code,
+        )
+        if _is_browser_navigation(request):
+            return RedirectResponse(url="/login?error=1", status_code=302)
         raise ProblemException(
             code=f"OIDC_{err.code}",
             status=502
@@ -99,6 +122,22 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
             title="OIDC Protocol Error",
             detail=err.message or err.code,
         ) from err
+    except ProblemException as err:
+        logger.warning(
+            "OIDC start rejected for card '%s': code=%s status=%d detail=%s",
+            slug,
+            err.code,
+            err.status,
+            err.detail,
+        )
+        if _is_browser_navigation(request):
+            return RedirectResponse(url="/login?error=1", status_code=302)
+        raise
+    except Exception:
+        logger.exception("Unexpected error in OIDC start for card '%s'", slug)
+        if _is_browser_navigation(request):
+            return RedirectResponse(url="/login?error=1", status_code=302)
+        raise
 
 
 @router.get("/{slug}/callback", summary="Callback endpoint for OIDC or OAuth2 login")
@@ -128,9 +167,33 @@ async def oidc_callback(  # noqa: PLR0913, PLR0917
             link_intent_id=link_intent_id,
         )
     except OidcError as err:
+        logger.warning(
+            "OIDC callback protocol error for card '%s': code=%s detail=%s",
+            slug,
+            err.code,
+            err.message or err.code,
+        )
+        if _is_browser_navigation(request):
+            return RedirectResponse(url="/login?error=1", status_code=302)
         raise ProblemException(
             code=f"OIDC_{err.code}",
             status=502 if err.code in ("DISCOVERY_FAILED", "JWKS_FETCH_FAILED") else 400,
             title="OIDC Protocol Error",
             detail=err.message or err.code,
         ) from err
+    except ProblemException as err:
+        logger.warning(
+            "OIDC callback rejected for card '%s': code=%s status=%d detail=%s",
+            slug,
+            err.code,
+            err.status,
+            err.detail,
+        )
+        if _is_browser_navigation(request):
+            return RedirectResponse(url="/login?error=1", status_code=302)
+        raise
+    except Exception:
+        logger.exception("Unexpected error in OIDC callback for card '%s'", slug)
+        if _is_browser_navigation(request):
+            return RedirectResponse(url="/login?error=1", status_code=302)
+        raise

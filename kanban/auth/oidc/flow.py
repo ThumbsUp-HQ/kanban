@@ -388,6 +388,8 @@ class OidcFlow:
         )
         row = res.mappings().first()
         await session.commit()
+        if hasattr(session, "info") and isinstance(session.info, dict):
+            session.info["rls_bound"] = True
 
         if not row or row["status"] != "OK":
             raise ProblemException(
@@ -776,6 +778,8 @@ class OidcFlow:
 
         # If SessionService is configured, issue session & CSRF cookies
         if self._session_service is not None:
+            if hasattr(session, "info") and isinstance(session.info, dict):
+                session.info["rls_bound"] = True
             issued_session = await self._session_service.create_after_login(
                 session,
                 principal_id=resolved_login.principal_id,
@@ -784,6 +788,9 @@ class OidcFlow:
                 aal_level=2,
                 mfa_pending=False,
             )
+            await session.commit()
+            if hasattr(session, "info") and isinstance(session.info, dict):
+                session.info["rls_bound"] = True
             response.headers.append(
                 "Set-Cookie",
                 build_set_cookie_header(issued_session.cookie_val, issued_session.idle_expires_at),

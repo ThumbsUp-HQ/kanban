@@ -185,11 +185,11 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
           detail: 'User is not in the authorized access list',
         }),
       ).message,
-    ).toBe('User is not in the authorized access list');
+    ).toBe('Sign-in is unavailable right now.');
 
     expect(
       formatAuthError(new ApiProblem(500, { code: 'CUSTOM_GATE_REJECTED' })).message,
-    ).toBe('Sign-in is unavailable right now (code: CUSTOM_GATE_REJECTED).');
+    ).toBe('Sign-in is unavailable right now.');
 
     expect(
       formatAuthError(new ApiProblem(500, { code: 'too_long_or_lowercase_code_not_matching_regex' }))

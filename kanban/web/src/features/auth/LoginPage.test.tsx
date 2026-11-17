@@ -92,7 +92,7 @@ describe('LoginPage (KB-P3-35)', () => {
     expect(resolveSafeNext('/https://evil.example')).toBe('/');
   });
 
-  it('initializes error banner when URL query contains error_description or error', async () => {
+  it('initializes generic error banner when URL query contains error_description or error without leaking details', async () => {
     const origLocation = window.location;
     window.history.pushState({}, '', '/login?error=access_denied&error_description=User+not+in+allowlist');
     vi.spyOn(authApi, 'fetchAuthCards').mockResolvedValue({ cards: mock4Cards });
@@ -100,7 +100,9 @@ describe('LoginPage (KB-P3-35)', () => {
     render(<LoginPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain('User not in allowlist');
+      const alertText = screen.getByRole('alert').textContent;
+      expect(alertText).toContain('Sign-in failed. Check your credentials and try again.');
+      expect(alertText).not.toContain('User not in allowlist');
     });
     window.history.pushState({}, '', origLocation.pathname);
   });
@@ -541,7 +543,7 @@ describe('LoginPage (KB-P3-35)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Sign-in is unavailable right now (code: INTERNAL_ERROR).'),
+        screen.getByText('Sign-in is unavailable right now.'),
       ).toBeDefined();
     });
   });

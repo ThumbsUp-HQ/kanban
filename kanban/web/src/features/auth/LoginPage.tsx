@@ -38,9 +38,9 @@ export function LoginPage({
 
   const [error, setError] = useState<FormattedError | null>(() => {
     const sp = new URLSearchParams(window.location.search);
-    const errDesc = sp.get('error_description') ?? sp.get('error');
-    if (errDesc && errDesc.trim().length > 0) {
-      return { message: errDesc.trim() };
+    const hasError = sp.get('error') ?? sp.get('error_description');
+    if (hasError && hasError.trim().length > 0) {
+      return { message: 'Sign-in failed. Check your credentials and try again.' };
     }
     return null;
   });

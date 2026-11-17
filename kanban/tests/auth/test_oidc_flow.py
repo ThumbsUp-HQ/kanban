@@ -1534,3 +1534,21 @@ async def test_fastapi_oidc_routes(
             )
             assert cb_res.status_code == 302
             assert cb_res.headers["Location"] == "/projects/TEST"
+
+            # 3. Browser navigation (Accept: text/html) with replayed state redirects
+            # to /login?error=1 instead of exposing raw OIDC error JSON
+            cb_replay_browser = await client.get(
+                f"/api/v1/auth/oidc/route-test/callback?code={cb_p['code']}&state={cb_p['state']}",
+                headers={"Accept": "text/html,application/xhtml+xml"},
+                follow_redirects=False,
+            )
+            assert cb_replay_browser.status_code == 302
+            assert cb_replay_browser.headers["Location"] == "/login?error=1"
+
+            start_missing_browser = await client.get(
+                "/api/v1/auth/oidc/nonexistent-card/start",
+                headers={"Accept": "text/html,application/xhtml+xml"},
+                follow_redirects=False,
+            )
+            assert start_missing_browser.status_code == 302
+            assert start_missing_browser.headers["Location"] == "/login?error=1"

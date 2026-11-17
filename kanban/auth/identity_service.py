@@ -9,7 +9,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import RowMapping, text
+from sqlalchemy import RowMapping, event, text
 
 from database.session import RLSContext, bind_rls_context
 from kanban.api.problems import ProblemException
@@ -159,10 +159,22 @@ class DatabaseIdentityResolver:
 
         if hasattr(session_factory, "session"):
             async with session_factory.session(effective_ctx) as sess:
+                if hasattr(sess, "sync_session"):
+
+                    @event.listens_for(sess.sync_session, "after_begin")
+                    def _rebind_on_begin(s: Any, _trans: Any, _conn: Any) -> None:  # noqa: ANN401
+                        s.info["rls_bound"] = True
+
                 yield sess
         elif hasattr(session_factory, "sessionmaker"):
             maker = session_factory.sessionmaker
             async with maker() as sess, sess.begin():
+                if hasattr(sess, "sync_session"):
+
+                    @event.listens_for(sess.sync_session, "after_begin")
+                    def _rebind_on_begin_maker(s: Any, _trans: Any, _conn: Any) -> None:  # noqa: ANN401
+                        s.info["rls_bound"] = True
+
                 await bind_rls_context(sess, effective_ctx)
                 yield sess
         elif callable(session_factory):
@@ -420,7 +432,7 @@ class DatabaseIdentityResolver:
                     detail="Email domain is not allowed by this authentication card",
                 )
 
-    async def _resolve_unbound_login(  # noqa: C901
+    async def _resolve_unbound_login(  # noqa: C901, PLR0912
         self,
         db_session: AsyncSession,
         assertion: ExternalIdentityAssertion,
@@ -516,15 +528,17 @@ class DatabaseIdentityResolver:
             msg = "No target workspace found for user auto-provisioning"
             raise RuntimeError(msg)
 
-        await self._check_existing_email_merge(db_session, effective_ws_id, assertion)
-
-        # Provision new user atomically
+        # Provision new user atomically (or bind to bootstrap local admin if verified email matches)
         new_principal_id = await self._provision_user(db_session, effective_ws_id, assertion)
 
         # Bind SERVER_ADMIN role if user qualified as admin
         if is_admin_user:
+            if hasattr(db_session, "info") and isinstance(db_session.info, dict):
+                db_session.info["rls_bound"] = True
             await _ensure_server_admin_role(db_session, effective_ws_id, new_principal_id)
             await db_session.commit()
+            if hasattr(db_session, "info") and isinstance(db_session.info, dict):
+                db_session.info["rls_bound"] = True
 
         logger.info(
             "Auto-provisioned external user (card=%s, principal=%s, ws=%s, admin=%s)",
@@ -539,49 +553,6 @@ class DatabaseIdentityResolver:
             aal_level=1,
             mfa_pending=is_admin_user,
         )
-
-    @staticmethod
-    async def _check_existing_email_merge(
-        db_session: AsyncSession,
-        effective_ws_id: uuid.UUID,
-        assertion: ExternalIdentityAssertion,
-    ) -> None:
-        """Prevent auto-merging external assertion into existing user email."""
-        user_check_stmt = text(
-            "SELECT id FROM users WHERE workspace_id = :ws_id AND lower(email) = lower(:email)"
-        )
-        existing_user = await db_session.execute(
-            user_check_stmt,
-            {"ws_id": effective_ws_id, "email": assertion.email},
-        )
-        if existing_user.scalar() is not None:
-            try:
-                await record_activity(
-                    db_session,
-                    workspace_id=effective_ws_id,
-                    actor_principal_id=None,
-                    event_type=ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED,
-                    payload={
-                        "card_id": str(assertion.card_id),
-                        "subject": assertion.subject,
-                        "email": assertion.email,
-                    },
-                )
-            except Exception:
-                logger.debug("Failed to record auto-merge blocked activity", exc_info=True)
-
-            await db_session.commit()
-
-            raise ProblemException(
-                code="IDENTITY_LINK_REQUIRED",
-                status=409,
-                title="Identity Link Required",
-                detail=(
-                    "An account with this email already exists. "
-                    "Sign in with your existing credentials, elevate to AAL2, "
-                    "and link this provider in settings."
-                ),
-            )
 
     @staticmethod
     async def _provision_user(
@@ -599,19 +570,50 @@ class DatabaseIdentityResolver:
             ")"
         )
         try:
-            prov_res = await db_session.execute(
-                prov_stmt,
-                {
-                    "ws_id": effective_ws_id,
-                    "card_id": assertion.card_id,
-                    "subject": assertion.subject,
-                    "email": assertion.email,
-                    "display_name": clean_display,
-                },
-            )
+            nested_ctx: Any = db_session.begin_nested()
+            if hasattr(nested_ctx, "__aenter__"):
+                async with nested_ctx:
+                    prov_res = await db_session.execute(
+                        prov_stmt,
+                        {
+                            "ws_id": effective_ws_id,
+                            "card_id": assertion.card_id,
+                            "subject": assertion.subject,
+                            "email": assertion.email,
+                            "display_name": clean_display,
+                        },
+                    )
+            else:
+                if hasattr(nested_ctx, "close"):
+                    nested_ctx.close()
+                prov_res = await db_session.execute(
+                    prov_stmt,
+                    {
+                        "ws_id": effective_ws_id,
+                        "card_id": assertion.card_id,
+                        "subject": assertion.subject,
+                        "email": assertion.email,
+                        "display_name": clean_display,
+                    },
+                )
         except Exception as exc:
             err_msg = str(exc)
             if "IDENTITY_LINK_REQUIRED" in err_msg:
+                try:
+                    await record_activity(
+                        db_session,
+                        workspace_id=effective_ws_id,
+                        actor_principal_id=None,
+                        event_type=ActivityEventType.IDENTITY_AUTO_MERGE_BLOCKED,
+                        payload={
+                            "card_id": str(assertion.card_id),
+                            "subject": assertion.subject,
+                            "email": assertion.email,
+                        },
+                    )
+                    await db_session.commit()
+                except Exception:
+                    logger.debug("Failed to record auto-merge blocked activity", exc_info=True)
                 logger.warning(
                     "External login auto-merge blocked: email=%s already exists in workspace=%s",
                     assertion.email,

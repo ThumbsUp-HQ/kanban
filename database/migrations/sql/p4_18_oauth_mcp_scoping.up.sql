@@ -437,3 +437,109 @@ BEGIN
 EXCEPTION
     WHEN OTHERS THEN NULL;
 END $$;
+
+-- Update kb_auth.identity_provision_new_user so a bootstrap local_admin_credentials account
+-- with matching verified email binds its first external identity on the card while keeping
+-- the zero auto-merge invariant for all regular user accounts.
+DO $$
+BEGIN
+    SET LOCAL ROLE kb_auth_owner;
+    CREATE OR REPLACE FUNCTION kb_auth.identity_provision_new_user(
+        p_workspace_id UUID,
+        p_card_id UUID,
+        p_subject TEXT,
+        p_email TEXT,
+        p_display_name TEXT
+    )
+    RETURNS TABLE (
+        principal_id UUID,
+        identity_id UUID
+    )
+    LANGUAGE plpgsql
+    SECURITY DEFINER
+    SET search_path = pg_catalog, public
+    AS $fn$
+    DECLARE
+        v_principal_id UUID;
+        v_identity_id UUID;
+        v_clean_display TEXT;
+        v_clean_key TEXT;
+    BEGIN
+        IF p_workspace_id IS NULL OR p_card_id IS NULL OR p_subject IS NULL OR p_email IS NULL THEN
+            RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'NULL_ARGUMENT';
+        END IF;
+
+        -- Verify card subject is not already bound
+        IF EXISTS (
+            SELECT 1 FROM user_identities
+            WHERE auth_card_id = p_card_id
+              AND immutable_subject_id = p_subject
+        ) THEN
+            RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'IDENTITY_ALREADY_LINKED';
+        END IF;
+
+        -- If an existing bootstrap local_admin_credentials account in this workspace has this email
+        -- and has not yet bound an identity on this card, bind to that admin principal.
+        SELECT u.id INTO v_principal_id
+        FROM users u
+        JOIN local_admin_credentials lac ON lac.principal_id = u.id
+        WHERE u.workspace_id = p_workspace_id
+          AND lower(u.email) = lower(p_email)
+          AND NOT EXISTS (
+              SELECT 1 FROM user_identities ui
+              WHERE ui.principal_id = u.id AND ui.auth_card_id = p_card_id
+          )
+        LIMIT 1;
+
+        IF v_principal_id IS NOT NULL THEN
+            v_identity_id := uuidv7();
+            INSERT INTO user_identities (
+                id, workspace_id, principal_id, auth_card_id, immutable_subject_id, subject_email_at_link, created_at, last_login_at
+            ) VALUES (
+                v_identity_id, p_workspace_id, v_principal_id, p_card_id, p_subject, p_email, clock_timestamp(), clock_timestamp()
+            );
+            RETURN QUERY SELECT v_principal_id, v_identity_id;
+            RETURN;
+        END IF;
+
+        -- Zero email auto-merge invariant: never auto-attach to existing regular user
+        IF EXISTS (
+            SELECT 1 FROM users
+            WHERE workspace_id = p_workspace_id
+              AND lower(email) = lower(p_email)
+        ) THEN
+            RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'IDENTITY_LINK_REQUIRED';
+        END IF;
+
+        v_principal_id := uuidv7();
+        v_identity_id := uuidv7();
+        v_clean_display := substr(COALESCE(NULLIF(btrim(p_display_name), ''), p_email), 1, 200);
+        v_clean_key := substr(lower(p_email), 1, 200);
+
+        INSERT INTO principals (id, principal_type, workspace_id, status, display_name)
+        VALUES (v_principal_id, 'USER', p_workspace_id, 'ACTIVE', v_clean_display);
+
+        INSERT INTO objects (id, object_type, workspace_id, project_id, canonical_key, display_title, created_by_id)
+        VALUES (v_principal_id, 'user'::object_kind, p_workspace_id, NULL, v_clean_key, v_clean_display, v_principal_id);
+
+        INSERT INTO users (id, object_type, principal_type, workspace_id, email)
+        VALUES (v_principal_id, 'user', 'USER', p_workspace_id, lower(p_email));
+
+        INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type)
+        VALUES (p_workspace_id, v_principal_id, 'WORKSPACE_MEMBER'::rbac_role, 'workspace');
+
+        INSERT INTO user_identities (
+            id, workspace_id, principal_id, auth_card_id, immutable_subject_id, subject_email_at_link, created_at, last_login_at
+        ) VALUES (
+            v_identity_id, p_workspace_id, v_principal_id, p_card_id, p_subject, p_email, clock_timestamp(), clock_timestamp()
+        );
+
+        RETURN QUERY SELECT v_principal_id, v_identity_id;
+    END;
+    $fn$;
+    REVOKE ALL ON FUNCTION kb_auth.identity_provision_new_user(UUID, UUID, TEXT, TEXT, TEXT) FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION kb_auth.identity_provision_new_user(UUID, UUID, TEXT, TEXT, TEXT) TO kanban_app;
+    RESET ROLE;
+EXCEPTION
+    WHEN OTHERS THEN RESET ROLE;
+END $$;
