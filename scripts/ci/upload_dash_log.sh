@@ -51,7 +51,9 @@ existing="$(curl -s --max-time 20 -H "Authorization: Bearer ${DASH_TOKEN}" \
   "${dash_url}/api/logs?${query}" 2>/dev/null \
   | python3 -c 'import json,sys
 try:
-    print(json.load(sys.stdin).get("log", ""), end="")
+    log = json.load(sys.stdin).get("log", "")
+    if "Forgejo/Gitea logs are not natively available" not in log:
+        print(log, end="")
 except Exception:
     pass' 2>/dev/null || true)"
 if [ -n "$existing" ]; then

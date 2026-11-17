@@ -1463,7 +1463,7 @@ async def test_flow_oidc_token_exchange_failures(
 
 
 @pytest.mark.asyncio
-async def test_fastapi_oidc_routes(
+async def test_fastapi_oidc_routes(  # noqa: PLR0915
     db_session: AsyncSession,
     key_material: KeyMaterial,
     kek_provider: StaticKekProvider,
@@ -1552,3 +1552,75 @@ async def test_fastapi_oidc_routes(
             )
             assert start_missing_browser.status_code == 302
             assert start_missing_browser.headers["Location"] == "/login?error=1"
+
+    # 4. Verify http://127.0.0.1 loopback flow with GOOGLE_TEST_CLIENT_ID
+    # and kb_oidc fallback cookie (no TLS required on 127.0.0.1)
+    from kanban.auth.oidc.config import (  # noqa: PLC0415
+        GOOGLE_TEST_CLIENT_ID,
+        GOOGLE_TEST_CLIENT_SECRET,
+        GOOGLE_TEST_CONSENT_NAME,
+        GOOGLE_TEST_PROJECT_ID,
+        GOOGLE_TEST_REDIRECT_URI,
+    )
+
+    assert GOOGLE_TEST_PROJECT_ID == "thumbsup-kanban-test"
+    assert GOOGLE_TEST_CONSENT_NAME == "TEST-ONLY-ThumbsUpKanban"
+    assert GOOGLE_TEST_REDIRECT_URI == "http://127.0.0.1/api/v1/auth/oidc/google-oauth/callback"
+
+    fake_idp.client_id = GOOGLE_TEST_CLIENT_ID
+    fake_idp.client_secret = GOOGLE_TEST_CLIENT_SECRET
+    await _seed_oidc_card(
+        db_session,
+        ws_id,
+        kek_provider,
+        slug="google-oauth",
+        issuer=fake_idp.issuer,
+        client_id=GOOGLE_TEST_CLIENT_ID,
+        client_secret=GOOGLE_TEST_CLIENT_SECRET.encode("utf-8"),
+    )
+
+    async with httpx.AsyncClient(transport=fake_idp.as_transport()) as idp_client_local:
+        flow_local = OidcFlow(
+            key_material=key_material,
+            identity_resolver=recording_resolver,
+            http_client=idp_client_local,
+        )
+        app.dependency_overrides[get_oidc_flow] = lambda: flow_local
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+        ) as local_client:
+            s_res = await local_client.get(
+                "/api/v1/auth/oidc/google-oauth/start?return_to=/",
+                follow_redirects=False,
+            )
+            assert s_res.status_code == 302
+            s_loc = s_res.headers["Location"]
+            s_params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(s_loc).query))
+            assert s_params["redirect_uri"] == GOOGLE_TEST_REDIRECT_URI
+            all_set_cookies = s_res.headers.get_list("set-cookie")
+            assert any("kb_oidc=" in c and "__Host-" not in c for c in all_set_cookies)
+
+            kb_oidc_val = ""
+            for c_str in all_set_cookies:
+                first_part = c_str.split(";", 1)[0].strip()
+                if first_part.startswith("kb_oidc="):
+                    kb_oidc_val = first_part.split("=", 1)[1]
+
+            cb_local_url = fake_idp.authorize_url_for_params(
+                client_id=s_params["client_id"],
+                redirect_uri=s_params["redirect_uri"],
+                state=s_params["state"],
+                nonce=s_params["nonce"],
+                code_challenge=s_params["code_challenge"],
+            )
+            cb_local_p = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(cb_local_url).query))
+
+            # Send only the non-__Host- fallback cookie kb_oidc over http://127.0.0.1
+            local_client.cookies.set("kb_oidc", kb_oidc_val)
+            cb_local_res = await local_client.get(
+                f"/api/v1/auth/oidc/google-oauth/callback?code={cb_local_p['code']}&state={cb_local_p['state']}",
+                follow_redirects=False,
+            )
+            assert cb_local_res.status_code == 302
+            assert cb_local_res.headers["Location"] == "/"

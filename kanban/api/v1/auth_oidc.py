@@ -19,6 +19,7 @@ from kanban.api.problems import ProblemException
 from kanban.auth.oidc.discovery import OidcError
 from kanban.auth.oidc.flow import (
     BROWSER_BINDING_COOKIE_NAME,
+    FALLBACK_BROWSER_BINDING_COOKIE_NAME,
     OidcFlow,
 )
 from kanban.security.keys import load_key_material
@@ -153,7 +154,9 @@ async def oidc_callback(  # noqa: PLR0913, PLR0917
     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Response:
     """Handle IdP callback redirect, validate state and token, and establish session."""
-    browser_binding = request.cookies.get(BROWSER_BINDING_COOKIE_NAME)
+    browser_binding = request.cookies.get(BROWSER_BINDING_COOKIE_NAME) or request.cookies.get(
+        FALLBACK_BROWSER_BINDING_COOKIE_NAME
+    )
     try:
         return await flow.callback(
             session,

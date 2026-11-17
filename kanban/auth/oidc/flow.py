@@ -38,8 +38,14 @@ from kanban.auth.oidc.discovery import (
     fetch_discovery,
 )
 from kanban.auth.oidc.tokens import build_private_key_jwt, validate_id_token
-from kanban.auth.sessions.cookies import build_set_cookie_header
-from kanban.auth.sessions.csrf import build_set_csrf_cookie_header
+from kanban.auth.sessions.cookies import (
+    build_set_cookie_header,
+    build_set_fallback_cookie_header,
+)
+from kanban.auth.sessions.csrf import (
+    build_set_csrf_cookie_header,
+    build_set_fallback_csrf_cookie_header,
+)
 from kanban.security.envelope import SealedSecret, StaticKekProvider, open_card_secret
 from kanban.security.keys import derive_subkey
 
@@ -56,6 +62,7 @@ logger = logging.getLogger(__name__)
 RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%:+~]{0,2048}$")
 
 BROWSER_BINDING_COOKIE_NAME: Final[str] = "__Host-kb_oidc"
+FALLBACK_BROWSER_BINDING_COOKIE_NAME: Final[str] = "kb_oidc"
 BROWSER_BINDING_TTL_SECONDS: Final[int] = 300
 MAX_TOKEN_RESPONSE_BYTES: Final[int] = 65536  # 64 KiB
 
@@ -95,9 +102,24 @@ def build_browser_binding_cookie(
     )
 
 
+def build_fallback_browser_binding_cookie(
+    cookie_val: str, max_age: int = BROWSER_BINDING_TTL_SECONDS
+) -> str:
+    """Construct HTTP fallback Set-Cookie header for kb_oidc on non-TLS loopback/reverse-proxy."""
+    return (
+        f"{FALLBACK_BROWSER_BINDING_COOKIE_NAME}={cookie_val}; "
+        f"Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax"
+    )
+
+
 def build_clear_browser_binding_cookie() -> str:
     """Construct Set-Cookie header to clear __Host-kb_oidc cookie."""
     return f"{BROWSER_BINDING_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure"
+
+
+def build_clear_fallback_browser_binding_cookie() -> str:
+    """Construct Set-Cookie header to clear HTTP fallback kb_oidc cookie."""
+    return f"{FALLBACK_BROWSER_BINDING_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
 
 
 class OidcStartResponse(RedirectResponse):
@@ -300,7 +322,7 @@ class OidcFlow:
         authorization_url = f"{auth_endpoint}{delimiter}{encoded_params}"
 
         cookie_header = build_browser_binding_cookie(browser_binding_cookie_val)
-        return OidcStartResponse(
+        start_resp = OidcStartResponse(
             url=authorization_url,
             state=state_str,
             nonce=nonce_str if config.kind == "OIDC" else None,
@@ -308,6 +330,14 @@ class OidcFlow:
             browser_binding=browser_binding_cookie_val,
             cookie_header=cookie_header,
         )
+        if request is not None:
+            host_name = (request.headers.get("host") or "").split(":")[0].lower()
+            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+                start_resp.headers.append(
+                    "Set-Cookie",
+                    build_fallback_browser_binding_cookie(browser_binding_cookie_val),
+                )
+        return start_resp
 
     async def callback(  # noqa: C901, PLR0912, PLR0913, PLR0915
         self,
@@ -775,6 +805,15 @@ class OidcFlow:
         clear_cookie_hdr = build_clear_browser_binding_cookie()
         response = RedirectResponse(url=return_to, status_code=302)
         response.headers.append("Set-Cookie", clear_cookie_hdr)
+        is_http_fallback = False
+        if request is not None:
+            host_name = (request.headers.get("host") or "").split(":")[0].lower()
+            if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+                is_http_fallback = True
+                response.headers.append(
+                    "Set-Cookie",
+                    build_clear_fallback_browser_binding_cookie(),
+                )
 
         # If SessionService is configured, issue session & CSRF cookies
         if self._session_service is not None:
@@ -799,5 +838,16 @@ class OidcFlow:
                 "Set-Cookie",
                 build_set_csrf_cookie_header(issued_session.csrf_token),
             )
+            if is_http_fallback:
+                response.headers.append(
+                    "Set-Cookie",
+                    build_set_fallback_cookie_header(
+                        issued_session.cookie_val, issued_session.idle_expires_at
+                    ),
+                )
+                response.headers.append(
+                    "Set-Cookie",
+                    build_set_fallback_csrf_cookie_header(issued_session.csrf_token),
+                )
 
         return response

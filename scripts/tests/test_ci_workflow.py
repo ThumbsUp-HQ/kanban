@@ -166,37 +166,31 @@ def test_forgejo_docker_push_gating_and_dependencies(
         "docker/setup-buildx-action",
         "docker/login-action",
         "docker/build-push-action",
-        "actions/upload-artifact",
     ]
     push = next(s for s in job["steps"] if s.get("name") == "Build and push Docker image")
     assert push["with"]["push"] is True
     assert push["with"]["tags"] == "${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest"
 
 
-def test_forgejo_last_step_uploads_logs_artifact_always(
+def test_forgejo_omits_unsupported_upload_artifact(
     forgejo_jobs: dict[str, dict[str, Any]],
 ) -> None:
-    """Positive: each Forgejo job ends with an always() upload-artifact of ci-logs/."""
+    """Forgejo does not support upload-artifact@v4 (GHESNotSupportedError); Dash is used instead."""
     for name, job in forgejo_jobs.items():
-        last = job["steps"][-1]
-        assert last["if"] == "always()", name
-        assert last["uses"].startswith("actions/upload-artifact@"), name
-        assert last["with"]["name"] == "ci-logs-${{ github.job }}", name
-        assert last["with"]["path"] == "ci-logs/", name
-        assert last["with"]["retention-days"] == 14, name
-        assert last["with"]["if-no-files-found"] == "error", name
+        for step in job["steps"]:
+            assert not str(step.get("uses", "")).startswith("actions/upload-artifact@"), name
 
 
-def test_forgejo_dash_upload_runs_always_before_artifact(
+def test_forgejo_dash_upload_runs_always_as_last_step(
     forgejo_jobs: dict[str, dict[str, Any]],
 ) -> None:
-    """Positive: each Forgejo job uploads to Dash with always() before the artifact."""
+    """Positive: each Forgejo job ends with an always() upload to Dash."""
     for name, job in forgejo_jobs.items():
-        dash = next(s for s in job["steps"] if s.get("name") == "Upload logs to Dash")
+        dash = job["steps"][-1]
+        assert dash["name"] == "Upload logs to Dash", name
         assert dash["if"] == "always()", name
         assert dash["env"] == {"DASH_TOKEN": "${{ secrets.DASH_TOKEN }}"}, name
         assert dash["run"] == f"scripts/ci/upload_dash_log.sh {name}", name
-        assert job["steps"].index(dash) < len(job["steps"]) - 1
 
 
 def test_forgejo_python_tests_enforce_coverage_threshold(

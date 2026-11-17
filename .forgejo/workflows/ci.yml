@@ -31,16 +31,6 @@ jobs:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh lint-type
 
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
-
   python-tests:
     runs-on: [inferrence1]
     timeout-minutes: 20
@@ -86,26 +76,6 @@ jobs:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh python-tests
 
-      - name: Upload test reports artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-reports-python-tests
-          path: reports/
-          retention-days: 14
-          if-no-files-found: warn
-        continue-on-error: true
-
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
-
   stride-security-gate:
     runs-on: [inferrence1]
     timeout-minutes: 20
@@ -143,16 +113,6 @@ jobs:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh stride-security-gate
 
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
-
   web-tests:
     needs: [docker-build]
     runs-on: [inferrence1]
@@ -182,16 +142,6 @@ jobs:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh web-tests
 
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
-
   license-gate:
     runs-on: [inferrence1]
     timeout-minutes: 20
@@ -217,16 +167,6 @@ jobs:
         env:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh license-gate
-
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
 
   docker-build:
     runs-on: [inferrence1]
@@ -269,16 +209,6 @@ jobs:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh docker-build
 
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
-
   perf-budgets:
     needs: [docker-build]
     runs-on: [inferrence1]
@@ -314,26 +244,6 @@ jobs:
         env:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh perf-budgets
-
-      - name: Upload perf report artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: perf-report
-          path: docs/qa/KANBA-151/perf-report.json
-          retention-days: 14
-          if-no-files-found: warn
-        continue-on-error: true
-
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
 
   docker-push:
     needs: [lint-type, python-tests, stride-security-gate, web-tests, license-gate, docker-build, perf-budgets]
@@ -373,13 +283,3 @@ jobs:
         env:
           DASH_TOKEN: ${{ secrets.DASH_TOKEN }}
         run: scripts/ci/upload_dash_log.sh docker-push
-
-      - name: Upload CI logs artifact
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ci-logs-${{ github.job }}
-          path: ci-logs/
-          retention-days: 14
-          if-no-files-found: error
-        continue-on-error: true
