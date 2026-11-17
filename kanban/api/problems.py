@@ -226,12 +226,7 @@ async def validation_exception_handler(
         msg = re.sub(r"\s*\[URL:\s*https://errors\.pydantic\.dev/[^\]]+\]", "", msg).strip()
         field_errors.append(FieldError(path=path_str, message=msg))
 
-    summary = (
-        "; ".join(f"{fe.path}: {fe.message}" for fe in field_errors)
-        if field_errors
-        else None
-    )
-    detail = f"Request validation failed: {summary}" if summary else "Request validation failed"
+    summary = "; ".join(f"{fe.path}: {fe.message}" for fe in field_errors) if field_errors else None
     logger.warning(
         "Request validation failed [request_id=%s]: %s",
         req_id,
@@ -243,7 +238,7 @@ async def validation_exception_handler(
         title="Validation Failed",
         status=422,
         code="VALIDATION_FAILED",
-        detail=detail,
+        detail="Request validation failed",
         request_id=req_id,
         errors=field_errors or None,
     )

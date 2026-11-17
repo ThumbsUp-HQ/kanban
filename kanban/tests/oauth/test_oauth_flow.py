@@ -1266,39 +1266,6 @@ async def test_case_10_scoped_resource_indicators_and_bare_mcp(
     assert meta["resource"].endswith("/mcp/agent")
     assert "agent:read" in meta["scopes_supported"]
 
-    # 3. Record QA proof transcript
-    import json  # noqa: PLC0415
-    from pathlib import Path  # noqa: PLC0415
-    out_dir = Path("docs/qa/KANBA-184")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    transcript = [
-        {
-            "step": "discovery",
-            "url": "/.well-known/oauth-protected-resource",
-            "status": resp_meta.status_code,
-            "resource": meta["resource"],
-            "scopes_supported": meta["scopes_supported"],
-        },
-        {
-            "step": "registration",
-            "url": "/oauth/register",
-            "status": resp_reg.status_code,
-            "client_id": client_id,
-            "grant_types": resp_reg.json().get("grant_types"),
-            "token_endpoint_auth_method": resp_reg.json().get("token_endpoint_auth_method"),
-        },
-        {
-            "step": "authorization",
-            "url": "/oauth/authorize",
-            "status": resp_auth.status_code,
-            "consent_rendered": "AGENT" in resp_auth.text,
-            "signed_in_badge": "Signed in as" in resp_auth.text,
-        },
-    ]
-    (out_dir / "oauth-mcp-transcript.json").write_text(
-        json.dumps(transcript, indent=2), encoding="utf-8"
-    )
-
 
 async def test_case_11_mcp_api_key_label_and_project_scoping(
     api_env: ApiEnv,

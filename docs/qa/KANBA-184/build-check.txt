@@ -1,7 +1,10 @@
-=== RUFF CHECK ===
+uv run ruff check .
 All checks passed!
-
-=== IMPORT LINTER CONTRACTS ===
+uv run ruff format --check .
+1584 files already formatted
+uv run mypy
+Success: no issues found in 1099 source files
+uv run lint-imports
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -24,14 +27,7 @@ Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored 
 mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
-
-> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
-> tsc -b --noEmit
-
-
-> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
-> eslint . --max-warnings 0
-
+uv run python -m scripts.check_no_dashes --all
 
 > @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
 > tsc -b && vite build
@@ -44,11 +40,11 @@ computing gzip size...
 dist/index.html                             0.39 kB │ gzip:   0.27 kB
 dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
 dist/assets/index-CkL0Vkdy.css            248.55 kB │ gzip:  36.97 kB
-dist/assets/index-CODD6xwm.js           1,527.00 kB │ gzip: 434.55 kB
+dist/assets/index-BJFPA15M.js           1,527.82 kB │ gzip: 434.66 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.08s
+✓ built in 1.03s

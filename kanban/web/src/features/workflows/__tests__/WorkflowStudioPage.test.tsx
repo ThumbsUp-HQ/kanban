@@ -261,4 +261,118 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       expect(screen.getByRole('dialog', { name: /Attach Workflow/i })).toBeDefined();
     });
   });
+
+  it('renders project empty state when rules array is empty', async () => {
+    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No workflow transition rules configured for Project KAN/i),
+      ).toBeDefined();
+    });
+  });
+
+  it('handles edit hook, detach hook, and AAL2 intercept with fallback challenge values and success retry', async () => {
+    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
+    const deleteSpy = vi.spyOn(api, 'deleteWorkflowHook').mockResolvedValue(undefined);
+    vi.spyOn(api, 'disableWorkflowHook')
+      .mockRejectedValueOnce(
+        new ApiProblem(403, { code: 'AAL2_REQUIRED' }), // no challenge_id, no methods
+      )
+      .mockResolvedValueOnce(undefined);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('require-qa-proof-link')).toBeDefined();
+    });
+
+    // 1. Edit hook
+    const editBtn = screen.getByRole('button', { name: 'Edit require-qa-proof-link' });
+    fireEvent.click(editBtn);
+    expect(screen.getByRole('dialog', { name: /Edit Hook/i })).toBeDefined();
+
+    // Close dialog
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelBtn);
+
+    // 2. Detach hook
+    const detachBtn = screen.getByRole('button', { name: 'Detach require-qa-proof-link' });
+    fireEvent.click(detachBtn);
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith('hook-1');
+    });
+
+    // 3. Toggle hook with AAL2 requirement (fallback methods/challengeId branch)
+    const toggle = screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' });
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+    });
+
+    // Close AAL2 modal via cancel button
+    const closeAal2Btn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(closeAal2Btn);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+    });
+  });
+
+  it('renders rules with from_state === null, handles non-AAL2 error on toggle, and resolves route projectKey param', async () => {
+    const rulesWithNullFrom: api.TransitionRule[] = [
+      {
+        from_state: null,
+        to_state: 'In Progress',
+        active_hook_count: 1,
+        hooks: [
+          {
+            ...api.DEFAULT_S14_4_RULES[0]?.hooks[0],
+            id: 'h-any-state',
+            name: 'any-state-hook',
+            from_state: null,
+            to_state: 'In Progress',
+          } as api.WorkflowHook,
+        ],
+      },
+    ];
+
+    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(rulesWithNullFrom);
+    vi.spyOn(api, 'disableWorkflowHook').mockRejectedValue(new Error('Generic network error'));
+
+    // Render with route params and NO projectKeyOverride
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/CUSTOM_PRJ/settings/workflows']}>
+          <WorkflowStudioPage isAdmin={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Any State/)).toBeDefined();
+      expect(screen.getByText('any-state-hook')).toBeDefined();
+    });
+
+    // Toggle hook with generic error (exercises non-AAL2 branch)
+    const toggle = screen.getByRole('checkbox', { name: 'Toggle any-state-hook' });
+    fireEvent.click(toggle);
+
+    // Render with no projectKeyOverride and no route params (fallback to KAN)
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/settings/workflows']}>
+          <WorkflowStudioPage isAdmin={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Any State/).length).toBeGreaterThan(0);
+    });
+    unmount();
+  });
 });

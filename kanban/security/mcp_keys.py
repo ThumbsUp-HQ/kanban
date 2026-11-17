@@ -659,13 +659,12 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         token_surface = claims.get("surface")
         token_aud = str(claims.get("aud", ""))
         from kanban.oauth.server import parse_surface_from_resource  # noqa: PLC0415
+
         aud_surface = None
         with contextlib.suppress(Exception):
             aud_surface = parse_surface_from_resource(token_aud)
 
-        if surface is not None and (
-            token_surface != surface or aud_surface != surface
-        ):
+        if surface is not None and (token_surface != surface or aud_surface != surface):
             return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
 
         # Check JTI revocation, Grant revocation, and Principal status via
@@ -728,18 +727,15 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             with contextlib.suppress(ValueError):
                 allowed_projects = [uuid.UUID(str(p)) for p in allowed_projects_raw]
 
-        ws_slug: str | None = None
-        if ws_uuid:
-            ws_slug_res = (
-                await session.execute(
-                    text("SELECT resolve_workspace_slug(:ws_id)"),
-                    {"ws_id": ws_uuid},
-                )
-            ).scalar_one_or_none()
-            if ws_slug_res:
-                ws_slug = ws_slug_res
+        ws_slug_res = (
+            await session.execute(
+                text("SELECT resolve_workspace_slug(:ws_id)"),
+                {"ws_id": ws_uuid},
+            )
+        ).scalar_one_or_none()
+        ws_slug: str | None = str(ws_slug_res) if ws_slug_res else None
 
-        resolved_proj_keys: list[str] = []
+        oauth_proj_keys: list[str] = []
         if allowed_projects:
             keys_res = (
                 await session.execute(
@@ -748,7 +744,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 )
             ).scalar_one_or_none()
             if keys_res:
-                resolved_proj_keys = [str(pk) for pk in keys_res]
+                oauth_proj_keys = [str(pk) for pk in keys_res]
 
         return McpIntrospectionResult(
             active=True,
@@ -760,7 +756,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             token_kind="oauth",  # noqa: S106
             allowed_projects=allowed_projects,
             allowed_project_ids=allowed_projects,
-            allowed_project_keys=resolved_proj_keys or None,
+            allowed_project_keys=oauth_proj_keys or None,
         )
 
     digest = hash_mcp_api_key(token)

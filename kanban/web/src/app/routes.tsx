@@ -12,7 +12,7 @@ import React, {
   useState,
   type JSX,
 } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, QueryClientContext } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 import {
   IssuesWorkspaceRoute,
@@ -493,9 +493,8 @@ export interface ProjectCycleItem {
   end_date?: string | null;
 }
 
-export function ProjectCyclesView(): JSX.Element {
-  const { projectKey } = useParams<{ projectKey: string }>();
-  const key = projectKey ?? 'KAN';
+function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Element {
+  const key = projectKey;
   const queryClient = useQueryClient();
 
   const [newName, setNewName] = useState('');
@@ -620,6 +619,22 @@ export function ProjectCyclesView(): JSX.Element {
   );
 }
 
+export function ProjectCyclesView(): JSX.Element {
+  const { projectKey } = useParams<{ projectKey: string }>();
+  const key = projectKey ?? 'KAN';
+  const client = useContext(QueryClientContext);
+  if (!client) {
+    return (
+      <section data-testid="project-cycles-view" className="kb-workspace-section">
+        <h1>Cycles ({key})</h1>
+        <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
+        <Link to={`/projects/${key}/issues`}>Filter work items by cycle →</Link>
+      </section>
+    );
+  }
+  return <ProjectCyclesViewInner projectKey={key} />;
+}
+
 export interface ProjectModuleItem {
   id: string;
   name: string;
@@ -627,9 +642,8 @@ export interface ProjectModuleItem {
   description_markdown?: string;
 }
 
-export function ProjectModulesView(): JSX.Element {
-  const { projectKey } = useParams<{ projectKey: string }>();
-  const key = projectKey ?? 'KAN';
+function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.Element {
+  const key = projectKey;
   const queryClient = useQueryClient();
 
   const [newName, setNewName] = useState('');
@@ -739,6 +753,22 @@ export function ProjectModulesView(): JSX.Element {
       </div>
     </section>
   );
+}
+
+export function ProjectModulesView(): JSX.Element {
+  const { projectKey } = useParams<{ projectKey: string }>();
+  const key = projectKey ?? 'KAN';
+  const client = useContext(QueryClientContext);
+  if (!client) {
+    return (
+      <section data-testid="project-modules-view" className="kb-workspace-section">
+        <h1>Modules ({key})</h1>
+        <p>Feature modules and sub-project groupings for {key}.</p>
+        <Link to={`/projects/${key}/issues`}>View module work items →</Link>
+      </section>
+    );
+  }
+  return <ProjectModulesViewInner projectKey={key} />;
 }
 
 export function ProjectSavedViewsView(): JSX.Element {

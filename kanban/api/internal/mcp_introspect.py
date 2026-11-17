@@ -50,7 +50,7 @@ class McpIntrospectResponse(BaseModel):
     scopes: list[str] | None = None
     token_kind: str | None = None
     reason: str | None = None
-    allowed_projects: list[uuid.UUID | str] | None = None
+    allowed_projects: list[uuid.UUID] | None = None
     allowed_project_keys: list[str] | None = None
     allowed_tools: list[str] | None = None
     disabled_tools: list[str] | None = None
@@ -139,6 +139,7 @@ async def introspect_token(
         principal_id=result.principal_id,
         agent_principal_id=result.agent_principal_id,
         workspace_id=result.workspace_id,
+        workspace_slug=result.workspace_slug,
         project_id=result.project_id,
         execution_id=result.execution_id,
         surface=result.surface,
@@ -146,6 +147,7 @@ async def introspect_token(
         token_kind=result.token_kind,
         reason=result.reason,
         allowed_projects=result.allowed_projects,
+        allowed_project_keys=result.allowed_project_keys,
         allowed_tools=result.allowed_tools,
         disabled_tools=result.disabled_tools,
         calls_used=result.calls_used,

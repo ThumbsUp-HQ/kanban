@@ -1007,8 +1007,7 @@ async def test_bare_mcp_routing_and_unauthorized_metadata() -> None:
     assert resp_bare.status_code == 401
     auth_bare = resp_bare.headers["www-authenticate"]
     expected_bare = (
-        'resource_metadata="https://127.0.0.1:8443/'
-        '.well-known/oauth-protected-resource/mcp/agent"'
+        'resource_metadata="https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent"'
     )
     assert expected_bare in auth_bare
 

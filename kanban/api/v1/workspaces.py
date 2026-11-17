@@ -243,8 +243,7 @@ async def switch_workspace_endpoint(
         res = (
             await session.execute(
                 text(
-                    "SELECT workspace_id, principal_id "
-                    "FROM kb_auth_switch_workspace(:ws_id, :p_id)"
+                    "SELECT workspace_id, principal_id FROM kb_auth_switch_workspace(:ws_id, :p_id)"
                 ),
                 {"ws_id": workspace_id, "p_id": caller.principal_id},
             )

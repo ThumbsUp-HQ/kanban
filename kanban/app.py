@@ -280,7 +280,8 @@ def create_app(
     ) -> Response:
         del subpath
         mcp_meta = importlib.import_module("mcp.metadata")
-        return await mcp_meta.protected_resource_metadata_endpoint(request)
+        resp: Response = await mcp_meta.protected_resource_metadata_endpoint(request)
+        return resp
 
     # Mount live MCP surfaces and RFC 9728 metadata endpoints
     _mount_mcp_surfaces(app, mcp_settings)

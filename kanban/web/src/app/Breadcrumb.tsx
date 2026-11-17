@@ -50,7 +50,7 @@ export function Breadcrumb({
           <>
             <li className="kb-breadcrumb-item">
               <span className="kb-breadcrumb-workspace" data-testid="breadcrumb-workspace">
-                {workspaceName}
+                [👍] {workspaceName}
               </span>
             </li>
             <li aria-hidden="true" className="kb-breadcrumb-separator">

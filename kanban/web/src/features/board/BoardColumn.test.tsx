@@ -165,4 +165,25 @@ describe('BoardColumn Component', () => {
     expect(data.type).toBe('column');
     expect(data.stateId).toBe('state-started');
   });
+
+  it('navigates to workflow settings when + Workflow button is clicked', () => {
+    const assignSpy = vi.fn();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { assign: assignSpy, pathname: '/projects/KAN/issues' },
+    });
+
+    render(
+      <BoardColumn
+        state={baseState}
+        issues={[]}
+      />,
+    );
+
+    const workflowBtn = screen.getByTestId(`section-add-workflow-btn-${baseState.name}`);
+    fireEvent.click(workflowBtn);
+    expect(assignSpy).toHaveBeenCalledWith(
+      `/projects/KAN/settings/workflows?to_state=${encodeURIComponent(baseState.name)}&attach=1`,
+    );
+  });
 });

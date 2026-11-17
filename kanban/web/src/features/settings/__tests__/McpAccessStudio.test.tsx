@@ -641,4 +641,136 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       expect(alert.textContent).toContain('Forbidden: Insufficient privileges to mint key');
     });
   });
+
+  it('covers unlimited without confirm, unchecking disabled tools, and non-Error mint error fallback', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('raw-string-error');
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Unlimited Key' },
+    });
+
+    // Select unlimited without checking confirmUnlimited
+    const expirySelect = screen.getByTestId('mint-expiry-select');
+    fireEvent.change(expirySelect, { target: { value: 'unlimited' } });
+
+    // Submit form directly while unconfirmed (exercises line 124-125 return)
+    const form = container.querySelector<HTMLFormElement>('.kb-mcp-mint-form');
+    expect(form).not.toBeNull();
+    if (!form) {
+      throw new Error('Mint form element not found');
+    }
+    fireEvent.submit(form);
+    expect(mintSpy).not.toHaveBeenCalled();
+
+    // Check disable tool then uncheck it (exercises line 595 filter)
+    const disableToolCheckbox = screen.getByTestId('disable-tool-complete_work');
+    fireEvent.click(disableToolCheckbox); // checked
+    fireEvent.click(disableToolCheckbox); // unchecked
+
+    // Now check confirmUnlimited
+    const confirmCheckbox = screen.getByTestId('confirm-unlimited-checkbox');
+    fireEvent.click(confirmCheckbox);
+
+    // Submit with rejection (string error exercises line 159)
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeDefined();
+      expect(alert.textContent).toContain('Failed to mint MCP key.');
+    });
+  });
+
+  it('covers minting under tier="global" and tier="project"', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+      id: 'key-g1',
+      label: 'Global Test Key',
+      display_hint: 'g1g1',
+      surface: 'agent',
+      scope_tier: 'global',
+      scopes: ['agent:read', 'agent:write'],
+      allowed_projects: null,
+      created_at: new Date().toISOString(),
+      expires_at: new Date().toISOString(),
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_mcp_raw_test_global',
+    });
+
+    const { unmount: u1 } = render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="global" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Global Test Key' },
+    });
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(mintSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ scope_tier: 'global' }),
+      );
+    });
+    u1();
+
+    // Now test project tier
+    const mintProjectSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+      id: 'key-p1',
+      label: 'Project Test Key',
+      display_hint: 'p1p1',
+      surface: 'agent',
+      scope_tier: 'project',
+      scopes: ['agent:read', 'agent:write'],
+      allowed_projects: ['KANBA'],
+      created_at: new Date().toISOString(),
+      expires_at: new Date().toISOString(),
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_mcp_raw_test_proj',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/projects/KANBA/settings/mcp']}>
+        <McpAccessStudio tier="project" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Project Test Key' },
+    });
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(mintProjectSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ scope_tier: 'project', allowed_projects: ['KANBA'] }),
+      );
+    });
+  });
 });

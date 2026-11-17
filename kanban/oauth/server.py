@@ -247,8 +247,6 @@ def check_registration_rate_limit(ip: str) -> None:
         )
 
 
-
-
 async def revoke_grant_family(
     session: AsyncSession,
     grant_id: uuid.UUID,

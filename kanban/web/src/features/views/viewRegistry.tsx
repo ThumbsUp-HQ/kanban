@@ -730,10 +730,11 @@ export function IssuesWorkspaceRoute({
         onClearSelection={() => { setSelectedIds([]); }}
         modulesEnabled={modulesEnabled}
         onBatchUpdateState={(targetStateSlug) => {
+          const isDone = targetStateSlug === 'done';
           const desiredState: StateSummary = {
             id: `state-${targetStateSlug}`,
-            name: targetStateSlug === 'done' ? 'Done' : 'Todo',
-            group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
+            name: isDone ? 'Done' : 'Todo',
+            group: isDone ? 'completed' : 'unstarted',
           };
           setIssues((prev) =>
             prev.map((i) =>
@@ -752,16 +753,13 @@ export function IssuesWorkspaceRoute({
         }}
         onBatchUpdatePriority={(prioritySlug) => {
           const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
-          const emoji =
-            prioritySlug === 'urgent'
-              ? '🔥'
-              : prioritySlug === 'high'
-                ? '⚡'
-                : prioritySlug === 'low'
-                  ? '🔽'
-                  : prioritySlug === 'none'
-                    ? '➖'
-                    : '🔹';
+          const priorityEmojiMap: Record<string, string> = {
+            urgent: '🔥',
+            high: '⚡',
+            low: '🔽',
+            none: '➖',
+          };
+          const emoji = priorityEmojiMap[prioritySlug] ?? '🔹';
           setIssues((prev) =>
             prev.map((i) =>
               selectedIds.includes(i.key)

@@ -21,7 +21,7 @@ The changes in `KANBA-184` successfully eliminate the unauthenticated dead-end, 
 
 ### 2.1 Interactive Browser Login Redirection (`kanban/api/v1/oauth.py`)
 - **Seamless 302 Redirection:**
-  - In `oauth_authorize` (lines 526–541), the blocking `Depends(get_principal)` dependency was replaced with dynamic resolution via `resolver.resolve(request)`.
+  - In `oauth_authorize` (lines 526-541), the blocking `Depends(get_principal)` dependency was replaced with dynamic resolution via `resolver.resolve(request)`.
   - When `caller is None`, the endpoint inspects the `Accept` header. If the request is a standard browser navigation (not pure JSON), it returns:
     ```python
     login_url = f"/login?next={urllib.parse.quote(str(request.url), safe='')}"
@@ -34,7 +34,7 @@ The changes in `KANBA-184` successfully eliminate the unauthenticated dead-end, 
 
 ### 2.2 Active Identity Attribution (`user-badge`)
 - **Visual Presentation:**
-  - In `kanban/api/v1/oauth.py` (lines 559–562), the endpoint queries the `principals` table for the user's `display_name`, falling back to their UUID.
+  - In `kanban/api/v1/oauth.py` (lines 559-562), the endpoint queries the `principals` table for the user's `display_name`, falling back to their UUID.
   - In `kanban/oauth/server.py`, the consent screen renders:
     ```html
     <div class="user-badge">Signed in as <strong>{safe_principal}</strong></div>

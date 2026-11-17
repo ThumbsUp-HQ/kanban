@@ -474,4 +474,81 @@ describe('IssuesWorkspaceRoute', () => {
       );
     });
   });
+
+  it('ProjectCyclesView supports start and end dates and displays error banner on failure', async () => {
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(client, 'apiFetch').mockImplementation((method: string, path: string) => {
+      if (method === 'GET' && path.includes('cycles')) {
+        return Promise.resolve([{ id: 'cyc-1', name: 'Sprint 1', start_date: '2026-01-01', end_date: '2026-01-14' }]);
+      }
+      if (method === 'POST' && path.includes('cycles')) {
+        return Promise.reject(new Error('Cycle creation rejected'));
+      }
+      return Promise.resolve([]);
+    });
+
+    const router = createAppRouter(['/projects/KAN/cycles']);
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-cycles-view')).toBeDefined();
+      expect(screen.getByText(/2026-01-01/)).toBeDefined();
+    });
+
+    const input = screen.getByTestId('new-cycle-name-input');
+    fireEvent.change(input, { target: { value: 'Sprint Fail' } });
+    fireEvent.change(screen.getByTestId('new-cycle-start-input'), { target: { value: '2026-02-01' } });
+    fireEvent.change(screen.getByTestId('new-cycle-end-input'), { target: { value: '2026-02-14' } });
+
+    const createBtn = screen.getByTestId('create-cycle-btn');
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Cycle creation rejected');
+    });
+  });
+
+  it('ProjectModulesView displays error banner on failure and renders module description', async () => {
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(client, 'apiFetch').mockImplementation((method: string, path: string) => {
+      if (method === 'GET' && path.includes('modules')) {
+        return Promise.resolve([{ id: 'mod-1', name: 'Core', description_markdown: 'Core architecture module' }]);
+      }
+      if (method === 'POST' && path.includes('modules')) {
+        return Promise.reject(new Error('Module creation rejected'));
+      }
+      return Promise.resolve([]);
+    });
+
+    const router = createAppRouter(['/projects/KAN/modules']);
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-modules-view')).toBeDefined();
+      expect(screen.getByText('Core architecture module')).toBeDefined();
+    });
+
+    const input = screen.getByTestId('new-module-name-input');
+    fireEvent.change(input, { target: { value: 'Fail Mod' } });
+    fireEvent.change(screen.getByTestId('new-module-desc-input'), { target: { value: 'Some description' } });
+
+    const createBtn = screen.getByTestId('create-module-btn');
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('module-error-banner').textContent).toContain('Module creation rejected');
+    });
+  });
 });

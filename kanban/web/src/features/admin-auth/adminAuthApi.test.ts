@@ -95,7 +95,7 @@ describe('adminAuthApi (KB-P3-36)', () => {
       expect.objectContaining({
         body: expect.objectContaining({
           slug: 'okta',
-          secret_input: 'super-secret',
+          secret: 'super-secret',
         }) as unknown,
       }),
     );

@@ -158,9 +158,8 @@ def intersect_key_and_connection_scope(
     # 2. Workspace connection mode
     if scope.is_workspace:
         ws_match = (
-            (bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug)
-            or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
-        )
+            bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug
+        ) or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
         if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
             msg = (
@@ -196,9 +195,8 @@ def intersect_key_and_connection_scope(
     # 3. Project connection mode
     if scope.is_project:
         ws_match = (
-            (bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug)
-            or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
-        )
+            bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug
+        ) or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
         if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
             msg = (
@@ -219,14 +217,15 @@ def intersect_key_and_connection_scope(
         proj_str = str(auth_ctx.project_id) if auth_ctx.project_id is not None else None
         allowed_proj_keys = getattr(auth_ctx, "allowed_project_keys", None) or []
         proj_match = (
-            scope.project_key in allowed_projects
-            or scope.project_key in allowed_proj_keys
-            or (scope.project_id is not None and scope.project_id in allowed_projects)
-            or (
-                proj_str is not None
-                and proj_str in (scope.project_key, scope.project_id)
+            (
+                scope.project_key in allowed_projects
+                or scope.project_key in allowed_proj_keys
+                or (scope.project_id is not None and scope.project_id in allowed_projects)
+                or (proj_str is not None and proj_str in (scope.project_key, scope.project_id))
             )
-        ) if allowed_projects else True
+            if allowed_projects
+            else True
+        )
         if allowed_projects and not proj_match:
             msg = (
                 f"Requested project '{scope.project_key}' is outside "

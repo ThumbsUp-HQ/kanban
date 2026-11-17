@@ -177,9 +177,7 @@ class OidcFlow:
                 return f"{proto}://{host}".rstrip("/")
             if host:
                 scheme = (
-                    request.url.scheme
-                    if hasattr(request, "url") and request.url.scheme
-                    else "http"
+                    request.url.scheme if hasattr(request, "url") and request.url.scheme else "http"
                 )
                 return f"{scheme}://{host}".rstrip("/")
             if hasattr(request, "base_url"):

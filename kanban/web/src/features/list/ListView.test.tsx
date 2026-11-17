@@ -314,4 +314,98 @@ describe('ListView', () => {
       expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
     }
   });
+
+  it('navigates to workflow settings when + Workflow button is clicked', () => {
+    const assignSpy = vi.fn();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { assign: assignSpy, pathname: '/projects/KAN/issues' },
+    });
+
+    render(<ListView issues={FIXTURE_12_ISSUES} projectKey="KAN" />);
+    const workflowBtn = screen.getByTestId('section-add-workflow-btn-Backlog');
+    fireEvent.click(workflowBtn);
+    expect(assignSpy).toHaveBeenCalledWith(
+      '/projects/KAN/settings/workflows?to_state=Backlog&attach=1',
+    );
+  });
+
+  it('covers state filter, key search, groupBy none, custom priority, and outside click', () => {
+    const customIssues: IssueItem[] = [
+      ...FIXTURE_12_ISSUES,
+      {
+        ...FIXTURE_12_ISSUES[0],
+        id: 'issue-custom-prio',
+        key: 'KAN-999',
+        summary: 'Custom priority item',
+        state: { id: 's-in-prog', name: 'In Progress', group: 'started' },
+        priority: { slug: 'custom_tier', label: 'Custom Tier', emoji: '✨' },
+      },
+      {
+        ...FIXTURE_12_ISSUES[0],
+        id: 'issue-unlabeled-prio',
+        key: 'KAN-998',
+        summary: 'Unlabeled priority item',
+        state: { id: 's-in-prog', name: 'In Progress', group: 'started' },
+        priority: { slug: 'unlabeled_tier', label: '', emoji: '✨' },
+      },
+    ];
+
+    render(<ListView issues={customIssues} projectKey="KAN" />);
+
+    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
+    fireEvent.click(filterBtn);
+    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
+
+    // 1. Search by Key only (summary does not match)
+    const searchInput = within(popover).getByLabelText(/Search/i);
+    fireEvent.change(searchInput, { target: { value: '999' } });
+    expect(screen.getByText('KAN-999')).toBeDefined();
+
+    // Search by non-matching query
+    fireEvent.change(searchInput, { target: { value: 'nonexistentquery' } });
+    expect(screen.queryByText('KAN-999')).toBeNull();
+
+    // Reset search
+    fireEvent.change(searchInput, { target: { value: '' } });
+
+    // 2. Filter by State (group match e.g. "started", name match e.g. "done", partial name match)
+    const stateSelect = within(popover).getByLabelText(/^State$/i);
+    fireEvent.change(stateSelect, { target: { value: 'started' } });
+    expect(screen.getByText('KAN-999')).toBeDefined();
+
+    fireEvent.change(stateSelect, { target: { value: 'completed' } });
+    expect(screen.getByText('KAN-148')).toBeDefined();
+    expect(screen.queryByText('KAN-999')).toBeNull();
+
+    // Partial name match e.g. "prog"
+    fireEvent.change(stateSelect, { target: { value: 'prog' } });
+    expect(screen.getByText('KAN-999')).toBeDefined();
+
+    // Cancelled state (excludes KAN-999)
+    fireEvent.change(stateSelect, { target: { value: 'cancelled' } });
+    expect(screen.queryByText('KAN-999')).toBeNull();
+
+    // Reset state
+    fireEvent.change(stateSelect, { target: { value: 'all' } });
+
+    // 3. Group by "none"
+    const groupSelect = within(popover).getByLabelText(/Group By/i);
+    fireEvent.change(groupSelect, { target: { value: 'none' } });
+    expect(screen.getByText('All Work Items')).toBeDefined();
+
+    // 4. Group by "priority" with custom priority and fallback slug
+    fireEvent.change(groupSelect, { target: { value: 'priority' } });
+    expect(screen.getByText('Custom Tier')).toBeDefined();
+
+    // Inside click and non-Escape keypress do not close popover
+    fireEvent.mouseDown(popover);
+    expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).not.toBeNull();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).not.toBeNull();
+
+    // 5. Outside click closes the popover
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
+  });
 });

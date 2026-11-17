@@ -111,24 +111,25 @@ class SessionCookieResolver:
             scope_ws = request.headers.get("x-kb-scope-workspace")
             if scope_ws:
                 scope_ws_clean = scope_ws.strip()
+                target_ws: uuid.UUID | None = None
                 try:
                     target_ws = uuid.UUID(scope_ws_clean)
                 except ValueError:
-                    target_ws = (
+                    resolved_ws = (
                         await async_session.execute(
                             text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
                             {"ident": scope_ws_clean},
                         )
                     ).scalar_one_or_none()
-                ws_id = target_ws or intro.workspace_id
+                    if isinstance(resolved_ws, uuid.UUID):
+                        target_ws = resolved_ws
+                ws_id = target_ws if target_ws is not None else intro.workspace_id
             else:
                 ws_id = intro.workspace_id
 
             if ws_id is None or ws_id == uuid.UUID(int=0):
                 def_ws = (
-                    await async_session.execute(
-                        text("SELECT get_default_workspace_id()")
-                    )
+                    await async_session.execute(text("SELECT get_default_workspace_id()"))
                 ).scalar_one_or_none()
                 ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
 
