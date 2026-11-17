@@ -254,7 +254,7 @@ describe('CustomFieldsRailSection', () => {
       { code: 'SCRIPT_FUEL_EXHAUSTED', expected: 'Compute limit reached' },
       {
         code: 'SANDBOX_UNAVAILABLE_IN_STANDALONE',
-        expected: 'Tier B unavailable in standalone',
+        expected: 'Optional CLI Sandbox not enabled in single-container mode',
       },
       { code: 'INTERNAL_EXCEPTION_XYZ', expected: 'Unavailable' },
     ];

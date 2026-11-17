@@ -1,6 +1,7 @@
 /**
- * Standalone Status Panel & Compose Export Styles (KB-P3-52, S2.2, S6.1).
+ * Standalone Status Panel & Compose Export Styles (KB-P3-52, S2.2, S6.1, KANBA-188).
  * Breathable, accessible layout with strict CSP compliance (zero inline styles).
+ * Adheres strictly to canonical theme and token variables.
  */
 
 .standalone-panel__backdrop {
@@ -16,8 +17,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(640px, 100vw - 32px);
-  max-height: min(720px, 90vh);
+  width: min(720px, 100vw - 32px);
+  max-height: min(840px, 92vh);
   background-color: var(--bg-surface-raised, #ffffff);
   color: var(--fg-primary, #111827);
   border: 1px solid var(--border-subtle, #e5e7eb);
@@ -26,7 +27,7 @@
   padding: var(--space-6, 24px);
   display: flex;
   flex-direction: column;
-  gap: var(--space-6, 24px);
+  gap: var(--space-4, 16px);
   overflow-y: auto;
   z-index: 1001;
   box-sizing: border-box;
@@ -38,7 +39,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle, #e5e7eb);
-  padding-bottom: var(--space-4, 16px);
+  padding-bottom: var(--space-3, 12px);
 }
 
 .standalone-panel__title {
@@ -69,13 +70,74 @@
   outline: 2px solid var(--focus-ring, #2563eb);
 }
 
-/* Section 1: Warning Banner & Storage Health */
+/* 3-Tab Bar */
+.standalone-panel__tabs {
+  display: flex;
+  gap: var(--space-2, 8px);
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  padding-bottom: var(--space-2, 8px);
+  overflow-x: auto;
+}
+
+.standalone-panel__tab-btn {
+  background: none;
+  border: none;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-muted, #525866);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.standalone-panel__tab-btn:hover {
+  background-color: var(--bg-hover, #f1f3f5);
+  color: var(--fg-primary, #111827);
+}
+
+.standalone-panel__tab-btn--active {
+  background-color: var(--bg-hover, #f1f3f5);
+  color: var(--accent-primary, #1d4ed8);
+  font-weight: 600;
+}
+
+.standalone-panel__tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+.standalone-panel__tabpanel--hidden {
+  display: none;
+}
+
+/* Section Containers & Cards */
 .standalone-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+.standalone-panel__subcard {
+  background-color: var(--bg-canvas, #f7f8fa);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-4, 16px);
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
 }
 
+.standalone-panel__section-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-primary, #111827);
+}
+
+/* Warnings and Badges */
 .standalone-panel__warn-banner {
   background-color: var(--warn-bg, #fef3c7);
   color: var(--warn-fg, #78350f);
@@ -85,8 +147,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
-  font-size: var(--text-body, 0.9375rem);
-  line-height: var(--leading-prose, 1.73);
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
 .standalone-panel__warn-text {
@@ -105,7 +167,7 @@
 }
 
 .standalone-panel__code-block code {
-  font-family: var(--font-mono, monospace);
+  font-family: monospace;
   font-size: 0.8125rem;
   color: inherit;
   word-break: break-all;
@@ -134,36 +196,70 @@
 .standalone-panel__badge-detail {
   color: var(--fg-secondary, #4b5563);
   font-size: 0.875rem;
-  font-family: var(--font-mono, monospace);
+  font-family: monospace;
 }
 
-.standalone-panel__sandbox-row {
+/* Capability Cards */
+.standalone-panel__sandbox-cards {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4, 16px);
-  font-size: 0.8125rem;
-  color: var(--fg-muted, #525866);
-  padding: var(--space-1, 4px) var(--space-2, 8px);
+  flex-direction: column;
+  gap: var(--space-3, 12px);
 }
 
-.standalone-panel__sandbox-item {
-  display: inline-flex;
+.standalone-panel__capability-card {
+  background-color: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.standalone-panel__capability-header {
+  display: flex;
   align-items: center;
-  gap: var(--space-1, 4px);
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
 }
 
-/* Section 2: Encrypted Database Backup */
-.standalone-panel__section-title {
-  margin: 0;
-  font-size: 1rem;
+.standalone-panel__capability-title {
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--fg-primary, #111827);
 }
 
-.standalone-panel__backup-form {
+.standalone-panel__capability-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  text-transform: uppercase;
+}
+
+.standalone-panel__capability-status--active {
+  background-color: rgba(5, 150, 105, 0.12);
+  color: var(--ok-fg, #059669);
+}
+
+.standalone-panel__capability-status--optional {
+  background-color: var(--bg-hover, #f1f3f5);
+  color: var(--fg-muted, #525866);
+}
+
+.standalone-panel__capability-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--fg-secondary, #4b5563);
+  line-height: 1.5;
+}
+
+/* Forms and Inputs */
+.standalone-panel__backup-form,
+.standalone-panel__restore-inputs {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
+  gap: var(--space-3, 12px);
 }
 
 .standalone-panel__label {
@@ -172,11 +268,15 @@
   color: var(--fg-primary, #111827);
 }
 
+.standalone-panel__label--danger {
+  color: var(--danger-fg, #881337);
+  font-weight: 600;
+}
+
 .standalone-panel__input {
   width: 100%;
   padding: var(--space-2, 8px) var(--space-3, 12px);
   font-size: 0.875rem;
-  font-family: var(--font-mono, monospace);
   background-color: var(--bg-surface, #ffffff);
   color: var(--fg-primary, #111827);
   border: 1px solid var(--border-strong, #d1d5db);
@@ -192,12 +292,22 @@
 .standalone-panel__hint {
   font-size: 0.75rem;
   color: var(--fg-muted, #525866);
+  line-height: 1.4;
 }
 
 .standalone-panel__error {
   background-color: var(--danger-bg, #ffe4e6);
   color: var(--danger-fg, #881337);
   border: 1px solid rgba(136, 19, 55, 0.2);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: 0.8125rem;
+}
+
+.standalone-panel__success {
+  background-color: rgba(5, 150, 105, 0.12);
+  color: var(--ok-fg, #059669);
+  border: 1px solid rgba(5, 150, 105, 0.3);
   border-radius: var(--radius-sm, 4px);
   padding: var(--space-2, 8px) var(--space-3, 12px);
   font-size: 0.8125rem;
@@ -212,17 +322,100 @@
   padding: var(--space-3, 12px) var(--space-4, 16px);
 }
 
-/* Section 3: Compose Export & Buttons */
-.standalone-panel__compose-container {
+/* Schedule & Snapshots Grid */
+.standalone-panel__schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3, 12px);
+  align-items: center;
+}
+
+.standalone-panel__checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-primary, #111827);
+  cursor: pointer;
+}
+
+.standalone-panel__field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.standalone-panel__snapshots-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-2, 8px);
+}
+
+.standalone-panel__snapshots-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.standalone-panel__snapshots-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.standalone-panel__snapshots-table th,
+.standalone-panel__snapshots-table td {
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+}
+
+.standalone-panel__snapshots-table th {
+  background-color: var(--bg-hover, #f1f3f5);
+  color: var(--fg-secondary, #4b5563);
+  font-weight: 600;
+}
+
+.standalone-panel__table-link {
+  color: var(--accent-primary, #1d4ed8);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.standalone-panel__table-link:hover {
+  text-decoration: underline;
+}
+
+/* 2-Stage Verification Card */
+.standalone-panel__verified-manifest {
+  background-color: var(--bg-surface, #ffffff);
+  border: 1px solid var(--ok-fg, #059669);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
 }
 
+.standalone-panel__destructive-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+/* Buttons */
 .standalone-panel__btn-group {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3, 12px);
+}
+
+.standalone-panel__compose-mode-toggle {
+  display: flex;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
 }
 
 .standalone-panel__btn {
@@ -262,6 +455,15 @@
   background-color: var(--border-subtle, #e5e7eb);
 }
 
+.standalone-panel__btn--danger {
+  background-color: var(--danger-fg, #881337);
+  color: #ffffff;
+}
+
+.standalone-panel__btn--danger:hover:not(:disabled) {
+  background-color: #9f1239;
+}
+
 .standalone-panel__copy-btn {
   background-color: var(--bg-surface, #ffffff);
   color: var(--fg-primary, #111827);
@@ -278,7 +480,7 @@
   background-color: var(--bg-hover, #f1f3f5);
 }
 
-/* Monospace Promotion Runbook */
+/* Monospace Checklist */
 .standalone-panel__checklist-card {
   background-color: var(--bg-canvas, #f7f8fa);
   border: 1px solid var(--border-subtle, #e5e7eb);
@@ -298,7 +500,7 @@
 
 .standalone-panel__checklist-pre {
   margin: 0;
-  font-family: var(--font-mono, monospace);
+  font-family: monospace;
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--fg-primary, #111827);
@@ -318,12 +520,12 @@
     border-radius: 16px 16px 0 0;
     border-bottom: none;
     padding: var(--space-4, 16px);
-    gap: var(--space-4, 16px);
+    gap: var(--space-3, 12px);
   }
 
   .standalone-panel__btn,
   .standalone-panel__copy-btn {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: var(--tap-min, 44px);
+    min-width: var(--tap-min, 44px);
   }
 }

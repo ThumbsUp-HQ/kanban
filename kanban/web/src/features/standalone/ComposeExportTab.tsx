@@ -11,6 +11,7 @@ export interface ComposeExportData {
   readonly compose_yaml: string;
   readonly env_template: string;
   readonly migration_steps_markdown: string;
+  readonly single_container_compose_yaml?: string;
 }
 
 export interface ComposeExportTabProps {
@@ -25,6 +26,7 @@ export function ComposeExportTab({
   const [error, setError] = useState<string | null>(null);
   const [copiedEnv, setCopiedEnv] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [composeMode, setComposeMode] = useState<'multi' | 'single'>('multi');
 
   const fetchExportData = useCallback(async (): Promise<ComposeExportData | null> => {
     setIsLoading(true);
@@ -66,13 +68,20 @@ export function ComposeExportTab({
       if (!exportData) {
         return;
       }
-      const blob = new Blob([exportData.compose_yaml], {
+      const yamlContent =
+        composeMode === 'single' && exportData.single_container_compose_yaml
+          ? exportData.single_container_compose_yaml
+          : exportData.compose_yaml;
+      const downloadFilename =
+        composeMode === 'single' ? 'docker-compose.standalone.yml' : exportData.filename || 'docker-compose.yml';
+
+      const blob = new Blob([yamlContent], {
         type: 'application/x-yaml;charset=utf-8',
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = exportData.filename || 'docker-compose.yml';
+      a.download = downloadFilename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -115,6 +124,24 @@ export function ComposeExportTab({
         </div>
       )}
 
+      {/* Mode Selector */}
+      <div className="standalone-panel__compose-mode-toggle" role="group" aria-label="Compose template mode">
+        <button
+          type="button"
+          className={`standalone-panel__tab-btn ${composeMode === 'multi' ? 'standalone-panel__tab-btn--active' : ''}`}
+          onClick={() => { setComposeMode('multi'); }}
+        >
+          Multi-Container Stack (Production)
+        </button>
+        <button
+          type="button"
+          className={`standalone-panel__tab-btn ${composeMode === 'single' ? 'standalone-panel__tab-btn--active' : ''}`}
+          onClick={() => { setComposeMode('single'); }}
+        >
+          Single-Container (Standalone)
+        </button>
+      </div>
+
       <div className="standalone-panel__btn-group">
         <button
           type="button"
@@ -124,32 +151,50 @@ export function ComposeExportTab({
           disabled={isLoading || isDownloading}
           className="standalone-panel__btn standalone-panel__btn--primary"
         >
-          {isDownloading ? 'Downloading...' : 'Download docker-compose.yml'}
+          {isDownloading
+            ? 'Downloading...'
+            : composeMode === 'single'
+              ? 'Download docker-compose.standalone.yml'
+              : 'Download docker-compose.yml'}
         </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            void handleCopyEnv();
-          }}
-          disabled={isLoading}
-          className="standalone-panel__btn standalone-panel__btn--secondary"
-        >
-          {copiedEnv ? 'Copied!' : 'Copy .env.example'}
-        </button>
+        {composeMode === 'multi' && (
+          <button
+            type="button"
+            onClick={() => {
+              void handleCopyEnv();
+            }}
+            disabled={isLoading}
+            className="standalone-panel__btn standalone-panel__btn--secondary"
+          >
+            {copiedEnv ? 'Copied!' : 'Copy .env.example'}
+          </button>
+        )}
       </div>
 
-      <div className="standalone-panel__checklist-card">
-        <h4 className="standalone-panel__checklist-title">
-          PostgreSQL 16 Promotion Runbook:
-        </h4>
-        <pre className="standalone-panel__checklist-pre">
+      {composeMode === 'multi' ? (
+        <div className="standalone-panel__checklist-card">
+          <h4 className="standalone-panel__checklist-title">
+            PostgreSQL 16 Promotion Runbook:
+          </h4>
+          <pre className="standalone-panel__checklist-pre">
 {`1. Generate secrets
-2. Download encrypted backup (.kbkp)
+2. Download encrypted backup (.kbbak)
 3. docker compose up -d postgres
 4. kanban-ctl restore / pg_restore into external PostgreSQL 16`}
-        </pre>
-      </div>
+          </pre>
+        </div>
+      ) : (
+        <div className="standalone-panel__checklist-card">
+          <h4 className="standalone-panel__checklist-title">
+            Single-Container Standalone Spec:
+          </h4>
+          <pre className="standalone-panel__checklist-pre">
+{`Runs 👍kanban and embedded PostgreSQL in a single container with a persistent volume named kanban_data.
+Run with: docker compose -f docker-compose.standalone.yml up -d`}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

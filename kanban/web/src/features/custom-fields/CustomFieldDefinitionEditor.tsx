@@ -506,7 +506,7 @@ export function CustomFieldDefinitionEditor({
               {/* Execution Tier */}
               <div className="custom-field-form-group">
                 <label htmlFor="execution-tier" className="custom-field-form-label">
-                  Execution Tier (S13.3)
+                  Execution Sandbox (S13.3)
                 </label>
                 <select
                   id="execution-tier"
@@ -517,9 +517,14 @@ export function CustomFieldDefinitionEditor({
                   }}
                   data-testid="execution-tier-select"
                 >
-                  <option value="wasm">Tier A: Wasmtime (Sub-millisecond Wasm)</option>
-                  <option value="nsjail">Tier B: nsjail (Linux Isolated Cgroup)</option>
+                  <option value="wasm">Built-in Formula Sandbox (WebAssembly)</option>
+                  <option value="nsjail">Isolated Process & CLI Sandbox (Linux Namespaces)</option>
                 </select>
+                <div className="custom-field-form-hint">
+                  {tier === 'wasm'
+                    ? 'Runs fast custom field formulas and workflow checks in-memory with zero network or filesystem access (Always active).'
+                    : 'Runs full Python/CLI scripts and local CLI transition agents with isolated Linux namespaces and allowlisted HTTP egress.'}
+                </div>
               </div>
 
               {/* Target Scope */}

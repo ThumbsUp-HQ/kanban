@@ -514,10 +514,20 @@ async def _assert_target_db_empty_or_confirmed(
 
             if count > 0 and confirm_overwrite:
                 await conn.execute(text("DROP SCHEMA public CASCADE;"))
-                await conn.execute(text("CREATE SCHEMA public;"))
+                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
+                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
+                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
                 await conn.execute(
                     text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
                 )
+                with contextlib.suppress(Exception):
+                    await conn.execute(
+                        text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
+                    )
+                with contextlib.suppress(Exception):
+                    await conn.execute(
+                        text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                    )
                 await conn.commit()
     finally:
         await engine.dispose()
@@ -532,7 +542,24 @@ async def _verify_post_restore_invariants(
     engine = create_async_engine(async_dsn)
     try:
         async with engine.connect() as conn:
-            # 1. Re-apply role grants
+            # 1. Re-apply extensions and role grants
+            for ext in ("pgcrypto", "ltree", "pg_trgm", "btree_gist", "vector"):
+                with contextlib.suppress(Exception):
+                    await conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {ext};"))
+
+            with contextlib.suppress(Exception):
+                await conn.execute(
+                    text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
+                )
+            with contextlib.suppress(Exception):
+                await conn.execute(
+                    text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
+                )
+            with contextlib.suppress(Exception):
+                await conn.execute(
+                    text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                )
+
             with contextlib.suppress(Exception):
                 await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
             with contextlib.suppress(Exception):

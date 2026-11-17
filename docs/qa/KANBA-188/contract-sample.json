@@ -1,0 +1,33 @@
+{
+  "system_status": {
+    "deployment_mode": "standalone_embedded_pg",
+    "persistent_volume": true,
+    "air_gap_mode": false,
+    "local_llm_endpoint_host": null,
+    "is_server_admin": true,
+    "data_mount_point": "/var/lib/kanban/data",
+    "data_mount_fstype": "ext4",
+    "tier_b_sandbox_available": false
+  },
+  "backup_schedule": {
+    "enabled": true,
+    "interval_hours": 24,
+    "retention_count": 7,
+    "last_run_at": "2026-11-17T12:00:00Z",
+    "next_run_at": "2026-11-18T12:00:00Z"
+  },
+  "snapshots": [
+    {
+      "filename": "kanban-backup-20261117-120000.kbbak",
+      "size_bytes": 1048576,
+      "created_at": "2026-11-17T12:00:00Z"
+    }
+  ],
+  "compose_export": {
+    "filename": "docker-compose.yml",
+    "compose_yaml": "services:\n  kanban:\n    image: thumbs-up-kanban:latest\n    ports:\n      - \"8080:8080\"\n",
+    "single_container_compose_yaml": "services:\n  kanban:\n    image: thumbs-up-kanban:latest\n    container_name: kanban-standalone\n    ports:\n      - \"${PORT:-8080}:8080\"\n    volumes:\n      - kanban_data:/var/lib/kanban/data\n",
+    "env_template": "PORT=8080\nPUBLIC_BASE_URL=http://localhost:8080\n",
+    "migration_steps_markdown": "### PostgreSQL 16 Migration Runbook\n1. Generate secrets\n2. Download encrypted backup (.kbbak)\n3. docker compose up -d postgres\n4. kanban-ctl restore into PostgreSQL 16\n"
+  }
+}

@@ -248,7 +248,7 @@ function AttachHookDialogInner({
           {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
             <div className="workflow-form-group">
               <label htmlFor="wasm-module-select" className="workflow-form-label">
-                Approved Wasm Module (Tier A)
+                Approved WebAssembly Module (Built-in Formula Sandbox)
               </label>
               <select
                 id="wasm-module-select"

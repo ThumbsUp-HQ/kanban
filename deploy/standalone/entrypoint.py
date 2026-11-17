@@ -479,7 +479,7 @@ def _compute_migrations_digest() -> str:
     return ""
 
 
-def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Coordinate standalone single-container startup."""
     # 1. Mode selection
     database_url = os.environ.get("DATABASE_URL")
@@ -523,6 +523,13 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     is_warm = (pgdata / "PG_VERSION").is_file() and migrations_current and keyring_path.is_file()
 
     if is_warm:
+        # Storage probe & status write before spawning Uvicorn to avoid race condition
+        status = probe(pgdata.parent, mode="standalone_embedded_pg")
+        status_path = resolve_status_path()
+        write_standalone_status(status, target_path=status_path)
+        if not status.persistent_volume:
+            emit_ephemeral_warning()
+
         try:
             keyring = load_or_create_keyring(keyring_path)
             log_phase("keyring", f"keyring loaded from {keyring_path}")
@@ -549,10 +556,6 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         if not (pgdata / "conf.d" / "kanban.conf").is_file():
             configure_postgres(pgdata, run_dir=run_dir)
         start_postgres(pgdata, run_dir=run_dir)
-
-        # Async background probe & status write
-        status = probe(pgdata.parent, mode="standalone_embedded_pg")
-        write_standalone_status(status, target_path=resolve_status_path())
     else:
         # Storage probe & ephemeral warning
         status = probe(pgdata.parent, mode="standalone_embedded_pg")

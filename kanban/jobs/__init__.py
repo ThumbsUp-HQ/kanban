@@ -14,6 +14,7 @@ from kanban.jobs.auto_archive import (
     run_auto_archive,
     run_auto_archive_pass,
 )
+from kanban.jobs.scheduled_backup import run_scheduled_backup
 from kanban.jobs.trash_purge import (
     PurgeReport,
     run_trash_purge,
@@ -76,6 +77,11 @@ registry.register(
     name="trash_purge",
     interval_seconds=3600.0,
     func=run_trash_purge,
+)
+registry.register(
+    name="scheduled_backup",
+    interval_seconds=3600.0,
+    func=run_scheduled_backup,
 )
 
 
@@ -156,6 +162,7 @@ __all__ = [
     "registry",
     "run_auto_archive",
     "run_auto_archive_pass",
+    "run_scheduled_backup",
     "run_trash_purge",
     "run_trash_purge_pass",
 ]

@@ -44,7 +44,7 @@ const AVATAR_NAV_LINKS: readonly { to: string; label: string; icon: string }[] =
   { to: '/workspaces/settings/mcp', label: 'Workspace MCP Keys', icon: '🏢' },
   { to: '/admin/auth', label: 'Admin Auth Studio', icon: '🛡️' },
   { to: '/admin/mcp', label: 'Admin MCP Keys', icon: '🤖' },
-  { to: '/admin/standalone', label: 'Standalone Status & Backup', icon: '💾' },
+  { to: '/admin/standalone', label: 'System Storage, Backups & Deployment', icon: '💾' },
 ] as const;
 
 export function Topbar({

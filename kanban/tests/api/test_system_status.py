@@ -686,6 +686,129 @@ async def test_case_7_api_backup_error_branches(
         assert "INSUFFICIENT_CAPABILITY" in resp_non_admin.text
 
 
+@pytest.mark.asyncio
+async def test_case_8_backup_schedule_and_snapshots_api(
+    db_session: AsyncSession,
+    key_material: KeyMaterial,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Case 8: Exercise backup schedule CRUD and snapshot listing / download APIs."""
+    schedule_file = tmp_path / "backup_schedule.json"
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("KB_BACKUP_SCHEDULE_PATH", str(schedule_file))
+    monkeypatch.setenv("KB_BACKUP_DIR", str(backup_dir))
+
+    ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    session_service = SessionService(key_material.session_hmac_key)
+    app = _create_test_app(factory, key_material, session_service)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        _, csrf_token = await _login_and_elevate(
+            client, session_service, db_session, admin_id, ws_id, aal_level=2
+        )
+
+        # 1. GET initial backup schedule
+        resp_sched = await client.get("/api/v1/admin/standalone/backup-schedule")
+        assert resp_sched.status_code == 200
+        sched_data = resp_sched.json()
+        assert sched_data["enabled"] is False
+        assert sched_data["interval_hours"] == 24
+        assert sched_data["retention_count"] == 7
+
+        # 2. PUT updated backup schedule
+        resp_put = await client.put(
+            "/api/v1/admin/standalone/backup-schedule",
+            json={"enabled": True, "interval_hours": 12, "retention_count": 5},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_put.status_code == 200
+        updated = resp_put.json()
+        assert updated["enabled"] is True
+        assert updated["interval_hours"] == 12
+        assert updated["retention_count"] == 5
+        assert updated["next_run_at"] is not None
+
+        # 3. GET backups list (initially empty)
+        resp_list = await client.get("/api/v1/admin/standalone/backups")
+        assert resp_list.status_code == 200
+        assert resp_list.json() == []
+
+        # 4. Create mock snapshot file on disk
+        test_snapshot = backup_dir / "kanban-backup-20260101T000000Z.kbbak"
+        test_snapshot.write_bytes(b"MOCK_ENCRYPTED_BACKUP_BYTES")
+
+        resp_list2 = await client.get("/api/v1/admin/standalone/backups")
+        assert resp_list2.status_code == 200
+        items = resp_list2.json()
+        assert len(items) == 1
+        assert items[0]["filename"] == "kanban-backup-20260101T000000Z.kbbak"
+        assert items[0]["size_bytes"] == len(b"MOCK_ENCRYPTED_BACKUP_BYTES")
+
+        # 5. Download snapshot file
+        resp_dl = await client.get(f"/api/v1/admin/standalone/backups/{test_snapshot.name}")
+        assert resp_dl.status_code == 200
+        assert resp_dl.content == b"MOCK_ENCRYPTED_BACKUP_BYTES"
+
+        # 6. Traversal attack prevented
+        resp_trav = await client.get("/api/v1/admin/standalone/backups/..%2Fetc%2Fpasswd")
+        assert resp_trav.status_code in (400, 404)
+
+
+@pytest.mark.asyncio
+async def test_case_9_backup_verify_and_restore_api(
+    db_session: AsyncSession,
+    key_material: KeyMaterial,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Case 9: Exercise backup verify and restore endpoints with RESTORE gate."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("KB_BACKUP_DIR", str(backup_dir))
+
+    ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    session_service = SessionService(key_material.session_hmac_key)
+    app = _create_test_app(factory, key_material, session_service)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        _, csrf_token = await _login_and_elevate(
+            client, session_service, db_session, admin_id, ws_id, aal_level=2
+        )
+
+        # 1. Verify legacy .kbkp payload
+        plain_dump = b"PGDUMP_MOCK_CONTENT"
+        test_passphrase = "a-strong-passphrase-16+"
+        enc_kbkp = encrypt_backup(plain_dump, passphrase=test_passphrase)
+        kbkp_file = backup_dir / "test.kbkp"
+        kbkp_file.write_bytes(enc_kbkp)
+
+        resp_v_kbkp = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"filename": "test.kbkp", "passphrase": test_passphrase},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_kbkp.status_code == 200
+        v_data = resp_v_kbkp.json()
+        assert v_data["valid"] is True
+        assert v_data["format"] == "kbkp"
+
+        # 2. Restore fails without exact confirm_overwrite="RESTORE" (422)
+        resp_r_fail = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"filename": "test.kbkp", "confirm_overwrite": "yes"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_fail.status_code == 422
+        assert "INVALID_CONFIRM_OVERWRITE" in resp_r_fail.text
+
+
 def test_assert_admin_routes_protected_compliance() -> None:
     """Verify all admin routes declare require_admin_aal2 dependency."""
     app = create_app()

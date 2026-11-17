@@ -73,10 +73,10 @@ describe('StandaloneStatusPanel', () => {
     ).toBeDefined();
 
     // Verify sandbox disclosure
-    expect(screen.getByText('Tier A Wasmtime: Active')).toBeDefined();
+    expect(screen.getByText('Built-in Formula Sandbox (WebAssembly)')).toBeDefined();
     expect(
       screen.getByText(
-        'Tier B nsjail CLI Sandbox: Disabled in Standalone (SANDBOX_UNAVAILABLE_IN_STANDALONE)',
+        'ℹ️ Optional - Not enabled in single-container mode',
       ),
     ).toBeDefined();
 
@@ -165,20 +165,20 @@ describe('StandaloneStatusPanel', () => {
     let capturedHeaders: Record<string, string> = {};
 
     const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      capturedUrl = url;
-      if (init?.body && typeof init.body === 'string') {
-        capturedBody = init.body;
-      }
-      if (init?.headers) {
-        capturedHeaders = init.headers as Record<string, string>;
-      }
-      if (url.includes('/api/v1/admin/standalone/backup')) {
+      if (url.endsWith('/api/v1/admin/standalone/backup')) {
+        capturedUrl = url;
+        if (init?.body && typeof init.body === 'string') {
+          capturedBody = init.body;
+        }
+        if (init?.headers) {
+          capturedHeaders = init.headers as Record<string, string>;
+        }
         return Promise.resolve(
           new Response('encrypted-kbkp-octets', {
             status: 200,
             headers: {
               'Content-Type': 'application/octet-stream',
-              'Content-Disposition': 'attachment; filename="kanban-backup-20261113T120000Z.kbkp"',
+              'Content-Disposition': 'attachment; filename="kanban-backup-20261113T120000Z.kbbak"',
             },
           }),
         );
@@ -206,7 +206,7 @@ describe('StandaloneStatusPanel', () => {
 
     const input = screen.getByLabelText('Backup Passphrase');
     const submitBtn = screen.getByRole('button', {
-      name: 'Download Encrypted Backup (.kbkp)',
+      name: 'Download Encrypted Backup (.kbbak)',
     });
 
     // 1. Initially empty passphrase: button disabled
@@ -274,7 +274,7 @@ describe('StandaloneStatusPanel', () => {
     );
 
     const form = screen.getByRole('button', {
-      name: 'Download Encrypted Backup (.kbkp)',
+      name: 'Download Encrypted Backup (.kbbak)',
     }).closest('form');
     expect(form).not.toBeNull();
     if (!form) return;
@@ -333,7 +333,7 @@ describe('StandaloneStatusPanel', () => {
     );
 
     const form = screen.getByRole('button', {
-      name: 'Download Encrypted Backup (.kbkp)',
+      name: 'Download Encrypted Backup (.kbbak)',
     }).closest('form');
     expect(form).not.toBeNull();
     if (!form) return;
@@ -471,13 +471,17 @@ describe('StandaloneStatusPanel', () => {
     );
 
     // Verify active sandbox text
-    expect(screen.getByText('Tier B nsjail CLI Sandbox: Active')).toBeDefined();
+    expect(
+      screen.getByText(
+        'Runs full Python/CLI scripts and local CLI transition agents with isolated Linux namespaces and allowlisted HTTP egress.',
+      ),
+    ).toBeDefined();
     // Verify default 'ext4' fallback
     expect(screen.getByText('/var/lib/kanban/data (ext4)')).toBeDefined();
 
     const input = screen.getByLabelText('Backup Passphrase');
     const submitBtn = screen.getByRole('button', {
-      name: 'Download Encrypted Backup (.kbkp)',
+      name: 'Download Encrypted Backup (.kbbak)',
     });
     fireEvent.change(input, { target: { value: 'passphrase-without-csrf-16' } });
 
@@ -519,7 +523,7 @@ describe('StandaloneStatusPanel', () => {
     // 2. Submit backup with string throw
     const input = screen.getByLabelText('Backup Passphrase');
     const submitBtn = screen.getByRole('button', {
-      name: 'Download Encrypted Backup (.kbkp)',
+      name: 'Download Encrypted Backup (.kbbak)',
     });
     fireEvent.change(input, { target: { value: 'passphrase-string-err-16' } });
     await act(async () => {
@@ -577,7 +581,7 @@ describe('StandaloneStatusPanel', () => {
     });
 
     const form = screen.getByRole('button', {
-      name: 'Download Encrypted Backup (.kbkp)',
+      name: 'Download Encrypted Backup (.kbbak)',
     }).closest('form');
     expect(form).not.toBeNull();
     if (!form) return;
@@ -617,6 +621,131 @@ describe('StandaloneStatusPanel', () => {
     Object.defineProperty(document, 'activeElement', {
       value: prevActive,
       configurable: true,
+    });
+  });
+
+  it('switches between 3 tabs and renders respective panels', () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    // Initial tab: Health
+    const healthTab = screen.getByRole('tab', { name: 'Storage & Capabilities Health' });
+    const backupTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    const composeTab = screen.getByRole('tab', { name: 'Docker Compose Export' });
+
+    expect(healthTab.getAttribute('aria-selected')).toBe('true');
+    expect(backupTab.getAttribute('aria-selected')).toBe('false');
+
+    // Switch to Backup tab
+    act(() => {
+      fireEvent.click(backupTab);
+    });
+    expect(backupTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Manual Encrypted Backup (.kbbak)')).toBeDefined();
+
+    // Switch to Compose tab
+    act(() => {
+      fireEvent.click(composeTab);
+    });
+    expect(composeTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Production Compose Export & Promotion')).toBeDefined();
+  });
+
+  it('tests 2-stage restore flow requiring RESTORE confirmation', async () => {
+    let restoreSubmitted = false;
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/backup/verify')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              valid: true,
+              manifest: { format_version: 1, pg_server_version: '16', alembic_revision: 'head' },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/restore')) {
+        restoreSubmitted = true;
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: 'success' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    // Verify step with a file
+    const fileInput = screen.getByLabelText(/Upload Backup Archive/);
+    const mockFile = new File(['mock-backup-octets'], 'test.kbbak', { type: 'application/octet-stream' });
+    fireEvent.change(fileInput, { target: { files: [mockFile] } });
+
+    const verifyBtn = screen.getByRole('button', { name: /Step 1: Verify Backup Archive/ });
+    await act(async () => {
+      fireEvent.click(verifyBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
+    });
+
+    // Step 2: Destructive confirmation
+    const confirmInput = screen.getByPlaceholderText('RESTORE');
+    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/ });
+
+    // Disabled initially
+    expect(restoreBtn.hasAttribute('disabled')).toBe(true);
+
+    // Type incorrect text
+    fireEvent.change(confirmInput, { target: { value: 'yes' } });
+    expect(restoreBtn.hasAttribute('disabled')).toBe(true);
+
+    // Type RESTORE exactly
+    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+    expect(restoreBtn.hasAttribute('disabled')).toBe(false);
+
+    // Submit restore
+    await act(async () => {
+      fireEvent.click(restoreBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(restoreSubmitted).toBe(true);
+      expect(screen.getByText(/Database restored successfully/)).toBeDefined();
     });
   });
 });
@@ -756,7 +885,7 @@ describe('ComposeExportTab', () => {
     expect(screen.getByText('PostgreSQL 16 Promotion Runbook:')).toBeDefined();
     const checklistPre = screen.getByText(/1\. Generate secrets/);
     expect(checklistPre.textContent).toContain('1. Generate secrets');
-    expect(checklistPre.textContent).toContain('2. Download encrypted backup (.kbkp)');
+    expect(checklistPre.textContent).toContain('2. Download encrypted backup (.kbbak)');
     expect(checklistPre.textContent).toContain('3. docker compose up -d postgres');
     expect(checklistPre.textContent).toContain(
       '4. kanban-ctl restore / pg_restore into external PostgreSQL 16',
@@ -850,5 +979,30 @@ describe('ComposeExportTab', () => {
 
     // Clipboard write should not be called because exportData is null
     expect(clipboardMock).not.toHaveBeenCalled();
+  });
+
+  it('supports single-container and multi-container toggle in ComposeExportTab', () => {
+    const mockData = {
+      filename: 'docker-compose.yml',
+      compose_yaml: 'services:\n  kanban:\n    image: thumbs-up-kanban:latest\n',
+      single_container_compose_yaml: 'services:\n  standalone:\n    image: thumbs-up-kanban:latest\n',
+      env_template: 'PORT=8080\n',
+      migration_steps_markdown: '### Steps',
+    };
+
+    render(<ComposeExportTab initialData={mockData} />);
+
+    expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
+
+    // Toggle to Single-Container
+    const singleTab = screen.getByRole('button', { name: 'Single-Container (Standalone)' });
+    act(() => {
+      fireEvent.click(singleTab);
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
+    ).toBeDefined();
+    expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
   });
 });

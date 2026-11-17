@@ -26,6 +26,8 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from sqlalchemy.engine.url import make_url
 
+from deploy.standalone.storage_probe import probe
+
 if TYPE_CHECKING:
     from kanban.settings import Settings
 
@@ -63,9 +65,10 @@ class ComposeExportPayload:
     compose_yaml: str
     env_template: str
     migration_steps_markdown: str
+    single_container_compose_yaml: str = ""
 
 
-def get_standalone_status(
+def get_standalone_status(  # noqa: C901
     status_path: Path | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
@@ -116,12 +119,27 @@ def get_standalone_status(
 
     # Respect settings.deployment_mode when file is absent or corrupt
     if settings_mode in ("standalone", "standalone_embedded_pg"):
+        persistent = False
+        data_mount_point: str | None = "/var/lib/kanban/data"
+        data_mount_fstype: str | None = "ext4"
+        tier_b_available = False
+        try:
+            live_probe = probe(Path("/var/lib/kanban/data"), mode="standalone_embedded_pg")
+            persistent = live_probe.persistent_volume
+            if live_probe.data_mount_point:
+                data_mount_point = live_probe.data_mount_point
+            if live_probe.data_mount_fstype:
+                data_mount_fstype = live_probe.data_mount_fstype
+            tier_b_available = live_probe.tier_b_sandbox_available
+        except Exception:
+            logger.debug("Live storage probe fallback failed", exc_info=True)
+
         return {
             "deployment_mode": "standalone_embedded_pg",
-            "persistent_volume": False,
-            "data_mount_point": "/var/lib/kanban/data",
-            "data_mount_fstype": "ext4",
-            "tier_b_sandbox_available": False,
+            "persistent_volume": persistent,
+            "data_mount_point": data_mount_point,
+            "data_mount_fstype": data_mount_fstype,
+            "tier_b_sandbox_available": tier_b_available,
             "air_gap_mode": air_gap,
             "local_llm_endpoint_host": local_llm_host,
         }
@@ -358,19 +376,19 @@ def generate_compose_export() -> ComposeExportPayload:
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: kanban-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: kanban
-      POSTGRES_USER: kanban_migrator
+      POSTGRES_USER: ${POSTGRES_USER:-kanban}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - kanban_db_data:/var/lib/postgresql/data
     networks:
       - data_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kanban_migrator -d kanban"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kanban} -d kanban"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -385,8 +403,7 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     environment:
-      KANBAN_DATABASE_URL: "postgresql+asyncpg://kanban_app:${KANBAN_APP_DB_PASSWORD}@postgres:5432/kanban"
-      KANBAN_DATABASE_URL_MIGRATOR: "postgresql+asyncpg://kanban_migrator:${POSTGRES_PASSWORD}@postgres:5432/kanban"
+      KANBAN_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD}@postgres:5432/kanban"
       KANBAN_MASTER_KEK: "${MASTER_KEK}"
       KANBAN_AUTH_PEPPER: "${AUTH_PEPPER}"
       KANBAN_SESSION_HMAC_KEY: "${SESSION_HMAC_KEY}"
@@ -511,9 +528,34 @@ docker compose up -d
 ```
 """
 
+    # Standalone Single-Container Deployment (docker-compose.standalone.yml)
+    # -----------------------------------------------------------------
+    header_sep = "# " + "-" * 65
+    single_container_compose_yaml = (
+        f"{header_sep}\n"
+        "# 👍kanban: Standalone Single-Container Deployment (docker-compose.yml)\n"
+        f"{header_sep}\n"
+        "services:\n"
+        "  kanban:\n"
+        "    image: thumbs-up-kanban:latest\n"
+        "    container_name: kanban-standalone\n"
+        "    restart: unless-stopped\n"
+        "    ports:\n"
+        '      - "${PORT:-8080}:8080"\n'
+        "    volumes:\n"
+        "      - kanban_data:/var/lib/kanban/data\n"
+        "    environment:\n"
+        '      KANBAN_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost:8080}"\n'
+        '      KANBAN_AIR_GAP_MODE: "${AIR_GAP_MODE:-false}"\n'
+        "\n"
+        "volumes:\n"
+        "  kanban_data:\n"
+    )
+
     return ComposeExportPayload(
         filename="docker-compose.yml",
         compose_yaml=compose_yaml.strip() + "\n",
         env_template=env_template.strip() + "\n",
         migration_steps_markdown=migration_steps_markdown.strip() + "\n",
+        single_container_compose_yaml=single_container_compose_yaml.strip() + "\n",
     )

@@ -4,9 +4,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import re
+import tempfile
 from datetime import UTC, datetime
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,8 +21,18 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime depend
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.jobs.scheduled_backup import (
+    get_backup_schedule,
+    list_backups,
+    resolve_backup_dir,
+    run_scheduled_backup_pass,
+    update_backup_schedule,
+)
+from kanban.ops.backup_crypto import KeySource, PassphraseKeySource, RawKeySource
+from kanban.ops.backup_service import restore_backup, verify_backup
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.standalone.export_service import (
+    decrypt_backup,
     encrypt_backup,
     generate_compose_export,
     get_standalone_status,
@@ -63,6 +78,39 @@ class ComposeExportResponse(BaseModel):
     compose_yaml: str
     env_template: str
     migration_steps_markdown: str
+    single_container_compose_yaml: str | None = None
+
+
+class BackupScheduleResponse(BaseModel):
+    """Automated backup schedule and snapshot retention settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    interval_hours: int
+    retention_count: int
+    last_run_at: str | None = None
+    next_run_at: str | None = None
+
+
+class BackupScheduleUpdateRequest(BaseModel):
+    """Update payload for automated backup schedule."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    interval_hours: int = Field(default=24, ge=1)
+    retention_count: int = Field(default=7, ge=1)
+
+
+class BackupFileItem(BaseModel):
+    """Descriptor of an existing backup snapshot file."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str
+    size_bytes: int
+    created_at: str
 
 
 async def require_server_admin(
@@ -280,4 +328,358 @@ async def get_compose_export_endpoint() -> ComposeExportResponse:
         compose_yaml=payload.compose_yaml,
         env_template=payload.env_template,
         migration_steps_markdown=payload.migration_steps_markdown,
+        single_container_compose_yaml=payload.single_container_compose_yaml,
     )
+
+
+@admin_standalone_router.get(
+    "/backup-schedule",
+    response_model=BackupScheduleResponse,
+    summary="Get automated backup schedule configuration",
+    dependencies=[Depends(require_server_admin)],
+)
+async def get_backup_schedule_endpoint() -> BackupScheduleResponse:
+    """Retrieve automated backup schedule and snapshot retention settings."""
+    data = get_backup_schedule()
+    return BackupScheduleResponse(**data)
+
+
+@admin_standalone_router.put(
+    "/backup-schedule",
+    response_model=BackupScheduleResponse,
+    summary="Update automated backup schedule configuration",
+    dependencies=[Depends(require_server_admin)],
+)
+async def update_backup_schedule_endpoint(
+    body: BackupScheduleUpdateRequest,
+) -> BackupScheduleResponse:
+    """Update automated backup interval and snapshot retention limit."""
+    data = update_backup_schedule(
+        enabled=body.enabled,
+        interval_hours=body.interval_hours,
+        retention_count=body.retention_count,
+    )
+    return BackupScheduleResponse(**data)
+
+
+@admin_standalone_router.get(
+    "/backups",
+    response_model=list[BackupFileItem],
+    summary="List existing backup snapshot files",
+    dependencies=[Depends(require_server_admin)],
+)
+async def list_backups_endpoint() -> list[BackupFileItem]:
+    """Enumerate backup snapshots on disk sorted by creation time descending."""
+    return [BackupFileItem(**item) for item in list_backups()]
+
+
+@admin_standalone_router.post(
+    "/backups/run-now",
+    summary="Trigger immediate backup snapshot",
+    dependencies=[Depends(require_server_admin)],
+)
+async def run_backup_now_endpoint(
+    request: Request,
+) -> dict[str, Any]:
+    """Execute an automated backup pass immediately on demand."""
+    settings = getattr(request.app.state, "settings", None)
+    db_url = settings.database_url if settings else None
+    summary = run_scheduled_backup_pass(db_url=db_url)
+    if summary is None:
+        raise ProblemException(
+            code="BACKUP_RUN_FAILED",
+            status=500,
+            title="Backup Run Failed",
+            detail="Failed to execute immediate backup snapshot.",
+        )
+    return {
+        "status": "success",
+        "filename": summary.archive_path.name,
+        "size_bytes": summary.size_bytes,
+        "manifest": summary.manifest.to_dict(),
+        "duration_seconds": summary.duration_seconds,
+    }
+
+
+@admin_standalone_router.get(
+    "/backups/{filename}",
+    summary="Download backup snapshot file",
+    dependencies=[Depends(require_server_admin)],
+)
+async def download_backup_file_endpoint(
+    filename: str,
+) -> Response:
+    """Safely stream requested backup file with traversal protections."""
+    if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
+        raise ProblemException(
+            code="INVALID_FILENAME",
+            status=400,
+            title="Invalid Filename",
+            detail="Filename contains forbidden characters.",
+        )
+    backup_dir = resolve_backup_dir()
+    target_file = backup_dir / filename
+    if not target_file.is_file():
+        raise ProblemException(
+            code="BACKUP_NOT_FOUND",
+            status=404,
+            title="Backup Not Found",
+            detail=f"Backup file '{filename}' was not found.",
+        )
+    return Response(
+        content=target_file.read_bytes(),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@admin_standalone_router.post(
+    "/backup/verify",
+    summary="Verify an encrypted backup archive",
+    dependencies=[Depends(require_server_admin)],
+)
+async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+    request: Request,
+) -> dict[str, Any]:
+    """Verify cryptographic integrity and manifest of a backup archive."""
+    content_type = request.headers.get("content-type", "")
+    passphrase: str | None = None
+    use_master_kek = False
+    file_bytes: bytes | None = None
+    filename: str | None = None
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        uploaded_file = form.get("file")
+        if uploaded_file and hasattr(uploaded_file, "read"):
+            file_bytes = await uploaded_file.read()
+            filename = getattr(uploaded_file, "filename", "uploaded_backup.kbbak")
+        passphrase_val = form.get("passphrase")
+        if isinstance(passphrase_val, str) and passphrase_val:
+            passphrase = passphrase_val
+        use_kek_val = form.get("use_master_kek")
+        if isinstance(use_kek_val, str) and use_kek_val.lower() in ("true", "1"):
+            use_master_kek = True
+    else:
+        body = await request.json()
+        filename = body.get("filename")
+        passphrase = body.get("passphrase")
+        use_master_kek = bool(body.get("use_master_kek", False))
+
+    if not file_bytes and filename:
+        if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
+            raise ProblemException(
+                code="INVALID_FILENAME",
+                status=400,
+                title="Invalid Filename",
+                detail="Filename contains forbidden characters.",
+            )
+        backup_dir = resolve_backup_dir()
+        target = backup_dir / filename
+        if not target.is_file():
+            raise ProblemException(
+                code="BACKUP_NOT_FOUND",
+                status=404,
+                title="Backup Not Found",
+                detail=f"Backup file '{filename}' was not found.",
+            )
+        file_bytes = target.read_bytes()
+
+    if not file_bytes:
+        raise ProblemException(
+            code="MISSING_BACKUP_PAYLOAD",
+            status=422,
+            title="Missing Backup Payload",
+            detail="Either an uploaded backup file or a valid server filename is required.",
+        )
+
+    # Determine key source
+    key_source: KeySource | None = None
+    if use_master_kek:
+        key_material = getattr(request.app.state, "key_material", None)
+        master_kek = getattr(key_material, "master_kek", None) if key_material else None
+        if master_kek:
+            key_source = RawKeySource(master_kek)
+    elif passphrase:
+        key_source = PassphraseKeySource(passphrase)
+
+    if key_source is None:
+        key_material = getattr(request.app.state, "key_material", None)
+        master_kek = getattr(key_material, "master_kek", None) if key_material else None
+        key_source = RawKeySource(master_kek) if master_kek else RawKeySource(b"\x00" * 32)
+
+    with tempfile.NamedTemporaryFile(prefix="kb_verify_target_", delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = Path(tmp.name)
+
+    try:
+        if file_bytes.startswith(b"KBKP"):
+            kek_bytes = (
+                getattr(key_source, "master_kek", None)
+                if hasattr(key_source, "master_kek")
+                else None
+            )
+            decrypted = decrypt_backup(file_bytes, passphrase=passphrase, master_kek=kek_bytes)
+            return {
+                "valid": True,
+                "format": "kbkp",
+                "size_bytes": len(file_bytes),
+                "plain_bytes": len(decrypted),
+            }
+
+        manifest = verify_backup(tmp_path, key_source)
+        return {
+            "valid": True,
+            "format": "kbbak",
+            "manifest": manifest.to_dict(),
+            "size_bytes": len(file_bytes),
+        }
+    except Exception as exc:
+        logger.warning("Backup verification failed: %s", exc)
+        raise ProblemException(
+            code="BACKUP_VERIFICATION_FAILED",
+            status=422,
+            title="Backup Verification Failed",
+            detail=f"Verification failed: {exc}",
+        ) from exc
+    finally:
+        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
+
+
+@admin_standalone_router.post(
+    "/restore",
+    summary="Restore database from an encrypted backup archive",
+    dependencies=[Depends(require_server_admin)],
+)
+async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+    request: Request,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> dict[str, Any]:
+    """Restore database from a backup archive with mandatory 'RESTORE' confirmation."""
+    del caller, session
+    content_type = request.headers.get("content-type", "")
+    passphrase: str | None = None
+    use_master_kek = False
+    confirm_overwrite: str | None = None
+    file_bytes: bytes | None = None
+    filename: str | None = None
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        uploaded_file = form.get("file")
+        if uploaded_file and hasattr(uploaded_file, "read"):
+            file_bytes = await uploaded_file.read()
+            filename = getattr(uploaded_file, "filename", "restore_backup.kbbak")
+        passphrase_val = form.get("passphrase")
+        if isinstance(passphrase_val, str) and passphrase_val:
+            passphrase = passphrase_val
+        use_kek_val = form.get("use_master_kek")
+        if isinstance(use_kek_val, str) and use_kek_val.lower() in ("true", "1"):
+            use_master_kek = True
+        confirm_val = form.get("confirm_overwrite")
+        if isinstance(confirm_val, str):
+            confirm_overwrite = confirm_val
+    else:
+        body = await request.json()
+        filename = body.get("filename")
+        passphrase = body.get("passphrase")
+        use_master_kek = bool(body.get("use_master_kek", False))
+        confirm_overwrite = body.get("confirm_overwrite")
+
+    if confirm_overwrite != "RESTORE":
+        raise ProblemException(
+            code="INVALID_CONFIRM_OVERWRITE",
+            status=422,
+            title="Confirmation Required",
+            detail="Database restore requires confirm_overwrite='RESTORE'.",
+            type_uri="urn:kanban:problem:invalid-confirm-overwrite",
+        )
+
+    if not file_bytes and filename:
+        if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
+            raise ProblemException(
+                code="INVALID_FILENAME",
+                status=400,
+                title="Invalid Filename",
+                detail="Filename contains forbidden characters.",
+            )
+        backup_dir = resolve_backup_dir()
+        target = backup_dir / filename
+        if not target.is_file():
+            raise ProblemException(
+                code="BACKUP_NOT_FOUND",
+                status=404,
+                title="Backup Not Found",
+                detail=f"Backup file '{filename}' was not found.",
+            )
+        file_bytes = target.read_bytes()
+
+    if not file_bytes:
+        raise ProblemException(
+            code="MISSING_BACKUP_PAYLOAD",
+            status=422,
+            title="Missing Backup Payload",
+            detail="Either an uploaded backup file or a valid server filename is required.",
+        )
+
+    settings = getattr(request.app.state, "settings", None)
+    target_db_url = settings.database_url if settings else None
+    if not target_db_url:
+        target_db_url = os.environ.get("DATABASE_URL")
+
+    if not target_db_url:
+        raise ProblemException(
+            code="DATABASE_UNAVAILABLE",
+            status=500,
+            title="Database Unavailable",
+            detail="Target database connection URL is not configured.",
+        )
+
+    key_source: KeySource | None = None
+    if use_master_kek:
+        key_material = getattr(request.app.state, "key_material", None)
+        master_kek = getattr(key_material, "master_kek", None) if key_material else None
+        if master_kek:
+            key_source = RawKeySource(master_kek)
+    elif passphrase:
+        key_source = PassphraseKeySource(passphrase)
+
+    if key_source is None:
+        key_material = getattr(request.app.state, "key_material", None)
+        master_kek = getattr(key_material, "master_kek", None) if key_material else None
+        key_source = RawKeySource(master_kek) if master_kek else RawKeySource(b"\x00" * 32)
+
+    with tempfile.NamedTemporaryFile(prefix="kb_restore_target_", delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = Path(tmp.name)
+
+    try:
+        report = restore_backup(
+            archive_path=tmp_path,
+            target_db_url=target_db_url,
+            key_source=key_source,
+            confirm_overwrite=True,
+        )
+    except Exception as exc:
+        logger.exception("Database restore execution failed")
+        raise ProblemException(
+            code="RESTORE_EXECUTION_FAILED",
+            status=500,
+            title="Restore Failed",
+            detail=f"Database restore failed: {exc}",
+        ) from exc
+    else:
+        return {
+            "status": "success",
+            "message": "Database restored successfully",
+            "workspaces_verified": report.workspaces_verified,
+            "links_audited": report.links_audited,
+            "duration_seconds": report.duration_seconds,
+        }
+    finally:
+        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)

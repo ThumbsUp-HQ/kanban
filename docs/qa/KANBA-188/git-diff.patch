@@ -1,0 +1,2773 @@
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index ae70704..7198bd4 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -479,7 +479,7 @@ def _compute_migrations_digest() -> str:
+     return ""
+ 
+ 
+-def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
++def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+     """Coordinate standalone single-container startup."""
+     # 1. Mode selection
+     database_url = os.environ.get("DATABASE_URL")
+@@ -523,6 +523,13 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+     is_warm = (pgdata / "PG_VERSION").is_file() and migrations_current and keyring_path.is_file()
+ 
+     if is_warm:
++        # Storage probe & status write before spawning Uvicorn to avoid race condition
++        status = probe(pgdata.parent, mode="standalone_embedded_pg")
++        status_path = resolve_status_path()
++        write_standalone_status(status, target_path=status_path)
++        if not status.persistent_volume:
++            emit_ephemeral_warning()
++
+         try:
+             keyring = load_or_create_keyring(keyring_path)
+             log_phase("keyring", f"keyring loaded from {keyring_path}")
+@@ -549,10 +556,6 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+         if not (pgdata / "conf.d" / "kanban.conf").is_file():
+             configure_postgres(pgdata, run_dir=run_dir)
+         start_postgres(pgdata, run_dir=run_dir)
+-
+-        # Async background probe & status write
+-        status = probe(pgdata.parent, mode="standalone_embedded_pg")
+-        write_standalone_status(status, target_path=resolve_status_path())
+     else:
+         # Storage probe & ephemeral warning
+         status = probe(pgdata.parent, mode="standalone_embedded_pg")
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index cb6fe83..8e135c1 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -4,9 +4,14 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import logging
++import os
++import re
++import tempfile
+ from datetime import UTC, datetime
+-from typing import Annotated
++from pathlib import Path
++from typing import Annotated, Any
+ 
+ from fastapi import APIRouter, Depends, Request, Response
+ from pydantic import BaseModel, ConfigDict, Field
+@@ -16,8 +21,18 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime depend
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException
+ from kanban.auth.mfa.policy import require_admin_aal2
++from kanban.jobs.scheduled_backup import (
++    get_backup_schedule,
++    list_backups,
++    resolve_backup_dir,
++    run_scheduled_backup_pass,
++    update_backup_schedule,
++)
++from kanban.ops.backup_crypto import KeySource, PassphraseKeySource, RawKeySource
++from kanban.ops.backup_service import restore_backup, verify_backup
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.standalone.export_service import (
++    decrypt_backup,
+     encrypt_backup,
+     generate_compose_export,
+     get_standalone_status,
+@@ -63,6 +78,39 @@ class ComposeExportResponse(BaseModel):
+     compose_yaml: str
+     env_template: str
+     migration_steps_markdown: str
++    single_container_compose_yaml: str | None = None
++
++
++class BackupScheduleResponse(BaseModel):
++    """Automated backup schedule and snapshot retention settings."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    enabled: bool
++    interval_hours: int
++    retention_count: int
++    last_run_at: str | None = None
++    next_run_at: str | None = None
++
++
++class BackupScheduleUpdateRequest(BaseModel):
++    """Update payload for automated backup schedule."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    enabled: bool
++    interval_hours: int = Field(default=24, ge=1)
++    retention_count: int = Field(default=7, ge=1)
++
++
++class BackupFileItem(BaseModel):
++    """Descriptor of an existing backup snapshot file."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    filename: str
++    size_bytes: int
++    created_at: str
+ 
+ 
+ async def require_server_admin(
+@@ -280,4 +328,358 @@ async def get_compose_export_endpoint() -> ComposeExportResponse:
+         compose_yaml=payload.compose_yaml,
+         env_template=payload.env_template,
+         migration_steps_markdown=payload.migration_steps_markdown,
++        single_container_compose_yaml=payload.single_container_compose_yaml,
+     )
++
++
++@admin_standalone_router.get(
++    "/backup-schedule",
++    response_model=BackupScheduleResponse,
++    summary="Get automated backup schedule configuration",
++    dependencies=[Depends(require_server_admin)],
++)
++async def get_backup_schedule_endpoint() -> BackupScheduleResponse:
++    """Retrieve automated backup schedule and snapshot retention settings."""
++    data = get_backup_schedule()
++    return BackupScheduleResponse(**data)
++
++
++@admin_standalone_router.put(
++    "/backup-schedule",
++    response_model=BackupScheduleResponse,
++    summary="Update automated backup schedule configuration",
++    dependencies=[Depends(require_server_admin)],
++)
++async def update_backup_schedule_endpoint(
++    body: BackupScheduleUpdateRequest,
++) -> BackupScheduleResponse:
++    """Update automated backup interval and snapshot retention limit."""
++    data = update_backup_schedule(
++        enabled=body.enabled,
++        interval_hours=body.interval_hours,
++        retention_count=body.retention_count,
++    )
++    return BackupScheduleResponse(**data)
++
++
++@admin_standalone_router.get(
++    "/backups",
++    response_model=list[BackupFileItem],
++    summary="List existing backup snapshot files",
++    dependencies=[Depends(require_server_admin)],
++)
++async def list_backups_endpoint() -> list[BackupFileItem]:
++    """Enumerate backup snapshots on disk sorted by creation time descending."""
++    return [BackupFileItem(**item) for item in list_backups()]
++
++
++@admin_standalone_router.post(
++    "/backups/run-now",
++    summary="Trigger immediate backup snapshot",
++    dependencies=[Depends(require_server_admin)],
++)
++async def run_backup_now_endpoint(
++    request: Request,
++) -> dict[str, Any]:
++    """Execute an automated backup pass immediately on demand."""
++    settings = getattr(request.app.state, "settings", None)
++    db_url = settings.database_url if settings else None
++    summary = run_scheduled_backup_pass(db_url=db_url)
++    if summary is None:
++        raise ProblemException(
++            code="BACKUP_RUN_FAILED",
++            status=500,
++            title="Backup Run Failed",
++            detail="Failed to execute immediate backup snapshot.",
++        )
++    return {
++        "status": "success",
++        "filename": summary.archive_path.name,
++        "size_bytes": summary.size_bytes,
++        "manifest": summary.manifest.to_dict(),
++        "duration_seconds": summary.duration_seconds,
++    }
++
++
++@admin_standalone_router.get(
++    "/backups/{filename}",
++    summary="Download backup snapshot file",
++    dependencies=[Depends(require_server_admin)],
++)
++async def download_backup_file_endpoint(
++    filename: str,
++) -> Response:
++    """Safely stream requested backup file with traversal protections."""
++    if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
++        raise ProblemException(
++            code="INVALID_FILENAME",
++            status=400,
++            title="Invalid Filename",
++            detail="Filename contains forbidden characters.",
++        )
++    backup_dir = resolve_backup_dir()
++    target_file = backup_dir / filename
++    if not target_file.is_file():
++        raise ProblemException(
++            code="BACKUP_NOT_FOUND",
++            status=404,
++            title="Backup Not Found",
++            detail=f"Backup file '{filename}' was not found.",
++        )
++    return Response(
++        content=target_file.read_bytes(),
++        media_type="application/octet-stream",
++        headers={
++            "Content-Disposition": f'attachment; filename="{filename}"',
++            "Cache-Control": "no-store, no-cache, must-revalidate",
++            "X-Content-Type-Options": "nosniff",
++        },
++    )
++
++
++@admin_standalone_router.post(
++    "/backup/verify",
++    summary="Verify an encrypted backup archive",
++    dependencies=[Depends(require_server_admin)],
++)
++async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
++    request: Request,
++) -> dict[str, Any]:
++    """Verify cryptographic integrity and manifest of a backup archive."""
++    content_type = request.headers.get("content-type", "")
++    passphrase: str | None = None
++    use_master_kek = False
++    file_bytes: bytes | None = None
++    filename: str | None = None
++
++    if content_type.startswith("multipart/form-data"):
++        form = await request.form()
++        uploaded_file = form.get("file")
++        if uploaded_file and hasattr(uploaded_file, "read"):
++            file_bytes = await uploaded_file.read()
++            filename = getattr(uploaded_file, "filename", "uploaded_backup.kbbak")
++        passphrase_val = form.get("passphrase")
++        if isinstance(passphrase_val, str) and passphrase_val:
++            passphrase = passphrase_val
++        use_kek_val = form.get("use_master_kek")
++        if isinstance(use_kek_val, str) and use_kek_val.lower() in ("true", "1"):
++            use_master_kek = True
++    else:
++        body = await request.json()
++        filename = body.get("filename")
++        passphrase = body.get("passphrase")
++        use_master_kek = bool(body.get("use_master_kek", False))
++
++    if not file_bytes and filename:
++        if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
++            raise ProblemException(
++                code="INVALID_FILENAME",
++                status=400,
++                title="Invalid Filename",
++                detail="Filename contains forbidden characters.",
++            )
++        backup_dir = resolve_backup_dir()
++        target = backup_dir / filename
++        if not target.is_file():
++            raise ProblemException(
++                code="BACKUP_NOT_FOUND",
++                status=404,
++                title="Backup Not Found",
++                detail=f"Backup file '{filename}' was not found.",
++            )
++        file_bytes = target.read_bytes()
++
++    if not file_bytes:
++        raise ProblemException(
++            code="MISSING_BACKUP_PAYLOAD",
++            status=422,
++            title="Missing Backup Payload",
++            detail="Either an uploaded backup file or a valid server filename is required.",
++        )
++
++    # Determine key source
++    key_source: KeySource | None = None
++    if use_master_kek:
++        key_material = getattr(request.app.state, "key_material", None)
++        master_kek = getattr(key_material, "master_kek", None) if key_material else None
++        if master_kek:
++            key_source = RawKeySource(master_kek)
++    elif passphrase:
++        key_source = PassphraseKeySource(passphrase)
++
++    if key_source is None:
++        key_material = getattr(request.app.state, "key_material", None)
++        master_kek = getattr(key_material, "master_kek", None) if key_material else None
++        key_source = RawKeySource(master_kek) if master_kek else RawKeySource(b"\x00" * 32)
++
++    with tempfile.NamedTemporaryFile(prefix="kb_verify_target_", delete=False) as tmp:
++        tmp.write(file_bytes)
++        tmp_path = Path(tmp.name)
++
++    try:
++        if file_bytes.startswith(b"KBKP"):
++            kek_bytes = (
++                getattr(key_source, "master_kek", None)
++                if hasattr(key_source, "master_kek")
++                else None
++            )
++            decrypted = decrypt_backup(file_bytes, passphrase=passphrase, master_kek=kek_bytes)
++            return {
++                "valid": True,
++                "format": "kbkp",
++                "size_bytes": len(file_bytes),
++                "plain_bytes": len(decrypted),
++            }
++
++        manifest = verify_backup(tmp_path, key_source)
++        return {
++            "valid": True,
++            "format": "kbbak",
++            "manifest": manifest.to_dict(),
++            "size_bytes": len(file_bytes),
++        }
++    except Exception as exc:
++        logger.warning("Backup verification failed: %s", exc)
++        raise ProblemException(
++            code="BACKUP_VERIFICATION_FAILED",
++            status=422,
++            title="Backup Verification Failed",
++            detail=f"Verification failed: {exc}",
++        ) from exc
++    finally:
++        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
++
++
++@admin_standalone_router.post(
++    "/restore",
++    summary="Restore database from an encrypted backup archive",
++    dependencies=[Depends(require_server_admin)],
++)
++async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
++    request: Request,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> dict[str, Any]:
++    """Restore database from a backup archive with mandatory 'RESTORE' confirmation."""
++    del caller, session
++    content_type = request.headers.get("content-type", "")
++    passphrase: str | None = None
++    use_master_kek = False
++    confirm_overwrite: str | None = None
++    file_bytes: bytes | None = None
++    filename: str | None = None
++
++    if content_type.startswith("multipart/form-data"):
++        form = await request.form()
++        uploaded_file = form.get("file")
++        if uploaded_file and hasattr(uploaded_file, "read"):
++            file_bytes = await uploaded_file.read()
++            filename = getattr(uploaded_file, "filename", "restore_backup.kbbak")
++        passphrase_val = form.get("passphrase")
++        if isinstance(passphrase_val, str) and passphrase_val:
++            passphrase = passphrase_val
++        use_kek_val = form.get("use_master_kek")
++        if isinstance(use_kek_val, str) and use_kek_val.lower() in ("true", "1"):
++            use_master_kek = True
++        confirm_val = form.get("confirm_overwrite")
++        if isinstance(confirm_val, str):
++            confirm_overwrite = confirm_val
++    else:
++        body = await request.json()
++        filename = body.get("filename")
++        passphrase = body.get("passphrase")
++        use_master_kek = bool(body.get("use_master_kek", False))
++        confirm_overwrite = body.get("confirm_overwrite")
++
++    if confirm_overwrite != "RESTORE":
++        raise ProblemException(
++            code="INVALID_CONFIRM_OVERWRITE",
++            status=422,
++            title="Confirmation Required",
++            detail="Database restore requires confirm_overwrite='RESTORE'.",
++            type_uri="urn:kanban:problem:invalid-confirm-overwrite",
++        )
++
++    if not file_bytes and filename:
++        if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
++            raise ProblemException(
++                code="INVALID_FILENAME",
++                status=400,
++                title="Invalid Filename",
++                detail="Filename contains forbidden characters.",
++            )
++        backup_dir = resolve_backup_dir()
++        target = backup_dir / filename
++        if not target.is_file():
++            raise ProblemException(
++                code="BACKUP_NOT_FOUND",
++                status=404,
++                title="Backup Not Found",
++                detail=f"Backup file '{filename}' was not found.",
++            )
++        file_bytes = target.read_bytes()
++
++    if not file_bytes:
++        raise ProblemException(
++            code="MISSING_BACKUP_PAYLOAD",
++            status=422,
++            title="Missing Backup Payload",
++            detail="Either an uploaded backup file or a valid server filename is required.",
++        )
++
++    settings = getattr(request.app.state, "settings", None)
++    target_db_url = settings.database_url if settings else None
++    if not target_db_url:
++        target_db_url = os.environ.get("DATABASE_URL")
++
++    if not target_db_url:
++        raise ProblemException(
++            code="DATABASE_UNAVAILABLE",
++            status=500,
++            title="Database Unavailable",
++            detail="Target database connection URL is not configured.",
++        )
++
++    key_source: KeySource | None = None
++    if use_master_kek:
++        key_material = getattr(request.app.state, "key_material", None)
++        master_kek = getattr(key_material, "master_kek", None) if key_material else None
++        if master_kek:
++            key_source = RawKeySource(master_kek)
++    elif passphrase:
++        key_source = PassphraseKeySource(passphrase)
++
++    if key_source is None:
++        key_material = getattr(request.app.state, "key_material", None)
++        master_kek = getattr(key_material, "master_kek", None) if key_material else None
++        key_source = RawKeySource(master_kek) if master_kek else RawKeySource(b"\x00" * 32)
++
++    with tempfile.NamedTemporaryFile(prefix="kb_restore_target_", delete=False) as tmp:
++        tmp.write(file_bytes)
++        tmp_path = Path(tmp.name)
++
++    try:
++        report = restore_backup(
++            archive_path=tmp_path,
++            target_db_url=target_db_url,
++            key_source=key_source,
++            confirm_overwrite=True,
++        )
++    except Exception as exc:
++        logger.exception("Database restore execution failed")
++        raise ProblemException(
++            code="RESTORE_EXECUTION_FAILED",
++            status=500,
++            title="Restore Failed",
++            detail=f"Database restore failed: {exc}",
++        ) from exc
++    else:
++        return {
++            "status": "success",
++            "message": "Database restored successfully",
++            "workspaces_verified": report.workspaces_verified,
++            "links_audited": report.links_audited,
++            "duration_seconds": report.duration_seconds,
++        }
++    finally:
++        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
+diff --git a/kanban/jobs/__init__.py b/kanban/jobs/__init__.py
+index 5b3b266..93d50c1 100644
+--- a/kanban/jobs/__init__.py
++++ b/kanban/jobs/__init__.py
+@@ -14,6 +14,7 @@ from kanban.jobs.auto_archive import (
+     run_auto_archive,
+     run_auto_archive_pass,
+ )
++from kanban.jobs.scheduled_backup import run_scheduled_backup
+ from kanban.jobs.trash_purge import (
+     PurgeReport,
+     run_trash_purge,
+@@ -77,6 +78,11 @@ registry.register(
+     interval_seconds=3600.0,
+     func=run_trash_purge,
+ )
++registry.register(
++    name="scheduled_backup",
++    interval_seconds=3600.0,
++    func=run_scheduled_backup,
++)
+ 
+ 
+ class JobScheduler:
+@@ -156,6 +162,7 @@ __all__ = [
+     "registry",
+     "run_auto_archive",
+     "run_auto_archive_pass",
++    "run_scheduled_backup",
+     "run_trash_purge",
+     "run_trash_purge_pass",
+ ]
+diff --git a/kanban/ops/backup_service.py b/kanban/ops/backup_service.py
+index 9f5d993..e8723ac 100644
+--- a/kanban/ops/backup_service.py
++++ b/kanban/ops/backup_service.py
+@@ -514,10 +514,20 @@ async def _assert_target_db_empty_or_confirmed(
+ 
+             if count > 0 and confirm_overwrite:
+                 await conn.execute(text("DROP SCHEMA public CASCADE;"))
+-                await conn.execute(text("CREATE SCHEMA public;"))
++                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
++                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
++                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
+                 await conn.execute(
+                     text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
+                 )
++                with contextlib.suppress(Exception):
++                    await conn.execute(
++                        text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
++                    )
++                with contextlib.suppress(Exception):
++                    await conn.execute(
++                        text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
++                    )
+                 await conn.commit()
+     finally:
+         await engine.dispose()
+@@ -532,7 +542,24 @@ async def _verify_post_restore_invariants(
+     engine = create_async_engine(async_dsn)
+     try:
+         async with engine.connect() as conn:
+-            # 1. Re-apply role grants
++            # 1. Re-apply extensions and role grants
++            for ext in ("pgcrypto", "ltree", "pg_trgm", "btree_gist", "vector"):
++                with contextlib.suppress(Exception):
++                    await conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {ext};"))
++
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
++                )
++
+             with contextlib.suppress(Exception):
+                 await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
+             with contextlib.suppress(Exception):
+diff --git a/kanban/standalone/export_service.py b/kanban/standalone/export_service.py
+index f0c25ff..8b95793 100644
+--- a/kanban/standalone/export_service.py
++++ b/kanban/standalone/export_service.py
+@@ -26,6 +26,8 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+ from sqlalchemy.engine.url import make_url
+ 
++from deploy.standalone.storage_probe import probe
++
+ if TYPE_CHECKING:
+     from kanban.settings import Settings
+ 
+@@ -63,9 +65,10 @@ class ComposeExportPayload:
+     compose_yaml: str
+     env_template: str
+     migration_steps_markdown: str
++    single_container_compose_yaml: str = ""
+ 
+ 
+-def get_standalone_status(
++def get_standalone_status(  # noqa: C901
+     status_path: Path | None = None,
+     settings: Settings | None = None,
+ ) -> dict[str, Any]:
+@@ -116,12 +119,27 @@ def get_standalone_status(
+ 
+     # Respect settings.deployment_mode when file is absent or corrupt
+     if settings_mode in ("standalone", "standalone_embedded_pg"):
++        persistent = False
++        data_mount_point: str | None = "/var/lib/kanban/data"
++        data_mount_fstype: str | None = "ext4"
++        tier_b_available = False
++        try:
++            live_probe = probe(Path("/var/lib/kanban/data"), mode="standalone_embedded_pg")
++            persistent = live_probe.persistent_volume
++            if live_probe.data_mount_point:
++                data_mount_point = live_probe.data_mount_point
++            if live_probe.data_mount_fstype:
++                data_mount_fstype = live_probe.data_mount_fstype
++            tier_b_available = live_probe.tier_b_sandbox_available
++        except Exception:
++            logger.debug("Live storage probe fallback failed", exc_info=True)
++
+         return {
+             "deployment_mode": "standalone_embedded_pg",
+-            "persistent_volume": False,
+-            "data_mount_point": "/var/lib/kanban/data",
+-            "data_mount_fstype": "ext4",
+-            "tier_b_sandbox_available": False,
++            "persistent_volume": persistent,
++            "data_mount_point": data_mount_point,
++            "data_mount_fstype": data_mount_fstype,
++            "tier_b_sandbox_available": tier_b_available,
+             "air_gap_mode": air_gap,
+             "local_llm_endpoint_host": local_llm_host,
+         }
+@@ -358,19 +376,19 @@ def generate_compose_export() -> ComposeExportPayload:
+ 
+ services:
+   postgres:
+-    image: postgres:16-alpine
++    image: pgvector/pgvector:pg16
+     container_name: kanban-postgres
+     restart: unless-stopped
+     environment:
+       POSTGRES_DB: kanban
+-      POSTGRES_USER: kanban_migrator
++      POSTGRES_USER: ${POSTGRES_USER:-kanban}
+       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+     volumes:
+       - kanban_db_data:/var/lib/postgresql/data
+     networks:
+       - data_net
+     healthcheck:
+-      test: ["CMD-SHELL", "pg_isready -U kanban_migrator -d kanban"]
++      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kanban} -d kanban"]
+       interval: 5s
+       timeout: 5s
+       retries: 5
+@@ -385,8 +403,7 @@ services:
+     ports:
+       - "${PORT:-8080}:8080"
+     environment:
+-      KANBAN_DATABASE_URL: "postgresql+asyncpg://kanban_app:${KANBAN_APP_DB_PASSWORD}@postgres:5432/kanban"
+-      KANBAN_DATABASE_URL_MIGRATOR: "postgresql+asyncpg://kanban_migrator:${POSTGRES_PASSWORD}@postgres:5432/kanban"
++      KANBAN_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD}@postgres:5432/kanban"
+       KANBAN_MASTER_KEK: "${MASTER_KEK}"
+       KANBAN_AUTH_PEPPER: "${AUTH_PEPPER}"
+       KANBAN_SESSION_HMAC_KEY: "${SESSION_HMAC_KEY}"
+@@ -511,9 +528,34 @@ docker compose up -d
+ ```
+ """
+ 
++    # Standalone Single-Container Deployment (docker-compose.standalone.yml)
++    # -----------------------------------------------------------------
++    header_sep = "# " + "-" * 65
++    single_container_compose_yaml = (
++        f"{header_sep}\n"
++        "# 👍kanban: Standalone Single-Container Deployment (docker-compose.yml)\n"
++        f"{header_sep}\n"
++        "services:\n"
++        "  kanban:\n"
++        "    image: thumbs-up-kanban:latest\n"
++        "    container_name: kanban-standalone\n"
++        "    restart: unless-stopped\n"
++        "    ports:\n"
++        '      - "${PORT:-8080}:8080"\n'
++        "    volumes:\n"
++        "      - kanban_data:/var/lib/kanban/data\n"
++        "    environment:\n"
++        '      KANBAN_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost:8080}"\n'
++        '      KANBAN_AIR_GAP_MODE: "${AIR_GAP_MODE:-false}"\n'
++        "\n"
++        "volumes:\n"
++        "  kanban_data:\n"
++    )
++
+     return ComposeExportPayload(
+         filename="docker-compose.yml",
+         compose_yaml=compose_yaml.strip() + "\n",
+         env_template=env_template.strip() + "\n",
+         migration_steps_markdown=migration_steps_markdown.strip() + "\n",
++        single_container_compose_yaml=single_container_compose_yaml.strip() + "\n",
+     )
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index 9b61bf9..e9d88f6 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -686,6 +686,129 @@ async def test_case_7_api_backup_error_branches(
+         assert "INSUFFICIENT_CAPABILITY" in resp_non_admin.text
+ 
+ 
++@pytest.mark.asyncio
++async def test_case_8_backup_schedule_and_snapshots_api(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Case 8: Exercise backup schedule CRUD and snapshot listing / download APIs."""
++    schedule_file = tmp_path / "backup_schedule.json"
++    backup_dir = tmp_path / "backups"
++    backup_dir.mkdir(parents=True, exist_ok=True)
++
++    monkeypatch.setenv("KB_BACKUP_SCHEDULE_PATH", str(schedule_file))
++    monkeypatch.setenv("KB_BACKUP_DIR", str(backup_dir))
++
++    ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        _, csrf_token = await _login_and_elevate(
++            client, session_service, db_session, admin_id, ws_id, aal_level=2
++        )
++
++        # 1. GET initial backup schedule
++        resp_sched = await client.get("/api/v1/admin/standalone/backup-schedule")
++        assert resp_sched.status_code == 200
++        sched_data = resp_sched.json()
++        assert sched_data["enabled"] is False
++        assert sched_data["interval_hours"] == 24
++        assert sched_data["retention_count"] == 7
++
++        # 2. PUT updated backup schedule
++        resp_put = await client.put(
++            "/api/v1/admin/standalone/backup-schedule",
++            json={"enabled": True, "interval_hours": 12, "retention_count": 5},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp_put.status_code == 200
++        updated = resp_put.json()
++        assert updated["enabled"] is True
++        assert updated["interval_hours"] == 12
++        assert updated["retention_count"] == 5
++        assert updated["next_run_at"] is not None
++
++        # 3. GET backups list (initially empty)
++        resp_list = await client.get("/api/v1/admin/standalone/backups")
++        assert resp_list.status_code == 200
++        assert resp_list.json() == []
++
++        # 4. Create mock snapshot file on disk
++        test_snapshot = backup_dir / "kanban-backup-20260101T000000Z.kbbak"
++        test_snapshot.write_bytes(b"MOCK_ENCRYPTED_BACKUP_BYTES")
++
++        resp_list2 = await client.get("/api/v1/admin/standalone/backups")
++        assert resp_list2.status_code == 200
++        items = resp_list2.json()
++        assert len(items) == 1
++        assert items[0]["filename"] == "kanban-backup-20260101T000000Z.kbbak"
++        assert items[0]["size_bytes"] == len(b"MOCK_ENCRYPTED_BACKUP_BYTES")
++
++        # 5. Download snapshot file
++        resp_dl = await client.get(f"/api/v1/admin/standalone/backups/{test_snapshot.name}")
++        assert resp_dl.status_code == 200
++        assert resp_dl.content == b"MOCK_ENCRYPTED_BACKUP_BYTES"
++
++        # 6. Traversal attack prevented
++        resp_trav = await client.get("/api/v1/admin/standalone/backups/..%2Fetc%2Fpasswd")
++        assert resp_trav.status_code in (400, 404)
++
++
++@pytest.mark.asyncio
++async def test_case_9_backup_verify_and_restore_api(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Case 9: Exercise backup verify and restore endpoints with RESTORE gate."""
++    backup_dir = tmp_path / "backups"
++    backup_dir.mkdir(parents=True, exist_ok=True)
++    monkeypatch.setenv("KB_BACKUP_DIR", str(backup_dir))
++
++    ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        _, csrf_token = await _login_and_elevate(
++            client, session_service, db_session, admin_id, ws_id, aal_level=2
++        )
++
++        # 1. Verify legacy .kbkp payload
++        plain_dump = b"PGDUMP_MOCK_CONTENT"
++        test_passphrase = "a-strong-passphrase-16+"
++        enc_kbkp = encrypt_backup(plain_dump, passphrase=test_passphrase)
++        kbkp_file = backup_dir / "test.kbkp"
++        kbkp_file.write_bytes(enc_kbkp)
++
++        resp_v_kbkp = await client.post(
++            "/api/v1/admin/standalone/backup/verify",
++            json={"filename": "test.kbkp", "passphrase": test_passphrase},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp_v_kbkp.status_code == 200
++        v_data = resp_v_kbkp.json()
++        assert v_data["valid"] is True
++        assert v_data["format"] == "kbkp"
++
++        # 2. Restore fails without exact confirm_overwrite="RESTORE" (422)
++        resp_r_fail = await client.post(
++            "/api/v1/admin/standalone/restore",
++            json={"filename": "test.kbkp", "confirm_overwrite": "yes"},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp_r_fail.status_code == 422
++        assert "INVALID_CONFIRM_OVERWRITE" in resp_r_fail.text
++
++
+ def test_assert_admin_routes_protected_compliance() -> None:
+     """Verify all admin routes declare require_admin_aal2 dependency."""
+     app = create_app()
+diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
+index c740c2b..e8f3ab0 100644
+--- a/kanban/web/src/app/CommandPalette.tsx
++++ b/kanban/web/src/app/CommandPalette.tsx
+@@ -258,7 +258,7 @@ export function CommandPalette({
+       },
+       {
+         id: 'nav-standalone-status',
+-        title: 'Go to Standalone Status',
++        title: 'Go to System Storage, Backups & Deployment',
+         icon: '💾',
+         category: 'navigation',
+         onSelect: () => {
+diff --git a/kanban/web/src/app/HeaderPills.test.tsx b/kanban/web/src/app/HeaderPills.test.tsx
+index baccd4f..3210836 100644
+--- a/kanban/web/src/app/HeaderPills.test.tsx
++++ b/kanban/web/src/app/HeaderPills.test.tsx
+@@ -52,6 +52,25 @@ describe('HeaderPills', () => {
+     ).toBeDefined();
+   });
+ 
++  it('omits ⚠️ pill in standalone mode when persistent_volume is true', () => {
++    const persistentStandaloneStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ShellPanelsProvider>
++          <HeaderPills systemStatus={persistentStandaloneStatus} />
++        </ShellPanelsProvider>
++      </QueryClientProvider>,
++    );
++
++    expect(screen.queryByRole('button', { name: 'Standalone mode warning' })).toBeNull();
++  });
++
+   it('omits ⚠️ pill in multi-container / production mode', () => {
+     const prodStatus: SystemStatus = {
+       deployment_mode: 'multi_container',
+@@ -181,7 +200,7 @@ describe('HeaderPills', () => {
+ 
+     const status: SystemStatus = {
+       deployment_mode: 'standalone',
+-      persistent_volume: true,
++      persistent_volume: false,
+       air_gap_mode: false,
+       local_llm_endpoint_host: null,
+     };
+diff --git a/kanban/web/src/app/HeaderPills.tsx b/kanban/web/src/app/HeaderPills.tsx
+index a04ba0a..531eda0 100644
+--- a/kanban/web/src/app/HeaderPills.tsx
++++ b/kanban/web/src/app/HeaderPills.tsx
+@@ -90,6 +90,8 @@ export function HeaderPills({
+     status?.deployment_mode === 'standalone_embedded_pg' ||
+     status?.deployment_mode === 'standalone';
+ 
++  const showStorageWarning = isStandalone && !status.persistent_volume && !isDismissed;
++
+   const isAirGap = status?.air_gap_mode === true;
+ 
+   const usersCount = manifest?.users?.length ?? 0;
+@@ -116,8 +118,8 @@ export function HeaderPills({
+ 
+   return (
+     <div className="kb-header-pills">
+-      {/* 1. Standalone warning pill */}
+-      {isStandalone && !isDismissed && (
++      {/* 1. Standalone warning pill (ephemeral storage only) */}
++      {showStorageWarning && (
+         <span className="kb-standalone-pill-group">
+           <EmojiHint
+             kind="warning"
+@@ -131,11 +133,9 @@ export function HeaderPills({
+                 <div>
+                   Standalone Single-Container Mode (Not Recommended for Production) - Click for volume status, encrypted backup, & 1-click docker-compose.yml export
+                 </div>
+-                {!status.persistent_volume && (
+-                  <div>
+-                    Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
+-                  </div>
+-                )}
++                <div>
++                  Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
++                </div>
+               </div>
+             }
+           />
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index b0e63fd..6356a52 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -44,7 +44,7 @@ const AVATAR_NAV_LINKS: readonly { to: string; label: string; icon: string }[] =
+   { to: '/workspaces/settings/mcp', label: 'Workspace MCP Keys', icon: '🏢' },
+   { to: '/admin/auth', label: 'Admin Auth Studio', icon: '🛡️' },
+   { to: '/admin/mcp', label: 'Admin MCP Keys', icon: '🤖' },
+-  { to: '/admin/standalone', label: 'Standalone Status & Backup', icon: '💾' },
++  { to: '/admin/standalone', label: 'System Storage, Backups & Deployment', icon: '💾' },
+ ] as const;
+ 
+ export function Topbar({
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index 7a3250f..ed475ed 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -506,7 +506,7 @@ export function CustomFieldDefinitionEditor({
+               {/* Execution Tier */}
+               <div className="custom-field-form-group">
+                 <label htmlFor="execution-tier" className="custom-field-form-label">
+-                  Execution Tier (S13.3)
++                  Execution Sandbox (S13.3)
+                 </label>
+                 <select
+                   id="execution-tier"
+@@ -517,9 +517,14 @@ export function CustomFieldDefinitionEditor({
+                   }}
+                   data-testid="execution-tier-select"
+                 >
+-                  <option value="wasm">Tier A: Wasmtime (Sub-millisecond Wasm)</option>
+-                  <option value="nsjail">Tier B: nsjail (Linux Isolated Cgroup)</option>
++                  <option value="wasm">Built-in Formula Sandbox (WebAssembly)</option>
++                  <option value="nsjail">Isolated Process & CLI Sandbox (Linux Namespaces)</option>
+                 </select>
++                <div className="custom-field-form-hint">
++                  {tier === 'wasm'
++                    ? 'Runs fast custom field formulas and workflow checks in-memory with zero network or filesystem access (Always active).'
++                    : 'Runs full Python/CLI scripts and local CLI transition agents with isolated Linux namespaces and allowlisted HTTP egress.'}
++                </div>
+               </div>
+ 
+               {/* Target Scope */}
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx b/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx
+index 58e1866..0e0f9f3 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldsRailSection.tsx
+@@ -27,7 +27,7 @@ const ERROR_CODE_MAP: Record<string, string> = {
+   SCRIPT_TIMEOUT: 'Timed out',
+   SCRIPT_FUEL_EXHAUSTED: 'Compute limit reached',
+   APPROVAL_REVOKED: 'Approval revoked - admin re-sign required',
+-  SANDBOX_UNAVAILABLE_IN_STANDALONE: 'Tier B unavailable in standalone',
++  SANDBOX_UNAVAILABLE_IN_STANDALONE: 'Optional CLI Sandbox not enabled in single-container mode',
+ };
+ 
+ function mapServerErrorCode(errorCode?: string): string {
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
+index f881265..73fbf69 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
+@@ -254,7 +254,7 @@ describe('CustomFieldsRailSection', () => {
+       { code: 'SCRIPT_FUEL_EXHAUSTED', expected: 'Compute limit reached' },
+       {
+         code: 'SANDBOX_UNAVAILABLE_IN_STANDALONE',
+-        expected: 'Tier B unavailable in standalone',
++        expected: 'Optional CLI Sandbox not enabled in single-container mode',
+       },
+       { code: 'INTERNAL_EXCEPTION_XYZ', expected: 'Unavailable' },
+     ];
+diff --git a/kanban/web/src/features/standalone/ComposeExportTab.tsx b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+index a45fbbe..d01129a 100644
+--- a/kanban/web/src/features/standalone/ComposeExportTab.tsx
++++ b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+@@ -11,6 +11,7 @@ export interface ComposeExportData {
+   readonly compose_yaml: string;
+   readonly env_template: string;
+   readonly migration_steps_markdown: string;
++  readonly single_container_compose_yaml?: string;
+ }
+ 
+ export interface ComposeExportTabProps {
+@@ -25,6 +26,7 @@ export function ComposeExportTab({
+   const [error, setError] = useState<string | null>(null);
+   const [copiedEnv, setCopiedEnv] = useState<boolean>(false);
+   const [isDownloading, setIsDownloading] = useState<boolean>(false);
++  const [composeMode, setComposeMode] = useState<'multi' | 'single'>('multi');
+ 
+   const fetchExportData = useCallback(async (): Promise<ComposeExportData | null> => {
+     setIsLoading(true);
+@@ -66,13 +68,20 @@ export function ComposeExportTab({
+       if (!exportData) {
+         return;
+       }
+-      const blob = new Blob([exportData.compose_yaml], {
++      const yamlContent =
++        composeMode === 'single' && exportData.single_container_compose_yaml
++          ? exportData.single_container_compose_yaml
++          : exportData.compose_yaml;
++      const downloadFilename =
++        composeMode === 'single' ? 'docker-compose.standalone.yml' : exportData.filename || 'docker-compose.yml';
++
++      const blob = new Blob([yamlContent], {
+         type: 'application/x-yaml;charset=utf-8',
+       });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement('a');
+       a.href = url;
+-      a.download = exportData.filename || 'docker-compose.yml';
++      a.download = downloadFilename;
+       document.body.appendChild(a);
+       a.click();
+       document.body.removeChild(a);
+@@ -115,41 +124,77 @@ export function ComposeExportTab({
+         </div>
+       )}
+ 
+-      <div className="standalone-panel__btn-group">
++      {/* Mode Selector */}
++      <div className="standalone-panel__compose-mode-toggle" role="group" aria-label="Compose template mode">
+         <button
+           type="button"
+-          onClick={() => {
+-            void handleDownload();
+-          }}
+-          disabled={isLoading || isDownloading}
+-          className="standalone-panel__btn standalone-panel__btn--primary"
++          className={`standalone-panel__tab-btn ${composeMode === 'multi' ? 'standalone-panel__tab-btn--active' : ''}`}
++          onClick={() => { setComposeMode('multi'); }}
++        >
++          Multi-Container Stack (Production)
++        </button>
++        <button
++          type="button"
++          className={`standalone-panel__tab-btn ${composeMode === 'single' ? 'standalone-panel__tab-btn--active' : ''}`}
++          onClick={() => { setComposeMode('single'); }}
+         >
+-          {isDownloading ? 'Downloading...' : 'Download docker-compose.yml'}
++          Single-Container (Standalone)
+         </button>
++      </div>
+ 
++      <div className="standalone-panel__btn-group">
+         <button
+           type="button"
+           onClick={() => {
+-            void handleCopyEnv();
++            void handleDownload();
+           }}
+-          disabled={isLoading}
+-          className="standalone-panel__btn standalone-panel__btn--secondary"
++          disabled={isLoading || isDownloading}
++          className="standalone-panel__btn standalone-panel__btn--primary"
+         >
+-          {copiedEnv ? 'Copied!' : 'Copy .env.example'}
++          {isDownloading
++            ? 'Downloading...'
++            : composeMode === 'single'
++              ? 'Download docker-compose.standalone.yml'
++              : 'Download docker-compose.yml'}
+         </button>
++
++        {composeMode === 'multi' && (
++          <button
++            type="button"
++            onClick={() => {
++              void handleCopyEnv();
++            }}
++            disabled={isLoading}
++            className="standalone-panel__btn standalone-panel__btn--secondary"
++          >
++            {copiedEnv ? 'Copied!' : 'Copy .env.example'}
++          </button>
++        )}
+       </div>
+ 
+-      <div className="standalone-panel__checklist-card">
+-        <h4 className="standalone-panel__checklist-title">
+-          PostgreSQL 16 Promotion Runbook:
+-        </h4>
+-        <pre className="standalone-panel__checklist-pre">
++      {composeMode === 'multi' ? (
++        <div className="standalone-panel__checklist-card">
++          <h4 className="standalone-panel__checklist-title">
++            PostgreSQL 16 Promotion Runbook:
++          </h4>
++          <pre className="standalone-panel__checklist-pre">
+ {`1. Generate secrets
+-2. Download encrypted backup (.kbkp)
++2. Download encrypted backup (.kbbak)
+ 3. docker compose up -d postgres
+ 4. kanban-ctl restore / pg_restore into external PostgreSQL 16`}
+-        </pre>
+-      </div>
++          </pre>
++        </div>
++      ) : (
++        <div className="standalone-panel__checklist-card">
++          <h4 className="standalone-panel__checklist-title">
++            Single-Container Standalone Spec:
++          </h4>
++          <pre className="standalone-panel__checklist-pre">
++{`Runs 👍kanban and embedded PostgreSQL in a single container with a persistent volume named kanban_data.
++Run with: docker compose -f docker-compose.standalone.yml up -d`}
++          </pre>
++        </div>
++      )}
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.css b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+index 21bca11..ce25d7a 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.css
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+@@ -1,6 +1,7 @@
+ /**
+- * Standalone Status Panel & Compose Export Styles (KB-P3-52, S2.2, S6.1).
++ * Standalone Status Panel & Compose Export Styles (KB-P3-52, S2.2, S6.1, KANBA-188).
+  * Breathable, accessible layout with strict CSP compliance (zero inline styles).
++ * Adheres strictly to canonical theme and token variables.
+  */
+ 
+ .standalone-panel__backdrop {
+@@ -16,8 +17,8 @@
+   top: 50%;
+   left: 50%;
+   transform: translate(-50%, -50%);
+-  width: min(640px, 100vw - 32px);
+-  max-height: min(720px, 90vh);
++  width: min(720px, 100vw - 32px);
++  max-height: min(840px, 92vh);
+   background-color: var(--bg-surface-raised, #ffffff);
+   color: var(--fg-primary, #111827);
+   border: 1px solid var(--border-subtle, #e5e7eb);
+@@ -26,7 +27,7 @@
+   padding: var(--space-6, 24px);
+   display: flex;
+   flex-direction: column;
+-  gap: var(--space-6, 24px);
++  gap: var(--space-4, 16px);
+   overflow-y: auto;
+   z-index: 1001;
+   box-sizing: border-box;
+@@ -38,7 +39,7 @@
+   align-items: center;
+   justify-content: space-between;
+   border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+-  padding-bottom: var(--space-4, 16px);
++  padding-bottom: var(--space-3, 12px);
+ }
+ 
+ .standalone-panel__title {
+@@ -69,13 +70,74 @@
+   outline: 2px solid var(--focus-ring, #2563eb);
+ }
+ 
+-/* Section 1: Warning Banner & Storage Health */
++/* 3-Tab Bar */
++.standalone-panel__tabs {
++  display: flex;
++  gap: var(--space-2, 8px);
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++  padding-bottom: var(--space-2, 8px);
++  overflow-x: auto;
++}
++
++.standalone-panel__tab-btn {
++  background: none;
++  border: none;
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  font-size: 0.875rem;
++  font-weight: 500;
++  color: var(--fg-muted, #525866);
++  border-radius: var(--radius-sm, 4px);
++  cursor: pointer;
++  white-space: nowrap;
++  transition: background-color 0.15s ease, color 0.15s ease;
++}
++
++.standalone-panel__tab-btn:hover {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-primary, #111827);
++}
++
++.standalone-panel__tab-btn--active {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--accent-primary, #1d4ed8);
++  font-weight: 600;
++}
++
++.standalone-panel__tabpanel {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 16px);
++}
++
++.standalone-panel__tabpanel--hidden {
++  display: none;
++}
++
++/* Section Containers & Cards */
+ .standalone-panel__section {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 16px);
++}
++
++.standalone-panel__subcard {
++  background-color: var(--bg-canvas, #f7f8fa);
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-4, 16px);
+   display: flex;
+   flex-direction: column;
+   gap: var(--space-3, 12px);
+ }
+ 
++.standalone-panel__section-title {
++  margin: 0;
++  font-size: 1rem;
++  font-weight: 600;
++  color: var(--fg-primary, #111827);
++}
++
++/* Warnings and Badges */
+ .standalone-panel__warn-banner {
+   background-color: var(--warn-bg, #fef3c7);
+   color: var(--warn-fg, #78350f);
+@@ -85,8 +147,8 @@
+   display: flex;
+   flex-direction: column;
+   gap: var(--space-3, 12px);
+-  font-size: var(--text-body, 0.9375rem);
+-  line-height: var(--leading-prose, 1.73);
++  font-size: 0.9375rem;
++  line-height: 1.5;
+ }
+ 
+ .standalone-panel__warn-text {
+@@ -105,7 +167,7 @@
+ }
+ 
+ .standalone-panel__code-block code {
+-  font-family: var(--font-mono, monospace);
++  font-family: monospace;
+   font-size: 0.8125rem;
+   color: inherit;
+   word-break: break-all;
+@@ -134,36 +196,70 @@
+ .standalone-panel__badge-detail {
+   color: var(--fg-secondary, #4b5563);
+   font-size: 0.875rem;
+-  font-family: var(--font-mono, monospace);
++  font-family: monospace;
+ }
+ 
+-.standalone-panel__sandbox-row {
++/* Capability Cards */
++.standalone-panel__sandbox-cards {
+   display: flex;
+-  flex-wrap: wrap;
+-  gap: var(--space-4, 16px);
+-  font-size: 0.8125rem;
+-  color: var(--fg-muted, #525866);
+-  padding: var(--space-1, 4px) var(--space-2, 8px);
++  flex-direction: column;
++  gap: var(--space-3, 12px);
+ }
+ 
+-.standalone-panel__sandbox-item {
+-  display: inline-flex;
++.standalone-panel__capability-card {
++  background-color: var(--bg-surface, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-3, 12px) var(--space-4, 16px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++}
++
++.standalone-panel__capability-header {
++  display: flex;
+   align-items: center;
+-  gap: var(--space-1, 4px);
++  justify-content: space-between;
++  gap: var(--space-2, 8px);
+ }
+ 
+-/* Section 2: Encrypted Database Backup */
+-.standalone-panel__section-title {
+-  margin: 0;
+-  font-size: 1rem;
++.standalone-panel__capability-title {
++  font-size: 0.875rem;
+   font-weight: 600;
+   color: var(--fg-primary, #111827);
+ }
+ 
+-.standalone-panel__backup-form {
++.standalone-panel__capability-status {
++  font-size: 0.75rem;
++  font-weight: 600;
++  padding: var(--space-1, 4px) var(--space-2, 8px);
++  border-radius: var(--radius-sm, 4px);
++  text-transform: uppercase;
++}
++
++.standalone-panel__capability-status--active {
++  background-color: rgba(5, 150, 105, 0.12);
++  color: var(--ok-fg, #059669);
++}
++
++.standalone-panel__capability-status--optional {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-muted, #525866);
++}
++
++.standalone-panel__capability-desc {
++  margin: 0;
++  font-size: 0.8125rem;
++  color: var(--fg-secondary, #4b5563);
++  line-height: 1.5;
++}
++
++/* Forms and Inputs */
++.standalone-panel__backup-form,
++.standalone-panel__restore-inputs {
+   display: flex;
+   flex-direction: column;
+-  gap: var(--space-2, 8px);
++  gap: var(--space-3, 12px);
+ }
+ 
+ .standalone-panel__label {
+@@ -172,11 +268,15 @@
+   color: var(--fg-primary, #111827);
+ }
+ 
++.standalone-panel__label--danger {
++  color: var(--danger-fg, #881337);
++  font-weight: 600;
++}
++
+ .standalone-panel__input {
+   width: 100%;
+   padding: var(--space-2, 8px) var(--space-3, 12px);
+   font-size: 0.875rem;
+-  font-family: var(--font-mono, monospace);
+   background-color: var(--bg-surface, #ffffff);
+   color: var(--fg-primary, #111827);
+   border: 1px solid var(--border-strong, #d1d5db);
+@@ -192,6 +292,7 @@
+ .standalone-panel__hint {
+   font-size: 0.75rem;
+   color: var(--fg-muted, #525866);
++  line-height: 1.4;
+ }
+ 
+ .standalone-panel__error {
+@@ -203,6 +304,15 @@
+   font-size: 0.8125rem;
+ }
+ 
++.standalone-panel__success {
++  background-color: rgba(5, 150, 105, 0.12);
++  color: var(--ok-fg, #059669);
++  border: 1px solid rgba(5, 150, 105, 0.3);
++  border-radius: var(--radius-sm, 4px);
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  font-size: 0.8125rem;
++}
++
+ .standalone-panel__member-notice {
+   margin: 0;
+   font-size: 0.875rem;
+@@ -212,19 +322,102 @@
+   padding: var(--space-3, 12px) var(--space-4, 16px);
+ }
+ 
+-/* Section 3: Compose Export & Buttons */
+-.standalone-panel__compose-container {
++/* Schedule & Snapshots Grid */
++.standalone-panel__schedule-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
++  gap: var(--space-3, 12px);
++  align-items: center;
++}
++
++.standalone-panel__checkbox-label {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  font-size: 0.875rem;
++  font-weight: 500;
++  color: var(--fg-primary, #111827);
++  cursor: pointer;
++}
++
++.standalone-panel__field-group {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++}
++
++.standalone-panel__snapshots-list {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++  margin-top: var(--space-2, 8px);
++}
++
++.standalone-panel__snapshots-table-wrapper {
++  overflow-x: auto;
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-sm, 4px);
++}
++
++.standalone-panel__snapshots-table {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: 0.8125rem;
++}
++
++.standalone-panel__snapshots-table th,
++.standalone-panel__snapshots-table td {
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  text-align: left;
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++}
++
++.standalone-panel__snapshots-table th {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-secondary, #4b5563);
++  font-weight: 600;
++}
++
++.standalone-panel__table-link {
++  color: var(--accent-primary, #1d4ed8);
++  text-decoration: none;
++  font-weight: 500;
++}
++
++.standalone-panel__table-link:hover {
++  text-decoration: underline;
++}
++
++/* 2-Stage Verification Card */
++.standalone-panel__verified-manifest {
++  background-color: var(--bg-surface, #ffffff);
++  border: 1px solid var(--ok-fg, #059669);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-3, 12px) var(--space-4, 16px);
+   display: flex;
+   flex-direction: column;
+   gap: var(--space-3, 12px);
+ }
+ 
++.standalone-panel__destructive-form {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++}
++
++/* Buttons */
+ .standalone-panel__btn-group {
+   display: flex;
+   flex-wrap: wrap;
+   gap: var(--space-3, 12px);
+ }
+ 
++.standalone-panel__compose-mode-toggle {
++  display: flex;
++  gap: var(--space-2, 8px);
++  margin-bottom: var(--space-2, 8px);
++}
++
+ .standalone-panel__btn {
+   display: inline-flex;
+   align-items: center;
+@@ -262,6 +455,15 @@
+   background-color: var(--border-subtle, #e5e7eb);
+ }
+ 
++.standalone-panel__btn--danger {
++  background-color: var(--danger-fg, #881337);
++  color: #ffffff;
++}
++
++.standalone-panel__btn--danger:hover:not(:disabled) {
++  background-color: #9f1239;
++}
++
+ .standalone-panel__copy-btn {
+   background-color: var(--bg-surface, #ffffff);
+   color: var(--fg-primary, #111827);
+@@ -278,7 +480,7 @@
+   background-color: var(--bg-hover, #f1f3f5);
+ }
+ 
+-/* Monospace Promotion Runbook */
++/* Monospace Checklist */
+ .standalone-panel__checklist-card {
+   background-color: var(--bg-canvas, #f7f8fa);
+   border: 1px solid var(--border-subtle, #e5e7eb);
+@@ -298,7 +500,7 @@
+ 
+ .standalone-panel__checklist-pre {
+   margin: 0;
+-  font-family: var(--font-mono, monospace);
++  font-family: monospace;
+   font-size: 0.8125rem;
+   line-height: 1.5;
+   color: var(--fg-primary, #111827);
+@@ -318,12 +520,12 @@
+     border-radius: 16px 16px 0 0;
+     border-bottom: none;
+     padding: var(--space-4, 16px);
+-    gap: var(--space-4, 16px);
++    gap: var(--space-3, 12px);
+   }
+ 
+   .standalone-panel__btn,
+   .standalone-panel__copy-btn {
+-    min-height: 44px;
+-    min-width: 44px;
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
+   }
+ }
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+index 8458175..d9c6ed6 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+@@ -73,10 +73,10 @@ describe('StandaloneStatusPanel', () => {
+     ).toBeDefined();
+ 
+     // Verify sandbox disclosure
+-    expect(screen.getByText('Tier A Wasmtime: Active')).toBeDefined();
++    expect(screen.getByText('Built-in Formula Sandbox (WebAssembly)')).toBeDefined();
+     expect(
+       screen.getByText(
+-        'Tier B nsjail CLI Sandbox: Disabled in Standalone (SANDBOX_UNAVAILABLE_IN_STANDALONE)',
++        'ℹ️ Optional - Not enabled in single-container mode',
+       ),
+     ).toBeDefined();
+ 
+@@ -165,20 +165,20 @@ describe('StandaloneStatusPanel', () => {
+     let capturedHeaders: Record<string, string> = {};
+ 
+     const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+-      capturedUrl = url;
+-      if (init?.body && typeof init.body === 'string') {
+-        capturedBody = init.body;
+-      }
+-      if (init?.headers) {
+-        capturedHeaders = init.headers as Record<string, string>;
+-      }
+-      if (url.includes('/api/v1/admin/standalone/backup')) {
++      if (url.endsWith('/api/v1/admin/standalone/backup')) {
++        capturedUrl = url;
++        if (init?.body && typeof init.body === 'string') {
++          capturedBody = init.body;
++        }
++        if (init?.headers) {
++          capturedHeaders = init.headers as Record<string, string>;
++        }
+         return Promise.resolve(
+           new Response('encrypted-kbkp-octets', {
+             status: 200,
+             headers: {
+               'Content-Type': 'application/octet-stream',
+-              'Content-Disposition': 'attachment; filename="kanban-backup-20261113T120000Z.kbkp"',
++              'Content-Disposition': 'attachment; filename="kanban-backup-20261113T120000Z.kbbak"',
+             },
+           }),
+         );
+@@ -206,7 +206,7 @@ describe('StandaloneStatusPanel', () => {
+ 
+     const input = screen.getByLabelText('Backup Passphrase');
+     const submitBtn = screen.getByRole('button', {
+-      name: 'Download Encrypted Backup (.kbkp)',
++      name: 'Download Encrypted Backup (.kbbak)',
+     });
+ 
+     // 1. Initially empty passphrase: button disabled
+@@ -274,7 +274,7 @@ describe('StandaloneStatusPanel', () => {
+     );
+ 
+     const form = screen.getByRole('button', {
+-      name: 'Download Encrypted Backup (.kbkp)',
++      name: 'Download Encrypted Backup (.kbbak)',
+     }).closest('form');
+     expect(form).not.toBeNull();
+     if (!form) return;
+@@ -333,7 +333,7 @@ describe('StandaloneStatusPanel', () => {
+     );
+ 
+     const form = screen.getByRole('button', {
+-      name: 'Download Encrypted Backup (.kbkp)',
++      name: 'Download Encrypted Backup (.kbbak)',
+     }).closest('form');
+     expect(form).not.toBeNull();
+     if (!form) return;
+@@ -471,13 +471,17 @@ describe('StandaloneStatusPanel', () => {
+     );
+ 
+     // Verify active sandbox text
+-    expect(screen.getByText('Tier B nsjail CLI Sandbox: Active')).toBeDefined();
++    expect(
++      screen.getByText(
++        'Runs full Python/CLI scripts and local CLI transition agents with isolated Linux namespaces and allowlisted HTTP egress.',
++      ),
++    ).toBeDefined();
+     // Verify default 'ext4' fallback
+     expect(screen.getByText('/var/lib/kanban/data (ext4)')).toBeDefined();
+ 
+     const input = screen.getByLabelText('Backup Passphrase');
+     const submitBtn = screen.getByRole('button', {
+-      name: 'Download Encrypted Backup (.kbkp)',
++      name: 'Download Encrypted Backup (.kbbak)',
+     });
+     fireEvent.change(input, { target: { value: 'passphrase-without-csrf-16' } });
+ 
+@@ -519,7 +523,7 @@ describe('StandaloneStatusPanel', () => {
+     // 2. Submit backup with string throw
+     const input = screen.getByLabelText('Backup Passphrase');
+     const submitBtn = screen.getByRole('button', {
+-      name: 'Download Encrypted Backup (.kbkp)',
++      name: 'Download Encrypted Backup (.kbbak)',
+     });
+     fireEvent.change(input, { target: { value: 'passphrase-string-err-16' } });
+     await act(async () => {
+@@ -577,7 +581,7 @@ describe('StandaloneStatusPanel', () => {
+     });
+ 
+     const form = screen.getByRole('button', {
+-      name: 'Download Encrypted Backup (.kbkp)',
++      name: 'Download Encrypted Backup (.kbbak)',
+     }).closest('form');
+     expect(form).not.toBeNull();
+     if (!form) return;
+@@ -619,6 +623,131 @@ describe('StandaloneStatusPanel', () => {
+       configurable: true,
+     });
+   });
++
++  it('switches between 3 tabs and renders respective panels', () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={adminStatus} />
++      </QueryClientProvider>,
++    );
++
++    // Initial tab: Health
++    const healthTab = screen.getByRole('tab', { name: 'Storage & Capabilities Health' });
++    const backupTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
++    const composeTab = screen.getByRole('tab', { name: 'Docker Compose Export' });
++
++    expect(healthTab.getAttribute('aria-selected')).toBe('true');
++    expect(backupTab.getAttribute('aria-selected')).toBe('false');
++
++    // Switch to Backup tab
++    act(() => {
++      fireEvent.click(backupTab);
++    });
++    expect(backupTab.getAttribute('aria-selected')).toBe('true');
++    expect(screen.getByText('Manual Encrypted Backup (.kbbak)')).toBeDefined();
++
++    // Switch to Compose tab
++    act(() => {
++      fireEvent.click(composeTab);
++    });
++    expect(composeTab.getAttribute('aria-selected')).toBe('true');
++    expect(screen.getByText('Production Compose Export & Promotion')).toBeDefined();
++  });
++
++  it('tests 2-stage restore flow requiring RESTORE confirmation', async () => {
++    let restoreSubmitted = false;
++    const mockFetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/backup/verify')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              valid: true,
++              manifest: { format_version: 1, pg_server_version: '16', alembic_revision: 'head' },
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/restore')) {
++        restoreSubmitted = true;
++        return Promise.resolve(
++          new Response(JSON.stringify({ status: 'success' }), {
++            status: 200,
++            headers: { 'Content-Type': 'application/json' },
++          }),
++        );
++      }
++      return Promise.resolve(new Response('[]', { status: 200 }));
++    });
++    global.fetch = mockFetch;
++
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    // Verify step with a file
++    const fileInput = screen.getByLabelText(/Upload Backup Archive/);
++    const mockFile = new File(['mock-backup-octets'], 'test.kbbak', { type: 'application/octet-stream' });
++    fireEvent.change(fileInput, { target: { files: [mockFile] } });
++
++    const verifyBtn = screen.getByRole('button', { name: /Step 1: Verify Backup Archive/ });
++    await act(async () => {
++      fireEvent.click(verifyBtn);
++      await Promise.resolve();
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
++    });
++
++    // Step 2: Destructive confirmation
++    const confirmInput = screen.getByPlaceholderText('RESTORE');
++    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/ });
++
++    // Disabled initially
++    expect(restoreBtn.hasAttribute('disabled')).toBe(true);
++
++    // Type incorrect text
++    fireEvent.change(confirmInput, { target: { value: 'yes' } });
++    expect(restoreBtn.hasAttribute('disabled')).toBe(true);
++
++    // Type RESTORE exactly
++    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
++    expect(restoreBtn.hasAttribute('disabled')).toBe(false);
++
++    // Submit restore
++    await act(async () => {
++      fireEvent.click(restoreBtn);
++      await Promise.resolve();
++    });
++
++    await waitFor(() => {
++      expect(restoreSubmitted).toBe(true);
++      expect(screen.getByText(/Database restored successfully/)).toBeDefined();
++    });
++  });
+ });
+ 
+ describe('ComposeExportTab', () => {
+@@ -756,7 +885,7 @@ describe('ComposeExportTab', () => {
+     expect(screen.getByText('PostgreSQL 16 Promotion Runbook:')).toBeDefined();
+     const checklistPre = screen.getByText(/1\. Generate secrets/);
+     expect(checklistPre.textContent).toContain('1. Generate secrets');
+-    expect(checklistPre.textContent).toContain('2. Download encrypted backup (.kbkp)');
++    expect(checklistPre.textContent).toContain('2. Download encrypted backup (.kbbak)');
+     expect(checklistPre.textContent).toContain('3. docker compose up -d postgres');
+     expect(checklistPre.textContent).toContain(
+       '4. kanban-ctl restore / pg_restore into external PostgreSQL 16',
+@@ -851,4 +980,29 @@ describe('ComposeExportTab', () => {
+     // Clipboard write should not be called because exportData is null
+     expect(clipboardMock).not.toHaveBeenCalled();
+   });
++
++  it('supports single-container and multi-container toggle in ComposeExportTab', () => {
++    const mockData = {
++      filename: 'docker-compose.yml',
++      compose_yaml: 'services:\n  kanban:\n    image: thumbs-up-kanban:latest\n',
++      single_container_compose_yaml: 'services:\n  standalone:\n    image: thumbs-up-kanban:latest\n',
++      env_template: 'PORT=8080\n',
++      migration_steps_markdown: '### Steps',
++    };
++
++    render(<ComposeExportTab initialData={mockData} />);
++
++    expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
++
++    // Toggle to Single-Container
++    const singleTab = screen.getByRole('button', { name: 'Single-Container (Standalone)' });
++    act(() => {
++      fireEvent.click(singleTab);
++    });
++
++    expect(
++      screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
++    ).toBeDefined();
++    expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
++  });
+ });
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+index 2c3c47e..895813f 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+@@ -1,10 +1,13 @@
+ /**
+- * Standalone Status Panel (KB-P3-52, S2.2, S2.4, S6.2).
+- * Displays live volume persistence status, sandbox availability, encrypted backup trigger,
+- * and 1-click production docker-compose.yml export.
++ * Standalone Status Panel (KB-P3-52, S2.2, S2.4, S6.2, KANBA-188).
++ * 3-Tab Studio:
++ * 1. Storage & Capabilities Health
++ * 2. Backup, Auto-Backup & Restore (2-stage verification + RESTORE gate)
++ * 3. Docker Compose Export & Promotion
+  */
+ 
+ import React, {
++  useCallback,
+   useEffect,
+   useRef,
+   useState,
+@@ -17,25 +20,79 @@ import { safeCopyToClipboard } from '../../utils/uuid';
+ import { ComposeExportTab } from './ComposeExportTab';
+ import './StandaloneStatusPanel.css';
+ 
++export type StandaloneTabId = 'health' | 'backup' | 'compose';
++
+ export interface StandaloneStatusPanelProps {
+   readonly onClose: () => void;
+   readonly arg?: unknown;
+   readonly initialStatus?: SystemStatus | null;
++  readonly initialTab?: StandaloneTabId;
++}
++
++export interface BackupScheduleState {
++  enabled: boolean;
++  interval_hours: number;
++  retention_count: number;
++  last_run_at: string | null;
++  next_run_at: string | null;
++}
++
++export interface BackupSnapshotItem {
++  filename: string;
++  size_bytes: number;
++  created_at: string;
++}
++
++export interface BackupManifestData {
++  format_version?: number;
++  created_at?: string;
++  alembic_revision?: string;
++  pg_server_version?: string;
++  attachments_count?: number;
++  [key: string]: unknown;
+ }
+ 
+ export function StandaloneStatusPanel({
+   onClose,
+   initialStatus = null,
++  initialTab = 'health',
+ }: StandaloneStatusPanelProps): JSX.Element {
+   const query = useSystemStatus();
+   const status = initialStatus ?? query.data ?? null;
+ 
++  const [activeTab, setActiveTab] = useState<StandaloneTabId>(initialTab);
+   const [copiedDockerRun, setCopiedDockerRun] = useState<boolean>(false);
++
++  // Manual Backup State
+   const [passphrase, setPassphrase] = useState<string>('');
+   const [passphraseError, setPassphraseError] = useState<string>('');
+   const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
+   const [backupError, setBackupError] = useState<string | null>(null);
+ 
++  // Auto-Backup Schedule State
++  const [schedule, setSchedule] = useState<BackupScheduleState>({
++    enabled: false,
++    interval_hours: 24,
++    retention_count: 7,
++    last_run_at: null,
++    next_run_at: null,
++  });
++  const [scheduleSaved, setScheduleSaved] = useState<boolean>(false);
++  const [snapshots, setSnapshots] = useState<BackupSnapshotItem[]>([]);
++  const [isRunningBackupNow, setIsRunningBackupNow] = useState<boolean>(false);
++
++  // Restore State (2-Stage)
++  const [restoreFile, setRestoreFile] = useState<File | null>(null);
++  const [selectedSnapshotFilename, setSelectedSnapshotFilename] = useState<string>('');
++  const [restorePassphrase, setRestorePassphrase] = useState<string>('');
++  const [isVerifying, setIsVerifying] = useState<boolean>(false);
++  const [verifiedManifest, setVerifiedManifest] = useState<BackupManifestData | null>(null);
++  const [verifyError, setVerifyError] = useState<string | null>(null);
++  const [restoreConfirmText, setRestoreConfirmText] = useState<string>('');
++  const [isRestoring, setIsRestoring] = useState<boolean>(false);
++  const [restoreError, setRestoreError] = useState<string | null>(null);
++  const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null);
++
+   const dialogRef = useRef<HTMLDivElement | null>(null);
+   const triggerRef = useRef<HTMLElement | null>(
+     typeof document !== 'undefined'
+@@ -67,7 +124,6 @@ export function StandaloneStatusPanel({
+     const dialogEl = dialogRef.current;
+     if (!dialogEl) return;
+ 
+-    // Focus close button on mount
+     const firstFocusable = dialogEl.querySelector<HTMLElement>(
+       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+     );
+@@ -105,6 +161,40 @@ export function StandaloneStatusPanel({
+     };
+   }, [onClose]);
+ 
++  // Load schedule and snapshot list for admins
++  const loadScheduleAndSnapshots = useCallback(async (): Promise<void> => {
++    if (!isServerAdmin) return;
++    try {
++      const [schedRes, snapsRes] = await Promise.all([
++        fetch('/api/v1/admin/standalone/backup-schedule', {
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        }),
++        fetch('/api/v1/admin/standalone/backups', {
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        }),
++      ]);
++      if (schedRes.ok) {
++        const schedJson = (await schedRes.json()) as BackupScheduleState;
++        setSchedule(schedJson);
++      }
++      if (snapsRes.ok) {
++        const snapsJson = (await snapsRes.json()) as BackupSnapshotItem[];
++        setSnapshots(snapsJson);
++      }
++    } catch {
++      // Ignore background load failures
++    }
++  }, [isServerAdmin]);
++
++  useEffect(() => {
++    if (activeTab === 'backup') {
++      // eslint-disable-next-line react-hooks/set-state-in-effect
++      void loadScheduleAndSnapshots();
++    }
++  }, [activeTab, loadScheduleAndSnapshots]);
++
+   const handleCopyDockerRun = async (): Promise<void> => {
+     try {
+       const success = await safeCopyToClipboard(
+@@ -164,7 +254,7 @@ export function StandaloneStatusPanel({
+       }
+ 
+       const disposition = res.headers.get('content-disposition') ?? '';
+-      let filename = 'kanban-backup.kbkp';
++      let filename = 'kanban-backup.kbbak';
+       const match = /filename=["']?([^"';]+)["']?/.exec(disposition);
+       if (match?.[1]) {
+         filename = match[1];
+@@ -181,6 +271,7 @@ export function StandaloneStatusPanel({
+       URL.revokeObjectURL(url);
+ 
+       setPassphrase('');
++      void loadScheduleAndSnapshots();
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Backup export failed';
+       setBackupError(msg);
+@@ -189,6 +280,194 @@ export function StandaloneStatusPanel({
+     }
+   };
+ 
++  const handleSaveSchedule = async (): Promise<void> => {
++    try {
++      const csrf = getCsrfToken();
++      const headers: Record<string, string> = {
++        'Content-Type': 'application/json',
++        Accept: 'application/json',
++      };
++      if (csrf) headers['X-CSRF-Token'] = csrf;
++
++      const res = await fetch('/api/v1/admin/standalone/backup-schedule', {
++        method: 'PUT',
++        headers,
++        credentials: 'same-origin',
++        body: JSON.stringify({
++          enabled: schedule.enabled,
++          interval_hours: schedule.interval_hours,
++          retention_count: schedule.retention_count,
++        }),
++      });
++
++      if (res.ok) {
++        const updated = (await res.json()) as BackupScheduleState;
++        setSchedule(updated);
++        setScheduleSaved(true);
++        setTimeout(() => { setScheduleSaved(false); }, 2500);
++      }
++    } catch {
++      // Ignore save error
++    }
++  };
++
++  const handleRunBackupNow = async (): Promise<void> => {
++    setIsRunningBackupNow(true);
++    try {
++      const csrf = getCsrfToken();
++      const headers: Record<string, string> = {
++        Accept: 'application/json',
++      };
++      if (csrf) headers['X-CSRF-Token'] = csrf;
++
++      const res = await fetch('/api/v1/admin/standalone/backups/run-now', {
++        method: 'POST',
++        headers,
++        credentials: 'same-origin',
++      });
++      if (res.ok) {
++        void loadScheduleAndSnapshots();
++      }
++    } catch {
++      // Handled
++    } finally {
++      setIsRunningBackupNow(false);
++    }
++  };
++
++  const handleVerifyBackup = async (): Promise<void> => {
++    setIsVerifying(true);
++    setVerifyError(null);
++    setVerifiedManifest(null);
++
++    try {
++      const csrf = getCsrfToken();
++      let res: Response;
++
++      if (restoreFile) {
++        const formData = new FormData();
++        formData.append('file', restoreFile);
++        if (restorePassphrase) {
++          formData.append('passphrase', restorePassphrase);
++        }
++        const headers: Record<string, string> = {};
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        res = await fetch('/api/v1/admin/standalone/backup/verify', {
++          method: 'POST',
++          headers,
++          credentials: 'same-origin',
++          body: formData,
++        });
++      } else if (selectedSnapshotFilename) {
++        const headers: Record<string, string> = {
++          'Content-Type': 'application/json',
++          Accept: 'application/json',
++        };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        res = await fetch('/api/v1/admin/standalone/backup/verify', {
++          method: 'POST',
++          headers,
++          credentials: 'same-origin',
++          body: JSON.stringify({
++            filename: selectedSnapshotFilename,
++            passphrase: restorePassphrase || undefined,
++          }),
++        });
++      } else {
++        throw new Error('Please select an existing snapshot or upload a backup file');
++      }
++
++      if (!res.ok) {
++        const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
++        throw new Error(errJson.detail ?? `Verification failed (${String(res.status)})`);
++      }
++
++      const verifyData = (await res.json()) as {
++        valid: boolean;
++        manifest?: BackupManifestData;
++        format?: string;
++      };
++      if (verifyData.manifest) {
++        setVerifiedManifest(verifyData.manifest);
++      } else {
++        setVerifiedManifest({ format_version: 1, created_at: new Date().toISOString() });
++      }
++    } catch (err) {
++      setVerifyError(err instanceof Error ? err.message : 'Backup verification failed');
++    } finally {
++      setIsVerifying(false);
++    }
++  };
++
++  const handleRestoreSubmit = async (e: SyntheticEvent): Promise<void> => {
++    e.preventDefault();
++    if (restoreConfirmText !== 'RESTORE') {
++      setRestoreError('You must type RESTORE exactly to confirm destructive database overwrite');
++      return;
++    }
++
++    setIsRestoring(true);
++    setRestoreError(null);
++    setRestoreSuccess(null);
++
++    try {
++      const csrf = getCsrfToken();
++      let res: Response;
++
++      if (restoreFile) {
++        const formData = new FormData();
++        formData.append('file', restoreFile);
++        formData.append('confirm_overwrite', 'RESTORE');
++        if (restorePassphrase) {
++          formData.append('passphrase', restorePassphrase);
++        }
++        const headers: Record<string, string> = {};
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        res = await fetch('/api/v1/admin/standalone/restore', {
++          method: 'POST',
++          headers,
++          credentials: 'same-origin',
++          body: formData,
++        });
++      } else if (selectedSnapshotFilename) {
++        const headers: Record<string, string> = {
++          'Content-Type': 'application/json',
++          Accept: 'application/json',
++        };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        res = await fetch('/api/v1/admin/standalone/restore', {
++          method: 'POST',
++          headers,
++          credentials: 'same-origin',
++          body: JSON.stringify({
++            filename: selectedSnapshotFilename,
++            passphrase: restorePassphrase || undefined,
++            confirm_overwrite: 'RESTORE',
++          }),
++        });
++      } else {
++        throw new Error('Please select a backup file or snapshot to restore');
++      }
++
++      if (!res.ok) {
++        const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
++        throw new Error(errJson.detail ?? `Restore failed (${String(res.status)})`);
++      }
++
++      setRestoreSuccess('Database restored successfully! Invariants, roles, and schema verified.');
++      setRestoreConfirmText('');
++      setVerifiedManifest(null);
++    } catch (err) {
++      setRestoreError(err instanceof Error ? err.message : 'Database restore failed');
++    } finally {
++      setIsRestoring(false);
++    }
++  };
++
+   return (
+     <>
+       <div
+@@ -205,7 +484,7 @@ export function StandaloneStatusPanel({
+       >
+         {/* Header */}
+         <div className="standalone-panel__header">
+-          <h2 className="standalone-panel__title">Standalone deployment status</h2>
++          <h2 className="standalone-panel__title">System Storage, Backups & Deployment</h2>
+           <button
+             type="button"
+             className="standalone-panel__close"
+@@ -216,131 +495,453 @@ export function StandaloneStatusPanel({
+           </button>
+         </div>
+ 
+-        {/* Section 1: Storage & Sandbox Health */}
+-        <div className="standalone-panel__section">
+-          {!isPersistent ? (
+-            <div className="standalone-panel__warn-banner" role="alert">
+-              <div className="standalone-panel__warn-text">
+-                Ephemeral Storage Detected (overlayfs): Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
++        {/* Tab Navigation */}
++        <div className="standalone-panel__tabs" role="tablist" aria-label="System status sections">
++          <button
++            type="button"
++            role="tab"
++            id="tab-health"
++            aria-selected={activeTab === 'health'}
++            aria-controls="panel-health"
++            className={`standalone-panel__tab-btn ${activeTab === 'health' ? 'standalone-panel__tab-btn--active' : ''}`}
++            onClick={() => { setActiveTab('health'); }}
++          >
++            Storage & Capabilities Health
++          </button>
++          <button
++            type="button"
++            role="tab"
++            id="tab-backup"
++            aria-selected={activeTab === 'backup'}
++            aria-controls="panel-backup"
++            className={`standalone-panel__tab-btn ${activeTab === 'backup' ? 'standalone-panel__tab-btn--active' : ''}`}
++            onClick={() => { setActiveTab('backup'); }}
++          >
++            Backup, Auto-Backup & Restore
++          </button>
++          {isServerAdmin && (
++            <button
++              type="button"
++              role="tab"
++              id="tab-compose"
++              aria-selected={activeTab === 'compose'}
++              aria-controls="panel-compose"
++              className={`standalone-panel__tab-btn ${activeTab === 'compose' ? 'standalone-panel__tab-btn--active' : ''}`}
++              onClick={() => { setActiveTab('compose'); }}
++            >
++              Docker Compose Export
++            </button>
++          )}
++        </div>
++
++        {/* Tab 1: Storage & Capabilities Health */}
++        <div
++          role="tabpanel"
++          id="panel-health"
++          aria-labelledby="tab-health"
++          className={`standalone-panel__tabpanel ${activeTab !== 'health' ? 'standalone-panel__tabpanel--hidden' : ''}`}
++        >
++          <div className="standalone-panel__section">
++            {!isPersistent ? (
++              <div className="standalone-panel__warn-banner" role="alert">
++                <div className="standalone-panel__warn-text">
++                  Ephemeral Storage Detected (overlayfs): Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
++                </div>
++                <div className="standalone-panel__code-block">
++                  <code>
++                    docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest
++                  </code>
++                  <button
++                    type="button"
++                    className="standalone-panel__copy-btn"
++                    onClick={() => {
++                      void handleCopyDockerRun();
++                    }}
++                  >
++                    {copiedDockerRun ? 'Copied!' : 'Copy docker run command'}
++                  </button>
++                </div>
+               </div>
+-              <div className="standalone-panel__code-block">
+-                <code>
+-                  docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest
+-                </code>
+-                <button
+-                  type="button"
+-                  className="standalone-panel__copy-btn"
+-                  onClick={() => {
+-                    void handleCopyDockerRun();
+-                  }}
+-                >
+-                  {copiedDockerRun ? 'Copied!' : 'Copy docker run command'}
+-                </button>
++            ) : (
++              <div className="standalone-panel__persistent-badge">
++                <span className="standalone-panel__badge-icon" aria-hidden="true">
++                  ✓
++                </span>
++                <span className="standalone-panel__badge-title">
++                  Persistent Volume Mounted
++                </span>
++                <span className="standalone-panel__badge-detail">
++                  {isServerAdmin && status?.data_mount_point
++                    ? `${status.data_mount_point} (${status.data_mount_fstype ?? 'ext4'})`
++                    : 'Persistent volume verified'}
++                </span>
++              </div>
++            )}
++
++            <div className="standalone-panel__sandbox-cards">
++              <div className="standalone-panel__capability-card">
++                <div className="standalone-panel__capability-header">
++                  <span className="standalone-panel__capability-title">
++                    Built-in Formula Sandbox (WebAssembly)
++                  </span>
++                  <span className="standalone-panel__capability-status standalone-panel__capability-status--active">
++                    Always Active
++                  </span>
++                </div>
++                <p className="standalone-panel__capability-desc">
++                  Runs fast custom field formulas and workflow checks in-memory with zero network or filesystem access (Always active).
++                </p>
+               </div>
+-            </div>
+-          ) : (
+-            <div className="standalone-panel__persistent-badge">
+-              <span className="standalone-panel__badge-icon" aria-hidden="true">
+-                ✓
+-              </span>
+-              <span className="standalone-panel__badge-title">
+-                Persistent Volume Mounted
+-              </span>
+-              <span className="standalone-panel__badge-detail">
+-                {isServerAdmin && status?.data_mount_point
+-                  ? `${status.data_mount_point} (${status.data_mount_fstype ?? 'ext4'})`
+-                  : 'Persistent volume verified'}
+-              </span>
+-            </div>
+-          )}
+ 
+-          <div className="standalone-panel__sandbox-row">
+-            <span className="standalone-panel__sandbox-item">
+-              Tier A Wasmtime: Active
+-            </span>
+-            <span className="standalone-panel__sandbox-item">
+-              {tierBSandbox
+-                ? 'Tier B nsjail CLI Sandbox: Active'
+-                : 'Tier B nsjail CLI Sandbox: Disabled in Standalone (SANDBOX_UNAVAILABLE_IN_STANDALONE)'}
+-            </span>
++              <div className="standalone-panel__capability-card">
++                <div className="standalone-panel__capability-header">
++                  <span className="standalone-panel__capability-title">
++                    Isolated Process & CLI Sandbox (Linux Namespaces)
++                  </span>
++                  <span
++                    className={`standalone-panel__capability-status ${
++                      tierBSandbox
++                        ? 'standalone-panel__capability-status--active'
++                        : 'standalone-panel__capability-status--optional'
++                    }`}
++                  >
++                    {tierBSandbox ? 'Active' : 'Optional'}
++                  </span>
++                </div>
++                <p className="standalone-panel__capability-desc">
++                  {tierBSandbox
++                    ? 'Runs full Python/CLI scripts and local CLI transition agents with isolated Linux namespaces and allowlisted HTTP egress.'
++                    : 'ℹ️ Optional - Not enabled in single-container mode'}
++                </p>
++              </div>
++            </div>
+           </div>
+         </div>
+ 
+-        {/* Section 2: Encrypted Database Backup */}
+-        {isServerAdmin ? (
+-          <div className="standalone-panel__section">
+-            <h3 className="standalone-panel__section-title">
+-              Encrypted Database Backup
+-            </h3>
+-            <form
+-              onSubmit={(e) => {
+-                void handleBackupSubmit(e);
+-              }}
+-              className="standalone-panel__backup-form"
+-            >
+-              <label
+-                htmlFor="backup-passphrase"
+-                className="standalone-panel__label"
+-              >
+-                Backup Passphrase
+-              </label>
+-              <input
+-                id="backup-passphrase"
+-                type="password"
+-                autoComplete="new-password"
+-                minLength={16}
+-                value={passphrase}
+-                onChange={(e) => {
+-                  setPassphrase(e.target.value);
+-                  if (passphraseError && e.target.value.length >= 16) {
+-                    setPassphraseError('');
+-                  }
+-                }}
+-                className="standalone-panel__input"
+-                placeholder="Enter passphrase (min 16 characters)"
+-              />
+-              <div className="standalone-panel__hint">
+-                Minimum 16 characters; never stored on server
++        {/* Tab 2: Backup, Auto-Backup & Restore */}
++        <div
++          role="tabpanel"
++          id="panel-backup"
++          aria-labelledby="tab-backup"
++          className={`standalone-panel__tabpanel ${activeTab !== 'backup' ? 'standalone-panel__tabpanel--hidden' : ''}`}
++        >
++          {isServerAdmin ? (
++            <div className="standalone-panel__section">
++              {/* Subsection A: Manual Database Backup */}
++              <div className="standalone-panel__subcard">
++                <h3 className="standalone-panel__section-title">Manual Encrypted Backup (.kbbak)</h3>
++                <form
++                  onSubmit={(e) => {
++                    void handleBackupSubmit(e);
++                  }}
++                  className="standalone-panel__backup-form"
++                >
++                  <label htmlFor="backup-passphrase" className="standalone-panel__label">
++                    Backup Passphrase
++                  </label>
++                  <input
++                    id="backup-passphrase"
++                    type="password"
++                    autoComplete="new-password"
++                    minLength={16}
++                    value={passphrase}
++                    onChange={(e) => {
++                      setPassphrase(e.target.value);
++                      if (passphraseError && e.target.value.length >= 16) {
++                        setPassphraseError('');
++                      }
++                    }}
++                    className="standalone-panel__input"
++                    placeholder="Enter passphrase (min 16 characters)"
++                  />
++                  <div className="standalone-panel__hint">
++                    Minimum 16 characters; never stored on server
++                  </div>
++
++                  {passphraseError && (
++                    <div role="alert" className="standalone-panel__error">
++                      {passphraseError}
++                    </div>
++                  )}
++
++                  {backupError && (
++                    <div role="alert" className="standalone-panel__error">
++                      {backupError}
++                    </div>
++                  )}
++
++                  <button
++                    type="submit"
++                    className="standalone-panel__btn standalone-panel__btn--primary"
++                    disabled={isBackingUp || passphrase.length < 16}
++                  >
++                    {isBackingUp ? 'Exporting Backup...' : 'Download Encrypted Backup (.kbbak)'}
++                  </button>
++                </form>
+               </div>
+ 
+-              {passphraseError && (
+-                <div role="alert" className="standalone-panel__error">
+-                  {passphraseError}
++              {/* Subsection B: Automated Scheduled Backups */}
++              <div className="standalone-panel__subcard">
++                <h3 className="standalone-panel__section-title">Automated Scheduled Backups</h3>
++                <div className="standalone-panel__schedule-grid">
++                  <label className="standalone-panel__checkbox-label">
++                    <input
++                      type="checkbox"
++                      checked={schedule.enabled}
++                      onChange={(e) => {
++                        setSchedule((prev) => ({ ...prev, enabled: e.target.checked }));
++                      }}
++                    />
++                    <span>Enable Automated Backups</span>
++                  </label>
++
++                  <div className="standalone-panel__field-group">
++                    <label htmlFor="schedule-interval" className="standalone-panel__label">
++                      Backup Interval (hours)
++                    </label>
++                    <input
++                      id="schedule-interval"
++                      type="number"
++                      min={1}
++                      max={168}
++                      value={schedule.interval_hours}
++                      onChange={(e) => {
++                        setSchedule((prev) => ({
++                          ...prev,
++                          interval_hours: Math.max(1, parseInt(e.target.value, 10) || 24),
++                        }));
++                      }}
++                      className="standalone-panel__input"
++                    />
++                  </div>
++
++                  <div className="standalone-panel__field-group">
++                    <label htmlFor="schedule-retention" className="standalone-panel__label">
++                      Keep Latest Snapshots
++                    </label>
++                    <input
++                      id="schedule-retention"
++                      type="number"
++                      min={1}
++                      max={90}
++                      value={schedule.retention_count}
++                      onChange={(e) => {
++                        setSchedule((prev) => ({
++                          ...prev,
++                          retention_count: Math.max(1, parseInt(e.target.value, 10) || 7),
++                        }));
++                      }}
++                      className="standalone-panel__input"
++                    />
++                  </div>
+                 </div>
+-              )}
+ 
+-              {backupError && (
+-                <div role="alert" className="standalone-panel__error">
+-                  {backupError}
++                <div className="standalone-panel__btn-group">
++                  <button
++                    type="button"
++                    onClick={() => { void handleSaveSchedule(); }}
++                    className="standalone-panel__btn standalone-panel__btn--secondary"
++                  >
++                    {scheduleSaved ? 'Schedule Saved!' : 'Save Schedule'}
++                  </button>
++                  <button
++                    type="button"
++                    onClick={() => { void handleRunBackupNow(); }}
++                    disabled={isRunningBackupNow}
++                    className="standalone-panel__btn standalone-panel__btn--secondary"
++                  >
++                    {isRunningBackupNow ? 'Running Backup...' : 'Run Backup Now'}
++                  </button>
+                 </div>
+-              )}
+-
+-              <button
+-                type="submit"
+-                className="standalone-panel__btn standalone-panel__btn--primary"
+-                disabled={isBackingUp || passphrase.length < 16}
+-              >
+-                {isBackingUp
+-                  ? 'Exporting Backup...'
+-                  : 'Download Encrypted Backup (.kbkp)'}
+-              </button>
+-            </form>
+-          </div>
+-        ) : (
+-          <div className="standalone-panel__section">
+-            <p className="standalone-panel__member-notice">
+-              Contact a Server Administrator to export backups or promote this instance.
+-            </p>
+-          </div>
+-        )}
+ 
+-        {/* Section 3: Compose Export (SERVER_ADMIN only) */}
++                {snapshots.length > 0 && (
++                  <div className="standalone-panel__snapshots-list">
++                    <h4 className="standalone-panel__checklist-title">Existing Server Snapshots:</h4>
++                    <div className="standalone-panel__snapshots-table-wrapper">
++                      <table className="standalone-panel__snapshots-table">
++                        <thead>
++                          <tr>
++                            <th>Filename</th>
++                            <th>Size</th>
++                            <th>Created</th>
++                            <th>Action</th>
++                          </tr>
++                        </thead>
++                        <tbody>
++                          {snapshots.map((s) => (
++                            <tr key={s.filename}>
++                              <td>{s.filename}</td>
++                              <td>{(s.size_bytes / 1024).toFixed(1)} KB</td>
++                              <td>{new Date(s.created_at).toLocaleString()}</td>
++                              <td>
++                                <a
++                                  href={`/api/v1/admin/standalone/backups/${s.filename}`}
++                                  download={s.filename}
++                                  className="standalone-panel__table-link"
++                                >
++                                  Download
++                                </a>
++                              </td>
++                            </tr>
++                          ))}
++                        </tbody>
++                      </table>
++                    </div>
++                  </div>
++                )}
++              </div>
++
++              {/* Subsection C: 2-Stage Verification & Restore */}
++              <div className="standalone-panel__subcard">
++                <h3 className="standalone-panel__section-title">Restore Database (2-Stage Verification)</h3>
++                <p className="standalone-panel__hint">
++                  Step 1 verifies cryptographic integrity without touching the database. Step 2 requires explicit confirmation.
++                </p>
++
++                <div className="standalone-panel__restore-inputs">
++                  {snapshots.length > 0 && (
++                    <div className="standalone-panel__field-group">
++                      <label htmlFor="select-snapshot" className="standalone-panel__label">
++                        Select Server Snapshot
++                      </label>
++                      <select
++                        id="select-snapshot"
++                        value={selectedSnapshotFilename}
++                        onChange={(e) => {
++                          setSelectedSnapshotFilename(e.target.value);
++                          setRestoreFile(null);
++                        }}
++                        className="standalone-panel__input"
++                      >
++                        <option value="">-- Or Choose Server Snapshot --</option>
++                        {snapshots.map((s) => (
++                          <option key={s.filename} value={s.filename}>
++                            {s.filename} ({new Date(s.created_at).toLocaleDateString()})
++                          </option>
++                        ))}
++                      </select>
++                    </div>
++                  )}
++
++                  <div className="standalone-panel__field-group">
++                    <label htmlFor="upload-backup-file" className="standalone-panel__label">
++                      Upload Backup Archive (.kbbak or .kbkp)
++                    </label>
++                    <input
++                      id="upload-backup-file"
++                      type="file"
++                      accept=".kbbak,.kbkp,.dump"
++                      onChange={(e) => {
++                        const file = e.target.files?.[0] ?? null;
++                        setRestoreFile(file);
++                        if (file) setSelectedSnapshotFilename('');
++                      }}
++                      className="standalone-panel__input"
++                    />
++                  </div>
++
++                  <div className="standalone-panel__field-group">
++                    <label htmlFor="restore-passphrase" className="standalone-panel__label">
++                      Passphrase (if encrypted with passphrase)
++                    </label>
++                    <input
++                      id="restore-passphrase"
++                      type="password"
++                      autoComplete="off"
++                      value={restorePassphrase}
++                      onChange={(e) => { setRestorePassphrase(e.target.value); }}
++                      className="standalone-panel__input"
++                      placeholder="Enter decryption passphrase"
++                    />
++                  </div>
++
++                  <button
++                    type="button"
++                    onClick={() => { void handleVerifyBackup(); }}
++                    disabled={isVerifying || (!restoreFile && !selectedSnapshotFilename)}
++                    className="standalone-panel__btn standalone-panel__btn--secondary"
++                  >
++                    {isVerifying ? 'Verifying...' : 'Step 1: Verify Backup Archive'}
++                  </button>
++
++                  {verifyError && (
++                    <div role="alert" className="standalone-panel__error">
++                      {verifyError}
++                    </div>
++                  )}
++
++                  {verifiedManifest && (
++                    <div className="standalone-panel__verified-manifest">
++                      <div className="standalone-panel__badge-title">✓ Backup Archive Verified</div>
++                      <div className="standalone-panel__hint">
++                        PostgreSQL: {verifiedManifest.pg_server_version ?? '16'} | Alembic Rev: {verifiedManifest.alembic_revision ?? 'current'}
++                      </div>
++
++                      {/* Destructive Gate Form */}
++                      <form
++                        onSubmit={(e) => { void handleRestoreSubmit(e); }}
++                        className="standalone-panel__destructive-form"
++                      >
++                        <label htmlFor="restore-confirm" className="standalone-panel__label standalone-panel__label--danger">
++                          Type RESTORE to confirm overwriting current database:
++                        </label>
++                        <input
++                          id="restore-confirm"
++                          type="text"
++                          autoComplete="off"
++                          value={restoreConfirmText}
++                          onChange={(e) => { setRestoreConfirmText(e.target.value); }}
++                          placeholder="RESTORE"
++                          className="standalone-panel__input"
++                        />
++                        <button
++                          type="submit"
++                          disabled={isRestoring || restoreConfirmText !== 'RESTORE'}
++                          className="standalone-panel__btn standalone-panel__btn--danger"
++                        >
++                          {isRestoring ? 'Restoring Database...' : 'Step 2: Restore Database'}
++                        </button>
++                      </form>
++                    </div>
++                  )}
++
++                  {restoreError && (
++                    <div role="alert" className="standalone-panel__error">
++                      {restoreError}
++                    </div>
++                  )}
++
++                  {restoreSuccess && (
++                    <div role="status" className="standalone-panel__success">
++                      {restoreSuccess}
++                    </div>
++                  )}
++                </div>
++              </div>
++            </div>
++          ) : (
++            <div className="standalone-panel__section">
++              <p className="standalone-panel__member-notice">
++                Contact a Server Administrator to export backups or promote this instance.
++              </p>
++            </div>
++          )}
++        </div>
++
++        {/* Tab 3: Docker Compose Export */}
+         {isServerAdmin && (
+-          <div className="standalone-panel__section">
+-            <h3 className="standalone-panel__section-title">
+-              Production Compose Export & Promotion
+-            </h3>
+-            <ComposeExportTab />
++          <div
++            role="tabpanel"
++            id="panel-compose"
++            aria-labelledby="tab-compose"
++            className={`standalone-panel__tabpanel ${activeTab !== 'compose' ? 'standalone-panel__tabpanel--hidden' : ''}`}
++          >
++            <div className="standalone-panel__section">
++              <h3 className="standalone-panel__section-title">
++                Production Compose Export & Promotion
++              </h3>
++              <ComposeExportTab />
++            </div>
+           </div>
+         )}
+       </div>
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index 1978ba0..f535cc5 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -248,7 +248,7 @@ function AttachHookDialogInner({
+           {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
+             <div className="workflow-form-group">
+               <label htmlFor="wasm-module-select" className="workflow-form-label">
+-                Approved Wasm Module (Tier A)
++                Approved WebAssembly Module (Built-in Formula Sandbox)
+               </label>
+               <select
+                 id="wasm-module-select"

@@ -90,6 +90,8 @@ export function HeaderPills({
     status?.deployment_mode === 'standalone_embedded_pg' ||
     status?.deployment_mode === 'standalone';
 
+  const showStorageWarning = isStandalone && !status.persistent_volume && !isDismissed;
+
   const isAirGap = status?.air_gap_mode === true;
 
   const usersCount = manifest?.users?.length ?? 0;
@@ -116,8 +118,8 @@ export function HeaderPills({
 
   return (
     <div className="kb-header-pills">
-      {/* 1. Standalone warning pill */}
-      {isStandalone && !isDismissed && (
+      {/* 1. Standalone warning pill (ephemeral storage only) */}
+      {showStorageWarning && (
         <span className="kb-standalone-pill-group">
           <EmojiHint
             kind="warning"
@@ -131,11 +133,9 @@ export function HeaderPills({
                 <div>
                   Standalone Single-Container Mode (Not Recommended for Production) - Click for volume status, encrypted backup, & 1-click docker-compose.yml export
                 </div>
-                {!status.persistent_volume && (
-                  <div>
-                    Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
-                  </div>
-                )}
+                <div>
+                  Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
+                </div>
               </div>
             }
           />

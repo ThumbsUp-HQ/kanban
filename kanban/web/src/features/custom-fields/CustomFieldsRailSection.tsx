@@ -27,7 +27,7 @@ const ERROR_CODE_MAP: Record<string, string> = {
   SCRIPT_TIMEOUT: 'Timed out',
   SCRIPT_FUEL_EXHAUSTED: 'Compute limit reached',
   APPROVAL_REVOKED: 'Approval revoked - admin re-sign required',
-  SANDBOX_UNAVAILABLE_IN_STANDALONE: 'Tier B unavailable in standalone',
+  SANDBOX_UNAVAILABLE_IN_STANDALONE: 'Optional CLI Sandbox not enabled in single-container mode',
 };
 
 function mapServerErrorCode(errorCode?: string): string {

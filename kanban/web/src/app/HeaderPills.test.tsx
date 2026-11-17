@@ -52,6 +52,25 @@ describe('HeaderPills', () => {
     ).toBeDefined();
   });
 
+  it('omits ⚠️ pill in standalone mode when persistent_volume is true', () => {
+    const persistentStandaloneStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShellPanelsProvider>
+          <HeaderPills systemStatus={persistentStandaloneStatus} />
+        </ShellPanelsProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Standalone mode warning' })).toBeNull();
+  });
+
   it('omits ⚠️ pill in multi-container / production mode', () => {
     const prodStatus: SystemStatus = {
       deployment_mode: 'multi_container',
@@ -181,7 +200,7 @@ describe('HeaderPills', () => {
 
     const status: SystemStatus = {
       deployment_mode: 'standalone',
-      persistent_volume: true,
+      persistent_volume: false,
       air_gap_mode: false,
       local_llm_endpoint_host: null,
     };

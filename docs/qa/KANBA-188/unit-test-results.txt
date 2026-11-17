@@ -1,0 +1,134 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-log-ops-builder-d7348e19/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-log-ops-builder-d7348e19
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 44 items
+
+kanban/tests/api/test_system_status.py::test_case_1_system_status_admin_full_fields_and_member_redaction PASSED [  2%]
+kanban/tests/api/test_system_status.py::test_case_1b_missing_status_file_defaults_to_production_multi_container PASSED [  4%]
+kanban/tests/api/test_system_status.py::test_case_2_standalone_encrypted_backup_and_zero_shell PASSED [  6%]
+kanban/tests/api/test_system_status.py::test_case_3_compose_export_secret_audit_and_network_topology PASSED [  9%]
+kanban/tests/api/test_system_status.py::test_case_4_backup_encryption_and_decryption_edge_cases PASSED [ 11%]
+kanban/tests/api/test_system_status.py::test_case_5_run_pg_dump_execution_and_errors PASSED [ 13%]
+kanban/tests/api/test_system_status.py::test_case_6_standalone_status_edge_cases PASSED [ 15%]
+kanban/tests/api/test_system_status.py::test_case_7_api_backup_error_branches PASSED [ 18%]
+kanban/tests/api/test_system_status.py::test_case_8_backup_schedule_and_snapshots_api PASSED [ 20%]
+kanban/tests/api/test_system_status.py::test_case_9_backup_verify_and_restore_api PASSED [ 22%]
+kanban/tests/api/test_system_status.py::test_assert_admin_routes_protected_compliance PASSED [ 25%]
+kanban/tests/ops/test_scheduled_backup.py::test_scheduled_backup_config_defaults PASSED [ 27%]
+kanban/tests/ops/test_scheduled_backup.py::test_get_and_update_backup_schedule PASSED [ 29%]
+kanban/tests/ops/test_scheduled_backup.py::test_list_and_prune_backups PASSED [ 31%]
+tests/deploy/test_standalone_entrypoint.py::test_case_1_first_boot PASSED [ 34%]
+tests/deploy/test_standalone_entrypoint.py::test_case_2_warm_boot_skips_initdb PASSED [ 36%]
+tests/deploy/test_standalone_entrypoint.py::test_case_2_external_db_mode PASSED [ 38%]
+tests/deploy/test_standalone_entrypoint.py::test_case_3_security_configuration PASSED [ 40%]
+tests/deploy/test_standalone_entrypoint.py::test_case_4_non_root_uid_exits_78 PASSED [ 43%]
+tests/deploy/test_standalone_entrypoint.py::test_case_4_pg_start_timeout_exits_70 PASSED [ 45%]
+tests/deploy/test_standalone_entrypoint.py::test_case_4_migration_failure_exits_70 PASSED [ 47%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_shutdown_uvicorn_escalates_to_sigkill PASSED [ 50%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_shutdown_uvicorn_clean_exit PASSED [ 52%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_shutdown_uvicorn_already_dead PASSED [ 54%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_supervisor_detects_postmaster_death PASSED [ 56%]
+tests/deploy/test_standalone_entrypoint.py::test_signal_handler_clean_exit PASSED [ 59%]
+tests/deploy/test_standalone_entrypoint.py::test_log_phase PASSED        [ 61%]
+tests/deploy/test_standalone_entrypoint.py::test_initialize_cluster_called_process_error PASSED [ 63%]
+tests/deploy/test_standalone_entrypoint.py::test_bootstrap_database_creates_database_when_missing PASSED [ 65%]
+tests/deploy/test_standalone_entrypoint.py::test_keyring_error_exits_78 PASSED [ 68%]
+tests/deploy/test_standalone_entrypoint.py::test_bootstrap_database_with_keyring PASSED [ 70%]
+tests/deploy/test_standalone_entrypoint.py::test_run_as_postgres_real_wrapper PASSED [ 72%]
+tests/deploy/test_standalone_entrypoint.py::test_warm_boot_stale_alembic_digest_runs_migrations PASSED [ 75%]
+kanban/tests/test_logging_standard.py::test_status_symbol_mapping PASSED [ 77%]
+kanban/tests/test_logging_standard.py::test_positive_formatting_and_deduplication PASSED [ 79%]
+kanban/tests/test_logging_standard.py::test_request_id_correlation PASSED [ 81%]
+kanban/tests/test_logging_standard.py::test_semantic_helper_functions PASSED [ 84%]
+kanban/tests/test_logging_standard.py::test_direct_sanitization_and_scrubbing_apis PASSED [ 86%]
+kanban/tests/test_logging_standard.py::test_log_injection_neutralization PASSED [ 88%]
+kanban/tests/test_logging_standard.py::test_credential_scrubbing_in_message_and_tracebacks PASSED [ 90%]
+kanban/tests/test_logging_standard.py::test_configure_logging_integration PASSED [ 93%]
+kanban/tests/test_logging_standard.py::test_first_boot_setup_url_preserves_stdout PASSED [ 95%]
+kanban/tests/test_logging_standard.py::test_standalone_entrypoint_log_level_and_phase_formatting PASSED [ 97%]
+kanban/tests/test_logging_standard.py::test_problem_exception_logging PASSED [100%]
+
+============================== 44 passed in 3.84s ==============================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-log-ops-builder-d7348e19/kanban/web
+> vitest run src/app/HeaderPills.test.tsx src/features/standalone/StandaloneStatusPanel.test.tsx src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-log-ops-builder-d7348e19/kanban/web
+
+ ✓ src/app/HeaderPills.test.tsx (10 tests) 250ms
+stderr | src/features/standalone/StandaloneStatusPanel.test.tsx > StandaloneStatusPanel > Case 4b: renders Persistent Volume Mounted with ext4 when persistent_volume is true
+An update to ComposeExportTab inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ComposeExportTab inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (8 tests) 324ms
+Not implemented: navigation to another Document
+stderr | src/features/standalone/StandaloneStatusPanel.test.tsx > StandaloneStatusPanel > Case 5b: admin backup validation, CSRF token header, and blob URL revocation
+A component is changing a controlled input to be uncontrolled. This is likely caused by the value changing from a defined to undefined, which should not happen. Decide between using a controlled or uncontrolled input element for the lifetime of the component. More info: https://react.dev/link/controlled-components
+
+stderr | src/features/standalone/StandaloneStatusPanel.test.tsx > StandaloneStatusPanel > Case 6: Keyboard A11y - Clicking ⚠️ opens panel, Tab traps focus, Escape closes and restores focus
+An update to EmojiHint inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+Not implemented: navigation to another Document
+stderr | src/features/standalone/StandaloneStatusPanel.test.tsx > StandaloneStatusPanel > switches between 3 tabs and renders respective panels
+An update to ComposeExportTab inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ComposeExportTab inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/StandaloneStatusPanel.test.tsx (19 tests) 815ms
+
+ Test Files  3 passed (3)
+      Tests  37 passed (37)
+   Start at  17:45:10
+   Duration  1.84s (environment 53%, tests 36%, import 10%, transform 1%, worker 1%)
+
