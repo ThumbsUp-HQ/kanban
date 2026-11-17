@@ -30,7 +30,7 @@ def static_dist(tmp_path: Path) -> Path:
     # app.js and compressed variants
     js_raw = b"console.log('identity js content');" * 20
     js_br = b"BR_COMPRESSED_DATA_CONTENT"
-    js_gz = gzip.compress(js_raw)
+    js_gz = gzip.compress(js_raw, mtime=0)
 
     (assets_dir / "app.js").write_bytes(js_raw)
     (assets_dir / "app.js.br").write_bytes(js_br)
@@ -50,7 +50,7 @@ async def test_precompressed_encoding_negotiation(static_dist: Path) -> None:
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
     expected_js_raw = b"console.log('identity js content');" * 20
-    expected_js_gz = gzip.compress(expected_js_raw)
+    expected_js_gz = gzip.compress(expected_js_raw, mtime=0)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         # Prefer Brotli when both br and gzip are acceptable
