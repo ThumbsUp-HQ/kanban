@@ -97,6 +97,9 @@ jobs:
               --ignore=tests/perf \
               --ignore=tests/security \
               --ignore=database/tests/migrations \
+              --ignore=database/tests/test_migration_modules.py \
+              --ignore=database/tests/test_migration_wip_limits.py \
+              --ignore=database/tests/test_p3_17_search_migration.py \
               --ignore=tests/deploy/test_standalone_container.py \
               --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
               --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
@@ -174,7 +177,10 @@ jobs:
         shell: bash
         run: |
           scripts/ci/run_and_log.sh stride-tests -- \
-            uv run pytest -n 4 --dist=loadscope tests/security database/tests/migrations -q
+            uv run pytest tests/security database/tests/migrations \
+              database/tests/test_migration_modules.py \
+              database/tests/test_migration_wip_limits.py \
+              database/tests/test_p3_17_search_migration.py -q
 
       - name: Stop test database
         if: always()

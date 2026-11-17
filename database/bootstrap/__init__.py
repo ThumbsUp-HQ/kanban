@@ -1,5 +1,7 @@
 """Database cluster bootstrap routines."""
 
+import fcntl
+import os
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +33,16 @@ async def bootstrap_cluster(superuser_dsn: str) -> None:
     kwargs = _to_asyncpg_kwargs(superuser_dsn)
     conn = await asyncpg.connect(**kwargs)
     try:
-        roles_sql = (BOOTSTRAP_DIR / "roles.sql").read_text(encoding="utf-8")
-        await conn.execute(roles_sql)
+        lock_fd = os.open("/tmp/.kb_bootstrap_cluster.lock", os.O_CREAT | os.O_WRONLY, 0o600)  # noqa: S108
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            try:
+                roles_sql = (BOOTSTRAP_DIR / "roles.sql").read_text(encoding="utf-8")
+                await conn.execute(roles_sql)
+            finally:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
         ext_sql = (BOOTSTRAP_DIR / "extensions.sql").read_text(encoding="utf-8")
         await conn.execute(ext_sql)
     finally:
