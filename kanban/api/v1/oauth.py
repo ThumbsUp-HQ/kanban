@@ -449,7 +449,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     code_challenge: Annotated[str, Query()],
     code_challenge_method: Annotated[str, Query()],
     state: Annotated[str, Query()],
-    resource: Annotated[str, Query()],
+    resource: Annotated[str | None, Query()] = None,
     scope: Annotated[str, Query()] = "",
 ) -> Response:
     """Render interactive consent screen for authorization code grant with PKCE S256."""
@@ -509,7 +509,8 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
 
     # 7. Validate resource & surface
     base_url = resolve_public_base_url(request)
-    surface = parse_surface_from_resource(resource, base_url)
+    effective_resource = (resource or "").strip() or f"{base_url}/mcp/agent"
+    surface = parse_surface_from_resource(effective_resource, base_url)
 
     # 8. Scopes validation
     allowed_surface_scopes = SURFACE_SCOPES[surface]
@@ -536,8 +537,11 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
                 title="Authentication Required",
                 detail="Authentication required before authorizing OAuth client.",
             )
-        # Redirect browser to login with next parameter
-        login_url = f"/login?next={urllib.parse.quote(str(request.url), safe='')}"
+        # Redirect browser to login with relative next parameter
+        next_target = (
+            f"{request.url.path}?{request.url.query}" if request.url.query else request.url.path
+        )
+        login_url = f"/login?next={urllib.parse.quote(next_target, safe='')}"
         return RedirectResponse(login_url, status_code=302)
 
     # 10. Admin surface requires AAL2
@@ -549,7 +553,19 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         }
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
-    # 11. Load available projects for project scope selector
+    # 11. Bind caller RLS context on session and load available projects + principal display name
+    await session.execute(
+        text(
+            "SELECT set_config('app.principal_id', :p_id, true), "
+            "set_config('app.workspace_id', :w_id, true), "
+            "set_config('app.aal_level', :aal, true)"
+        ),
+        {
+            "p_id": str(caller.principal_id),
+            "w_id": str(caller.workspace_id),
+            "aal": str(caller.aal_level),
+        },
+    )
     stmt_projects = select(Project.id, Project.name).where(
         Project.workspace_id == caller.workspace_id
     )
@@ -571,7 +587,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         state=state,
         code_challenge=code_challenge,
         code_challenge_method=code_challenge_method,
-        resource=resource,
+        resource=effective_resource,
         client_id=client_id,
         csrf_token=csrf_token,
         available_projects=available_projects,

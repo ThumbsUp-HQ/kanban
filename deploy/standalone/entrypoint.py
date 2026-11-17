@@ -447,7 +447,33 @@ def shutdown_uvicorn(proc: subprocess.Popen[str]) -> None:
     proc.wait()
 
 
-def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+def _compute_migrations_digest() -> str:
+    """Compute SHA-256 digest of migration versions and SQL scripts."""
+    candidates = [
+        (
+            Path("/opt/kanban/database/migrations/versions"),
+            Path("/opt/kanban/database/migrations/sql"),
+        ),
+        (
+            Path("database/migrations/versions"),
+            Path("database/migrations/sql"),
+        ),
+    ]
+    for versions_dir, sql_dir in candidates:
+        if versions_dir.is_dir():
+            hasher = hashlib.sha256()
+            for f in sorted(versions_dir.glob("*.py")):
+                hasher.update(f.name.encode("utf-8"))
+                hasher.update(f.read_bytes())
+            if sql_dir.is_dir():
+                for f in sorted(sql_dir.glob("*.sql")):
+                    hasher.update(f.name.encode("utf-8"))
+                    hasher.update(f.read_bytes())
+            return hasher.hexdigest()
+    return ""
+
+
+def main(_argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     """Coordinate standalone single-container startup."""
     # 1. Mode selection
     database_url = os.environ.get("DATABASE_URL")
@@ -480,10 +506,15 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         )
     )
 
+    current_digest = _compute_migrations_digest()
     mig_digest_file = pgdata / ".alembic_head"
-    is_warm = (
-        (pgdata / "PG_VERSION").is_file() and mig_digest_file.is_file() and keyring_path.is_file()
+    stored_digest = (
+        mig_digest_file.read_text(encoding="utf-8").strip() if mig_digest_file.is_file() else ""
     )
+    migrations_current = bool(
+        mig_digest_file.is_file() and (not current_digest or stored_digest == current_digest)
+    )
+    is_warm = (pgdata / "PG_VERSION").is_file() and migrations_current and keyring_path.is_file()
 
     if is_warm:
         try:
@@ -541,17 +572,6 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         start_postgres(pgdata, run_dir=run_dir)
 
         # Bootstrap SQL & Migrations
-        candidates = [
-            Path("/opt/kanban/database/migrations/versions"),
-            Path("database/migrations/versions"),
-        ]
-        current_digest = ""
-        for p in candidates:
-            if p.is_dir():
-                names = sorted(f.name for f in p.glob("*.py"))
-                current_digest = hashlib.sha256("".join(names).encode("utf-8")).hexdigest()
-                break
-
         bootstrap_database(run_dir=run_dir, keyring=keyring)
         run_migrations(pgdata, alembic_ini, run_dir=run_dir)
         if current_digest:

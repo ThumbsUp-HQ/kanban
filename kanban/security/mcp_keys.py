@@ -772,8 +772,23 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         "workspace_slug, project_key "
         "FROM introspect_mcp_api_key(:digest)"
     )
-    result = await session.execute(stmt, {"digest": digest})
-    row = result.first()
+    row = None
+    has_slug_cols = True
+    try:
+        async with session.begin_nested():
+            result = await session.execute(stmt, {"digest": digest})
+            row = result.first()
+    except Exception:  # noqa: BLE001
+        has_slug_cols = False
+        stmt_legacy = text(
+            "SELECT id, workspace_id, principal_id, surface, key_prefix, "
+            "scopes, created_at, expires_at, revoked_at, last_used_at, principal_status, "
+            "scope_tier, owner_kind, project_id, allowed_workspace_ids, allowed_project_ids, "
+            "capability_mask, allowed_tools, disabled_tools, allowed_cidrs "
+            "FROM introspect_mcp_api_key(:digest)"
+        )
+        result = await session.execute(stmt_legacy, {"digest": digest})
+        row = result.first()
 
     if row is None:
         # Unknown digest
@@ -781,30 +796,56 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             return McpIntrospectionResult(active=False, reason="SURFACE_KEY_MISMATCH")
         return McpIntrospectionResult(active=False)
 
-    (
-        _key_id,
-        workspace_id,
-        principal_id,
-        key_surface,
-        key_prefix,
-        key_scopes,
-        _created_at,
-        expires_at,
-        revoked_at,
-        _last_used_at,
-        principal_status,
-        scope_tier,
-        owner_kind,
-        project_id,
-        allowed_workspace_ids,
-        allowed_project_ids,
-        capability_mask,
-        allowed_tools,
-        disabled_tools,
-        allowed_cidrs,
-        workspace_slug,
-        project_key,
-    ) = row
+    if has_slug_cols:
+        (
+            _key_id,
+            workspace_id,
+            principal_id,
+            key_surface,
+            key_prefix,
+            key_scopes,
+            _created_at,
+            expires_at,
+            revoked_at,
+            _last_used_at,
+            principal_status,
+            scope_tier,
+            owner_kind,
+            project_id,
+            allowed_workspace_ids,
+            allowed_project_ids,
+            capability_mask,
+            allowed_tools,
+            disabled_tools,
+            allowed_cidrs,
+            workspace_slug,
+            project_key,
+        ) = row
+    else:
+        (
+            _key_id,
+            workspace_id,
+            principal_id,
+            key_surface,
+            key_prefix,
+            key_scopes,
+            _created_at,
+            expires_at,
+            revoked_at,
+            _last_used_at,
+            principal_status,
+            scope_tier,
+            owner_kind,
+            project_id,
+            allowed_workspace_ids,
+            allowed_project_ids,
+            capability_mask,
+            allowed_tools,
+            disabled_tools,
+            allowed_cidrs,
+        ) = row
+        workspace_slug = None
+        project_key = None
 
     if revoked_at is not None:
         return McpIntrospectionResult(active=False)
@@ -827,17 +868,19 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
     resolved_proj_keys: list[str] = []
     if project_key:
         resolved_proj_keys.append(str(project_key))
-    if allowed_project_ids:
-        keys_res = (
-            await session.execute(
-                text("SELECT resolve_project_keys(:p_ids)"),
-                {"p_ids": list(allowed_project_ids)},
-            )
-        ).scalar_one_or_none()
-        if keys_res:
-            for k in keys_res:
-                if str(k) not in resolved_proj_keys:
-                    resolved_proj_keys.append(str(k))
+    if allowed_project_ids and has_slug_cols:
+        with contextlib.suppress(Exception):
+            async with session.begin_nested():
+                keys_res = (
+                    await session.execute(
+                        text("SELECT resolve_project_keys(:p_ids)"),
+                        {"p_ids": list(allowed_project_ids)},
+                    )
+                ).scalar_one_or_none()
+                if keys_res:
+                    for k in keys_res:
+                        if str(k) not in resolved_proj_keys:
+                            resolved_proj_keys.append(str(k))
 
     return McpIntrospectionResult(
         active=True,

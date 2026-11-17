@@ -86,6 +86,10 @@ describe('LoginPage (KB-P3-35)', () => {
     expect(resolveSafeNext('/projects/KAN/issues?layout=board')).toBe(
       '/projects/KAN/issues?layout=board',
     );
+    const oauthAuthorizeNext =
+      '/oauth/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2F127.0.0.1%3A54321%2Fcallback&scope=agent:read+agent:write';
+    expect(resolveSafeNext(oauthAuthorizeNext)).toBe(oauthAuthorizeNext);
+    expect(resolveSafeNext('/https://evil.example')).toBe('/');
   });
 
   it('error copy and Retry-After parser clamp boundaries (Mandatory Test Case 5)', () => {

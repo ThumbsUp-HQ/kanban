@@ -47,15 +47,17 @@ export interface TotpEnrollResponse {
 
 /**
  * Validates and sanitizes the `next` redirect target parameter (Mandatory Test Case 3).
- * Must be a same-origin relative path matching `^/(?!/)[A-Za-z0-9/_\-?=&.%]*$`.
+ * Must be a same-origin relative path matching `^/(?!/)[A-Za-z0-9/_\-?=&.%:+~]*$`
+ * with no scheme/colon in the path segment before `?`.
  * Rejects protocol-relative //, backslash /\, or absolute schemes, returning '/' as fallback.
  */
 export function resolveSafeNext(next: string | null | undefined): string {
   if (!next || typeof next !== 'string') {
     return '/';
   }
-  const SAFE_NEXT_REGEX = /^\/(?!\/)[A-Za-z0-9/_\-?=&.%]*$/;
-  if (!SAFE_NEXT_REGEX.test(next) || next.includes('\\')) {
+  const SAFE_NEXT_REGEX = /^\/(?!\/)[A-Za-z0-9/_\-?=&.%:+~]*$/;
+  const [pathPart = ''] = next.split('?');
+  if (!SAFE_NEXT_REGEX.test(next) || next.includes('\\') || pathPart.includes(':')) {
     return '/';
   }
   return next;

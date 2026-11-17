@@ -78,7 +78,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
     request: Request,
     session: AuthSession,
     flow: FlowDep,
-    return_to: Annotated[str | None, Query(max_length=512)] = None,
+    return_to: Annotated[str | None, Query(max_length=2048)] = None,
     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Response:
     """Initialize authorization-code flow with PKCE S256 for an OIDC or OAuth2 card."""

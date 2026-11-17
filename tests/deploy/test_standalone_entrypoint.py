@@ -655,3 +655,55 @@ def test_run_as_postgres_real_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
         "--",
     ]
     assert recorded_full[0][7:] == ["echo", "hello"]
+
+
+def test_warm_boot_stale_alembic_digest_runs_migrations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Existing cluster with stale .alembic_head digest runs alembic upgrade head."""
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir(parents=True)
+    (pgdata / "PG_VERSION").write_text("16\n", encoding="utf-8")
+    (pgdata / ".alembic_head").write_text("stale-old-digest\n", encoding="utf-8")
+    alembic_ini = tmp_path / "alembic.ini"
+    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
+
+    recorded_cmds: list[list[str]] = []
+
+    def mock_run(
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (timeout, check, env)
+        recorded_cmds.append(cmd)
+        stdout = "1" if "-tAc" in cmd else ""
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout=stdout, stderr="")
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+    mock_proc.returncode = 0
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", MagicMock(return_value=mock_proc))
+    monkeypatch.setattr("os.getuid", lambda: 0)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_ALEMBIC_INI", str(alembic_ini))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 0
+
+    # Assert initdb was skipped, but alembic upgrade head WAS executed
+    initdb_calls = [c for c in recorded_cmds if BIN_INITDB in c]
+    assert len(initdb_calls) == 0
+    alembic_calls = [c for c in recorded_cmds if BIN_ALEMBIC in c]
+    assert len(alembic_calls) == 1
+    assert "upgrade" in alembic_calls[0]
+    assert "head" in alembic_calls[0]
+    assert (pgdata / ".alembic_head").read_text(encoding="utf-8").strip() != "stale-old-digest"

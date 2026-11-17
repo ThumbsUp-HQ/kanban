@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%]{0,512}$")
+RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%:+~]{0,2048}$")
 
 BROWSER_BINDING_COOKIE_NAME: Final[str] = "__Host-kb_oidc"
 BROWSER_BINDING_TTL_SECONDS: Final[int] = 300
@@ -68,12 +68,17 @@ def sanitize_return_to(return_to: str | None) -> str:
     if not RETURN_TO_REGEX.match(return_to):
         return "/"
 
-    # Invariant: Unquoted target must still not be scheme-relative or backslash-based
-    unquoted = urllib.parse.unquote(return_to)
-    if not unquoted.startswith("/") or unquoted.startswith(("//", "/\\")):
+    path_part, _, _query_part = return_to.partition("?")
+    unquoted_path = urllib.parse.unquote(path_part)
+    if not unquoted_path.startswith("/") or unquoted_path.startswith(("//", "/\\")):
         return "/"
 
-    if "\\" in unquoted or "://" in unquoted:
+    if "\\" in unquoted_path or ":" in unquoted_path:
+        return "/"
+
+    # Invariant: Unquoted full target must not contain backslashes
+    unquoted = urllib.parse.unquote(return_to)
+    if "\\" in unquoted:
         return "/"
 
     return return_to

@@ -535,5 +535,13 @@ def render_consent_screen(  # noqa: PLR0913
         headers={
             "Cache-Control": "no-store",
             "Pragma": "no-cache",
+            "Content-Security-Policy": (
+                "default-src 'none'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "form-action 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* https:; "
+                "frame-ancestors 'none'; "
+                "base-uri 'none';"
+            ),
         },
     )

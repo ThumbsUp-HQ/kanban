@@ -239,15 +239,29 @@ class McpAuthMiddleware:
         surface: Surface,
         req_scope: ConnectionScope | None = None,
         headers: Headers | None = None,
+        scope: Scope | None = None,
     ) -> Response:
         """Return 401 with WWW-Authenticate header carrying protected-resource metadata."""
         env_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN", "").strip()
         if env_origin:
             base_url = env_origin.rstrip("/")
-        elif headers and headers.get("x-forwarded-proto") and headers.get("x-forwarded-host"):
-            proto = headers["x-forwarded-proto"]
-            host = headers["x-forwarded-host"]
-            base_url = f"{proto}://{host}".rstrip("/")
+        elif headers:
+            host = headers.get("x-forwarded-host") or headers.get("host")
+            proto = headers.get("x-forwarded-proto") or (
+                str(scope.get("scheme", "https")) if scope else "https"
+            )
+            local_hosts = (
+                "localhost",
+                "127.0.0.1",
+                "127.0.0.1:8443",
+                "127.0.0.1:8080",
+                "testserver",
+                "test",
+            )
+            if (host and host not in local_hosts) or (headers.get("x-forwarded-proto") and host):
+                base_url = f"{proto}://{host}".rstrip("/")
+            else:
+                base_url = self.settings.kanban_api_base_url.rstrip("/")
         else:
             base_url = self.settings.kanban_api_base_url.rstrip("/")
 
@@ -301,13 +315,17 @@ class McpAuthMiddleware:
         auth_header = headers.get("authorization", "").strip()
         parts = auth_header.split(maxsplit=1)
         if len(parts) != 2 or parts[0].lower() != "bearer":  # noqa: PLR2004
-            resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
+            resp = self._unauthorized_response(
+                surface, req_scope=req_scope, headers=headers, scope=scope
+            )
             await resp(scope, receive, send)
             return
 
         token = parts[1].strip()
         if not token:
-            resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
+            resp = self._unauthorized_response(
+                surface, req_scope=req_scope, headers=headers, scope=scope
+            )
             await resp(scope, receive, send)
             return
 
@@ -367,17 +385,23 @@ class McpAuthMiddleware:
                     resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
                     await resp(scope, receive, send)
                     return
-                resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
+                resp = self._unauthorized_response(
+                    surface, req_scope=req_scope, headers=headers, scope=scope
+                )
                 await resp(scope, receive, send)
                 return
             except Exception:
                 _logger.exception("Introspection request failed")
-                resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
+                resp = self._unauthorized_response(
+                    surface, req_scope=req_scope, headers=headers, scope=scope
+                )
                 await resp(scope, receive, send)
                 return
 
             if not isinstance(res_data, dict):
-                resp = self._unauthorized_response(surface, req_scope=req_scope, headers=headers)
+                resp = self._unauthorized_response(
+                    surface, req_scope=req_scope, headers=headers, scope=scope
+                )
                 await resp(scope, receive, send)
                 return
 
@@ -391,7 +415,7 @@ class McpAuthMiddleware:
                     intro_result = res_data
                 else:
                     resp = self._unauthorized_response(
-                        surface, req_scope=req_scope, headers=headers
+                        surface, req_scope=req_scope, headers=headers, scope=scope
                     )
                     await resp(scope, receive, send)
                     return

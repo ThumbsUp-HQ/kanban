@@ -69,8 +69,8 @@ async def start_card_login(  # noqa: PLR0913, PLR0917
     slug: str,
     request: Request,
     session: PublicSession,
-    next: Annotated[str | None, Query(max_length=512)] = None,  # noqa: A002
-    return_to: Annotated[str | None, Query(max_length=512)] = None,
+    next: Annotated[str | None, Query(max_length=2048)] = None,  # noqa: A002
+    return_to: Annotated[str | None, Query(max_length=2048)] = None,
     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Response:
     """Start OIDC/OAuth2 login flow for an enabled card.

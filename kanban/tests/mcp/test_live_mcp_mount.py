@@ -98,6 +98,18 @@ async def test_mcp_surfaces_unauthenticated_401(
                 in www_auth
             )
 
+        # Verify reverse-proxy Host header without X-Forwarded-Host resolves public domain
+        resp_proxy = await client.post(
+            "/mcp/agent/w/kanban",
+            json={},
+            headers={"Host": "k.hackedyour.info", "X-Forwarded-Proto": "https"},
+        )
+        assert resp_proxy.status_code == 401
+        assert (
+            'resource_metadata="https://k.hackedyour.info/.well-known/oauth-protected-resource/mcp/agent/w/kanban"'
+            in resp_proxy.headers.get("www-authenticate", "")
+        )
+
 
 @pytest.mark.asyncio
 async def test_live_mcp_authenticated_session_and_tools(tmp_path: Path) -> None:

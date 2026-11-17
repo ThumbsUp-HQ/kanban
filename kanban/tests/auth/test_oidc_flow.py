@@ -640,6 +640,14 @@ def test_11_open_redirect_defense() -> None:
     # Legitimate local paths are preserved
     assert sanitize_return_to("/projects/KAN") == "/projects/KAN"
     assert sanitize_return_to("/issues/KAN-123?tab=comments") == "/issues/KAN-123?tab=comments"
+    oauth_next = (
+        "/oauth/authorize?response_type=code&client_id=abc"
+        "&redirect_uri=http%3A%2F%2F127.0.0.1%3A54321%2Fcallback"
+        "&scope=agent%3Aread+agent%3Awrite"
+        "&resource=https%3A%2F%2Fk.hackedyour.info%2Fmcp%2Fagent"
+    )
+    assert sanitize_return_to(oauth_next) == oauth_next
+    assert sanitize_return_to("/https:%2F%2Fevil.example") == "/"
 
 
 def test_12_ssrf_config_validation() -> None:

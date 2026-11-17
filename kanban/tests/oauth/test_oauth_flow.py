@@ -1266,6 +1266,43 @@ async def test_case_10_scoped_resource_indicators_and_bare_mcp(
     assert meta["resource"].endswith("/mcp/agent")
     assert "agent:read" in meta["scopes_supported"]
 
+    # 3. Authorize without resource parameter defaults to /mcp/agent and emits consent CSP
+    resp_no_res = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-no-res",
+        },
+    )
+    assert resp_no_res.status_code == 200
+    assert "AGENT" in resp_no_res.text
+    csp = resp_no_res.headers.get("content-security-policy", "")
+    assert "style-src 'self' 'unsafe-inline'" in csp
+    assert "http://127.0.0.1:*" in csp
+
+    # 4. Unauthenticated browser request to /oauth/authorize redirects to relative /login?next=...
+    api_env.resolver.principal = None
+    resp_unauth = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-unauth",
+        },
+        headers={"Accept": "text/html"},
+        follow_redirects=False,
+    )
+    assert resp_unauth.status_code == 302
+    loc = resp_unauth.headers["location"]
+    assert loc.startswith("/login?next=%2Foauth%2Fauthorize%3F")
+
 
 async def test_case_11_mcp_api_key_label_and_project_scoping(
     api_env: ApiEnv,
