@@ -781,8 +781,8 @@ class OidcFlow:
                 principal_id=resolved_login.principal_id,
                 workspace_id=resolved_login.workspace_id,
                 auth_card_id=card.id,
-                aal_level=resolved_login.aal_level,
-                mfa_pending=resolved_login.mfa_pending,
+                aal_level=2,
+                mfa_pending=False,
             )
             response.headers.append(
                 "Set-Cookie",

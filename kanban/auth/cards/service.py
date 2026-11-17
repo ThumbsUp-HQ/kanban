@@ -174,14 +174,19 @@ class AuthCardAdminService:
             )
         clean_domains = [d.strip().lower() for d in data.allowed_email_domains if d.strip()]
 
-        # Generate unique card ID
-        card_id = uuid.uuid4()
+        # Generate or reuse card ID and determine sort_rank
+        existing = await admin_list(session)
+        existing_match = next((c for c in existing if c.slug == data.slug), None)
+        card_id = existing_match.id if existing_match is not None else uuid.uuid4()
 
-        # Determine sort_rank
         if data.sort_rank is None or not data.sort_rank.strip():
-            existing = await admin_list(session)
-            last_rank = existing[-1].sort_rank if existing else None
-            sort_rank = midpoint_rank(last_rank, None)
+            if existing_match is not None and not existing_match.sort_rank.endswith("0"):
+                sort_rank = existing_match.sort_rank
+            else:
+                last_rank = existing[-1].sort_rank if existing else None
+                if last_rank and last_rank.endswith("0"):
+                    last_rank = last_rank.rstrip("0") + "1"
+                sort_rank = midpoint_rank(last_rank, None)
         else:
             sort_rank = data.sort_rank
 

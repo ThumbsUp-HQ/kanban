@@ -101,6 +101,7 @@ class OidcCardConfig(BaseModel):
         elif "token_auth_method" in d:
             d.pop("token_auth_method")
         d.pop("pkce_method", None)
+        d.pop("access_mode", None)
         return d
 
     @field_validator(

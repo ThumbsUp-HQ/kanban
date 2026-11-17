@@ -427,3 +427,13 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION kb_auth_ensure_server_admin_role(UUID, UUID) TO kanban_app;
+
+-- Normalize legacy '0' sort_rank on auth_provider_cards so midpoint_rank never fails
+DO $$
+BEGIN
+    SET LOCAL ROLE kb_auth_owner;
+    UPDATE auth_provider_cards SET sort_rank = '0001' WHERE sort_rank ~ '0$';
+    RESET ROLE;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;

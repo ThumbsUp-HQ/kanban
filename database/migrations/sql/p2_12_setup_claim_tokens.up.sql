@@ -181,7 +181,7 @@ BEGIN
             'Username and password',
             'key',
             TRUE,
-            '0',
+            '0001',
             FALSE,
             '{}',
             '{}'::jsonb
