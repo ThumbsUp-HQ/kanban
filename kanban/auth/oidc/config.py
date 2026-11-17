@@ -7,19 +7,9 @@ from __future__ import annotations
 import ipaddress
 import os
 import urllib.parse
-from typing import Final, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-# Built-in Google Cloud test project (thumbsup-kanban-test / TEST-ONLY-ThumbsUpKanban)
-# for local loopback OAuth/OIDC verification (http://127.0.0.1/api/v1/auth/oidc/google-oauth/callback).
-GOOGLE_TEST_PROJECT_ID: Final[str] = "thumbsup-kanban-test"
-GOOGLE_TEST_CONSENT_NAME: Final[str] = "TEST-ONLY-ThumbsUpKanban"
-GOOGLE_TEST_CLIENT_ID: Final[str] = (
-    "000000000000-redacted.apps.googleusercontent.com"
-)
-GOOGLE_TEST_CLIENT_SECRET: Final[str] = "GOCSPX-REDACTED_TEST_CLIENT_SECRET"  # noqa: S105
-GOOGLE_TEST_REDIRECT_URI: Final[str] = "http://127.0.0.1/api/v1/auth/oidc/google-oauth/callback"
 
 
 def _validate_safe_url(url_str: str | None, field_name: str) -> str | None:
