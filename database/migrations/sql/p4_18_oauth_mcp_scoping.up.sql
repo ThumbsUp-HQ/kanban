@@ -402,3 +402,28 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION kb_auth_switch_workspace(UUID, UUID) TO kanban_app;
+
+CREATE OR REPLACE FUNCTION kb_auth_ensure_server_admin_role(
+    p_workspace_id UUID,
+    p_principal_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM role_bindings
+        WHERE workspace_id = p_workspace_id
+          AND principal_id = p_principal_id
+          AND role = 'SERVER_ADMIN'
+          AND scope_type = 'server'
+    ) THEN
+        INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id)
+        VALUES (uuidv7(), p_workspace_id, p_principal_id, 'SERVER_ADMIN', 'server', NULL)
+        ON CONFLICT DO NOTHING;
+    END IF;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION kb_auth_ensure_server_admin_role(UUID, UUID) TO kanban_app;

@@ -32,20 +32,5 @@ REVOKE SELECT ON TABLE role_bindings FROM kb_auth_owner;
 REVOKE EXECUTE ON FUNCTION app_effective_principal_set() FROM kb_auth_owner;
 REVOKE USAGE, CREATE ON SCHEMA public FROM kb_auth_owner;
 
--- Note: role kb_auth_owner is retained or dropped if no objects depend on it
-DO $$
-BEGIN
-    EXECUTE format('REVOKE kb_auth_owner FROM %I', CURRENT_USER);
-EXCEPTION
-    WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kb_auth_owner') THEN
-        DROP ROLE kb_auth_owner;
-    END IF;
-EXCEPTION
-    WHEN dependent_objects_still_exist THEN
-        NULL;
-END $$;
+-- Note: cluster-level role kb_auth_owner and its membership on kanban_migrator are retained
+-- so concurrent databases on the same cluster do not lose role membership during downgrades.

@@ -92,6 +92,19 @@ describe('LoginPage (KB-P3-35)', () => {
     expect(resolveSafeNext('/https://evil.example')).toBe('/');
   });
 
+  it('initializes error banner when URL query contains error_description or error', async () => {
+    const origLocation = window.location;
+    window.history.pushState({}, '', '/login?error=access_denied&error_description=User+not+in+allowlist');
+    vi.spyOn(authApi, 'fetchAuthCards').mockResolvedValue({ cards: mock4Cards });
+
+    render(<LoginPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('User not in allowlist');
+    });
+    window.history.pushState({}, '', origLocation.pathname);
+  });
+
   it('error copy and Retry-After parser clamp boundaries (Mandatory Test Case 5)', () => {
     // 1. INVALID_CREDENTIALS byte-identical message for unknown user and wrong password
     const errUnknownUser = new ApiProblem(401, {

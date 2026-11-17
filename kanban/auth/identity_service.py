@@ -97,6 +97,18 @@ async def _ensure_server_admin_role(
     principal_id: uuid.UUID,
 ) -> None:
     """Grant SERVER_ADMIN role binding if not already present."""
+    db_session.info["rls_bound"] = True
+    try:
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("SELECT kb_auth_ensure_server_admin_role(:ws_id, :pid)"),
+                {"ws_id": workspace_id, "pid": principal_id},
+            )
+            return
+    except Exception:  # noqa: BLE001
+        logger.debug("Fallback to direct role_bindings insert for SERVER_ADMIN")
+
+    db_session.info["rls_bound"] = True
     stmt = text(
         "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type) "
         "VALUES (uuidv7(), :ws_id, :pid, 'SERVER_ADMIN', 'server') "
@@ -286,12 +298,28 @@ class DatabaseIdentityResolver:
     ) -> ResolvedLogin:
         """Handle login when existing user identity binding exists."""
         if identity_row["status"] != "ACTIVE":
+            logger.warning(
+                "External login rejected: account disabled (card_id=%s, principal_id=%s)",
+                assertion.card_id,
+                identity_row["principal_id"],
+            )
             raise ProblemException(
                 code="ACCOUNT_DISABLED",
                 status=403,
                 title="Account Disabled",
                 detail="Account is disabled",
             )
+
+        await db_session.execute(
+            text(
+                "SELECT set_config('app.principal_id', :p_id, true), "
+                "set_config('app.workspace_id', :w_id, true)"
+            ),
+            {
+                "p_id": str(identity_row["principal_id"]),
+                "w_id": str(identity_row["workspace_id"]),
+            },
+        )
 
         # Check card allowlist policy if configured
         card_res = await db_session.execute(
@@ -304,6 +332,11 @@ class DatabaseIdentityResolver:
         card_row = card_res.mappings().first()
         is_allowed, is_admin_card = _evaluate_card_access(card_row, assertion)
         if not is_allowed:
+            logger.warning(
+                "External login rejected: user not in card allowlist (card_id=%s, email=%s)",
+                assertion.card_id,
+                assertion.email,
+            )
             raise ProblemException(
                 code="IDENTITY_NOT_PROVISIONED",
                 status=403,
@@ -348,6 +381,12 @@ class DatabaseIdentityResolver:
             logger.debug("Failed to record login success activity", exc_info=True)
 
         await db_session.commit()
+        logger.info(
+            "External bound login succeeded (card_id=%s, principal_id=%s, workspace_id=%s)",
+            assertion.card_id,
+            identity_row["principal_id"],
+            identity_row["workspace_id"],
+        )
 
         return ResolvedLogin(
             principal_id=identity_row["principal_id"],
@@ -381,7 +420,7 @@ class DatabaseIdentityResolver:
                     detail="Email domain is not allowed by this authentication card",
                 )
 
-    async def _resolve_unbound_login(
+    async def _resolve_unbound_login(  # noqa: C901
         self,
         db_session: AsyncSession,
         assertion: ExternalIdentityAssertion,
@@ -407,10 +446,24 @@ class DatabaseIdentityResolver:
 
         effective_ws_id = card_row["workspace_id"]
         if effective_ws_id is None:
-            default_ws = await db_session.scalar(
-                text("SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1")
+            try:
+                async with db_session.begin_nested():
+                    effective_ws_id = await db_session.scalar(
+                        text("SELECT get_default_workspace_id()")
+                    )
+            except Exception:  # noqa: BLE001
+                effective_ws_id = None
+            if effective_ws_id is None:
+                default_ws = await db_session.scalar(
+                    text("SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1")
+                )
+                effective_ws_id = default_ws
+
+        if effective_ws_id is not None:
+            await db_session.execute(
+                text("SELECT set_config('app.workspace_id', :w_id, true)"),
+                {"w_id": str(effective_ws_id)},
             )
-            effective_ws_id = default_ws
 
         if not card_row["auto_provision_users"]:
             if effective_ws_id is not None:
@@ -429,6 +482,11 @@ class DatabaseIdentityResolver:
                     logger.debug("Failed to record unprovisioned activity", exc_info=True)
                 await db_session.commit()
 
+            logger.warning(
+                "External login rejected: auto_provision_users=false on card %s for email=%s",
+                assertion.card_id,
+                assertion.email,
+            )
             raise ProblemException(
                 code="IDENTITY_NOT_PROVISIONED",
                 status=403,
@@ -442,6 +500,11 @@ class DatabaseIdentityResolver:
         # Check OAuth/OIDC admin and user allowlists if configured
         is_allowed, is_admin_user = _evaluate_card_access(card_row, assertion)
         if not is_allowed:
+            logger.warning(
+                "External login rejected: user %s not in card allowlist (card_id=%s)",
+                assertion.email,
+                assertion.card_id,
+            )
             raise ProblemException(
                 code="IDENTITY_NOT_PROVISIONED",
                 status=403,
@@ -463,6 +526,13 @@ class DatabaseIdentityResolver:
             await _ensure_server_admin_role(db_session, effective_ws_id, new_principal_id)
             await db_session.commit()
 
+        logger.info(
+            "Auto-provisioned external user (card=%s, principal=%s, ws=%s, admin=%s)",
+            assertion.card_id,
+            new_principal_id,
+            effective_ws_id,
+            is_admin_user,
+        )
         return ResolvedLogin(
             principal_id=new_principal_id,
             workspace_id=effective_ws_id,
@@ -528,16 +598,43 @@ class DatabaseIdentityResolver:
             "  :ws_id, :card_id, :subject, :email, :display_name"
             ")"
         )
-        prov_res = await db_session.execute(
-            prov_stmt,
-            {
-                "ws_id": effective_ws_id,
-                "card_id": assertion.card_id,
-                "subject": assertion.subject,
-                "email": assertion.email,
-                "display_name": clean_display,
-            },
-        )
+        try:
+            prov_res = await db_session.execute(
+                prov_stmt,
+                {
+                    "ws_id": effective_ws_id,
+                    "card_id": assertion.card_id,
+                    "subject": assertion.subject,
+                    "email": assertion.email,
+                    "display_name": clean_display,
+                },
+            )
+        except Exception as exc:
+            err_msg = str(exc)
+            if "IDENTITY_LINK_REQUIRED" in err_msg:
+                logger.warning(
+                    "External login auto-merge blocked: email=%s already exists in workspace=%s",
+                    assertion.email,
+                    effective_ws_id,
+                )
+                raise ProblemException(
+                    code="IDENTITY_LINK_REQUIRED",
+                    status=409,
+                    title="Identity Link Required",
+                    detail=(
+                        "An account with this email already exists. "
+                        "Sign in with your existing credentials, elevate to AAL2, "
+                        "and link this provider in settings."
+                    ),
+                ) from exc
+            if "IDENTITY_ALREADY_LINKED" in err_msg:
+                raise ProblemException(
+                    code="IDENTITY_ALREADY_LINKED",
+                    status=409,
+                    title="Identity Already Linked",
+                    detail="External identity is already linked to an account",
+                ) from exc
+            raise
         prov_row = prov_res.mappings().first()
         if prov_row is None:
             msg = "Failed to provision new user identity"

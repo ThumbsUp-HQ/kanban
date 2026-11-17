@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import logging
 import os
@@ -530,11 +531,26 @@ class OidcFlow:
             )
 
         if token_resp.status_code != HTTPStatus.OK:
+            idp_err = ""
+            with contextlib.suppress(Exception):
+                err_json = token_resp.json()
+                if isinstance(err_json, dict) and err_json.get("error"):
+                    idp_err = f" ({err_json['error']})"
+            logger.warning(
+                "OIDC token exchange failed on card '%s': HTTP %d%s (redirect_uri=%s)",
+                slug,
+                token_resp.status_code,
+                idp_err,
+                redirect_uri,
+            )
             raise ProblemException(
                 code="OIDC_TOKEN_INVALID",
                 status=401,
                 title="Token Exchange Failed",
-                detail="Token endpoint returned non-200 status code",
+                detail=(
+                    f"Token endpoint returned non-200 status code "
+                    f"(HTTP {token_resp.status_code}{idp_err})"
+                ),
             )
 
         try:
@@ -634,11 +650,19 @@ class OidcFlow:
                 )
 
             if userinfo_resp.status_code != HTTPStatus.OK:
+                logger.warning(
+                    "OAuth2 userinfo request failed on card '%s': HTTP %d",
+                    slug,
+                    userinfo_resp.status_code,
+                )
                 raise ProblemException(
                     code="OIDC_TOKEN_INVALID",
                     status=401,
                     title="Userinfo Failed",
-                    detail="Userinfo endpoint returned non-200 status code",
+                    detail=(
+                        f"Userinfo endpoint returned non-200 status code "
+                        f"(HTTP {userinfo_resp.status_code})"
+                    ),
                 )
 
             try:

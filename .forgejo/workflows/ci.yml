@@ -93,8 +93,10 @@ jobs:
         run: |
           mkdir -p reports
           scripts/ci/run_and_log.sh pytest -- \
-            uv run pytest \
+            uv run pytest -n 4 --dist=loadscope \
               --ignore=tests/perf \
+              --ignore=tests/security \
+              --ignore=database/tests/migrations \
               --ignore=tests/deploy/test_standalone_container.py \
               --cov=database --cov=kanban --cov=mcp --cov=agent --cov=scripts \
               --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml \
@@ -168,11 +170,11 @@ jobs:
         shell: bash
         run: scripts/ci/run_and_log.sh testdb-up -- make testdb-up
 
-      - name: Run STRIDE security tests
+      - name: Run STRIDE security and DDL migration lifecycle tests
         shell: bash
         run: |
           scripts/ci/run_and_log.sh stride-tests -- \
-            uv run pytest tests/security -q
+            uv run pytest -n 4 --dist=loadscope tests/security database/tests/migrations -q
 
       - name: Stop test database
         if: always()
@@ -346,7 +348,6 @@ jobs:
         continue-on-error: true
 
   perf-budgets:
-    needs: [lint-type, python-tests, web-tests, docker-build]
     runs-on: [inferrence1]
     timeout-minutes: 20
     env:

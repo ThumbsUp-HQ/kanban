@@ -167,13 +167,26 @@ async def problem_exception_handler(
     exc: ProblemException,
 ) -> JSONResponse:
     """Format an explicit ProblemException into application/problem+json."""
-    del request
     req_id = get_request_id()
+    method = getattr(request, "method", "UNKNOWN")
+    path = request.url.path if hasattr(request, "url") else "unknown"
     if exc.status in range(400, 500):
         logger.warning(
-            "Client error [%s / %d] [request_id=%s]: %s",
+            "Client error [%s / %d] on %s %s [request_id=%s]: %s",
             exc.code,
             exc.status,
+            method,
+            path,
+            req_id,
+            exc.detail or exc.title,
+        )
+    elif exc.status >= 500:  # noqa: PLR2004
+        logger.error(
+            "Server problem [%s / %d] on %s %s [request_id=%s]: %s",
+            exc.code,
+            exc.status,
+            method,
+            path,
             req_id,
             exc.detail or exc.title,
         )
@@ -214,8 +227,9 @@ async def validation_exception_handler(
     exc: RequestValidationError,
 ) -> JSONResponse:
     """Format request validation errors into 422 VALIDATION_FAILED without echoing input."""
-    del request
     req_id = get_request_id()
+    method = getattr(request, "method", "UNKNOWN")
+    path = request.url.path if hasattr(request, "url") else "unknown"
     field_errors: list[FieldError] = []
 
     for err in exc.errors():
@@ -228,7 +242,9 @@ async def validation_exception_handler(
 
     summary = "; ".join(f"{fe.path}: {fe.message}" for fe in field_errors) if field_errors else None
     logger.warning(
-        "Request validation failed [request_id=%s]: %s",
+        "Request validation failed on %s %s [request_id=%s]: %s",
+        method,
+        path,
         req_id,
         summary or "validation error",
     )
@@ -299,9 +315,17 @@ async def unhandled_exception_handler(
     exc: Exception,
 ) -> JSONResponse:
     """Catch-all handler translating unexpected exceptions into non-leaking 500 INTERNAL_ERROR."""
-    del request
     req_id = get_request_id()
-    logger.error("Unhandled server exception [request_id=%s]: %s", req_id, exc)
+    method = getattr(request, "method", "UNKNOWN")
+    path = request.url.path if hasattr(request, "url") else "unknown"
+    logger.error(
+        "Unhandled server exception on %s %s [request_id=%s]: %s",
+        method,
+        path,
+        req_id,
+        exc,
+        exc_info=exc,
+    )
 
     problem = Problem(
         type="urn:kanban:problem:INTERNAL_ERROR",

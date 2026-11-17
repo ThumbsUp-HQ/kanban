@@ -271,6 +271,15 @@ class McpAuthMiddleware:
             if getattr(req_scope, "project_key", None):
                 metadata_url += f"/p/{req_scope.project_key}"
         challenge = f'Bearer realm="kanban-mcp", resource_metadata="{metadata_url}"'
+        method = scope.get("method", "HTTP") if scope else "HTTP"
+        path = scope.get("path", "/mcp") if scope else "/mcp"
+        _logger.warning(
+            "MCP 401 Unauthorized on %s %s (surface=%s, resource_metadata=%s)",
+            method,
+            path,
+            surface.value,
+            metadata_url,
+        )
         return JSONResponse(
             {"error": "unauthorized", "message": "Bearer authentication required"},
             status_code=401,
@@ -535,6 +544,19 @@ class McpAuthMiddleware:
             effective_scope = intersect_key_and_connection_scope(auth_context, req_scope)
         except KbMcpError as exc:
             status_code = 403 if exc.code == McpErrorCode.KEY_SCOPE_VIOLATION else 400
+            _logger.warning(
+                "MCP %d %s on %s %s (surface=%s, tier=%s, key_ws=%s, req_ws=%s, proj=%s): %s",
+                status_code,
+                exc.code.value,
+                scope.get("method", "HTTP"),
+                scope.get("path", "/mcp"),
+                surface.value,
+                auth_context.scope_tier,
+                auth_context.workspace_slug or auth_context.workspace_id,
+                req_scope.workspace_slug,
+                req_scope.project_key,
+                exc.message,
+            )
             payload: dict[str, Any] = {"error": exc.code.value, "message": exc.message}
             if exc.extra:
                 payload.update(exc.extra)

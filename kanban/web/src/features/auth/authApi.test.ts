@@ -179,6 +179,15 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     );
 
     expect(
+      formatAuthError(
+        new ApiProblem(403, {
+          code: 'IDENTITY_NOT_PROVISIONED',
+          detail: 'User is not in the authorized access list',
+        }),
+      ).message,
+    ).toBe('User is not in the authorized access list');
+
+    expect(
       formatAuthError(new ApiProblem(500, { code: 'CUSTOM_GATE_REJECTED' })).message,
     ).toBe('Sign-in is unavailable right now (code: CUSTOM_GATE_REJECTED).');
 

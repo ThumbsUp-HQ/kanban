@@ -95,21 +95,27 @@ async def test_05_boundary_ensure_template_caching(tmp_path: Path) -> None:
     """Verify golden template caching preserves OID until SQL fingerprint changes."""
     host = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
+    tmpl_name = "kanban_template_test05"
+
+    fp0 = await ensure_template(socket_dir=host, user=user, template_db_name=tmpl_name)
 
     conn = await asyncpg.connect(user=user, database="postgres", host=host)
     try:
         oid_initial = await conn.fetchval(
-            "SELECT oid FROM pg_database WHERE datname = 'kanban_template'"
+            "SELECT oid FROM pg_database WHERE datname = $1",
+            tmpl_name,
         )
     finally:
         await conn.close()
 
-    fp1 = await ensure_template(socket_dir=host, user=user)
+    fp1 = await ensure_template(socket_dir=host, user=user, template_db_name=tmpl_name)
+    assert fp0 == fp1
 
     conn = await asyncpg.connect(user=user, database="postgres", host=host)
     try:
         oid_reused = await conn.fetchval(
-            "SELECT oid FROM pg_database WHERE datname = 'kanban_template'"
+            "SELECT oid FROM pg_database WHERE datname = $1",
+            tmpl_name,
         )
     finally:
         await conn.close()
@@ -126,21 +132,25 @@ async def test_05_boundary_ensure_template_caching(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    fp2 = await ensure_template(socket_dir=host, user=user, sql_dir=modified_dir)
+    fp2 = await ensure_template(
+        socket_dir=host,
+        user=user,
+        sql_dir=modified_dir,
+        template_db_name=tmpl_name,
+    )
     assert fp1 != fp2
 
     conn = await asyncpg.connect(user=user, database="postgres", host=host)
     try:
         oid_changed = await conn.fetchval(
-            "SELECT oid FROM pg_database WHERE datname = 'kanban_template'"
+            "SELECT oid FROM pg_database WHERE datname = $1",
+            tmpl_name,
         )
+        await conn.execute(f"DROP DATABASE IF EXISTS {tmpl_name} WITH (FORCE)")
     finally:
         await conn.close()
 
     assert oid_changed != oid_initial
-
-    # Restore canonical template state
-    await ensure_template(socket_dir=host, user=user)
 
 
 async def test_06_negative_committed_db_session_without_marker(

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -190,11 +191,28 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
     app.mount("/mcp", proxy)
 
 
+def _configure_application_logging() -> None:
+    """Configure application loggers (kanban, mcp, database, agent) to emit INFO+ logs."""
+    log_level_name = os.environ.get("KB_LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        logging.basicConfig(
+            level=log_level,
+            format="%(levelname)s:     [%(name)s] %(message)s",
+        )
+    for pkg_name in ("kanban", "mcp", "database", "agent"):
+        pkg_logger = logging.getLogger(pkg_name)
+        if pkg_logger.level == logging.NOTSET or pkg_logger.level > log_level:
+            pkg_logger.setLevel(log_level)
+
+
 def create_app(
     settings: Settings | None = None,
     mcp_settings: McpSettings | None = None,
 ) -> FastAPI:
     """Create and configure the canonical Kanban ASGI FastAPI application."""
+    _configure_application_logging()
     if settings is None:
         settings = Settings()
 
@@ -224,7 +242,14 @@ def create_app(
 
     @app.exception_handler(OAuth2Error)
     async def oauth2_error_handler(request: Request, exc: OAuth2Error) -> JSONResponse:
-        del request
+        logger.warning(
+            "OAuth2Error [%s / %d] on %s %s: %s",
+            exc.error,
+            exc.status_code,
+            request.method,
+            request.url.path,
+            exc.description,
+        )
         return JSONResponse(
             {"error": exc.error, "error_description": exc.description},
             status_code=exc.status_code,

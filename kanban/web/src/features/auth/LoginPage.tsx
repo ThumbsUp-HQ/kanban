@@ -36,7 +36,14 @@ export function LoginPage({
     methods: MfaMethod[];
   } | null>(null);
 
-  const [error, setError] = useState<FormattedError | null>(null);
+  const [error, setError] = useState<FormattedError | null>(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const errDesc = sp.get('error_description') ?? sp.get('error');
+    if (errDesc && errDesc.trim().length > 0) {
+      return { message: errDesc.trim() };
+    }
+    return null;
+  });
   const [copiedCommand, setCopiedCommand] = useState(false);
 
   const alertRef = useRef<HTMLDivElement | null>(null);

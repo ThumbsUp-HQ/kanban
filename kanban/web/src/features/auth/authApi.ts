@@ -125,6 +125,13 @@ export function formatAuthError(error: unknown): FormattedError {
         code,
       };
     }
+    if (
+      error.status < 500 &&
+      typeof error.detail === 'string' &&
+      error.detail.trim().length > 0
+    ) {
+      return { message: error.detail.trim(), code };
+    }
     if (/^[A-Z_]{1,40}$/.test(code)) {
       return { message: `Sign-in is unavailable right now (code: ${code}).`, code };
     }
