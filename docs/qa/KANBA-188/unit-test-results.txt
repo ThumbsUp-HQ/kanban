@@ -51,7 +51,7 @@ kanban/tests/test_logging_standard.py::test_first_boot_setup_url_preserves_stdou
 kanban/tests/test_logging_standard.py::test_standalone_entrypoint_log_level_and_phase_formatting PASSED [ 97%]
 kanban/tests/test_logging_standard.py::test_problem_exception_logging PASSED [100%]
 
-============================== 44 passed in 3.84s ==============================
+============================== 44 passed in 3.58s ==============================
 
 > @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-log-ops-builder-d7348e19/kanban/web
 > vitest run src/app/HeaderPills.test.tsx src/features/standalone/StandaloneStatusPanel.test.tsx src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx
@@ -59,7 +59,7 @@ kanban/tests/test_logging_standard.py::test_problem_exception_logging PASSED [10
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-log-ops-builder-d7348e19/kanban/web
 
- ✓ src/app/HeaderPills.test.tsx (10 tests) 250ms
+ ✓ src/app/HeaderPills.test.tsx (10 tests) 252ms
 stderr | src/features/standalone/StandaloneStatusPanel.test.tsx > StandaloneStatusPanel > Case 4b: renders Persistent Volume Mounted with ext4 when persistent_volume is true
 An update to ComposeExportTab inside a test was not wrapped in act(...).
 
@@ -82,7 +82,7 @@ act(() => {
 
 This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
 
- ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (8 tests) 324ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (8 tests) 323ms
 Not implemented: navigation to another Document
 stderr | src/features/standalone/StandaloneStatusPanel.test.tsx > StandaloneStatusPanel > Case 5b: admin backup validation, CSRF token header, and blob URL revocation
 A component is changing a controlled input to be uncontrolled. This is likely caused by the value changing from a defined to undefined, which should not happen. Decide between using a controlled or uncontrolled input element for the lifetime of the component. More info: https://react.dev/link/controlled-components
@@ -125,10 +125,10 @@ This ensures that you're testing the behavior the user would see in the browser.
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
- ✓ src/features/standalone/StandaloneStatusPanel.test.tsx (19 tests) 815ms
+ ✓ src/features/standalone/StandaloneStatusPanel.test.tsx (19 tests) 794ms
 
  Test Files  3 passed (3)
       Tests  37 passed (37)
-   Start at  17:45:10
-   Duration  1.84s (environment 53%, tests 36%, import 10%, transform 1%, worker 1%)
+   Start at  17:59:25
+   Duration  1.84s (environment 50%, tests 35%, import 10%, transform 5%, worker 1%)
 

@@ -506,6 +506,278 @@ index 5b3b266..93d50c1 100644
      "run_trash_purge",
      "run_trash_purge_pass",
  ]
+diff --git a/kanban/jobs/scheduled_backup.py b/kanban/jobs/scheduled_backup.py
+new file mode 100644
+index 0000000..ca3bc64
+--- /dev/null
++++ b/kanban/jobs/scheduled_backup.py
+@@ -0,0 +1,266 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Scheduled automated database backups and retention management (KB-P3-52 / KANBA-188).
++
++Produces encrypted backup archives (.kbbak) on configured schedules,
++prunes snapshots exceeding retention limits, and exposes schedule configuration.
++"""
++
++from __future__ import annotations
++
++import base64
++import contextlib
++import json
++import logging
++import os
++from dataclasses import asdict, dataclass
++from datetime import UTC, datetime, timedelta
++from pathlib import Path
++from typing import TYPE_CHECKING, Any, Final
++
++from kanban.ops.backup_crypto import RawKeySource
++from kanban.ops.backup_service import BackupSummary, create_backup
++from kanban.settings import get_settings
++
++if TYPE_CHECKING:
++    from kanban.ops.backup_crypto import KeySource
++
++logger = logging.getLogger(__name__)
++
++DEFAULT_BACKUP_DIR: Final[Path] = Path("/var/lib/kanban/data/backups")
++DEFAULT_SCHEDULE_PATH: Final[Path] = Path("/var/lib/kanban/data/backup_schedule.json")
++DEFAULT_INTERVAL_HOURS: Final[int] = 24
++DEFAULT_RETENTION_COUNT: Final[int] = 7
++
++
++@dataclass
++class ScheduledBackupConfig:
++    """Schedule and retention configuration descriptor."""
++
++    enabled: bool = False
++    interval_hours: int = DEFAULT_INTERVAL_HOURS
++    retention_count: int = DEFAULT_RETENTION_COUNT
++    last_run_at: str | None = None
++    next_run_at: str | None = None
++
++    def to_dict(self) -> dict[str, Any]:
++        """Convert configuration to dictionary."""
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict[str, Any]) -> ScheduledBackupConfig:
++        """Instantiate config from dictionary with safe fallbacks."""
++        return cls(
++            enabled=bool(data.get("enabled", False)),
++            interval_hours=max(1, int(data.get("interval_hours", DEFAULT_INTERVAL_HOURS))),
++            retention_count=max(1, int(data.get("retention_count", DEFAULT_RETENTION_COUNT))),
++            last_run_at=data.get("last_run_at"),
++            next_run_at=data.get("next_run_at"),
++        )
++
++
++def resolve_backup_dir(override: Path | None = None) -> Path:
++    """Resolve directory where automated backups are stored."""
++    if override is not None:
++        return override
++    env_dir = os.environ.get("KB_BACKUP_DIR")
++    if env_dir:
++        return Path(env_dir)
++    if DEFAULT_BACKUP_DIR.parent.exists():
++        return DEFAULT_BACKUP_DIR
++    # Local fallback for development/testing
++    fallback = Path("backups")
++    fallback.mkdir(parents=True, exist_ok=True)
++    return fallback
++
++
++def resolve_schedule_path(override: Path | None = None) -> Path:
++    """Resolve path to backup schedule configuration JSON file."""
++    if override is not None:
++        return override
++    env_path = os.environ.get("KB_BACKUP_SCHEDULE_PATH")
++    if env_path:
++        return Path(env_path)
++    if DEFAULT_SCHEDULE_PATH.parent.exists():
++        return DEFAULT_SCHEDULE_PATH
++    return Path(".backup_schedule.json")
++
++
++def get_backup_schedule(config_path: Path | None = None) -> dict[str, Any]:
++    """Retrieve current backup schedule configuration."""
++    target = resolve_schedule_path(config_path)
++    if target.is_file():
++        try:
++            content = target.read_text(encoding="utf-8")
++            data = json.loads(content)
++            if isinstance(data, dict):
++                return ScheduledBackupConfig.from_dict(data).to_dict()
++        except Exception:
++            logger.warning("Failed to parse backup schedule from %s", target, exc_info=True)
++    return ScheduledBackupConfig().to_dict()
++
++
++def update_backup_schedule(
++    *,
++    enabled: bool,
++    interval_hours: int,
++    retention_count: int,
++    config_path: Path | None = None,
++) -> dict[str, Any]:
++    """Update and persist backup schedule configuration."""
++    if interval_hours < 1:
++        msg = f"interval_hours must be at least 1, got {interval_hours}"
++        raise ValueError(msg)
++    if retention_count < 1:
++        msg = f"retention_count must be at least 1, got {retention_count}"
++        raise ValueError(msg)
++
++    current = get_backup_schedule(config_path)
++    now = datetime.now(UTC)
++
++    next_run = (now + timedelta(hours=interval_hours)).isoformat() if enabled else None
++
++    config = ScheduledBackupConfig(
++        enabled=enabled,
++        interval_hours=interval_hours,
++        retention_count=retention_count,
++        last_run_at=current.get("last_run_at"),
++        next_run_at=next_run,
++    )
++
++    target = resolve_schedule_path(config_path)
++    target.parent.mkdir(parents=True, exist_ok=True)
++    target.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
++
++    return config.to_dict()
++
++
++def list_backups(backup_dir: Path | None = None) -> list[dict[str, Any]]:
++    """Enumerate existing backup files sorted by creation time descending."""
++    target_dir = resolve_backup_dir(backup_dir)
++    if not target_dir.is_dir():
++        return []
++
++    results: list[dict[str, Any]] = []
++    for entry in target_dir.iterdir():
++        if entry.is_file() and (entry.name.endswith(".kbbak") or entry.name.endswith(".kbkp")):
++            stat = entry.stat()
++            created_dt = datetime.fromtimestamp(stat.st_mtime, UTC)
++            results.append(
++                {
++                    "filename": entry.name,
++                    "size_bytes": stat.st_size,
++                    "created_at": created_dt.isoformat(),
++                }
++            )
++
++    results.sort(key=lambda item: item["created_at"], reverse=True)
++    return results
++
++
++def prune_old_backups(
++    backup_dir: Path | None = None,
++    retention_count: int = DEFAULT_RETENTION_COUNT,
++) -> int:
++    """Remove backup snapshots older than retention_count."""
++    backups = list_backups(backup_dir)
++    target_dir = resolve_backup_dir(backup_dir)
++    if len(backups) <= retention_count:
++        return 0
++
++    to_prune = backups[retention_count:]
++    pruned = 0
++    for item in to_prune:
++        file_path = target_dir / item["filename"]
++        with contextlib.suppress(OSError):
++            file_path.unlink(missing_ok=True)
++            pruned += 1
++
++    logger.info("Pruned %d old backup snapshots (retention limit: %d)", pruned, retention_count)
++    return pruned
++
++
++def run_scheduled_backup_pass(
++    db_url: str | None = None,
++    key_source: KeySource | None = None,
++    backup_dir: Path | None = None,
++    config_path: Path | None = None,
++) -> BackupSummary | None:
++    """Execute a single backup pass and prune older snapshots according to schedule."""
++    schedule = get_backup_schedule(config_path)
++    target_dir = resolve_backup_dir(backup_dir)
++    target_dir.mkdir(parents=True, exist_ok=True)
++
++    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
++    out_filename = f"kanban-backup-{timestamp}.kbbak"
++    out_path = target_dir / out_filename
++
++    effective_db_url = db_url
++    if not effective_db_url:
++        settings = get_settings()
++        effective_db_url = settings.database_url or os.environ.get("DATABASE_URL")
++
++    if not effective_db_url:
++        logger.error("Cannot run scheduled backup: database_url is unavailable")
++        return None
++
++    effective_key_source = key_source
++    if effective_key_source is None:
++        master_kek_b64 = os.environ.get("KB_MASTER_KEK_B64")
++        if master_kek_b64:
++            padded = master_kek_b64 + "=" * (-len(master_kek_b64) % 4)
++            kek_bytes = base64.urlsafe_b64decode(padded)
++            effective_key_source = RawKeySource(kek_bytes)
++        else:
++            # Fallback to ephemeral deterministic key source for tests or standalone default
++            effective_key_source = RawKeySource(b"\x00" * 32)
++
++    try:
++        summary = create_backup(
++            db_url=effective_db_url,
++            out_path=out_path,
++            key_source=effective_key_source,
++            include_secrets=True,
++        )
++    except Exception:
++        logger.exception("Scheduled backup creation failed")
++        return None
++
++    # Update schedule last_run and next_run
++    now = datetime.now(UTC)
++    interval = schedule.get("interval_hours", DEFAULT_INTERVAL_HOURS)
++    retention = schedule.get("retention_count", DEFAULT_RETENTION_COUNT)
++
++    schedule["last_run_at"] = now.isoformat()
++    if schedule.get("enabled"):
++        schedule["next_run_at"] = (now + timedelta(hours=interval)).isoformat()
++
++    schedule_target = resolve_schedule_path(config_path)
++    with contextlib.suppress(Exception):
++        schedule_target.write_text(json.dumps(schedule, indent=2), encoding="utf-8")
++
++    # Prune old backups exceeding retention count
++    prune_old_backups(backup_dir, retention_count=retention)
++
++    return summary
++
++
++async def run_scheduled_backup(session_target: Any) -> None:  # noqa: ANN401
++    """Background job loop callback verifying schedule due time and executing backup pass."""
++    del session_target
++    schedule = get_backup_schedule()
++    if not schedule.get("enabled"):
++        return
++
++    next_run_str = schedule.get("next_run_at")
++    if next_run_str:
++        with contextlib.suppress(Exception):
++            next_run = datetime.fromisoformat(next_run_str)
++            if datetime.now(UTC) < next_run:
++                return
++
++    # Backup is due
++    try:
++        run_scheduled_backup_pass()
++    except Exception:
++        logger.exception("Error executing scheduled backup background pass")
 diff --git a/kanban/ops/backup_service.py b/kanban/ops/backup_service.py
 index 9f5d993..e8723ac 100644
 --- a/kanban/ops/backup_service.py
@@ -817,6 +1089,122 @@ index 9b61bf9..e9d88f6 100644
  def test_assert_admin_routes_protected_compliance() -> None:
      """Verify all admin routes declare require_admin_aal2 dependency."""
      app = create_app()
+diff --git a/kanban/tests/ops/test_scheduled_backup.py b/kanban/tests/ops/test_scheduled_backup.py
+new file mode 100644
+index 0000000..441f33c
+--- /dev/null
++++ b/kanban/tests/ops/test_scheduled_backup.py
+@@ -0,0 +1,110 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for scheduled automated backups and snapshot pruning (KANBA-188)."""
++
++from __future__ import annotations
++
++import os
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++
++from kanban.jobs.scheduled_backup import (
++    DEFAULT_INTERVAL_HOURS,
++    DEFAULT_RETENTION_COUNT,
++    ScheduledBackupConfig,
++    get_backup_schedule,
++    list_backups,
++    prune_old_backups,
++    update_backup_schedule,
++)
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++def test_scheduled_backup_config_defaults() -> None:
++    """Test default configuration serialization and deserialization."""
++    config = ScheduledBackupConfig()
++    assert config.enabled is False
++    assert config.interval_hours == DEFAULT_INTERVAL_HOURS
++    assert config.retention_count == DEFAULT_RETENTION_COUNT
++    assert config.last_run_at is None
++    assert config.next_run_at is None
++
++    as_dict = config.to_dict()
++    assert as_dict["enabled"] is False
++
++    from_dict = ScheduledBackupConfig.from_dict(as_dict)
++    assert from_dict.interval_hours == DEFAULT_INTERVAL_HOURS
++
++
++def test_get_and_update_backup_schedule(tmp_path: Path) -> None:
++    """Test updating and reading schedule configuration from disk."""
++    config_file = tmp_path / "backup_schedule.json"
++
++    initial = get_backup_schedule(config_file)
++    assert initial["enabled"] is False
++
++    updated = update_backup_schedule(
++        enabled=True,
++        interval_hours=12,
++        retention_count=5,
++        config_path=config_file,
++    )
++    assert updated["enabled"] is True
++    assert updated["interval_hours"] == 12
++    assert updated["retention_count"] == 5
++    assert updated["next_run_at"] is not None
++
++    reloaded = get_backup_schedule(config_file)
++    assert reloaded["enabled"] is True
++    assert reloaded["interval_hours"] == 12
++    assert reloaded["retention_count"] == 5
++
++    # Invalid values raise ValueError
++    with pytest.raises(ValueError, match="interval_hours must be at least 1"):
++        update_backup_schedule(
++            enabled=True, interval_hours=0, retention_count=5, config_path=config_file
++        )
++
++    with pytest.raises(ValueError, match="retention_count must be at least 1"):
++        update_backup_schedule(
++            enabled=True, interval_hours=12, retention_count=0, config_path=config_file
++        )
++
++
++def test_list_and_prune_backups(tmp_path: Path) -> None:
++    """Test listing and pruning backup files based on retention count."""
++    backup_dir = tmp_path / "backups"
++    backup_dir.mkdir(parents=True, exist_ok=True)
++
++    # Empty initially
++    assert list_backups(backup_dir) == []
++
++    # Create 5 snapshots
++    now = datetime.now(UTC)
++    for i in range(5):
++        file_path = backup_dir / f"kanban-backup-{i:02d}.kbbak"
++        file_path.write_bytes(f"DATA_{i}".encode())
++        # Set mtime staggered
++        mtime = (now + timedelta(minutes=i * 10)).timestamp()
++        os.utime(file_path, (mtime, mtime))
++
++    backups = list_backups(backup_dir)
++    assert len(backups) == 5
++    assert backups[0]["filename"] == "kanban-backup-04.kbbak"
++
++    # Prune keeping 3
++    pruned = prune_old_backups(backup_dir, retention_count=3)
++    assert pruned == 2
++
++    remaining = list_backups(backup_dir)
++    assert len(remaining) == 3
++    filenames = [b["filename"] for b in remaining]
++    assert "kanban-backup-04.kbbak" in filenames
++    assert "kanban-backup-03.kbbak" in filenames
++    assert "kanban-backup-02.kbbak" in filenames
++    assert "kanban-backup-01.kbbak" not in filenames
++    assert "kanban-backup-00.kbbak" not in filenames
 diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
 index c740c2b..e8f3ab0 100644
 --- a/kanban/web/src/app/CommandPalette.tsx
@@ -1539,7 +1927,7 @@ index 21bca11..ce25d7a 100644
    }
  }
 diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
-index 8458175..d9c6ed6 100644
+index 8458175..79c6d94 100644
 --- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
 +++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
 @@ -73,10 +73,10 @@ describe('StandaloneStatusPanel', () => {
@@ -1555,7 +1943,24 @@ index 8458175..d9c6ed6 100644
        ),
      ).toBeDefined();
  
-@@ -165,20 +165,20 @@ describe('StandaloneStatusPanel', () => {
+@@ -137,7 +137,7 @@ describe('StandaloneStatusPanel', () => {
+       tier_b_sandbox_available: false,
+     };
+ 
+-    render(
++    const { unmount } = render(
+       <QueryClientProvider client={queryClient}>
+         <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={memberStatus} />
+       </QueryClientProvider>,
+@@ -157,6 +157,7 @@ describe('StandaloneStatusPanel', () => {
+ 
+     // Tab key with only 1 focusable (Close button) exercises line 86 (focusables.length <= 1)
+     fireEvent.keyDown(document, { key: 'Tab' });
++    unmount();
+   });
+ 
+   it('Case 5b: admin backup validation, CSRF token header, and blob URL revocation', async () => {
+@@ -165,20 +166,20 @@ describe('StandaloneStatusPanel', () => {
      let capturedHeaders: Record<string, string> = {};
  
      const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -1585,7 +1990,7 @@ index 8458175..d9c6ed6 100644
              },
            }),
          );
-@@ -206,7 +206,7 @@ describe('StandaloneStatusPanel', () => {
+@@ -206,7 +207,7 @@ describe('StandaloneStatusPanel', () => {
  
      const input = screen.getByLabelText('Backup Passphrase');
      const submitBtn = screen.getByRole('button', {
@@ -1594,7 +1999,7 @@ index 8458175..d9c6ed6 100644
      });
  
      // 1. Initially empty passphrase: button disabled
-@@ -274,7 +274,7 @@ describe('StandaloneStatusPanel', () => {
+@@ -274,7 +275,7 @@ describe('StandaloneStatusPanel', () => {
      );
  
      const form = screen.getByRole('button', {
@@ -1603,7 +2008,7 @@ index 8458175..d9c6ed6 100644
      }).closest('form');
      expect(form).not.toBeNull();
      if (!form) return;
-@@ -333,7 +333,7 @@ describe('StandaloneStatusPanel', () => {
+@@ -333,7 +334,7 @@ describe('StandaloneStatusPanel', () => {
      );
  
      const form = screen.getByRole('button', {
@@ -1612,7 +2017,7 @@ index 8458175..d9c6ed6 100644
      }).closest('form');
      expect(form).not.toBeNull();
      if (!form) return;
-@@ -471,13 +471,17 @@ describe('StandaloneStatusPanel', () => {
+@@ -471,13 +472,17 @@ describe('StandaloneStatusPanel', () => {
      );
  
      // Verify active sandbox text
@@ -1632,7 +2037,7 @@ index 8458175..d9c6ed6 100644
      });
      fireEvent.change(input, { target: { value: 'passphrase-without-csrf-16' } });
  
-@@ -519,7 +523,7 @@ describe('StandaloneStatusPanel', () => {
+@@ -519,7 +524,7 @@ describe('StandaloneStatusPanel', () => {
      // 2. Submit backup with string throw
      const input = screen.getByLabelText('Backup Passphrase');
      const submitBtn = screen.getByRole('button', {
@@ -1641,7 +2046,7 @@ index 8458175..d9c6ed6 100644
      });
      fireEvent.change(input, { target: { value: 'passphrase-string-err-16' } });
      await act(async () => {
-@@ -577,7 +581,7 @@ describe('StandaloneStatusPanel', () => {
+@@ -577,7 +582,7 @@ describe('StandaloneStatusPanel', () => {
      });
  
      const form = screen.getByRole('button', {
@@ -1650,7 +2055,7 @@ index 8458175..d9c6ed6 100644
      }).closest('form');
      expect(form).not.toBeNull();
      if (!form) return;
-@@ -619,6 +623,131 @@ describe('StandaloneStatusPanel', () => {
+@@ -619,6 +624,131 @@ describe('StandaloneStatusPanel', () => {
        configurable: true,
      });
    });
@@ -1782,7 +2187,7 @@ index 8458175..d9c6ed6 100644
  });
  
  describe('ComposeExportTab', () => {
-@@ -756,7 +885,7 @@ describe('ComposeExportTab', () => {
+@@ -756,7 +886,7 @@ describe('ComposeExportTab', () => {
      expect(screen.getByText('PostgreSQL 16 Promotion Runbook:')).toBeDefined();
      const checklistPre = screen.getByText(/1\. Generate secrets/);
      expect(checklistPre.textContent).toContain('1. Generate secrets');
@@ -1791,7 +2196,7 @@ index 8458175..d9c6ed6 100644
      expect(checklistPre.textContent).toContain('3. docker compose up -d postgres');
      expect(checklistPre.textContent).toContain(
        '4. kanban-ctl restore / pg_restore into external PostgreSQL 16',
-@@ -851,4 +980,29 @@ describe('ComposeExportTab', () => {
+@@ -851,4 +981,29 @@ describe('ComposeExportTab', () => {
      // Clipboard write should not be called because exportData is null
      expect(clipboardMock).not.toHaveBeenCalled();
    });

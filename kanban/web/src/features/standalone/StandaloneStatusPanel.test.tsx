@@ -137,7 +137,7 @@ describe('StandaloneStatusPanel', () => {
       tier_b_sandbox_available: false,
     };
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={queryClient}>
         <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={memberStatus} />
       </QueryClientProvider>,
@@ -157,6 +157,7 @@ describe('StandaloneStatusPanel', () => {
 
     // Tab key with only 1 focusable (Close button) exercises line 86 (focusables.length <= 1)
     fireEvent.keyDown(document, { key: 'Tab' });
+    unmount();
   });
 
   it('Case 5b: admin backup validation, CSRF token header, and blob URL revocation', async () => {
