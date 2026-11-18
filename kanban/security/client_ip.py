@@ -11,8 +11,21 @@ import os
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from typing import TYPE_CHECKING, Any
 
+from kanban.settings import get_settings
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+
+
+def _get_raw_trusted_proxies() -> str:
+    """Retrieve raw trusted proxies string from environment or application settings."""
+    raw_env = os.environ.get("KANBAN_TRUSTED_PROXIES") or os.environ.get("KB_TRUSTED_PROXIES", "")
+    if not raw_env.strip():
+        try:
+            raw_env = get_settings().trusted_proxies
+        except RuntimeError:
+            return ""
+    return raw_env
 
 
 def _parse_trusted_networks(
@@ -20,27 +33,25 @@ def _parse_trusted_networks(
 ) -> tuple[IPv4Network | IPv6Network, ...]:
     """Parse trusted proxy CIDR entries from sequence, string, or environment."""
     if trusted is None:
-        raw_env = os.environ.get("KANBAN_TRUSTED_PROXIES") or os.environ.get(
-            "KB_TRUSTED_PROXIES", ""
-        )
-        if not raw_env.strip():
-            return ()
-        entries = [item.strip() for item in raw_env.replace(" ", ",").split(",") if item.strip()]
+        raw_str = _get_raw_trusted_proxies()
+        entries: Sequence[IPv4Network | IPv6Network | str] = [
+            item.strip() for item in raw_str.replace(" ", ",").split(",") if item.strip()
+        ]
     elif isinstance(trusted, str):
         entries = [item.strip() for item in trusted.replace(" ", ",").split(",") if item.strip()]
     else:
-        parsed: list[IPv4Network | IPv6Network] = []
-        for item in trusted:
-            if isinstance(item, (IPv4Network, IPv6Network)):
-                parsed.append(item)
-            elif item.strip():
-                parsed.append(ipaddress.ip_network(item.strip(), strict=False))
-        return tuple(parsed)
+        entries = trusted
 
     parsed_list: list[IPv4Network | IPv6Network] = []
-    for entry in entries:
+    for item in entries:
+        if isinstance(item, (IPv4Network, IPv6Network)):
+            parsed_list.append(item)
+            continue
+        token = item.strip()
+        if not token:
+            continue
         try:
-            parsed_list.append(ipaddress.ip_network(entry, strict=False))
+            parsed_list.append(ipaddress.ip_network(token, strict=False))
         except ValueError:
             continue
     return tuple(parsed_list)
@@ -66,6 +77,8 @@ def _format_ip(ip: IPv4Address | IPv6Address) -> str:
 
 def _extract_direct_peer(scope: Mapping[str, Any]) -> IPv4Address | IPv6Address | str:
     """Extract and normalize the direct peer IP from the ASGI connection scope."""
+    if hasattr(scope, "scope"):
+        scope = scope.scope
     client_info = scope.get("client")
     direct_peer_str: str = ""
     if client_info and len(client_info) > 0 and client_info[0]:
@@ -135,6 +148,8 @@ def resolve_client_ip(
     Malformed entries immediately fall back to the direct peer. IPv4-mapped IPv6
     addresses are normalized to IPv4. IPv6 clients are bucketed by their /64 prefix.
     """
+    if hasattr(scope, "scope"):
+        scope = scope.scope
     peer = _extract_direct_peer(scope)
     if isinstance(peer, str):
         return peer

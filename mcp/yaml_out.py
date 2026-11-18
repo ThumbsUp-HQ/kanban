@@ -7,6 +7,8 @@ from typing import Final
 
 import yaml
 
+from kanban.security.scrubber import scrub_text
+
 __all__ = [
     "InlineSafeDumper",
     "dump_yaml",
@@ -31,7 +33,7 @@ _SECRET_KEY_NAMES: Final[frozenset[str]] = frozenset(
 
 
 def redact_secrets(val: object) -> object:
-    """Recursively replace secret fields with '***'."""
+    """Recursively replace secret fields with '***' and scrub free-text strings."""
     if isinstance(val, dict):
         cleaned_dict: dict[object, object] = {}
         for k, v in val.items():
@@ -43,6 +45,9 @@ def redact_secrets(val: object) -> object:
 
     if isinstance(val, list):
         return [redact_secrets(item) for item in val]
+
+    if isinstance(val, str):
+        return scrub_text(val)
 
     return val
 

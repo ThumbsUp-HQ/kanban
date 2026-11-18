@@ -1,4 +1,7 @@
-"""Issue endpoints: CRUD, keyset listing, and description ETag concurrency (S7.2 8a, S3.4)."""
+"""Issue endpoints CRUD and outbound secret scrubbing.
+
+Covers CRUD, keyset listing, description ETag concurrency, and secret redaction (S7.2, S3.4).
+"""
 
 from __future__ import annotations
 

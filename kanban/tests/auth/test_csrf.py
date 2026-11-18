@@ -19,14 +19,19 @@ from kanban.auth.sessions.csrf import (
     CSRF_COOKIE_NAME,
     CSRF_EXEMPT_PATHS,
     CSRF_HEADER_NAME,
+    FALLBACK_CSRF_COOKIE_NAME,
     PRE_SESSION_ID,
     CsrfMiddleware,
     build_clear_csrf_cookie_header,
+    build_clear_fallback_csrf_cookie_header,
     build_set_csrf_cookie_header,
+    build_set_fallback_csrf_cookie_header,
+    extract_csrf_cookie,
     generate_csrf_token,
     validate_csrf_token,
 )
 from kanban.security.keys import KeyMaterial
+from kanban.settings import get_settings
 
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -193,6 +198,119 @@ async def test_case_8_security_csrf_protections(hmac_key: bytes) -> None:
             assert res5.json() == {"status": "action_performed"}
 
 
+@pytest.mark.asyncio
+async def test_csrf_referer_validation(hmac_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify standalone Referer validation when Origin header is absent."""
+    test_app = FastAPI()
+    test_app.add_middleware(CsrfMiddleware, session_hmac_key=hmac_key)
+
+    @test_app.post("/api/v1/resource")
+    async def modify_resource() -> JSONResponse:
+        return JSONResponse({"status": "modified"})
+
+    session_id = uuid.uuid4()
+    token = generate_csrf_token(session_id, hmac_key)
+
+    class InjectSessionMiddleware:
+        def __init__(self, app: ASGIApp, sess_id: uuid.UUID) -> None:
+            self.app = app
+            self.sess_id = sess_id
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            if scope["type"] == "http":
+                scope["state"] = {
+                    "session_id": self.sess_id,
+                    "principal": PrincipalContext(
+                        principal_id=uuid.uuid4(),
+                        workspace_id=uuid.uuid4(),
+                        session_id=self.sess_id,
+                    ),
+                }
+            await self.app(scope, receive, send)
+
+    app_wrapped = InjectSessionMiddleware(test_app, session_id)
+    transport = httpx.ASGITransport(app=app_wrapped, raise_app_exceptions=False)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # 1. Origin absent, Referer: https://evil.example/attack -> 403 CSRF_REJECTED
+        res_evil = await client.post(
+            "/api/v1/resource",
+            headers={
+                "host": "testserver",
+                "referer": "https://evil.example/attack?param=value",
+                CSRF_HEADER_NAME: token,
+            },
+            cookies={CSRF_COOKIE_NAME: token},
+        )
+        assert res_evil.status_code == 403
+        assert res_evil.json()["code"] == "CSRF_REJECTED"
+
+        # 2. Origin absent, Referer: http://testserver/app/issues -> 200 OK
+        res_ok = await client.post(
+            "/api/v1/resource",
+            headers={
+                "host": "testserver",
+                "referer": "http://testserver/app/issues",
+                CSRF_HEADER_NAME: token,
+            },
+            cookies={CSRF_COOKIE_NAME: token},
+        )
+        assert res_ok.status_code == 200
+        assert res_ok.json() == {"status": "modified"}
+
+        # 3. Origin absent, malformed Referer -> 403 CSRF_REJECTED
+        res_malformed = await client.post(
+            "/api/v1/resource",
+            headers={
+                "host": "testserver",
+                "referer": "not-a-valid-url",
+                CSRF_HEADER_NAME: token,
+            },
+            cookies={CSRF_COOKIE_NAME: token},
+        )
+        assert res_malformed.status_code == 403
+        assert res_malformed.json()["code"] == "CSRF_REJECTED"
+
+        # 4. Origin absent, non-HTTP Referer -> 403 CSRF_REJECTED
+        res_js = await client.post(
+            "/api/v1/resource",
+            headers={
+                "host": "testserver",
+                "referer": "javascript:alert(1)",
+                CSRF_HEADER_NAME: token,
+            },
+            cookies={CSRF_COOKIE_NAME: token},
+        )
+        assert res_js.status_code == 403
+        assert res_js.json()["code"] == "CSRF_REJECTED"
+
+        # 5. Public origin configured: matches Referer
+        monkeypatch.setenv("KB_PUBLIC_ORIGIN", "https://kanban.example")
+        res_public_ok = await client.post(
+            "/api/v1/resource",
+            headers={
+                "host": "kanban.internal",
+                "referer": "https://kanban.example/board",
+                CSRF_HEADER_NAME: token,
+            },
+            cookies={CSRF_COOKIE_NAME: token},
+        )
+        assert res_public_ok.status_code == 200
+
+        # 6. Public origin configured: mismatch Referer -> 403 CSRF_REJECTED
+        res_public_mismatch = await client.post(
+            "/api/v1/resource",
+            headers={
+                "host": "kanban.internal",
+                "referer": "https://other.example/board",
+                CSRF_HEADER_NAME: token,
+            },
+            cookies={CSRF_COOKIE_NAME: token},
+        )
+        assert res_public_mismatch.status_code == 403
+        assert res_public_mismatch.json()["code"] == "CSRF_REJECTED"
+
+
 def test_csrf_exempt_paths() -> None:
     """Verify exempt paths constant contains required endpoints."""
     assert "/api/v1/auth/session" in CSRF_EXEMPT_PATHS
@@ -322,3 +440,138 @@ async def test_csrf_middleware_edge_cases(hmac_key: bytes, monkeypatch: pytest.M
     req = Request({"type": "http", "app": app_no_km, "headers": []})
     mw = CsrfMiddleware(app_no_km)
     assert mw._get_key(req) == b"\x00" * 32  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_csrf_fallback_cookie_and_scope_branches(hmac_key: bytes) -> None:
+    """Verify fallback cookies, non-http scopes, metadata fallbacks, and state principal."""
+    # 1. Fallback cookie headers
+    set_fb = build_set_fallback_csrf_cookie_header("fb_token")
+    assert f"{FALLBACK_CSRF_COOKIE_NAME}=fb_token" in set_fb
+    assert "SameSite=Strict" in set_fb
+
+    clear_fb = build_clear_fallback_csrf_cookie_header()
+    assert f"{FALLBACK_CSRF_COOKIE_NAME}=" in clear_fb
+    assert "Max-Age=0" in clear_fb
+
+    # 2. extract_csrf_cookie with fallback cookie and matching header
+    req_fb = Request({
+        "type": "http",
+        "headers": [
+            (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
+            (b"x-csrf-token", b"fb_val"),
+        ],
+    })
+    assert extract_csrf_cookie(req_fb) == "fb_val"
+
+    req_fb_no_match = Request({
+        "type": "http",
+        "headers": [
+            (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
+            (b"x-csrf-token", b"other_val"),
+        ],
+    })
+    assert extract_csrf_cookie(req_fb_no_match) == "fb_val"
+
+    # 3. Non-http scope in CsrfMiddleware
+    app = FastAPI()
+    mw = CsrfMiddleware(app, session_hmac_key=hmac_key)
+    ws_scope = {"type": "websocket"}
+    called = False
+
+    async def mock_app(_s: Scope, _r: Receive, _snd: Send) -> None:
+        nonlocal called
+        called = True
+
+    mw.app = mock_app
+    await mw(ws_scope, lambda: None, lambda _: None)  # type: ignore[arg-type]
+    assert called is True
+
+    # 4. Metadata validation when host header is missing
+    req_no_host = Request({"type": "http", "headers": [(b"origin", b"https://some.origin")]})
+    assert mw._validate_metadata(req_no_host) is not None  # noqa: SLF001
+
+    # 5. Metadata validation using settings.public_origin fallback
+    orig_pub = get_settings().public_origin
+    try:
+        object.__setattr__(get_settings(), "public_origin", "https://settings.kanban.test")
+        req_settings = Request({
+            "type": "http",
+            "path": "/",
+            "headers": [
+                (b"host", b"kanban.internal"),
+                (b"origin", b"https://settings.kanban.test"),
+            ],
+        })
+        assert mw._validate_metadata(req_settings) is None  # noqa: SLF001
+    finally:
+        object.__setattr__(get_settings(), "public_origin", orig_pub)
+
+    # 6. Principal on request.state fallback in _resolve_session_id
+    test_sid = uuid.uuid4()
+    req_princ = Request({"type": "http", "path": "/", "app": app, "headers": []})
+    req_princ.state.principal = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        session_id=test_sid,
+    )
+    resolved_sess = await mw._resolve_session_id(req_princ)  # noqa: SLF001
+    assert resolved_sess == test_sid
+
+
+@pytest.mark.asyncio
+async def test_csrf_token_bypass_and_login_branches(hmac_key: bytes) -> None:
+    """Verify subject/internal tokens bypass and login pre-session token grace."""
+    app2 = FastAPI()
+    app2.add_middleware(CsrfMiddleware, session_hmac_key=hmac_key)
+
+    @app2.post("/api/v1/agent-endpoint")
+    async def agent_act() -> JSONResponse:
+        return JSONResponse({"status": "agent_ok"})
+
+    transport = httpx.ASGITransport(app=app2, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # Subject token bypass
+        res_subj = await client.post(
+            "/api/v1/agent-endpoint",
+            headers={"x-kb-subject-token": "kb_agt_test"},
+        )
+        assert res_subj.status_code == 200
+
+        # Internal auth bypass
+        res_int = await client.post(
+            "/api/v1/agent-endpoint",
+            headers={"x-kb-internal-auth": "secret-internal"},
+        )
+        assert res_int.status_code == 200
+
+        # Pre-session token on /api/v1/auth/local/login with active session
+        pre_token = generate_csrf_token(PRE_SESSION_ID, hmac_key)
+
+        @app2.post("/api/v1/auth/local/login")
+        async def login_act() -> JSONResponse:
+            return JSONResponse({"status": "logged_in"})
+
+        class SessionInjector:
+            def __init__(self, inner: ASGIApp) -> None:
+                self.inner = inner
+
+            async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                if scope["type"] == "http":
+                    scope["state"] = {"session_id": uuid.uuid4()}
+                await self.inner(scope, receive, send)
+
+        app_login = SessionInjector(app2)
+        trans_login = httpx.ASGITransport(app=app_login, raise_app_exceptions=False)
+        async with (
+            httpx.AsyncClient(transport=trans_login, base_url="http://testserver") as cl_login
+        ):
+            res_login = await cl_login.post(
+                "/api/v1/auth/local/login",
+                headers={
+                    "host": "testserver",
+                    CSRF_HEADER_NAME: pre_token,
+                },
+                cookies={CSRF_COOKIE_NAME: pre_token},
+            )
+            assert res_login.status_code == 200

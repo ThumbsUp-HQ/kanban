@@ -1119,3 +1119,90 @@ async def test_services_edge_cases_and_missing_branches(  # noqa: PLR0915
                 if_match=iss_etag,
             )
         assert exc_toctou.value.code == "PRECONDITION_FAILED"
+
+
+async def test_issue_and_comment_free_text_secret_scrubbing(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify outbound REST issue descriptions and comments redact known secret patterns."""
+    user = await make_user("sec_scrub_user", workspace_role="WORKSPACE_ADMIN")
+    await make_project("SCRUB", created_by=user, roles={user: "PROJECT_ADMIN"})
+    client = as_principal(user)
+
+    pem_block = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEowIBAAKCAQEA0Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
+        "KLMNOPQRSTUVWXYZ0123456789+/abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+    raw_desc = (
+        "# Security Audit\n\n"
+        "Configured credentials:\n"
+        "- OpenAI: sk-proj-1234567890abcdef1234567890abcdef1234567890\n"
+        "- GitHub: ghp_1234567890abcdefghijklmnopqrstuvwxyz12\n"
+        "- AWS: AKIAIOSFODNN7EXAMPLE\n"
+        "- Agent: kb_agt_0123456789abcdef\n"
+        f"- PEM:\n```\n{pem_block}\n```\n\n"
+        "Normal markdown: **bold** and `code` formatting."
+    )
+
+    # 1. Create issue
+    resp_create = await client.post(
+        "/api/v1/projects/SCRUB/issues",
+        json={"summary": "Secret Issue", "description_markdown": raw_desc},
+    )
+    assert resp_create.status_code == 201
+    created_data = resp_create.json()
+    desc_out = created_data["description_markdown"]
+
+    # Verify secrets are scrubbed in POST response
+    assert "sk-proj-1234567890" not in desc_out
+    assert "ghp_1234567890" not in desc_out
+    assert "AKIAIOSFODNN7EXAMPLE" not in desc_out
+    assert "kb_agt_0123456789" not in desc_out
+    assert "BEGIN RSA PRIVATE KEY" not in desc_out
+
+    assert "[REDACTED:API_KEY]" in desc_out
+    assert "[REDACTED:GITHUB_TOKEN]" in desc_out
+    assert "[REDACTED:AWS_ACCESS_KEY]" in desc_out
+    assert "[REDACTED:KANBAN_KEY]" in desc_out
+    assert "[REDACTED:PRIVATE_KEY]" in desc_out
+    assert "# Security Audit" in desc_out
+    assert "**bold** and `code` formatting." in desc_out
+
+    issue_key = created_data["key"]
+    etag = resp_create.headers["ETag"]
+
+    # 2. GET issue
+    resp_get = await client.get(f"/api/v1/issues/{issue_key}")
+    assert resp_get.status_code == 200
+    assert "[REDACTED:API_KEY]" in resp_get.json()["description_markdown"]
+    assert "sk-proj-1234567890" not in resp_get.json()["description_markdown"]
+
+    # 3. GET with matching ETag returns 304
+    resp_304 = await client.get(f"/api/v1/issues/{issue_key}", headers={"If-None-Match": etag})
+    assert resp_304.status_code == 304
+
+    # 4. POST comment with secret
+    resp_comm = await client.post(
+        f"/api/v1/issues/{issue_key}/comments",
+        json={
+            "body_markdown": (
+                "Found leaked token: ghp_1234567890abcdefghijklmnopqrstuvwxyz12 in deployment."
+            )
+        },
+    )
+    assert resp_comm.status_code == 201
+    comm_data = resp_comm.json()
+    assert "ghp_1234567890" not in comm_data["body_markdown"]
+    assert "[REDACTED:GITHUB_TOKEN]" in comm_data["body_markdown"]
+
+    # 5. GET comments
+    resp_comm_list = await client.get(f"/api/v1/issues/{issue_key}/comments")
+    assert resp_comm_list.status_code == 200
+    comments_items = resp_comm_list.json()["items"]
+    assert len(comments_items) == 1
+    assert "[REDACTED:GITHUB_TOKEN]" in comments_items[0]["body_markdown"]
+    assert "ghp_1234567890" not in comments_items[0]["body_markdown"]

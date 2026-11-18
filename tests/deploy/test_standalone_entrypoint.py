@@ -278,6 +278,26 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
     assert kr_env["KB_MASTER_KEK_B64"] == kr.master_kek_b64
 
 
+def test_trusted_proxies_passthrough_and_uvicorn_non_wildcard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify KB_TRUSTED_PROXIES is passed to child env and safe non-wildcard uvicorn command."""
+    monkeypatch.setenv("KB_TRUSTED_PROXIES", "10.0.0.0/8,172.16.0.0/12")
+    monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
+
+    env = build_child_env()
+    assert env["KB_TRUSTED_PROXIES"] == "10.0.0.0/8,172.16.0.0/12"
+
+    cmd = build_uvicorn_command()
+    assert "--forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12" in cmd
+
+    # When both are unset, default is safe non-wildcard
+    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
+    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
+    cmd_default = build_uvicorn_command()
+    assert '--forwarded-allow-ips=""' in cmd_default
+
+
 # -----------------------------------------------------------------------------
 # Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
 # -----------------------------------------------------------------------------

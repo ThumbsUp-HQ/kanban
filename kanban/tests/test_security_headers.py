@@ -385,13 +385,21 @@ async def test_standalone_idn_punycode_host_matching(dummy_dist: Path) -> None:
 
 
 def test_build_uvicorn_command_forwarded_allow_ips(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test build_uvicorn_command respects KB_FORWARDED_ALLOW_IPS environment variable."""
-    # Default is '*'
+    """Test build_uvicorn_command forwarded_allow_ips non-wildcard defaults and env vars."""
+    # Default is safe non-wildcard ('--forwarded-allow-ips=""')
     monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
+    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
+    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
     cmd = build_uvicorn_command()
-    assert "--forwarded-allow-ips=*" in cmd
+    assert '--forwarded-allow-ips=""' in cmd
 
     # Explicit override
     monkeypatch.setenv("KB_FORWARDED_ALLOW_IPS", "127.0.0.1,10.0.0.1")
     cmd_custom = build_uvicorn_command()
     assert "--forwarded-allow-ips=127.0.0.1,10.0.0.1" in cmd_custom
+
+    # Respects KB_TRUSTED_PROXIES when KB_FORWARDED_ALLOW_IPS is not set
+    monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
+    monkeypatch.setenv("KB_TRUSTED_PROXIES", "10.0.0.0/8")
+    cmd_trusted = build_uvicorn_command()
+    assert "--forwarded-allow-ips=10.0.0.0/8" in cmd_trusted

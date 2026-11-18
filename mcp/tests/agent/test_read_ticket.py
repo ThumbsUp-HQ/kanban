@@ -444,3 +444,73 @@ async def test_read_ticket_full_compacts_manifest_activity_provenance(
     if "provenance" in parsed:
         assert "created_by" in parsed["provenance"]
         assert str(parsed["provenance"]["created_by"]).startswith("@")
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_free_text_secret_scrubbing(agent_test_env: AgentTestEnv) -> None:
+    """Verify read_ticket output scrubs known secret patterns in description and comments."""
+    env = agent_test_env
+
+    # 1. Create issue with secret patterns in description
+    pem_key = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEowIBAAKCAQEA0Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
+        "KLMNOPQRSTUVWXYZ0123456789+/abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+    desc_with_secrets = (
+        "# Secret Manifest\n\n"
+        "Testing outbound redaction:\n"
+        "- OpenAI: sk-proj-1234567890abcdef1234567890abcdef1234567890\n"
+        "- GitHub: ghp_1234567890abcdefghijklmnopqrstuvwxyz12\n"
+        "- AWS: AKIAIOSFODNN7EXAMPLE\n"
+        "- Kanban agent: kb_agt_0123456789abcdef\n"
+        f"- Private key:\n```\n{pem_key}\n```\n"
+    )
+
+    issue_res = await env.internal_client.request(
+        "POST",
+        "/api/v1/projects/KAN/issues",
+        json_data={"summary": "Ticket with Secrets", "description_markdown": desc_with_secrets},
+        subject_token=env.token_adam,
+    )
+    assert isinstance(issue_res, dict)
+    issue_key = str(issue_res["key"])
+
+    # 2. Add comment with secret patterns
+    await env.internal_client.request(
+        "POST",
+        f"/api/v1/issues/{issue_key}/comments",
+        json_data={
+            "body_markdown": (
+                "Comment secret: sk-proj-1234567890abcdef1234567890abcdef1234567890 "
+                "and AKIAIOSFODNN7EXAMPLE"
+            )
+        },
+        subject_token=env.token_adam,
+        mcp_session_id="test-session-secret-scrub",
+    )
+
+    # 3. Call read_ticket via MCP with lod=full
+    res = await _call_read_ticket(env, {"identifier": issue_key, "lod": "full"})
+    assert res["isError"] is False
+    yaml_text = res["content"][0]["text"]
+
+    # 4. Verify raw secrets are absent and redacted placeholders appear in YAML output
+    assert "sk-proj-1234567890" not in yaml_text
+    assert "ghp_1234567890" not in yaml_text
+    assert "AKIAIOSFODNN7EXAMPLE" not in yaml_text
+    assert "kb_agt_0123456789" not in yaml_text
+    assert "BEGIN RSA PRIVATE KEY" not in yaml_text
+
+    assert "[REDACTED:API_KEY]" in yaml_text
+    assert "[REDACTED:GITHUB_TOKEN]" in yaml_text
+    assert "[REDACTED:AWS_ACCESS_KEY]" in yaml_text
+    assert "[REDACTED:KANBAN_KEY]" in yaml_text
+    assert "[REDACTED:PRIVATE_KEY]" in yaml_text
+
+    # 5. Verify parsed structure also has scrubbed values
+    parsed = yaml.safe_load(yaml_text)
+    assert "[REDACTED:API_KEY]" in parsed["description_markdown"]
+    assert len(parsed["comments"]) > 0
+    assert "[REDACTED:API_KEY]" in parsed["comments"][0]["body_markdown"]

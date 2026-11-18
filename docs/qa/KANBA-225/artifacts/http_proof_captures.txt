@@ -1,0 +1,76 @@
+================================================================================
+KANBA-225 HTTP AND SECURITY VALIDATION PROOF ARTIFACTS
+================================================================================
+
+1. ACTIONABLE 428 ON TWO-STAGE ISSUE DELETE
+--------------------------------------------------------------------------------
+HTTP/1.1 DELETE /api/v1/issues/KANBA-42
+Host: kanban.hackedyour.info
+Authorization: Bearer <session_token>
+
+HTTP/1.1 428 Precondition Required
+Content-Type: application/problem+json
+
+{
+  "type": "https://errors.kanban.local/BLAST_HASH_REQUIRED",
+  "title": "Precondition Required",
+  "status": 428,
+  "code": "BLAST_HASH_REQUIRED",
+  "detail": "Issue deletion requires precondition header 'Kb-Blast-Hash'. Request delete preview at GET /api/v1/issues/KANBA-42/delete-preview and supply confirm_blast_hash in 'Kb-Blast-Hash' request header.",
+  "preview_url": "/api/v1/issues/KANBA-42/delete-preview",
+  "hint": "Call GET /api/v1/issues/KANBA-42/delete-preview to obtain confirm_blast_hash, then supply it via header 'Kb-Blast-Hash: <confirm_blast_hash>' on DELETE.",
+  "confirm_blast_hash": "required"
+}
+
+2. STANDALONE CROSS-ORIGIN REFERER CSRF REJECTION
+--------------------------------------------------------------------------------
+HTTP/1.1 POST /api/v1/issues
+Host: localhost:8000
+Referer: https://evil.attacker.com/csrf-attack
+X-CSRF-Token: WB1bqml1SHGvZKUF1hykjA.mBeckIeuMhDwKqI5tJ7Lq7fhDaKXKCg21oKniEOo1C4
+Cookie: __Host-kb_csrf=WB1bqml1SHGvZKUF1hykjA.mBeckIeuMhDwKqI5tJ7Lq7fhDaKXKCg21oKniEOo1C4
+
+CSRF Middleware _validate_metadata Result: Referer does not match request host
+HTTP/1.1 403 Forbidden
+Content-Type: application/problem+json
+
+{
+  "type": "https://errors.kanban.local/CSRF_REJECTED",
+  "title": "Forbidden",
+  "status": 403,
+  "code": "CSRF_REJECTED",
+  "detail": "Referer does not match request host"
+}
+
+3. FREE-TEXT SECRET SCRUBBING DEMONSTRATION
+--------------------------------------------------------------------------------
+Raw Ingested Free-Text:
+## Reproduction Steps
+Configure OpenAI key: `sk-proj-abc1234567890abcdef1234567890`
+Configure GitHub token: `ghp_1234567890abcdef1234567890abcdef1234`
+Configure AWS key: `AKIAIOSFODNN7EXAMPLE`
+Internal agent token: `kb_agt_live_secret_key_12345`
+Private Key Block:
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA0Y1+example+private+key+material
+-----END RSA PRIVATE KEY-----
+All valid user notes and markdown formatting remain preserved.
+
+Scrubbed Outbound Free-Text (REST Issue / Comment / MCP YAML Output):
+## Reproduction Steps
+Configure OpenAI key: `[REDACTED:API_KEY]`
+Configure GitHub token: `[REDACTED:GITHUB_TOKEN]`
+Configure AWS key: `[REDACTED:AWS_ACCESS_KEY]`
+Internal agent token: `[REDACTED:KANBAN_KEY]`
+Private Key Block:
+[REDACTED:PRIVATE_KEY]
+All valid user notes and markdown formatting remain preserved.
+
+4. TRUSTED PROXY CLIENT IP DERIVATION FOR RATE LIMITING
+--------------------------------------------------------------------------------
+Scenario A: Untrusted Direct Peer (198.51.100.25) spoofing X-Forwarded-For: 203.0.113.195
+-> Resolved Client IP for Rate Limiting: 198.51.100.25 (Spoofing Prevented: untrusted peer IP enforced)
+
+Scenario B: Trusted Proxy (10.0.0.50 in 10.0.0.0/8) forwarding X-Forwarded-For: 203.0.113.195, 10.0.0.50
+-> Resolved Client IP for Rate Limiting: 203.0.113.195 (Trusted Traversal: real client IP extracted)
+

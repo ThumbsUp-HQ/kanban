@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 10 items
+
+kanban/tests/security/test_client_ip.py::test_case_04_xff_spoof_and_trusted_traversal PASSED [ 10%]
+kanban/tests/security/test_client_ip.py::test_case_05_ipv6_rotation_subnet_bucketing PASSED [ 20%]
+kanban/tests/security/test_client_ip.py::test_ipv4_mapped_ipv6_normalization PASSED [ 30%]
+kanban/tests/security/test_client_ip.py::test_env_var_trusted_proxies PASSED [ 40%]
+kanban/tests/security/test_client_ip.py::test_empty_or_malformed_scope_handling PASSED [ 50%]
+kanban/tests/security/test_client_ip.py::test_trusted_proxy_string_and_sequence_formats PASSED [ 60%]
+kanban/tests/security/test_client_ip.py::test_env_var_with_invalid_entries_and_empty PASSED [ 70%]
+kanban/tests/security/test_client_ip.py::test_xff_edge_cases PASSED      [ 80%]
+kanban/tests/security/test_client_ip.py::test_format_ip_and_header_scanning PASSED [ 90%]
+kanban/tests/security/test_client_ip.py::test_kb_trusted_proxies_env_and_settings PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/security/client_ip.py      99      3     44      1    97%   26-27, 81
+--------------------------------------------------------------------------
+TOTAL                             99      3     44      1    97%
+============================== 10 passed in 0.23s ==============================

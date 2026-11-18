@@ -1,0 +1,33 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 9 items
+
+kanban/tests/auth/test_csrf.py::test_csrf_token_generation_and_validation PASSED [ 11%]
+kanban/tests/auth/test_csrf.py::test_csrf_cookie_headers PASSED          [ 22%]
+kanban/tests/auth/test_csrf.py::test_case_8_security_csrf_protections PASSED [ 33%]
+kanban/tests/auth/test_csrf.py::test_csrf_referer_validation PASSED      [ 44%]
+kanban/tests/auth/test_csrf.py::test_csrf_exempt_paths PASSED            [ 55%]
+kanban/tests/auth/test_csrf.py::test_csrf_token_validation_error_branches PASSED [ 66%]
+kanban/tests/auth/test_csrf.py::test_csrf_middleware_edge_cases PASSED   [ 77%]
+kanban/tests/auth/test_csrf.py::test_csrf_fallback_cookie_and_scope_branches PASSED [ 88%]
+kanban/tests/auth/test_csrf.py::test_csrf_token_bypass_and_login_branches PASSED [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/auth/test_csrf.py: 16 warnings
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/auth/sessions/csrf.py     186      6     68      3    96%   150-151, 190-191, 265->268, 303, 312
+--------------------------------------------------------------------------
+TOTAL                            186      6     68      3    96%
+======================== 9 passed, 16 warnings in 0.39s ========================

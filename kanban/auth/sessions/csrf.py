@@ -11,6 +11,7 @@ import os
 import secrets
 import uuid
 from typing import TYPE_CHECKING, Final
+from urllib.parse import urlsplit
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse, Response
@@ -18,6 +19,7 @@ from starlette.responses import JSONResponse, Response
 from kanban.api.problems import Problem
 from kanban.api.request_id import get_request_id
 from kanban.security.keys import derive_subkey
+from kanban.settings import get_settings
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -139,6 +141,62 @@ def build_clear_fallback_csrf_cookie_header() -> str:
     return f"{FALLBACK_CSRF_COOKIE_NAME}=; Path=/; SameSite=Strict; Max-Age=0"
 
 
+def _resolve_public_origin() -> str | None:
+    """Retrieve public origin from environment or application settings."""
+    public_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN") or os.environ.get("KB_PUBLIC_ORIGIN")
+    if not public_origin:
+        try:
+            public_origin = get_settings().public_origin
+        except RuntimeError:
+            return None
+    return public_origin.strip().rstrip("/") if public_origin else None
+
+
+def _get_allowed_origins(request: Request, public_origin: str | None) -> set[str]:
+    """Build allowed origin strings from configured public origin and host header."""
+    allowed: set[str] = set()
+    if public_origin:
+        allowed.add(public_origin)
+    host = request.headers.get("host")
+    if host:
+        clean_host = host.strip()
+        allowed.add(f"{request.url.scheme}://{clean_host}")
+        allowed.add(f"https://{clean_host}")
+        allowed.add(f"http://{clean_host}")
+    return allowed
+
+
+def _check_origin_header(
+    origin: str, allowed_origins: set[str], public_origin: str | None
+) -> str | None:
+    """Validate Origin header against allowed origins."""
+    clean_origin = origin.strip().rstrip("/")
+    if not allowed_origins or clean_origin not in allowed_origins:
+        if public_origin:
+            return "Origin does not match configured public origin"
+        return "Origin does not match request host"
+    return None
+
+
+def _check_referer_header(
+    referer: str, allowed_origins: set[str], public_origin: str | None
+) -> str | None:
+    """Validate Referer header when Origin is omitted."""
+    try:
+        parsed_ref = urlsplit(referer.strip())
+        if parsed_ref.scheme not in ("http", "https") or not parsed_ref.netloc:
+            return "Referer header is malformed"
+        ref_origin = f"{parsed_ref.scheme}://{parsed_ref.netloc}".rstrip("/")
+    except ValueError:
+        return "Referer header is malformed"
+
+    if not allowed_origins or ref_origin not in allowed_origins:
+        if public_origin:
+            return "Referer does not match configured public origin"
+        return "Referer does not match request host"
+    return None
+
+
 class CsrfMiddleware(BaseHTTPMiddleware):
     """ASGI middleware enforcing session-bound double-submit CSRF and browser metadata defenses."""
 
@@ -179,30 +237,22 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         return b"\x00" * 32
 
     def _validate_metadata(self, request: Request) -> str | None:
-        """Validate browser security headers (Sec-Fetch-Site and Origin)."""
+        """Validate browser security headers (Sec-Fetch-Site, Origin, and Referer)."""
         sec_fetch_site = request.headers.get("sec-fetch-site")
         if sec_fetch_site and sec_fetch_site.strip().lower() not in ("same-origin", "none"):
             return "Sec-Fetch-Site not same-origin or none"
 
+        public_origin = _resolve_public_origin()
+        allowed_origins = _get_allowed_origins(request, public_origin)
+
         origin = request.headers.get("origin")
         if origin:
-            clean_origin = origin.strip().rstrip("/")
-            host = request.headers.get("host")
-            allowed_origins: set[str] = set()
-            public_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN") or os.environ.get(
-                "KB_PUBLIC_ORIGIN"
-            )
-            if public_origin:
-                allowed_origins.add(public_origin.strip().rstrip("/"))
-            if host:
-                clean_host = host.strip()
-                allowed_origins.add(f"{request.url.scheme}://{clean_host}")
-                allowed_origins.add(f"https://{clean_host}")
-                allowed_origins.add(f"http://{clean_host}")
-            if allowed_origins and clean_origin not in allowed_origins:
-                if public_origin:
-                    return "Origin does not match configured public origin"
-                return "Origin does not match request host"
+            return _check_origin_header(origin, allowed_origins, public_origin)
+
+        referer = request.headers.get("referer")
+        if referer:
+            return _check_referer_header(referer, allowed_origins, public_origin)
+
         return None
 
     async def _resolve_session_id(self, request: Request) -> uuid.UUID:

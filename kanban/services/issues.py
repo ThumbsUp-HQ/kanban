@@ -70,6 +70,7 @@ from kanban.security.permissions import (
     evaluate_capabilities,
     require_capability,
 )
+from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, JSONValue, record_activity
 from kanban.services.assignees import get_issue_assignees
 from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
@@ -605,7 +606,11 @@ async def serialize_issue(
         id=issue.id,
         key=f"{project.identifier}-{issue.sequence_id}",
         summary=issue.summary,
-        description_markdown=issue.description_markdown,
+        description_markdown=(
+            scrub_text(issue.description_markdown)
+            if issue.description_markdown
+            else issue.description_markdown
+        ),
         description_sha256=sha256_hex,
         state=StateSummary(id=state.id, name=state.name, group=state.state_group),
         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),

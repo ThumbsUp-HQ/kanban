@@ -32,6 +32,7 @@ from kanban.api.v1.schemas.comments import (
 )
 from kanban.content import ContentNormalizeError, normalize_to_markdown
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
 from kanban.services.mentions import extract_mentions, resolve_mentions
@@ -303,7 +304,7 @@ async def create_comment(
         parent_comment_id=comment.parent_comment_id,
         author_id=caller.principal_id,
         author=author_summary,
-        body_markdown=normalized_body,
+        body_markdown=scrub_text(normalized_body) if normalized_body else normalized_body,
         body_sha256=body_sha256_hex,
         permalink=permalink,
         created_at=comment.created_at,
@@ -410,13 +411,14 @@ async def list_comments(
             AuthorSummary(id=c.author_id, handle="", display_name="Deleted" if is_deleted else ""),
         )
         permalink = _build_permalink(project.identifier, issue.sequence_id, c.id)
+        scrubbed_body = scrub_text(body_text) if body_text else body_text
         return CommentResponse(
             id=c.id,
             issue_id=c.issue_id,
             parent_comment_id=c.parent_comment_id,
             author_id=c.author_id,
             author=author,
-            body_markdown=body_text,
+            body_markdown=scrubbed_body,
             body_sha256=sha_hex,
             permalink=permalink,
             created_at=c.created_at,
@@ -565,7 +567,7 @@ async def update_comment(
         parent_comment_id=comment.parent_comment_id,
         author_id=comment.author_id,
         author=author_summary,
-        body_markdown=normalized_body,
+        body_markdown=scrub_text(normalized_body) if normalized_body else normalized_body,
         body_sha256=new_sha256,
         permalink=permalink,
         created_at=comment.created_at,

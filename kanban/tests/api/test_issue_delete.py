@@ -236,11 +236,16 @@ async def test_case_2_concurrency_and_missing_hash(
             creator_id=admin.id,
         )
 
-    # 3. Missing header returns 428 BLAST_HASH_REQUIRED
+    # 3. Missing header returns 428 BLAST_HASH_REQUIRED with actionable delete-preview link
     missing_resp = await client.delete(f"/api/v1/issues/{target_key}")
     contract_recorder.record("delete_missing_hash_428", missing_resp.request, missing_resp)
     assert missing_resp.status_code == 428
-    assert missing_resp.json()["code"] == "BLAST_HASH_REQUIRED"
+    body_428 = missing_resp.json()
+    assert body_428["code"] == "BLAST_HASH_REQUIRED"
+    assert f"/api/v1/issues/{target_key}/delete-preview" in body_428["detail"]
+    assert "confirm_blast_hash" in body_428["detail"]
+    assert body_428.get("preview_url") == f"/api/v1/issues/{target_key}/delete-preview"
+    assert "confirm_blast_hash" in body_428.get("hint", "")
 
     # 4. Generate preview with 3 inbound links
     preview_resp = await client.get(f"/api/v1/issues/{target_key}/delete-preview")

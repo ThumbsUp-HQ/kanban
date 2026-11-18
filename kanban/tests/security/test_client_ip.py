@@ -182,3 +182,43 @@ def test_format_ip_and_header_scanning() -> None:
         ],
     )
     assert resolve_client_ip(scope, trusted) == "198.51.100.12"
+
+
+def test_kb_trusted_proxies_env_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify KB_TRUSTED_PROXIES env var, Settings integration, and Request object support."""
+    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
+    monkeypatch.setenv("KB_TRUSTED_PROXIES", "192.168.1.0/24")
+
+    # Trusted proxy 192.168.1.10 forwards client 203.0.113.88
+    scope_trusted = _make_scope(
+        client_ip="192.168.1.10",
+        headers=[(b"x-forwarded-for", b"203.0.113.88")],
+    )
+    assert resolve_client_ip(scope_trusted) == "203.0.113.88"
+
+    # Untrusted client 203.0.113.55 tries spoofing X-Forwarded-For to bypass rate limiting
+    scope_untrusted = _make_scope(
+        client_ip="203.0.113.55",
+        headers=[(b"x-forwarded-for", b"1.2.3.4, 5.6.7.8")],
+    )
+    # Must resolve strictly to direct untrusted peer 203.0.113.55, NOT the spoofed header!
+    resolved = resolve_client_ip(scope_untrusted)
+    assert resolved == "203.0.113.55"
+
+    # Verify rate limit key derivation for auth_login_ip policy
+    auth_login_policy = RateLimitPolicy(name="auth_login_ip", limit=5, window_seconds=900)
+    key_untrusted = make_key(auth_login_policy, resolved, session_hmac_key=b"k" * 32)
+    expected_key = make_key(auth_login_policy, "203.0.113.55", session_hmac_key=b"k" * 32)
+    assert key_untrusted == expected_key
+
+    # Test object wrapping scope (e.g. Starlette Request)
+    class DummyRequest:
+        def __init__(self, s: dict[str, Any]) -> None:
+            self.scope = s
+
+    dummy_req = DummyRequest(scope_trusted)
+    assert resolve_client_ip(dummy_req) == "203.0.113.88"  # type: ignore[arg-type]
+
+    # Test Sequence of IPv4Network objects passed directly
+    net = ipaddress.ip_network("192.168.1.0/24")
+    assert resolve_client_ip(scope_trusted, [net]) == "203.0.113.88"

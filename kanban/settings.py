@@ -110,6 +110,14 @@ class Settings(BaseSettings):
             "disable_unlimited_mcp_keys",
         ),
     )
+    trusted_proxies: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "KB_TRUSTED_PROXIES",
+            "KANBAN_TRUSTED_PROXIES",
+            "trusted_proxies",
+        ),
+    )
 
     @field_validator("trash_retention_days")
     @classmethod

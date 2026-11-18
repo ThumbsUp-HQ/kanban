@@ -312,7 +312,10 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
 
 def build_uvicorn_command() -> list[str]:
     """Construct the setpriv argv list for spawning Uvicorn as UID 65532."""
-    forwarded_allow_ips = os.environ.get("KB_FORWARDED_ALLOW_IPS", "*")
+    forwarded_allow_ips = os.environ.get(
+        "KB_FORWARDED_ALLOW_IPS",
+        os.environ.get("KB_TRUSTED_PROXIES", "") or os.environ.get("KANBAN_TRUSTED_PROXIES", ""),
+    )
     return [
         BIN_SETPRIV,
         "--reuid=65532",
@@ -329,7 +332,11 @@ def build_uvicorn_command() -> list[str]:
         "--port",
         "8080",
         "--proxy-headers",
-        f"--forwarded-allow-ips={forwarded_allow_ips}",
+        (
+            f"--forwarded-allow-ips={forwarded_allow_ips}"
+            if forwarded_allow_ips
+            else '--forwarded-allow-ips=""'
+        ),
         "--loop",
         "uvloop",
         "--http",
@@ -353,6 +360,8 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
     "KANBAN_ENFORCE_HTTPS",
     "KB_STANDALONE_CLEARTEXT_HOSTS",
     "KB_FORWARDED_ALLOW_IPS",
+    "KB_TRUSTED_PROXIES",
+    "KANBAN_TRUSTED_PROXIES",
     "KB_PUBLIC_ORIGIN",
     "KANBAN_PUBLIC_ORIGIN",
     "KB_PUBLIC_BASE_URL",

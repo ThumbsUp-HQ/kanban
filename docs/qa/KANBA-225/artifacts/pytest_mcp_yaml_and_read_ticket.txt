@@ -1,0 +1,38 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-sec-ba07f8cf
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 20 items
+
+mcp/tests/test_yaml_out.py::test_strip_empty_nested_structures PASSED    [  5%]
+mcp/tests/test_yaml_out.py::test_strip_empty_top_level_empties PASSED    [ 10%]
+mcp/tests/test_yaml_out.py::test_flow_style_for_scalar_lists_and_small_dicts PASSED [ 15%]
+mcp/tests/test_yaml_out.py::test_multiline_markdown_renders_as_literal_block PASSED [ 20%]
+mcp/tests/test_yaml_out.py::test_dump_set_raises_type_error PASSED       [ 25%]
+mcp/tests/test_yaml_out.py::test_dump_custom_class_raises_type_error PASSED [ 30%]
+mcp/tests/test_yaml_out.py::test_dump_empty_cases PASSED                 [ 35%]
+mcp/tests/test_yaml_out.py::test_free_text_secret_scrubbing_in_yaml_and_dict PASSED [ 40%]
+mcp/tests/agent/test_read_ticket.py::test_case_1_positive_read_ticket_all_lods PASSED [ 45%]
+mcp/tests/agent/test_read_ticket.py::test_case_2_rls_security_identical_404 PASSED [ 50%]
+mcp/tests/agent/test_read_ticket.py::test_case_3_boundary_validation_read_ticket PASSED [ 55%]
+mcp/tests/agent/test_read_ticket.py::test_case_5_read_ticket_help PASSED [ 60%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_formatting_helpers PASSED [ 65%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_additional_validations PASSED [ 70%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_comments_limit_zero PASSED [ 75%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_links_projection_unit PASSED [ 80%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_empty_links_omitted_standard PASSED [ 85%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_standard_populates_access_from_pill_label PASSED [ 90%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_full_compacts_manifest_activity_provenance PASSED [ 95%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_free_text_secret_scrubbing PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name              Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------
+mcp/yaml_out.py      82      1     40      1    98%   41
+-------------------------------------------------------------
+TOTAL                82      1     40      1    98%
+============================== 20 passed in 8.10s ==============================

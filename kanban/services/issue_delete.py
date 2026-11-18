@@ -186,11 +186,21 @@ async def trash_issue(
 ) -> IssueDeleteResponse:
     """Soft-delete an issue into trash after validating blast radius concurrency."""
     if not blast_hash_header or not blast_hash_header.strip():
+        preview_url = f"/api/v1/issues/{issue_ref}/delete-preview"
+        hint = (
+            f"Obtain blast_hash by calling GET {preview_url} "
+            f"and provide it via 'Kb-Blast-Hash' header (confirm_blast_hash) to confirm deletion."
+        )
         raise ProblemException(
             code="BLAST_HASH_REQUIRED",
             status=428,
             title="Blast Hash Required",
-            detail="Header 'Kb-Blast-Hash' is required to delete an issue",
+            detail=f"Header 'Kb-Blast-Hash' is required to delete an issue. {hint}",
+            extra={
+                "preview_url": preview_url,
+                "hint": hint,
+                "confirm_blast_hash": "Kb-Blast-Hash",
+            },
         )
 
     issue = await resolve_issue_ref(session, caller, issue_ref)

@@ -128,3 +128,55 @@ def test_dump_empty_cases() -> None:
     assert dump_yaml([], strip_nulls=False) == "[]\n"
     assert dump_yaml({"a": None}, strip_nulls=False) == "a: null\n"
     assert dump_yaml({"empty_list": []}, strip_nulls=False) == "empty_list: []\n"
+
+
+def test_free_text_secret_scrubbing_in_yaml_and_dict() -> None:
+    """Verify free-text secret patterns are redacted in YAML output while preserving Markdown."""
+    pem_block = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEowIBAAKCAQEA0Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
+        "KLMNOPQRSTUVWXYZ0123456789+/abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+    raw_markdown = (
+        "# Security Audit Findings\n\n"
+        "Detected test keys in configuration:\n"
+        "- OpenAI key: sk-proj-1234567890abcdef1234567890abcdef1234567890\n"
+        "- GitHub token: ghp_1234567890abcdefghijklmnopqrstuvwxyz12\n"
+        "- AWS key ID: AKIAIOSFODNN7EXAMPLE\n"
+        "- Agent token: kb_agt_0123456789abcdef\n"
+        f"- Private key:\n```\n{pem_block}\n```\n\n"
+        "Normal markdown content: **bold** and `code` formatting."
+    )
+    payload = {
+        "key": "SEC-101",
+        "description_markdown": raw_markdown,
+        "comments": [
+            {
+                "body": (
+                    "Found credential: sk-proj-1234567890abcdef1234567890abcdef1234567890 in"
+                    " comment."
+                )
+            }
+        ],
+    }
+
+    dumped = dump_yaml(payload)
+
+    # 1. Raw secrets must NOT appear
+    assert "sk-proj-1234567890" not in dumped
+    assert "ghp_1234567890" not in dumped
+    assert "AKIAIOSFODNN7EXAMPLE" not in dumped
+    assert "kb_agt_0123456789" not in dumped
+    assert "BEGIN RSA PRIVATE KEY" not in dumped
+
+    # 2. Redacted placeholders must appear
+    assert "[REDACTED:API_KEY]" in dumped
+    assert "[REDACTED:GITHUB_TOKEN]" in dumped
+    assert "[REDACTED:AWS_ACCESS_KEY]" in dumped
+    assert "[REDACTED:KANBAN_KEY]" in dumped
+    assert "[REDACTED:PRIVATE_KEY]" in dumped
+
+    # 3. Normal Markdown formatting preserved
+    assert "# Security Audit Findings" in dumped
+    assert "**bold** and `code` formatting" in dumped

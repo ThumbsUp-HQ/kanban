@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Final
 
+from kanban.security.scrubber import scrub_text
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
@@ -231,7 +232,8 @@ def _compact_single_comment(item: dict[str, Any]) -> dict[str, Any]:
     elif "author_id" in item:
         entry["author"] = _format_comment_author(item["author_id"])
     if "body_markdown" in item:
-        entry["body_markdown"] = item["body_markdown"]
+        bm = item["body_markdown"]
+        entry["body_markdown"] = scrub_text(bm) if isinstance(bm, str) else bm
     if "created_at" in item:
         entry["created_at"] = item["created_at"]
     if "permalink" in item:
@@ -407,7 +409,11 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         "state": state_str,
         "priority": pri_str,
         "assignees": _format_assignees(issue_data.get("assignees", [])),
-        "description_markdown": issue_data.get("description_markdown", ""),
+        "description_markdown": (
+            scrub_text(issue_data.get("description_markdown", ""))
+            if isinstance(issue_data.get("description_markdown"), str)
+            else ""
+        ),
         "labels": labels_list,
         "cycle": issue_data.get("cycle_id"),
         "modules": issue_data.get("module_ids"),

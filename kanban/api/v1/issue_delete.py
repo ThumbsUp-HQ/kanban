@@ -57,6 +57,14 @@ async def delete_preview(
     "/issues/{issue_ref}",
     response_model=IssueDeleteResponse,
     summary="Soft-delete an issue into trash",
+    responses={
+        428: {
+            "description": (
+                "Precondition Required: Kb-Blast-Hash header is required. Directs callers to "
+                "GET /api/v1/issues/{id}/delete-preview to obtain blast_hash (confirm_blast_hash)."
+            )
+        }
+    },
 )
 async def delete_issue(
     issue_ref: str,
