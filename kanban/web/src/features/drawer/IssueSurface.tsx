@@ -501,14 +501,16 @@ function IssueSurfaceContent({
                 <pre className="surface__mermaid-code">{mermaidSource}</pre>
               </div>
             )}
-            <button
-              type="button"
-              className="surface__description-edit-btn"
-              aria-label="Edit description"
-              onClick={handleStartEditDescription}
-            >
-              Edit description
-            </button>
+            {(currentIssue.capabilities === undefined || currentIssue.capabilities.includes('EDIT') || currentIssue.capabilities.includes('ADMIN')) && (
+              <button
+                type="button"
+                className="surface__description-edit-btn"
+                aria-label="Edit description"
+                onClick={handleStartEditDescription}
+              >
+                Edit description
+              </button>
+            )}
           </div>
         )}
         {ActivitySlot && <ActivitySlot issue={currentIssue} />}

@@ -22,6 +22,7 @@ import './DocsWorkspaceView.css';
 export interface PageEditorPaneProps {
   pageId: string;
   projectKey: string;
+  readOnly?: boolean | undefined;
   onToggleRail?: (() => void) | undefined;
   onOpenHistory?: (() => void) | undefined;
   isRailOpen?: boolean | undefined;
@@ -33,6 +34,7 @@ interface InnerEditorFormProps {
   page: PageResponse;
   pageId: string;
   projectKey: string;
+  readOnly?: boolean | undefined;
   onToggleRail?: (() => void) | undefined;
   onOpenHistory?: (() => void) | undefined;
   isRailOpen?: boolean | undefined;
@@ -45,6 +47,7 @@ function InnerEditorForm({
   page,
   pageId,
   projectKey,
+  readOnly = false,
   onToggleRail,
   onOpenHistory,
   isRailOpen = true,
@@ -369,18 +372,24 @@ function InnerEditorForm({
       {/* Spacious Editorial Area (.docs-prose) */}
       <div className="docs-prose" data-testid="docs-prose">
         {/* Inline Title */}
-        <textarea
-          ref={titleInputRef}
-          className="docs-title-input"
-          value={title}
-          onChange={handleTitleChange}
-          onKeyDown={handleTitleKeyDown}
-          placeholder="Untitled page"
-          rows={1}
-          maxLength={501}
-          aria-label="Document Title"
-          data-testid="page-title-input"
-        />
+        {readOnly ? (
+          <h1 className="docs-title-static" data-testid="page-title-static">
+            {title}
+          </h1>
+        ) : (
+          <textarea
+            ref={titleInputRef}
+            className="docs-title-input"
+            value={title}
+            onChange={handleTitleChange}
+            onKeyDown={handleTitleKeyDown}
+            placeholder="Untitled page"
+            rows={1}
+            maxLength={501}
+            aria-label="Document Title"
+            data-testid="page-title-input"
+          />
+        )}
 
         {/* ProseMirror Markdown Editor */}
         <div ref={editorContainerRef} className="docs-editor-container">
@@ -389,6 +398,7 @@ function InnerEditorForm({
             value={markdown}
             onChange={handleMarkdownChange}
             onBlur={handleBlur}
+            readOnly={readOnly}
             maxBytes={1048576}
             ariaLabel={`Content for ${title}`}
             testId="page-markdown-editor"
@@ -410,6 +420,7 @@ function InnerEditorForm({
 export function PageEditorPane({
   pageId,
   projectKey,
+  readOnly = false,
   onToggleRail,
   onOpenHistory,
   isRailOpen = true,
@@ -453,6 +464,7 @@ export function PageEditorPane({
       page={page}
       pageId={pageId}
       projectKey={projectKey}
+      readOnly={readOnly}
       onToggleRail={onToggleRail}
       onOpenHistory={onOpenHistory}
       isRailOpen={isRailOpen}

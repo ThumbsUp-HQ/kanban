@@ -56,10 +56,32 @@ export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]
   ],
 };
 
+export const WRITE_MCP_TOOLS = new Set([
+  'create_ticket',
+  'update_ticket',
+  'begin_work',
+  'transition_ticket',
+  'complete_work',
+  'link_objects',
+  'create_doc',
+  'update_doc',
+  'upsert_doc',
+  'manage_stickies',
+  'promote_sticky_to_doc',
+  'link_knowledge',
+  'manage_principals_and_groups',
+  'manage_access_policies',
+  'audit_links',
+  'override_ticket_provenance',
+  'audit_and_purge_object_links',
+  'manage_ai_and_agent_runners',
+  'destructive_lifecycle',
+]);
+
 export interface McpAccessStudioProps {
   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
   allowUnlimitedKeys?: boolean | undefined;
-  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean } | null | undefined;
+  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean; workspace_role?: string } | null | undefined;
 }
 
 export function McpAccessStudio({
@@ -70,6 +92,7 @@ export function McpAccessStudio({
   const [fetchedUser, setFetchedUser] = useState<{
     is_server_admin?: boolean;
     is_workspace_admin?: boolean;
+    workspace_role?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -80,6 +103,7 @@ export function McpAccessStudio({
         const u = (await apiFetch('GET', '/api/v1/auth/me')) as {
           is_server_admin?: boolean;
           is_workspace_admin?: boolean;
+          workspace_role?: string;
         };
         if (isMounted.current) setFetchedUser(u);
       } catch {
@@ -94,6 +118,7 @@ export function McpAccessStudio({
   const currentUser = propUser ?? fetchedUser;
   const isServerAdmin = currentUser?.is_server_admin === true;
   const isWorkspaceAdmin = currentUser?.is_workspace_admin === true || isServerAdmin;
+  const isViewer = currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
 
   const systemStatusQuery = useSystemStatus();
   const allowUnlimited =
@@ -625,7 +650,9 @@ export function McpAccessStudio({
                   Narrow Tools (Disable specific capabilities):
                 </label>
                 <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
-                  {SURFACE_TOOLS[newKeySurface].map((toolName) => {
+                  {SURFACE_TOOLS[newKeySurface]
+                    .filter((toolName) => !isViewer || !WRITE_MCP_TOOLS.has(toolName))
+                    .map((toolName) => {
                     const isDisabled = disabledTools.includes(toolName);
                     return (
                       <label key={toolName} className="kb-mcp-tool-checkbox-label">

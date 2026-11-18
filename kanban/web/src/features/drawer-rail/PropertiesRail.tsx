@@ -54,8 +54,8 @@ export function PropertiesRail({
 
   const projectKey = currentIssue.project_key;
   const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
-  const canEdit = capabilities.includes('EDIT');
-  const canTransition = capabilities.includes('TRANSITION');
+  const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+  const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');
   const isAdmin = capabilities.includes('ADMIN');
 
   const modulesEnabled = metadata?.modules_enabled ?? (initialMetadata?.modules_enabled !== false);

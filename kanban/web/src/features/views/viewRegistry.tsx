@@ -81,16 +81,16 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
 export interface ViewComponentProps {
   issues: IssueItem[];
   projectKey: string;
-  modulesEnabled?: boolean;
-  selectedIds?: string[];
-  onToggleSelect?: (key: string, selected: boolean) => void;
-  onSelectAll?: (selected: boolean) => void;
-  onCreateIssue?: () => void;
-  nextCursor?: string | null;
-  onLoadMore?: () => void;
-  isLoading?: boolean;
-  focusedKey?: string | null;
-  onOpenPeek?: (issueKey: string) => void;
+  modulesEnabled?: boolean | undefined;
+  selectedIds?: string[] | undefined;
+  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+  onSelectAll?: ((selected: boolean) => void) | undefined;
+  onCreateIssue?: (() => void) | undefined;
+  nextCursor?: string | null | undefined;
+  onLoadMore?: (() => void) | undefined;
+  isLoading?: boolean | undefined;
+  focusedKey?: string | null | undefined;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
 }
 
 export type ViewComponent = ComponentType<ViewComponentProps>;
@@ -131,11 +131,13 @@ const defaultQueryClient = new QueryClient({
 
 export interface IssuesWorkspaceRouteProps {
   projectKey: string;
-  modulesEnabled?: boolean;
-  initialIssues?: IssueItem[];
-  initialLayout?: ViewLayout;
-  queryClient?: QueryClient;
-  onOpenPeek?: (issueKey: string) => void;
+  modulesEnabled?: boolean | undefined;
+  initialIssues?: IssueItem[] | undefined;
+  initialLayout?: ViewLayout | undefined;
+  queryClient?: QueryClient | undefined;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
+  capabilities?: string[] | undefined;
+  isProjectAdmin?: boolean | undefined;
 }
 
 /**
@@ -150,8 +152,19 @@ export function IssuesWorkspaceRoute({
   initialLayout,
   queryClient = defaultQueryClient,
   onOpenPeek: propOnOpenPeek,
+  capabilities,
+  isProjectAdmin,
 }: IssuesWorkspaceRouteProps): JSX.Element {
   const isLiveMode = initialIssues === undefined;
+
+  const effectiveCaps = capabilities ?? ['EDIT', 'ADMIN'];
+  const canEdit =
+    effectiveCaps.includes('EDIT') ||
+    effectiveCaps.includes('ADMIN') ||
+    Boolean(isProjectAdmin);
+  const canAdmin =
+    effectiveCaps.includes('ADMIN') ||
+    Boolean(isProjectAdmin);
 
   const searchParams = useMemo(() => {
     return new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -266,6 +279,7 @@ export function IssuesWorkspaceRoute({
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
+    if (!canEdit) return;
     const handleOpenCreate = (): void => {
       setIsCreateModalOpen(true);
     };
@@ -273,7 +287,7 @@ export function IssuesWorkspaceRoute({
     return () => {
       window.removeEventListener('kb:create-issue', handleOpenCreate);
     };
-  }, []);
+  }, [canEdit]);
   const [popoverState, setPopoverState] = useState<{
     isOpen: boolean;
     field: QuickFieldType | null;
@@ -389,7 +403,7 @@ export function IssuesWorkspaceRoute({
     selectedIds,
     setSelectedIds,
     modulesEnabled,
-    onOpenCreateModal: () => { setIsCreateModalOpen(true); },
+    onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
     onOpenFilter: () => { setIsFilterOpen(true); },
     onOpenFieldPopover: (field, issue, rect) => {
       setPopoverState({
@@ -680,7 +694,7 @@ export function IssuesWorkspaceRoute({
           subGroupBy={subGroupBy}
           modulesEnabled={modulesEnabled}
           selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
+          onToggleSelect={canEdit ? handleToggleSelect : undefined}
           focusedKey={focusedKey}
           onCardClick={handleRowClick}
         />
@@ -689,10 +703,11 @@ export function IssuesWorkspaceRoute({
           projectKey={projectKey}
           states={boardStates}
           issues={boardIssues}
+          currentUserCapabilities={effectiveCaps}
           onOpenPeek={handleOpenPeek}
-          onNewItem={() => {
+          onNewItem={canEdit ? () => {
             setIsCreateModalOpen(true);
-          }}
+          } : undefined}
         />
       ) : layout === 'list' ? (
         <div className="kb-split-layout" data-testid="split-list-layout">
@@ -702,13 +717,14 @@ export function IssuesWorkspaceRoute({
               projectKey={projectKey}
               modulesEnabled={modulesEnabled}
               selectedIds={selectedIds}
-              onToggleSelect={handleToggleSelect}
-              onCreateIssue={() => {
+              onToggleSelect={canEdit ? handleToggleSelect : undefined}
+              onCreateIssue={canEdit ? () => {
                 setIsCreateModalOpen(true);
-              }}
+              } : undefined}
               focusedKey={focusedKey}
               onOpenPeek={handleOpenPeek}
               activeKey={activePeekKey}
+              canManageWorkflows={canAdmin}
             />
           </div>
           {activePeekKey && (
@@ -726,95 +742,99 @@ export function IssuesWorkspaceRoute({
           projectKey={projectKey}
           modulesEnabled={modulesEnabled}
           selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onSelectAll={handleSelectAll}
+          onToggleSelect={canEdit ? handleToggleSelect : undefined}
+          onSelectAll={canEdit ? handleSelectAll : undefined}
           onOpenPeek={handleOpenPeek}
-          onCreateIssue={() => {
+          onCreateIssue={canEdit ? () => {
             setIsCreateModalOpen(true);
-          }}
+          } : undefined}
           focusedKey={focusedKey}
         />
       )}
 
       {/* 3. Floating Bulk Action Bar */}
-      <BulkActionBar
-        selectedKeys={selectedIds}
-        issues={filteredIssues}
-        onClearSelection={() => { setSelectedIds([]); }}
-        modulesEnabled={modulesEnabled}
-        onBatchUpdateState={(targetStateSlug) => {
-          const isDone = targetStateSlug === 'done';
-          const desiredState: StateSummary = {
-            id: `state-${targetStateSlug}`,
-            name: isDone ? 'Done' : 'Todo',
-            group: isDone ? 'completed' : 'unstarted',
-          };
-          setIssues((prev) =>
-            prev.map((i) =>
-              selectedIds.includes(i.key) ? { ...i, state: desiredState } : i
-            )
-          );
-          if (isLiveMode) {
-            const resolvedUuid = resolveStateUuid(desiredState, projectStates);
-            if (resolvedUuid) {
-              for (const key of selectedIds) {
-                void patchProjectIssue(key, { state_id: resolvedUuid }).catch(() => undefined);
+      {canEdit && (
+        <BulkActionBar
+          selectedKeys={selectedIds}
+          issues={filteredIssues}
+          onClearSelection={() => { setSelectedIds([]); }}
+          modulesEnabled={modulesEnabled}
+          onBatchUpdateState={(targetStateSlug) => {
+            const isDone = targetStateSlug === 'done';
+            const desiredState: StateSummary = {
+              id: `state-${targetStateSlug}`,
+              name: isDone ? 'Done' : 'Todo',
+              group: isDone ? 'completed' : 'unstarted',
+            };
+            setIssues((prev) =>
+              prev.map((i) =>
+                selectedIds.includes(i.key) ? { ...i, state: desiredState } : i
+              )
+            );
+            if (isLiveMode) {
+              const resolvedUuid = resolveStateUuid(desiredState, projectStates);
+              if (resolvedUuid) {
+                for (const key of selectedIds) {
+                  void patchProjectIssue(key, { state_id: resolvedUuid }).catch(() => undefined);
+                }
               }
             }
-          }
-          setSelectedIds([]);
-        }}
-        onBatchUpdatePriority={(prioritySlug) => {
-          const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
-          const priorityEmojiMap: Record<string, string> = {
-            urgent: '🔥',
-            high: '⚡',
-            low: '🔽',
-            none: '➖',
-          };
-          const emoji = priorityEmojiMap[prioritySlug] ?? '🔹';
-          setIssues((prev) =>
-            prev.map((i) =>
-              selectedIds.includes(i.key)
-                ? { ...i, priority: { slug: prioritySlug, label, emoji } }
-                : i
-            )
-          );
-          if (isLiveMode) {
-            for (const key of selectedIds) {
-              void patchProjectIssue(key, { priority: prioritySlug }).catch(() => undefined);
+            setSelectedIds([]);
+          }}
+          onBatchUpdatePriority={(prioritySlug) => {
+            const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
+            const priorityEmojiMap: Record<string, string> = {
+              urgent: '🔥',
+              high: '⚡',
+              low: '🔽',
+              none: '➖',
+            };
+            const emoji = priorityEmojiMap[prioritySlug] ?? '🔹';
+            setIssues((prev) =>
+              prev.map((i) =>
+                selectedIds.includes(i.key)
+                  ? { ...i, priority: { slug: prioritySlug, label, emoji } }
+                  : i
+              )
+            );
+            if (isLiveMode) {
+              for (const key of selectedIds) {
+                void patchProjectIssue(key, { priority: prioritySlug }).catch(() => undefined);
+              }
             }
-          }
-          setSelectedIds([]);
-        }}
-        onBatchArchive={() => {
-          setIssues((prev) =>
-            prev.map((i) =>
-              selectedIds.includes(i.key) ? { ...i, archived_at: new Date().toISOString() } : i
-            )
-          );
-          setSelectedIds([]);
-        }}
-        onBatchDelete={() => {
-          const toDelete = [...selectedIds];
-          setIssues((prev) => prev.filter((i) => !toDelete.includes(i.key)));
-          if (isLiveMode) {
-            for (const key of toDelete) {
-              void deleteProjectIssue(key).catch(() => undefined);
+            setSelectedIds([]);
+          }}
+          onBatchArchive={() => {
+            setIssues((prev) =>
+              prev.map((i) =>
+                selectedIds.includes(i.key) ? { ...i, archived_at: new Date().toISOString() } : i
+              )
+            );
+            setSelectedIds([]);
+          }}
+          onBatchDelete={() => {
+            const toDelete = [...selectedIds];
+            setIssues((prev) => prev.filter((i) => !toDelete.includes(i.key)));
+            if (isLiveMode) {
+              for (const key of toDelete) {
+                void deleteProjectIssue(key).catch(() => undefined);
+              }
             }
-          }
-          setSelectedIds([]);
-        }}
-      />
+            setSelectedIds([]);
+          }}
+        />
+      )}
 
       {/* 4. Quick Create Issue Modal */}
-      <QuickCreateIssueModal
-        isOpen={isCreateModalOpen}
-        onClose={() => { setIsCreateModalOpen(false); }}
-        onCreate={handleCreateIssue}
-        projectKey={projectKey}
-        modulesEnabled={modulesEnabled}
-      />
+      {canEdit && (
+        <QuickCreateIssueModal
+          isOpen={isCreateModalOpen}
+          onClose={() => { setIsCreateModalOpen(false); }}
+          onCreate={handleCreateIssue}
+          projectKey={projectKey}
+          modulesEnabled={modulesEnabled}
+        />
+      )}
 
       {/* 5. Quick Field Popover */}
       <QuickFieldPopover

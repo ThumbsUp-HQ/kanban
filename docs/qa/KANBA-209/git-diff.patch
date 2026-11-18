@@ -1,0 +1,3277 @@
+diff --git a/kanban/web/e2e/rbac/kanba-209-screenshots.spec.ts b/kanban/web/e2e/rbac/kanba-209-screenshots.spec.ts
+new file mode 100644
+index 0000000..f2be016
+--- /dev/null
++++ b/kanban/web/e2e/rbac/kanba-209-screenshots.spec.ts
+@@ -0,0 +1,326 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KANBA-209/screenshots',
++);
++
++process.env.QA_TICKET_ID = 'KANBA-209';
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++const mockGuestUser = {
++  id: 'usr-guest-1',
++  handle: 'guest_user',
++  display_name: 'Guest User',
++  email: 'guest@example.com',
++  workspace_role: 'WORKSPACE_GUEST',
++  is_workspace_admin: false,
++  is_server_admin: false,
++};
++
++const mockViewerUser = {
++  id: 'usr-viewer-1',
++  handle: 'vicki_viewer',
++  display_name: 'Vicki Viewer',
++  email: 'viewer@example.com',
++  workspace_role: 'VIEWER',
++  is_workspace_admin: false,
++  is_server_admin: false,
++};
++
++const mockMemberUser = {
++  id: 'usr-member-1',
++  handle: 'mike_member',
++  display_name: 'Mike Member',
++  email: 'member@example.com',
++  workspace_role: 'WORKSPACE_MEMBER',
++  is_workspace_admin: false,
++  is_server_admin: false,
++};
++
++const mockProjectViewer = {
++  id: 'proj-qaview-1',
++  identifier: 'QAVIEW',
++  name: 'QA Viewer Project',
++  description_markdown: 'Read-only project for QA inspection and verification.',
++  modules_enabled: true,
++  auto_archive_days: 90,
++  capabilities: ['VIEW', 'COMMENT'],
++  is_project_admin: false,
++  project_role: 'VIEWER',
++};
++
++const mockProjectMember = {
++  id: 'proj-qamem-1',
++  identifier: 'QAMEM',
++  name: 'QA Member Project',
++  description_markdown: 'Member project with standard contributor capabilities.',
++  modules_enabled: false,
++  auto_archive_days: 90,
++  capabilities: ['VIEW', 'COMMENT', 'EDIT'],
++  is_project_admin: false,
++  project_role: 'MEMBER',
++};
++
++const mockWorkspaces = [
++  {
++    id: 'ws-default',
++    name: 'Primary Workspace',
++    slug: 'primary-workspace',
++    is_current: true,
++  },
++];
++
++const mockStates = [
++  { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++  { id: 'st-todo', name: 'To Do', group: 'unstarted', sort_order: 2 },
++  { id: 'st-done', name: 'Done', group: 'completed', sort_order: 3 },
++];
++
++const mockIssuesViewer = {
++  items: [
++    {
++      id: 'iss-1',
++      key: 'QAVIEW-1',
++      project_key: 'QAVIEW',
++      summary: 'Read-only security assessment ticket',
++      state_id: 'st-backlog',
++      priority_slug: 'urgent',
++      capabilities: ['VIEW', 'COMMENT'],
++    },
++  ],
++  total: 1,
++};
++
++const mockCyclesViewer = [
++  {
++    id: 'cyc-1',
++    name: 'Sprint 1',
++    status: 'active',
++    start_date: '2026-03-01',
++    end_date: '2026-03-15',
++  },
++];
++
++function getCommonMocks(user: Record<string, unknown>): MockHandlers {
++  return {
++    'GET /api/v1/auth/me': { json: user },
++    'GET /api/v1/me': { json: user },
++    'GET /api/v1/users/me': { json: user },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 1,
++        csrf_token: 'csrf-test-token',
++        user,
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'csrf-test-token' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/workspaces': { json: mockWorkspaces },
++    'GET /api/v1/system/status': loadFixture('system-status-prod'),
++    'GET /api/v1/objects/:id/access': loadFixture('access-project-kan'),
++  };
++}
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++test.describe('KANBA-209 RBAC Route Guards and UI Controls Forensic Audit', () => {
++  test('1. Guest empty home renders No accessible projects and 0 dummy KAN cards', async ({ page }, testInfo) => {
++    await mockApi(page, {
++      ...getCommonMocks(mockGuestUser),
++      'GET /api/v1/projects': { json: [] },
++    });
++
++    await page.goto('/');
++    await page.waitForSelector('[data-testid="no-accessible-projects"]', { state: 'visible' });
++
++    // Assert zero dummy KAN cards and exact "No accessible projects" text
++    const kanCards = await page.locator('[data-testid="project-card-KAN"]').count();
++    expect(kanCards).toBe(0);
++
++    const emptyText = await page.locator('[data-testid="no-accessible-projects"]').textContent();
++    expect(emptyText?.trim()).toBe('No accessible projects');
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `01-guest-empty-home-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="no-accessible-projects"]',
++            label: 'No accessible projects rendered for Guest (0 KAN dummy cards)',
++          },
++        ],
++      });
++    }
++  });
++
++  test('2. Viewer QAVIEW omits create/edit controls and hides Create New Cycle form', async ({ page }, testInfo) => {
++    await mockApi(page, {
++      ...getCommonMocks(mockViewerUser),
++      'GET /api/v1/projects': { json: [mockProjectViewer] },
++      'GET /api/v1/projects/QAVIEW': { json: mockProjectViewer },
++      'GET /api/v1/projects/QAVIEW/issues': { json: mockIssuesViewer },
++      'GET /api/v1/projects/QAVIEW/states': { json: mockStates },
++      'GET /api/v1/projects/QAVIEW/cycles': { json: mockCyclesViewer },
++      'GET /api/v1/issues/QAVIEW-1': { json: mockIssuesViewer.items[0] },
++      'GET /api/v1/issues/QAVIEW-1/activity': { json: [] },
++      'GET /api/v1/issues/QAVIEW-1/comments': { json: [] },
++    });
++
++    await page.goto('/projects/QAVIEW/issues');
++    await page.waitForSelector('[data-testid="issues-workspace"]', { state: 'visible' });
++
++    // Assert 0 create buttons
++    expect(await page.locator('[data-testid="home-create-issue-btn"]').count()).toBe(0);
++    expect(await page.locator('[data-testid="view-empty-create-btn"]').count()).toBe(0);
++    expect(await page.locator('[data-testid="list-new-btn"]').count()).toBe(0);
++    expect(await page.locator('.kb-new-item-btn').count()).toBe(0);
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `02-viewer-readonly-board-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="issues-workspace"]',
++            label: 'Viewer read-only board with 0 new work item buttons and 0 row checkboxes',
++          },
++        ],
++      });
++    }
++
++    // Now visit cycles view
++    await page.goto('/projects/QAVIEW/cycles');
++    await page.waitForSelector('[data-testid="project-cycles-view"]', { state: 'visible' });
++
++    // Assert 0 Create New Cycle form
++    expect(await page.locator('[data-testid="create-cycle-form"]').count()).toBe(0);
++    expect(await page.locator('text=Create New Cycle').count()).toBe(0);
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `03-viewer-readonly-cycles-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="project-cycles-view"]',
++            label: 'Viewer read-only cycles view with 0 Create New Cycle form (FAIL-CLOSED)',
++          },
++        ],
++      });
++    }
++  });
++
++  test('3. Member omits Create Project and Workflow management controls', async ({ page }, testInfo) => {
++    await mockApi(page, {
++      ...getCommonMocks(mockMemberUser),
++      'GET /api/v1/projects': { json: [mockProjectMember] },
++      'GET /api/v1/projects/QAMEM': { json: mockProjectMember },
++      'GET /api/v1/projects/QAMEM/issues': { json: { items: [], total: 0 } },
++      'GET /api/v1/projects/QAMEM/states': { json: mockStates },
++    });
++
++    await page.goto('/');
++    await page.waitForSelector('[data-testid="route-placeholder"]', { state: 'visible' });
++
++    // Assert Member cannot create projects or workspaces
++    expect(await page.locator('[data-testid="home-create-project-btn"]').count()).toBe(0);
++    expect(await page.locator('[data-testid="sidebar-add-project-btn"]').count()).toBe(0);
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `04-member-restricted-home-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="route-placeholder"]',
++            label: 'Member Home with 0 + Create Project buttons and 0 Add Project in sidebar',
++          },
++        ],
++      });
++    }
++
++    // Now visit project issues view
++    await page.goto('/projects/QAMEM/issues');
++    await page.waitForSelector('[data-testid="issues-workspace"]', { state: 'visible' });
++
++    // Assert Workflow button hidden for non-admin
++    expect(await page.locator('text=+ Workflow').count()).toBe(0);
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `05-member-restricted-board-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="issues-workspace"]',
++            label: 'Member project board with 0 + Workflow management headers',
++          },
++        ],
++      });
++    }
++  });
++
++  test('4. Strict Route Guards render Not found or no access for /admin/standalone and unauthorized projects', async ({ page }, testInfo) => {
++    await mockApi(page, {
++      ...getCommonMocks(mockMemberUser),
++      'GET /api/v1/projects': { json: [mockProjectMember] },
++      'GET /api/v1/projects/QAADM': { status: 404, json: { detail: 'Project not found' } },
++      'GET /api/v1/projects/QAADM/issues': { status: 404, json: { detail: 'Project not found' } },
++      'GET /api/v1/projects/QAADM/states': { status: 404, json: { detail: 'Project not found' } },
++    });
++
++    // 1. /admin/standalone
++    await page.goto('/admin/standalone');
++    await page.waitForSelector('[data-testid="not-found-view"]', { state: 'visible' });
++    expect(await page.locator('text=Not found or no access').count()).toBeGreaterThanOrEqual(1);
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `06-admin-standalone-guard-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="not-found-view"]',
++            label: 'Admin standalone locked down behind SERVER_ADMIN + AAL2 (renders Not found)',
++          },
++        ],
++      });
++    }
++
++    // 2. Direct URL access to unauthorized /projects/QAADM/issues
++    await page.goto('/projects/QAADM/issues');
++    await page.waitForSelector('[data-testid="not-found-view"]', { state: 'visible' });
++    expect(await page.locator('text=Not found or no access').count()).toBeGreaterThanOrEqual(1);
++    expect(await page.locator('.kb-sidebar').count()).toBe(0);
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `07-unauthorized-project-guard-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="not-found-view"]',
++            label: 'Direct access to unauthorized project renders Not found with 0 sidebar links',
++          },
++        ],
++      });
++    }
++  });
++});
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 2b7a0af..18741b0 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -86,9 +86,9 @@ export function computeCurrentSection(pathname: string, fallback = 'Work Items')
+ 
+ export function AppShell({
+   children,
+-  projectKey = 'KAN',
++  projectKey,
+   projectId,
+-  projectName = 'kanban',
++  projectName,
+   modulesEnabled = true,
+   issueCount,
+   currentSection = 'Work Items',
+@@ -101,7 +101,7 @@ export function AppShell({
+   const navigate = useNavigate();
+   const match = /\/projects\/([^/]+)/.exec(location.pathname);
+   const activeProjectKey = match?.[1] ?? projectKey;
+-  const isInsideProject = Boolean(match) || location.pathname.startsWith('/projects');
++  const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
+   const computedSection =
+     currentSection && currentSection !== 'Work Items'
+       ? currentSection
+@@ -188,8 +188,8 @@ export function AppShell({
+         <Sidebar
+           isOpen={mobileSidebarOpen}
+           onClose={() => { setMobileSidebarOpen(false); }}
+-          projectKey={activeProjectKey}
+-          projectName={projectName}
++          projectKey={isInsideProject ? activeProjectKey : undefined}
++          projectName={isInsideProject ? projectName : undefined}
+           modulesEnabled={modulesEnabled}
+           triggerButtonRef={hamburgerButtonRef}
+           user={currentUser}
+@@ -201,9 +201,9 @@ export function AppShell({
+           onToggleSidebar={toggleMobileSidebar}
+           onOpenPalette={() => { setPaletteOpen(true); }}
+           workspaceName={isInsideProject ? 'kanban' : undefined}
+-          projectKey={activeProjectKey}
++          projectKey={isInsideProject ? activeProjectKey : undefined}
+           projectId={isInsideProject ? (projectId ?? activeProjectKey) : undefined}
+-          projectName={projectName}
++          projectName={isInsideProject ? projectName : undefined}
+           currentSection={computedSection}
+           issueCount={issueCount}
+           accessManifest={accessManifest}
+diff --git a/kanban/web/src/app/Breadcrumb.tsx b/kanban/web/src/app/Breadcrumb.tsx
+index 34fedd9..7dbef71 100644
+--- a/kanban/web/src/app/Breadcrumb.tsx
++++ b/kanban/web/src/app/Breadcrumb.tsx
+@@ -21,8 +21,8 @@ export interface BreadcrumbProps {
+ 
+ export function Breadcrumb({
+   workspaceName = 'kanban',
+-  projectKey = 'KAN',
+-  projectName = 'kanban',
++  projectKey,
++  projectName,
+   projectIcon = '⚡',
+   currentSection = 'Work Items',
+   issueCount,
+@@ -59,19 +59,23 @@ export function Breadcrumb({
+           </>
+         )}
+ 
+-        <li className="kb-breadcrumb-item">
+-          <span aria-hidden="true">{projectIcon}</span>
+-          <Link
+-            to={`/projects/${projectKey}/overview`}
+-            className="kb-breadcrumb-link"
+-          >
+-            {projectName}
+-          </Link>
+-        </li>
++        {Boolean(projectKey) && (
++          <>
++            <li className="kb-breadcrumb-item">
++              <span aria-hidden="true">{projectIcon}</span>
++              <Link
++                to={`/projects/${projectKey}/overview`}
++                className="kb-breadcrumb-link"
++              >
++                {projectName ?? projectKey}
++              </Link>
++            </li>
+ 
+-        <li aria-hidden="true" className="kb-breadcrumb-separator">
+-          /
+-        </li>
++            <li aria-hidden="true" className="kb-breadcrumb-separator">
++              /
++            </li>
++          </>
++        )}
+ 
+         <li aria-current="page" className="kb-breadcrumb-current">
+           <span data-testid="breadcrumb-current-section">{currentSection}</span>
+diff --git a/kanban/web/src/app/ProjectRouteContext.ts b/kanban/web/src/app/ProjectRouteContext.ts
+new file mode 100644
+index 0000000..ff69c9f
+--- /dev/null
++++ b/kanban/web/src/app/ProjectRouteContext.ts
+@@ -0,0 +1,24 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { createContext, useContext } from 'react';
++
++export interface ProjectRouteContextValue {
++  readonly projectKey: string;
++  readonly projectName: string;
++  readonly modulesEnabled: boolean;
++  readonly capabilities: string[];
++  readonly isProjectAdmin: boolean;
++}
++
++export const ProjectRouteContext = createContext<ProjectRouteContextValue>({
++  projectKey: '',
++  projectName: '',
++  modulesEnabled: true,
++  capabilities: [],
++  isProjectAdmin: false,
++});
++
++export function useProjectRouteContext(): ProjectRouteContextValue {
++  return useContext(ProjectRouteContext);
++}
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index 12b6670..95551b9 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -48,19 +48,19 @@ export interface ProjectNavData {
+ }
+ 
+ export interface SidebarProps {
+-  isOpen?: boolean;
+-  onClose?: () => void;
+-  onToggleCollapse?: () => void;
+-  projectKey?: string;
+-  projectName?: string;
+-  modulesEnabled?: boolean;
+-  activePath?: string;
+-  triggerButtonRef?: React.RefObject<HTMLButtonElement | null>;
++  isOpen?: boolean | undefined;
++  onClose?: (() => void) | undefined;
++  onToggleCollapse?: (() => void) | undefined;
++  projectKey?: string | undefined;
++  projectName?: string | undefined;
++  modulesEnabled?: boolean | undefined;
++  activePath?: string | undefined;
++  triggerButtonRef?: React.RefObject<HTMLButtonElement | null> | undefined;
+   user?: {
+-    is_server_admin?: boolean;
+-    is_workspace_admin?: boolean;
+-    workspace_role?: string | null;
+-    workspace_capabilities?: string[] | null;
++    is_server_admin?: boolean | undefined;
++    is_workspace_admin?: boolean | undefined;
++    workspace_role?: string | null | undefined;
++    workspace_capabilities?: string[] | null | undefined;
+   } | null | undefined;
+ }
+ 
+@@ -146,8 +146,8 @@ export function Sidebar({
+   isOpen = true,
+   onClose,
+   onToggleCollapse,
+-  projectKey = 'KAN',
+-  projectName = 'kanban',
++  projectKey,
++  projectName,
+   modulesEnabled = true,
+   activePath: activePathProp,
+   triggerButtonRef,
+@@ -197,6 +197,7 @@ export function Sidebar({
+ 
+   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+   const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
++  const [isProjectsLoaded, setIsProjectsLoaded] = useState(false);
+   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+   const [workspaces, setWorkspaces] = useState<WorkspaceNavData[]>([]);
+   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+@@ -315,22 +316,46 @@ export function Sidebar({
+     void handleSwitchWorkspace(created.id);
+   };
+ 
++  const deduplicatedWorkspaces = useMemo<WorkspaceNavData[]>(() => {
++    const seen = new Set<string>();
++    const result: WorkspaceNavData[] = [];
++    for (const ws of workspaces) {
++      const slugKey = ws.slug ? ws.slug.toLowerCase() : '';
++      const nameKey = ws.name ? ws.name.toLowerCase() : '';
++      if (
++        (ws.id && seen.has(`id:${ws.id}`)) ||
++        (slugKey && seen.has(`slug:${slugKey}`)) ||
++        (nameKey === 'default workspace' && seen.has('name:default workspace'))
++      ) {
++        continue;
++      }
++      if (ws.id) seen.add(`id:${ws.id}`);
++      if (slugKey) seen.add(`slug:${slugKey}`);
++      if (nameKey) seen.add(`name:${nameKey}`);
++      result.push(ws);
++    }
++    return result;
++  }, [workspaces]);
++
+   const currentWorkspace = useMemo(() => {
+     return (
+-      workspaces.find((w) => w.is_current) ?? {
++      deduplicatedWorkspaces.find((w) => w.is_current) ?? {
+         id: '',
+         name: '👍kanban',
+         slug: 'kanban',
+       }
+     );
+-  }, [workspaces]);
++  }, [deduplicatedWorkspaces]);
+ 
+   useEffect(() => {
+     let active = true;
+     const refresh = (): void => {
+       void fetchProjects().then((items) => {
+-        if (active && items.length > 0) {
+-          setFetchedProjects(items);
++        if (active) {
++          if (items.length > 0) {
++            setFetchedProjects(items);
++          }
++          setIsProjectsLoaded(true);
+         }
+       });
+     };
+@@ -372,27 +397,29 @@ export function Sidebar({
+   }, []);
+ 
+   const projectList = useMemo<ProjectNavData[]>(() => {
+-    const primary: ProjectNavData = {
+-      key: projectKey,
+-      name: projectName,
+-      modules_enabled: modulesEnabled,
+-    };
++    const primary: ProjectNavData | null =
++      projectKey && projectKey.length > 0
++        ? {
++            key: projectKey,
++            name: projectName ?? projectKey,
++            modules_enabled: modulesEnabled,
++          }
++        : null;
++
+     if (fetchedProjects.length === 0) {
+-      return [primary];
+-    }
+-    const hasPrimaryInFetched = fetchedProjects.some((p) => p.key === projectKey);
+-    if (hasPrimaryInFetched) {
+-      return fetchedProjects.map((p) =>
+-        p.key === projectKey && projectName !== 'kanban'
+-          ? { key: p.key, name: projectName, modules_enabled: modulesEnabled }
+-          : p,
+-      );
++      return primary ? [primary] : [];
+     }
+-    if (projectName !== 'kanban' || currentPath.startsWith(`/projects/${projectKey}`)) {
++    if (primary && !fetchedProjects.some((p) => p.key === primary.key)) {
+       return [primary, ...fetchedProjects];
+     }
+     return fetchedProjects;
+-  }, [fetchedProjects, projectKey, projectName, modulesEnabled, currentPath]);
++  }, [fetchedProjects, projectKey, projectName, modulesEnabled]);
++
++  const isViewer = user?.workspace_role === 'VIEWER' || user?.workspace_role === 'WORKSPACE_GUEST';
++  const canCreateProject = user ? Boolean(user.is_workspace_admin || user.is_server_admin) : true;
++  const canCreateWorkspace = user ? Boolean(user.is_workspace_admin || user.is_server_admin) : true;
++  const canCreateWorkItem = !isViewer;
++  const canViewDrafts = !isViewer && user?.workspace_role !== 'WORKSPACE_GUEST';
+ 
+   const activeProjectKey = projectList[0]?.key ?? projectKey;
+ 
+@@ -541,7 +568,7 @@ export function Sidebar({
+ 
+             {workspaceDropdownOpen && (
+               <div className="kb-workspace-dropdown" role="menu">
+-                {workspaces.map((ws) => (
++                {deduplicatedWorkspaces.map((ws) => (
+                   <button
+                     key={ws.id}
+                     type="button"
+@@ -558,7 +585,7 @@ export function Sidebar({
+                     {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
+                   </button>
+                 ))}
+-                {workspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
++                {deduplicatedWorkspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
+                 {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
+                   <NavLink
+                     to="/workspaces/settings"
+@@ -576,30 +603,34 @@ export function Sidebar({
+                     </span>
+                   </NavLink>
+                 )}
+-                <button
+-                  type="button"
+-                  role="menuitem"
+-                  className="kb-workspace-dropdown-create-btn"
+-                  onClick={() => {
+-                    setWorkspaceDropdownOpen(false);
+-                    setCreateWorkspaceOpen(true);
+-                  }}
+-                >
+-                  <span aria-hidden="true">+</span>
+-                  <span>Create New Workspace</span>
+-                </button>
++                {canCreateWorkspace && (
++                  <button
++                    type="button"
++                    role="menuitem"
++                    className="kb-workspace-dropdown-create-btn"
++                    onClick={() => {
++                      setWorkspaceDropdownOpen(false);
++                      setCreateWorkspaceOpen(true);
++                    }}
++                  >
++                    <span aria-hidden="true">+</span>
++                    <span>Create New Workspace</span>
++                  </button>
++                )}
+               </div>
+             )}
+           </div>
+ 
+-          <button
+-            type="button"
+-            className="kb-new-item-btn"
+-            onClick={handleCreateIssue}
+-          >
+-            <span aria-hidden="true">+</span>
+-            <span>New work item</span>
+-          </button>
++          {canCreateWorkItem && (
++            <button
++              type="button"
++              className="kb-new-item-btn"
++              onClick={handleCreateIssue}
++            >
++              <span aria-hidden="true">+</span>
++              <span>New work item</span>
++            </button>
++          )}
+         </div>
+ 
+         {/* Workspace Section */}
+@@ -619,18 +650,20 @@ export function Sidebar({
+                   <span>Home</span>
+                 </NavLink>
+               </li>
+-              <li>
+-                <NavLink
+-                  to="/drafts"
+-                  className="kb-sidebar-nav-item"
+-                  aria-current={currentPath === '/drafts' ? 'page' : undefined}
+-                >
+-                  <span className="kb-sidebar-icon" aria-hidden="true">
+-                    📝
+-                  </span>
+-                  <span>Drafts</span>
+-                </NavLink>
+-              </li>
++              {canViewDrafts && (
++                <li>
++                  <NavLink
++                    to="/drafts"
++                    className="kb-sidebar-nav-item"
++                    aria-current={currentPath === '/drafts' ? 'page' : undefined}
++                  >
++                    <span className="kb-sidebar-icon" aria-hidden="true">
++                      📝
++                    </span>
++                    <span>Drafts</span>
++                  </NavLink>
++                </li>
++              )}
+               <li>
+                 <NavLink
+                   to="/your-work"
+@@ -665,20 +698,27 @@ export function Sidebar({
+             <div className="kb-sidebar-heading">
+               Projects
+             </div>
+-            <button
+-              type="button"
+-              className="kb-sidebar-add-project-btn"
+-              aria-label="Create project"
+-              title="Create project"
+-              onClick={() => {
+-                setCreateProjectOpen(true);
+-              }}
+-            >
+-              + Project
+-            </button>
++            {canCreateProject && (
++              <button
++                type="button"
++                className="kb-sidebar-add-project-btn"
++                aria-label="Create project"
++                title="Create project"
++                onClick={() => {
++                  setCreateProjectOpen(true);
++                }}
++              >
++                + Project
++              </button>
++            )}
+           </div>
+           <nav aria-label="Projects navigation">
+-            {projectList.map((proj) => {
++            {projectList.length === 0 ? (
++              <div className="kb-sidebar-no-projects" data-testid="sidebar-no-projects">
++                No accessible projects
++              </div>
++            ) : (
++              projectList.map((proj) => {
+               const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
+               const isProjExpanded = expandedProjects[proj.key] ?? true;
+               return (
+@@ -928,7 +968,8 @@ export function Sidebar({
+                   )}
+                 </div>
+               );
+-            })}
++            })
++            )}
+           </nav>
+         </div>
+ 
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 1e18a22..0da8836 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+ import React from 'react';
+ import { RouterProvider, MemoryRouter } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { qk } from '../api/queryKeys';
+ import * as client from '../api/client';
+ import {
+   createAppRouter,
+@@ -171,6 +172,7 @@ describe('routes and AppShell integration', () => {
+   });
+ 
+   it('renders various project routes, auth routes, and dev story routes', () => {
++    queryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal2' });
+     const paths = [
+       { path: '/', expected: 'route-placeholder' },
+       { path: '/projects/KAN/overview', expected: 'project-overview-page' },
+@@ -351,6 +353,7 @@ describe('routes and AppShell integration', () => {
+   });
+ 
+   it('closes StandaloneStatusRoute and navigates back on Close click', () => {
++    queryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal2' });
+     const router = createAppRouter(['/admin/standalone']);
+     render(
+       <QueryClientProvider client={queryClient}>
+@@ -623,6 +626,9 @@ describe('IssuesWorkspaceRoute', () => {
+     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+       const m = method.toUpperCase();
+       const url = path;
++      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
++        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
++      }
+       if (url.includes('/cycles') && m === 'GET') {
+         return Promise.resolve({ items: cyclesList });
+       }
+@@ -651,7 +657,7 @@ describe('IssuesWorkspaceRoute', () => {
+     );
+ 
+     // Empty submit does nothing
+-    const form = screen.getByTestId('create-cycle-form');
++    const form = await screen.findByTestId('create-cycle-form');
+     fireEvent.submit(form);
+ 
+     // Fill form
+@@ -695,6 +701,9 @@ describe('IssuesWorkspaceRoute', () => {
+     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+       const m = method.toUpperCase();
+       const url = path;
++      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
++        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
++      }
+       if (url.includes('/modules') && m === 'GET') {
+         return Promise.resolve({ items: modulesList });
+       }
+@@ -724,7 +733,7 @@ describe('IssuesWorkspaceRoute', () => {
+     );
+ 
+     // Empty submit does nothing
+-    const form = screen.getByTestId('create-module-form');
++    const form = await screen.findByTestId('create-module-form');
+     fireEvent.submit(form);
+ 
+     // Fill form
+@@ -771,6 +780,9 @@ describe('IssuesWorkspaceRoute', () => {
+     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+       const m = method.toUpperCase();
+       const url = path;
++      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
++        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
++      }
+       if (url.includes('/cycles') && m === 'GET') {
+         return Promise.resolve([
+           { id: 'c-start-only', name: 'Start Only Cycle', start_date: '2026-03-01' },
+@@ -810,6 +822,9 @@ describe('IssuesWorkspaceRoute', () => {
+     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+       const m = method.toUpperCase();
+       const url = path;
++      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
++        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
++      }
+       if (url.includes('/modules') && m === 'GET') {
+         return Promise.resolve([
+           { id: 'm-1', name: 'Existing Module', status: 'planned', description_markdown: 'Docs' },
+@@ -998,4 +1013,162 @@ describe('IssuesWorkspaceRoute', () => {
+ 
+     uDrafts();
+   });
++
++  describe('Strict RBAC Route Guards (KANBA-209)', () => {
++    let rbacQueryClient: QueryClient;
++
++    beforeEach(() => {
++      rbacQueryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++    });
++
++    it('gates /admin/standalone behind SERVER_ADMIN and AAL2', async () => {
++      // 1. Guest / unauthenticated (user is null)
++      rbacQueryClient.setQueryData(qk.me(), null);
++      const routerGuest = createAppRouter(['/admin/standalone']);
++      const { unmount: u1 } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerGuest} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++      u1();
++
++      // 2. Member / non-server-admin
++      rbacQueryClient.setQueryData(qk.me(), { is_server_admin: false, auth_aal: 'aal2' });
++      const routerMember = createAppRouter(['/admin/standalone']);
++      const { unmount: u2 } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerMember} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++      u2();
++
++      // 3. Server admin with non-AAL2 (aal1)
++      rbacQueryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal1', aal_level: 1 });
++      const routerAal1 = createAppRouter(['/admin/standalone']);
++      const { unmount: u3 } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerAal1} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++      u3();
++
++      // 4. Server admin with AAL2 -> access allowed
++      rbacQueryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal2', aal_level: 2 });
++      const routerAdmin = createAppRouter(['/admin/standalone']);
++      const { unmount: u4 } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerAdmin} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByTestId('standalone-status-route')).toBeDefined();
++      u4();
++    });
++
++    it('gates /drafts to render Not found or no access for VIEWER and WORKSPACE_GUEST', () => {
++      // 1. VIEWER
++      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'VIEWER' });
++      const routerViewer = createAppRouter(['/drafts']);
++      const { unmount: uViewer } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerViewer} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++      uViewer();
++
++      // 2. WORKSPACE_GUEST
++      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'WORKSPACE_GUEST' });
++      const routerGuest = createAppRouter(['/drafts']);
++      const { unmount: uGuest } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerGuest} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByText('Not found or no access')).toBeDefined();
++      uGuest();
++
++      // 3. WORKSPACE_MEMBER -> access allowed
++      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'WORKSPACE_MEMBER' });
++      const routerMember = createAppRouter(['/drafts']);
++      const { unmount: uMember } = render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={routerMember} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      expect(screen.getByTestId('drafts-view')).toBeDefined();
++      uMember();
++    });
++
++    it('renders Not found or no access on direct URL access to unauthorized project', async () => {
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/projects/QAADM')) {
++          return Promise.resolve(new Response(JSON.stringify({ detail: 'Project not found' }), { status: 404 }));
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      const router = createAppRouter(['/projects/QAADM/issues']);
++      render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={router} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(await screen.findByText('Not found or no access')).toBeDefined();
++      expect(screen.queryByTestId('home-create-issue-btn')).toBeNull();
++      expect(screen.queryByTestId('view-empty-create-btn')).toBeNull();
++    });
++
++    it('renders No accessible projects when project list is empty for guest', async () => {
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/projects')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({ items: [] }),
++              { status: 200, headers: { 'Content-Type': 'application/json' } },
++            ),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'WORKSPACE_GUEST' });
++
++      const router = createAppRouter(['/']);
++      render(
++        <QueryClientProvider client={rbacQueryClient}>
++          <ThemeProvider>
++            <RouterProvider router={router} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(await screen.findByTestId('no-accessible-projects')).toBeDefined();
++      expect(screen.getAllByText('No accessible projects').length).toBeGreaterThanOrEqual(1);
++      expect(screen.queryByTestId('project-card-KAN')).toBeNull();
++    });
++  });
+ });
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index f4e2c20..5e8e259 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -24,6 +24,7 @@ import {
+   createMemoryRouter,
+   Link,
+   Navigate,
++  Outlet,
+   useLocation,
+   useNavigate,
+   useParams,
+@@ -76,17 +77,17 @@ export const VALID_LAYOUTS = new Set([
+   'timeline',
+ ]);
+ 
+-interface ProjectRouteContextValue {
+-  readonly projectKey: string;
+-  readonly projectName: string;
+-  readonly modulesEnabled: boolean;
+-}
++import {
++  type ProjectRouteContextValue,
++  ProjectRouteContext,
++  useProjectRouteContext,
++} from './ProjectRouteContext';
+ 
+-const ProjectRouteContext = createContext<ProjectRouteContextValue>({
+-  projectKey: 'KAN',
+-  projectName: 'kanban',
+-  modulesEnabled: true,
+-});
++export {
++  type ProjectRouteContextValue,
++  ProjectRouteContext,
++  useProjectRouteContext,
++};
+ 
+ /**
+  * Uniform 403 / 404 view preventing principal & object enumeration (S3.4).
+@@ -185,17 +186,27 @@ export function ProjectIssuesRoute(): JSX.Element {
+         initialLayout={normalizedLayout}
+         queryClient={queryClient}
+         onOpenPeek={handleOpenPeek}
++        capabilities={ctx.projectKey ? ctx.capabilities : undefined}
++        isProjectAdmin={ctx.projectKey ? ctx.isProjectAdmin : true}
+       />
+     </div>
+   );
+ }
+ 
+ /**
+- * Workspace Root Home View (`/` - KANBA-170, KANBA-166).
++ * Workspace Root Home View (`/` - KANBA-170, KANBA-166).
+  * Verifies initialization/authentication via `useSessionGuard`, loads projects from
+  * `GET /api/v1/projects`, and provides 1-click project & work item creation.
+  */
+-export function WorkspaceHomeView(): JSX.Element {
++function WorkspaceHomeInner({
++  currentUser,
++}: {
++  currentUser: {
++    workspace_role?: string;
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++  } | null;
++}): JSX.Element {
+   useSessionGuard();
+   const navigate = useNavigate();
+   const [projects, setProjects] = useState<CreatedProject[]>([]);
+@@ -240,20 +251,27 @@ export function WorkspaceHomeView(): JSX.Element {
+     };
+   }, []);
+ 
+-  const displayProjects: readonly CreatedProject[] =
+-    projects.length > 0
+-      ? projects
+-      : [
+-          {
+-            id: 'default-kan',
+-            identifier: 'KAN',
+-            name: 'kanban',
+-            description_markdown: 'Default workspace project for tracking issues, stickies, and docs.',
+-            modules_enabled: true,
+-          },
+-        ];
+-
+-  const primaryKey = displayProjects[0]?.identifier ?? 'KAN';
++  const isViewer = currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
++  const isExplicitNonAdmin =
++    isViewer ||
++    currentUser?.workspace_role === 'WORKSPACE_MEMBER' ||
++    currentUser?.workspace_role === 'MEMBER' ||
++    (currentUser?.workspace_role != null && !currentUser.is_workspace_admin && !currentUser.is_server_admin);
++  const canCreateProject = currentUser
++    ? Boolean(currentUser.is_workspace_admin || currentUser.is_server_admin || !isExplicitNonAdmin)
++    : true;
++  const displayProjects: readonly CreatedProject[] = projects;
++  const canCreateWorkItem =
++    !isViewer &&
++    displayProjects.length > 0 &&
++    displayProjects.some(
++      (p) =>
++        p.capabilities === undefined ||
++        p.capabilities.includes('EDIT') ||
++        p.capabilities.includes('ADMIN') ||
++        p.is_project_admin,
++    );
++  const primaryKey = displayProjects[0]?.identifier ?? '';
+ 
+   return (
+     <section
+@@ -272,92 +290,104 @@ export function WorkspaceHomeView(): JSX.Element {
+         </div>
+ 
+         <div className="kb-workspace-home-actions">
+-          <button
+-            type="button"
+-            data-testid="home-create-project-btn"
+-            className="kb-home-secondary-btn"
+-            onClick={() => {
+-              setCreateOpen(true);
+-            }}
+-          >
+-            + Create Project
+-          </button>
+-          <button
+-            type="button"
+-            data-testid="home-create-issue-btn"
+-            className="kb-home-primary-btn"
+-            onClick={() => {
+-              void navigate(`/projects/${primaryKey}/issues?create=1`);
+-            }}
+-          >
+-            + New Work Item
+-          </button>
++          {canCreateProject && (
++            <button
++              type="button"
++              data-testid="home-create-project-btn"
++              className="kb-home-secondary-btn"
++              onClick={() => {
++                setCreateOpen(true);
++              }}
++            >
++              + Create Project
++            </button>
++          )}
++          {canCreateWorkItem && (
++            <button
++              type="button"
++              data-testid="home-create-issue-btn"
++              className="kb-home-primary-btn"
++              onClick={() => {
++                if (primaryKey) {
++                  void navigate(`/projects/${primaryKey}/issues?create=1`);
++                }
++              }}
++            >
++              + New Work Item
++            </button>
++          )}
+         </div>
+       </div>
+ 
+-      <div
+-        data-testid="workspace-projects-grid"
+-        className="kb-workspace-projects-grid"
+-      >
+-        {displayProjects.map((proj) => (
+-          <div
+-            key={proj.identifier}
+-            data-testid={`project-card-${proj.identifier}`}
+-            className="kb-project-card"
+-          >
+-            <div>
+-              <div className="kb-project-card-header">
+-                <span className="kb-project-card-name">
+-                  ⚡ {proj.name}
+-                </span>
+-                <span className="kb-project-card-key">
+-                  {proj.identifier}
+-                </span>
++      {displayProjects.length === 0 ? (
++        <div data-testid="no-accessible-projects" className="kb-workspace-no-projects">
++          No accessible projects
++        </div>
++      ) : (
++        <div
++          data-testid="workspace-projects-grid"
++          className="kb-workspace-projects-grid"
++        >
++          {displayProjects.map((proj) => (
++            <div
++              key={proj.identifier}
++              data-testid={`project-card-${proj.identifier}`}
++              className="kb-project-card"
++            >
++              <div>
++                <div className="kb-project-card-header">
++                  <span className="kb-project-card-name">
++                    ⚡ {proj.name}
++                  </span>
++                  <span className="kb-project-card-key">
++                    {proj.identifier}
++                  </span>
++                </div>
++                <p className="kb-project-card-desc">
++                  {proj.description_markdown && proj.description_markdown.length > 0
++                    ? proj.description_markdown
++                    : 'Project workspace for issues, cycles, and docs.'}
++                </p>
+               </div>
+-              <p className="kb-project-card-desc">
+-                {proj.description_markdown && proj.description_markdown.length > 0
+-                  ? proj.description_markdown
+-                  : 'Project workspace for issues, cycles, and docs.'}
+-              </p>
+-            </div>
+ 
+-            <div className="kb-project-card-links">
+-              <Link
+-                to={`/projects/${proj.identifier}/issues`}
+-                className="kb-project-card-primary-link"
+-              >
+-                Work Items →
+-              </Link>
+-              <Link
+-                to={`/projects/${proj.identifier}/issues?layout=board`}
+-                className="kb-project-card-secondary-link"
+-              >
+-                Board
+-              </Link>
+-              <Link
+-                to={`/projects/${proj.identifier}/overview`}
+-                className="kb-project-card-secondary-link"
+-              >
+-                Stickies
+-              </Link>
+-              <Link
+-                to={`/projects/${proj.identifier}/docs`}
+-                className="kb-project-card-secondary-link"
+-              >
+-                Docs
+-              </Link>
+-              {(proj.is_project_admin ?? proj.capabilities?.includes('ADMIN')) && (
++              <div className="kb-project-card-links">
+                 <Link
+-                  to={`/projects/${proj.identifier}/settings/custom-fields`}
++                  to={`/projects/${proj.identifier}/issues`}
++                  className="kb-project-card-primary-link"
++                >
++                  Work Items →
++                </Link>
++                <Link
++                  to={`/projects/${proj.identifier}/issues?layout=board`}
+                   className="kb-project-card-secondary-link"
+                 >
+-                  Custom Fields
++                  Board
+                 </Link>
+-              )}
++                <Link
++                  to={`/projects/${proj.identifier}/overview`}
++                  className="kb-project-card-secondary-link"
++                >
++                  Stickies
++                </Link>
++                <Link
++                  to={`/projects/${proj.identifier}/docs`}
++                  className="kb-project-card-secondary-link"
++                >
++                  Docs
++                </Link>
++                {(proj.is_project_admin ?? proj.capabilities?.includes('ADMIN')) && (
++                  <Link
++                    to={`/projects/${proj.identifier}/settings/custom-fields`}
++                    className="kb-project-card-secondary-link"
++                  >
++                    Custom Fields
++                  </Link>
++                )}
++              </div>
+             </div>
+-          </div>
+-        ))}
+-      </div>
++          ))}
++        </div>
++      )}
+ 
+       <CreateProjectModal
+         isOpen={createOpen}
+@@ -372,6 +402,38 @@ export function WorkspaceHomeView(): JSX.Element {
+   );
+ }
+ 
++function WorkspaceHomeWithQuery(): JSX.Element {
++  const { data: currentUser } = useQuery<{
++    workspace_role?: string;
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++  } | null>({
++    queryKey: qk.me(),
++    queryFn: async () => {
++      try {
++        return (await apiFetch('GET', '/api/v1/auth/me')) as {
++          workspace_role?: string;
++          is_server_admin?: boolean;
++          is_workspace_admin?: boolean;
++        };
++      } catch {
++        return null;
++      }
++    },
++    staleTime: 60000,
++  });
++
++  return <WorkspaceHomeInner currentUser={currentUser ?? null} />;
++}
++
++export function WorkspaceHomeView(): JSX.Element {
++  const client = useContext(QueryClientContext);
++  if (!client) {
++    return <WorkspaceHomeInner currentUser={null} />;
++  }
++  return <WorkspaceHomeWithQuery />;
++}
++
+ export function DraftsWorkspaceView(): JSX.Element {
+   const drafts = useDrafts();
+   const navigate = useNavigate();
+@@ -510,7 +572,7 @@ function ProjectCyclesViewInner({
+   capabilities: propCapabilities,
+ }: {
+   projectKey: string;
+-  capabilities?: string[];
++  capabilities?: string[] | undefined;
+ }): JSX.Element {
+   const key = projectKey;
+   const queryClient = useQueryClient();
+@@ -538,12 +600,12 @@ function ProjectCyclesViewInner({
+       } catch {
+         // fallback
+       }
+-      return { capabilities: ['EDIT', 'ADMIN'] };
++      return { capabilities: [] };
+     },
+     enabled: propCapabilities === undefined,
+   });
+ 
+-  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
++  const capabilities = propCapabilities ?? projectData?.capabilities ?? [];
+   const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+ 
+   const { data: cycles = [], isLoading } = useQuery<ProjectCycleItem[]>({
+@@ -676,7 +738,8 @@ function ProjectCyclesViewInner({
+ 
+ export function ProjectCyclesView(): JSX.Element {
+   const { projectKey } = useParams<{ projectKey: string }>();
+-  const key = projectKey ?? 'KAN';
++  const ctx = useContext(ProjectRouteContext);
++  const key = projectKey ?? ctx.projectKey ?? 'KAN';
+   const client = useContext(QueryClientContext);
+   if (!client) {
+     return (
+@@ -687,7 +750,12 @@ export function ProjectCyclesView(): JSX.Element {
+       </section>
+     );
+   }
+-  return <ProjectCyclesViewInner projectKey={key} />;
++  return (
++    <ProjectCyclesViewInner
++      projectKey={key}
++      capabilities={ctx.projectKey ? ctx.capabilities : undefined}
++    />
++  );
+ }
+ 
+ export interface ProjectModuleItem {
+@@ -702,7 +770,7 @@ function ProjectModulesViewInner({
+   capabilities: propCapabilities,
+ }: {
+   projectKey: string;
+-  capabilities?: string[];
++  capabilities?: string[] | undefined;
+ }): JSX.Element {
+   const key = projectKey;
+   const queryClient = useQueryClient();
+@@ -732,12 +800,12 @@ function ProjectModulesViewInner({
+       } catch {
+         // fallback
+       }
+-      return { capabilities: ['EDIT', 'ADMIN'] };
++      return { capabilities: [] };
+     },
+     enabled: propCapabilities === undefined,
+   });
+ 
+-  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
++  const capabilities = propCapabilities ?? projectData?.capabilities ?? [];
+   const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+ 
+   const { data: modules = [], isLoading } = useQuery<ProjectModuleItem[]>({
+@@ -899,7 +967,8 @@ function ProjectModulesViewInner({
+ 
+ export function ProjectModulesView(): JSX.Element {
+   const { projectKey } = useParams<{ projectKey: string }>();
+-  const key = projectKey ?? 'KAN';
++  const ctx = useContext(ProjectRouteContext);
++  const key = projectKey ?? ctx.projectKey ?? 'KAN';
+   const client = useContext(QueryClientContext);
+   if (!client) {
+     return (
+@@ -910,7 +979,12 @@ export function ProjectModulesView(): JSX.Element {
+       </section>
+     );
+   }
+-  return <ProjectModulesViewInner projectKey={key} />;
++  return (
++    <ProjectModulesViewInner
++      projectKey={key}
++      capabilities={ctx.projectKey ? ctx.capabilities : undefined}
++    />
++  );
+ }
+ 
+ export function ProjectViewsRedirect(): JSX.Element {
+@@ -1024,13 +1098,20 @@ export function ProjectRouteContainer(): JSX.Element {
+         signal,
+       });
+       if (!res.ok) {
++        if (res.status === 404 || res.status === 403) {
++          return { isNotFound: true };
++        }
+         return null;
+       }
+       return (await res.json()) as {
+         id?: string;
++        identifier?: string;
+         name?: string;
+         modules_enabled?: boolean;
+         access_manifest?: AccessManifestData;
++        capabilities?: string[];
++        is_project_admin?: boolean;
++        isNotFound?: boolean;
+       };
+     },
+     enabled: isValidProject && isValidIssue,
+@@ -1041,9 +1122,17 @@ export function ProjectRouteContainer(): JSX.Element {
+     return <NotFoundView />;
+   }
+ 
+-  const modulesEnabled = projectQuery.data?.modules_enabled ?? true;
+-  const projectName = projectQuery.data?.name ?? 'kanban';
+-  const resolvedKey = projectKey ?? 'KAN';
++  const projectData = projectQuery.data;
++
++  if (projectData?.isNotFound) {
++    return <NotFoundView />;
++  }
++
++  const modulesEnabled = projectData?.modules_enabled ?? true;
++  const projectName = projectData?.name ?? 'kanban';
++  const resolvedKey = projectData?.identifier ?? projectKey ?? '';
++  const capabilities = projectData?.capabilities ?? (projectData === null || projectData === undefined ? ['EDIT', 'ADMIN'] : []);
++  const isProjectAdmin = projectData?.is_project_admin ?? capabilities.includes('ADMIN');
+ 
+   return (
+     <ProjectRouteContext.Provider
+@@ -1051,19 +1140,86 @@ export function ProjectRouteContainer(): JSX.Element {
+         projectKey: resolvedKey,
+         projectName,
+         modulesEnabled,
++        capabilities,
++        isProjectAdmin,
+       }}
+     >
+       <AppShell
+         projectKey={resolvedKey}
+-        projectId={projectQuery.data?.id}
++        projectId={projectData?.id}
+         projectName={projectName}
+         modulesEnabled={modulesEnabled}
+-        accessManifest={projectQuery.data?.access_manifest}
++        accessManifest={projectData?.access_manifest}
+       />
+     </ProjectRouteContext.Provider>
+   );
+ }
+ 
++export function AdminRouteGuard(): JSX.Element {
++  const { data: user, isLoading } = useQuery<{
++    is_server_admin?: boolean;
++    aal_level?: number | string;
++    auth_aal?: string;
++  } | null>({
++    queryKey: qk.me(),
++    queryFn: async () => {
++      try {
++        return (await apiFetch('GET', '/api/v1/auth/me')) as {
++          is_server_admin?: boolean;
++          aal_level?: number | string;
++          auth_aal?: string;
++        };
++      } catch {
++        return null;
++      }
++    },
++    staleTime: 60000,
++  });
++
++  if (isLoading) {
++    return <div data-testid="admin-guard-loading" className="kb-loading-state" />;
++  }
++
++  const isServerAdmin = Boolean(user?.is_server_admin);
++  const aal = user?.aal_level;
++  const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
++
++  if (!isServerAdmin || !isAal2) {
++    return <NotFoundView />;
++  }
++
++  return <Outlet />;
++}
++
++export function DraftsWorkspaceRouteGuard(): JSX.Element {
++  const { data: user, isLoading } = useQuery<{
++    workspace_role?: string;
++  } | null>({
++    queryKey: qk.me(),
++    queryFn: async () => {
++      try {
++        return (await apiFetch('GET', '/api/v1/auth/me')) as {
++          workspace_role?: string;
++        };
++      } catch {
++        return null;
++      }
++    },
++    staleTime: 60000,
++  });
++
++  if (isLoading) {
++    return <div data-testid="drafts-guard-loading" className="kb-loading-state" />;
++  }
++
++  const isViewer = user?.workspace_role === 'VIEWER' || user?.workspace_role === 'WORKSPACE_GUEST';
++  if (isViewer) {
++    return <NotFoundView />;
++  }
++
++  return <DraftsWorkspaceView />;
++}
++
+ export function RootShellLayout(): JSX.Element {
+   return <AppShell projectKey={undefined} projectId={undefined} />;
+ }
+@@ -1148,7 +1304,7 @@ export const appRoutes: RouteObject[] = [
+           },
+           {
+             path: 'drafts',
+-            element: <DraftsWorkspaceView />,
++            element: <DraftsWorkspaceRouteGuard />,
+           },
+           {
+             path: 'your-work',
+@@ -1175,16 +1331,26 @@ export const appRoutes: RouteObject[] = [
+             element: <McpAccessStudio tier="workspace" />,
+           },
+           {
+-            path: 'admin/mcp',
+-            element: <McpAccessStudio tier="global" />,
+-          },
+-          {
+-            path: 'admin/auth',
+-            element: <AuthStudioPage />,
+-          },
+-          {
+-            path: 'admin/standalone',
+-            element: <StandaloneStatusRoute />,
++            path: 'admin',
++            element: <AdminRouteGuard />,
++            children: [
++              {
++                path: 'mcp',
++                element: <McpAccessStudio tier="global" />,
++              },
++              {
++                path: 'auth',
++                element: <AuthStudioPage />,
++              },
++              {
++                path: 'standalone',
++                element: <StandaloneStatusRoute />,
++              },
++              {
++                path: '*',
++                element: <NotFoundView />,
++              },
++            ],
+           },
+           {
+             path: '__dev/*',
+diff --git a/kanban/web/src/features/board/BoardColumn.tsx b/kanban/web/src/features/board/BoardColumn.tsx
+index a3205bf..50f5284 100644
+--- a/kanban/web/src/features/board/BoardColumn.tsx
++++ b/kanban/web/src/features/board/BoardColumn.tsx
+@@ -258,16 +258,18 @@ export function BoardColumn({
+         </div>
+       </div>
+ 
+-      <footer className="board-column-footer">
+-        <button
+-          type="button"
+-          className="board-new-item-btn"
+-          onClick={() => onNewItem?.(state.id)}
+-          data-testid={`new-item-${state.id}`}
+-        >
+-          <span>+</span> New work item
+-        </button>
+-      </footer>
++      {onNewItem && (
++        <footer className="board-column-footer">
++          <button
++            type="button"
++            className="board-new-item-btn"
++            onClick={() => onNewItem(state.id)}
++            data-testid={`new-item-${state.id}`}
++          >
++            <span>+</span> New work item
++          </button>
++        </footer>
++      )}
+     </section>
+   );
+ }
+diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
+index fed32c2..f068cc5 100644
+--- a/kanban/web/src/features/board/BoardView.tsx
++++ b/kanban/web/src/features/board/BoardView.tsx
+@@ -22,14 +22,14 @@ import './board.css';
+ 
+ export interface BoardViewProps {
+   projectKey: string;
+-  states?: BoardWorkflowState[];
+-  issues?: BoardIssue[];
+-  currentUserCapabilities?: string[];
++  states?: BoardWorkflowState[] | undefined;
++  issues?: BoardIssue[] | undefined;
++  currentUserCapabilities?: string[] | undefined;
+   realtimeClient?: RealtimeClient | undefined;
+-  onOpenPeek?: (issueKey: string) => void;
+-  onNewItem?: (stateId: string) => void;
+-  onMoveSuccess?: (res: IssueMoveResponse) => void;
+-  monitorFactory?: typeof monitorForElements;
++  onOpenPeek?: ((issueKey: string) => void) | undefined;
++  onNewItem?: ((stateId: string) => void) | undefined;
++  onMoveSuccess?: ((res: IssueMoveResponse) => void) | undefined;
++  monitorFactory?: typeof monitorForElements | undefined;
+ }
+ 
+ interface PendingHardWipMove {
+diff --git a/kanban/web/src/features/docs/DocsTreeNav.tsx b/kanban/web/src/features/docs/DocsTreeNav.tsx
+index 14cc322..f0202c9 100644
+--- a/kanban/web/src/features/docs/DocsTreeNav.tsx
++++ b/kanban/web/src/features/docs/DocsTreeNav.tsx
+@@ -27,6 +27,7 @@ import './DocsWorkspaceView.css';
+ export interface DocsTreeNavProps {
+   projectKey: string;
+   activePageId?: string | undefined;
++  readOnly?: boolean | undefined;
+   onSelectPage: (pageId: string) => void;
+   onAnnounce?: ((message: string) => void) | undefined;
+ }
+@@ -77,6 +78,7 @@ export function getDescendantIds(node: PageTreeNode): Set<string> {
+ export function DocsTreeNav({
+   projectKey,
+   activePageId,
++  readOnly = false,
+   onSelectPage,
+   onAnnounce,
+ }: DocsTreeNavProps): JSX.Element {
+@@ -341,17 +343,19 @@ export function DocsTreeNav({
+     <aside className="docs-tree-pane" aria-label="Documentation navigation">
+       <div className="docs-tree-pane__header">
+         <h2 className="docs-tree-pane__title">Pages</h2>
+-        <button
+-          type="button"
+-          className="docs-tree-btn docs-tree-btn--primary"
+-          onClick={() => {
+-            handleStartCreate(null);
+-          }}
+-          aria-label="Create new root doc"
+-          data-testid="create-root-doc-btn"
+-        >
+-          + New Doc
+-        </button>
++        {!readOnly && (
++          <button
++            type="button"
++            className="docs-tree-btn docs-tree-btn--primary"
++            onClick={() => {
++              handleStartCreate(null);
++            }}
++            aria-label="Create new root doc"
++            data-testid="create-root-doc-btn"
++          >
++            + New Doc
++          </button>
++        )}
+       </div>
+ 
+       {isLoading && (
+@@ -433,42 +437,44 @@ export function DocsTreeNav({
+                 {item.title}
+               </span>
+ 
+-              <div
+-                className="docs-tree-item__actions"
+-                onClick={(e) => {
+-                  e.stopPropagation();
+-                }}
+-              >
+-                <button
+-                  type="button"
+-                  className="docs-tree-item__action-btn"
+-                  title={isAtMaxDepth ? 'Maximum nesting depth of 10 pages reached' : 'Add sub-page'}
+-                  aria-label={`Add sub-page to ${item.title}`}
+-                  aria-disabled={isAtMaxDepth ? 'true' : undefined}
+-                  disabled={isAtMaxDepth}
+-                  data-testid={`add-subpage-${item.node.slug ?? item.id}`}
+-                  onClick={() => {
+-                    handleStartCreate(item.id);
++              {!readOnly && (
++                <div
++                  className="docs-tree-item__actions"
++                  onClick={(e) => {
++                    e.stopPropagation();
+                   }}
+                 >
+-                  +
+-                </button>
+-
+-                {!item.restricted && (
+                   <button
+                     type="button"
+                     className="docs-tree-item__action-btn"
+-                    title="Move page"
+-                    aria-label={`Move page ${item.title}`}
+-                    data-testid={`move-page-${item.node.slug ?? item.id}`}
++                    title={isAtMaxDepth ? 'Maximum nesting depth of 10 pages reached' : 'Add sub-page'}
++                    aria-label={`Add sub-page to ${item.title}`}
++                    aria-disabled={isAtMaxDepth ? 'true' : undefined}
++                    disabled={isAtMaxDepth}
++                    data-testid={`add-subpage-${item.node.slug ?? item.id}`}
+                     onClick={() => {
+-                      handleStartMove(item.node);
++                      handleStartCreate(item.id);
+                     }}
+                   >
+-                    ↗
++                    +
+                   </button>
+-                )}
+-              </div>
++
++                  {!item.restricted && (
++                    <button
++                      type="button"
++                      className="docs-tree-item__action-btn"
++                      title="Move page"
++                      aria-label={`Move page ${item.title}`}
++                      data-testid={`move-page-${item.node.slug ?? item.id}`}
++                      onClick={() => {
++                        handleStartMove(item.node);
++                      }}
++                    >
++                      ↗
++                    </button>
++                  )}
++                </div>
++              )}
+             </div>
+           );
+         })}
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.tsx b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+index 78d084f..5697515 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.tsx
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+@@ -18,11 +18,18 @@ import { DocsTreeNav } from './DocsTreeNav';
+ import { PageEditorPane } from './PageEditorPane';
+ import { OutlineAndVersionsRail } from './OutlineAndVersionsRail';
+ import { SelectionToIssueToolbar } from './SelectionToIssueToolbar';
++import { useProjectRouteContext } from '../../app/ProjectRouteContext';
+ import './DocsWorkspaceView.css';
+ 
+ export function DocsWorkspaceView(): JSX.Element {
+   const { projectKey = 'KAN', pageId } = useParams<{ projectKey: string; pageId?: string }>();
+   const navigate = useNavigate();
++  const ctx = useProjectRouteContext();
++
++  const effectiveCaps = ctx.projectKey
++    ? ctx.capabilities
++    : (ctx.capabilities.length > 0 ? ctx.capabilities : ['EDIT', 'ADMIN']);
++  const canEdit = effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN') || Boolean(ctx.isProjectAdmin);
+ 
+   const [currentMarkdown, setCurrentMarkdown] = useState<string | undefined>(undefined);
+   const [isTreeSheetOpen, setIsTreeSheetOpen] = useState(false);
+@@ -148,6 +155,7 @@ export function DocsWorkspaceView(): JSX.Element {
+           <DocsTreeNav
+             projectKey={projectKey}
+             activePageId={activePageId}
++            readOnly={!canEdit}
+             onSelectPage={handleSelectPage}
+             onAnnounce={handleAnnounce}
+           />
+@@ -159,6 +167,7 @@ export function DocsWorkspaceView(): JSX.Element {
+             <PageEditorPane
+               pageId={activePageId}
+               projectKey={projectKey}
++              readOnly={!canEdit}
+               onToggleRail={() => {
+                 setIsRailSheetOpen((prev) => !prev);
+               }}
+@@ -167,12 +176,14 @@ export function DocsWorkspaceView(): JSX.Element {
+               onAnnounce={handleAnnounce}
+               onMarkdownChange={setCurrentMarkdown}
+             />
+-            <SelectionToIssueToolbar
+-              pageId={activePageId}
+-              projectKey={projectKey}
+-              pageTitle={pageData?.title ?? 'Document'}
+-              onAnnounce={handleAnnounce}
+-            />
++            {canEdit && (
++              <SelectionToIssueToolbar
++                pageId={activePageId}
++                projectKey={projectKey}
++                pageTitle={pageData?.title ?? 'Document'}
++                onAnnounce={handleAnnounce}
++              />
++            )}
+           </>
+         ) : (
+           <main className="docs-center-pane" aria-label="Page Editor">
+diff --git a/kanban/web/src/features/docs/PageEditorPane.tsx b/kanban/web/src/features/docs/PageEditorPane.tsx
+index d1c1f10..9768a77 100644
+--- a/kanban/web/src/features/docs/PageEditorPane.tsx
++++ b/kanban/web/src/features/docs/PageEditorPane.tsx
+@@ -22,6 +22,7 @@ import './DocsWorkspaceView.css';
+ export interface PageEditorPaneProps {
+   pageId: string;
+   projectKey: string;
++  readOnly?: boolean | undefined;
+   onToggleRail?: (() => void) | undefined;
+   onOpenHistory?: (() => void) | undefined;
+   isRailOpen?: boolean | undefined;
+@@ -33,6 +34,7 @@ interface InnerEditorFormProps {
+   page: PageResponse;
+   pageId: string;
+   projectKey: string;
++  readOnly?: boolean | undefined;
+   onToggleRail?: (() => void) | undefined;
+   onOpenHistory?: (() => void) | undefined;
+   isRailOpen?: boolean | undefined;
+@@ -45,6 +47,7 @@ function InnerEditorForm({
+   page,
+   pageId,
+   projectKey,
++  readOnly = false,
+   onToggleRail,
+   onOpenHistory,
+   isRailOpen = true,
+@@ -369,18 +372,24 @@ function InnerEditorForm({
+       {/* Spacious Editorial Area (.docs-prose) */}
+       <div className="docs-prose" data-testid="docs-prose">
+         {/* Inline Title */}
+-        <textarea
+-          ref={titleInputRef}
+-          className="docs-title-input"
+-          value={title}
+-          onChange={handleTitleChange}
+-          onKeyDown={handleTitleKeyDown}
+-          placeholder="Untitled page"
+-          rows={1}
+-          maxLength={501}
+-          aria-label="Document Title"
+-          data-testid="page-title-input"
+-        />
++        {readOnly ? (
++          <h1 className="docs-title-static" data-testid="page-title-static">
++            {title}
++          </h1>
++        ) : (
++          <textarea
++            ref={titleInputRef}
++            className="docs-title-input"
++            value={title}
++            onChange={handleTitleChange}
++            onKeyDown={handleTitleKeyDown}
++            placeholder="Untitled page"
++            rows={1}
++            maxLength={501}
++            aria-label="Document Title"
++            data-testid="page-title-input"
++          />
++        )}
+ 
+         {/* ProseMirror Markdown Editor */}
+         <div ref={editorContainerRef} className="docs-editor-container">
+@@ -389,6 +398,7 @@ function InnerEditorForm({
+             value={markdown}
+             onChange={handleMarkdownChange}
+             onBlur={handleBlur}
++            readOnly={readOnly}
+             maxBytes={1048576}
+             ariaLabel={`Content for ${title}`}
+             testId="page-markdown-editor"
+@@ -410,6 +420,7 @@ function InnerEditorForm({
+ export function PageEditorPane({
+   pageId,
+   projectKey,
++  readOnly = false,
+   onToggleRail,
+   onOpenHistory,
+   isRailOpen = true,
+@@ -453,6 +464,7 @@ export function PageEditorPane({
+       page={page}
+       pageId={pageId}
+       projectKey={projectKey}
++      readOnly={readOnly}
+       onToggleRail={onToggleRail}
+       onOpenHistory={onOpenHistory}
+       isRailOpen={isRailOpen}
+diff --git a/kanban/web/src/features/drawer-actions/IssueOverflowMenu.test.tsx b/kanban/web/src/features/drawer-actions/IssueOverflowMenu.test.tsx
+index 8f1eedf..e42efb1 100644
+--- a/kanban/web/src/features/drawer-actions/IssueOverflowMenu.test.tsx
++++ b/kanban/web/src/features/drawer-actions/IssueOverflowMenu.test.tsx
+@@ -142,7 +142,7 @@ describe('IssueOverflowMenu (KB-P3-43, S7.1, S7.2 8n-8q)', () => {
+     expect(fsBtn.textContent).toContain('Return to side panel');
+   });
+ 
+-  it('make a copy: disabled when caller lacks EDIT capability', () => {
++  it('make a copy: omitted from DOM when caller lacks EDIT capability', () => {
+     const readOnlyIssue: IssueDetail = {
+       ...startedIssue,
+       capabilities: ['VIEW'],
+@@ -151,8 +151,7 @@ describe('IssueOverflowMenu (KB-P3-43, S7.1, S7.2 8n-8q)', () => {
+     renderComponent({ issue: readOnlyIssue });
+ 
+     fireEvent.click(screen.getByTestId('issue-overflow-trigger'));
+-    const copyBtn = screen.getByTestId<HTMLButtonElement>('overflow-make-copy-btn');
+-    expect(copyBtn.disabled).toBe(true);
++    expect(screen.queryByTestId('overflow-make-copy-btn')).toBeNull();
+   });
+ 
+   it('delete button: hidden when caller lacks DELETE capability, shown and clickable when caller has DELETE', () => {
+diff --git a/kanban/web/src/features/drawer-actions/IssueOverflowMenu.tsx b/kanban/web/src/features/drawer-actions/IssueOverflowMenu.tsx
+index df65153..8f81bbd 100644
+--- a/kanban/web/src/features/drawer-actions/IssueOverflowMenu.tsx
++++ b/kanban/web/src/features/drawer-actions/IssueOverflowMenu.tsx
+@@ -39,8 +39,8 @@ export function IssueOverflowMenu({
+   const capabilities = (issue.capabilities && Array.isArray(issue.capabilities))
+     ? issue.capabilities
+     : ['VIEW', 'EDIT', 'DELETE'];
+-  const canEdit = capabilities.includes('EDIT');
+-  const canDelete = capabilities.includes('DELETE');
++  const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
++  const canDelete = capabilities.includes('DELETE') || capabilities.includes('ADMIN');
+ 
+   const stateGroup = (issue.state && typeof issue.state.group === 'string')
+     ? issue.state.group.toLowerCase()
+@@ -144,22 +144,23 @@ export function IssueOverflowMenu({
+           data-testid="issue-overflow-menu"
+         >
+           {/* 1. Make a copy */}
+-          <button
+-            type="button"
+-            className="overflow-menu__item"
+-            role="menuitem"
+-            disabled={!canEdit}
+-            onClick={() => {
+-              setMenuOpen(false);
+-              setCopyDialogOpen(true);
+-            }}
+-            data-testid="overflow-make-copy-btn"
+-          >
+-            <div className="overflow-menu__label-row">
+-              <span aria-hidden="true">📑</span>
+-              <span>Make a copy</span>
+-            </div>
+-          </button>
++          {canEdit && (
++            <button
++              type="button"
++              className="overflow-menu__item"
++              role="menuitem"
++              onClick={() => {
++                setMenuOpen(false);
++                setCopyDialogOpen(true);
++              }}
++              data-testid="overflow-make-copy-btn"
++            >
++              <div className="overflow-menu__label-row">
++                <span aria-hidden="true">📑</span>
++                <span>Make a copy</span>
++              </div>
++            </button>
++          )}
+ 
+           {/* 2. Open in full screen / Return to side panel */}
+           <button
+@@ -179,24 +180,26 @@ export function IssueOverflowMenu({
+           </button>
+ 
+           {/* 3. Archive / Unarchive */}
+-          <button
+-            type="button"
+-            className="overflow-menu__item"
+-            role="menuitem"
+-            aria-disabled={!isArchiveEligible && !isArchived}
+-            onClick={handleArchiveClick}
+-            data-testid="overflow-archive-btn"
+-          >
+-            <div className="overflow-menu__label-row">
+-              <span aria-hidden="true">🗄️</span>
+-              <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
+-            </div>
+-            {!isArchiveEligible && !isArchived && (
+-              <span className="overflow-menu__sublabel" data-testid="archive-disabled-reason">
+-                Only completed or canceled work items can be archived
+-              </span>
+-            )}
+-          </button>
++          {canEdit && (
++            <button
++              type="button"
++              className="overflow-menu__item"
++              role="menuitem"
++              aria-disabled={!isArchiveEligible && !isArchived}
++              onClick={handleArchiveClick}
++              data-testid="overflow-archive-btn"
++            >
++              <div className="overflow-menu__label-row">
++                <span aria-hidden="true">🗄️</span>
++                <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
++              </div>
++              {!isArchiveEligible && !isArchived && (
++                <span className="overflow-menu__sublabel" data-testid="archive-disabled-reason">
++                  Only completed or canceled work items can be archived
++                </span>
++              )}
++            </button>
++          )}
+ 
+           {/* 4. Delete... (Rendered only when caller holds DELETE capability) */}
+           {canDelete && (
+diff --git a/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx b/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx
+index 1631df4..72965f0 100644
+--- a/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx
++++ b/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx
+@@ -54,6 +54,11 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
+   const [linkError, setLinkError] = useState<string | null>(null);
+   const containerRef = useRef<HTMLDivElement>(null);
+ 
++  const capabilities = (issue.capabilities && Array.isArray(issue.capabilities))
++    ? issue.capabilities
++    : ['EDIT', 'ADMIN'];
++  const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
++
+   const { data: canonical } = useQuery<CanonicalUrlResponse>({
+     queryKey: qk.canonicalUrl(issue.key),
+     queryFn: () => fetchCanonicalUrl(issue.key),
+@@ -248,15 +253,17 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
+                           </>
+                         )}
+                       </div>
+-                      <button
+-                        type="button"
+-                        className="link-delete-btn"
+-                        aria-label={`Delete link ${link.id}`}
+-                        onClick={() => { deleteLinkMutation.mutate(link.id); }}
+-                        data-testid={`delete-link-${link.id}`}
+-                      >
+-                        ×
+-                      </button>
++                      {canEdit && (
++                        <button
++                          type="button"
++                          className="link-delete-btn"
++                          aria-label={`Delete link ${link.id}`}
++                          onClick={() => { deleteLinkMutation.mutate(link.id); }}
++                          data-testid={`delete-link-${link.id}`}
++                        >
++                          ×
++                        </button>
++                      )}
+                     </li>
+                   );
+                 })}
+@@ -305,41 +312,45 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
+             )}
+           </div>
+ 
+-          <div className="link-graph-divider" />
++          {canEdit && (
++            <>
++              <div className="link-graph-divider" />
+ 
+-          {/* Add Link Form */}
+-          <form className="add-link-form" onSubmit={handleAddLinkSubmit}>
+-            <select
+-              className="add-link-select"
+-              value={linkType}
+-              onChange={(e) => { setLinkType(e.target.value); }}
+-              aria-label="Link type"
+-              data-testid="link-type-select"
+-            >
+-              {USER_CREATABLE_LINK_TYPES.map((lt) => (
+-                <option key={lt} value={lt}>
+-                  {lt}
+-                </option>
+-              ))}
+-            </select>
+-            <input
+-              type="text"
+-              className="add-link-input"
+-              placeholder="Target key (e.g. KAN-7)"
+-              value={targetRef}
+-              onChange={(e) => { setTargetRef(e.target.value); }}
+-              aria-label="Target issue key"
+-              data-testid="link-target-input"
+-            />
+-            <button
+-              type="submit"
+-              className="drawer-action-btn"
+-              disabled={!targetRef.trim() || addLinkMutation.isPending}
+-              data-testid="add-link-submit-btn"
+-            >
+-              Add Link
+-            </button>
+-          </form>
++              {/* Add Link Form */}
++              <form className="add-link-form" onSubmit={handleAddLinkSubmit}>
++                <select
++                  className="add-link-select"
++                  value={linkType}
++                  onChange={(e) => { setLinkType(e.target.value); }}
++                  aria-label="Link type"
++                  data-testid="link-type-select"
++                >
++                  {USER_CREATABLE_LINK_TYPES.map((lt) => (
++                    <option key={lt} value={lt}>
++                      {lt}
++                    </option>
++                  ))}
++                </select>
++                <input
++                  type="text"
++                  className="add-link-input"
++                  placeholder="Target key (e.g. KAN-7)"
++                  value={targetRef}
++                  onChange={(e) => { setTargetRef(e.target.value); }}
++                  aria-label="Target issue key"
++                  data-testid="link-target-input"
++                />
++                <button
++                  type="submit"
++                  className="drawer-action-btn"
++                  disabled={!targetRef.trim() || addLinkMutation.isPending}
++                  data-testid="add-link-submit-btn"
++                >
++                  Add Link
++                </button>
++              </form>
++            </>
++          )}
+           {linkError && (
+             <div className="modal-alert modal-alert--danger" role="alert">
+               {linkError}
+diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.tsx b/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
+index e606ec2..d2cd1ad 100644
+--- a/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
++++ b/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
+@@ -54,8 +54,8 @@ export function PropertiesRail({
+ 
+   const projectKey = currentIssue.project_key;
+   const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
+-  const canEdit = capabilities.includes('EDIT');
+-  const canTransition = capabilities.includes('TRANSITION');
++  const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
++  const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');
+   const isAdmin = capabilities.includes('ADMIN');
+ 
+   const modulesEnabled = metadata?.modules_enabled ?? (initialMetadata?.modules_enabled !== false);
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index 137cdbd..f46971b 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -501,14 +501,16 @@ function IssueSurfaceContent({
+                 <pre className="surface__mermaid-code">{mermaidSource}</pre>
+               </div>
+             )}
+-            <button
+-              type="button"
+-              className="surface__description-edit-btn"
+-              aria-label="Edit description"
+-              onClick={handleStartEditDescription}
+-            >
+-              Edit description
+-            </button>
++            {(currentIssue.capabilities === undefined || currentIssue.capabilities.includes('EDIT') || currentIssue.capabilities.includes('ADMIN')) && (
++              <button
++                type="button"
++                className="surface__description-edit-btn"
++                aria-label="Edit description"
++                onClick={handleStartEditDescription}
++              >
++                Edit description
++              </button>
++            )}
+           </div>
+         )}
+         {ActivitySlot && <ActivitySlot issue={currentIssue} />}
+diff --git a/kanban/web/src/features/drawer/SummaryField.tsx b/kanban/web/src/features/drawer/SummaryField.tsx
+index dd7fc72..89e4321 100644
+--- a/kanban/web/src/features/drawer/SummaryField.tsx
++++ b/kanban/web/src/features/drawer/SummaryField.tsx
+@@ -201,19 +201,21 @@ export function SummaryField({ issue, descriptionFocusRef }: SummaryFieldProps):
+       ) : (
+         <h1 id={`issue-summary-${issue.key}`} className="summary-field__heading">
+           <span className="summary-field__display-text">{issue.summary}</span>
+-          <button
+-            ref={editButtonRef}
+-            type="button"
+-            className="summary__edit"
+-            aria-label="Edit summary"
+-            onClick={() => {
+-              setDraftText(issue.summary);
+-              setErrorText(null);
+-              setIsEditing(true);
+-            }}
+-          >
+-            <span aria-hidden="true" className="summary__edit-glyph">✎</span>
+-          </button>
++          {(issue.capabilities ? (issue.capabilities.includes('EDIT') || issue.capabilities.includes('ADMIN')) : true) && (
++            <button
++              ref={editButtonRef}
++              type="button"
++              className="summary__edit"
++              aria-label="Edit summary"
++              onClick={() => {
++                setDraftText(issue.summary);
++                setErrorText(null);
++                setIsEditing(true);
++              }}
++            >
++              <span aria-hidden="true" className="summary__edit-glyph">✎</span>
++            </button>
++          )}
+         </h1>
+       )}
+ 
+diff --git a/kanban/web/src/features/list/ListRow.tsx b/kanban/web/src/features/list/ListRow.tsx
+index a71e421..460665f 100644
+--- a/kanban/web/src/features/list/ListRow.tsx
++++ b/kanban/web/src/features/list/ListRow.tsx
+@@ -99,15 +99,17 @@ export function ListRow({
+       aria-selected={isSelected}
+     >
+       <div className="list-row-left">
+-        <span className="list-row-checkbox-wrap">
+-          <input
+-            type="checkbox"
+-            className="list-row-checkbox"
+-            checked={isSelected}
+-            aria-label={`Select ${issue.key}`}
+-            onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
+-          />
+-        </span>
++        {onToggleSelect && (
++          <span className="list-row-checkbox-wrap">
++            <input
++              type="checkbox"
++              className="list-row-checkbox"
++              checked={isSelected}
++              aria-label={`Select ${issue.key}`}
++              onChange={(e) => onToggleSelect(issue.key, e.target.checked)}
++            />
++          </span>
++        )}
+ 
+         <StateBadge
+           state={issue.state}
+diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
+index edc4b6d..ad962de 100644
+--- a/kanban/web/src/features/list/ListView.tsx
++++ b/kanban/web/src/features/list/ListView.tsx
+@@ -5,18 +5,18 @@ import '../views/listTable.css';
+ 
+ export interface ListViewProps {
+   issues: IssueItem[];
+-  projectKey?: string;
+-  modulesEnabled?: boolean;
+-  selectedIds?: string[];
+-  onToggleSelect?: (key: string, selected: boolean) => void;
+-  onCreateIssue?: () => void;
+-  nextCursor?: string | null;
+-  onLoadMore?: () => void;
+-  isLoading?: boolean;
+-  focusedKey?: string | null;
+-  onOpenPeek?: (issueKey: string) => void;
+-  activeKey?: string | null;
+-  canManageWorkflows?: boolean;
++  projectKey?: string | undefined;
++  modulesEnabled?: boolean | undefined;
++  selectedIds?: string[] | undefined;
++  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
++  onCreateIssue?: (() => void) | undefined;
++  nextCursor?: string | null | undefined;
++  onLoadMore?: (() => void) | undefined;
++  isLoading?: boolean | undefined;
++  focusedKey?: string | null | undefined;
++  onOpenPeek?: ((issueKey: string) => void) | undefined;
++  activeKey?: string | null | undefined;
++  canManageWorkflows?: boolean | undefined;
+ }
+ 
+ interface GroupSection {
+@@ -238,13 +238,15 @@ export function ListView({
+       <div className="view-empty-state">
+         <h2 className="view-empty-title">No work items found</h2>
+         <p className="view-empty-desc">Get started by creating the first work item in this project.</p>
+-        <button
+-          type="button"
+-          className="view-empty-create-btn"
+-          onClick={onCreateIssue}
+-        >
+-          + Create first work item
+-        </button>
++        {onCreateIssue && (
++          <button
++            type="button"
++            className="view-empty-create-btn"
++            onClick={onCreateIssue}
++          >
++            + Create first work item
++          </button>
++        )}
+       </div>
+     );
+   }
+@@ -370,15 +372,17 @@ export function ListView({
+           )}
+         </div>
+ 
+-        <button
+-          type="button"
+-          className="list-new-btn"
+-          onClick={onCreateIssue}
+-          aria-label="New work item"
+-        >
+-          <span aria-hidden="true">+</span>
+-          <span>New</span>
+-        </button>
++        {onCreateIssue && (
++          <button
++            type="button"
++            className="list-new-btn"
++            onClick={onCreateIssue}
++            aria-label="New work item"
++          >
++            <span aria-hidden="true">+</span>
++            <span>New</span>
++          </button>
++        )}
+       </div>
+ 
+       {sections.map((section) => {
+@@ -425,14 +429,16 @@ export function ListView({
+                     + Workflow
+                   </button>
+                 )}
+-                <button
+-                  type="button"
+-                  className="list-section-new-btn"
+-                  onClick={onCreateIssue}
+-                  aria-label={`New work item in ${section.name}`}
+-                >
+-                  + New work item
+-                </button>
++                {onCreateIssue && (
++                  <button
++                    type="button"
++                    className="list-section-new-btn"
++                    onClick={onCreateIssue}
++                    aria-label={`New work item in ${section.name}`}
++                  >
++                    + New work item
++                  </button>
++                )}
+               </div>
+             </div>
+ 
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index afcf3d3..13ebf33 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -56,10 +56,32 @@ export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]
+   ],
+ };
+ 
++export const WRITE_MCP_TOOLS = new Set([
++  'create_ticket',
++  'update_ticket',
++  'begin_work',
++  'transition_ticket',
++  'complete_work',
++  'link_objects',
++  'create_doc',
++  'update_doc',
++  'upsert_doc',
++  'manage_stickies',
++  'promote_sticky_to_doc',
++  'link_knowledge',
++  'manage_principals_and_groups',
++  'manage_access_policies',
++  'audit_links',
++  'override_ticket_provenance',
++  'audit_and_purge_object_links',
++  'manage_ai_and_agent_runners',
++  'destructive_lifecycle',
++]);
++
+ export interface McpAccessStudioProps {
+   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
+   allowUnlimitedKeys?: boolean | undefined;
+-  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean } | null | undefined;
++  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean; workspace_role?: string } | null | undefined;
+ }
+ 
+ export function McpAccessStudio({
+@@ -70,6 +92,7 @@ export function McpAccessStudio({
+   const [fetchedUser, setFetchedUser] = useState<{
+     is_server_admin?: boolean;
+     is_workspace_admin?: boolean;
++    workspace_role?: string;
+   } | null>(null);
+ 
+   useEffect(() => {
+@@ -80,6 +103,7 @@ export function McpAccessStudio({
+         const u = (await apiFetch('GET', '/api/v1/auth/me')) as {
+           is_server_admin?: boolean;
+           is_workspace_admin?: boolean;
++          workspace_role?: string;
+         };
+         if (isMounted.current) setFetchedUser(u);
+       } catch {
+@@ -94,6 +118,7 @@ export function McpAccessStudio({
+   const currentUser = propUser ?? fetchedUser;
+   const isServerAdmin = currentUser?.is_server_admin === true;
+   const isWorkspaceAdmin = currentUser?.is_workspace_admin === true || isServerAdmin;
++  const isViewer = currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
+ 
+   const systemStatusQuery = useSystemStatus();
+   const allowUnlimited =
+@@ -625,7 +650,9 @@ export function McpAccessStudio({
+                   Narrow Tools (Disable specific capabilities):
+                 </label>
+                 <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
+-                  {SURFACE_TOOLS[newKeySurface].map((toolName) => {
++                  {SURFACE_TOOLS[newKeySurface]
++                    .filter((toolName) => !isViewer || !WRITE_MCP_TOOLS.has(toolName))
++                    .map((toolName) => {
+                     const isDisabled = disabledTools.includes(toolName);
+                     return (
+                       <label key={toolName} className="kb-mcp-tool-checkbox-label">
+diff --git a/kanban/web/src/features/stickies/ProjectOverviewView.tsx b/kanban/web/src/features/stickies/ProjectOverviewView.tsx
+index ccbe32f..c9c405c 100644
+--- a/kanban/web/src/features/stickies/ProjectOverviewView.tsx
++++ b/kanban/web/src/features/stickies/ProjectOverviewView.tsx
+@@ -20,10 +20,17 @@ import {
+   type StickyItem,
+ } from './stickiesApi';
+ import type { StickyColorToken } from './stickyHeuristic';
++import { useProjectRouteContext } from '../../app/ProjectRouteContext';
+ 
+ export function ProjectOverviewView(): JSX.Element {
+   const { projectKey = 'KAN' } = useParams<{ projectKey: string }>();
+   const queryClient = useQueryClient();
++  const ctx = useProjectRouteContext();
++
++  const effectiveCaps = ctx.projectKey
++    ? ctx.capabilities
++    : (ctx.capabilities.length > 0 ? ctx.capabilities : ['EDIT', 'ADMIN']);
++  const canEdit = effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN') || Boolean(ctx.isProjectAdmin);
+ 
+   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({
+     queryKey: qk.stickies(projectKey),
+@@ -97,9 +104,10 @@ export function ProjectOverviewView(): JSX.Element {
+         projectKey={projectKey}
+         title="Project Overview Stickies"
+         isLoading={isLoading}
+-        onCreateSticky={() => {
++        readOnly={!canEdit}
++        onCreateSticky={canEdit ? () => {
+           createMutation.mutate();
+-        }}
++        } : undefined}
+         onUpdateSticky={async (id, payload, etag) => {
+           await updateMutation.mutateAsync({ stickyId: id, payload, etag });
+         }}
+diff --git a/kanban/web/src/features/stickies/PromotedStickyStub.tsx b/kanban/web/src/features/stickies/PromotedStickyStub.tsx
+index 9f705d8..73e8e7f 100644
+--- a/kanban/web/src/features/stickies/PromotedStickyStub.tsx
++++ b/kanban/web/src/features/stickies/PromotedStickyStub.tsx
+@@ -24,7 +24,7 @@ export function PromotedStickyStub({
+   onOpenAccessInspector,
+ }: PromotedStickyStubProps): JSX.Element {
+   // Derive 2-line preview from body_markdown
+-  const previewText = sticky.body_markdown
++  const previewText = (sticky.body_markdown ?? '')
+     .replace(/^#+\s+/gm, '')
+     .replace(/[`*_[\]]/g, '')
+     .trim()
+diff --git a/kanban/web/src/features/stickies/StickyCard.tsx b/kanban/web/src/features/stickies/StickyCard.tsx
+index b1b3f28..db79d47 100644
+--- a/kanban/web/src/features/stickies/StickyCard.tsx
++++ b/kanban/web/src/features/stickies/StickyCard.tsx
+@@ -60,6 +60,10 @@ export function StickyCard({
+   const [isMenuOpen, setIsMenuOpen] = useState(false);
+   const [isPromoting, setIsPromoting] = useState(false);
+ 
++  const effectiveCaps = sticky.capabilities ?? (readOnly ? ['VIEW'] : ['EDIT', 'DELETE', 'ADMIN']);
++  const canEdit = !readOnly && (effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN'));
++  const canDelete = !readOnly && (effectiveCaps.includes('DELETE') || effectiveCaps.includes('ADMIN'));
++
+   // Complexity evaluation runs on debounced evaluatedBody
+   const evaluation: StickyComplexityEvaluation = evaluateStickyComplexity(
+     evaluatedBody,
+@@ -180,29 +184,31 @@ export function StickyCard({
+     >
+       <header className="sticky-card__header">
+         {/* 6-swatch palette radiogroup */}
+-        <div
+-          role="radiogroup"
+-          aria-label="Sticky color"
+-          className="sticky-card__palette"
+-          onKeyDown={(e) => { handleColorKeyDown(e, color); }}
+-        >
+-          {STICKY_COLOR_TOKENS.map((token) => {
+-            const isSelected = token === color;
+-            return (
+-              <button
+-                key={token}
+-                type="button"
+-                role="radio"
+-                aria-checked={isSelected}
+-                aria-label={`Color ${token}`}
+-                className={`sticky-swatch sticky-swatch--${token}${isSelected ? ' sticky-swatch--selected' : ''}`}
+-                onClick={() => { handleColorSelect(token); }}
+-                tabIndex={isSelected ? 0 : -1}
+-                data-testid={`color-swatch-${token}`}
+-              />
+-            );
+-          })}
+-        </div>
++        {canEdit && (
++          <div
++            role="radiogroup"
++            aria-label="Sticky color"
++            className="sticky-card__palette"
++            onKeyDown={(e) => { handleColorKeyDown(e, color); }}
++          >
++            {STICKY_COLOR_TOKENS.map((token) => {
++              const isSelected = token === color;
++              return (
++                <button
++                  key={token}
++                  type="button"
++                  role="radio"
++                  aria-checked={isSelected}
++                  aria-label={`Color ${token}`}
++                  className={`sticky-swatch sticky-swatch--${token}${isSelected ? ' sticky-swatch--selected' : ''}`}
++                  onClick={() => { handleColorSelect(token); }}
++                  tabIndex={isSelected ? 0 : -1}
++                  data-testid={`color-swatch-${token}`}
++                />
++              );
++            })}
++          </div>
++        )}
+ 
+         <div className="sticky-card__actions">
+           {/* Access Inspector 🛡️ */}
+@@ -218,51 +224,57 @@ export function StickyCard({
+           </span>
+ 
+           {/* ⋯ Overflow menu */}
+-          <div className="sticky-card__menu-container">
+-            <button
+-              type="button"
+-              className="sticky-card__menu-trigger"
+-              onClick={() => { setIsMenuOpen((prev) => !prev); }}
+-              aria-label="Sticky actions"
+-              aria-haspopup="menu"
+-              aria-expanded={isMenuOpen}
+-              data-testid={`sticky-menu-trigger-${sticky.id}`}
+-            >
+-              ⋯
+-            </button>
+-            {isMenuOpen ? (
+-              <div
+-                className="sticky-card__menu"
+-                role="menu"
++          {(canEdit || canDelete) && (
++            <div className="sticky-card__menu-container">
++              <button
++                type="button"
++                className="sticky-card__menu-trigger"
++                onClick={() => { setIsMenuOpen((prev) => !prev); }}
+                 aria-label="Sticky actions"
++                aria-haspopup="menu"
++                aria-expanded={isMenuOpen}
++                data-testid={`sticky-menu-trigger-${sticky.id}`}
+               >
+-                <button
+-                  type="button"
+-                  role="menuitem"
+-                  className="sticky-card__menu-item"
+-                  onClick={() => {
+-                    setIsMenuOpen(false);
+-                    void handlePromote();
+-                  }}
+-                  data-testid="convert-to-doc-menuitem"
++                ⋯
++              </button>
++              {isMenuOpen ? (
++                <div
++                  className="sticky-card__menu"
++                  role="menu"
++                  aria-label="Sticky actions"
+                 >
+-                  Convert to Doc
+-                </button>
+-                <button
+-                  type="button"
+-                  role="menuitem"
+-                  className="sticky-card__menu-item sticky-card__menu-item--danger"
+-                  onClick={() => {
+-                    setIsMenuOpen(false);
+-                    void onDelete(sticky.id);
+-                  }}
+-                  data-testid="delete-sticky-menuitem"
+-                >
+-                  Delete Sticky
+-                </button>
+-              </div>
+-            ) : null}
+-          </div>
++                  {canEdit && (
++                    <button
++                      type="button"
++                      role="menuitem"
++                      className="sticky-card__menu-item"
++                      onClick={() => {
++                        setIsMenuOpen(false);
++                        void handlePromote();
++                      }}
++                      data-testid="convert-to-doc-menuitem"
++                    >
++                      Convert to Doc
++                    </button>
++                  )}
++                  {canDelete && (
++                    <button
++                      type="button"
++                      role="menuitem"
++                      className="sticky-card__menu-item sticky-card__menu-item--danger"
++                      onClick={() => {
++                        setIsMenuOpen(false);
++                        void onDelete(sticky.id);
++                      }}
++                      data-testid="delete-sticky-menuitem"
++                    >
++                      Delete Sticky
++                    </button>
++                  )}
++                </div>
++              ) : null}
++            </div>
++          )}
+         </div>
+       </header>
+ 
+@@ -273,7 +285,7 @@ export function StickyCard({
+           value={body}
+           onChange={handleBodyChange}
+           onBlur={handleBodyBlur}
+-          readOnly={readOnly}
++          readOnly={readOnly || !canEdit}
+           maxBytes={65536}
+           ariaLabel="Sticky markdown content"
+           testId={`sticky-editor-${sticky.id}`}
+@@ -281,7 +293,7 @@ export function StickyCard({
+       </div>
+ 
+       {/* 💡📄 Non-modal promotion banner */}
+-      {evaluation.shouldShowBanner ? (
++      {canEdit && evaluation.shouldShowBanner ? (
+         <StickyPromotionBanner
+           reasons={evaluation.reasons}
+           isPromoting={isPromoting}
+diff --git a/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx b/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+index 627b431..b109ed4 100644
+--- a/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
++++ b/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+@@ -18,16 +18,25 @@ import {
+   type StickyItem,
+ } from './stickiesApi';
+ import type { StickyColorToken } from './stickyHeuristic';
++import { apiFetch } from '../../api/client';
++import { qk } from '../../api/queryKeys';
+ 
+ export const WORKSPACE_STICKIES_QUERY_KEY = ['stickies', 'workspace'] as const;
+ 
++export interface WorkspaceStickiesViewProps {
++  defaultProjectKey?: string | undefined;
++  readOnly?: boolean | undefined;
++}
++
+ export function WorkspaceStickiesView({
+   defaultProjectKey = 'KAN',
+-}: {
+-  defaultProjectKey?: string | undefined;
+-} = {}): JSX.Element {
++  readOnly: propReadOnly,
++}: WorkspaceStickiesViewProps = {}): JSX.Element {
+   const queryClient = useQueryClient();
+ 
++  const cachedUser = queryClient.getQueryData<{ workspace_role?: string }>(qk.me());
++  const isViewer = propReadOnly ?? (cachedUser?.workspace_role === 'VIEWER' || cachedUser?.workspace_role === 'WORKSPACE_GUEST');
++
+   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({
+     queryKey: WORKSPACE_STICKIES_QUERY_KEY,
+     queryFn: ({ signal }) => fetchWorkspaceStickies(signal),
+@@ -99,9 +108,10 @@ export function WorkspaceStickiesView({
+         stickies={stickies}
+         title="Workspace Stickies"
+         isLoading={isLoading}
+-        onCreateSticky={() => {
++        readOnly={isViewer}
++        onCreateSticky={!isViewer ? () => {
+           createMutation.mutate();
+-        }}
++        } : undefined}
+         onUpdateSticky={async (id, payload, etag) => {
+           await updateMutation.mutateAsync({ stickyId: id, payload, etag });
+         }}
+diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
+index 0294886..fead132 100644
+--- a/kanban/web/src/features/table/TableView.tsx
++++ b/kanban/web/src/features/table/TableView.tsx
+@@ -14,15 +14,15 @@ import '../views/listTable.css';
+ export interface TableViewProps {
+   issues: IssueItem[];
+   projectKey: string;
+-  modulesEnabled?: boolean;
+-  selectedIds?: string[];
+-  onToggleSelect?: (key: string, selected: boolean) => void;
+-  onSelectAll?: (selected: boolean) => void;
+-  onCreateIssue?: () => void;
+-  nextCursor?: string | null;
+-  onLoadMore?: () => void;
+-  isLoading?: boolean;
+-  onOpenPeek?: (issueKey: string) => void;
++  modulesEnabled?: boolean | undefined;
++  selectedIds?: string[] | undefined;
++  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
++  onSelectAll?: ((selected: boolean) => void) | undefined;
++  onCreateIssue?: (() => void) | undefined;
++  nextCursor?: string | null | undefined;
++  onLoadMore?: (() => void) | undefined;
++  isLoading?: boolean | undefined;
++  onOpenPeek?: ((issueKey: string) => void) | undefined;
+ }
+ 
+ export function TableView({
+@@ -132,13 +132,15 @@ export function TableView({
+       <div className="view-empty-state">
+         <h2 className="view-empty-title">No work items found</h2>
+         <p className="view-empty-desc">Get started by creating the first work item in this project.</p>
+-        <button
+-          type="button"
+-          className="view-empty-create-btn"
+-          onClick={onCreateIssue}
+-        >
+-          + Create first work item
+-        </button>
++        {onCreateIssue && (
++          <button
++            type="button"
++            className="view-empty-create-btn"
++            onClick={onCreateIssue}
++          >
++            + Create first work item
++          </button>
++        )}
+       </div>
+     );
+   }
+@@ -161,12 +163,14 @@ export function TableView({
+             <tr className="table-header-row">
+               <th className="sticky-col table-key-header" data-col-header="key">
+                 <div className="table-key-cell-content">
+-                  <input
+-                    type="checkbox"
+-                    checked={allSelected}
+-                    aria-label="Select all issues"
+-                    onChange={(e) => onSelectAll?.(e.target.checked)}
+-                  />
++                  {onSelectAll && (
++                    <input
++                      type="checkbox"
++                      checked={allSelected}
++                      aria-label="Select all issues"
++                      onChange={(e) => onSelectAll(e.target.checked)}
++                    />
++                  )}
+                   <button
+                     type="button"
+                     className="issues-table-sort-btn"
+@@ -264,12 +268,14 @@ export function TableView({
+                 >
+                   <td className="sticky-col">
+                     <div className="table-key-cell-content">
+-                      <input
+-                        type="checkbox"
+-                        checked={isSelected}
+-                        aria-label={`Select ${issue.key}`}
+-                        onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
+-                      />
++                      {onToggleSelect && (
++                        <input
++                          type="checkbox"
++                          checked={isSelected}
++                          aria-label={`Select ${issue.key}`}
++                          onChange={(e) => onToggleSelect(issue.key, e.target.checked)}
++                        />
++                      )}
+                       <a
+                         href={`?layout=table&peek=${encodeURIComponent(issue.key)}`}
+                         className="mono table-key-link"
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+index a3098fe..f468bd8 100644
+--- a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+@@ -6,14 +6,14 @@ import './filterBulk.css';
+ export interface SwimlaneBoardGridProps {
+   issues: IssueItem[];
+   projectKey: string;
+-  groupBy?: GroupAxis;
+-  subGroupBy?: GroupAxis;
+-  modulesEnabled?: boolean;
+-  selectedIds?: string[];
+-  onToggleSelect?: (key: string, selected: boolean) => void;
+-  focusedKey?: string | null;
+-  onCardClick?: (key: string, isShift: boolean) => void;
+-  onCardMove?: (issueKey: string, targetColId: string, targetLaneId: string) => void;
++  groupBy?: GroupAxis | undefined;
++  subGroupBy?: GroupAxis | undefined;
++  modulesEnabled?: boolean | undefined;
++  selectedIds?: string[] | undefined;
++  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
++  focusedKey?: string | null | undefined;
++  onCardClick?: ((key: string, isShift: boolean) => void) | undefined;
++  onCardMove?: ((issueKey: string, targetColId: string, targetLaneId: string) => void) | undefined;
+ }
+ 
+ interface ColumnDef {
+@@ -267,17 +267,19 @@ export function SwimlaneBoardGrid({
+                             }}
+                           >
+                             <div className="swimlane-card-top">
+-                              <label
+-                                className="swimlane-card-checkbox-wrap"
+-                                onClick={(e) => { e.stopPropagation(); }}
+-                              >
+-                                <input
+-                                  type="checkbox"
+-                                  checked={isSelected}
+-                                  onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
+-                                  aria-label={`Select ${issue.key}`}
+-                                />
+-                              </label>
++                              {onToggleSelect && (
++                                <label
++                                  className="swimlane-card-checkbox-wrap"
++                                  onClick={(e) => { e.stopPropagation(); }}
++                                >
++                                  <input
++                                    type="checkbox"
++                                    checked={isSelected}
++                                    onChange={(e) => onToggleSelect(issue.key, e.target.checked)}
++                                    aria-label={`Select ${issue.key}`}
++                                  />
++                                </label>
++                              )}
+ 
+                               <a
+                                 href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
+diff --git a/kanban/web/src/features/views/useIssueKeyboardMap.ts b/kanban/web/src/features/views/useIssueKeyboardMap.ts
+index f532cdc..6d1f0ea 100644
+--- a/kanban/web/src/features/views/useIssueKeyboardMap.ts
++++ b/kanban/web/src/features/views/useIssueKeyboardMap.ts
+@@ -4,19 +4,19 @@ import type { QuickFieldType } from './QuickFieldPopover';
+ 
+ export interface UseIssueKeyboardMapOptions {
+   issues: IssueItem[];
+-  layout?: string;
++  layout?: string | undefined;
+   selectedIds: string[];
+   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+-  modulesEnabled?: boolean;
+-  onOpenCreateModal?: () => void;
+-  onOpenFilter?: () => void;
+-  onOpenFieldPopover?: (
++  modulesEnabled?: boolean | undefined;
++  onOpenCreateModal?: (() => void) | undefined;
++  onOpenFilter?: (() => void) | undefined;
++  onOpenFieldPopover?: ((
+     field: QuickFieldType,
+     issue: IssueItem,
+     rect: DOMRect | null
+-  ) => void;
+-  onToggleAssigneeMe?: (issue: IssueItem) => void;
+-  isPopoverOrModalOpen?: boolean;
++  ) => void) | undefined;
++  onToggleAssigneeMe?: ((issue: IssueItem) => void) | undefined;
++  isPopoverOrModalOpen?: boolean | undefined;
+ }
+ 
+ export interface UseIssueKeyboardMapReturn {
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 278c8d5..a237844 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -81,16 +81,16 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
+ export interface ViewComponentProps {
+   issues: IssueItem[];
+   projectKey: string;
+-  modulesEnabled?: boolean;
+-  selectedIds?: string[];
+-  onToggleSelect?: (key: string, selected: boolean) => void;
+-  onSelectAll?: (selected: boolean) => void;
+-  onCreateIssue?: () => void;
+-  nextCursor?: string | null;
+-  onLoadMore?: () => void;
+-  isLoading?: boolean;
+-  focusedKey?: string | null;
+-  onOpenPeek?: (issueKey: string) => void;
++  modulesEnabled?: boolean | undefined;
++  selectedIds?: string[] | undefined;
++  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
++  onSelectAll?: ((selected: boolean) => void) | undefined;
++  onCreateIssue?: (() => void) | undefined;
++  nextCursor?: string | null | undefined;
++  onLoadMore?: (() => void) | undefined;
++  isLoading?: boolean | undefined;
++  focusedKey?: string | null | undefined;
++  onOpenPeek?: ((issueKey: string) => void) | undefined;
+ }
+ 
+ export type ViewComponent = ComponentType<ViewComponentProps>;
+@@ -131,11 +131,13 @@ const defaultQueryClient = new QueryClient({
+ 
+ export interface IssuesWorkspaceRouteProps {
+   projectKey: string;
+-  modulesEnabled?: boolean;
+-  initialIssues?: IssueItem[];
+-  initialLayout?: ViewLayout;
+-  queryClient?: QueryClient;
+-  onOpenPeek?: (issueKey: string) => void;
++  modulesEnabled?: boolean | undefined;
++  initialIssues?: IssueItem[] | undefined;
++  initialLayout?: ViewLayout | undefined;
++  queryClient?: QueryClient | undefined;
++  onOpenPeek?: ((issueKey: string) => void) | undefined;
++  capabilities?: string[] | undefined;
++  isProjectAdmin?: boolean | undefined;
+ }
+ 
+ /**
+@@ -150,9 +152,20 @@ export function IssuesWorkspaceRoute({
+   initialLayout,
+   queryClient = defaultQueryClient,
+   onOpenPeek: propOnOpenPeek,
++  capabilities,
++  isProjectAdmin,
+ }: IssuesWorkspaceRouteProps): JSX.Element {
+   const isLiveMode = initialIssues === undefined;
+ 
++  const effectiveCaps = capabilities ?? ['EDIT', 'ADMIN'];
++  const canEdit =
++    effectiveCaps.includes('EDIT') ||
++    effectiveCaps.includes('ADMIN') ||
++    Boolean(isProjectAdmin);
++  const canAdmin =
++    effectiveCaps.includes('ADMIN') ||
++    Boolean(isProjectAdmin);
++
+   const searchParams = useMemo(() => {
+     return new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+   }, []);
+@@ -266,6 +279,7 @@ export function IssuesWorkspaceRoute({
+   const [isFilterOpen, setIsFilterOpen] = useState(false);
+ 
+   useEffect(() => {
++    if (!canEdit) return;
+     const handleOpenCreate = (): void => {
+       setIsCreateModalOpen(true);
+     };
+@@ -273,7 +287,7 @@ export function IssuesWorkspaceRoute({
+     return () => {
+       window.removeEventListener('kb:create-issue', handleOpenCreate);
+     };
+-  }, []);
++  }, [canEdit]);
+   const [popoverState, setPopoverState] = useState<{
+     isOpen: boolean;
+     field: QuickFieldType | null;
+@@ -389,7 +403,7 @@ export function IssuesWorkspaceRoute({
+     selectedIds,
+     setSelectedIds,
+     modulesEnabled,
+-    onOpenCreateModal: () => { setIsCreateModalOpen(true); },
++    onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
+     onOpenFilter: () => { setIsFilterOpen(true); },
+     onOpenFieldPopover: (field, issue, rect) => {
+       setPopoverState({
+@@ -680,7 +694,7 @@ export function IssuesWorkspaceRoute({
+           subGroupBy={subGroupBy}
+           modulesEnabled={modulesEnabled}
+           selectedIds={selectedIds}
+-          onToggleSelect={handleToggleSelect}
++          onToggleSelect={canEdit ? handleToggleSelect : undefined}
+           focusedKey={focusedKey}
+           onCardClick={handleRowClick}
+         />
+@@ -689,10 +703,11 @@ export function IssuesWorkspaceRoute({
+           projectKey={projectKey}
+           states={boardStates}
+           issues={boardIssues}
++          currentUserCapabilities={effectiveCaps}
+           onOpenPeek={handleOpenPeek}
+-          onNewItem={() => {
++          onNewItem={canEdit ? (_stateId: string) => {
+             setIsCreateModalOpen(true);
+-          }}
++          } : undefined}
+         />
+       ) : layout === 'list' ? (
+         <div className="kb-split-layout" data-testid="split-list-layout">
+@@ -702,13 +717,14 @@ export function IssuesWorkspaceRoute({
+               projectKey={projectKey}
+               modulesEnabled={modulesEnabled}
+               selectedIds={selectedIds}
+-              onToggleSelect={handleToggleSelect}
+-              onCreateIssue={() => {
++              onToggleSelect={canEdit ? handleToggleSelect : undefined}
++              onCreateIssue={canEdit ? () => {
+                 setIsCreateModalOpen(true);
+-              }}
++              } : undefined}
+               focusedKey={focusedKey}
+               onOpenPeek={handleOpenPeek}
+               activeKey={activePeekKey}
++              canManageWorkflows={canAdmin}
+             />
+           </div>
+           {activePeekKey && (
+@@ -726,95 +742,99 @@ export function IssuesWorkspaceRoute({
+           projectKey={projectKey}
+           modulesEnabled={modulesEnabled}
+           selectedIds={selectedIds}
+-          onToggleSelect={handleToggleSelect}
+-          onSelectAll={handleSelectAll}
++          onToggleSelect={canEdit ? handleToggleSelect : undefined}
++          onSelectAll={canEdit ? handleSelectAll : undefined}
+           onOpenPeek={handleOpenPeek}
+-          onCreateIssue={() => {
++          onCreateIssue={canEdit ? () => {
+             setIsCreateModalOpen(true);
+-          }}
++          } : undefined}
+           focusedKey={focusedKey}
+         />
+       )}
+ 
+       {/* 3. Floating Bulk Action Bar */}
+-      <BulkActionBar
+-        selectedKeys={selectedIds}
+-        issues={filteredIssues}
+-        onClearSelection={() => { setSelectedIds([]); }}
+-        modulesEnabled={modulesEnabled}
+-        onBatchUpdateState={(targetStateSlug) => {
+-          const isDone = targetStateSlug === 'done';
+-          const desiredState: StateSummary = {
+-            id: `state-${targetStateSlug}`,
+-            name: isDone ? 'Done' : 'Todo',
+-            group: isDone ? 'completed' : 'unstarted',
+-          };
+-          setIssues((prev) =>
+-            prev.map((i) =>
+-              selectedIds.includes(i.key) ? { ...i, state: desiredState } : i
+-            )
+-          );
+-          if (isLiveMode) {
+-            const resolvedUuid = resolveStateUuid(desiredState, projectStates);
+-            if (resolvedUuid) {
+-              for (const key of selectedIds) {
+-                void patchProjectIssue(key, { state_id: resolvedUuid }).catch(() => undefined);
++      {canEdit && (
++        <BulkActionBar
++          selectedKeys={selectedIds}
++          issues={filteredIssues}
++          onClearSelection={() => { setSelectedIds([]); }}
++          modulesEnabled={modulesEnabled}
++          onBatchUpdateState={(targetStateSlug) => {
++            const isDone = targetStateSlug === 'done';
++            const desiredState: StateSummary = {
++              id: `state-${targetStateSlug}`,
++              name: isDone ? 'Done' : 'Todo',
++              group: isDone ? 'completed' : 'unstarted',
++            };
++            setIssues((prev) =>
++              prev.map((i) =>
++                selectedIds.includes(i.key) ? { ...i, state: desiredState } : i
++              )
++            );
++            if (isLiveMode) {
++              const resolvedUuid = resolveStateUuid(desiredState, projectStates);
++              if (resolvedUuid) {
++                for (const key of selectedIds) {
++                  void patchProjectIssue(key, { state_id: resolvedUuid }).catch(() => undefined);
++                }
+               }
+             }
+-          }
+-          setSelectedIds([]);
+-        }}
+-        onBatchUpdatePriority={(prioritySlug) => {
+-          const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
+-          const priorityEmojiMap: Record<string, string> = {
+-            urgent: '🔥',
+-            high: '⚡',
+-            low: '🔽',
+-            none: '➖',
+-          };
+-          const emoji = priorityEmojiMap[prioritySlug] ?? '🔹';
+-          setIssues((prev) =>
+-            prev.map((i) =>
+-              selectedIds.includes(i.key)
+-                ? { ...i, priority: { slug: prioritySlug, label, emoji } }
+-                : i
+-            )
+-          );
+-          if (isLiveMode) {
+-            for (const key of selectedIds) {
+-              void patchProjectIssue(key, { priority: prioritySlug }).catch(() => undefined);
++            setSelectedIds([]);
++          }}
++          onBatchUpdatePriority={(prioritySlug) => {
++            const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
++            const priorityEmojiMap: Record<string, string> = {
++              urgent: '🔥',
++              high: '⚡',
++              low: '🔽',
++              none: '➖',
++            };
++            const emoji = priorityEmojiMap[prioritySlug] ?? '🔹';
++            setIssues((prev) =>
++              prev.map((i) =>
++                selectedIds.includes(i.key)
++                  ? { ...i, priority: { slug: prioritySlug, label, emoji } }
++                  : i
++              )
++            );
++            if (isLiveMode) {
++              for (const key of selectedIds) {
++                void patchProjectIssue(key, { priority: prioritySlug }).catch(() => undefined);
++              }
+             }
+-          }
+-          setSelectedIds([]);
+-        }}
+-        onBatchArchive={() => {
+-          setIssues((prev) =>
+-            prev.map((i) =>
+-              selectedIds.includes(i.key) ? { ...i, archived_at: new Date().toISOString() } : i
+-            )
+-          );
+-          setSelectedIds([]);
+-        }}
+-        onBatchDelete={() => {
+-          const toDelete = [...selectedIds];
+-          setIssues((prev) => prev.filter((i) => !toDelete.includes(i.key)));
+-          if (isLiveMode) {
+-            for (const key of toDelete) {
+-              void deleteProjectIssue(key).catch(() => undefined);
++            setSelectedIds([]);
++          }}
++          onBatchArchive={() => {
++            setIssues((prev) =>
++              prev.map((i) =>
++                selectedIds.includes(i.key) ? { ...i, archived_at: new Date().toISOString() } : i
++              )
++            );
++            setSelectedIds([]);
++          }}
++          onBatchDelete={() => {
++            const toDelete = [...selectedIds];
++            setIssues((prev) => prev.filter((i) => !toDelete.includes(i.key)));
++            if (isLiveMode) {
++              for (const key of toDelete) {
++                void deleteProjectIssue(key).catch(() => undefined);
++              }
+             }
+-          }
+-          setSelectedIds([]);
+-        }}
+-      />
++            setSelectedIds([]);
++          }}
++        />
++      )}
+ 
+       {/* 4. Quick Create Issue Modal */}
+-      <QuickCreateIssueModal
+-        isOpen={isCreateModalOpen}
+-        onClose={() => { setIsCreateModalOpen(false); }}
+-        onCreate={handleCreateIssue}
+-        projectKey={projectKey}
+-        modulesEnabled={modulesEnabled}
+-      />
++      {canEdit && (
++        <QuickCreateIssueModal
++          isOpen={isCreateModalOpen}
++          onClose={() => { setIsCreateModalOpen(false); }}
++          onCreate={handleCreateIssue}
++          projectKey={projectKey}
++          modulesEnabled={modulesEnabled}
++        />
++      )}
+ 
+       {/* 5. Quick Field Popover */}
+       <QuickFieldPopover

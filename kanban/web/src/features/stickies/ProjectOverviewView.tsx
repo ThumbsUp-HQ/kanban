@@ -20,10 +20,17 @@ import {
   type StickyItem,
 } from './stickiesApi';
 import type { StickyColorToken } from './stickyHeuristic';
+import { useProjectRouteContext } from '../../app/ProjectRouteContext';
 
 export function ProjectOverviewView(): JSX.Element {
   const { projectKey = 'KAN' } = useParams<{ projectKey: string }>();
   const queryClient = useQueryClient();
+  const ctx = useProjectRouteContext();
+
+  const effectiveCaps = ctx.projectKey
+    ? ctx.capabilities
+    : (ctx.capabilities.length > 0 ? ctx.capabilities : ['EDIT', 'ADMIN']);
+  const canEdit = effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN') || ctx.isProjectAdmin;
 
   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({
     queryKey: qk.stickies(projectKey),
@@ -97,9 +104,10 @@ export function ProjectOverviewView(): JSX.Element {
         projectKey={projectKey}
         title="Project Overview Stickies"
         isLoading={isLoading}
-        onCreateSticky={() => {
+        readOnly={!canEdit}
+        onCreateSticky={canEdit ? () => {
           createMutation.mutate();
-        }}
+        } : undefined}
         onUpdateSticky={async (id, payload, etag) => {
           await updateMutation.mutateAsync({ stickyId: id, payload, etag });
         }}

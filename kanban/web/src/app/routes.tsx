@@ -5,7 +5,6 @@
  */
 
 import React, {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -24,6 +23,7 @@ import {
   createMemoryRouter,
   Link,
   Navigate,
+  Outlet,
   useLocation,
   useNavigate,
   useParams,
@@ -76,17 +76,17 @@ export const VALID_LAYOUTS = new Set([
   'timeline',
 ]);
 
-interface ProjectRouteContextValue {
-  readonly projectKey: string;
-  readonly projectName: string;
-  readonly modulesEnabled: boolean;
-}
+import {
+  type ProjectRouteContextValue,
+  ProjectRouteContext,
+  useProjectRouteContext,
+} from './ProjectRouteContext';
 
-const ProjectRouteContext = createContext<ProjectRouteContextValue>({
-  projectKey: 'KAN',
-  projectName: 'kanban',
-  modulesEnabled: true,
-});
+export {
+  type ProjectRouteContextValue,
+  ProjectRouteContext,
+  useProjectRouteContext,
+};
 
 /**
  * Uniform 403 / 404 view preventing principal & object enumeration (S3.4).
@@ -185,17 +185,27 @@ export function ProjectIssuesRoute(): JSX.Element {
         initialLayout={normalizedLayout}
         queryClient={queryClient}
         onOpenPeek={handleOpenPeek}
+        capabilities={ctx.projectKey ? ctx.capabilities : undefined}
+        isProjectAdmin={ctx.projectKey ? ctx.isProjectAdmin : true}
       />
     </div>
   );
 }
 
 /**
- * Workspace Root Home View (`/` — KANBA-170, KANBA-166).
+ * Workspace Root Home View (`/` - KANBA-170, KANBA-166).
  * Verifies initialization/authentication via `useSessionGuard`, loads projects from
  * `GET /api/v1/projects`, and provides 1-click project & work item creation.
  */
-export function WorkspaceHomeView(): JSX.Element {
+function WorkspaceHomeInner({
+  currentUser,
+}: {
+  currentUser: {
+    workspace_role?: string;
+    is_server_admin?: boolean;
+    is_workspace_admin?: boolean;
+  } | null;
+}): JSX.Element {
   useSessionGuard();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<CreatedProject[]>([]);
@@ -240,20 +250,27 @@ export function WorkspaceHomeView(): JSX.Element {
     };
   }, []);
 
-  const displayProjects: readonly CreatedProject[] =
-    projects.length > 0
-      ? projects
-      : [
-          {
-            id: 'default-kan',
-            identifier: 'KAN',
-            name: 'kanban',
-            description_markdown: 'Default workspace project for tracking issues, stickies, and docs.',
-            modules_enabled: true,
-          },
-        ];
-
-  const primaryKey = displayProjects[0]?.identifier ?? 'KAN';
+  const isViewer = currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
+  const isExplicitNonAdmin =
+    isViewer ||
+    currentUser?.workspace_role === 'WORKSPACE_MEMBER' ||
+    currentUser?.workspace_role === 'MEMBER' ||
+    (currentUser?.workspace_role != null && !currentUser.is_workspace_admin && !currentUser.is_server_admin);
+  const canCreateProject = currentUser
+    ? ((currentUser.is_workspace_admin ?? false) || (currentUser.is_server_admin ?? false) || !isExplicitNonAdmin)
+    : true;
+  const displayProjects: readonly CreatedProject[] = projects;
+  const canCreateWorkItem =
+    !isViewer &&
+    displayProjects.length > 0 &&
+    displayProjects.some(
+      (p) =>
+        p.capabilities === undefined ||
+        p.capabilities.includes('EDIT') ||
+        p.capabilities.includes('ADMIN') ||
+        p.is_project_admin,
+    );
+  const primaryKey = displayProjects[0]?.identifier ?? '';
 
   return (
     <section
@@ -272,92 +289,104 @@ export function WorkspaceHomeView(): JSX.Element {
         </div>
 
         <div className="kb-workspace-home-actions">
-          <button
-            type="button"
-            data-testid="home-create-project-btn"
-            className="kb-home-secondary-btn"
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-          >
-            + Create Project
-          </button>
-          <button
-            type="button"
-            data-testid="home-create-issue-btn"
-            className="kb-home-primary-btn"
-            onClick={() => {
-              void navigate(`/projects/${primaryKey}/issues?create=1`);
-            }}
-          >
-            + New Work Item
-          </button>
+          {canCreateProject && (
+            <button
+              type="button"
+              data-testid="home-create-project-btn"
+              className="kb-home-secondary-btn"
+              onClick={() => {
+                setCreateOpen(true);
+              }}
+            >
+              + Create Project
+            </button>
+          )}
+          {canCreateWorkItem && (
+            <button
+              type="button"
+              data-testid="home-create-issue-btn"
+              className="kb-home-primary-btn"
+              onClick={() => {
+                if (primaryKey) {
+                  void navigate(`/projects/${primaryKey}/issues?create=1`);
+                }
+              }}
+            >
+              + New Work Item
+            </button>
+          )}
         </div>
       </div>
 
-      <div
-        data-testid="workspace-projects-grid"
-        className="kb-workspace-projects-grid"
-      >
-        {displayProjects.map((proj) => (
-          <div
-            key={proj.identifier}
-            data-testid={`project-card-${proj.identifier}`}
-            className="kb-project-card"
-          >
-            <div>
-              <div className="kb-project-card-header">
-                <span className="kb-project-card-name">
-                  ⚡ {proj.name}
-                </span>
-                <span className="kb-project-card-key">
-                  {proj.identifier}
-                </span>
+      {displayProjects.length === 0 ? (
+        <div data-testid="no-accessible-projects" className="kb-workspace-no-projects">
+          No accessible projects
+        </div>
+      ) : (
+        <div
+          data-testid="workspace-projects-grid"
+          className="kb-workspace-projects-grid"
+        >
+          {displayProjects.map((proj) => (
+            <div
+              key={proj.identifier}
+              data-testid={`project-card-${proj.identifier}`}
+              className="kb-project-card"
+            >
+              <div>
+                <div className="kb-project-card-header">
+                  <span className="kb-project-card-name">
+                    ⚡ {proj.name}
+                  </span>
+                  <span className="kb-project-card-key">
+                    {proj.identifier}
+                  </span>
+                </div>
+                <p className="kb-project-card-desc">
+                  {proj.description_markdown && proj.description_markdown.length > 0
+                    ? proj.description_markdown
+                    : 'Project workspace for issues, cycles, and docs.'}
+                </p>
               </div>
-              <p className="kb-project-card-desc">
-                {proj.description_markdown && proj.description_markdown.length > 0
-                  ? proj.description_markdown
-                  : 'Project workspace for issues, cycles, and docs.'}
-              </p>
-            </div>
 
-            <div className="kb-project-card-links">
-              <Link
-                to={`/projects/${proj.identifier}/issues`}
-                className="kb-project-card-primary-link"
-              >
-                Work Items →
-              </Link>
-              <Link
-                to={`/projects/${proj.identifier}/issues?layout=board`}
-                className="kb-project-card-secondary-link"
-              >
-                Board
-              </Link>
-              <Link
-                to={`/projects/${proj.identifier}/overview`}
-                className="kb-project-card-secondary-link"
-              >
-                Stickies
-              </Link>
-              <Link
-                to={`/projects/${proj.identifier}/docs`}
-                className="kb-project-card-secondary-link"
-              >
-                Docs
-              </Link>
-              {(proj.is_project_admin ?? proj.capabilities?.includes('ADMIN')) && (
+              <div className="kb-project-card-links">
                 <Link
-                  to={`/projects/${proj.identifier}/settings/custom-fields`}
+                  to={`/projects/${proj.identifier}/issues`}
+                  className="kb-project-card-primary-link"
+                >
+                  Work Items →
+                </Link>
+                <Link
+                  to={`/projects/${proj.identifier}/issues?layout=board`}
                   className="kb-project-card-secondary-link"
                 >
-                  Custom Fields
+                  Board
                 </Link>
-              )}
+                <Link
+                  to={`/projects/${proj.identifier}/overview`}
+                  className="kb-project-card-secondary-link"
+                >
+                  Stickies
+                </Link>
+                <Link
+                  to={`/projects/${proj.identifier}/docs`}
+                  className="kb-project-card-secondary-link"
+                >
+                  Docs
+                </Link>
+                {(proj.is_project_admin ?? proj.capabilities?.includes('ADMIN')) && (
+                  <Link
+                    to={`/projects/${proj.identifier}/settings/custom-fields`}
+                    className="kb-project-card-secondary-link"
+                  >
+                    Custom Fields
+                  </Link>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <CreateProjectModal
         isOpen={createOpen}
@@ -370,6 +399,38 @@ export function WorkspaceHomeView(): JSX.Element {
       />
     </section>
   );
+}
+
+function WorkspaceHomeWithQuery(): JSX.Element {
+  const { data: currentUser } = useQuery<{
+    workspace_role?: string;
+    is_server_admin?: boolean;
+    is_workspace_admin?: boolean;
+  } | null>({
+    queryKey: qk.me(),
+    queryFn: async () => {
+      try {
+        return (await apiFetch('GET', '/api/v1/auth/me')) as {
+          workspace_role?: string;
+          is_server_admin?: boolean;
+          is_workspace_admin?: boolean;
+        };
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 60000,
+  });
+
+  return <WorkspaceHomeInner currentUser={currentUser ?? null} />;
+}
+
+export function WorkspaceHomeView(): JSX.Element {
+  const client = useContext(QueryClientContext);
+  if (!client) {
+    return <WorkspaceHomeInner currentUser={null} />;
+  }
+  return <WorkspaceHomeWithQuery />;
 }
 
 export function DraftsWorkspaceView(): JSX.Element {
@@ -510,7 +571,7 @@ function ProjectCyclesViewInner({
   capabilities: propCapabilities,
 }: {
   projectKey: string;
-  capabilities?: string[];
+  capabilities?: string[] | undefined;
 }): JSX.Element {
   const key = projectKey;
   const queryClient = useQueryClient();
@@ -538,12 +599,12 @@ function ProjectCyclesViewInner({
       } catch {
         // fallback
       }
-      return { capabilities: ['EDIT', 'ADMIN'] };
+      return { capabilities: [] };
     },
     enabled: propCapabilities === undefined,
   });
 
-  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
+  const capabilities = propCapabilities ?? projectData?.capabilities ?? [];
   const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
 
   const { data: cycles = [], isLoading } = useQuery<ProjectCycleItem[]>({
@@ -676,7 +737,8 @@ function ProjectCyclesViewInner({
 
 export function ProjectCyclesView(): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
-  const key = projectKey ?? 'KAN';
+  const ctx = useContext(ProjectRouteContext);
+  const key = projectKey ?? (ctx.projectKey || 'KAN');
   const client = useContext(QueryClientContext);
   if (!client) {
     return (
@@ -687,7 +749,12 @@ export function ProjectCyclesView(): JSX.Element {
       </section>
     );
   }
-  return <ProjectCyclesViewInner projectKey={key} />;
+  return (
+    <ProjectCyclesViewInner
+      projectKey={key}
+      capabilities={ctx.projectKey ? ctx.capabilities : undefined}
+    />
+  );
 }
 
 export interface ProjectModuleItem {
@@ -702,7 +769,7 @@ function ProjectModulesViewInner({
   capabilities: propCapabilities,
 }: {
   projectKey: string;
-  capabilities?: string[];
+  capabilities?: string[] | undefined;
 }): JSX.Element {
   const key = projectKey;
   const queryClient = useQueryClient();
@@ -732,12 +799,12 @@ function ProjectModulesViewInner({
       } catch {
         // fallback
       }
-      return { capabilities: ['EDIT', 'ADMIN'] };
+      return { capabilities: [] };
     },
     enabled: propCapabilities === undefined,
   });
 
-  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
+  const capabilities = propCapabilities ?? projectData?.capabilities ?? [];
   const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
 
   const { data: modules = [], isLoading } = useQuery<ProjectModuleItem[]>({
@@ -899,7 +966,8 @@ function ProjectModulesViewInner({
 
 export function ProjectModulesView(): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
-  const key = projectKey ?? 'KAN';
+  const ctx = useContext(ProjectRouteContext);
+  const key = projectKey ?? (ctx.projectKey || 'KAN');
   const client = useContext(QueryClientContext);
   if (!client) {
     return (
@@ -910,7 +978,12 @@ export function ProjectModulesView(): JSX.Element {
       </section>
     );
   }
-  return <ProjectModulesViewInner projectKey={key} />;
+  return (
+    <ProjectModulesViewInner
+      projectKey={key}
+      capabilities={ctx.projectKey ? ctx.capabilities : undefined}
+    />
+  );
 }
 
 export function ProjectViewsRedirect(): JSX.Element {
@@ -1024,13 +1097,20 @@ export function ProjectRouteContainer(): JSX.Element {
         signal,
       });
       if (!res.ok) {
+        if (res.status === 404 || res.status === 403) {
+          return { isNotFound: true };
+        }
         return null;
       }
       return (await res.json()) as {
         id?: string;
+        identifier?: string;
         name?: string;
         modules_enabled?: boolean;
         access_manifest?: AccessManifestData;
+        capabilities?: string[];
+        is_project_admin?: boolean;
+        isNotFound?: boolean;
       };
     },
     enabled: isValidProject && isValidIssue,
@@ -1041,9 +1121,17 @@ export function ProjectRouteContainer(): JSX.Element {
     return <NotFoundView />;
   }
 
-  const modulesEnabled = projectQuery.data?.modules_enabled ?? true;
-  const projectName = projectQuery.data?.name ?? 'kanban';
-  const resolvedKey = projectKey ?? 'KAN';
+  const projectData = projectQuery.data;
+
+  if (projectData?.isNotFound) {
+    return <NotFoundView />;
+  }
+
+  const modulesEnabled = projectData?.modules_enabled ?? true;
+  const projectName = projectData?.name ?? 'kanban';
+  const resolvedKey = projectData?.identifier ?? projectKey ?? '';
+  const capabilities = projectData?.capabilities ?? (projectData === null || projectData === undefined ? ['EDIT', 'ADMIN'] : []);
+  const isProjectAdmin = projectData?.is_project_admin ?? capabilities.includes('ADMIN');
 
   return (
     <ProjectRouteContext.Provider
@@ -1051,17 +1139,84 @@ export function ProjectRouteContainer(): JSX.Element {
         projectKey: resolvedKey,
         projectName,
         modulesEnabled,
+        capabilities,
+        isProjectAdmin,
       }}
     >
       <AppShell
         projectKey={resolvedKey}
-        projectId={projectQuery.data?.id}
+        projectId={projectData?.id}
         projectName={projectName}
         modulesEnabled={modulesEnabled}
-        accessManifest={projectQuery.data?.access_manifest}
+        accessManifest={projectData?.access_manifest}
       />
     </ProjectRouteContext.Provider>
   );
+}
+
+export function AdminRouteGuard(): JSX.Element {
+  const { data: user, isLoading } = useQuery<{
+    is_server_admin?: boolean;
+    aal_level?: number | string;
+    auth_aal?: string;
+  } | null>({
+    queryKey: qk.me(),
+    queryFn: async () => {
+      try {
+        return (await apiFetch('GET', '/api/v1/auth/me')) as {
+          is_server_admin?: boolean;
+          aal_level?: number | string;
+          auth_aal?: string;
+        };
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return <div data-testid="admin-guard-loading" className="kb-loading-state" />;
+  }
+
+  const isServerAdmin = Boolean(user?.is_server_admin);
+  const aal = user?.aal_level;
+  const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
+
+  if (!isServerAdmin || !isAal2) {
+    return <NotFoundView />;
+  }
+
+  return <Outlet />;
+}
+
+export function DraftsWorkspaceRouteGuard(): JSX.Element {
+  const { data: user, isLoading } = useQuery<{
+    workspace_role?: string;
+  } | null>({
+    queryKey: qk.me(),
+    queryFn: async () => {
+      try {
+        return (await apiFetch('GET', '/api/v1/auth/me')) as {
+          workspace_role?: string;
+        };
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return <div data-testid="drafts-guard-loading" className="kb-loading-state" />;
+  }
+
+  const isViewer = user?.workspace_role === 'VIEWER' || user?.workspace_role === 'WORKSPACE_GUEST';
+  if (isViewer) {
+    return <NotFoundView />;
+  }
+
+  return <DraftsWorkspaceView />;
 }
 
 export function RootShellLayout(): JSX.Element {
@@ -1148,7 +1303,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'drafts',
-            element: <DraftsWorkspaceView />,
+            element: <DraftsWorkspaceRouteGuard />,
           },
           {
             path: 'your-work',
@@ -1175,16 +1330,26 @@ export const appRoutes: RouteObject[] = [
             element: <McpAccessStudio tier="workspace" />,
           },
           {
-            path: 'admin/mcp',
-            element: <McpAccessStudio tier="global" />,
-          },
-          {
-            path: 'admin/auth',
-            element: <AuthStudioPage />,
-          },
-          {
-            path: 'admin/standalone',
-            element: <StandaloneStatusRoute />,
+            path: 'admin',
+            element: <AdminRouteGuard />,
+            children: [
+              {
+                path: 'mcp',
+                element: <McpAccessStudio tier="global" />,
+              },
+              {
+                path: 'auth',
+                element: <AuthStudioPage />,
+              },
+              {
+                path: 'standalone',
+                element: <StandaloneStatusRoute />,
+              },
+              {
+                path: '*',
+                element: <NotFoundView />,
+              },
+            ],
           },
           {
             path: '__dev/*',

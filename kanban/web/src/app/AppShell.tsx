@@ -86,9 +86,9 @@ export function computeCurrentSection(pathname: string, fallback = 'Work Items')
 
 export function AppShell({
   children,
-  projectKey = 'KAN',
+  projectKey,
   projectId,
-  projectName = 'kanban',
+  projectName,
   modulesEnabled = true,
   issueCount,
   currentSection = 'Work Items',
@@ -101,7 +101,7 @@ export function AppShell({
   const navigate = useNavigate();
   const match = /\/projects\/([^/]+)/.exec(location.pathname);
   const activeProjectKey = match?.[1] ?? projectKey;
-  const isInsideProject = Boolean(match) || location.pathname.startsWith('/projects');
+  const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
   const computedSection =
     currentSection && currentSection !== 'Work Items'
       ? currentSection
@@ -188,8 +188,8 @@ export function AppShell({
         <Sidebar
           isOpen={mobileSidebarOpen}
           onClose={() => { setMobileSidebarOpen(false); }}
-          projectKey={activeProjectKey}
-          projectName={projectName}
+          projectKey={isInsideProject ? activeProjectKey : undefined}
+          projectName={isInsideProject ? projectName : undefined}
           modulesEnabled={modulesEnabled}
           triggerButtonRef={hamburgerButtonRef}
           user={currentUser}
@@ -201,9 +201,9 @@ export function AppShell({
           onToggleSidebar={toggleMobileSidebar}
           onOpenPalette={() => { setPaletteOpen(true); }}
           workspaceName={isInsideProject ? 'kanban' : undefined}
-          projectKey={activeProjectKey}
+          projectKey={isInsideProject ? activeProjectKey : undefined}
           projectId={isInsideProject ? (projectId ?? activeProjectKey) : undefined}
-          projectName={projectName}
+          projectName={isInsideProject ? projectName : undefined}
           currentSection={computedSection}
           issueCount={issueCount}
           accessManifest={accessManifest}

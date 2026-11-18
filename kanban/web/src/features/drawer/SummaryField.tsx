@@ -201,19 +201,21 @@ export function SummaryField({ issue, descriptionFocusRef }: SummaryFieldProps):
       ) : (
         <h1 id={`issue-summary-${issue.key}`} className="summary-field__heading">
           <span className="summary-field__display-text">{issue.summary}</span>
-          <button
-            ref={editButtonRef}
-            type="button"
-            className="summary__edit"
-            aria-label="Edit summary"
-            onClick={() => {
-              setDraftText(issue.summary);
-              setErrorText(null);
-              setIsEditing(true);
-            }}
-          >
-            <span aria-hidden="true" className="summary__edit-glyph">✎</span>
-          </button>
+          {(issue.capabilities ? (issue.capabilities.includes('EDIT') || issue.capabilities.includes('ADMIN')) : true) && (
+            <button
+              ref={editButtonRef}
+              type="button"
+              className="summary__edit"
+              aria-label="Edit summary"
+              onClick={() => {
+                setDraftText(issue.summary);
+                setErrorText(null);
+                setIsEditing(true);
+              }}
+            >
+              <span aria-hidden="true" className="summary__edit-glyph">✎</span>
+            </button>
+          )}
         </h1>
       )}
 

@@ -4,19 +4,19 @@ import type { QuickFieldType } from './QuickFieldPopover';
 
 export interface UseIssueKeyboardMapOptions {
   issues: IssueItem[];
-  layout?: string;
+  layout?: string | undefined;
   selectedIds: string[];
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
-  modulesEnabled?: boolean;
-  onOpenCreateModal?: () => void;
-  onOpenFilter?: () => void;
-  onOpenFieldPopover?: (
+  modulesEnabled?: boolean | undefined;
+  onOpenCreateModal?: (() => void) | undefined;
+  onOpenFilter?: (() => void) | undefined;
+  onOpenFieldPopover?: ((
     field: QuickFieldType,
     issue: IssueItem,
     rect: DOMRect | null
-  ) => void;
-  onToggleAssigneeMe?: (issue: IssueItem) => void;
-  isPopoverOrModalOpen?: boolean;
+  ) => void) | undefined;
+  onToggleAssigneeMe?: ((issue: IssueItem) => void) | undefined;
+  isPopoverOrModalOpen?: boolean | undefined;
 }
 
 export interface UseIssueKeyboardMapReturn {

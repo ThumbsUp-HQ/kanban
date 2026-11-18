@@ -18,11 +18,18 @@ import { DocsTreeNav } from './DocsTreeNav';
 import { PageEditorPane } from './PageEditorPane';
 import { OutlineAndVersionsRail } from './OutlineAndVersionsRail';
 import { SelectionToIssueToolbar } from './SelectionToIssueToolbar';
+import { useProjectRouteContext } from '../../app/ProjectRouteContext';
 import './DocsWorkspaceView.css';
 
 export function DocsWorkspaceView(): JSX.Element {
   const { projectKey = 'KAN', pageId } = useParams<{ projectKey: string; pageId?: string }>();
   const navigate = useNavigate();
+  const ctx = useProjectRouteContext();
+
+  const effectiveCaps = ctx.projectKey
+    ? ctx.capabilities
+    : (ctx.capabilities.length > 0 ? ctx.capabilities : ['EDIT', 'ADMIN']);
+  const canEdit = effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN') || ctx.isProjectAdmin;
 
   const [currentMarkdown, setCurrentMarkdown] = useState<string | undefined>(undefined);
   const [isTreeSheetOpen, setIsTreeSheetOpen] = useState(false);
@@ -148,6 +155,7 @@ export function DocsWorkspaceView(): JSX.Element {
           <DocsTreeNav
             projectKey={projectKey}
             activePageId={activePageId}
+            readOnly={!canEdit}
             onSelectPage={handleSelectPage}
             onAnnounce={handleAnnounce}
           />
@@ -159,6 +167,7 @@ export function DocsWorkspaceView(): JSX.Element {
             <PageEditorPane
               pageId={activePageId}
               projectKey={projectKey}
+              readOnly={!canEdit}
               onToggleRail={() => {
                 setIsRailSheetOpen((prev) => !prev);
               }}
@@ -167,12 +176,14 @@ export function DocsWorkspaceView(): JSX.Element {
               onAnnounce={handleAnnounce}
               onMarkdownChange={setCurrentMarkdown}
             />
-            <SelectionToIssueToolbar
-              pageId={activePageId}
-              projectKey={projectKey}
-              pageTitle={pageData?.title ?? 'Document'}
-              onAnnounce={handleAnnounce}
-            />
+            {canEdit && (
+              <SelectionToIssueToolbar
+                pageId={activePageId}
+                projectKey={projectKey}
+                pageTitle={pageData?.title ?? 'Document'}
+                onAnnounce={handleAnnounce}
+              />
+            )}
           </>
         ) : (
           <main className="docs-center-pane" aria-label="Page Editor">

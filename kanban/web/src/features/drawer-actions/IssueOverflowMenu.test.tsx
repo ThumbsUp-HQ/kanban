@@ -142,7 +142,7 @@ describe('IssueOverflowMenu (KB-P3-43, S7.1, S7.2 8n-8q)', () => {
     expect(fsBtn.textContent).toContain('Return to side panel');
   });
 
-  it('make a copy: disabled when caller lacks EDIT capability', () => {
+  it('make a copy: omitted from DOM when caller lacks EDIT capability', () => {
     const readOnlyIssue: IssueDetail = {
       ...startedIssue,
       capabilities: ['VIEW'],
@@ -151,8 +151,7 @@ describe('IssueOverflowMenu (KB-P3-43, S7.1, S7.2 8n-8q)', () => {
     renderComponent({ issue: readOnlyIssue });
 
     fireEvent.click(screen.getByTestId('issue-overflow-trigger'));
-    const copyBtn = screen.getByTestId<HTMLButtonElement>('overflow-make-copy-btn');
-    expect(copyBtn.disabled).toBe(true);
+    expect(screen.queryByTestId('overflow-make-copy-btn')).toBeNull();
   });
 
   it('delete button: hidden when caller lacks DELETE capability, shown and clickable when caller has DELETE', () => {

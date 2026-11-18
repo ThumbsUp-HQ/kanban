@@ -60,6 +60,10 @@ export function StickyCard({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPromoting, setIsPromoting] = useState(false);
 
+  const effectiveCaps = sticky.capabilities ?? (readOnly ? ['VIEW'] : ['EDIT', 'DELETE', 'ADMIN']);
+  const canEdit = !readOnly && (effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN'));
+  const canDelete = !readOnly && (effectiveCaps.includes('DELETE') || effectiveCaps.includes('ADMIN'));
+
   // Complexity evaluation runs on debounced evaluatedBody
   const evaluation: StickyComplexityEvaluation = evaluateStickyComplexity(
     evaluatedBody,
@@ -180,29 +184,31 @@ export function StickyCard({
     >
       <header className="sticky-card__header">
         {/* 6-swatch palette radiogroup */}
-        <div
-          role="radiogroup"
-          aria-label="Sticky color"
-          className="sticky-card__palette"
-          onKeyDown={(e) => { handleColorKeyDown(e, color); }}
-        >
-          {STICKY_COLOR_TOKENS.map((token) => {
-            const isSelected = token === color;
-            return (
-              <button
-                key={token}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                aria-label={`Color ${token}`}
-                className={`sticky-swatch sticky-swatch--${token}${isSelected ? ' sticky-swatch--selected' : ''}`}
-                onClick={() => { handleColorSelect(token); }}
-                tabIndex={isSelected ? 0 : -1}
-                data-testid={`color-swatch-${token}`}
-              />
-            );
-          })}
-        </div>
+        {canEdit && (
+          <div
+            role="radiogroup"
+            aria-label="Sticky color"
+            className="sticky-card__palette"
+            onKeyDown={(e) => { handleColorKeyDown(e, color); }}
+          >
+            {STICKY_COLOR_TOKENS.map((token) => {
+              const isSelected = token === color;
+              return (
+                <button
+                  key={token}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`Color ${token}`}
+                  className={`sticky-swatch sticky-swatch--${token}${isSelected ? ' sticky-swatch--selected' : ''}`}
+                  onClick={() => { handleColorSelect(token); }}
+                  tabIndex={isSelected ? 0 : -1}
+                  data-testid={`color-swatch-${token}`}
+                />
+              );
+            })}
+          </div>
+        )}
 
         <div className="sticky-card__actions">
           {/* Access Inspector 🛡️ */}
@@ -218,51 +224,57 @@ export function StickyCard({
           </span>
 
           {/* ⋯ Overflow menu */}
-          <div className="sticky-card__menu-container">
-            <button
-              type="button"
-              className="sticky-card__menu-trigger"
-              onClick={() => { setIsMenuOpen((prev) => !prev); }}
-              aria-label="Sticky actions"
-              aria-haspopup="menu"
-              aria-expanded={isMenuOpen}
-              data-testid={`sticky-menu-trigger-${sticky.id}`}
-            >
-              ⋯
-            </button>
-            {isMenuOpen ? (
-              <div
-                className="sticky-card__menu"
-                role="menu"
+          {(canEdit || canDelete) && (
+            <div className="sticky-card__menu-container">
+              <button
+                type="button"
+                className="sticky-card__menu-trigger"
+                onClick={() => { setIsMenuOpen((prev) => !prev); }}
                 aria-label="Sticky actions"
+                aria-haspopup="menu"
+                aria-expanded={isMenuOpen}
+                data-testid={`sticky-menu-trigger-${sticky.id}`}
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="sticky-card__menu-item"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    void handlePromote();
-                  }}
-                  data-testid="convert-to-doc-menuitem"
+                ⋯
+              </button>
+              {isMenuOpen ? (
+                <div
+                  className="sticky-card__menu"
+                  role="menu"
+                  aria-label="Sticky actions"
                 >
-                  Convert to Doc
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="sticky-card__menu-item sticky-card__menu-item--danger"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    void onDelete(sticky.id);
-                  }}
-                  data-testid="delete-sticky-menuitem"
-                >
-                  Delete Sticky
-                </button>
-              </div>
-            ) : null}
-          </div>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sticky-card__menu-item"
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        void handlePromote();
+                      }}
+                      data-testid="convert-to-doc-menuitem"
+                    >
+                      Convert to Doc
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sticky-card__menu-item sticky-card__menu-item--danger"
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        void onDelete(sticky.id);
+                      }}
+                      data-testid="delete-sticky-menuitem"
+                    >
+                      Delete Sticky
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </header>
 
@@ -273,7 +285,7 @@ export function StickyCard({
           value={body}
           onChange={handleBodyChange}
           onBlur={handleBodyBlur}
-          readOnly={readOnly}
+          readOnly={readOnly || !canEdit}
           maxBytes={65536}
           ariaLabel="Sticky markdown content"
           testId={`sticky-editor-${sticky.id}`}
@@ -281,7 +293,7 @@ export function StickyCard({
       </div>
 
       {/* 💡📄 Non-modal promotion banner */}
-      {evaluation.shouldShowBanner ? (
+      {canEdit && evaluation.shouldShowBanner ? (
         <StickyPromotionBanner
           reasons={evaluation.reasons}
           isPromoting={isPromoting}

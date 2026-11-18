@@ -14,15 +14,15 @@ import '../views/listTable.css';
 export interface TableViewProps {
   issues: IssueItem[];
   projectKey: string;
-  modulesEnabled?: boolean;
-  selectedIds?: string[];
-  onToggleSelect?: (key: string, selected: boolean) => void;
-  onSelectAll?: (selected: boolean) => void;
-  onCreateIssue?: () => void;
-  nextCursor?: string | null;
-  onLoadMore?: () => void;
-  isLoading?: boolean;
-  onOpenPeek?: (issueKey: string) => void;
+  modulesEnabled?: boolean | undefined;
+  selectedIds?: string[] | undefined;
+  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+  onSelectAll?: ((selected: boolean) => void) | undefined;
+  onCreateIssue?: (() => void) | undefined;
+  nextCursor?: string | null | undefined;
+  onLoadMore?: (() => void) | undefined;
+  isLoading?: boolean | undefined;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
 }
 
 export function TableView({
@@ -132,13 +132,15 @@ export function TableView({
       <div className="view-empty-state">
         <h2 className="view-empty-title">No work items found</h2>
         <p className="view-empty-desc">Get started by creating the first work item in this project.</p>
-        <button
-          type="button"
-          className="view-empty-create-btn"
-          onClick={onCreateIssue}
-        >
-          + Create first work item
-        </button>
+        {onCreateIssue && (
+          <button
+            type="button"
+            className="view-empty-create-btn"
+            onClick={onCreateIssue}
+          >
+            + Create first work item
+          </button>
+        )}
       </div>
     );
   }
@@ -161,12 +163,14 @@ export function TableView({
             <tr className="table-header-row">
               <th className="sticky-col table-key-header" data-col-header="key">
                 <div className="table-key-cell-content">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    aria-label="Select all issues"
-                    onChange={(e) => onSelectAll?.(e.target.checked)}
-                  />
+                  {onSelectAll && (
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      aria-label="Select all issues"
+                      onChange={(e) => { onSelectAll(e.target.checked); }}
+                    />
+                  )}
                   <button
                     type="button"
                     className="issues-table-sort-btn"
@@ -264,12 +268,14 @@ export function TableView({
                 >
                   <td className="sticky-col">
                     <div className="table-key-cell-content">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        aria-label={`Select ${issue.key}`}
-                        onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
-                      />
+                      {onToggleSelect && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          aria-label={`Select ${issue.key}`}
+                          onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
+                        />
+                      )}
                       <a
                         href={`?layout=table&peek=${encodeURIComponent(issue.key)}`}
                         className="mono table-key-link"

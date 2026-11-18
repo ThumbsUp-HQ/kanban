@@ -48,19 +48,19 @@ export interface ProjectNavData {
 }
 
 export interface SidebarProps {
-  isOpen?: boolean;
-  onClose?: () => void;
-  onToggleCollapse?: () => void;
-  projectKey?: string;
-  projectName?: string;
-  modulesEnabled?: boolean;
-  activePath?: string;
-  triggerButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  isOpen?: boolean | undefined;
+  onClose?: (() => void) | undefined;
+  onToggleCollapse?: (() => void) | undefined;
+  projectKey?: string | undefined;
+  projectName?: string | undefined;
+  modulesEnabled?: boolean | undefined;
+  activePath?: string | undefined;
+  triggerButtonRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   user?: {
-    is_server_admin?: boolean;
-    is_workspace_admin?: boolean;
-    workspace_role?: string | null;
-    workspace_capabilities?: string[] | null;
+    is_server_admin?: boolean | undefined;
+    is_workspace_admin?: boolean | undefined;
+    workspace_role?: string | null | undefined;
+    workspace_capabilities?: string[] | null | undefined;
   } | null | undefined;
 }
 
@@ -146,8 +146,8 @@ export function Sidebar({
   isOpen = true,
   onClose,
   onToggleCollapse,
-  projectKey = 'KAN',
-  projectName = 'kanban',
+  projectKey,
+  projectName,
   modulesEnabled = true,
   activePath: activePathProp,
   triggerButtonRef,
@@ -315,22 +315,45 @@ export function Sidebar({
     void handleSwitchWorkspace(created.id);
   };
 
+  const deduplicatedWorkspaces = useMemo<WorkspaceNavData[]>(() => {
+    const seen = new Set<string>();
+    const result: WorkspaceNavData[] = [];
+    for (const ws of workspaces) {
+      const slugKey = ws.slug ? ws.slug.toLowerCase() : '';
+      const nameKey = ws.name ? ws.name.toLowerCase() : '';
+      if (
+        (ws.id && seen.has(`id:${ws.id}`)) ||
+        (slugKey && seen.has(`slug:${slugKey}`)) ||
+        (nameKey === 'default workspace' && seen.has('name:default workspace'))
+      ) {
+        continue;
+      }
+      if (ws.id) seen.add(`id:${ws.id}`);
+      if (slugKey) seen.add(`slug:${slugKey}`);
+      if (nameKey) seen.add(`name:${nameKey}`);
+      result.push(ws);
+    }
+    return result;
+  }, [workspaces]);
+
   const currentWorkspace = useMemo(() => {
     return (
-      workspaces.find((w) => w.is_current) ?? {
+      deduplicatedWorkspaces.find((w) => w.is_current) ?? {
         id: '',
         name: '👍kanban',
         slug: 'kanban',
       }
     );
-  }, [workspaces]);
+  }, [deduplicatedWorkspaces]);
 
   useEffect(() => {
     let active = true;
     const refresh = (): void => {
       void fetchProjects().then((items) => {
-        if (active && items.length > 0) {
-          setFetchedProjects(items);
+        if (active) {
+          if (items.length > 0) {
+            setFetchedProjects(items);
+          }
         }
       });
     };
@@ -372,27 +395,29 @@ export function Sidebar({
   }, []);
 
   const projectList = useMemo<ProjectNavData[]>(() => {
-    const primary: ProjectNavData = {
-      key: projectKey,
-      name: projectName,
-      modules_enabled: modulesEnabled,
-    };
+    const primary: ProjectNavData | null =
+      projectKey && projectKey.length > 0
+        ? {
+            key: projectKey,
+            name: projectName ?? projectKey,
+            modules_enabled: modulesEnabled,
+          }
+        : null;
+
     if (fetchedProjects.length === 0) {
-      return [primary];
+      return primary ? [primary] : [];
     }
-    const hasPrimaryInFetched = fetchedProjects.some((p) => p.key === projectKey);
-    if (hasPrimaryInFetched) {
-      return fetchedProjects.map((p) =>
-        p.key === projectKey && projectName !== 'kanban'
-          ? { key: p.key, name: projectName, modules_enabled: modulesEnabled }
-          : p,
-      );
-    }
-    if (projectName !== 'kanban' || currentPath.startsWith(`/projects/${projectKey}`)) {
+    if (primary && !fetchedProjects.some((p) => p.key === primary.key)) {
       return [primary, ...fetchedProjects];
     }
     return fetchedProjects;
-  }, [fetchedProjects, projectKey, projectName, modulesEnabled, currentPath]);
+  }, [fetchedProjects, projectKey, projectName, modulesEnabled]);
+
+  const isViewer = user?.workspace_role === 'VIEWER' || user?.workspace_role === 'WORKSPACE_GUEST';
+  const canCreateProject = user ? ((user.is_workspace_admin ?? false) || (user.is_server_admin ?? false)) : true;
+  const canCreateWorkspace = user ? ((user.is_workspace_admin ?? false) || (user.is_server_admin ?? false)) : true;
+  const canCreateWorkItem = !isViewer;
+  const canViewDrafts = !isViewer && user?.workspace_role !== 'WORKSPACE_GUEST';
 
   const activeProjectKey = projectList[0]?.key ?? projectKey;
 
@@ -482,7 +507,7 @@ export function Sidebar({
         new CustomEvent('kb:create-issue', { bubbles: true }),
       );
     }
-    if (navigateFn && !currentPath.startsWith(`/projects/${activeProjectKey}/issues`)) {
+    if (navigateFn && activeProjectKey && !currentPath.startsWith(`/projects/${activeProjectKey}/issues`)) {
       navigateFn(`/projects/${activeProjectKey}/issues?create=1`);
     }
   };
@@ -541,7 +566,7 @@ export function Sidebar({
 
             {workspaceDropdownOpen && (
               <div className="kb-workspace-dropdown" role="menu">
-                {workspaces.map((ws) => (
+                {deduplicatedWorkspaces.map((ws) => (
                   <button
                     key={ws.id}
                     type="button"
@@ -558,7 +583,7 @@ export function Sidebar({
                     {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
                   </button>
                 ))}
-                {workspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
+                {deduplicatedWorkspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
                 {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
                   <NavLink
                     to="/workspaces/settings"
@@ -576,30 +601,34 @@ export function Sidebar({
                     </span>
                   </NavLink>
                 )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="kb-workspace-dropdown-create-btn"
-                  onClick={() => {
-                    setWorkspaceDropdownOpen(false);
-                    setCreateWorkspaceOpen(true);
-                  }}
-                >
-                  <span aria-hidden="true">+</span>
-                  <span>Create New Workspace</span>
-                </button>
+                {canCreateWorkspace && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="kb-workspace-dropdown-create-btn"
+                    onClick={() => {
+                      setWorkspaceDropdownOpen(false);
+                      setCreateWorkspaceOpen(true);
+                    }}
+                  >
+                    <span aria-hidden="true">+</span>
+                    <span>Create New Workspace</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
 
-          <button
-            type="button"
-            className="kb-new-item-btn"
-            onClick={handleCreateIssue}
-          >
-            <span aria-hidden="true">+</span>
-            <span>New work item</span>
-          </button>
+          {canCreateWorkItem && (
+            <button
+              type="button"
+              className="kb-new-item-btn"
+              onClick={handleCreateIssue}
+            >
+              <span aria-hidden="true">+</span>
+              <span>New work item</span>
+            </button>
+          )}
         </div>
 
         {/* Workspace Section */}
@@ -619,18 +648,20 @@ export function Sidebar({
                   <span>Home</span>
                 </NavLink>
               </li>
-              <li>
-                <NavLink
-                  to="/drafts"
-                  className="kb-sidebar-nav-item"
-                  aria-current={currentPath === '/drafts' ? 'page' : undefined}
-                >
-                  <span className="kb-sidebar-icon" aria-hidden="true">
-                    📝
-                  </span>
-                  <span>Drafts</span>
-                </NavLink>
-              </li>
+              {canViewDrafts && (
+                <li>
+                  <NavLink
+                    to="/drafts"
+                    className="kb-sidebar-nav-item"
+                    aria-current={currentPath === '/drafts' ? 'page' : undefined}
+                  >
+                    <span className="kb-sidebar-icon" aria-hidden="true">
+                      📝
+                    </span>
+                    <span>Drafts</span>
+                  </NavLink>
+                </li>
+              )}
               <li>
                 <NavLink
                   to="/your-work"
@@ -665,20 +696,27 @@ export function Sidebar({
             <div className="kb-sidebar-heading">
               Projects
             </div>
-            <button
-              type="button"
-              className="kb-sidebar-add-project-btn"
-              aria-label="Create project"
-              title="Create project"
-              onClick={() => {
-                setCreateProjectOpen(true);
-              }}
-            >
-              + Project
-            </button>
+            {canCreateProject && (
+              <button
+                type="button"
+                className="kb-sidebar-add-project-btn"
+                aria-label="Create project"
+                title="Create project"
+                onClick={() => {
+                  setCreateProjectOpen(true);
+                }}
+              >
+                + Project
+              </button>
+            )}
           </div>
           <nav aria-label="Projects navigation">
-            {projectList.map((proj) => {
+            {projectList.length === 0 ? (
+              <div className="kb-sidebar-no-projects" data-testid="sidebar-no-projects">
+                No accessible projects
+              </div>
+            ) : (
+              projectList.map((proj) => {
               const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
               const isProjExpanded = expandedProjects[proj.key] ?? true;
               return (
@@ -928,7 +966,8 @@ export function Sidebar({
                   )}
                 </div>
               );
-            })}
+            })
+            )}
           </nav>
         </div>
 

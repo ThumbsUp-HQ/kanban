@@ -5,18 +5,18 @@ import '../views/listTable.css';
 
 export interface ListViewProps {
   issues: IssueItem[];
-  projectKey?: string;
-  modulesEnabled?: boolean;
-  selectedIds?: string[];
-  onToggleSelect?: (key: string, selected: boolean) => void;
-  onCreateIssue?: () => void;
-  nextCursor?: string | null;
-  onLoadMore?: () => void;
-  isLoading?: boolean;
-  focusedKey?: string | null;
-  onOpenPeek?: (issueKey: string) => void;
-  activeKey?: string | null;
-  canManageWorkflows?: boolean;
+  projectKey?: string | undefined;
+  modulesEnabled?: boolean | undefined;
+  selectedIds?: string[] | undefined;
+  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+  onCreateIssue?: (() => void) | undefined;
+  nextCursor?: string | null | undefined;
+  onLoadMore?: (() => void) | undefined;
+  isLoading?: boolean | undefined;
+  focusedKey?: string | null | undefined;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
+  activeKey?: string | null | undefined;
+  canManageWorkflows?: boolean | undefined;
 }
 
 interface GroupSection {
@@ -238,13 +238,15 @@ export function ListView({
       <div className="view-empty-state">
         <h2 className="view-empty-title">No work items found</h2>
         <p className="view-empty-desc">Get started by creating the first work item in this project.</p>
-        <button
-          type="button"
-          className="view-empty-create-btn"
-          onClick={onCreateIssue}
-        >
-          + Create first work item
-        </button>
+        {onCreateIssue && (
+          <button
+            type="button"
+            className="view-empty-create-btn"
+            onClick={onCreateIssue}
+          >
+            + Create first work item
+          </button>
+        )}
       </div>
     );
   }
@@ -370,15 +372,17 @@ export function ListView({
           )}
         </div>
 
-        <button
-          type="button"
-          className="list-new-btn"
-          onClick={onCreateIssue}
-          aria-label="New work item"
-        >
-          <span aria-hidden="true">+</span>
-          <span>New</span>
-        </button>
+        {onCreateIssue && (
+          <button
+            type="button"
+            className="list-new-btn"
+            onClick={onCreateIssue}
+            aria-label="New work item"
+          >
+            <span aria-hidden="true">+</span>
+            <span>New</span>
+          </button>
+        )}
       </div>
 
       {sections.map((section) => {
@@ -425,14 +429,16 @@ export function ListView({
                     + Workflow
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="list-section-new-btn"
-                  onClick={onCreateIssue}
-                  aria-label={`New work item in ${section.name}`}
-                >
-                  + New work item
-                </button>
+                {onCreateIssue && (
+                  <button
+                    type="button"
+                    className="list-section-new-btn"
+                    onClick={onCreateIssue}
+                    aria-label={`New work item in ${section.name}`}
+                  >
+                    + New work item
+                  </button>
+                )}
               </div>
             </div>
 

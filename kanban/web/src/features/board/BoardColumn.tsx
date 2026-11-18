@@ -258,16 +258,18 @@ export function BoardColumn({
         </div>
       </div>
 
-      <footer className="board-column-footer">
-        <button
-          type="button"
-          className="board-new-item-btn"
-          onClick={() => onNewItem?.(state.id)}
-          data-testid={`new-item-${state.id}`}
-        >
-          <span>+</span> New work item
-        </button>
-      </footer>
+      {onNewItem && (
+        <footer className="board-column-footer">
+          <button
+            type="button"
+            className="board-new-item-btn"
+            onClick={() => { onNewItem(state.id); }}
+            data-testid={`new-item-${state.id}`}
+          >
+            <span>+</span> New work item
+          </button>
+        </footer>
+      )}
     </section>
   );
 }

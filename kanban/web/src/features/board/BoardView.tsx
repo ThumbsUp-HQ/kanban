@@ -22,14 +22,14 @@ import './board.css';
 
 export interface BoardViewProps {
   projectKey: string;
-  states?: BoardWorkflowState[];
-  issues?: BoardIssue[];
-  currentUserCapabilities?: string[];
+  states?: BoardWorkflowState[] | undefined;
+  issues?: BoardIssue[] | undefined;
+  currentUserCapabilities?: string[] | undefined;
   realtimeClient?: RealtimeClient | undefined;
-  onOpenPeek?: (issueKey: string) => void;
-  onNewItem?: (stateId: string) => void;
-  onMoveSuccess?: (res: IssueMoveResponse) => void;
-  monitorFactory?: typeof monitorForElements;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
+  onNewItem?: ((stateId: string) => void) | undefined;
+  onMoveSuccess?: ((res: IssueMoveResponse) => void) | undefined;
+  monitorFactory?: typeof monitorForElements | undefined;
 }
 
 interface PendingHardWipMove {

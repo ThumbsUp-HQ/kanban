@@ -99,15 +99,17 @@ export function ListRow({
       aria-selected={isSelected}
     >
       <div className="list-row-left">
-        <span className="list-row-checkbox-wrap">
-          <input
-            type="checkbox"
-            className="list-row-checkbox"
-            checked={isSelected}
-            aria-label={`Select ${issue.key}`}
-            onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
-          />
-        </span>
+        {onToggleSelect && (
+          <span className="list-row-checkbox-wrap">
+            <input
+              type="checkbox"
+              className="list-row-checkbox"
+              checked={isSelected}
+              aria-label={`Select ${issue.key}`}
+              onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
+            />
+          </span>
+        )}
 
         <StateBadge
           state={issue.state}

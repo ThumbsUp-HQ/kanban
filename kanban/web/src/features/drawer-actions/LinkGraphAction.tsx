@@ -54,6 +54,11 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
   const [linkError, setLinkError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const capabilities = (issue.capabilities && Array.isArray(issue.capabilities))
+    ? issue.capabilities
+    : ['EDIT', 'ADMIN'];
+  const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+
   const { data: canonical } = useQuery<CanonicalUrlResponse>({
     queryKey: qk.canonicalUrl(issue.key),
     queryFn: () => fetchCanonicalUrl(issue.key),
@@ -248,15 +253,17 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
                           </>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        className="link-delete-btn"
-                        aria-label={`Delete link ${link.id}`}
-                        onClick={() => { deleteLinkMutation.mutate(link.id); }}
-                        data-testid={`delete-link-${link.id}`}
-                      >
-                        ×
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="link-delete-btn"
+                          aria-label={`Delete link ${link.id}`}
+                          onClick={() => { deleteLinkMutation.mutate(link.id); }}
+                          data-testid={`delete-link-${link.id}`}
+                        >
+                          ×
+                        </button>
+                      )}
                     </li>
                   );
                 })}
@@ -305,41 +312,45 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
             )}
           </div>
 
-          <div className="link-graph-divider" />
+          {canEdit && (
+            <>
+              <div className="link-graph-divider" />
 
-          {/* Add Link Form */}
-          <form className="add-link-form" onSubmit={handleAddLinkSubmit}>
-            <select
-              className="add-link-select"
-              value={linkType}
-              onChange={(e) => { setLinkType(e.target.value); }}
-              aria-label="Link type"
-              data-testid="link-type-select"
-            >
-              {USER_CREATABLE_LINK_TYPES.map((lt) => (
-                <option key={lt} value={lt}>
-                  {lt}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              className="add-link-input"
-              placeholder="Target key (e.g. KAN-7)"
-              value={targetRef}
-              onChange={(e) => { setTargetRef(e.target.value); }}
-              aria-label="Target issue key"
-              data-testid="link-target-input"
-            />
-            <button
-              type="submit"
-              className="drawer-action-btn"
-              disabled={!targetRef.trim() || addLinkMutation.isPending}
-              data-testid="add-link-submit-btn"
-            >
-              Add Link
-            </button>
-          </form>
+              {/* Add Link Form */}
+              <form className="add-link-form" onSubmit={handleAddLinkSubmit}>
+                <select
+                  className="add-link-select"
+                  value={linkType}
+                  onChange={(e) => { setLinkType(e.target.value); }}
+                  aria-label="Link type"
+                  data-testid="link-type-select"
+                >
+                  {USER_CREATABLE_LINK_TYPES.map((lt) => (
+                    <option key={lt} value={lt}>
+                      {lt}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  className="add-link-input"
+                  placeholder="Target key (e.g. KAN-7)"
+                  value={targetRef}
+                  onChange={(e) => { setTargetRef(e.target.value); }}
+                  aria-label="Target issue key"
+                  data-testid="link-target-input"
+                />
+                <button
+                  type="submit"
+                  className="drawer-action-btn"
+                  disabled={!targetRef.trim() || addLinkMutation.isPending}
+                  data-testid="add-link-submit-btn"
+                >
+                  Add Link
+                </button>
+              </form>
+            </>
+          )}
           {linkError && (
             <div className="modal-alert modal-alert--danger" role="alert">
               {linkError}

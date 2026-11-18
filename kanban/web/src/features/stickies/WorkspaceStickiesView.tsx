@@ -18,15 +18,23 @@ import {
   type StickyItem,
 } from './stickiesApi';
 import type { StickyColorToken } from './stickyHeuristic';
+import { qk } from '../../api/queryKeys';
 
 export const WORKSPACE_STICKIES_QUERY_KEY = ['stickies', 'workspace'] as const;
 
+export interface WorkspaceStickiesViewProps {
+  defaultProjectKey?: string | undefined;
+  readOnly?: boolean | undefined;
+}
+
 export function WorkspaceStickiesView({
   defaultProjectKey = 'KAN',
-}: {
-  defaultProjectKey?: string | undefined;
-} = {}): JSX.Element {
+  readOnly: propReadOnly,
+}: WorkspaceStickiesViewProps = {}): JSX.Element {
   const queryClient = useQueryClient();
+
+  const cachedUser = queryClient.getQueryData<{ workspace_role?: string }>(qk.me());
+  const isViewer = propReadOnly ?? (cachedUser?.workspace_role === 'VIEWER' || cachedUser?.workspace_role === 'WORKSPACE_GUEST');
 
   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({
     queryKey: WORKSPACE_STICKIES_QUERY_KEY,
@@ -99,9 +107,10 @@ export function WorkspaceStickiesView({
         stickies={stickies}
         title="Workspace Stickies"
         isLoading={isLoading}
-        onCreateSticky={() => {
+        readOnly={isViewer}
+        onCreateSticky={!isViewer ? () => {
           createMutation.mutate();
-        }}
+        } : undefined}
         onUpdateSticky={async (id, payload, etag) => {
           await updateMutation.mutateAsync({ stickyId: id, payload, etag });
         }}

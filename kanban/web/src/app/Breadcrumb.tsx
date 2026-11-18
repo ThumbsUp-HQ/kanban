@@ -21,8 +21,8 @@ export interface BreadcrumbProps {
 
 export function Breadcrumb({
   workspaceName = 'kanban',
-  projectKey = 'KAN',
-  projectName = 'kanban',
+  projectKey,
+  projectName,
   projectIcon = '⚡',
   currentSection = 'Work Items',
   issueCount,
@@ -59,19 +59,23 @@ export function Breadcrumb({
           </>
         )}
 
-        <li className="kb-breadcrumb-item">
-          <span aria-hidden="true">{projectIcon}</span>
-          <Link
-            to={`/projects/${projectKey}/overview`}
-            className="kb-breadcrumb-link"
-          >
-            {projectName}
-          </Link>
-        </li>
+        {Boolean(projectKey) && projectKey && (
+          <>
+            <li className="kb-breadcrumb-item">
+              <span aria-hidden="true">{projectIcon}</span>
+              <Link
+                to={`/projects/${projectKey}/overview`}
+                className="kb-breadcrumb-link"
+              >
+                {projectName ?? projectKey}
+              </Link>
+            </li>
 
-        <li aria-hidden="true" className="kb-breadcrumb-separator">
-          /
-        </li>
+            <li aria-hidden="true" className="kb-breadcrumb-separator">
+              /
+            </li>
+          </>
+        )}
 
         <li aria-current="page" className="kb-breadcrumb-current">
           <span data-testid="breadcrumb-current-section">{currentSection}</span>

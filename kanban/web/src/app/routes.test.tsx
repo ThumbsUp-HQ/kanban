@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import React from 'react';
 import { RouterProvider, MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { qk } from '../api/queryKeys';
 import * as client from '../api/client';
 import {
   createAppRouter,
@@ -171,6 +172,7 @@ describe('routes and AppShell integration', () => {
   });
 
   it('renders various project routes, auth routes, and dev story routes', () => {
+    queryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal2' });
     const paths = [
       { path: '/', expected: 'route-placeholder' },
       { path: '/projects/KAN/overview', expected: 'project-overview-page' },
@@ -351,6 +353,7 @@ describe('routes and AppShell integration', () => {
   });
 
   it('closes StandaloneStatusRoute and navigates back on Close click', () => {
+    queryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal2' });
     const router = createAppRouter(['/admin/standalone']);
     render(
       <QueryClientProvider client={queryClient}>
@@ -623,6 +626,9 @@ describe('IssuesWorkspaceRoute', () => {
     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
       const m = method.toUpperCase();
       const url = path;
+      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
+        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
+      }
       if (url.includes('/cycles') && m === 'GET') {
         return Promise.resolve({ items: cyclesList });
       }
@@ -651,7 +657,7 @@ describe('IssuesWorkspaceRoute', () => {
     );
 
     // Empty submit does nothing
-    const form = screen.getByTestId('create-cycle-form');
+    const form = await screen.findByTestId('create-cycle-form');
     fireEvent.submit(form);
 
     // Fill form
@@ -695,6 +701,9 @@ describe('IssuesWorkspaceRoute', () => {
     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
       const m = method.toUpperCase();
       const url = path;
+      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
+        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
+      }
       if (url.includes('/modules') && m === 'GET') {
         return Promise.resolve({ items: modulesList });
       }
@@ -724,7 +733,7 @@ describe('IssuesWorkspaceRoute', () => {
     );
 
     // Empty submit does nothing
-    const form = screen.getByTestId('create-module-form');
+    const form = await screen.findByTestId('create-module-form');
     fireEvent.submit(form);
 
     // Fill form
@@ -771,6 +780,9 @@ describe('IssuesWorkspaceRoute', () => {
     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
       const m = method.toUpperCase();
       const url = path;
+      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
+        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
+      }
       if (url.includes('/cycles') && m === 'GET') {
         return Promise.resolve([
           { id: 'c-start-only', name: 'Start Only Cycle', start_date: '2026-03-01' },
@@ -810,6 +822,9 @@ describe('IssuesWorkspaceRoute', () => {
     vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
       const m = method.toUpperCase();
       const url = path;
+      if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
+        return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true });
+      }
       if (url.includes('/modules') && m === 'GET') {
         return Promise.resolve([
           { id: 'm-1', name: 'Existing Module', status: 'planned', description_markdown: 'Docs' },
@@ -997,5 +1012,163 @@ describe('IssuesWorkspaceRoute', () => {
     });
 
     uDrafts();
+  });
+
+  describe('Strict RBAC Route Guards (KANBA-209)', () => {
+    let rbacQueryClient: QueryClient;
+
+    beforeEach(() => {
+      rbacQueryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+    });
+
+    it('gates /admin/standalone behind SERVER_ADMIN and AAL2', () => {
+      // 1. Guest / unauthenticated (user is null)
+      rbacQueryClient.setQueryData(qk.me(), null);
+      const routerGuest = createAppRouter(['/admin/standalone']);
+      const { unmount: u1 } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerGuest} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('Not found or no access')).toBeDefined();
+      u1();
+
+      // 2. Member / non-server-admin
+      rbacQueryClient.setQueryData(qk.me(), { is_server_admin: false, auth_aal: 'aal2' });
+      const routerMember = createAppRouter(['/admin/standalone']);
+      const { unmount: u2 } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerMember} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('Not found or no access')).toBeDefined();
+      u2();
+
+      // 3. Server admin with non-AAL2 (aal1)
+      rbacQueryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal1', aal_level: 1 });
+      const routerAal1 = createAppRouter(['/admin/standalone']);
+      const { unmount: u3 } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerAal1} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('Not found or no access')).toBeDefined();
+      u3();
+
+      // 4. Server admin with AAL2 -> access allowed
+      rbacQueryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal2', aal_level: 2 });
+      const routerAdmin = createAppRouter(['/admin/standalone']);
+      const { unmount: u4 } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerAdmin} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId('standalone-status-route')).toBeDefined();
+      u4();
+    });
+
+    it('gates /drafts to render Not found or no access for VIEWER and WORKSPACE_GUEST', () => {
+      // 1. VIEWER
+      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'VIEWER' });
+      const routerViewer = createAppRouter(['/drafts']);
+      const { unmount: uViewer } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerViewer} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('Not found or no access')).toBeDefined();
+      uViewer();
+
+      // 2. WORKSPACE_GUEST
+      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'WORKSPACE_GUEST' });
+      const routerGuest = createAppRouter(['/drafts']);
+      const { unmount: uGuest } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerGuest} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('Not found or no access')).toBeDefined();
+      uGuest();
+
+      // 3. WORKSPACE_MEMBER -> access allowed
+      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'WORKSPACE_MEMBER' });
+      const routerMember = createAppRouter(['/drafts']);
+      const { unmount: uMember } = render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={routerMember} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId('drafts-view')).toBeDefined();
+      uMember();
+    });
+
+    it('renders Not found or no access on direct URL access to unauthorized project', async () => {
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects/QAADM')) {
+          return Promise.resolve(new Response(JSON.stringify({ detail: 'Project not found' }), { status: 404 }));
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
+      });
+
+      const router = createAppRouter(['/projects/QAADM/issues']);
+      render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={router} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('Not found or no access')).toBeDefined();
+      expect(screen.queryByTestId('home-create-issue-btn')).toBeNull();
+      expect(screen.queryByTestId('view-empty-create-btn')).toBeNull();
+    });
+
+    it('renders No accessible projects when project list is empty for guest', async () => {
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ items: [] }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
+      });
+
+      rbacQueryClient.setQueryData(qk.me(), { workspace_role: 'WORKSPACE_GUEST' });
+
+      const router = createAppRouter(['/']);
+      render(
+        <QueryClientProvider client={rbacQueryClient}>
+          <ThemeProvider>
+            <RouterProvider router={router} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByTestId('no-accessible-projects')).toBeDefined();
+      expect(screen.getAllByText('No accessible projects').length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByTestId('project-card-KAN')).toBeNull();
+    });
   });
 });

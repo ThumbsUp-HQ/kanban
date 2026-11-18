@@ -27,6 +27,7 @@ import './DocsWorkspaceView.css';
 export interface DocsTreeNavProps {
   projectKey: string;
   activePageId?: string | undefined;
+  readOnly?: boolean | undefined;
   onSelectPage: (pageId: string) => void;
   onAnnounce?: ((message: string) => void) | undefined;
 }
@@ -77,6 +78,7 @@ export function getDescendantIds(node: PageTreeNode): Set<string> {
 export function DocsTreeNav({
   projectKey,
   activePageId,
+  readOnly = false,
   onSelectPage,
   onAnnounce,
 }: DocsTreeNavProps): JSX.Element {
@@ -341,17 +343,19 @@ export function DocsTreeNav({
     <aside className="docs-tree-pane" aria-label="Documentation navigation">
       <div className="docs-tree-pane__header">
         <h2 className="docs-tree-pane__title">Pages</h2>
-        <button
-          type="button"
-          className="docs-tree-btn docs-tree-btn--primary"
-          onClick={() => {
-            handleStartCreate(null);
-          }}
-          aria-label="Create new root doc"
-          data-testid="create-root-doc-btn"
-        >
-          + New Doc
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className="docs-tree-btn docs-tree-btn--primary"
+            onClick={() => {
+              handleStartCreate(null);
+            }}
+            aria-label="Create new root doc"
+            data-testid="create-root-doc-btn"
+          >
+            + New Doc
+          </button>
+        )}
       </div>
 
       {isLoading && (
@@ -433,42 +437,44 @@ export function DocsTreeNav({
                 {item.title}
               </span>
 
-              <div
-                className="docs-tree-item__actions"
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
-              >
-                <button
-                  type="button"
-                  className="docs-tree-item__action-btn"
-                  title={isAtMaxDepth ? 'Maximum nesting depth of 10 pages reached' : 'Add sub-page'}
-                  aria-label={`Add sub-page to ${item.title}`}
-                  aria-disabled={isAtMaxDepth ? 'true' : undefined}
-                  disabled={isAtMaxDepth}
-                  data-testid={`add-subpage-${item.node.slug ?? item.id}`}
-                  onClick={() => {
-                    handleStartCreate(item.id);
+              {!readOnly && (
+                <div
+                  className="docs-tree-item__actions"
+                  onClick={(e) => {
+                    e.stopPropagation();
                   }}
                 >
-                  +
-                </button>
-
-                {!item.restricted && (
                   <button
                     type="button"
                     className="docs-tree-item__action-btn"
-                    title="Move page"
-                    aria-label={`Move page ${item.title}`}
-                    data-testid={`move-page-${item.node.slug ?? item.id}`}
+                    title={isAtMaxDepth ? 'Maximum nesting depth of 10 pages reached' : 'Add sub-page'}
+                    aria-label={`Add sub-page to ${item.title}`}
+                    aria-disabled={isAtMaxDepth ? 'true' : undefined}
+                    disabled={isAtMaxDepth}
+                    data-testid={`add-subpage-${item.node.slug ?? item.id}`}
                     onClick={() => {
-                      handleStartMove(item.node);
+                      handleStartCreate(item.id);
                     }}
                   >
-                    ↗
+                    +
                   </button>
-                )}
-              </div>
+
+                  {!item.restricted && (
+                    <button
+                      type="button"
+                      className="docs-tree-item__action-btn"
+                      title="Move page"
+                      aria-label={`Move page ${item.title}`}
+                      data-testid={`move-page-${item.node.slug ?? item.id}`}
+                      onClick={() => {
+                        handleStartMove(item.node);
+                      }}
+                    >
+                      ↗
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

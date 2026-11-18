@@ -39,8 +39,8 @@ export function IssueOverflowMenu({
   const capabilities = (issue.capabilities && Array.isArray(issue.capabilities))
     ? issue.capabilities
     : ['VIEW', 'EDIT', 'DELETE'];
-  const canEdit = capabilities.includes('EDIT');
-  const canDelete = capabilities.includes('DELETE');
+  const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+  const canDelete = capabilities.includes('DELETE') || capabilities.includes('ADMIN');
 
   const stateGroup = (issue.state && typeof issue.state.group === 'string')
     ? issue.state.group.toLowerCase()
@@ -144,22 +144,23 @@ export function IssueOverflowMenu({
           data-testid="issue-overflow-menu"
         >
           {/* 1. Make a copy */}
-          <button
-            type="button"
-            className="overflow-menu__item"
-            role="menuitem"
-            disabled={!canEdit}
-            onClick={() => {
-              setMenuOpen(false);
-              setCopyDialogOpen(true);
-            }}
-            data-testid="overflow-make-copy-btn"
-          >
-            <div className="overflow-menu__label-row">
-              <span aria-hidden="true">📑</span>
-              <span>Make a copy</span>
-            </div>
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              className="overflow-menu__item"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setCopyDialogOpen(true);
+              }}
+              data-testid="overflow-make-copy-btn"
+            >
+              <div className="overflow-menu__label-row">
+                <span aria-hidden="true">📑</span>
+                <span>Make a copy</span>
+              </div>
+            </button>
+          )}
 
           {/* 2. Open in full screen / Return to side panel */}
           <button
@@ -179,24 +180,26 @@ export function IssueOverflowMenu({
           </button>
 
           {/* 3. Archive / Unarchive */}
-          <button
-            type="button"
-            className="overflow-menu__item"
-            role="menuitem"
-            aria-disabled={!isArchiveEligible && !isArchived}
-            onClick={handleArchiveClick}
-            data-testid="overflow-archive-btn"
-          >
-            <div className="overflow-menu__label-row">
-              <span aria-hidden="true">🗄️</span>
-              <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
-            </div>
-            {!isArchiveEligible && !isArchived && (
-              <span className="overflow-menu__sublabel" data-testid="archive-disabled-reason">
-                Only completed or canceled work items can be archived
-              </span>
-            )}
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              className="overflow-menu__item"
+              role="menuitem"
+              aria-disabled={!isArchiveEligible && !isArchived}
+              onClick={handleArchiveClick}
+              data-testid="overflow-archive-btn"
+            >
+              <div className="overflow-menu__label-row">
+                <span aria-hidden="true">🗄️</span>
+                <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
+              </div>
+              {!isArchiveEligible && !isArchived && (
+                <span className="overflow-menu__sublabel" data-testid="archive-disabled-reason">
+                  Only completed or canceled work items can be archived
+                </span>
+              )}
+            </button>
+          )}
 
           {/* 4. Delete... (Rendered only when caller holds DELETE capability) */}
           {canDelete && (

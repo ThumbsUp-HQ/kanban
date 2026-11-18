@@ -131,7 +131,7 @@ export interface AdminUserPrincipal {
   principal: string;
   handle?: string;
   display_name: string;
-  type?: 'USER' | 'GROUP' | 'AGENT' | string | null;
+  type?: string | null;
   status: 'active' | 'deactivated' | 'disabled';
   email?: string | null;
   role?: string;

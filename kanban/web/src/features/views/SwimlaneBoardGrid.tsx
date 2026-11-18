@@ -6,14 +6,14 @@ import './filterBulk.css';
 export interface SwimlaneBoardGridProps {
   issues: IssueItem[];
   projectKey: string;
-  groupBy?: GroupAxis;
-  subGroupBy?: GroupAxis;
-  modulesEnabled?: boolean;
-  selectedIds?: string[];
-  onToggleSelect?: (key: string, selected: boolean) => void;
-  focusedKey?: string | null;
-  onCardClick?: (key: string, isShift: boolean) => void;
-  onCardMove?: (issueKey: string, targetColId: string, targetLaneId: string) => void;
+  groupBy?: GroupAxis | undefined;
+  subGroupBy?: GroupAxis | undefined;
+  modulesEnabled?: boolean | undefined;
+  selectedIds?: string[] | undefined;
+  onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+  focusedKey?: string | null | undefined;
+  onCardClick?: ((key: string, isShift: boolean) => void) | undefined;
+  onCardMove?: ((issueKey: string, targetColId: string, targetLaneId: string) => void) | undefined;
 }
 
 interface ColumnDef {
@@ -267,17 +267,19 @@ export function SwimlaneBoardGrid({
                             }}
                           >
                             <div className="swimlane-card-top">
-                              <label
-                                className="swimlane-card-checkbox-wrap"
-                                onClick={(e) => { e.stopPropagation(); }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={(e) => onToggleSelect?.(issue.key, e.target.checked)}
-                                  aria-label={`Select ${issue.key}`}
-                                />
-                              </label>
+                              {onToggleSelect && (
+                                <label
+                                  className="swimlane-card-checkbox-wrap"
+                                  onClick={(e) => { e.stopPropagation(); }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
+                                    aria-label={`Select ${issue.key}`}
+                                  />
+                                </label>
+                              )}
 
                               <a
                                 href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
