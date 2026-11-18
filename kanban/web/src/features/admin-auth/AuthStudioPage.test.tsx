@@ -1239,7 +1239,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(screen.getByText('LDAP Engineer')).toBeDefined();
       });
 
-      const roleSelect = screen.getByLabelText(/Role for ldap\.engineer/i);
+      const roleSelect = screen.getByLabelText(/Role for @?ldap\.engineer/i);
       fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
 
       await waitFor(() => {
@@ -1369,7 +1369,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       fireEvent.click(within(container).getByTestId('filter-all'));
       await waitFor(() => {
-        expect(fetchSpy).toHaveBeenCalledWith('GET', expect.stringContaining('filter='));
+        expect(fetchSpy).toHaveBeenCalledWith('GET', expect.stringContaining('/api/v1/admin/principals'));
       });
     });
 
@@ -1438,7 +1438,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(screen.getByText('Role User')).toBeDefined();
       });
 
-      const roleSelect = screen.getByLabelText(/Role for role\.user/i);
+      const roleSelect = screen.getByLabelText(/Role for @?role\.user/i);
       fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
 
       await waitFor(() => {

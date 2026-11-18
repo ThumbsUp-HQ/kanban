@@ -13,6 +13,7 @@ import {
   toggleAdminAuthCardEnabled,
   reorderAdminAuthCard,
   testAuthCardHandshake,
+  testDraftAuthCardHandshake,
   deleteAdminAuthCard,
   fetchAdminPrincipals,
   createLocalUser,
@@ -31,6 +32,12 @@ interface CurrentUserResponse {
   id?: string;
   handle?: string;
   is_server_admin?: boolean;
+}
+
+export function formatHandle(handle?: string | null): string {
+  if (!handle) return '';
+  const clean = handle.replace(/^@+/, '');
+  return `@${clean}`;
 }
 
 interface PendingMutation {
@@ -174,7 +181,7 @@ export function AuthStudioPage(): JSX.Element {
     setIsLoadingUsers(true);
     setUserActionError(null);
     try {
-      const activeFilter = filter ?? (principalKindFilter === 'ALL' ? '' : principalKindFilter);
+      const activeFilter = filter !== undefined ? (filter === 'ALL' ? undefined : filter) : (principalKindFilter === 'ALL' ? undefined : principalKindFilter);
       const principals = await fetchAdminPrincipals(activeFilter);
       setUsers(principals);
     } catch (err: unknown) {
@@ -553,7 +560,7 @@ export function AuthStudioPage(): JSX.Element {
 
     try {
       await resetUserPassword(resetTargetUser.id, newPassword);
-      setUserActionSuccess(`Password reset successfully for @${resetTargetUser.handle ?? resetTargetUser.principal}.`);
+      setUserActionSuccess(`Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}.`);
       setResetTargetUser(null);
       setNewPassword('');
       setConfirmPassword('');
@@ -659,7 +666,7 @@ export function AuthStudioPage(): JSX.Element {
               className={`auth-btn-secondary ${principalKindFilter === kind ? 'auth-btn-primary' : ''}`}
               onClick={() => {
                 setPrincipalKindFilter(kind);
-                void loadUsers(kind === 'ALL' ? '' : kind);
+                void loadUsers(kind === 'ALL' ? undefined : kind);
               }}
               data-testid={`filter-${kind.toLowerCase()}`}
             >
@@ -779,6 +786,7 @@ export function AuthStudioPage(): JSX.Element {
                   <tr>
                     <th className="auth-users-th">User / Handle</th>
                     <th className="auth-users-th">Email</th>
+                    <th className="auth-users-th">Type</th>
                     <th className="auth-users-th">Provider</th>
                     <th className="auth-users-th">Role Grant</th>
                     <th className="auth-users-th">Actions</th>
@@ -787,23 +795,28 @@ export function AuthStudioPage(): JSX.Element {
                 <tbody>
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="auth-users-td">
+                      <td colSpan={6} className="auth-users-td">
                         No user principals found.
                       </td>
                     </tr>
                   ) : (
                     users.map((u) => (
-                      <tr key={u.id} className="auth-users-tr">
+                      <tr key={u.id} className="auth-users-tr" data-testid={`auth-user-row-${u.id}`}>
                         <td className="auth-users-td">
                           <div className="auth-user-name-cell">
                             <span className="auth-user-display-name">
                               {u.display_name || (u.handle ?? u.principal)}
                             </span>
-                            <span className="auth-user-handle">@{u.handle ?? u.principal}</span>
+                            <span className="auth-user-handle">{formatHandle(u.handle ?? u.principal)}</span>
                           </div>
                         </td>
                         <td className="auth-users-td">
-                          <span className="auth-user-email">{u.email ?? '—'}</span>
+                          <span className="auth-user-email">{u.email ?? '-'}</span>
+                        </td>
+                        <td className="auth-users-td">
+                          <span className={`kb-type-pill kb-type-pill--${(u.type ?? 'USER').toLowerCase()}`} data-testid={`type-pill-${u.id}`}>
+                            {u.type === 'USER' ? 'User' : u.type === 'GROUP' ? 'Group' : u.type === 'AGENT' ? 'Agent' : (u.type ?? 'User')}
+                          </span>
                         </td>
                         <td className="auth-users-td">
                           <span
@@ -819,7 +832,7 @@ export function AuthStudioPage(): JSX.Element {
                             onChange={(e) => {
                               void handleRoleChange(u.id, e.target.value, u.role);
                             }}
-                            aria-label={`Role for ${u.handle ?? u.principal}`}
+                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal)}`}
                           >
                             <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
                             <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
@@ -862,6 +875,12 @@ export function AuthStudioPage(): JSX.Element {
           setEditingCard(null);
         }}
         onSave={handleSaveDrawer}
+        onTestHandshake={async (card, payload) => {
+          if (card?.id) {
+            return await testAuthCardHandshake(card.id);
+          }
+          return await testDraftAuthCardHandshake(payload);
+        }}
       />
 
       {/* Add Local User Modal */}
@@ -1018,7 +1037,7 @@ export function AuthStudioPage(): JSX.Element {
           >
             <div className="auth-modal-header">
               <h2 id="reset-pwd-modal-title" className="auth-modal-title">
-                Reset Password: @{resetTargetUser.handle ?? resetTargetUser.principal}
+                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}
               </h2>
               <button
                 type="button"
@@ -1034,7 +1053,7 @@ export function AuthStudioPage(): JSX.Element {
                 <p className="auth-card-subtext">
                   Set a new password for{' '}
                   <strong>{resetTargetUser.display_name || (resetTargetUser.handle ?? resetTargetUser.principal)}</strong> (
-                  {resetTargetUser.email ?? `@${resetTargetUser.handle ?? resetTargetUser.principal}`}).
+                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}).
                 </p>
 
                 <div className="auth-editor-field">

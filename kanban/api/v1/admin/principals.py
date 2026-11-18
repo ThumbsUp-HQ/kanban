@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import logging
 import uuid  # noqa: TC003
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kanban.admin import principal_service
@@ -102,13 +102,18 @@ class UpdatePrincipalRequest(BaseModel):
 class RoleBindingRequest(BaseModel):
     """Schema for binding or unbinding an RBAC role."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     principal_id: uuid.UUID = Field(
         description="Target principal UUID receiving the role assignment"
     )
-    role: str = Field(
-        description="RBAC role name to bind (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, PROJECT_ADMIN)"
+    role: str | None = Field(
+        default=None,
+        description="RBAC role name to bind (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, PROJECT_ADMIN)",
+    )
+    role_name: str | None = Field(
+        default=None,
+        description="Alternative field name for role",
     )
     scope_type: Literal["server", "workspace", "project"] = Field(
         description="Hierarchy tier for the binding: server, workspace, or project"
@@ -117,6 +122,23 @@ class RoleBindingRequest(BaseModel):
         default=None,
         description="Optional scope target UUID (required when scope_type is project)",
     )
+
+    @model_validator(mode="after")
+    def resolve_role_field(self) -> Self:
+        """Resolve role from role or role_name."""
+        resolved = self.role or self.role_name
+        if not resolved:
+            msg = "role or role_name is required"
+            raise ProblemException(
+                code="VALIDATION_FAILED",
+                status=422,
+                title="Validation Failed",
+                detail=msg,
+                errors=[FieldError(path="role", message=msg)],
+            )
+        self.role = resolved
+        self.role_name = resolved
+        return self
 
 
 @router.get(
@@ -133,10 +155,13 @@ async def list_principals_endpoint(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[dict[str, object]]:
     """List principals in the current workspace with optional type filtering."""
+    clean_filter = filter.strip() if filter and filter.strip() else None
+    if clean_filter and clean_filter.upper() == "ALL":
+        clean_filter = None
     return await principal_service.list_principals(
         session,
         caller.workspace_id,
-        filter_type=filter,
+        filter_type=clean_filter,
         limit=limit,
     )
 
@@ -262,6 +287,23 @@ async def reset_password_endpoint(
         caller.principal_id,
         principal_id,
         body.password,
+    )
+
+
+@router.get(
+    "/admin/groups/{group_id}/members",
+    summary="List group members",
+)
+async def list_group_members_endpoint(
+    group_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+) -> list[dict[str, object]]:
+    """List direct member principals (users, groups, agents) of the group."""
+    return await principal_service.list_group_members(
+        session,
+        caller.workspace_id,
+        group_id=group_id,
     )
 
 

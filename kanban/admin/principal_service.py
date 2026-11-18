@@ -310,18 +310,19 @@ async def list_principals(
 
     if filter_type is not None:
         ft = filter_type.strip().upper()
-        if ft not in ("USER", "GROUP", "AGENT", "SERVICE_PRINCIPAL"):
-            msg = (
-                f"Invalid filter '{filter_type}'. Must be USER, GROUP, AGENT, or SERVICE_PRINCIPAL"
-            )
-            raise ProblemException(
-                code="VALIDATION_FAILED",
-                status=422,
-                title="Validation Failed",
-                detail=msg,
-                errors=[FieldError(path="filter", message=msg)],
-            )
-        stmt = stmt.where(Principal.principal_type == ft)
+        if ft and ft != "ALL":
+            if ft not in ("USER", "GROUP", "AGENT", "SERVICE_PRINCIPAL"):
+                msg = (
+                    f"Invalid filter '{filter_type}'. Must be USER, GROUP, AGENT, or SERVICE_PRINCIPAL"
+                )
+                raise ProblemException(
+                    code="VALIDATION_FAILED",
+                    status=422,
+                    title="Validation Failed",
+                    detail=msg,
+                    errors=[FieldError(path="filter", message=msg)],
+                )
+            stmt = stmt.where(Principal.principal_type == ft)
 
     principals = list((await session.execute(stmt)).scalars().all())
     result: list[dict[str, Any]] = []
@@ -940,6 +941,62 @@ async def remove_group_member(
             payload={"group_id": str(group_id), "member_id": str(member_id)},
         )
     return {"status": "member_removed", "group_id": str(group_id), "member_id": str(member_id)}
+
+
+async def list_group_members(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    group_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """List direct member principals of a group."""
+    grp_stmt = select(Group).where(Group.id == group_id, Group.workspace_id == workspace_id)
+    grp = (await session.execute(grp_stmt)).scalar_one_or_none()
+    if grp is None:
+        not_found()
+
+    stmt = (
+        select(Principal)
+        .join(
+            PrincipalGroupEdge,
+            (PrincipalGroupEdge.member_id == Principal.id)
+            & (PrincipalGroupEdge.group_id == group_id)
+            & (PrincipalGroupEdge.workspace_id == workspace_id),
+        )
+        .where(
+            Principal.workspace_id == workspace_id,
+            Principal.principal_type != "SCRIPT_EPHEMERAL",
+        )
+        .order_by(Principal.display_name)
+    )
+    members = list((await session.execute(stmt)).scalars().all())
+    result: list[dict[str, Any]] = []
+    for p in members:
+        handle = p.display_name
+        email: str | None = None
+        if p.principal_type == "USER":
+            handle, email, _, _ = await _enrich_user_principal(session, workspace_id, p)
+        elif p.principal_type == "AGENT":
+            a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
+            slug = (await session.execute(a_stmt)).scalar_one_or_none()
+            if slug:
+                handle = f"@{slug}"
+        elif p.principal_type == "GROUP":
+            g_stmt = select(Group.name).where(Group.id == p.id)
+            g_name = (await session.execute(g_stmt)).scalar_one_or_none()
+            if g_name:
+                handle = g_name
+
+        result.append(
+            {
+                "id": str(p.id),
+                "principal": handle,
+                "display_name": p.display_name,
+                "type": p.principal_type,
+                "status": "active" if p.status == "ACTIVE" else "deactivated",
+                "email": email,
+            }
+        )
+    return result
 
 
 async def bind_role(  # noqa: C901, PLR0912, PLR0913, PLR0917

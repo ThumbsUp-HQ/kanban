@@ -3,7 +3,7 @@ import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Topbar } from './Topbar';
+import { Topbar, resolveDisplayHandle } from './Topbar';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { ShellPanelsProvider } from './shellPanels';
 
@@ -432,5 +432,99 @@ describe('Topbar', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  describe('resolveDisplayHandle and user profile rendering (KANBA-210)', () => {
+    it('normalizes handles, removes double-@ prefixes, and avoids leaking UUIDs', () => {
+      // Normal handle
+      expect(resolveDisplayHandle({ handle: 'johndoe' })).toBe('@johndoe');
+      // Single @
+      expect(resolveDisplayHandle({ handle: '@johndoe' })).toBe('@johndoe');
+      // Double @@
+      expect(resolveDisplayHandle({ handle: '@@member' })).toBe('@member');
+      // Raw short UUID handle falls back to display name
+      expect(
+        resolveDisplayHandle({
+          handle: '01a1ede4',
+          display_name: 'Audit Guest',
+        }),
+      ).toBe('@audit.guest');
+      // Raw UUID handle with @ prefix falls back to email prefix
+      expect(
+        resolveDisplayHandle({
+          handle: '@01a1ede4',
+          display_name: null,
+          email: 'guest@audit.local',
+        }),
+      ).toBe('@guest');
+      // Raw full UUID handle falls back to @user if no other info
+      expect(
+        resolveDisplayHandle({
+          handle: '01a1ede4-1234-5678-9abc-def012345678',
+        }),
+      ).toBe('@user');
+      // Empty input
+      expect(resolveDisplayHandle(null)).toBe('');
+    });
+
+    it('renders user avatar img with testid and user profile card in menu', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'usr-1',
+                    handle: '@@paranoiac.sec',
+                    display_name: 'Paranoiac Architect',
+                    email: 'sec@example.com',
+                    avatar_url: '/uploads/avatars/user1.webp',
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      const avatarImg = screen.getByTestId('topbar-avatar-img');
+      expect(avatarImg).toBeDefined();
+      expect(avatarImg.getAttribute('src')).toBe('/uploads/avatars/user1.webp');
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      act(() => {
+        avatarBtn.click();
+      });
+
+      const profileCard = screen.getByTestId('topbar-user-profile');
+      expect(profileCard).toBeDefined();
+      expect(screen.getByTestId('topbar-user-name').textContent).toBe('Paranoiac Architect');
+      expect(screen.getByTestId('topbar-user-handle').textContent).toBe('@paranoiac.sec');
+    });
+
+    it('renders fallback initial when avatar_url is missing', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'usr-2',
+                    display_name: 'Bob Ross',
+                    email: 'bob@example.com',
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      const initialEl = screen.getByTestId('topbar-avatar-initial');
+      expect(initialEl.textContent).toBe('B');
+      expect(screen.queryByTestId('topbar-avatar-img')).toBeNull();
+    });
   });
 });

@@ -26,10 +26,42 @@ export interface TopbarUser {
   display_name?: string | null;
   email?: string | null;
   avatar_url?: string | null;
+  handle?: string | null;
   is_server_admin?: boolean;
   is_workspace_admin?: boolean;
   workspace_role?: string | null;
   workspace_capabilities?: string[] | null;
+}
+
+export function resolveDisplayHandle(user?: TopbarUser | null): string {
+  if (!user) return '';
+  const rawHandle = user.handle?.trim();
+  const isUuid = (val: string) =>
+    /^[0-9a-f]{8}(-[0-9a-f]{4}){0,3}(-[0-9a-f]{4,12})?$/i.test(val.replace(/^@+/, ''));
+
+  if (rawHandle && !isUuid(rawHandle)) {
+    const clean = rawHandle.replace(/^@+/, '');
+    return clean ? `@${clean}` : '@user';
+  }
+
+  // Derive from display_name or email, avoiding raw UUID leaks
+  if (user.display_name && !isUuid(user.display_name)) {
+    const slug = user.display_name
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '.')
+      .replace(/[^a-z0-9._-]/g, '');
+    if (slug) return `@${slug}`;
+  }
+
+  if (user.email) {
+    const parts = user.email.split('@');
+    const emailPrefix = parts[0]?.trim();
+    if (emailPrefix && !isUuid(emailPrefix)) return `@${emailPrefix}`;
+  }
+
+  if (user.id && !isUuid(user.id)) return `@${user.id}`;
+  return '@user';
 }
 
 export interface TopbarProps {
@@ -152,7 +184,16 @@ export function Topbar({
   const activeTheme = themeContext.theme;
 
   // Determine avatar initials or custom image
-  const userInitial = user?.display_name ? user.display_name.charAt(0).toUpperCase() : 'A';
+  const userInitial = (
+    user?.display_name?.trim() ||
+    (user?.handle && !/^[0-9a-f]{8}/i.test(user.handle.replace(/^@+/, ''))
+      ? user.handle.replace(/^@+/, '')
+      : null) ||
+    user?.email?.trim() ||
+    'A'
+  )
+    .charAt(0)
+    .toUpperCase();
   const isServerAdmin = Boolean(user?.is_server_admin);
   const isWorkspaceAdmin = Boolean(user?.is_workspace_admin ?? user?.is_server_admin);
 
@@ -223,9 +264,10 @@ export function Topbar({
                 src={user.avatar_url}
                 alt={user.display_name ?? 'User avatar'}
                 className="kb-avatar-img"
+                data-testid="topbar-avatar-img"
               />
             ) : (
-              userInitial
+              <span data-testid="topbar-avatar-initial">{userInitial}</span>
             )}
           </button>
 
@@ -237,6 +279,32 @@ export function Topbar({
               aria-label="User settings"
               onKeyDown={handleMenuKeyDown}
             >
+              {user && (
+                <>
+                  <div className="kb-avatar-user-card" data-testid="topbar-user-profile">
+                    <div className="kb-avatar-user-card-avatar">
+                      {user.avatar_url ? (
+                        <img
+                          src={user.avatar_url}
+                          alt={user.display_name ?? 'User avatar'}
+                          className="kb-avatar-img"
+                        />
+                      ) : (
+                        <span className="kb-avatar-fallback">{userInitial}</span>
+                      )}
+                    </div>
+                    <div className="kb-avatar-user-card-info">
+                      <div className="kb-avatar-user-card-name" data-testid="topbar-user-name">
+                        {user.display_name || user.email || 'User'}
+                      </div>
+                      <div className="kb-avatar-user-card-handle" data-testid="topbar-user-handle">
+                        {resolveDisplayHandle(user)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="kb-avatar-menu-divider" />
+                </>
+              )}
               <div className="kb-theme-menu-title">Theme</div>
               <div
                 className="kb-theme-radiogroup"

@@ -115,42 +115,51 @@ export function AuthCardRow({
 
       <div className="auth-card-right">
         {/* Health Status Chip */}
-        <div
-          className={`auth-health-chip auth-status-chip auth-health-chip--${card.last_health_status.toLowerCase()} auth-status-chip--${card.last_health_status.toLowerCase()}`}
-          data-testid={`health-chip-${card.slug}`}
-        >
-          <span>
-            {card.last_health_status === 'HEALTHY' && card.latency_ms !== null
-              ? `HEALTHY (${String(card.latency_ms)} ms)`
-              : card.last_health_status}
-          </span>
-          {card.last_health_status === 'FAILED' ? (
-            <EmojiHint
-              kind="warning"
-              label="Health check failure"
-              content={
-                card.check_summary
-                  ? `${card.check_summary}${
-                      card.last_handshake_at ? ` (at ${card.last_handshake_at})` : ''
-                    }`
-                  : 'Connection failed'
-              }
-            />
-          ) : null}
-        </div>
+        {(() => {
+          const statusStr = (
+            card.last_health_status ??
+            (card as { status?: string }).status ??
+            'UNVERIFIED'
+          ).toUpperCase();
+          const statusLower = statusStr.toLowerCase();
+          return (
+            <div
+              className={`auth-health-chip auth-status-chip auth-health-chip--${statusLower} auth-status-chip--${statusLower}`}
+              data-testid={`health-chip-${card.slug}`}
+            >
+              <span>
+                {statusStr === 'HEALTHY' && card.latency_ms !== null && card.latency_ms !== undefined
+                  ? `HEALTHY (${String(card.latency_ms)} ms)`
+                  : statusStr}
+              </span>
+              {statusStr === 'FAILED' ? (
+                <EmojiHint
+                  kind="warning"
+                  label="Health check failure"
+                  content={
+                    card.check_summary
+                      ? `${card.check_summary}${
+                          card.last_handshake_at ? ` (at ${card.last_handshake_at})` : ''
+                        }`
+                      : 'Connection failed'
+                  }
+                />
+              ) : null}
+            </div>
+          );
+        })()}
 
         {/* Test Handshake Button */}
-        {card.provider_kind !== 'LOCAL_ADMIN' ? (
-          <button
-            type="button"
-            className="auth-btn-secondary"
-            onClick={() => { onTestHandshake(card); }}
-            disabled={isTestingHandshake}
-            aria-busy={isTestingHandshake}
-          >
-            {isTestingHandshake ? 'Testing...' : 'Test handshake'}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="auth-btn-secondary"
+          onClick={() => { onTestHandshake(card); }}
+          disabled={isTestingHandshake}
+          aria-busy={isTestingHandshake}
+          data-testid={`test-handshake-${card.slug}`}
+        >
+          {isTestingHandshake ? 'Testing...' : 'Test handshake'}
+        </button>
 
         {/* Enable / Disable Switch */}
         <label className="auth-toggle-switch auth-switch-label">

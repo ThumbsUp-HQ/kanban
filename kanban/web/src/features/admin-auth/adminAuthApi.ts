@@ -251,6 +251,23 @@ export async function testAuthCardHandshake(
   };
 }
 
+export async function testDraftAuthCardHandshake(
+  payload: CreateAuthCardPayload,
+): Promise<TestHandshakeResult> {
+  const result = (await apiFetch(
+    'POST',
+    '/api/v1/admin/auth-cards/test-handshake' as never,
+    { body: payload },
+  )) as TestHandshakeResult;
+  return {
+    ...result,
+    last_health_status: (result.ok ?? (result.status === 'OK' || result.last_health_status === 'HEALTHY'))
+      ? 'HEALTHY'
+      : 'FAILED',
+    check_summary: result.check_summary ?? (result.ok ? 'Probe successful' : (result.error_code ?? 'Probe failed')),
+  };
+}
+
 export async function deleteAdminAuthCard(cardId: string, confirmSlug?: string): Promise<void> {
   await apiFetch(
     'DELETE',
@@ -261,10 +278,13 @@ export async function deleteAdminAuthCard(cardId: string, confirmSlug?: string):
 
 // User & Permission Management APIs (KB-UX-06)
 
-export async function fetchAdminPrincipals(filter = 'USER'): Promise<AdminUserPrincipal[]> {
+export async function fetchAdminPrincipals(filter?: string): Promise<AdminUserPrincipal[]> {
+  const query = filter && filter.trim() && filter.toUpperCase() !== 'ALL'
+    ? `?filter=${encodeURIComponent(filter.trim())}&limit=100`
+    : `?limit=100`;
   const result = (await apiFetch(
     'GET',
-    `/api/v1/admin/principals?filter=${encodeURIComponent(filter)}&limit=100` as never,
+    `/api/v1/admin/principals${query}` as never,
   )) as AdminUserPrincipal[];
   return result;
 }

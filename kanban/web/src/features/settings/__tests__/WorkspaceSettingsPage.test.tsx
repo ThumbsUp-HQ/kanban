@@ -527,4 +527,288 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     });
     expect(roleBindingCalled).toBe(false);
   });
+
+  it('supports Air-Gap mode, Display Name, and MCP Key Max TTL in general tab (KANBA-210)', async () => {
+    let patchedBody: Record<string, unknown> = {};
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return {
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+          display_name: 'Acme Corp',
+          default_project_visibility: 'workspace',
+          session_idle_timeout_min: 120,
+          session_absolute_timeout_min: 1440,
+          trash_retention_days: 30,
+          mcp_key_max_ttl_days: 90,
+          air_gap_mode: false,
+        };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'PATCH') {
+        patchedBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        return {
+          id: 'ws-1',
+          ...patchedBody,
+        };
+      }
+      return {};
+    });
+
+    renderComponent();
+
+    // Verify initial values
+    const displayNameInput = await screen.findByTestId('workspace-display-name-input');
+    const ttlInput = screen.getByTestId('workspace-mcp-key-max-ttl-input');
+    const airGapToggle = screen.getByTestId('workspace-air-gap-toggle') as HTMLInputElement;
+
+    expect(displayNameInput).toBeDefined();
+    expect((displayNameInput as HTMLInputElement).value).toBe('Acme Corp');
+    expect((ttlInput as HTMLInputElement).value).toBe('90');
+    expect(airGapToggle.checked).toBe(false);
+
+    // Edit values
+    fireEvent.change(displayNameInput, { target: { value: 'Acme Global Security' } });
+    fireEvent.change(ttlInput, { target: { value: '180' } });
+    fireEvent.click(airGapToggle);
+
+    expect(airGapToggle.checked).toBe(true);
+
+    // Save
+    fireEvent.click(screen.getByTestId('save-workspace-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Workspace settings updated successfully.')).toBeDefined();
+    });
+
+    expect(patchedBody.display_name).toBe('Acme Global Security');
+    expect(patchedBody.mcp_key_max_ttl_days).toBe(180);
+    expect(patchedBody.air_gap_mode).toBe(true);
+  });
+
+  it('supports inline role selection and remove member actions (KANBA-210)', async () => {
+    let boundRole: string | null = null;
+    let removedPrincipalId: string | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return {
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+        };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          {
+            id: 'p-mem-1',
+            type: 'USER',
+            principal_type: 'USER',
+            handle: '@mem.one',
+            display_name: 'Member One',
+            email: 'mem1@example.com',
+            role: 'WORKSPACE_MEMBER',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'POST') {
+        const body = JSON.parse(String((options as { body?: string }).body)) as {
+          principal_id: string;
+          role: string;
+          role_name: string;
+        };
+        boundRole = body.role;
+        return { ok: true };
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'DELETE') {
+        const body = JSON.parse(String((options as { body?: string }).body)) as {
+          principal_id: string;
+        };
+        removedPrincipalId = body.principal_id;
+        return { ok: true };
+      }
+      return {};
+    });
+
+    renderComponent();
+
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // Verify row and cells
+    expect(await screen.findByTestId('principal-row-p-mem-1')).toBeDefined();
+    expect(screen.getByTestId('member-name-p-mem-1').textContent).toBe('Member One');
+    expect(screen.getByTestId('member-handle-p-mem-1').textContent).toBe('@mem.one');
+    expect(screen.getByTestId('member-email-p-mem-1').textContent).toBe('mem1@example.com');
+    expect(screen.getByTestId('type-pill-p-mem-1').textContent).toBe('User');
+
+    // Change role
+    const roleSelect = screen.getByTestId('role-select-p-mem-1');
+    fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+
+    await waitFor(() => {
+      expect(boundRole).toBe('WORKSPACE_ADMIN');
+      expect(screen.getByText('Member role updated.')).toBeDefined();
+    });
+
+    // Remove member
+    const removeBtn = screen.getByTestId('remove-member-btn-p-mem-1');
+    fireEvent.click(removeBtn);
+
+    await waitFor(() => {
+      expect(removedPrincipalId).toBe('p-mem-1');
+      expect(screen.getByText('Member removed from workspace.')).toBeDefined();
+    });
+  });
+
+  it('supports Groups tab, creating groups, listing members, adding nested groups and cycle rejection (KANBA-210)', async () => {
+    let createdGroupPayload: Record<string, unknown> = {};
+    let addedMemberId: string | null = null;
+    let removedGroupMemberId: string | null = null;
+    let simulateCycle = false;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return {
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+        };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          {
+            id: 'grp-eng',
+            type: 'GROUP',
+            principal_type: 'GROUP',
+            handle: '@engineers',
+            display_name: 'Engineering Group',
+          },
+          {
+            id: 'grp-core',
+            type: 'GROUP',
+            principal_type: 'GROUP',
+            handle: '@core-team',
+            display_name: 'Core Team',
+          },
+          {
+            id: 'usr-dev',
+            type: 'USER',
+            principal_type: 'USER',
+            handle: '@developer',
+            display_name: 'Developer One',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'POST') {
+        createdGroupPayload = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        return { id: 'grp-new' };
+      }
+      if (url.includes('/api/v1/admin/groups/grp-eng/members') && m === 'GET') {
+        return [
+          {
+            id: 'usr-dev',
+            type: 'USER',
+            principal_type: 'USER',
+            handle: '@developer',
+            display_name: 'Developer One',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/admin/groups/grp-eng/members/grp-core') && m === 'POST') {
+        if (simulateCycle) {
+          const err = new Error('Adding member would introduce a cyclic group dependency.') as Error & {
+            detail?: string;
+            status?: number;
+          };
+          err.detail = 'Cannot nest group: would introduce a cyclic dependency.';
+          err.status = 409;
+          throw err;
+        }
+        addedMemberId = 'grp-core';
+        return { ok: true };
+      }
+      if (url.includes('/api/v1/admin/groups/grp-eng/members/usr-dev') && m === 'DELETE') {
+        removedGroupMemberId = 'usr-dev';
+        return { ok: true };
+      }
+      return {};
+    });
+
+    renderComponent();
+
+    // Switch to groups tab
+    const groupsTab = await screen.findByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    expect(await screen.findByTestId('workspace-groups-section')).toBeDefined();
+    expect(screen.getByTestId('selected-group-name').textContent).toBe('Engineering Group');
+
+    // Verify existing member Developer One is listed
+    expect(await screen.findByText('Developer One')).toBeDefined();
+    expect(screen.getByTestId('group-member-type-usr-dev').textContent).toBe('User');
+
+    // Create a new group
+    fireEvent.change(screen.getByTestId('new-group-name'), { target: { value: 'Security Team' } });
+    fireEvent.change(screen.getByTestId('new-group-handle'), { target: { value: 'sec-team' } });
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+
+    await waitFor(() => {
+      expect(createdGroupPayload.type).toBe('GROUP');
+      expect(createdGroupPayload.handle).toBe('@sec-team');
+      expect(createdGroupPayload.display_name).toBe('Security Team');
+      expect(screen.getByText('Group created successfully.')).toBeDefined();
+    });
+
+    // Add nested group grp-core with cycle rejection
+    simulateCycle = true;
+    const addSelect = screen.getByTestId('add-group-member-select');
+    fireEvent.change(addSelect, { target: { value: 'grp-core' } });
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
+
+    await waitFor(() => {
+      const alert = screen.getByTestId('group-cycle-alert');
+      expect(alert.textContent).toContain('Cannot nest group: would introduce a cyclic dependency.');
+    });
+
+    // Successfully add nested group when no cycle
+    simulateCycle = false;
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
+
+    await waitFor(() => {
+      expect(addedMemberId).toBe('grp-core');
+      expect(screen.getByText('Member added to group successfully.')).toBeDefined();
+    });
+
+    // Remove group member
+    const removeMemberBtn = screen.getByTestId('remove-group-member-usr-dev');
+    fireEvent.click(removeMemberBtn);
+
+    await waitFor(() => {
+      expect(removedGroupMemberId).toBe('usr-dev');
+      expect(screen.getByText('Member removed from group.')).toBeDefined();
+    });
+  });
 });

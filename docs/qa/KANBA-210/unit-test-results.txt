@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-ws-2a9755ab
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 49 items
+
+kanban/tests/api/test_admin_principals.py ...........                    [ 22%]
+kanban/tests/api/test_workspaces_api.py .........                        [ 40%]
+kanban/tests/api/test_system_status.py ...........                       [ 63%]
+kanban/tests/auth/test_auth_cards_admin_api.py ........                  [ 79%]
+kanban/tests/api/test_workspace_settings.py ..........                   [100%]
+
+============================= 49 passed in 18.08s ==============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-ws-2a9755ab/kanban/web
+
+ ✓ src/features/admin-auth/cardRank.test.ts (11 tests) 24ms
+ ✓ src/features/admin-auth/adminAuthApi.test.ts (9 tests) 23ms
+ ✓ src/features/admin-auth/LockoutPreventedBanner.test.tsx (5 tests) 257ms
+ ✓ src/features/admin-auth/AuthCardRow.test.tsx (7 tests) 327ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (11 tests) 744ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (11)
+     ✓ renders workspace settings page and updates workspace name and slug 314ms
+ ✓ src/app/Topbar.test.tsx (14 tests) 773ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (35 tests) 2598ms
+   ✓ AuthStudioPage (KB-P3-36) (35)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 307ms
+     ✓ opens drawer to add a new auth card and appends created card 324ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (37 tests) 2902ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (37)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 309ms
+
+ Test Files  8 passed (8)
+      Tests  129 passed (129)
+   Start at  14:00:21
+   Duration  4.14s (tests 48%, environment 43%, import 6%, transform 1%, worker 1%)
+

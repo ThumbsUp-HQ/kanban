@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
 
+from database.models.auth import AuthProviderCard
 from kanban.api.problems import ProblemException, format_validation_error
 from kanban.auth.cards.handshake import probe_auth_card_handshake
 from kanban.auth.cards.lockout import (
@@ -661,6 +662,69 @@ class AuthCardAdminService:
         )
 
         return probe_result
+
+    async def test_draft_handshake(
+        self,
+        draft: AuthCardCreate,
+        actor_id: uuid.UUID,
+    ) -> HandshakeProbeResult:
+        """Execute live test-handshake probe on draft auth card without persisting."""
+        del actor_id
+        encrypted_secret_blob = None
+        wrapped_dek = None
+        dek_kid = "kek-v1"
+        secret_val = draft.secret
+        card_id = uuid.uuid4()
+
+        if draft.provider_kind in ("OIDC", "OAUTH2") and draft.google_oauth_json:
+            try:
+                parsed = json.loads(draft.google_oauth_json)
+                web_or_installed = parsed.get("web") or parsed.get("installed") or {}
+                if "client_secret" in web_or_installed:
+                    secret_val = str(web_or_installed["client_secret"])
+            except Exception:
+                pass
+
+        if secret_val and self._kek_provider is not None:
+            secret_buf = bytearray(secret_val.encode("utf-8"))
+            try:
+                sealed = seal_card_secret(
+                    card_id,
+                    draft.provider_kind,
+                    bytes(secret_buf),
+                    self._kek_provider,
+                )
+                encrypted_secret_blob = sealed.encrypted_secret_blob
+                wrapped_dek = sealed.wrapped_dek
+                dek_kid = sealed.dek_kid
+            finally:
+                for idx in range(len(secret_buf)):
+                    secret_buf[idx] = 0
+
+        card = AuthProviderCard(
+            id=card_id,
+            workspace_id=uuid.uuid4(),
+            provider_kind=draft.provider_kind,
+            slug=draft.slug,
+            display_name=draft.display_name,
+            button_subtext=draft.button_subtext,
+            icon_preset=draft.icon_preset,
+            is_enabled=True,
+            sort_rank="A",
+            auto_provision_users=draft.auto_provision_users,
+            allowed_email_domains=draft.allowed_email_domains,
+            public_config=draft.public_config,
+            encrypted_secret_blob=encrypted_secret_blob,
+            wrapped_dek=wrapped_dek,
+            dek_kid=dek_kid,
+            last_health_status="UNVERIFIED",
+        )
+        return await probe_auth_card_handshake(
+            card,
+            http_client=self._http_client,
+            kek_provider=self._kek_provider,
+            unix_socket_path=self._ldap_unix_socket_path,
+        )
 
     async def delete_card(
         self,

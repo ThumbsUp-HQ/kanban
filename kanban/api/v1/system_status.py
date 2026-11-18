@@ -15,8 +15,10 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime dependency for FastAPI
+
+from database.models.workspace_settings import WorkspaceSettings
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
@@ -153,7 +155,6 @@ async def get_system_status_endpoint(
     request: Request,
 ) -> SystemStatusResponse:
     """Retrieve system status with anti-enumeration redaction for non-administrators."""
-    del caller  # Context verified
     stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
     is_server_admin = bool((await session.execute(stmt)).scalar_one())
 
@@ -167,13 +168,25 @@ async def get_system_status_endpoint(
         bool(getattr(settings, "disable_unlimited_mcp_keys", False)) if settings else False
     )
 
+    ws_air_gap = False
+    if caller.workspace_id:
+        try:
+            ws_stmt = select(WorkspaceSettings.air_gap_mode).where(
+                WorkspaceSettings.workspace_id == caller.workspace_id
+            )
+            ws_res = (await session.execute(ws_stmt)).scalar_one_or_none()
+            ws_air_gap = bool(ws_res)
+        except Exception:
+            ws_air_gap = False
+    effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
+
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
         persistent_volume=status_data["persistent_volume"],
         data_mount_point=mount_point,
         data_mount_fstype=mount_fstype,
         tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
-        air_gap_mode=status_data["air_gap_mode"],
+        air_gap_mode=effective_air_gap,
         local_llm_endpoint_host=local_llm_host,
         is_server_admin=is_server_admin,
         allow_unlimited_mcp_keys=not disable_unlimited,
@@ -191,7 +204,6 @@ async def get_admin_standalone_status_endpoint(
     request: Request,
 ) -> SystemStatusResponse:
     """Retrieve standalone deployment status for administrators with full topology."""
-    del caller
     stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
     is_server_admin = bool((await session.execute(stmt)).scalar_one())
 
@@ -205,13 +217,25 @@ async def get_admin_standalone_status_endpoint(
         bool(getattr(settings, "disable_unlimited_mcp_keys", False)) if settings else False
     )
 
+    ws_air_gap = False
+    if caller.workspace_id:
+        try:
+            ws_stmt = select(WorkspaceSettings.air_gap_mode).where(
+                WorkspaceSettings.workspace_id == caller.workspace_id
+            )
+            ws_res = (await session.execute(ws_stmt)).scalar_one_or_none()
+            ws_air_gap = bool(ws_res)
+        except Exception:
+            ws_air_gap = False
+    effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
+
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
         persistent_volume=status_data["persistent_volume"],
         data_mount_point=mount_point,
         data_mount_fstype=mount_fstype,
         tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
-        air_gap_mode=status_data["air_gap_mode"],
+        air_gap_mode=effective_air_gap,
         local_llm_endpoint_host=local_llm_host,
         is_server_admin=is_server_admin,
         allow_unlimited_mcp_keys=not disable_unlimited,

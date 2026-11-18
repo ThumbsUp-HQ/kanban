@@ -7,18 +7,19 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # FastAPI dependency
 from starlette.responses import JSONResponse
 
 from database.models.spine import Workspace
 from database.models.workspace_settings import WorkspaceSettings
+from kanban.admin import principal_service
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
-from kanban.api.problems import ProblemException
+from kanban.api.problems import FieldError, ProblemException
 from kanban.auth.sessions.cookies import (
     SESSION_COOKIE_NAME,
     attach_session_and_csrf_cookies,
@@ -417,4 +418,99 @@ async def update_workspace_endpoint(
         slug=ws.slug,
         is_current=(ws.id == caller.workspace_id),
         role="WORKSPACE_ADMIN",
+    )
+
+
+class WorkspaceRoleBindingRequest(BaseModel):
+    """Schema for workspace-scoped role binding accepting both role and role_name."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    principal_id: uuid.UUID = Field(
+        description="Target principal UUID receiving the role assignment"
+    )
+    role: str | None = Field(default=None)
+    role_name: str | None = Field(default=None)
+    scope_type: Literal["server", "workspace", "project"] = "workspace"
+    scope_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def resolve_role_field(self) -> Self:
+        """Resolve role from role or role_name."""
+        resolved = self.role or self.role_name
+        if not resolved:
+            msg = "role or role_name is required"
+            raise ProblemException(
+                code="VALIDATION_FAILED",
+                status=422,
+                title="Validation Failed",
+                detail=msg,
+                errors=[FieldError(path="role", message=msg)],
+            )
+        self.role = resolved
+        self.role_name = resolved
+        return self
+
+
+@router.post(
+    "/{workspace_id}/role-bindings",
+    summary="Bind RBAC role to principal in workspace",
+)
+async def bind_workspace_role_endpoint(
+    workspace_id: uuid.UUID,
+    body: WorkspaceRoleBindingRequest,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> dict[str, object]:
+    """Bind role to principal at workspace scope."""
+    admin_check = await session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    )
+    if not bool(admin_check.scalar_one()):
+        raise ProblemException(
+            code="INSUFFICIENT_CAPABILITY",
+            status=status.HTTP_403_FORBIDDEN,
+            title="Insufficient Capability",
+            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+        )
+    return await principal_service.bind_role(
+        session,
+        workspace_id,
+        caller.principal_id,
+        principal_id=body.principal_id,
+        role_name=body.role,  # type: ignore[arg-type]
+        scope_type=body.scope_type,
+        project_id=body.scope_id,
+    )
+
+
+@router.delete(
+    "/{workspace_id}/role-bindings",
+    summary="Unbind RBAC role from principal in workspace",
+)
+async def unbind_workspace_role_endpoint(
+    workspace_id: uuid.UUID,
+    body: WorkspaceRoleBindingRequest,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> dict[str, object]:
+    """Unbind role from principal at workspace scope."""
+    admin_check = await session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    )
+    if not bool(admin_check.scalar_one()):
+        raise ProblemException(
+            code="INSUFFICIENT_CAPABILITY",
+            status=status.HTTP_403_FORBIDDEN,
+            title="Insufficient Capability",
+            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+        )
+    return await principal_service.unbind_role(
+        session,
+        workspace_id,
+        caller.principal_id,
+        principal_id=body.principal_id,
+        role_name=body.role,  # type: ignore[arg-type]
+        scope_type=body.scope_type,
+        project_id=body.scope_id,
     )

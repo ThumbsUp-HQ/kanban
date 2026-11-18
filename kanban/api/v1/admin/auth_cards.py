@@ -271,6 +271,25 @@ async def reorder_admin_card(
 
 
 @router.post(
+    "/test-handshake",
+    response_model=HandshakeProbeResult,
+    summary="Test authentication card draft handshake probe",
+)
+async def test_draft_card_handshake(
+    body: AuthCardCreate,
+    caller: Caller,
+    session: Session,
+    service: ServiceDep,
+) -> HandshakeProbeResult:
+    """Execute live reachability and cryptographic probe on draft auth card."""
+    del session
+    return await service.test_draft_handshake(
+        body,
+        actor_id=caller.principal_id,
+    )
+
+
+@router.post(
     "/{card_ref}/test-handshake",
     response_model=HandshakeProbeResult,
     summary="Test authentication card handshake",

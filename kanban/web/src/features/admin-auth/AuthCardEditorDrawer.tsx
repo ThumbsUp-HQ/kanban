@@ -14,7 +14,9 @@ import type {
   UpdateAuthCardPayload,
   ProviderKind,
   GoogleOAuthJsonPreviewResponse,
+  TestHandshakeResult,
 } from './adminAuthApi';
+import { testAuthCardHandshake, testDraftAuthCardHandshake } from './adminAuthApi';
 import './adminAuth.css';
 
 export interface AuthCardEditorDrawerProps {
@@ -25,6 +27,10 @@ export interface AuthCardEditorDrawerProps {
     payload: CreateAuthCardPayload | UpdateAuthCardPayload,
     isEdit: boolean,
   ) => Promise<void>;
+  onTestHandshake?: (
+    card: AdminAuthCard | null,
+    payload: CreateAuthCardPayload,
+  ) => Promise<TestHandshakeResult>;
 }
 
 export type ProviderPreset =
@@ -42,12 +48,17 @@ export function AuthCardEditorDrawer({
   card,
   onClose,
   onSave,
+  onTestHandshake,
 }: AuthCardEditorDrawerProps): JSX.Element | null {
   const isEdit = Boolean(card);
   const drawerRef = useRef<HTMLDivElement | null>(null);
 
   // Active preset
   const [activePreset, setActivePreset] = useState<ProviderPreset | null>(null);
+
+  // Handshake test state
+  const [isTestingHandshake, setIsTestingHandshake] = useState(false);
+  const [handshakeResult, setHandshakeResult] = useState<{ status: 'healthy' | 'failed'; message: string } | null>(null);
 
   // Common metadata
   const [prevCard, setPrevCard] = useState<AdminAuthCard | null>(card);
@@ -476,16 +487,7 @@ export function AuthCardEditorDrawer({
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-
-    if (!validate()) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setFormError(null);
-
+  const constructPayload = (): CreateAuthCardPayload => {
     const domains = allowedEmailDomains
       .split(',')
       .map((d) => d.trim().toLowerCase())
@@ -537,6 +539,64 @@ export function AuthCardEditorDrawer({
     }
 
     const effectiveSlug = slug.trim() || (providerKind === 'LDAP' ? 'ldap1' : 'oauth1');
+
+    return {
+      provider_kind: providerKind,
+      slug: effectiveSlug,
+      display_name: displayName.trim() || effectiveSlug,
+      button_subtext: buttonSubtext.trim() || null,
+      icon_preset: iconPreset,
+      is_enabled: card?.is_enabled ?? true,
+      auto_provision_users: autoProvisionUsers,
+      allowed_email_domains: domains,
+      public_config: publicConfig,
+      ...(secretInput.trim() ? { secret: secretInput.trim() } : {}),
+      ...(googleJsonPasteText.trim() ? { google_oauth_json: googleJsonPasteText.trim() } : {}),
+    };
+  };
+
+  const handleTestHandshake = async () => {
+    setIsTestingHandshake(true);
+    setHandshakeResult(null);
+    try {
+      const payload = constructPayload();
+      let res: TestHandshakeResult;
+      if (onTestHandshake) {
+        res = await onTestHandshake(card, payload);
+      } else if (card?.id) {
+        res = await testAuthCardHandshake(card.id);
+      } else {
+        res = await testDraftAuthCardHandshake(payload);
+      }
+      const isHealthy = res.last_health_status === 'HEALTHY' || res.status === 'OK' || res.ok;
+      setHandshakeResult({
+        status: isHealthy ? 'healthy' : 'failed',
+        message: res.check_summary || (isHealthy ? 'Handshake healthy' : 'Handshake probe failed'),
+      });
+    } catch (err: unknown) {
+      setHandshakeResult({
+        status: 'failed',
+        message: err instanceof Error ? err.message : 'Handshake test failed',
+      });
+    } finally {
+      setIsTestingHandshake(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+
+    if (!validate()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormError(null);
+
+    const fullPayload = constructPayload();
+    const domains = fullPayload.allowed_email_domains;
+    const publicConfig = fullPayload.public_config;
+    const effectiveSlug = fullPayload.slug;
 
     try {
       if (isEdit) {
@@ -1466,7 +1526,27 @@ export function AuthCardEditorDrawer({
           </>
         )}
 
+          {handshakeResult && (
+            <div
+              className={`auth-drawer-handshake-result auth-health-chip--${handshakeResult.status}`}
+              data-testid="drawer-handshake-result"
+              role="status"
+              style={{ padding: '8px 12px', margin: '12px 0', borderRadius: '4px', border: '1px solid currentColor' }}
+            >
+              <span>{handshakeResult.status === 'healthy' ? 'HEALTHY' : 'FAILED'}: {handshakeResult.message}</span>
+            </div>
+          )}
+
           <div className="auth-editor-actions">
+            <button
+              type="button"
+              className="auth-btn-secondary"
+              onClick={handleTestHandshake}
+              disabled={isSubmitting || isTestingHandshake}
+              data-testid="drawer-test-handshake-btn"
+            >
+              {isTestingHandshake ? 'Testing Handshake...' : 'Test Handshake'}
+            </button>
             <button
               type="button"
               className="auth-btn-secondary"

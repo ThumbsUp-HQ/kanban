@@ -109,6 +109,7 @@ describe('AuthCardRow (KB-P3-36)', () => {
   it('pins LOCAL_ADMIN row: disables reorder and delete buttons', () => {
     const onMoveUp = vi.fn();
     const onMoveDown = vi.fn();
+    const onTestHandshake = vi.fn();
 
     render(
       <AuthCardRow
@@ -118,7 +119,7 @@ describe('AuthCardRow (KB-P3-36)', () => {
         onMoveUp={onMoveUp}
         onMoveDown={onMoveDown}
         onToggleEnabled={vi.fn()}
-        onTestHandshake={vi.fn()}
+        onTestHandshake={onTestHandshake}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
       />,
@@ -136,8 +137,11 @@ describe('AuthCardRow (KB-P3-36)', () => {
     });
     expect(deleteBtn.hasAttribute('disabled')).toBe(true);
 
-    // LOCAL_ADMIN does not render Test Handshake button
-    expect(screen.queryByRole('button', { name: /Test handshake/i })).toBeNull();
+    // LOCAL_ADMIN renders Test Handshake button
+    const testHandshakeBtn = screen.getByRole('button', { name: /Test handshake/i });
+    expect(testHandshakeBtn).toBeDefined();
+    fireEvent.click(testHandshakeBtn);
+    expect(onTestHandshake).toHaveBeenCalledWith(localAdminCard);
   });
 
   it('renders FAILED health status with warning EmojiHint showing check summary', () => {
