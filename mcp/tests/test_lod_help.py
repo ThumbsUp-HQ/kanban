@@ -13,6 +13,7 @@ from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
 from mcp.lod import (
     Lod,
+    _compact_access_manifest,
     parse_lod,
     project_doc,
     project_entity,
@@ -127,6 +128,91 @@ def test_issue_standard_and_full_projections() -> None:
         "created_by": "@adam",
         "original_created_by": "@creator",
     }
+
+
+def test_provenance_overridden_boundary_cases() -> None:
+    """Verify provenance overridden boundary cases for compact serialization."""
+    raw_overridden_true = {
+        "key": "KAN-1",
+        "summary": "Overridden creator",
+        "provenance": {
+            "created_by": "adam",
+            "original_created_by": "@bob",
+            "overridden": True,
+        },
+    }
+    full_true = project_issue(raw_overridden_true, Lod.FULL)
+    assert full_true["provenance"] == {
+        "created_by": "@adam",
+        "original_created_by": "@bob",
+        "overridden": True,
+    }
+
+    raw_overridden_false = {
+        "key": "KAN-2",
+        "summary": "Normal creator",
+        "provenance": {
+            "created_by": "@carol",
+            "original_created_by": "@carol",
+            "overridden": False,
+        },
+    }
+    full_false = project_issue(raw_overridden_false, Lod.FULL)
+    assert full_false["provenance"] == {
+        "created_by": "@carol",
+    }
+    assert "original_created_by" not in full_false["provenance"]
+    assert "overridden" not in full_false["provenance"]
+
+
+def test_compact_access_manifest_unit() -> None:
+    """Verify _compact_access_manifest strips internal UUIDs, zero counts, redundant keys."""
+    raw_manifest = {
+        "workspace_id": "018d-work-uuid",
+        "project_id": "018d-proj-uuid",
+        "canonical_key": "KAN-1",
+        "object_type": "issue",
+        "pill_label": "Project",
+        "explicit_grant_count": 0,
+        "redacted_count": 0,
+        "caller_capabilities": ["read", "write"],
+        "inherited_scope": {
+            "workspace_id": "018d-work-uuid",
+            "kind": "project",
+            "scope_label": "Project Scope",
+            "project_key": "KAN",
+        },
+        "users": [
+            {
+                "principal_id": "018d-user-uuid",
+                "handle": "alice",
+                "grant_source": "role",
+                "capabilities": ["admin"],
+            }
+        ],
+    }
+    compact = _compact_access_manifest(raw_manifest)
+    assert isinstance(compact, dict)
+    assert compact["pill_label"] == "Project"
+    assert "workspace_id" not in compact
+    assert "project_id" not in compact
+    assert "canonical_key" not in compact
+    assert "object_type" not in compact
+    assert "explicit_grant_count" not in compact
+    assert "redacted_count" not in compact
+    assert compact["caller_capabilities"] == ["read", "write"]
+    assert compact["inherited_scope"] == {
+        "kind": "project",
+        "scope_label": "Project Scope",
+        "project_key": "KAN",
+    }
+    assert compact["users"] == [
+        {
+            "handle": "@alice",
+            "grant_source": "role",
+            "capabilities": ["admin"],
+        }
+    ]
 
 
 def test_doc_sticky_project_entity_projections() -> None:

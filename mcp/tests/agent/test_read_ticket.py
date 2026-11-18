@@ -380,3 +380,70 @@ async def test_read_ticket_empty_links_omitted_standard(agent_test_env: AgentTes
     assert parsed_142["links"]["outbound"][0]["target"]["key"] == "KAN-150"
 
 
+@pytest.mark.asyncio
+async def test_read_ticket_standard_populates_access_from_pill_label(
+    agent_test_env: AgentTestEnv,
+) -> None:
+    """Verify read_ticket in standard LOD populates access from access_manifest pill_label."""
+    env = agent_test_env
+
+    res = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "standard"})
+    assert res["isError"] is False
+    parsed = yaml.safe_load(res["content"][0]["text"])
+    assert "access" in parsed
+    assert parsed["access"] == "Project"
+    assert "access_manifest" not in parsed
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_full_compacts_manifest_activity_provenance(
+    agent_test_env: AgentTestEnv,
+) -> None:
+    """Verify read_ticket in full LOD compacts manifest, activity, comments, provenance."""
+    env = agent_test_env
+
+    res = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "full"})
+    assert res["isError"] is False
+    parsed = yaml.safe_load(res["content"][0]["text"])
+
+    # access_manifest check
+    assert "access_manifest" in parsed
+    manifest = parsed["access_manifest"]
+    assert "workspace_id" not in manifest
+    assert "project_id" not in manifest
+    assert "canonical_key" not in manifest
+    assert "object_type" not in manifest
+    assert manifest.get("pill_label") == "Project"
+
+    # comments check
+    assert "comments" in parsed
+    if parsed["comments"]:
+        for comm in parsed["comments"]:
+            assert "author_id" not in comm
+            assert "issue_id" not in comm
+            assert "body_sha256" not in comm
+            if "author" in comm:
+                assert comm["author"].startswith("@")
+
+    # activity check
+    assert "activity" in parsed
+    if parsed["activity"]:
+        for act in parsed["activity"]:
+            assert "id" not in act
+            assert "category" not in act
+            if "payload" in act:
+                assert "from_state_id" not in act["payload"]
+                assert "to_state_id" not in act["payload"]
+                assert "body_sha256" not in act["payload"]
+                assert "comment" not in act["payload"]
+                assert "body_markdown" not in act["payload"]
+            if "actor" in act:
+                assert str(act["actor"]).startswith("@") or str(act["actor"]).isalnum()
+
+    # provenance check when present
+    if "provenance" in parsed:
+        assert "created_by" in parsed["provenance"]
+        assert str(parsed["provenance"]["created_by"]).startswith("@")
+
+
+

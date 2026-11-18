@@ -1,0 +1,41 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-builder-fcb10f25/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-builder-fcb10f25
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 31 items
+
+mcp/tests/agent/test_read_ticket.py::test_case_1_positive_read_ticket_all_lods PASSED [  3%]
+mcp/tests/agent/test_read_ticket.py::test_case_2_rls_security_identical_404 PASSED [  6%]
+mcp/tests/agent/test_read_ticket.py::test_case_3_boundary_validation_read_ticket PASSED [  9%]
+mcp/tests/agent/test_read_ticket.py::test_case_5_read_ticket_help PASSED [ 12%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_formatting_helpers PASSED [ 16%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_additional_validations PASSED [ 19%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_comments_limit_zero PASSED [ 22%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_links_projection_unit PASSED [ 25%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_empty_links_omitted_standard PASSED [ 29%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_standard_populates_access_from_pill_label PASSED [ 32%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_full_compacts_manifest_activity_provenance PASSED [ 35%]
+mcp/tests/test_lod_help.py::test_parse_lod_valid_and_invalid PASSED      [ 38%]
+mcp/tests/test_lod_help.py::test_issue_summary_projection_keys PASSED    [ 41%]
+mcp/tests/test_lod_help.py::test_issue_summary_gate_included_only_when_pending PASSED [ 45%]
+mcp/tests/test_lod_help.py::test_issue_standard_and_full_projections PASSED [ 48%]
+mcp/tests/test_lod_help.py::test_provenance_overridden_boundary_cases PASSED [ 51%]
+mcp/tests/test_lod_help.py::test_compact_access_manifest_unit PASSED     [ 54%]
+mcp/tests/test_lod_help.py::test_doc_sticky_project_entity_projections PASSED [ 58%]
+mcp/tests/test_lod_help.py::test_issue_projections_edge_cases PASSED     [ 61%]
+mcp/tests/test_lod_help.py::test_build_help_with_mock_client PASSED      [ 64%]
+mcp/tests/test_lod_help.py::test_build_help_with_live_project_metadata_success PASSED [ 67%]
+mcp/tests/test_lod_help.py::test_build_help_modules_disabled_omits_modules PASSED [ 70%]
+mcp/tests/test_lod_help.py::test_build_help_yaml_rendering PASSED        [ 74%]
+mcp/tests/test_lod_help.py::test_mcp_transcript_help_and_ambiguity PASSED [ 77%]
+mcp/tests/test_lod_help.py::test_internal_exception_non_disclosure PASSED [ 80%]
+mcp/tests/test_lod_help.py::test_build_help_workflow_tools PASSED        [ 83%]
+mcp/tests/test_token_benchmark.py::test_token_benchmark_reduction_threshold PASSED [ 87%]
+mcp/tests/test_token_benchmark.py::test_count_tokens_punctuation_and_words PASSED [ 90%]
+mcp/tests/test_token_benchmark.py::test_run_benchmark_zero_tokens_raises_value_error PASSED [ 93%]
+mcp/tests/test_token_benchmark.py::test_main_cli_exit_zero PASSED        [ 96%]
+mcp/tests/test_token_benchmark.py::test_main_cli_exit_one_on_low_reduction PASSED [100%]
+
+============================== 31 passed in 3.06s ==============================

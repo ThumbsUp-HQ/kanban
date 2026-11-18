@@ -1,0 +1,130 @@
+{
+  "contract": "read_ticket(lod='full') serialization compaction",
+  "ticket": "KAN-6",
+  "before_and_after_examples": {
+    "access_manifest": {
+      "raw_from_api": {
+        "workspace_id": "018d45f0-b5d1-7c91-95c0-101112131415",
+        "project_id": "018d45f0-b5d1-7c91-95c0-202122232425",
+        "canonical_key": "KAN-142",
+        "object_type": "issue",
+        "pill_label": "Project",
+        "explicit_grant_count": 0,
+        "redacted_count": 0,
+        "inherited_scope": {
+          "workspace_id": "018d45f0-b5d1-7c91-95c0-101112131415",
+          "kind": "project",
+          "scope_label": "Engineering WS / Kanban",
+          "project_key": "KAN"
+        },
+        "users": [
+          {
+            "principal_id": "018d45f0-b5d1-7c91-95c0-303132333435",
+            "handle": "adam",
+            "grant_source": "role",
+            "capabilities": ["ADMIN", "EDIT", "VIEW"]
+          }
+        ],
+        "caller_capabilities": ["ADMIN", "EDIT", "VIEW"]
+      },
+      "compacted_mcp_output": {
+        "pill_label": "Project",
+        "inherited_scope": {
+          "kind": "project",
+          "scope_label": "Engineering WS / Kanban",
+          "project_key": "KAN"
+        },
+        "users": [
+          {
+            "handle": "@adam",
+            "grant_source": "role",
+            "capabilities": ["ADMIN", "EDIT", "VIEW"]
+          }
+        ],
+        "caller_capabilities": ["ADMIN", "EDIT", "VIEW"]
+      }
+    },
+    "activity": {
+      "raw_from_api": [
+        {
+          "id": "018d45f0-b5d1-7c91-95c0-404142434445",
+          "category": "state_transition",
+          "event_type": "ISSUE_STATE_TRANSITIONED",
+          "actor": {"handle": "adam", "type": "USER"},
+          "created_at": "2026-11-17T18:00:00Z",
+          "payload": {
+            "from_state": "Backlog",
+            "from_state_id": "018d45f0-b5d1-7c91-95c0-505152535455",
+            "to_state": "In Progress",
+            "to_state_id": "018d45f0-b5d1-7c91-95c0-606162636465",
+            "body_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "comment": "Beginning work on issue"
+          }
+        }
+      ],
+      "compacted_mcp_output": [
+        {
+          "event_type": "ISSUE_STATE_TRANSITIONED",
+          "actor": "@adam",
+          "created_at": "2026-11-17T18:00:00Z",
+          "payload": {
+            "from_state": "Backlog",
+            "to_state": "In Progress"
+          }
+        }
+      ]
+    },
+    "comments": {
+      "raw_from_api": [
+        {
+          "id": "018d45f0-b5d1-7c91-95c0-707172737475",
+          "author_id": "018d45f0-b5d1-7c91-95c0-303132333435",
+          "issue_id": "018d45f0-b5d1-7c91-95c0-808182838485",
+          "author": "adam",
+          "body_markdown": "Initial security audit comment for OIDC.",
+          "body_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "created_at": "2026-11-17T18:01:00Z"
+        }
+      ],
+      "compacted_mcp_output": [
+        {
+          "id": "018d45f0-b5d1-7c91-95c0-707172737475",
+          "author": "@adam",
+          "body_markdown": "Initial security audit comment for OIDC.",
+          "created_at": "2026-11-17T18:01:00Z"
+        }
+      ]
+    },
+    "provenance": {
+      "raw_from_api_overridden_false": {
+        "created_by": "adam",
+        "original_created_by": "adam",
+        "overridden": false
+      },
+      "compacted_mcp_output_overridden_false": {
+        "created_by": "@adam"
+      },
+      "raw_from_api_overridden_true": {
+        "created_by": "admin",
+        "original_created_by": "adam",
+        "overridden": true
+      },
+      "compacted_mcp_output_overridden_true": {
+        "created_by": "@admin",
+        "original_created_by": "@adam",
+        "overridden": true
+      }
+    },
+    "standard_lod_access_projection": {
+      "input_issue_data": {
+        "access": null,
+        "access_manifest": {
+          "pill_label": "Project"
+        }
+      },
+      "output_standard_lod": {
+        "access": "Project"
+      }
+    }
+  }
+}

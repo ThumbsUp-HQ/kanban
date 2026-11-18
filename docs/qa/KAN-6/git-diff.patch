@@ -1,0 +1,535 @@
+diff --git a/mcp/lod.py b/mcp/lod.py
+index f629744..7f10e3d 100644
+--- a/mcp/lod.py
++++ b/mcp/lod.py
+@@ -10,6 +10,7 @@ from mcp.errors import KbMcpError, McpErrorCode
+ 
+ __all__ = [
+     "Lod",
++    "_compact_access_manifest",
+     "parse_lod",
+     "project_doc",
+     "project_entity",
+@@ -115,32 +116,162 @@ def _project_issue_standard(raw: dict[str, Any]) -> dict[str, Any]:
+     return result
+ 
+ 
+-def _extract_provenance(raw: dict[str, Any]) -> dict[str, Any] | None:
++def _compact_manifest_principals(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
++    """Extract and compact users, groups, agents, and principals lists."""
++    groups_out: dict[str, list[dict[str, Any]]] = {}
++    for p_group in ("users", "groups", "agents", "principals"):
++        items = manifest.get(p_group)
++        if not isinstance(items, list):
++            continue
++        compact_list: list[dict[str, Any]] = []
++        for p in items:
++            if not isinstance(p, dict):
++                continue
++            entry: dict[str, Any] = {}
++            handle = p.get("handle") or p.get("slug") or p.get("name")
++            if handle:
++                s_handle = str(handle).strip()
++                entry["handle"] = s_handle if s_handle.startswith("@") else f"@{s_handle}"
++            if p.get("grant_source"):
++                entry["grant_source"] = p["grant_source"]
++            if p.get("capabilities"):
++                entry["capabilities"] = p["capabilities"]
++            if entry:
++                compact_list.append(entry)
++        if compact_list:
++            groups_out[p_group] = compact_list
++    return groups_out
++
++
++def _compact_inherited_scope(inh: object) -> object:
++    """Compact inherited scope object, retaining only kind, scope_label, project_key."""
++    if not isinstance(inh, dict):
++        return inh
++    compact_inh: dict[str, Any] = {}
++    for k in ("kind", "scope_label", "project_key"):
++        if inh.get(k) is not None:
++            compact_inh[k] = inh[k]
++    return compact_inh or None
++
++
++def _compact_access_manifest(manifest: object) -> object:
++    """Compact access_manifest by stripping internal UUIDs, zero counts, and redundant keys."""
++    if not isinstance(manifest, dict):
++        return manifest
++
++    compact: dict[str, Any] = {}
++    if manifest.get("pill_label"):
++        compact["pill_label"] = manifest["pill_label"]
++
++    eg_count = manifest.get("explicit_grant_count")
++    if isinstance(eg_count, int) and eg_count > 0:
++        compact["explicit_grant_count"] = eg_count
++
++    red_count = manifest.get("redacted_count")
++    if isinstance(red_count, int) and red_count > 0:
++        compact["redacted_count"] = red_count
++
++    if "inherited_scope" in manifest:
++        compact_inh = _compact_inherited_scope(manifest["inherited_scope"])
++        if compact_inh is not None:
++            compact["inherited_scope"] = compact_inh
++
++    compact.update(_compact_manifest_principals(manifest))
++
++    if manifest.get("caller_capabilities"):
++        compact["caller_capabilities"] = manifest["caller_capabilities"]
++    if manifest.get("scope"):
++        compact["scope"] = manifest["scope"]
++
++    return compact or manifest
++
++
++def _format_provenance_handle(val: object) -> str | None:
++    """Format provenance creator as clean @handle string."""
++    if isinstance(val, dict):
++        h = val.get("handle") or val.get("name") or val.get("id")
++        if h is not None:
++            s = str(h).strip()
++            return s if s.startswith("@") else f"@{s}"
++        return None
++    if isinstance(val, str) and val.strip():
++        s = val.strip()
++        return s if s.startswith("@") else f"@{s}"
++    return None
++
++
++def _get_raw_provenance_dict(raw: dict[str, Any]) -> dict[str, Any] | None:
++    """Extract dictionary representation of provenance from issue data."""
+     if "provenance" in raw:
+         prov_val = raw["provenance"]
+-        return prov_val if isinstance(prov_val, dict) else {"raw": prov_val}
+-    prov: dict[str, Any] = {}
+-    for pkey in ("created_by", "original_created_by", "creator_modified_by"):
++        if isinstance(prov_val, dict):
++            return prov_val
++        return None
++    prov_dict: dict[str, Any] = {}
++    for pkey in ("created_by", "original_created_by", "creator_modified_by", "overridden"):
+         if pkey in raw and raw[pkey] is not None:
+-            prov[pkey] = raw[pkey]
+-    return prov or None
++            prov_dict[pkey] = raw[pkey]
++    return prov_dict or None
+ 
+ 
+-def _project_issue_full(raw: dict[str, Any]) -> dict[str, Any]:
++def _extract_provenance(raw: dict[str, Any]) -> dict[str, Any] | None:
++    if "provenance" in raw and not isinstance(raw["provenance"], dict) and raw["provenance"]:
++        return {"raw": raw["provenance"]}
++
++    prov_dict = _get_raw_provenance_dict(raw)
++    if not prov_dict:
++        return None
++
+     result: dict[str, Any] = {}
+-    for k in _FULL_ISSUE_KEYS:
+-        if k in ("comments", "activity"):
+-            items = raw.get(k)
+-            if isinstance(items, list):
+-                result[k] = items[-50:]
+-            elif k in raw:
+-                result[k] = raw[k]
+-        elif k == "provenance":
+-            prov = _extract_provenance(raw)
+-            if prov is not None:
+-                result["provenance"] = prov
++    created_by = _format_provenance_handle(prov_dict.get("created_by"))
++    if created_by:
++        result["created_by"] = created_by
++
++    is_overridden_false = prov_dict.get("overridden") is False
++    if not is_overridden_false:
++        orig = _format_provenance_handle(prov_dict.get("original_created_by"))
++        if orig:
++            result["original_created_by"] = orig
++        if prov_dict.get("overridden") is True:
++            result["overridden"] = True
++
++    if prov_dict.get("creator_modified_by") is not None:
++        mod = _format_provenance_handle(prov_dict["creator_modified_by"])
++        if mod:
++            result["creator_modified_by"] = mod
++
++    if prov_dict.get("source"):
++        result["source"] = prov_dict["source"]
++
++    return result or None
++
++
++def _project_issue_full_field(k: str, raw: dict[str, Any], result: dict[str, Any]) -> None:
++    """Project a single field for full LOD issue."""
++    if k in ("comments", "activity"):
++        items = raw.get(k)
++        if isinstance(items, list):
++            result[k] = items[-50:]
+         elif k in raw:
+             result[k] = raw[k]
++    elif k == "access_manifest":
++        manifest = raw.get("access_manifest")
++        if manifest is not None:
++            compact_m = _compact_access_manifest(manifest)
++            if compact_m is not None:
++                result["access_manifest"] = compact_m
++    elif k == "provenance":
++        prov = _extract_provenance(raw)
++        if prov is not None:
++            result["provenance"] = prov
++    elif k in raw:
++        result[k] = raw[k]
++
++
++def _project_issue_full(raw: dict[str, Any]) -> dict[str, Any]:
++    result: dict[str, Any] = {}
++    for k in _FULL_ISSUE_KEYS:
++        _project_issue_full_field(k, raw, result)
+ 
+     gate = raw.get("gate")
+     if gate is not None:
+diff --git a/mcp/surfaces/agent/read_ticket.py b/mcp/surfaces/agent/read_ticket.py
+index c17e405..8907e03 100644
+--- a/mcp/surfaces/agent/read_ticket.py
++++ b/mcp/surfaces/agent/read_ticket.py
+@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Final
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+-from mcp.lod import project_issue
++from mcp.lod import _compact_access_manifest, project_issue
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -211,8 +211,38 @@ async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any]
+     return projected or None
+ 
+ 
+-async def _load_comments(issue_key: str, comments_limit: int, ctx: McpRequestContext) -> list[Any]:
+-    """Load comments for an issue up to limit."""
++def _format_comment_author(author: object) -> str:
++    """Format comment author as clean @handle string."""
++    if isinstance(author, dict):
++        h = author.get("handle") or author.get("name") or author.get("id") or ""
++        s = str(h).strip()
++        return s if s.startswith("@") else f"@{s}"
++    s = str(author or "").strip()
++    return s if s.startswith("@") else f"@{s}"
++
++
++def _compact_single_comment(item: dict[str, Any]) -> dict[str, Any]:
++    """Compact a single comment entry, omitting author_id, issue_id, body_sha256."""
++    entry: dict[str, Any] = {}
++    if "id" in item:
++        entry["id"] = item["id"]
++    if "author" in item:
++        entry["author"] = _format_comment_author(item["author"])
++    elif "author_id" in item:
++        entry["author"] = _format_comment_author(item["author_id"])
++    if "body_markdown" in item:
++        entry["body_markdown"] = item["body_markdown"]
++    if "created_at" in item:
++        entry["created_at"] = item["created_at"]
++    if "permalink" in item:
++        entry["permalink"] = item["permalink"]
++    return entry
++
++
++async def _load_comments(
++    issue_key: str, comments_limit: int, ctx: McpRequestContext
++) -> list[dict[str, Any]]:
++    """Load comments for an issue up to limit, compacting author handle and omitting UUIDs."""
+     if comments_limit <= 0 or ctx.client is None:
+         return []
+     try:
+@@ -223,16 +253,56 @@ async def _load_comments(issue_key: str, comments_limit: int, ctx: McpRequestCon
+             subject_token=ctx.subject_token,
+             mcp_session_id=ctx.session_id,
+         )
+-        if isinstance(comm_res, dict):
+-            raw_items = comm_res.get("items", [])
+-            return raw_items if isinstance(raw_items, list) else []
+     except KbMcpError:
+         return []
+-    return []
+-
+ 
+-async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[Any]:
+-    """Load activity history for an issue."""
++    if not isinstance(comm_res, dict):
++        return []
++    raw_items = comm_res.get("items", [])
++    if not isinstance(raw_items, list):
++        return []
++    return [_compact_single_comment(it) for it in raw_items if isinstance(it, dict)]
++
++
++def _format_activity_actor(actor: object) -> str:
++    """Format activity actor as @handle or agent slug."""
++    if isinstance(actor, dict):
++        h = (
++            actor.get("handle")
++            or actor.get("agent_slug")
++            or actor.get("slug")
++            or actor.get("name")
++            or ""
++        )
++        s = str(h).strip()
++        return s if s.startswith("@") else (f"@{s}" if actor.get("type") == "USER" else s)
++    s = str(actor or "").strip()
++    return s if s.startswith("@") else f"@{s}"
++
++
++def _compact_single_activity(item: dict[str, Any]) -> dict[str, Any]:
++    """Compact a single activity entry, omitting state IDs, sha256, and comments."""
++    act_entry: dict[str, Any] = {}
++    if "event_type" in item:
++        act_entry["event_type"] = item["event_type"]
++    if "actor" in item:
++        act_entry["actor"] = _format_activity_actor(item["actor"])
++    if "created_at" in item:
++        act_entry["created_at"] = item["created_at"]
++    if "payload" in item and isinstance(item["payload"], dict):
++        raw_payload = dict(item["payload"])
++        raw_payload.pop("from_state_id", None)
++        raw_payload.pop("to_state_id", None)
++        raw_payload.pop("body_sha256", None)
++        raw_payload.pop("comment", None)
++        raw_payload.pop("body_markdown", None)
++        if raw_payload:
++            act_entry["payload"] = raw_payload
++    return act_entry
++
++
++async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[dict[str, Any]]:
++    """Load activity history for an issue, compacting actor and omitting internal IDs."""
+     if ctx.client is None:
+         return []
+     try:
+@@ -243,12 +313,15 @@ async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[Any]:
+             subject_token=ctx.subject_token,
+             mcp_session_id=ctx.session_id,
+         )
+-        if isinstance(act_res, dict):
+-            raw_items = act_res.get("items", [])
+-            return raw_items if isinstance(raw_items, list) else []
+     except KbMcpError:
+         return []
+-    return []
++
++    if not isinstance(act_res, dict):
++        return []
++    raw_items = act_res.get("items", [])
++    if not isinstance(raw_items, list):
++        return []
++    return [_compact_single_activity(it) for it in raw_items if isinstance(it, dict)]
+ 
+ 
+ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+@@ -320,6 +393,13 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+ 
+     etag = issue_data.get("description_sha256") or issue_data.get("etag")
+ 
++    access_val = issue_data.get("access")
++    access_manifest_raw = issue_data.get("access_manifest")
++    if not access_val and isinstance(access_manifest_raw, dict):
++        access_val = access_manifest_raw.get("pill_label")
++
++    compact_manifest = _compact_access_manifest(access_manifest_raw)
++
+     normalized_issue: dict[str, Any] = {
+         "key": issue_key,
+         "workspace": issue_data.get("workspace"),
+@@ -336,8 +416,8 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+         "due_date": issue_data.get("due_date"),
+         "links": links,
+         "etag": etag,
+-        "access": issue_data.get("access"),
+-        "access_manifest": issue_data.get("access_manifest"),
++        "access": access_val,
++        "access_manifest": compact_manifest,
+         "comments": comments,
+         "activity": activity,
+         "provenance": issue_data.get("provenance"),
+diff --git a/mcp/tests/agent/test_read_ticket.py b/mcp/tests/agent/test_read_ticket.py
+index b1c6aec..9f40f84 100644
+--- a/mcp/tests/agent/test_read_ticket.py
++++ b/mcp/tests/agent/test_read_ticket.py
+@@ -380,3 +380,70 @@ async def test_read_ticket_empty_links_omitted_standard(agent_test_env: AgentTes
+     assert parsed_142["links"]["outbound"][0]["target"]["key"] == "KAN-150"
+ 
+ 
++@pytest.mark.asyncio
++async def test_read_ticket_standard_populates_access_from_pill_label(
++    agent_test_env: AgentTestEnv,
++) -> None:
++    """Verify read_ticket in standard LOD populates access from access_manifest pill_label."""
++    env = agent_test_env
++
++    res = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "standard"})
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert "access" in parsed
++    assert parsed["access"] == "Project"
++    assert "access_manifest" not in parsed
++
++
++@pytest.mark.asyncio
++async def test_read_ticket_full_compacts_manifest_activity_provenance(
++    agent_test_env: AgentTestEnv,
++) -> None:
++    """Verify read_ticket in full LOD compacts manifest, activity, comments, provenance."""
++    env = agent_test_env
++
++    res = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "full"})
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++
++    # access_manifest check
++    assert "access_manifest" in parsed
++    manifest = parsed["access_manifest"]
++    assert "workspace_id" not in manifest
++    assert "project_id" not in manifest
++    assert "canonical_key" not in manifest
++    assert "object_type" not in manifest
++    assert manifest.get("pill_label") == "Project"
++
++    # comments check
++    assert "comments" in parsed
++    if parsed["comments"]:
++        for comm in parsed["comments"]:
++            assert "author_id" not in comm
++            assert "issue_id" not in comm
++            assert "body_sha256" not in comm
++            if "author" in comm:
++                assert comm["author"].startswith("@")
++
++    # activity check
++    assert "activity" in parsed
++    if parsed["activity"]:
++        for act in parsed["activity"]:
++            assert "id" not in act
++            assert "category" not in act
++            if "payload" in act:
++                assert "from_state_id" not in act["payload"]
++                assert "to_state_id" not in act["payload"]
++                assert "body_sha256" not in act["payload"]
++                assert "comment" not in act["payload"]
++                assert "body_markdown" not in act["payload"]
++            if "actor" in act:
++                assert str(act["actor"]).startswith("@") or str(act["actor"]).isalnum()
++
++    # provenance check when present
++    if "provenance" in parsed:
++        assert "created_by" in parsed["provenance"]
++        assert str(parsed["provenance"]["created_by"]).startswith("@")
++
++
++
+diff --git a/mcp/tests/test_lod_help.py b/mcp/tests/test_lod_help.py
+index 6c74c70..b32add0 100644
+--- a/mcp/tests/test_lod_help.py
++++ b/mcp/tests/test_lod_help.py
+@@ -13,6 +13,7 @@ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+ from mcp.lod import (
+     Lod,
++    _compact_access_manifest,
+     parse_lod,
+     project_doc,
+     project_entity,
+@@ -129,6 +130,91 @@ def test_issue_standard_and_full_projections() -> None:
+     }
+ 
+ 
++def test_provenance_overridden_boundary_cases() -> None:
++    """Verify provenance overridden boundary cases for compact serialization."""
++    raw_overridden_true = {
++        "key": "KAN-1",
++        "summary": "Overridden creator",
++        "provenance": {
++            "created_by": "adam",
++            "original_created_by": "@bob",
++            "overridden": True,
++        },
++    }
++    full_true = project_issue(raw_overridden_true, Lod.FULL)
++    assert full_true["provenance"] == {
++        "created_by": "@adam",
++        "original_created_by": "@bob",
++        "overridden": True,
++    }
++
++    raw_overridden_false = {
++        "key": "KAN-2",
++        "summary": "Normal creator",
++        "provenance": {
++            "created_by": "@carol",
++            "original_created_by": "@carol",
++            "overridden": False,
++        },
++    }
++    full_false = project_issue(raw_overridden_false, Lod.FULL)
++    assert full_false["provenance"] == {
++        "created_by": "@carol",
++    }
++    assert "original_created_by" not in full_false["provenance"]
++    assert "overridden" not in full_false["provenance"]
++
++
++def test_compact_access_manifest_unit() -> None:
++    """Verify _compact_access_manifest strips internal UUIDs, zero counts, redundant keys."""
++    raw_manifest = {
++        "workspace_id": "018d-work-uuid",
++        "project_id": "018d-proj-uuid",
++        "canonical_key": "KAN-1",
++        "object_type": "issue",
++        "pill_label": "Project",
++        "explicit_grant_count": 0,
++        "redacted_count": 0,
++        "caller_capabilities": ["read", "write"],
++        "inherited_scope": {
++            "workspace_id": "018d-work-uuid",
++            "kind": "project",
++            "scope_label": "Project Scope",
++            "project_key": "KAN",
++        },
++        "users": [
++            {
++                "principal_id": "018d-user-uuid",
++                "handle": "alice",
++                "grant_source": "role",
++                "capabilities": ["admin"],
++            }
++        ],
++    }
++    compact = _compact_access_manifest(raw_manifest)
++    assert isinstance(compact, dict)
++    assert compact["pill_label"] == "Project"
++    assert "workspace_id" not in compact
++    assert "project_id" not in compact
++    assert "canonical_key" not in compact
++    assert "object_type" not in compact
++    assert "explicit_grant_count" not in compact
++    assert "redacted_count" not in compact
++    assert compact["caller_capabilities"] == ["read", "write"]
++    assert compact["inherited_scope"] == {
++        "kind": "project",
++        "scope_label": "Project Scope",
++        "project_key": "KAN",
++    }
++    assert compact["users"] == [
++        {
++            "handle": "@alice",
++            "grant_source": "role",
++            "capabilities": ["admin"],
++        }
++    ]
++
++
+ def test_doc_sticky_project_entity_projections() -> None:
+     """Verify project_entity dispatches correctly across doc, sticky, project kinds."""
+     raw_doc = {

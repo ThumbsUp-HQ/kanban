@@ -10,6 +10,7 @@ from mcp.errors import KbMcpError, McpErrorCode
 
 __all__ = [
     "Lod",
+    "_compact_access_manifest",
     "parse_lod",
     "project_doc",
     "project_entity",
@@ -115,32 +116,162 @@ def _project_issue_standard(raw: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _extract_provenance(raw: dict[str, Any]) -> dict[str, Any] | None:
+def _compact_manifest_principals(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Extract and compact users, groups, agents, and principals lists."""
+    groups_out: dict[str, list[dict[str, Any]]] = {}
+    for p_group in ("users", "groups", "agents", "principals"):
+        items = manifest.get(p_group)
+        if not isinstance(items, list):
+            continue
+        compact_list: list[dict[str, Any]] = []
+        for p in items:
+            if not isinstance(p, dict):
+                continue
+            entry: dict[str, Any] = {}
+            handle = p.get("handle") or p.get("slug") or p.get("name")
+            if handle:
+                s_handle = str(handle).strip()
+                entry["handle"] = s_handle if s_handle.startswith("@") else f"@{s_handle}"
+            if p.get("grant_source"):
+                entry["grant_source"] = p["grant_source"]
+            if p.get("capabilities"):
+                entry["capabilities"] = p["capabilities"]
+            if entry:
+                compact_list.append(entry)
+        if compact_list:
+            groups_out[p_group] = compact_list
+    return groups_out
+
+
+def _compact_inherited_scope(inh: object) -> object:
+    """Compact inherited scope object, retaining only kind, scope_label, project_key."""
+    if not isinstance(inh, dict):
+        return inh
+    compact_inh: dict[str, Any] = {}
+    for k in ("kind", "scope_label", "project_key"):
+        if inh.get(k) is not None:
+            compact_inh[k] = inh[k]
+    return compact_inh or None
+
+
+def _compact_access_manifest(manifest: object) -> object:
+    """Compact access_manifest by stripping internal UUIDs, zero counts, and redundant keys."""
+    if not isinstance(manifest, dict):
+        return manifest
+
+    compact: dict[str, Any] = {}
+    if manifest.get("pill_label"):
+        compact["pill_label"] = manifest["pill_label"]
+
+    eg_count = manifest.get("explicit_grant_count")
+    if isinstance(eg_count, int) and eg_count > 0:
+        compact["explicit_grant_count"] = eg_count
+
+    red_count = manifest.get("redacted_count")
+    if isinstance(red_count, int) and red_count > 0:
+        compact["redacted_count"] = red_count
+
+    if "inherited_scope" in manifest:
+        compact_inh = _compact_inherited_scope(manifest["inherited_scope"])
+        if compact_inh is not None:
+            compact["inherited_scope"] = compact_inh
+
+    compact.update(_compact_manifest_principals(manifest))
+
+    if manifest.get("caller_capabilities"):
+        compact["caller_capabilities"] = manifest["caller_capabilities"]
+    if manifest.get("scope"):
+        compact["scope"] = manifest["scope"]
+
+    return compact or manifest
+
+
+def _format_provenance_handle(val: object) -> str | None:
+    """Format provenance creator as clean @handle string."""
+    if isinstance(val, dict):
+        h = val.get("handle") or val.get("name") or val.get("id")
+        if h is not None:
+            s = str(h).strip()
+            return s if s.startswith("@") else f"@{s}"
+        return None
+    if isinstance(val, str) and val.strip():
+        s = val.strip()
+        return s if s.startswith("@") else f"@{s}"
+    return None
+
+
+def _get_raw_provenance_dict(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract dictionary representation of provenance from issue data."""
     if "provenance" in raw:
         prov_val = raw["provenance"]
-        return prov_val if isinstance(prov_val, dict) else {"raw": prov_val}
-    prov: dict[str, Any] = {}
-    for pkey in ("created_by", "original_created_by", "creator_modified_by"):
+        if isinstance(prov_val, dict):
+            return prov_val
+        return None
+    prov_dict: dict[str, Any] = {}
+    for pkey in ("created_by", "original_created_by", "creator_modified_by", "overridden"):
         if pkey in raw and raw[pkey] is not None:
-            prov[pkey] = raw[pkey]
-    return prov or None
+            prov_dict[pkey] = raw[pkey]
+    return prov_dict or None
+
+
+def _extract_provenance(raw: dict[str, Any]) -> dict[str, Any] | None:
+    if "provenance" in raw and not isinstance(raw["provenance"], dict) and raw["provenance"]:
+        return {"raw": raw["provenance"]}
+
+    prov_dict = _get_raw_provenance_dict(raw)
+    if not prov_dict:
+        return None
+
+    result: dict[str, Any] = {}
+    created_by = _format_provenance_handle(prov_dict.get("created_by"))
+    if created_by:
+        result["created_by"] = created_by
+
+    is_overridden_false = prov_dict.get("overridden") is False
+    if not is_overridden_false:
+        orig = _format_provenance_handle(prov_dict.get("original_created_by"))
+        if orig:
+            result["original_created_by"] = orig
+        if prov_dict.get("overridden") is True:
+            result["overridden"] = True
+
+    if prov_dict.get("creator_modified_by") is not None:
+        mod = _format_provenance_handle(prov_dict["creator_modified_by"])
+        if mod:
+            result["creator_modified_by"] = mod
+
+    if prov_dict.get("source"):
+        result["source"] = prov_dict["source"]
+
+    return result or None
+
+
+def _project_issue_full_field(k: str, raw: dict[str, Any], result: dict[str, Any]) -> None:
+    """Project a single field for full LOD issue."""
+    if k in ("comments", "activity"):
+        items = raw.get(k)
+        if isinstance(items, list):
+            result[k] = items[-50:]
+        elif k in raw:
+            result[k] = raw[k]
+    elif k == "access_manifest":
+        manifest = raw.get("access_manifest")
+        if manifest is not None:
+            compact_m = _compact_access_manifest(manifest)
+            if compact_m is not None:
+                result["access_manifest"] = compact_m
+    elif k == "provenance":
+        prov = _extract_provenance(raw)
+        if prov is not None:
+            result["provenance"] = prov
+    elif k in raw:
+        result[k] = raw[k]
 
 
 def _project_issue_full(raw: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for k in _FULL_ISSUE_KEYS:
-        if k in ("comments", "activity"):
-            items = raw.get(k)
-            if isinstance(items, list):
-                result[k] = items[-50:]
-            elif k in raw:
-                result[k] = raw[k]
-        elif k == "provenance":
-            prov = _extract_provenance(raw)
-            if prov is not None:
-                result["provenance"] = prov
-        elif k in raw:
-            result[k] = raw[k]
+        _project_issue_full_field(k, raw, result)
 
     gate = raw.get("gate")
     if gate is not None:

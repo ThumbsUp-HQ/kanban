@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Final
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
-from mcp.lod import project_issue
+from mcp.lod import _compact_access_manifest, project_issue
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -211,8 +211,38 @@ async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any] 
     return projected or None
 
 
-async def _load_comments(issue_key: str, comments_limit: int, ctx: McpRequestContext) -> list[Any]:
-    """Load comments for an issue up to limit."""
+def _format_comment_author(author: object) -> str:
+    """Format comment author as clean @handle string."""
+    if isinstance(author, dict):
+        h = author.get("handle") or author.get("name") or author.get("id") or ""
+        s = str(h).strip()
+        return s if s.startswith("@") else f"@{s}"
+    s = str(author or "").strip()
+    return s if s.startswith("@") else f"@{s}"
+
+
+def _compact_single_comment(item: dict[str, Any]) -> dict[str, Any]:
+    """Compact a single comment entry, omitting author_id, issue_id, body_sha256."""
+    entry: dict[str, Any] = {}
+    if "id" in item:
+        entry["id"] = item["id"]
+    if "author" in item:
+        entry["author"] = _format_comment_author(item["author"])
+    elif "author_id" in item:
+        entry["author"] = _format_comment_author(item["author_id"])
+    if "body_markdown" in item:
+        entry["body_markdown"] = item["body_markdown"]
+    if "created_at" in item:
+        entry["created_at"] = item["created_at"]
+    if "permalink" in item:
+        entry["permalink"] = item["permalink"]
+    return entry
+
+
+async def _load_comments(
+    issue_key: str, comments_limit: int, ctx: McpRequestContext
+) -> list[dict[str, Any]]:
+    """Load comments for an issue up to limit, compacting author handle and omitting UUIDs."""
     if comments_limit <= 0 or ctx.client is None:
         return []
     try:
@@ -223,16 +253,56 @@ async def _load_comments(issue_key: str, comments_limit: int, ctx: McpRequestCon
             subject_token=ctx.subject_token,
             mcp_session_id=ctx.session_id,
         )
-        if isinstance(comm_res, dict):
-            raw_items = comm_res.get("items", [])
-            return raw_items if isinstance(raw_items, list) else []
     except KbMcpError:
         return []
-    return []
+
+    if not isinstance(comm_res, dict):
+        return []
+    raw_items = comm_res.get("items", [])
+    if not isinstance(raw_items, list):
+        return []
+    return [_compact_single_comment(it) for it in raw_items if isinstance(it, dict)]
 
 
-async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[Any]:
-    """Load activity history for an issue."""
+def _format_activity_actor(actor: object) -> str:
+    """Format activity actor as @handle or agent slug."""
+    if isinstance(actor, dict):
+        h = (
+            actor.get("handle")
+            or actor.get("agent_slug")
+            or actor.get("slug")
+            or actor.get("name")
+            or ""
+        )
+        s = str(h).strip()
+        return s if s.startswith("@") else (f"@{s}" if actor.get("type") == "USER" else s)
+    s = str(actor or "").strip()
+    return s if s.startswith("@") else f"@{s}"
+
+
+def _compact_single_activity(item: dict[str, Any]) -> dict[str, Any]:
+    """Compact a single activity entry, omitting state IDs, sha256, and comments."""
+    act_entry: dict[str, Any] = {}
+    if "event_type" in item:
+        act_entry["event_type"] = item["event_type"]
+    if "actor" in item:
+        act_entry["actor"] = _format_activity_actor(item["actor"])
+    if "created_at" in item:
+        act_entry["created_at"] = item["created_at"]
+    if "payload" in item and isinstance(item["payload"], dict):
+        raw_payload = dict(item["payload"])
+        raw_payload.pop("from_state_id", None)
+        raw_payload.pop("to_state_id", None)
+        raw_payload.pop("body_sha256", None)
+        raw_payload.pop("comment", None)
+        raw_payload.pop("body_markdown", None)
+        if raw_payload:
+            act_entry["payload"] = raw_payload
+    return act_entry
+
+
+async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[dict[str, Any]]:
+    """Load activity history for an issue, compacting actor and omitting internal IDs."""
     if ctx.client is None:
         return []
     try:
@@ -243,12 +313,15 @@ async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[Any]:
             subject_token=ctx.subject_token,
             mcp_session_id=ctx.session_id,
         )
-        if isinstance(act_res, dict):
-            raw_items = act_res.get("items", [])
-            return raw_items if isinstance(raw_items, list) else []
     except KbMcpError:
         return []
-    return []
+
+    if not isinstance(act_res, dict):
+        return []
+    raw_items = act_res.get("items", [])
+    if not isinstance(raw_items, list):
+        return []
+    return [_compact_single_activity(it) for it in raw_items if isinstance(it, dict)]
 
 
 async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -320,6 +393,13 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
 
     etag = issue_data.get("description_sha256") or issue_data.get("etag")
 
+    access_val = issue_data.get("access")
+    access_manifest_raw = issue_data.get("access_manifest")
+    if not access_val and isinstance(access_manifest_raw, dict):
+        access_val = access_manifest_raw.get("pill_label")
+
+    compact_manifest = _compact_access_manifest(access_manifest_raw)
+
     normalized_issue: dict[str, Any] = {
         "key": issue_key,
         "workspace": issue_data.get("workspace"),
@@ -336,8 +416,8 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         "due_date": issue_data.get("due_date"),
         "links": links,
         "etag": etag,
-        "access": issue_data.get("access"),
-        "access_manifest": issue_data.get("access_manifest"),
+        "access": access_val,
+        "access_manifest": compact_manifest,
         "comments": comments,
         "activity": activity,
         "provenance": issue_data.get("provenance"),
