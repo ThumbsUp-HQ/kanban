@@ -407,7 +407,21 @@ export function Sidebar({
     if (fetchedProjects.length === 0) {
       return primary ? [primary] : [];
     }
-    if (primary && !fetchedProjects.some((p) => p.key === primary.key)) {
+    if (primary) {
+      const idx = fetchedProjects.findIndex((p) => p.key === primary.key);
+      if (idx >= 0) {
+        const existing = fetchedProjects[idx];
+        if (existing) {
+          const copy = [...fetchedProjects];
+          copy[idx] = {
+            ...existing,
+            key: existing.key,
+            modules_enabled: modulesEnabled,
+            name: projectName ?? existing.name,
+          };
+          return copy;
+        }
+      }
       return [primary, ...fetchedProjects];
     }
     return fetchedProjects;

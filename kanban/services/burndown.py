@@ -38,7 +38,7 @@ def _resolve_burndown_window(cycle: Cycle) -> tuple[dt.date, dt.date]:
                 code="DATE_ORDER",
                 status=422,
                 title="Invalid Date Order",
-                detail="end_date cannot be earlier than start_date",
+                detail="End date cannot be earlier than start date.",
             )
         range_days = (cycle.end_date - cycle.start_date).days + 1
         if range_days > MAX_BURNDOWN_RANGE_DAYS:

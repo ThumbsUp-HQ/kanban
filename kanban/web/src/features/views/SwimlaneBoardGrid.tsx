@@ -9,6 +9,8 @@ export interface SwimlaneBoardGridProps {
   groupBy?: GroupAxis | undefined;
   subGroupBy?: GroupAxis | undefined;
   modulesEnabled?: boolean | undefined;
+  projectCycles?: { id: string; name: string }[] | undefined;
+  projectModules?: { id: string; name: string }[] | undefined;
   selectedIds?: string[] | undefined;
   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
   focusedKey?: string | null | undefined;
@@ -33,6 +35,13 @@ interface SwimlaneDef {
 function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
   if (groupBy === 'priority') {
     return issue.priority.slug.toLowerCase();
+  }
+  if (groupBy === 'cycle') {
+    return issue.cycle_id ?? 'none';
+  }
+  if (groupBy === 'module') {
+    const firstMod = issue.modules?.[0]?.id ?? issue.module_ids?.[0];
+    return firstMod ?? 'none';
   }
   const sName = normalizeStateKey(issue.state.name);
   if (sName.includes('backlog')) return 'backlog';
@@ -73,7 +82,7 @@ function getIssueLaneId(
     return issue.cycle_id ?? 'none';
   }
   if (subGroupBy === 'module' && modulesEnabled) {
-    const firstMod = issue.module_ids?.[0];
+    const firstMod = issue.modules?.[0]?.id ?? issue.module_ids?.[0];
     return firstMod ?? 'none';
   }
   return 'all';
@@ -85,6 +94,8 @@ export function SwimlaneBoardGrid({
   groupBy = 'state',
   subGroupBy = 'priority',
   modulesEnabled = true,
+  projectCycles,
+  projectModules,
   selectedIds = [],
   onToggleSelect,
   focusedKey = null,
@@ -92,6 +103,41 @@ export function SwimlaneBoardGrid({
 }: SwimlaneBoardGridProps): JSX.Element {
   // Collapsed bands map: laneId -> boolean
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
+
+  const allCycles = useMemo(() => {
+    const map = new Map<string, string>();
+    if (projectCycles) {
+      for (const c of projectCycles) map.set(c.id, c.name);
+    }
+    for (const issue of issues) {
+      if (issue.cycle_id) {
+        map.set(
+          issue.cycle_id,
+          issue.cycle?.name ?? (issue.cycle_id === 'cycle-1' ? 'Cycle 1' : `Cycle ${issue.cycle_id.slice(0, 6)}`)
+        );
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [projectCycles, issues]);
+
+  const allModules = useMemo(() => {
+    const map = new Map<string, string>();
+    if (projectModules) {
+      for (const m of projectModules) map.set(m.id, m.name);
+    }
+    for (const issue of issues) {
+      if (issue.modules && issue.modules.length > 0) {
+        for (const m of issue.modules) map.set(m.id, m.name);
+      } else if (issue.module_ids && issue.module_ids.length > 0) {
+        for (const mid of issue.module_ids) {
+          if (!map.has(mid)) {
+            map.set(mid, mid === 'mod-1' ? 'Auth Core' : `Module ${mid.slice(0, 6)}`);
+          }
+        }
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [projectModules, issues]);
 
   // 1. Determine Column Definitions based on groupBy axis (default 'state')
   const columns: ColumnDef[] = useMemo(() => {
@@ -104,6 +150,24 @@ export function SwimlaneBoardGrid({
         { id: 'none', name: 'None', sortOrder: 50 },
       ];
     }
+    if (groupBy === 'cycle') {
+      const cycleCols: ColumnDef[] = allCycles.map((c, idx) => ({
+        id: c.id,
+        name: c.name,
+        sortOrder: (idx + 1) * 10,
+      }));
+      cycleCols.push({ id: 'none', name: 'No Cycle', sortOrder: 9999 });
+      return cycleCols;
+    }
+    if (groupBy === 'module' && modulesEnabled) {
+      const modCols: ColumnDef[] = allModules.map((m, idx) => ({
+        id: m.id,
+        name: m.name,
+        sortOrder: (idx + 1) * 10,
+      }));
+      modCols.push({ id: 'none', name: 'No Module', sortOrder: 9999 });
+      return modCols;
+    }
     // Default: State columns
     return [
       { id: 'backlog', name: 'Backlog', sortOrder: 10 },
@@ -113,7 +177,7 @@ export function SwimlaneBoardGrid({
       { id: 'done', name: 'Done', sortOrder: 50 },
       { id: 'cancelled', name: 'Cancelled', sortOrder: 60 },
     ];
-  }, [groupBy]);
+  }, [groupBy, allCycles, allModules, modulesEnabled]);
 
   // 2. Determine Horizontal Swimlane Definitions based on subGroupBy axis
   const swimlanes: SwimlaneDef[] = useMemo(() => {
@@ -134,20 +198,26 @@ export function SwimlaneBoardGrid({
       ];
     }
     if (subGroupBy === 'cycle') {
-      return [
-        { id: 'cycle-1', title: 'Cycle 1', sortOrder: 10 },
-        { id: 'none', title: 'No Cycle', sortOrder: 99 },
-      ];
+      const cycleLanes: SwimlaneDef[] = allCycles.map((c, idx) => ({
+        id: c.id,
+        title: c.name,
+        sortOrder: (idx + 1) * 10,
+      }));
+      cycleLanes.push({ id: 'none', title: 'No Cycle', sortOrder: 9999 });
+      return cycleLanes;
     }
     if (subGroupBy === 'module' && modulesEnabled) {
-      return [
-        { id: 'mod-1', title: 'Auth Core', sortOrder: 10 },
-        { id: 'none', title: 'No Module', sortOrder: 99 },
-      ];
+      const modLanes: SwimlaneDef[] = allModules.map((m, idx) => ({
+        id: m.id,
+        title: m.name,
+        sortOrder: (idx + 1) * 10,
+      }));
+      modLanes.push({ id: 'none', title: 'No Module', sortOrder: 9999 });
+      return modLanes;
     }
     // Fallback single swimlane if none or unknown
     return [{ id: 'all', title: 'All Work Items', sortOrder: 10 }];
-  }, [subGroupBy, modulesEnabled]);
+  }, [subGroupBy, modulesEnabled, allCycles, allModules]);
 
   // 3. Partition issues into 2D grid [laneId][colId]
   const partitionedGrid = useMemo(() => {

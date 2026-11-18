@@ -409,4 +409,62 @@ describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
     const card = screen.getByText('Exotic Issue');
     expect(card).toBeDefined();
   });
+
+  it('supports groupBy=cycle and groupBy=module column grouping', () => {
+    const first = FIXTURE_12_ISSUES[0];
+    const second = FIXTURE_12_ISSUES[1];
+    if (!first || !second) throw new Error('missing fixtures');
+
+    const cycleIssues: IssueItem[] = [
+      {
+        ...first,
+        id: 'kan-501',
+        key: 'KAN-501',
+        summary: 'Cycle 1 Item',
+        cycle_id: 'cyc-1',
+        cycle: { id: 'cyc-1', name: 'Sprint Alpha' },
+        module_ids: ['mod-1'],
+        modules: [{ id: 'mod-1', name: 'Auth Module' }],
+      },
+      {
+        ...second,
+        id: 'kan-502',
+        key: 'KAN-502',
+        summary: 'No Cycle Item',
+        cycle_id: null,
+        module_ids: [],
+      },
+    ];
+
+    const { rerender } = render(
+      <SwimlaneBoardGrid
+        issues={cycleIssues}
+        projectKey="KAN"
+        groupBy="cycle"
+        subGroupBy="none"
+        modulesEnabled={true}
+        projectCycles={[{ id: 'cyc-1', name: 'Sprint Alpha' }]}
+      />
+    );
+
+    // Verify column headers for Sprint Alpha and No Cycle
+    expect(screen.getByRole('columnheader', { name: /Sprint Alpha/i })).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /No Cycle/i })).toBeDefined();
+
+    // Verify groupBy=module
+    rerender(
+      <SwimlaneBoardGrid
+        issues={cycleIssues}
+        projectKey="KAN"
+        groupBy="module"
+        subGroupBy="none"
+        modulesEnabled={true}
+        projectModules={[{ id: 'mod-1', name: 'Auth Module' }]}
+      />
+    );
+
+    // Verify column headers for Auth Module and No Module
+    expect(screen.getByRole('columnheader', { name: /Auth Module/i })).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /No Module/i })).toBeDefined();
+  });
 });

@@ -1,0 +1,63 @@
+================================================================================
+Automated Unit Test Results: KANBA-211
+Branch: feat/w4-cycles
+================================================================================
+
+1. Vitest Unit Test Suite & Coverage:
+--------------------------------------------------------------------------------
+Command:
+COVERAGE_INCLUDE="src/features/drawer-rail/PropertiesRail.tsx,src/features/views/SwimlaneBoardGrid.tsx,src/features/list/ListRow.tsx,src/features/table/TableView.tsx,src/app/routes.tsx" npm --prefix kanban/web run test:unit -- --coverage src/app/routes.test.tsx src/features/drawer-rail/PropertiesRail.test.tsx src/features/views/SwimlaneBoardGrid.test.tsx src/features/list/ListRow.test.tsx src/features/table/TableView.test.tsx src/app/AppShell.test.tsx
+
+Test Files: 6 passed (6)
+Tests:      74 passed (74)
+Duration:   6.90s
+
+Coverage Report:
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   95.70 |    88.74 |   93.83 |   96.72 |                   
+ app/routes.tsx     |   93.57 |    85.65 |   92.08 |   95.86 | ...,815,1207,1427 
+ PropertiesRail.tsx|  100.00 |    82.14 |  100.00 |  100.00 | ...36-138,181,210 
+ ListRow.tsx       |  100.00 |   100.00 |  100.00 |  100.00 |                   
+ TableView.tsx     |   96.00 |    91.77 |   91.66 |   95.83 | 266,283-285,370   
+ SwimlaneBoardGrid |  100.00 |    94.32 |  100.00 |  100.00 | ...33-239,257,307 
+-------------------|---------|----------|---------|---------|-------------------
+
+Overall Lines Coverage across touched components: 96.72% (exceeds >=95% requirement)
+
+2. Backend Pytest Suite:
+--------------------------------------------------------------------------------
+Command:
+uv run pytest kanban/tests/api/test_issues.py kanban/tests/services/
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+collected 93 items
+
+kanban/tests/api/test_issues.py ...............                          [ 16%]
+kanban/tests/services/test_activity.py ......                            [ 22%]
+kanban/tests/services/test_board_rank.py ........                        [ 31%]
+kanban/tests/services/test_burndown.py .....                             [ 36%]
+kanban/tests/services/test_docs_service_unit.py ........                 [ 45%]
+kanban/tests/services/test_issue_keys.py .                               [ 46%]
+kanban/tests/services/test_lexorank.py .....                             [ 51%]
+kanban/tests/services/test_markdown_outline.py ........                  [ 60%]
+kanban/tests/services/test_mentions.py ..                                [ 62%]
+kanban/tests/services/test_notifications.py ........                     [ 70%]
+kanban/tests/services/test_object_ref.py ...                             [ 74%]
+kanban/tests/services/test_query_engine.py .....                         [ 79%]
+kanban/tests/services/test_snippets.py ............                      [ 92%]
+kanban/tests/services/test_sticky_heuristic.py .......                   [100%]
+
+============================= 93 passed in 27.75s ==============================
+
+3. Playwright E2E Suite:
+--------------------------------------------------------------------------------
+Command:
+E2E_PORT=4191 npm --prefix kanban/web run e2e -- e2e/views/kanba-211-screenshots.spec.ts
+
+Running 21 tests using 10 workers
+  21 passed (31.2s)
+================================================================================

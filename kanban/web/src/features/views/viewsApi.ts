@@ -55,6 +55,16 @@ export interface RestrictedParentSummary {
   label: string;
 }
 
+export interface CycleSummary {
+  id: string;
+  name: string;
+}
+
+export interface ModuleSummary {
+  id: string;
+  name: string;
+}
+
 export interface IssueItem {
   id: string;
   key: string;
@@ -66,9 +76,11 @@ export interface IssueItem {
   start_date?: string | null;
   due_date?: string | null;
   cycle_id?: string | null;
+  cycle?: CycleSummary | null;
   parent?: NormalParentSummary | RestrictedParentSummary | null;
   labels?: LabelSummary[];
   module_ids?: string[] | null;
+  modules?: ModuleSummary[];
   assignees?: AssigneeItem[];
   board_rank?: string;
   created_by_id?: string;

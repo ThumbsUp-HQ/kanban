@@ -48,11 +48,13 @@ from database.models import (
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.issues import (
     ArchiveEligibility,
+    CycleSummary,
     IssueCreate,
     IssueList,
     IssuePatch,
     IssueResponse,
     LabelSummary,
+    ModuleSummary,
     NormalParentSummary,
     PrioritySummary,
     RestrictedParentSummary,
@@ -80,7 +82,7 @@ from kanban.workflows.engine import TransitionEngine
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from datetime import date
+    from datetime import date, datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -502,6 +504,62 @@ async def _resolve_labels(
     return [lbl.id for lbl in rows]
 
 
+async def _resolve_issue_modules(
+    session: AsyncSession, project: Project, issue_id: uuid.UUID
+) -> tuple[list[uuid.UUID] | None, list[ModuleSummary]]:
+    """Fetch module IDs and summaries for an issue if modules are enabled on the project."""
+    if not project.modules_enabled:
+        return None, []
+    mod_rows = (
+        (
+            await session.execute(
+                select(Module)
+                .join(IssueModule, IssueModule.module_id == Module.id)
+                .where(IssueModule.issue_id == issue_id)
+                .order_by(Module.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [m.id for m in mod_rows], [ModuleSummary(id=m.id, name=m.name) for m in mod_rows]
+
+
+async def _resolve_archive_eligibility(
+    session: AsyncSession, issue: Issue, state: WorkflowState, archived_at: datetime | None
+) -> ArchiveEligibility:
+    """Calculate archive eligibility status and explanatory reason for an issue."""
+    if archived_at is not None:
+        return ArchiveEligibility(
+            allowed=False,
+            reason="Issue is already archived",
+        )
+    if state.state_group not in ("completed", "cancelled"):
+        return ArchiveEligibility(
+            allowed=False,
+            reason="Only completed or canceled work items can be archived",
+        )
+    sub_stmt = (
+        select(Issue.id)
+        .join(WorkflowState, WorkflowState.id == Issue.state_id)
+        .join(ObjectRecord, ObjectRecord.id == Issue.id)
+        .where(
+            Issue.parent_issue_id == issue.id,
+            ObjectRecord.deleted_at.is_(None),
+            ObjectRecord.archived_at.is_(None),
+            WorkflowState.state_group.notin_(["completed", "cancelled"]),
+        )
+        .limit(1)
+    )
+    has_open_sub = (await session.execute(sub_stmt)).first() is not None
+    if has_open_sub:
+        return ArchiveEligibility(
+            allowed=False,
+            reason="Cannot archive work item with open sub-issues",
+        )
+    return ArchiveEligibility(allowed=True, reason=None)
+
+
 async def serialize_issue(
     session: AsyncSession, caller: PrincipalContext, issue: Issue
 ) -> IssueResponse:
@@ -543,19 +601,13 @@ async def serialize_issue(
         .all()
     )
 
-    module_ids: list[uuid.UUID] | None = None
-    if project.modules_enabled:
-        module_ids = list(
-            (
-                await session.execute(
-                    select(IssueModule.module_id)
-                    .where(IssueModule.issue_id == issue.id)
-                    .order_by(IssueModule.module_id)
-                )
-            )
-            .scalars()
-            .all()
-        )
+    module_ids, module_summaries = await _resolve_issue_modules(session, project, issue.id)
+
+    cycle_summary: CycleSummary | None = None
+    if issue.cycle_id is not None:
+        cycle_obj = await session.get(Cycle, issue.cycle_id)
+        if cycle_obj is not None:
+            cycle_summary = CycleSummary(id=cycle_obj.id, name=cycle_obj.name)
 
     manifest = await build_access_manifest(session, caller, issue.id)
     caps = await evaluate_capabilities(session, caller, issue.id)
@@ -566,38 +618,7 @@ async def serialize_issue(
 
     obj = await session.get(ObjectRecord, issue.id)
     archived_at = obj.archived_at if obj is not None else None
-
-    if archived_at is not None:
-        archive_eligibility = ArchiveEligibility(
-            allowed=False,
-            reason="Issue is already archived",
-        )
-    elif state.state_group not in ("completed", "cancelled"):
-        archive_eligibility = ArchiveEligibility(
-            allowed=False,
-            reason="Only completed or canceled work items can be archived",
-        )
-    else:
-        sub_stmt = (
-            select(Issue.id)
-            .join(WorkflowState, WorkflowState.id == Issue.state_id)
-            .join(ObjectRecord, ObjectRecord.id == Issue.id)
-            .where(
-                Issue.parent_issue_id == issue.id,
-                ObjectRecord.deleted_at.is_(None),
-                ObjectRecord.archived_at.is_(None),
-                WorkflowState.state_group.notin_(["completed", "cancelled"]),
-            )
-            .limit(1)
-        )
-        has_open_sub = (await session.execute(sub_stmt)).first() is not None
-        if has_open_sub:
-            archive_eligibility = ArchiveEligibility(
-                allowed=False,
-                reason="Cannot archive work item with open sub-issues",
-            )
-        else:
-            archive_eligibility = ArchiveEligibility(allowed=True, reason=None)
+    archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
 
     pending_gate = await resolve_pending_gate(session, issue)
     latest_gate_verdict = await resolve_latest_gate_verdict(session, issue)
@@ -617,11 +638,13 @@ async def serialize_issue(
         start_date=issue.start_date,
         due_date=issue.due_date,
         cycle_id=issue.cycle_id,
+        cycle=cycle_summary,
         parent=parent_summary,
         labels=[
             LabelSummary(id=lbl.id, name=lbl.name, color_hex=lbl.color_hex) for lbl in label_rows
         ],
         module_ids=module_ids,
+        modules=module_summaries,
         assignees=assignee_items,
         board_rank=issue.board_rank,
         created_by_id=issue.created_by_id,

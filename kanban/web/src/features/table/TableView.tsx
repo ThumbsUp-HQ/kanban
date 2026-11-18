@@ -352,15 +352,31 @@ export function TableView({
                       if (colId === 'cycle') {
                         return (
                           <td key={colId}>
-                            {issue.cycle_id ? <span className="cycle-pill">Cycle</span> : null}
+                            {issue.cycle_id ? (
+                              <span className="cycle-pill" data-testid="cycle-pill">
+                                🔄 {issue.cycle?.name ?? 'Cycle'}
+                              </span>
+                            ) : null}
                           </td>
                         );
                       }
                       if (colId === 'modules') {
                         return (
                           <td key={colId}>
-                            {issue.module_ids && issue.module_ids.length > 0 ? (
-                              <span className="module-pill">Modules</span>
+                            {modulesEnabled && issue.module_ids && issue.module_ids.length > 0 ? (
+                              <div className="table-chips-wrap">
+                                {issue.modules && issue.modules.length > 0 ? (
+                                  issue.modules.map((m) => (
+                                    <span key={m.id} className="module-pill" data-testid="module-pill">
+                                      📦 {m.name}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="module-pill" data-testid="module-pill">
+                                    📦 Module
+                                  </span>
+                                )}
+                              </div>
                             ) : null}
                           </td>
                         );

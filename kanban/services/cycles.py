@@ -67,7 +67,7 @@ def _validate_dates(start_date: date | None, end_date: date | None) -> None:
             code="DATE_ORDER",
             status=422,
             title="Invalid Date Order",
-            detail="end_date cannot be earlier than start_date",
+            detail="End date cannot be earlier than start date.",
         )
 
 

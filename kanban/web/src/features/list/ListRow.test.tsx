@@ -78,4 +78,60 @@ describe('ListRow', () => {
     const duePill = document.querySelector('.due-pill--overdue');
     expect(duePill).toBeDefined();
   });
+
+  it('renders real cycle name, real module pills, and handles click and Enter keyboard navigation', () => {
+    const onOpenPeek = vi.fn();
+    const issueWithCycleAndModules: IssueItem = {
+      id: 'row-3',
+      key: 'KAN-203',
+      summary: 'Cycle and Modules test',
+      state: { id: 's-1', name: 'To Do', group: 'unstarted' },
+      priority: { slug: 'medium', label: 'Medium', sort_order: 30 },
+      cycle_id: 'cyc-1',
+      cycle: { id: 'cyc-1', name: 'Sprint 1' },
+      module_ids: ['mod-1', 'mod-2'],
+      modules: [
+        { id: 'mod-1', name: 'Auth Core' },
+        { id: 'mod-2', name: 'UI System' },
+      ],
+    };
+
+    const { rerender } = render(
+      <ListRow
+        issue={issueWithCycleAndModules}
+        modulesEnabled={true}
+        onOpenPeek={onOpenPeek}
+      />
+    );
+
+    // Verify real cycle name rendered
+    expect(screen.getByText(/Sprint 1/)).toBeDefined();
+    // Verify real module pills rendered
+    expect(screen.getByText(/Auth Core/)).toBeDefined();
+    expect(screen.getByText(/UI System/)).toBeDefined();
+
+    // Click row navigates to peek
+    const row = screen.getByRole('row');
+    fireEvent.click(row);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-203');
+
+    // Press Enter navigates to peek
+    fireEvent.keyDown(row, { key: 'Enter' });
+    expect(onOpenPeek).toHaveBeenCalledTimes(2);
+
+    // Click key link navigates to peek
+    const keyLink = screen.getByText('KAN-203');
+    fireEvent.click(keyLink);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-203');
+
+    // When onOpenPeek is omitted, Enter sets window.location.href
+    rerender(
+      <ListRow
+        issue={issueWithCycleAndModules}
+        modulesEnabled={true}
+      />
+    );
+    fireEvent.click(keyLink);
+    fireEvent.keyDown(row, { key: 'Enter' });
+  });
 });

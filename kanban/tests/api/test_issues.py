@@ -794,6 +794,9 @@ async def test_comprehensive_field_patching_and_validation(  # noqa: PLR0915
     root_key = r_root.json()["key"]
     root_etag = r_root.headers["etag"]
     assert r_root.json()["module_ids"] == [str(m1_id)]
+    assert len(r_root.json()["modules"]) == 1
+    assert r_root.json()["modules"][0]["id"] == str(m1_id)
+    assert r_root.json()["modules"][0]["name"] == "Module 1"
 
     # Patch root with Weak ETag W/"..."
     r_weak = await client.patch(
@@ -850,6 +853,9 @@ async def test_comprehensive_field_patching_and_validation(  # noqa: PLR0915
     )
     assert r_cyc.status_code == 200
     assert r_cyc.json()["cycle_id"] == str(c1_id)
+    assert r_cyc.json()["cycle"] is not None
+    assert r_cyc.json()["cycle"]["id"] == str(c1_id)
+    assert r_cyc.json()["cycle"]["name"] == "Sprint 1"
 
     r_cyc_clear = await client.patch(
         f"/api/v1/issues/{root_key}",
@@ -857,12 +863,17 @@ async def test_comprehensive_field_patching_and_validation(  # noqa: PLR0915
     )
     assert r_cyc_clear.status_code == 200
     assert r_cyc_clear.json()["cycle_id"] is None
+    assert r_cyc_clear.json()["cycle"] is None
 
     # Patch module_ids -> change to m2, then clear
     r_mod_change = await client.patch(
         f"/api/v1/issues/{root_key}",
         json={"module_ids": [str(m2_id)]},
     )
+    assert r_mod_change.status_code == 200
+    assert r_mod_change.json()["module_ids"] == [str(m2_id)]
+    assert len(r_mod_change.json()["modules"]) == 1
+    assert r_mod_change.json()["modules"][0]["name"] == "Module 2"
     assert r_mod_change.status_code == 200
     assert r_mod_change.json()["module_ids"] == [str(m2_id)]
 

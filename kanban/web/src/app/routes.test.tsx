@@ -17,6 +17,8 @@ import {
   ProjectSavedViewsView,
   WorkspaceHomeView,
   DraftsWorkspaceView,
+  AdminRouteGuard,
+  DraftsWorkspaceRouteGuard,
 } from './routes';
 import { saveDraft } from '../features/drafts/draftsStore';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -1169,6 +1171,401 @@ describe('IssuesWorkspaceRoute', () => {
       expect(await screen.findByTestId('no-accessible-projects')).toBeDefined();
       expect(screen.getAllByText('No accessible projects').length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByTestId('project-card-KAN')).toBeNull();
+    });
+  });
+
+  describe('ProjectCyclesView and ProjectModulesView lifecycle actions (KANBA-211)', () => {
+    let lifecycleClient: QueryClient;
+
+    beforeEach(() => {
+      lifecycleClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      vi.restoreAllMocks();
+    });
+
+    it('enforces RBAC for cycle Delete button and supports Edit and Complete with rollover', async () => {
+      const calls: {
+        method: string;
+        path: string;
+        params?: Record<string, unknown> | undefined;
+        body?: Record<string, unknown> | undefined;
+      }[] = [];
+      let cyclesList = [
+        { id: 'c-1', name: 'Sprint 1', status: 'in_progress', start_date: '2026-03-01', end_date: '2026-03-14' },
+        { id: 'c-2', name: 'Sprint 2', status: 'upcoming', start_date: '2026-03-15', end_date: '2026-03-28' },
+        { id: 'c-completed', name: 'Sprint 0', status: 'completed', start_date: '2026-02-15', end_date: '2026-02-28' },
+      ];
+
+      vi.spyOn(client, 'apiFetch').mockImplementation((method, path, options?: { params?: unknown; body?: unknown }) => {
+        const m = method.toUpperCase();
+        const url = path;
+        calls.push({
+          method: m,
+          path: url,
+          params: options?.params as Record<string, unknown> | undefined,
+          body: options?.body as Record<string, unknown> | undefined,
+        });
+
+        if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
+          return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['VIEW', 'EDIT'], modules_enabled: true });
+        }
+        if (url.includes('/cycles') && m === 'GET') {
+          return Promise.resolve(cyclesList);
+        }
+        if (url.includes('/cycles') && m === 'PATCH') {
+          const body = options?.body as Record<string, unknown>;
+          cyclesList = cyclesList.map((c) => (c.id === 'c-1' ? { ...c, ...body } : c));
+          return Promise.resolve(cyclesList[0]);
+        }
+        if (url.includes('/complete') && m === 'POST') {
+          cyclesList = cyclesList.map((c) => (c.id === 'c-1' ? { ...c, status: 'completed' } : c));
+          return Promise.resolve({ ...cyclesList[0], status: 'completed' });
+        }
+        if (m === 'DELETE') {
+          cyclesList = cyclesList.filter((c) => c.id !== 'c-1');
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      // 1. Render as MEMBER (capabilities = ['VIEW', 'EDIT']) -> Delete buttons must be absent
+      const { unmount } = render(
+        <QueryClientProvider client={lifecycleClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+            <ProjectCyclesView capabilities={['VIEW', 'EDIT']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('Sprint 1')).toBeDefined();
+      expect(screen.queryByTestId('delete-cycle-btn-c-1')).toBeNull();
+      expect(screen.getByTestId('edit-cycle-btn-c-1')).toBeDefined();
+      expect(screen.getByTestId('complete-cycle-btn-c-1')).toBeDefined();
+      // Completed cycle c-completed should NOT show Complete button
+      expect(screen.queryByTestId('complete-cycle-btn-c-completed')).toBeNull();
+
+      // Test Complete modal with rollover target
+      fireEvent.click(screen.getByTestId('complete-cycle-btn-c-1'));
+      expect(screen.getByTestId('complete-cycle-modal')).toBeDefined();
+      const rolloverSelect = screen.getByTestId('rollover-target-select');
+      fireEvent.change(rolloverSelect, { target: { value: 'c-2' } });
+      fireEvent.click(screen.getByTestId('confirm-complete-cycle-btn'));
+
+      await waitFor(() => {
+        expect(
+          calls.some(
+            (c) =>
+              c.path.includes('/complete') &&
+              c.body?.rollover_to_cycle_id === 'c-2',
+          ),
+        ).toBe(true);
+      });
+
+      unmount();
+
+      // 2. Render as PROJECT_ADMIN (capabilities = ['VIEW', 'EDIT', 'PROJECT_ADMIN'])
+      const adminClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={adminClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+            <ProjectCyclesView capabilities={['VIEW', 'EDIT', 'PROJECT_ADMIN']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByTestId('delete-cycle-btn-c-1')).toBeDefined();
+
+      // Test Edit cycle modal with date validation
+      fireEvent.click(screen.getByTestId('edit-cycle-btn-c-1'));
+      expect(screen.getByTestId('edit-cycle-modal')).toBeDefined();
+      const editNameInput = screen.getByTestId('edit-cycle-name-input');
+      const editStartInput = screen.getByTestId('edit-cycle-start-input');
+      const editEndInput = screen.getByTestId('edit-cycle-end-input');
+
+      // Invalid dates: end < start
+      fireEvent.change(editStartInput, { target: { value: '2026-04-10' } });
+      fireEvent.change(editEndInput, { target: { value: '2026-04-01' } });
+      fireEvent.click(screen.getByTestId('save-edit-cycle-btn'));
+      expect(await screen.findByTestId('edit-cycle-error')).toBeDefined();
+      expect(screen.getByTestId('edit-cycle-error').textContent).toContain(
+        'End date cannot be earlier than start date',
+      );
+
+      // Valid edit
+      fireEvent.change(editEndInput, { target: { value: '2026-04-20' } });
+      fireEvent.change(editNameInput, { target: { value: 'Sprint 1 Renamed' } });
+      fireEvent.click(screen.getByTestId('save-edit-cycle-btn'));
+
+      await waitFor(() => {
+        expect(
+          calls.some(
+            (c) => c.method === 'PATCH' && c.body?.name === 'Sprint 1 Renamed',
+          ),
+        ).toBe(true);
+      });
+
+      // Test Delete cycle
+      fireEvent.click(screen.getByTestId('delete-cycle-btn-c-1'));
+      await waitFor(() => {
+        expect(
+          calls.some(
+            (c) =>
+              c.method === 'DELETE' &&
+              (c.params?.cycle_id === 'c-1' || c.path.includes('c-1')),
+          ),
+        ).toBe(true);
+      });
+    });
+
+    it('enforces RBAC for module Delete button and supports Edit with date validation', async () => {
+      const calls: {
+        method: string;
+        path: string;
+        params?: Record<string, unknown> | undefined;
+        body?: Record<string, unknown> | undefined;
+      }[] = [];
+      let modulesList = [
+        {
+          id: 'm-1',
+          name: 'Auth Core',
+          status: 'in_progress',
+          start_date: '2026-03-01',
+          target_date: '2026-03-30',
+          description_markdown: 'Auth module',
+        },
+      ];
+
+      vi.spyOn(client, 'apiFetch').mockImplementation((method, path, options?: { params?: unknown; body?: unknown }) => {
+        const m = method.toUpperCase();
+        const url = path;
+        calls.push({
+          method: m,
+          path: url,
+          params: options?.params as Record<string, unknown> | undefined,
+          body: options?.body as Record<string, unknown> | undefined,
+        });
+
+        if (url.includes('/projects/') && !url.includes('/cycles') && !url.includes('/modules')) {
+          return Promise.resolve({ id: 'p-1', identifier: 'KAN', name: 'kanban', capabilities: ['VIEW', 'EDIT'], modules_enabled: true });
+        }
+        if (url.includes('/modules') && m === 'GET') {
+          return Promise.resolve(modulesList);
+        }
+        if (url.includes('/modules') && m === 'PATCH') {
+          const body = options?.body as Record<string, unknown>;
+          modulesList = modulesList.map((mod) => (mod.id === 'm-1' ? { ...mod, ...body } : mod));
+          return Promise.resolve(modulesList[0]);
+        }
+        if (m === 'DELETE') {
+          modulesList = modulesList.filter((mod) => mod.id !== 'm-1');
+          return Promise.resolve({ success: true });
+        }
+        return Promise.resolve({});
+      });
+
+      // 1. Member: Delete button is hidden
+      const { unmount } = render(
+        <QueryClientProvider client={lifecycleClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+            <ProjectModulesView capabilities={['VIEW', 'EDIT']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('Auth Core')).toBeDefined();
+      expect(screen.queryByTestId('delete-module-btn-m-1')).toBeNull();
+      expect(screen.getByTestId('edit-module-btn-m-1')).toBeDefined();
+      unmount();
+
+      // 2. Admin: Delete button is visible and Edit modal validates target date
+      const adminClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={adminClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+            <ProjectModulesView capabilities={['VIEW', 'EDIT', 'ADMIN']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByTestId('delete-module-btn-m-1')).toBeDefined();
+
+      // Open Edit module modal
+      fireEvent.click(screen.getByTestId('edit-module-btn-m-1'));
+      expect(screen.getByTestId('edit-module-modal')).toBeDefined();
+      const editNameInput = screen.getByTestId('edit-module-name-input');
+      const editStartInput = screen.getByTestId('edit-module-start-input');
+      const editTargetInput = screen.getByTestId('edit-module-target-input');
+
+      // Invalid dates: target < start
+      fireEvent.change(editStartInput, { target: { value: '2026-05-10' } });
+      fireEvent.change(editTargetInput, { target: { value: '2026-05-01' } });
+      fireEvent.click(screen.getByTestId('save-edit-module-btn'));
+      expect(await screen.findByTestId('edit-module-error')).toBeDefined();
+      expect(screen.getByTestId('edit-module-error').textContent).toContain(
+        'Target date cannot be earlier than start date',
+      );
+
+      // Valid edit
+      fireEvent.change(editTargetInput, { target: { value: '2026-05-20' } });
+      fireEvent.change(editNameInput, { target: { value: 'Auth Core Hardened' } });
+      fireEvent.click(screen.getByTestId('save-edit-module-btn'));
+
+      await waitFor(() => {
+        expect(
+          calls.some(
+            (c) => c.method === 'PATCH' && c.body?.name === 'Auth Core Hardened',
+          ),
+        ).toBe(true);
+      });
+
+      // Delete module
+      fireEvent.click(screen.getByTestId('delete-module-btn-m-1'));
+      await waitFor(() => {
+        expect(
+          calls.some(
+            (c) =>
+              c.method === 'DELETE' &&
+              (c.params?.module_id === 'm-1' || c.path.includes('m-1')),
+          ),
+        ).toBe(true);
+      });
+    });
+
+    it('covers route guards loading and error states and modal cancel buttons', async () => {
+      // 1. AdminRouteGuard loading and error
+      const pendingClient = new QueryClient();
+      vi.spyOn(client, 'apiFetch').mockReturnValue(new Promise(() => undefined));
+      const { unmount: u1 } = render(
+        <QueryClientProvider client={pendingClient}>
+          <MemoryRouter>
+            <AdminRouteGuard />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId('admin-guard-loading')).toBeDefined();
+      u1();
+
+      // 2. DraftsWorkspaceRouteGuard loading and queryFn catch
+      const failClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(client, 'apiFetch').mockRejectedValue(new Error('Network offline'));
+      const { unmount: u2 } = render(
+        <QueryClientProvider client={failClient}>
+          <MemoryRouter>
+            <DraftsWorkspaceRouteGuard />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      // Wait for query catch to resolve to null and render DraftsWorkspaceView
+      expect(await screen.findByTestId('drafts-view')).toBeDefined();
+      u2();
+
+      // 3. Cancel buttons on Edit Cycle, Complete Cycle, Edit Module
+      const editClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(client, 'apiFetch').mockImplementation((_method, path) => {
+        const url = path;
+        if (url.includes('/cycles')) {
+          return Promise.resolve([{ id: 'c-cancel', name: 'Sprint Cancel', status: 'upcoming' }]);
+        }
+        if (url.includes('/modules')) {
+          return Promise.resolve([{ id: 'm-cancel', name: 'Module Cancel', status: 'planned' }]);
+        }
+        return Promise.resolve({});
+      });
+
+      const { unmount: u3 } = render(
+        <QueryClientProvider client={editClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+            <ProjectCyclesView capabilities={['VIEW', 'EDIT']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      // Open and cancel edit cycle
+      expect(await screen.findByText('Sprint Cancel')).toBeDefined();
+      fireEvent.click(screen.getByTestId('edit-cycle-btn-c-cancel'));
+      expect(screen.getByTestId('edit-cycle-modal')).toBeDefined();
+      fireEvent.click(screen.getByTestId('cancel-edit-cycle-btn'));
+      expect(screen.queryByTestId('edit-cycle-modal')).toBeNull();
+
+      // Open and cancel complete cycle
+      fireEvent.click(screen.getByTestId('complete-cycle-btn-c-cancel'));
+      expect(screen.getByTestId('complete-cycle-modal')).toBeDefined();
+      fireEvent.click(screen.getByTestId('cancel-complete-cycle-btn'));
+      expect(screen.queryByTestId('complete-cycle-modal')).toBeNull();
+      u3();
+
+      // Open and cancel edit module
+      const { unmount: u4 } = render(
+        <QueryClientProvider client={editClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+            <ProjectModulesView capabilities={['VIEW', 'EDIT']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText('Module Cancel')).toBeDefined();
+      fireEvent.click(screen.getByTestId('edit-module-btn-m-cancel'));
+      expect(screen.getByTestId('edit-module-modal')).toBeDefined();
+      fireEvent.click(screen.getByTestId('cancel-edit-module-btn'));
+      expect(screen.queryByTestId('edit-module-modal')).toBeNull();
+      u4();
+
+      // AdminRouteGuard catch
+      const adminRejectClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(client, 'apiFetch').mockRejectedValue(new Error('Auth failed'));
+      const { unmount: uAdmin } = render(
+        <QueryClientProvider client={adminRejectClient}>
+          <MemoryRouter>
+            <AdminRouteGuard />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText('Not found or no access')).toBeDefined();
+      uAdmin();
+
+      // 4. Description input and error states for modules
+      const errorModClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+        const m = method.toUpperCase();
+        const url = path;
+        if (url.includes('/modules') && m === 'GET') {
+          return Promise.resolve([{ id: 'm-err', name: 'Module Err', status: 'planned', description_markdown: 'desc' }]);
+        }
+        if (url.includes('/modules') && m === 'PATCH') {
+          throw new Error('Patch module failed');
+        }
+        if (url.includes('/modules') && m === 'DELETE') {
+          throw new Error('Delete module failed');
+        }
+        return Promise.resolve({});
+      });
+
+      const { unmount: u5 } = render(
+        <QueryClientProvider client={errorModClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+            <ProjectModulesView capabilities={['VIEW', 'EDIT', 'ADMIN']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('Module Err')).toBeDefined();
+      // Description input in create form
+      fireEvent.change(screen.getByTestId('new-module-desc-input'), { target: { value: 'New desc' } });
+
+      // Open Edit module and test description change + patch error
+      fireEvent.click(screen.getByTestId('edit-module-btn-m-err'));
+      fireEvent.change(screen.getByTestId('edit-module-desc-input'), { target: { value: 'Edited desc' } });
+      fireEvent.click(screen.getByTestId('save-edit-module-btn'));
+      expect(await screen.findByTestId('edit-module-error')).toBeDefined();
+      expect(screen.getByTestId('edit-module-error').textContent).toContain('Patch module failed');
+      fireEvent.click(screen.getByTestId('cancel-edit-module-btn'));
+
+      // Delete module error
+      fireEvent.click(screen.getByTestId('delete-module-btn-m-err'));
+      await waitFor(() => {
+        expect(screen.getByTestId('module-error-banner').textContent).toContain('Delete module failed');
+      });
+      u5();
     });
   });
 });

@@ -170,10 +170,24 @@ export function ListRow({
           <span className="label-pill">+{overflowLabelCount}</span>
         )}
 
-        {issue.cycle_id && <span className="cycle-pill">Cycle</span>}
+        {issue.cycle_id && (
+          <span className="cycle-pill" data-testid="cycle-pill">
+            🔄 {issue.cycle?.name ?? 'Cycle'}
+          </span>
+        )}
 
         {modulesEnabled && Boolean(issue.module_ids && issue.module_ids.length > 0) && (
-          <span className="module-pill">Modules</span>
+          issue.modules && issue.modules.length > 0 ? (
+            issue.modules.map((m) => (
+              <span key={m.id} className="module-pill" data-testid="module-pill">
+                📦 {m.name}
+              </span>
+            ))
+          ) : (
+            <span className="module-pill" data-testid="module-pill">
+              📦 Module
+            </span>
+          )
         )}
 
         {issue.due_date && (

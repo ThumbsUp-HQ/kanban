@@ -50,7 +50,7 @@ export function ListView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState('all');
   const [selectedPriority, setSelectedPriority] = useState('all');
-  const [groupByOption, setGroupByOption] = useState<'state' | 'priority' | 'none'>('state');
+  const [groupByOption, setGroupByOption] = useState<'state' | 'priority' | 'cycle' | 'module' | 'none'>('state');
 
   const filterCardRef = useRef<HTMLDivElement>(null);
 
@@ -155,6 +155,52 @@ export function ListView({
         }
       }
       return Array.from(prioMap.values()).filter((s) => s.items.length > 0);
+    }
+
+    if (groupByOption === 'cycle') {
+      const cycleMap = new Map<string, GroupSection>();
+      for (const issue of filteredIssues) {
+        const cId = issue.cycle_id ?? 'no-cycle';
+        const cName = issue.cycle?.name ?? (cId === 'no-cycle' ? 'No Cycle' : `Cycle ${cId.slice(0, 6)}`);
+        const existing = cycleMap.get(cId);
+        if (existing) {
+          existing.items.push(issue);
+        } else {
+          cycleMap.set(cId, {
+            id: `cycle-${cId}`,
+            name: cName,
+            sortOrder: cId === 'no-cycle' ? 9999 : 10,
+            items: [issue],
+          });
+        }
+      }
+      return Array.from(cycleMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+    }
+
+    if (groupByOption === 'module') {
+      const modMap = new Map<string, GroupSection>();
+      for (const issue of filteredIssues) {
+        const mods =
+          issue.modules && issue.modules.length > 0
+            ? issue.modules
+            : issue.module_ids && issue.module_ids.length > 0
+            ? issue.module_ids.map((id) => ({ id, name: `Module ${id.slice(0, 6)}` }))
+            : [{ id: 'no-module', name: 'No Module' }];
+        for (const m of mods) {
+          const existing = modMap.get(m.id);
+          if (existing) {
+            existing.items.push(issue);
+          } else {
+            modMap.set(m.id, {
+              id: `module-${m.id}`,
+              name: m.name,
+              sortOrder: m.id === 'no-module' ? 9999 : 10,
+              items: [issue],
+            });
+          }
+        }
+      }
+      return Array.from(modMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
     }
 
     if (groupByOption === 'none') {
@@ -342,12 +388,14 @@ export function ListView({
                   id="list-groupby-select"
                   value={groupByOption}
                   onChange={(e) => {
-                    setGroupByOption(e.target.value as 'state' | 'priority' | 'none');
+                    setGroupByOption(e.target.value as 'state' | 'priority' | 'cycle' | 'module' | 'none');
                   }}
                   className="list-filter-select"
                 >
                   <option value="state">Workflow State</option>
                   <option value="priority">Priority</option>
+                  <option value="cycle">Cycle</option>
+                  {modulesEnabled && <option value="module">Module</option>}
                   <option value="none">None (Flat list)</option>
                 </select>
               </div>

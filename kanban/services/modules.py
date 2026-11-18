@@ -384,7 +384,7 @@ async def patch_module(  # noqa: C901
             code="INVALID_DATE_RANGE",
             status=422,
             title="Invalid Date Range",
-            detail="target_date cannot be earlier than start_date",
+            detail="Target date cannot be earlier than start date.",
         )
 
     await session.flush()

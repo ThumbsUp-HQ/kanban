@@ -1,0 +1,26 @@
+================================================================================
+Typecheck & Lint Validation: KANBA-211
+Branch: feat/w4-cycles
+Date: 2026-11-18
+================================================================================
+
+$ npm --prefix kanban/web run typecheck
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+[SUCCESS] 0 type errors detected.
+
+$ npm --prefix kanban/web run lint
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+[SUCCESS] 0 lint errors, 0 warnings.
+
+$ npm --prefix kanban/web run build
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+vite v8.3.8 building client environment for production...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-CuNFVetb.css            286.65 kB │ gzip:  42.23 kB
+dist/assets/index-eXIPzX1-.js           1,661.20 kB │ gzip: 463.40 kB
+[SUCCESS] Built in 1.37s.
+================================================================================

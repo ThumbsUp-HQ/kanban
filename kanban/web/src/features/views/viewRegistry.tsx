@@ -175,7 +175,8 @@ export function IssuesWorkspaceRoute({
   });
 
   const [groupBy, setGroupBy] = useState<GroupAxis>(() => {
-    const p = searchParams.get('group_by');
+    const raw = searchParams.get('group_by') ?? searchParams.get('groupBy');
+    const p = raw?.toLowerCase();
     if (p && ['state', 'priority', 'assignee', 'cycle', 'module', 'label', 'none'].includes(p)) {
       return p as GroupAxis;
     }
@@ -183,7 +184,8 @@ export function IssuesWorkspaceRoute({
   });
 
   const [subGroupBy, setSubGroupBy] = useState<GroupAxis>(() => {
-    const p = searchParams.get('sub_group_by');
+    const raw = searchParams.get('sub_group_by') ?? searchParams.get('subGroupBy');
+    const p = raw?.toLowerCase();
     if (p && ['none', 'assignee', 'priority', 'state', 'cycle', 'module', 'label'].includes(p)) {
       return p as GroupAxis;
     }
@@ -654,8 +656,8 @@ export function IssuesWorkspaceRoute({
     });
   }, [filteredIssues, boardStates]);
 
-  // 2D Swimlane condition: layout === 'board' && subGroupBy !== 'none'
-  const is2DSwimlane = layout === 'board' && subGroupBy !== 'none';
+  // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
+  const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
 
   // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
   const activePeekKey = useMemo(() => {

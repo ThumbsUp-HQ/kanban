@@ -105,11 +105,13 @@ export function PropertiesRail({
   }, [projectKey, modulesEnabled, initialMetadata]);
 
   const updateLocalIssue = (patch: Partial<IssueDetail>): void => {
-    const updated: IssueDetail = { ...currentIssue, ...patch };
-    setCurrentIssue(updated);
-    if (onIssueUpdate) {
-      onIssueUpdate(updated);
-    }
+    setCurrentIssue((prev) => {
+      const updated: IssueDetail = { ...prev, ...patch };
+      if (onIssueUpdate) {
+        onIssueUpdate(updated);
+      }
+      return updated;
+    });
   };
 
   const handleStateChange = async (stateId: string): Promise<void> => {
@@ -174,21 +176,43 @@ export function PropertiesRail({
       start_date: dates.start_date ?? null,
       due_date: dates.due_date ?? null,
     });
-    await patchIssue(currentIssue.key, dates, currentIssue.etag);
+    try {
+      const updated = await patchIssue(currentIssue.key, dates, currentIssue.etag);
+      if (updated.etag) {
+        updateLocalIssue({ etag: updated.etag });
+      }
+    } catch {
+      // Keep optimistic
+    }
   };
 
   const handleUpdateModules = async (moduleIds: string[]): Promise<void> => {
-    updateLocalIssue({ module_ids: moduleIds });
-    await updateIssueModules(currentIssue.key, moduleIds);
+    const selectedMods = modules.filter((m) => moduleIds.includes(m.id));
+    updateLocalIssue({
+      module_ids: moduleIds,
+      modules: selectedMods.map((m) => ({ id: m.id, name: m.name })),
+    });
+    try {
+      await updateIssueModules(currentIssue.key, moduleIds);
+    } catch {
+      // Keep optimistic
+    }
   };
 
   const handleUpdateCycle = async (cycleId: string | null): Promise<void> => {
     const foundCycle = cycles.find((c) => c.id === cycleId);
     updateLocalIssue({
       cycle_id: cycleId,
-      cycle: foundCycle ?? null,
+      cycle: foundCycle ? { id: foundCycle.id, name: foundCycle.name } : null,
     });
-    await patchIssue(currentIssue.key, { cycle_id: cycleId }, currentIssue.etag);
+    try {
+      const updated = await patchIssue(currentIssue.key, { cycle_id: cycleId }, currentIssue.etag);
+      if (updated.etag) {
+        updateLocalIssue({ etag: updated.etag });
+      }
+    } catch {
+      // Keep optimistic
+    }
   };
 
   const handleUpdateParent = async (parentKey: string | null): Promise<void> => {

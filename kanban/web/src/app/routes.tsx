@@ -628,6 +628,30 @@ export interface ProjectCycleItem {
   end_date?: string | null;
 }
 
+function formatStatusLabel(rawStatus?: string): string {
+  if (!rawStatus) return 'Upcoming';
+  const s = rawStatus.toLowerCase().replace(/_/g, ' ');
+  if (s === 'in progress') return 'In Progress';
+  if (s === 'upcoming') return 'Upcoming';
+  if (s === 'planned') return 'Planned';
+  if (s === 'completed') return 'Completed';
+  if (s === 'backlog') return 'Backlog';
+  if (s === 'paused') return 'Paused';
+  if (s === 'cancelled') return 'Cancelled';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatDateOrderError(msg: string): string {
+  const lower = msg.toLowerCase();
+  if (lower.includes('end_date') || lower.includes('end date')) {
+    return 'End date cannot be earlier than start date.';
+  }
+  if (lower.includes('target_date') || lower.includes('target date')) {
+    return 'Target date cannot be earlier than start date.';
+  }
+  return msg;
+}
+
 function ProjectCyclesViewInner({
   projectKey,
   capabilities: propCapabilities,
@@ -642,6 +666,18 @@ function ProjectCyclesViewInner({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Edit cycle state
+  const [editingCycle, setEditingCycle] = useState<ProjectCycleItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
+  const [editErrorMsg, setEditErrorMsg] = useState<string | null>(null);
+
+  // Complete cycle state (with rollover target selector)
+  const [completingCycle, setCompletingCycle] = useState<ProjectCycleItem | null>(null);
+  const [rolloverTargetId, setRolloverTargetId] = useState('');
+  const [completeErrorMsg, setCompleteErrorMsg] = useState<string | null>(null);
 
   const { data: projectData } = useQuery<{ capabilities?: string[] }>({
     queryKey: ['projects', key, 'detail'],
@@ -667,7 +703,8 @@ function ProjectCyclesViewInner({
   });
 
   const capabilities = propCapabilities ?? projectData?.capabilities ?? [];
-  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN') || capabilities.includes('PROJECT_ADMIN');
+  const canDelete = capabilities.includes('ADMIN') || capabilities.includes('PROJECT_ADMIN');
 
   const { data: cycles = [], isLoading } = useQuery<ProjectCycleItem[]>({
     queryKey: ['projects', key, 'cycles'],
@@ -683,6 +720,9 @@ function ProjectCyclesViewInner({
   const createMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
+      if (startDate && endDate && endDate < startDate) {
+        throw new Error('End date cannot be earlier than start date.');
+      }
       return await apiFetch('POST', '/api/v1/projects/{project_ref}/cycles' as never, {
         params: { project_ref: key },
         body: {
@@ -692,14 +732,87 @@ function ProjectCyclesViewInner({
         },
       });
     },
-    onSuccess: () => {
+    onSuccess: (newCycle: unknown) => {
       setNewName('');
       setStartDate('');
       setEndDate('');
+      if (newCycle && typeof newCycle === 'object' && 'id' in newCycle) {
+        queryClient.setQueryData<ProjectCycleItem[]>(['projects', key, 'cycles'], (old = []) => [
+          ...old,
+          newCycle as ProjectCycleItem,
+        ]);
+      }
       void queryClient.invalidateQueries({ queryKey: ['projects', key, 'cycles'] });
     },
     onError: (err: unknown) => {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to create cycle');
+      setErrorMsg(formatDateOrderError(err instanceof Error ? err.message : 'Failed to create cycle'));
+    },
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingCycle) return null;
+      setEditErrorMsg(null);
+      if (editStartDate && editEndDate && editEndDate < editStartDate) {
+        throw new Error('End date cannot be earlier than start date.');
+      }
+      return await apiFetch('PATCH', '/api/v1/cycles/{cycle_id}' as never, {
+        params: { cycle_id: editingCycle.id },
+        body: {
+          name: editName.trim(),
+          start_date: editStartDate || null,
+          end_date: editEndDate || null,
+        },
+      });
+    },
+    onSuccess: (updated: unknown) => {
+      if (updated && typeof updated === 'object' && 'id' in updated) {
+        queryClient.setQueryData<ProjectCycleItem[]>(['projects', key, 'cycles'], (old = []) =>
+          old.map((c) => (c.id === (updated as ProjectCycleItem).id ? (updated as ProjectCycleItem) : c))
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'cycles'] });
+      setEditingCycle(null);
+    },
+    onError: (err: unknown) => {
+      setEditErrorMsg(formatDateOrderError(err instanceof Error ? err.message : 'Failed to update cycle'));
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: async () => {
+      if (!completingCycle) return null;
+      setCompleteErrorMsg(null);
+      return await apiFetch('POST', '/api/v1/cycles/{cycle_id}/complete' as never, {
+        params: { cycle_id: completingCycle.id },
+        body: {
+          rollover_to_cycle_id: rolloverTargetId ? rolloverTargetId : null,
+        },
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'cycles'] });
+      setCompletingCycle(null);
+    },
+    onError: (err: unknown) => {
+      setCompleteErrorMsg(err instanceof Error ? err.message : 'Failed to complete cycle');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (cycleId: string) => {
+      return await apiFetch('DELETE', '/api/v1/cycles/{cycle_id}' as never, {
+        params: { cycle_id: cycleId },
+      });
+    },
+    onSuccess: (_data, cycleId) => {
+      queryClient.setQueryData<ProjectCycleItem[]>(['projects', key, 'cycles'], (old = []) =>
+        old.filter((c) => c.id !== cycleId)
+      );
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'cycles'] });
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to delete cycle');
     },
   });
 
@@ -707,6 +820,31 @@ function ProjectCyclesViewInner({
     e.preventDefault();
     if (!newName.trim()) return;
     createMutation.mutate();
+  };
+
+  const handleEditSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    patchMutation.mutate();
+  };
+
+  const handleCompleteSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    completeMutation.mutate();
+  };
+
+  const openEditModal = (cyc: ProjectCycleItem) => {
+    setEditingCycle(cyc);
+    setEditName(cyc.name);
+    setEditStartDate(cyc.start_date ?? '');
+    setEditEndDate(cyc.end_date ?? '');
+    setEditErrorMsg(null);
+  };
+
+  const openCompleteModal = (cyc: ProjectCycleItem) => {
+    setCompletingCycle(cyc);
+    setRolloverTargetId('');
+    setCompleteErrorMsg(null);
   };
 
   return (
@@ -771,33 +909,203 @@ function ProjectCyclesViewInner({
         </form>
       )}
 
+      {/* Edit Cycle Modal */}
+      {editingCycle && (
+        <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-cycle-modal-title">
+          <div className="kb-modal" data-testid="edit-cycle-modal">
+            <h3 id="edit-cycle-modal-title">Edit Cycle</h3>
+            {editErrorMsg && (
+              <div className="kb-cycles-error" role="alert" data-testid="edit-cycle-error">
+                {editErrorMsg}
+              </div>
+            )}
+            <form onSubmit={handleEditSubmit}>
+              <div className="kb-form-field" style={{ marginBottom: 12 }}>
+                <span className="kb-form-label">Cycle Name</span>
+                <input
+                  type="text"
+                  className="kb-form-input"
+                  data-testid="edit-cycle-name-input"
+                  value={editName}
+                  onChange={(e) => { setEditName(e.target.value); }}
+                  required
+                />
+              </div>
+              <div className="kb-form-field" style={{ marginBottom: 12 }}>
+                <span className="kb-form-label">Start Date</span>
+                <input
+                  type="date"
+                  className="kb-form-input"
+                  data-testid="edit-cycle-start-input"
+                  value={editStartDate}
+                  onChange={(e) => { setEditStartDate(e.target.value); }}
+                />
+              </div>
+              <div className="kb-form-field" style={{ marginBottom: 16 }}>
+                <span className="kb-form-label">End Date</span>
+                <input
+                  type="date"
+                  className="kb-form-input"
+                  data-testid="edit-cycle-end-input"
+                  value={editEndDate}
+                  onChange={(e) => { setEditEndDate(e.target.value); }}
+                />
+              </div>
+              <div className="kb-modal-footer">
+                <button
+                  type="button"
+                  className="kb-btn-secondary"
+                  data-testid="cancel-edit-cycle-btn"
+                  onClick={() => { setEditingCycle(null); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="kb-btn-primary"
+                  data-testid="save-edit-cycle-btn"
+                  disabled={patchMutation.isPending || !editName.trim()}
+                >
+                  {patchMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Cycle Modal */}
+      {completingCycle && (
+        <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="complete-cycle-modal-title">
+          <div className="kb-modal" data-testid="complete-cycle-modal">
+            <h3 id="complete-cycle-modal-title">Complete Cycle ({completingCycle.name})</h3>
+            <p style={{ fontSize: 13, color: 'var(--fg-secondary)', marginBottom: 16 }}>
+              Select a target cycle to roll over any unfinished issues, or send them to the backlog.
+            </p>
+            {completeErrorMsg && (
+              <div className="kb-cycles-error" role="alert" data-testid="complete-cycle-error">
+                {completeErrorMsg}
+              </div>
+            )}
+            <form onSubmit={handleCompleteSubmit}>
+              <div className="kb-form-field" style={{ marginBottom: 16 }}>
+                <span className="kb-form-label">Rollover Unfinished Issues To</span>
+                <select
+                  className="kb-form-input"
+                  data-testid="rollover-target-select"
+                  value={rolloverTargetId}
+                  onChange={(e) => { setRolloverTargetId(e.target.value); }}
+                >
+                  <option value="">No rollover (Send to Backlog)</option>
+                  {cycles
+                    .filter((c) => c.id !== completingCycle.id && c.status?.toLowerCase() !== 'completed')
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({formatStatusLabel(c.status)})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="kb-modal-footer">
+                <button
+                  type="button"
+                  className="kb-btn-secondary"
+                  data-testid="cancel-complete-cycle-btn"
+                  onClick={() => { setCompletingCycle(null); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="kb-btn-primary"
+                  data-testid="confirm-complete-cycle-btn"
+                  disabled={completeMutation.isPending}
+                >
+                  {completeMutation.isPending ? 'Completing...' : 'Complete Cycle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="kb-cycles-list-wrapper">
         {isLoading && <p>Loading cycles...</p>}
         {!isLoading && cycles.length === 0 && (
           <p className="kb-empty-text">No cycles defined yet. Create your first sprint cycle above.</p>
         )}
         <ul className="kb-cycles-list" data-testid="cycles-list">
-          {cycles.map((cyc) => (
-            <li key={cyc.id} className="kb-cycle-item" data-testid={`cycle-item-${cyc.id}`}>
-              <div className="kb-cycle-info">
-                <strong>{cyc.name}</strong>
-                {cyc.status && <span className="kb-cycle-status-badge">{cyc.status}</span>}
-                {Boolean(cyc.start_date ?? cyc.end_date) && (
-                  <span className="kb-cycle-dates">
+          {cycles.map((cyc) => {
+            const statusKey = cyc.status?.toLowerCase().replace(/_/g, '-') ?? 'upcoming';
+            const isCompleted = statusKey === 'completed';
+            return (
+              <li key={cyc.id} className="kb-cycle-item" data-testid={`cycle-item-${cyc.id}`}>
+                <div className="kb-cycle-info">
+                  <strong>{cyc.name}</strong>
+                  <span
+                    className={`kb-status-pill kb-status-pill--${statusKey}`}
+                    data-testid={`cycle-status-${cyc.id}`}
+                  >
+                    {formatStatusLabel(cyc.status)}
+                  </span>
+                  <span
+                    className="kb-cycle-dates"
+                    data-testid={`cycle-dates-${cyc.id}`}
+                    aria-label={`Start: ${cyc.start_date ?? 'TBD'}, End: ${cyc.end_date ?? 'TBD'}`}
+                  >
                     {cyc.start_date ?? 'TBD'} → {cyc.end_date ?? 'TBD'}
                   </span>
-                )}
-              </div>
-              <Link to={`/projects/${key}/issues?cycle=${cyc.id}`}>Filter work items →</Link>
-            </li>
-          ))}
+                </div>
+                <div className="kb-cycle-actions">
+                  <Link to={`/projects/${key}/issues?cycle=${cyc.id}`} style={{ marginRight: 8, fontSize: 13 }}>
+                    Filter work items &rarr;
+                  </Link>
+                  {canCreate && (
+                    <button
+                      type="button"
+                      className="kb-btn-secondary"
+                      data-testid={`edit-cycle-btn-${cyc.id}`}
+                      onClick={() => { openEditModal(cyc); }}
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {canCreate && !isCompleted && (
+                    <button
+                      type="button"
+                      className="kb-btn-secondary"
+                      data-testid={`complete-cycle-btn-${cyc.id}`}
+                      onClick={() => { openCompleteModal(cyc); }}
+                    >
+                      Complete
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="kb-btn-danger"
+                      data-testid={`delete-cycle-btn-${cyc.id}`}
+                      onClick={() => { deleteMutation.mutate(cyc.id); }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>
   );
 }
 
-export function ProjectCyclesView(): JSX.Element {
+export function ProjectCyclesView({
+  capabilities,
+}: {
+  capabilities?: string[] | undefined;
+} = {}): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
   const ctx = useContext(ProjectRouteContext);
   const key = projectKey ?? (ctx.projectKey || 'KAN');
@@ -814,7 +1122,7 @@ export function ProjectCyclesView(): JSX.Element {
   return (
     <ProjectCyclesViewInner
       projectKey={key}
-      capabilities={ctx.projectKey ? ctx.capabilities : undefined}
+      capabilities={capabilities ?? (ctx.projectKey ? ctx.capabilities : undefined)}
     />
   );
 }
@@ -823,7 +1131,9 @@ export interface ProjectModuleItem {
   id: string;
   name: string;
   status?: string;
-  description_markdown?: string;
+  start_date?: string | null;
+  target_date?: string | null;
+  description_markdown?: string | null;
 }
 
 function ProjectModulesViewInner({
@@ -842,6 +1152,15 @@ function ProjectModulesViewInner({
   const [targetDate, setTargetDate] = useState('');
   const [description, setDescription] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Edit module state
+  const [editingModule, setEditingModule] = useState<ProjectModuleItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editStatus, setEditStatus] = useState('planned');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editTargetDate, setEditTargetDate] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editErrorMsg, setEditErrorMsg] = useState<string | null>(null);
 
   const { data: projectData } = useQuery<{ capabilities?: string[] }>({
     queryKey: ['projects', key, 'detail'],
@@ -867,7 +1186,8 @@ function ProjectModulesViewInner({
   });
 
   const capabilities = propCapabilities ?? projectData?.capabilities ?? [];
-  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN') || capabilities.includes('PROJECT_ADMIN');
+  const canDelete = capabilities.includes('ADMIN') || capabilities.includes('PROJECT_ADMIN');
 
   const { data: modules = [], isLoading } = useQuery<ProjectModuleItem[]>({
     queryKey: ['projects', key, 'modules'],
@@ -883,6 +1203,9 @@ function ProjectModulesViewInner({
   const createMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
+      if (startDate && targetDate && targetDate < startDate) {
+        throw new Error('Target date cannot be earlier than start date.');
+      }
       return await apiFetch('POST', '/api/v1/projects/{project_ref}/modules' as never, {
         params: { project_ref: key },
         body: {
@@ -894,16 +1217,71 @@ function ProjectModulesViewInner({
         },
       });
     },
-    onSuccess: () => {
+    onSuccess: (newMod: unknown) => {
       setNewName('');
       setStatus('planned');
       setStartDate('');
       setTargetDate('');
       setDescription('');
+      if (newMod && typeof newMod === 'object' && 'id' in newMod) {
+        queryClient.setQueryData<ProjectModuleItem[]>(['projects', key, 'modules'], (old = []) => [
+          ...old,
+          newMod as ProjectModuleItem,
+        ]);
+      }
       void queryClient.invalidateQueries({ queryKey: ['projects', key, 'modules'] });
     },
     onError: (err: unknown) => {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to create module');
+      setErrorMsg(formatDateOrderError(err instanceof Error ? err.message : 'Failed to create module'));
+    },
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingModule) return null;
+      setEditErrorMsg(null);
+      if (editStartDate && editTargetDate && editTargetDate < editStartDate) {
+        throw new Error('Target date cannot be earlier than start date.');
+      }
+      return await apiFetch('PATCH', '/api/v1/modules/{module_id}' as never, {
+        params: { module_id: editingModule.id },
+        body: {
+          name: editName.trim(),
+          status: editStatus,
+          start_date: editStartDate || null,
+          target_date: editTargetDate || null,
+          description_markdown: editDesc.trim() || null,
+        },
+      });
+    },
+    onSuccess: (updated: unknown) => {
+      if (updated && typeof updated === 'object' && 'id' in updated) {
+        queryClient.setQueryData<ProjectModuleItem[]>(['projects', key, 'modules'], (old = []) =>
+          old.map((m) => (m.id === (updated as ProjectModuleItem).id ? (updated as ProjectModuleItem) : m))
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'modules'] });
+      setEditingModule(null);
+    },
+    onError: (err: unknown) => {
+      setEditErrorMsg(formatDateOrderError(err instanceof Error ? err.message : 'Failed to update module'));
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (moduleId: string) => {
+      return await apiFetch('DELETE', '/api/v1/modules/{module_id}' as never, {
+        params: { module_id: moduleId },
+      });
+    },
+    onSuccess: (_data, moduleId) => {
+      queryClient.setQueryData<ProjectModuleItem[]>(['projects', key, 'modules'], (old = []) =>
+        old.filter((m) => m.id !== moduleId)
+      );
+      void queryClient.invalidateQueries({ queryKey: ['projects', key, 'modules'] });
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to delete module');
     },
   });
 
@@ -911,6 +1289,22 @@ function ProjectModulesViewInner({
     e.preventDefault();
     if (!newName.trim()) return;
     createMutation.mutate();
+  };
+
+  const handleEditSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    patchMutation.mutate();
+  };
+
+  const openEditModal = (mod: ProjectModuleItem) => {
+    setEditingModule(mod);
+    setEditName(mod.name);
+    setEditStatus(mod.status ?? 'planned');
+    setEditStartDate(mod.start_date ?? '');
+    setEditTargetDate(mod.target_date ?? '');
+    setEditDesc(mod.description_markdown ?? '');
+    setEditErrorMsg(null);
   };
 
   return (
@@ -1002,31 +1396,166 @@ function ProjectModulesViewInner({
         </form>
       )}
 
+      {/* Edit Module Modal */}
+      {editingModule && (
+        <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-module-modal-title">
+          <div className="kb-modal" data-testid="edit-module-modal">
+            <h3 id="edit-module-modal-title">Edit Module</h3>
+            {editErrorMsg && (
+              <div className="kb-modules-error" role="alert" data-testid="edit-module-error">
+                {editErrorMsg}
+              </div>
+            )}
+            <form onSubmit={handleEditSubmit}>
+              <div className="kb-form-field" style={{ marginBottom: 12 }}>
+                <span className="kb-form-label">Module Name</span>
+                <input
+                  type="text"
+                  className="kb-form-input"
+                  data-testid="edit-module-name-input"
+                  value={editName}
+                  onChange={(e) => { setEditName(e.target.value); }}
+                  required
+                />
+              </div>
+              <div className="kb-form-field" style={{ marginBottom: 12 }}>
+                <span className="kb-form-label">Status</span>
+                <select
+                  className="kb-form-input"
+                  data-testid="edit-module-status-select"
+                  value={editStatus}
+                  onChange={(e) => { setEditStatus(e.target.value); }}
+                >
+                  <option value="planned">Planned</option>
+                  <option value="backlog">Backlog</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="paused">Paused</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div className="kb-form-field" style={{ marginBottom: 12 }}>
+                <span className="kb-form-label">Start Date</span>
+                <input
+                  type="date"
+                  className="kb-form-input"
+                  data-testid="edit-module-start-input"
+                  value={editStartDate}
+                  onChange={(e) => { setEditStartDate(e.target.value); }}
+                />
+              </div>
+              <div className="kb-form-field" style={{ marginBottom: 12 }}>
+                <span className="kb-form-label">Target Date</span>
+                <input
+                  type="date"
+                  className="kb-form-input"
+                  data-testid="edit-module-target-input"
+                  value={editTargetDate}
+                  onChange={(e) => { setEditTargetDate(e.target.value); }}
+                />
+              </div>
+              <div className="kb-form-field" style={{ marginBottom: 16 }}>
+                <span className="kb-form-label">Description</span>
+                <input
+                  type="text"
+                  className="kb-form-input"
+                  data-testid="edit-module-desc-input"
+                  value={editDesc}
+                  onChange={(e) => { setEditDesc(e.target.value); }}
+                />
+              </div>
+              <div className="kb-modal-footer">
+                <button
+                  type="button"
+                  className="kb-btn-secondary"
+                  data-testid="cancel-edit-module-btn"
+                  onClick={() => { setEditingModule(null); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="kb-btn-primary"
+                  data-testid="save-edit-module-btn"
+                  disabled={patchMutation.isPending || !editName.trim()}
+                >
+                  {patchMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="kb-modules-list-wrapper">
         {isLoading && <p>Loading modules...</p>}
         {!isLoading && modules.length === 0 && (
           <p className="kb-empty-text">No modules defined yet. Create your first module above.</p>
         )}
         <ul className="kb-modules-list" data-testid="modules-list">
-          {modules.map((mod) => (
-            <li key={mod.id} className="kb-module-item" data-testid={`module-item-${mod.id}`}>
-              <div className="kb-module-info">
-                <strong>{mod.name}</strong>
-                {mod.status && <span className="kb-module-status-badge">{mod.status}</span>}
-                {mod.description_markdown && (
-                  <p className="kb-module-desc">{mod.description_markdown}</p>
-                )}
-              </div>
-              <Link to={`/projects/${key}/issues?module=${mod.id}`}>View module work items →</Link>
-            </li>
-          ))}
+          {modules.map((mod) => {
+            const statusKey = mod.status?.toLowerCase().replace(/_/g, '-') ?? 'planned';
+            return (
+              <li key={mod.id} className="kb-module-item" data-testid={`module-item-${mod.id}`}>
+                <div className="kb-module-info">
+                  <strong>{mod.name}</strong>
+                  <span
+                    className={`kb-status-pill kb-status-pill--${statusKey}`}
+                    data-testid={`module-status-${mod.id}`}
+                  >
+                    {formatStatusLabel(mod.status)}
+                  </span>
+                  <span
+                    className="kb-module-dates"
+                    data-testid={`module-dates-${mod.id}`}
+                    aria-label={`Start: ${mod.start_date ?? 'TBD'}, Target: ${mod.target_date ?? 'TBD'}`}
+                  >
+                    {mod.start_date ?? 'TBD'} → {mod.target_date ?? 'TBD'}
+                  </span>
+                  {mod.description_markdown && (
+                    <p className="kb-module-desc">{mod.description_markdown}</p>
+                  )}
+                </div>
+                <div className="kb-module-actions">
+                  <Link to={`/projects/${key}/issues?module=${mod.id}`} style={{ marginRight: 8, fontSize: 13 }}>
+                    View module work items &rarr;
+                  </Link>
+                  {canCreate && (
+                    <button
+                      type="button"
+                      className="kb-btn-secondary"
+                      data-testid={`edit-module-btn-${mod.id}`}
+                      onClick={() => { openEditModal(mod); }}
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="kb-btn-danger"
+                      data-testid={`delete-module-btn-${mod.id}`}
+                      onClick={() => { deleteMutation.mutate(mod.id); }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>
   );
 }
 
-export function ProjectModulesView(): JSX.Element {
+export function ProjectModulesView({
+  capabilities,
+}: {
+  capabilities?: string[] | undefined;
+} = {}): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
   const ctx = useContext(ProjectRouteContext);
   const key = projectKey ?? (ctx.projectKey || 'KAN');
@@ -1043,7 +1572,7 @@ export function ProjectModulesView(): JSX.Element {
   return (
     <ProjectModulesViewInner
       projectKey={key}
-      capabilities={ctx.projectKey ? ctx.capabilities : undefined}
+      capabilities={capabilities ?? (ctx.projectKey ? ctx.capabilities : undefined)}
     />
   );
 }

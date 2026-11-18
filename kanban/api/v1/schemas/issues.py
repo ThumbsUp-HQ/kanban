@@ -87,6 +87,24 @@ class LabelSummary(BaseModel):
     color_hex: str = Field(description="Hexadecimal color code (e.g. #FF5733)")
 
 
+class CycleSummary(BaseModel):
+    """Sprint cycle metadata for issue response representation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID = Field(description="Cycle UUID")
+    name: str = Field(description="Cycle name")
+
+
+class ModuleSummary(BaseModel):
+    """Module metadata for issue response representation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID = Field(description="Module UUID")
+    name: str = Field(description="Module name")
+
+
 class IssueCreate(BaseModel):
     """Body of POST /api/v1/projects/{project_ref}/issues."""
 
@@ -231,6 +249,9 @@ class IssueResponse(BaseModel):
         default=None, description="Target completion due date (YYYY-MM-DD)"
     )
     cycle_id: uuid.UUID | None = Field(default=None, description="Sprint cycle UUID if assigned")
+    cycle: CycleSummary | None = Field(
+        default=None, description="Sprint cycle metadata if assigned"
+    )
     parent: NormalParentSummary | RestrictedParentSummary | None = Field(
         default=None, description="Parent issue summary or masked restricted placeholder"
     )
@@ -239,6 +260,9 @@ class IssueResponse(BaseModel):
     )
     module_ids: list[uuid.UUID] | None = Field(
         default=None, description="List of assigned module UUIDs"
+    )
+    modules: list[ModuleSummary] = Field(
+        default_factory=list, description="List of assigned module metadata"
     )
     assignees: list[AssigneeResponse] = Field(
         default_factory=list, description="List of principal or free-text assignees"
@@ -277,6 +301,7 @@ class IssueResponse(BaseModel):
         data: dict[str, object] = handler(self)
         if data.get("module_ids") is None:
             data.pop("module_ids", None)
+            data.pop("modules", None)
         return data
 
     @classmethod
