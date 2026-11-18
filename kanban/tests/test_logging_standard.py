@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import logging
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -324,7 +325,9 @@ async def test_first_boot_setup_banner_redacted_with_emoji() -> None:
     assert token is not None
     assert token.startswith("kb_setup_")
     rendered = out_buf.getvalue()
-    assert rendered.startswith("👍 First-boot setup URL: http://localhost:8080/setup?token=[REDACTED:SETUP_TOKEN]")
+    assert rendered.startswith(
+        "👍 First-boot setup URL: http://localhost:8080/setup?token=[REDACTED:SETUP_TOKEN]"
+    )
     assert token not in rendered
 
 
@@ -514,7 +517,7 @@ def test_http_status_extraction_sources() -> None:
     """Verify extract_http_status_code parses args tuple, dict, attr, and regex."""
     # 1. Attribute
     rec_attr = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-    rec_attr.status_code = 404  # type: ignore[attr-defined]
+    cast("Any", rec_attr).status_code = 404
     assert extract_http_status_code(rec_attr) == 404
 
     # 2. Tuple args (5-tuple uvicorn format)
@@ -536,7 +539,7 @@ def test_http_status_extraction_sources() -> None:
         "",
         0,
         "access event %(status_code)s",
-        ({"status_code": 422},),  # type: ignore[arg-type]
+        ({"status_code": 422},),
         None,
     )
     assert extract_http_status_code(rec_dict) == 422
@@ -656,7 +659,7 @@ def test_logging_edge_cases_status_extraction_and_filter() -> None:
     """Verify edge cases for string representations, non-digit args, and request_id."""
     # extract_http_status_code string representations
     rec_str_attr = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-    rec_str_attr.status_code = "404"  # type: ignore[attr-defined]
+    cast("Any", rec_str_attr).status_code = "404"
     assert extract_http_status_code(rec_str_attr) == 404
 
     rec_str_tuple = logging.LogRecord(
@@ -665,34 +668,38 @@ def test_logging_edge_cases_status_extraction_and_filter() -> None:
     assert extract_http_status_code(rec_str_tuple) == 502
 
     rec_str_dict = logging.LogRecord(
-        "test", logging.INFO, "", 0, "msg", ({"status": "403"},), None  # type: ignore[arg-type]
+        "test",
+        logging.INFO,
+        "",
+        0,
+        "msg",
+        ({"status": "403"},),
+        None,
     )
     assert extract_http_status_code(rec_str_dict) == 403
 
     rec_direct_dict = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-    rec_direct_dict.args = {"status_code": 401}  # type: ignore[assignment]
+    cast("Any", rec_direct_dict).args = {"status_code": 401}
     assert extract_http_status_code(rec_direct_dict) == 401
 
     rec_direct_dict_str = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-    rec_direct_dict_str.args = {"status_code": "429"}  # type: ignore[assignment]
+    cast("Any", rec_direct_dict_str).args = {"status_code": "429"}
     assert extract_http_status_code(rec_direct_dict_str) == 429
 
     # Non-digit string candidates
     bad_args = ("1", "2", "3", "4", "invalid")
-    rec_bad_tuple = logging.LogRecord(
-        "test", logging.INFO, "", 0, "%s %s %s %s %s", bad_args, None
-    )
+    rec_bad_tuple = logging.LogRecord("test", logging.INFO, "", 0, "%s %s %s %s %s", bad_args, None)
     assert extract_http_status_code(rec_bad_tuple) is None
 
     rec_bad_dict = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-    rec_bad_dict.args = {"status": "not_a_number"}  # type: ignore[assignment]
+    cast("Any", rec_bad_dict).args = {"status": "not_a_number"}
     assert extract_http_status_code(rec_bad_dict) is None
 
     # Pre-existing request_id preserved in filter
     flt = KanbanLogFilter()
     rec_preset_req = logging.LogRecord("test", logging.WARNING, "", 0, "msg", (), None)
-    rec_preset_req.request_id = "req_custom_set"  # type: ignore[attr-defined]
-    rec_preset_req.status_code = 200  # type: ignore[attr-defined]
+    cast("Any", rec_preset_req).request_id = "req_custom_set"
+    cast("Any", rec_preset_req).status_code = 200
     assert flt.filter(rec_preset_req) is True
-    assert rec_preset_req.request_id == "req_custom_set"
+    assert cast("Any", rec_preset_req).request_id == "req_custom_set"
     assert rec_preset_req.levelno == logging.WARNING  # preserved because >= WARNING

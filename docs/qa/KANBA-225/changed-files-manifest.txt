@@ -1,0 +1,25 @@
+# Changed Files Manifest for KANBA-225
+# Base Commit: 144917a
+# Head Commit: 82c2f1a
+
+Path                                                         SHA-256                                                          Lines   
+---------------------------------------------------------------------------------------------------------------------------------------
+deploy/standalone/entrypoint.py                              27a7e24f2f55471c9560913c80402f5f64f0e4bdb661b95a4bb64ffd7bd9c8ed 674     
+kanban/api/v1/issue_delete.py                                8db0a6771b6fefe4d8f94250a42b079e280995ef271a6d0840be8ec3fdccea00 109     
+kanban/api/v1/issues.py                                      bade2cb115b964aa1c43b16654fa88c12506a024aa3d0e9c86f571add53d3c51 145     
+kanban/auth/sessions/csrf.py                                 4e7fba88113bbde9796548d380b3c6f9039cc3141b69287939f1d8dfcf501599 341     
+kanban/security/client_ip.py                                 481c741ad9ff1a5fe35433adfdb0f96d393fdd88412bc9cf890529119fe6e894 166     
+kanban/services/comments.py                                  2ce6e04e647bb6518241e99c0d2a439775f427a87cfee9dd9c71a7da79af3792 730     
+kanban/services/issue_delete.py                              dd5729c445a782fa2495ebef35ada365283a8f92c27f52b4d6196cdb3589072c 387     
+kanban/services/issues.py                                    7f9c813abb840621bb70c65bd2a7a77f03200730ac2dac1df451f139d8dee06c 1116    
+kanban/settings.py                                           9eeff5a1089d7e3199398818803f966dac15f9116381a0d4972928102ee30608 230     
+kanban/tests/api/test_issue_delete.py                        76d216b9f5b0dc3f9f70c2ed64ae2bf348ac550e50a829249f5b76c5405e0579 636     
+kanban/tests/api/test_issues.py                              7f1ca4465a1f53abe18c08a4e07179c1280703a4842f6e7471fe50814b985646 1208    
+kanban/tests/auth/test_csrf.py                               aa8bf3785684883a3ef3b521c96a6e84b1a23923cacba8b6e317781255b1c709 589     
+kanban/tests/security/test_client_ip.py                      c97aad0cc6d1c4947518f62141f3b4a2ae2b6bbcfa52a89164e47595a289216e 224     
+kanban/tests/test_security_headers.py                        7b41a5fac5ea7d4a76328275535385748fa95a8ddbf4e40f872b47cc07efa7e2 405     
+mcp/surfaces/agent/read_ticket.py                            79fa7aa16a6de796f5b90e3202a3b147f0727cf2da14c7b894d2ada3745cfb66 432     
+mcp/tests/agent/test_read_ticket.py                          5768e30330245c9a996b91b913b7fa753676b20c4daa6e4a91ca20ccc8517481 516     
+mcp/tests/test_yaml_out.py                                   4a85fe725eacd0ea588269ab08890a090e3707b59fca3fafc83cbbda26e3d6be 182     
+mcp/yaml_out.py                                              6660fb0c795a3aaffca01c8e40f17982bad39012defb17fb554ae11b7f17694c 163     
+tests/deploy/test_standalone_entrypoint.py                   f8666c0333ddfde50505ce356a6f67fb895ccda83f88da28e51d3f9539c4dc6f 748     

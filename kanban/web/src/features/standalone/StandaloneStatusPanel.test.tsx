@@ -2442,7 +2442,7 @@ describe('ComposeExportTab', () => {
     restoreFailMode = 'html';
     fireEvent.click(restoreBtn);
     await waitFor(() => {
-      expect(screen.getByText('Restore failed (504)')).toBeDefined();
+      expect(screen.getByText('Database restore failed with status 504')).toBeDefined();
     });
 
     // 3. String rejection
@@ -2517,7 +2517,7 @@ describe('ComposeExportTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Verification failed (400)')).toBeDefined();
+      expect(screen.getByText('Backup verification failed with status 400')).toBeDefined();
     });
   });
 });

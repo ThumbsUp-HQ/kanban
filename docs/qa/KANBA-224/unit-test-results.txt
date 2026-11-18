@@ -1,0 +1,156 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 125 items
+
+kanban/tests/test_logging_standard.py::test_status_symbol_mapping PASSED [  0%]
+kanban/tests/test_logging_standard.py::test_positive_formatting_and_deduplication PASSED [  1%]
+kanban/tests/test_logging_standard.py::test_request_id_correlation PASSED [  2%]
+kanban/tests/test_logging_standard.py::test_semantic_helper_functions PASSED [  3%]
+kanban/tests/test_logging_standard.py::test_direct_sanitization_and_scrubbing_apis PASSED [  4%]
+kanban/tests/test_logging_standard.py::test_log_injection_neutralization PASSED [  4%]
+kanban/tests/test_logging_standard.py::test_credential_scrubbing_in_message_and_tracebacks PASSED [  5%]
+kanban/tests/test_logging_standard.py::test_configure_logging_integration PASSED [  6%]
+kanban/tests/test_logging_standard.py::test_first_boot_setup_banner_redacted_with_emoji PASSED [  7%]
+kanban/tests/test_logging_standard.py::test_standalone_entrypoint_log_level_and_phase_formatting PASSED [  8%]
+kanban/tests/test_logging_standard.py::test_problem_exception_logging PASSED [  8%]
+kanban/tests/test_logging_standard.py::test_http_status_symbol_mapping PASSED [  9%]
+kanban/tests/test_logging_standard.py::test_uvicorn_access_log_severity_mapping PASSED [ 10%]
+kanban/tests/test_logging_standard.py::test_http_status_extraction_sources PASSED [ 11%]
+kanban/tests/test_logging_standard.py::test_cli_ctl_help_without_pytest PASSED [ 12%]
+kanban/tests/test_logging_standard.py::test_logging_edge_cases_helpers PASSED [ 12%]
+kanban/tests/test_logging_standard.py::test_logging_edge_cases_formatter PASSED [ 13%]
+kanban/tests/test_logging_standard.py::test_logging_edge_cases_status_extraction_and_filter PASSED [ 14%]
+agent/tests/cli/test_cli_skeleton.py::test_case_1_positive_text_report PASSED [ 15%]
+agent/tests/cli/test_cli_skeleton.py::test_case_2_positive_json_and_verbose_tools PASSED [ 16%]
+agent/tests/cli/test_cli_skeleton.py::test_case_3_policy_and_schema_violations PASSED [ 16%]
+agent/tests/cli/test_cli_skeleton.py::test_case_4_runtime_errors PASSED  [ 17%]
+agent/tests/cli/test_cli_skeleton.py::test_case_5_extensibility_and_boundaries PASSED [ 18%]
+agent/tests/cli/test_cli_skeleton.py::test_cli_report_formatting_and_mapping PASSED [ 19%]
+agent/tests/cli/test_cli_skeleton.py::test_cli_handler_unexpected_exception PASSED [ 20%]
+agent/tests/cli/test_cli_skeleton.py::test_validate_echo_non_fixture_provider_error PASSED [ 20%]
+agent/tests/cli/test_cli_skeleton.py::test_validate_echo_cassette_matcher_adaptation PASSED [ 21%]
+agent/tests/cli/test_cli_skeleton.py::test_validate_echo_structured_fault_handling PASSED [ 22%]
+agent/tests/cli/test_cli_skeleton.py::test_cli_handler_without_scrubber_kwarg PASSED [ 23%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_1_positive_s15_3_example_4 PASSED [ 24%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_2_positive_markdown_ticket_frontmatter PASSED [ 24%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_3_negative_specialist_gates_enforced PASSED [ 25%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_4_anti_fantasy_invariant PASSED [ 26%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_5_security_symlink_escape_and_secrets PASSED [ 27%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_6_passive_guarantee_zero_subprocess PASSED [ 28%]
+agent/tests/cli/test_validate_qa_packet.py::test_case_7_boundary_and_json_schema PASSED [ 28%]
+agent/tests/cli/test_validate_qa_packet.py::test_cli_runtime_errors_nonexistent_paths PASSED [ 29%]
+agent/tests/cli/test_validate_qa_packet.py::test_cli_air_gap_flag_enforcement PASSED [ 30%]
+agent/tests/cli/test_validate_qa_packet.py::test_resolve_qa_provider_variants PASSED [ 31%]
+agent/tests/cli/test_validate_qa_packet.py::test_handle_validate_qa_packet_audit_failure PASSED [ 32%]
+agent/tests/cli/test_validate_qa_packet.py::test_resolve_qa_provider_all_branches PASSED [ 32%]
+agent/tests/cli/test_validate_sparkle.py::test_case_1_positive_pkce_ldap PASSED [ 33%]
+agent/tests/cli/test_validate_sparkle.py::test_case_2_security_rls_isolation PASSED [ 34%]
+agent/tests/cli/test_validate_sparkle.py::test_case_3_security_bypass_role_refused PASSED [ 35%]
+agent/tests/cli/test_validate_sparkle.py::test_case_4_security_scrub_first PASSED [ 36%]
+agent/tests/cli/test_validate_sparkle.py::test_case_5_negative_markers_and_usage PASSED [ 36%]
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable PASSED [ 37%]
+agent/tests/cli/test_validate_sparkle.py::test_case_7_fault_prompt_override PASSED [ 38%]
+agent/tests/cli/test_validate_sparkle.py::test_case_8_boundary_iterations_and_json_schema PASSED [ 39%]
+agent/tests/cli/test_validate_sparkle.py::test_unknown_principal_and_project PASSED [ 40%]
+agent/tests/cli/test_validate_sparkle.py::test_cli_embedder PASSED       [ 40%]
+agent/tests/cli/test_validate_sparkle.py::test_provider_resolution_variants PASSED [ 41%]
+agent/tests/cli/test_validate_sparkle.py::test_filter_action_secret_echo PASSED [ 42%]
+agent/tests/cli/test_validate_sparkle.py::test_latency_sla_breach PASSED [ 43%]
+agent/tests/cli/test_validate_sparkle.py::test_provider_unavailable_fault PASSED [ 44%]
+agent/tests/cli/test_validate_sparkle.py::test_html_stripped_filter_action PASSED [ 44%]
+agent/tests/cli/test_validate_sparkle.py::test_default_database_url_and_trace_error PASSED [ 45%]
+agent/tests/cli/test_validate_sparkle.py::test_pipeline_none_result PASSED [ 46%]
+agent/tests/cli/test_validate_sparkle.py::test_direct_select_fallbacks PASSED [ 47%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_file_not_found PASSED [ 48%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_missing_cassette_for_fixture PASSED [ 48%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_ok_text_report PASSED [ 49%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_ok_json_report PASSED [ 50%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_schema_invalid PASSED [ 51%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_air_gap_denied PASSED [ 52%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_strict_blocks_dropped_mermaid PASSED [ 52%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_non_strict_blocks_dropped_mermaid PASSED [ 53%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_with_acl_fixture PASSED [ 54%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_live_provider_missing_key PASSED [ 55%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_provider_with_cassette_override PASSED [ 56%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_runtime_error PASSED [ 56%]
+agent/tests/cli/test_validate_sticky_promo.py::test_validate_sticky_promo_acl_fixture_not_a_file PASSED [ 57%]
+agent/tests/cli/test_validate_transition.py::test_cli_pipe_s15_3_example_1 PASSED [ 58%]
+agent/tests/cli/test_validate_transition.py::test_in_app_sdk_gate PASSED [ 59%]
+agent/tests/cli/test_validate_transition.py::test_remote_runner_loopback PASSED [ 60%]
+agent/tests/cli/test_validate_transition.py::test_security_banned_flags_and_secret_masking PASSED [ 60%]
+agent/tests/cli/test_validate_transition.py::test_security_repo_immutability PASSED [ 61%]
+agent/tests/cli/test_validate_transition.py::test_negative_and_schema_violations PASSED [ 62%]
+agent/tests/cli/test_validate_transition.py::test_boundary_json_schema_validation PASSED [ 63%]
+agent/tests/cli/test_validate_transition.py::test_cli_error_branches PASSED [ 64%]
+agent/tests/cli/test_validate_transition.py::test_direct_handler_and_helpers PASSED [ 64%]
+agent/tests/cli/test_validate_verdict.py::test_cli_valid_approve_exit_0 PASSED [ 65%]
+agent/tests/cli/test_validate_verdict.py::test_cli_forged_echo_exit_0_with_forged_count PASSED [ 66%]
+agent/tests/cli/test_validate_verdict.py::test_cli_forged_only_exit_2 PASSED [ 67%]
+agent/tests/cli/test_validate_verdict.py::test_cli_malformed_prose_exit_2 PASSED [ 68%]
+agent/tests/cli/test_validate_verdict.py::test_cli_missing_output_file_exit_1 PASSED [ 68%]
+agent/tests/cli/test_validate_verdict.py::test_cli_render_context_kan_142 PASSED [ 69%]
+agent/tests/cli/test_validate_verdict.py::test_cli_render_context_missing_ticket_file PASSED [ 70%]
+agent/tests/cli/test_validate_verdict.py::test_cli_render_context_no_ticket_arg PASSED [ 71%]
+agent/tests/cli/test_validate_verdict.py::test_cli_no_args_exit_1 PASSED [ 72%]
+agent/tests/cli/test_validate_verdict.py::test_cli_json_report_format PASSED [ 72%]
+agent/tests/cli/test_validate_verdict.py::test_parser_configuration PASSED [ 73%]
+agent/tests/cli/test_validate_verdict.py::test_cli_allowed_mutable_fields_and_final_verdict_cassette PASSED [ 74%]
+agent/tests/cli/test_validate_verdict.py::test_cli_render_context_markdown_and_direct_descriptions PASSED [ 75%]
+agent/tests/cli/test_validate_verdict.py::test_cli_error_branches PASSED [ 76%]
+kanban/tests/auth/test_setup_claim.py::test_case_1_positive_full_lifecycle PASSED [ 76%]
+kanban/tests/auth/test_setup_claim.py::test_case_2_positive_passkey_branch PASSED [ 77%]
+kanban/tests/auth/test_setup_claim.py::test_case_3_single_use_replay PASSED [ 78%]
+kanban/tests/auth/test_setup_claim.py::test_case_4_concurrency_race PASSED [ 79%]
+kanban/tests/auth/test_setup_claim.py::test_case_5_ttl_expiry PASSED     [ 80%]
+kanban/tests/auth/test_setup_claim.py::test_case_6_restart_rotation_and_post_init_silence PASSED [ 80%]
+kanban/tests/auth/test_setup_claim.py::test_case_7_at_rest_hashing_and_db_boundary PASSED [ 81%]
+kanban/tests/auth/test_setup_claim.py::test_case_8_rate_limit_and_enumeration PASSED [ 82%]
+kanban/tests/auth/test_setup_claim.py::test_case_9_boundary_and_secret_hygiene PASSED [ 83%]
+kanban/tests/auth/test_setup_claim.py::test_setup_validation_edge_cases PASSED [ 84%]
+kanban/tests/auth/test_setup_claim.py::test_setup_service_dependency_error PASSED [ 84%]
+kanban/tests/auth/test_setup_claim.py::test_mint_token_defaults_coverage PASSED [ 85%]
+kanban/tests/auth/test_setup_claim.py::test_browser_setup_wizard_and_login_flow_over_plain_http PASSED [ 86%]
+kanban/tests/jobs/test_auto_archive.py::test_case_4_job_boundary PASSED  [ 87%]
+kanban/tests/jobs/test_auto_archive.py::test_case_5_job_concurrency PASSED [ 88%]
+kanban/tests/jobs/test_auto_archive.py::test_case_6_cli PASSED           [ 88%]
+kanban/tests/jobs/test_auto_archive.py::test_scheduler_and_registry PASSED [ 89%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_boundary_logic PASSED [ 90%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_column_empty_and_single PASSED [ 91%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_column_multi_card_and_activity_and_outbox PASSED [ 92%]
+kanban/tests/jobs/test_board_rebalance.py::test_rebalance_column_advisory_lock_contention PASSED [ 92%]
+kanban/tests/jobs/test_board_rebalance.py::test_cli_board_rebalance_command PASSED [ 93%]
+kanban/tests/jobs/test_trash_purge.py::test_case_5_trash_purge_expired_vs_unexpired PASSED [ 94%]
+kanban/tests/jobs/test_trash_purge.py::test_case_5_advisory_lock_concurrency PASSED [ 95%]
+kanban/tests/jobs/test_trash_purge.py::test_case_5_cli PASSED            [ 96%]
+kanban/tests/jobs/test_trash_purge.py::test_registry_registration PASSED [ 96%]
+kanban/tests/jobs/test_trash_purge.py::test_purge_engine_targets_and_type_error PASSED [ 97%]
+kanban/tests/jobs/test_trash_purge.py::test_purge_issue_without_links_and_naive_datetime PASSED [ 98%]
+kanban/tests/jobs/test_trash_purge.py::test_purge_target_none_and_existing_sp PASSED [ 99%]
+kanban/tests/jobs/test_trash_purge.py::test_unrelated_flagged_link_survives_trash_purge PASSED [100%]
+
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 125 passed, 1 warning in 13.35s ========================
+
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
+> vitest run src/utils/logger.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+
+ ✓ src/utils/logger.test.ts (16 tests) 17ms
+
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+   Start at  13:24:11
+   Duration  925ms (environment 93%, tests 2%, import 2%, transform 1%, worker 1%)
+

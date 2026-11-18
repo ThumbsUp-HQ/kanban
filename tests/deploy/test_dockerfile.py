@@ -319,4 +319,3 @@ def test_kanban_ctl_and_agent_in_container_path() -> None:
     assert "/opt/kanban/.venv/bin" in combined_env, (
         "runtime-slim PATH must include /opt/kanban/.venv/bin"
     )
-

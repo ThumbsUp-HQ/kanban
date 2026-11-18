@@ -511,9 +511,7 @@ def _render_responses_table(responses: dict[str, Any]) -> list[str]:
         "                <tbody>",
     ]
     for code, r_info in sorted(responses.items()):
-        r_desc = (
-            html.escape(str(r_info.get("description", ""))) if isinstance(r_info, dict) else ""
-        )
+        r_desc = html.escape(str(r_info.get("description", ""))) if isinstance(r_info, dict) else ""
         c_badge = (
             "status-2xx"
             if str(code).startswith("2")

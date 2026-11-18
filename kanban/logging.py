@@ -66,9 +66,7 @@ _RE_KV_SECRETS: Final[re.Pattern[str]] = re.compile(
     r"(?i)\b(password|client_secret|secret)\s*([=:]\s*(?:\\*['\"])?)"
     r"(?!\[REDACTED:)([^;'\"\s,]+)((?:\\*['\"])?)"
 )
-_RE_HTTP_STATUS_IN_ACCESS_LOG: Final[re.Pattern[str]] = re.compile(
-    r'"\s+([1-5]\d\d)\b'
-)
+_RE_HTTP_STATUS_IN_ACCESS_LOG: Final[re.Pattern[str]] = re.compile(r'"\s+([1-5]\d\d)\b')
 
 _PACKAGE_LOGGERS: Final[tuple[str, ...]] = (
     "kanban",

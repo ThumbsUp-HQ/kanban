@@ -28,7 +28,7 @@ index 3900fa5..3f0f76e 100644
  EXPOSE 8080
  VOLUME /var/lib/kanban/data
 diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
-index 7198bd4..e50f94c 100644
+index ac31a14..69734e0 100644
 --- a/deploy/standalone/entrypoint.py
 +++ b/deploy/standalone/entrypoint.py
 @@ -9,6 +9,7 @@ from __future__ import annotations
@@ -90,8 +90,8 @@ index 7198bd4..e50f94c 100644
 +
  def build_uvicorn_command() -> list[str]:
      """Construct the setpriv argv list for spawning Uvicorn as UID 65532."""
-     forwarded_allow_ips = os.environ.get("KB_FORWARDED_ALLOW_IPS", "*")
-@@ -505,6 +538,20 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+     forwarded_allow_ips = os.environ.get(
+@@ -514,6 +547,20 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
      run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
      alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
  
@@ -112,7 +112,7 @@ index 7198bd4..e50f94c 100644
      keyring_path = Path(
          os.environ.get(
              "KB_KEYRING_PATH",
-@@ -556,6 +603,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+@@ -565,6 +612,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
          if not (pgdata / "conf.d" / "kanban.conf").is_file():
              configure_postgres(pgdata, run_dir=run_dir)
          start_postgres(pgdata, run_dir=run_dir)
@@ -120,7 +120,7 @@ index 7198bd4..e50f94c 100644
      else:
          # Storage probe & ephemeral warning
          status = probe(pgdata.parent, mode="standalone_embedded_pg")
-@@ -583,6 +631,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+@@ -592,6 +640,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
          # Bootstrap SQL & Migrations
          bootstrap_database(run_dir=run_dir, keyring=keyring)
          run_migrations(pgdata, alembic_ini, run_dir=run_dir)
@@ -306,6 +306,205 @@ index e9d88f6..806bd5f 100644
  
  @pytest.mark.asyncio
  async def test_case_9_backup_verify_and_restore_api(
+diff --git a/kanban/web/e2e/standalone/kanba-208-screenshots.spec.ts b/kanban/web/e2e/standalone/kanba-208-screenshots.spec.ts
+new file mode 100644
+index 0000000..0d07f65
+--- /dev/null
++++ b/kanban/web/e2e/standalone/kanba-208-screenshots.spec.ts
+@@ -0,0 +1,193 @@
++/**
++ * Playwright Visual & Accessibility Verification for KANBA-208.
++ * Captures Light, Dark, Desktop (1440x900), Tablet (1024x768), and Mobile (390x844)
++ * screenshots of /admin/standalone across Health, Backup, Compose tabs and Error Banner scroll.
++ */
++
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { resolve } from 'node:path';
++
++const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
++const SCREENSHOT_DIR = resolve(REPO_ROOT, 'docs/qa/KANBA-208/screenshots');
++
++const ADMIN_STATUS_FIXTURE = {
++  deployment_mode: 'standalone_embedded_pg',
++  persistent_volume: true,
++  data_mount_point: '/var/lib/kanban/data',
++  data_mount_fstype: 'ext4',
++  tier_b_sandbox_available: false,
++  air_gap_mode: false,
++  local_llm_endpoint_host: 'http://host.docker.internal:11434',
++  is_server_admin: true,
++};
++
++const SCHEDULE_FIXTURE = {
++  enabled: true,
++  interval_hours: 24,
++  retention_count: 7,
++  last_run_at: '2026-11-18T08:00:00Z',
++  next_run_at: '2026-11-19T08:00:00Z',
++};
++
++const SNAPSHOTS_FIXTURE = [
++  {
++    filename: 'kanban-backup-20261118-080000.kbbak',
++    size_bytes: 4194304,
++    created_at: '2026-11-18T08:00:00Z',
++  },
++];
++
++test.describe('KANBA-208 Studio Modal & Tab Accessibility Screenshots', () => {
++  test('Capture visual proof across tabs, dark/light, and error banner scroll', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name; // 'desktop', 'tablet', or 'mobile'
++
++    const mockUser = {
++      id: '00000000-0000-0000-0000-000000000001',
++      email: 'adam@example.com',
++      display_name: 'Adam Outler',
++      role: 'SERVER_ADMIN',
++      capabilities: ['SERVER_ADMIN', 'WORKSPACE_ADMIN'],
++    };
++
++    const mockWorkspace = {
++      items: [
++        {
++          id: '00000000-0000-0000-0000-000000000002',
++          slug: 'kanban',
++          name: '👍kanban',
++        },
++      ],
++      total: 1,
++    };
++
++    const mockProjects = [
++      {
++        id: '00000000-0000-0000-0000-000000000003',
++        key: 'KAN',
++        name: 'kanban',
++      },
++    ];
++
++    await mockApi(page, {
++      'GET /api/v1/auth/me': { json: mockUser },
++      'GET /api/v1/me': { json: mockUser },
++      'GET /api/v1/users/me': { json: mockUser },
++      'GET /api/v1/auth/session': {
++        json: {
++          authenticated: true,
++          aal_level: 2,
++          csrf_token: 'csrf-test-token',
++          user: mockUser,
++        },
++      },
++      'GET /api/v1/session/csrf': { json: { csrf_token: 'csrf-test-token' } },
++      'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++      'GET /api/v1/workspaces': { json: mockWorkspace },
++      'GET /api/v1/workspaces/:wsId': { json: mockWorkspace.items[0] },
++      'GET /api/v1/projects': { json: mockProjects },
++      'GET /api/v1/projects/KAN': { json: mockProjects[0] },
++      'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++      'GET /api/v1/issues': { json: loadFixture('issues-kan') },
++      'GET /api/v1/system/status': { json: ADMIN_STATUS_FIXTURE },
++      'GET /api/v1/admin/standalone/backup-schedule': { json: SCHEDULE_FIXTURE },
++      'PUT /api/v1/admin/standalone/backup-schedule': {
++        status: 500,
++        json: {
++          detail:
++            'pg_dump: ERROR: permission denied for table alembic_version. Standalone backup failed with correlation tracking.',
++          request_id: 'req-pgdump-alembic-500-corr-id-998',
++        },
++      },
++      'GET /api/v1/admin/standalone/backups': { json: SNAPSHOTS_FIXTURE },
++      'GET /api/v1/admin/standalone/compose-export': { json: loadFixture('compose-export-sample') },
++    });
++
++    // 1. Light Mode - Navigate to /admin/standalone
++    await page.goto('/admin/standalone');
++    await page.waitForLoadState('networkidle');
++
++    const dialog = page.locator('.standalone-panel');
++    await expect(dialog).toBeVisible();
++
++    // Verify Health Tab
++    const healthPanel = page.locator('#panel-health');
++    await expect(healthPanel).toBeVisible();
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/01-health-tab-${projectName}-light.png`,
++    });
++
++    // 2. Backup Tab
++    const backupTabBtn = page.locator('#tab-backup');
++    await backupTabBtn.click();
++    const backupPanel = page.locator('#panel-backup');
++    await expect(backupPanel).toBeVisible();
++    await expect(
++      page.locator('.standalone-panel__snapshots-table td', {
++        hasText: 'kanban-backup-20261118-080000.kbbak',
++      }),
++    ).toBeVisible();
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/02-backup-tab-${projectName}-light.png`,
++    });
++
++    // 3. Compose Tab
++    const composeTabBtn = page.locator('#tab-compose');
++    await composeTabBtn.click();
++    const composePanel = page.locator('#panel-compose');
++    await expect(composePanel).toBeVisible();
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/03-compose-tab-${projectName}-light.png`,
++    });
++
++    // 4. Trigger Error Banner on Backup Tab
++    await backupTabBtn.click();
++    const saveScheduleBtn = page.locator('button:has-text("Save Schedule")');
++    await saveScheduleBtn.click();
++
++    const errorAlert = page.locator('[data-testid="standalone-api-error-alert"]');
++    await expect(errorAlert).toBeVisible();
++    await expect(page.locator('[data-testid="correlation-id"]')).toHaveText(
++      'req-pgdump-alembic-500-corr-id-998',
++    );
++
++    // Verify tabs and close button remain visible and unoccluded
++    await expect(page.locator('.standalone-panel__tabs')).toBeVisible();
++    await expect(page.locator('.standalone-panel__close')).toBeVisible();
++
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/04-error-banner-scroll-${projectName}-light.png`,
++    });
++
++    // 5. Dark Mode
++    await page.evaluate(() => {
++      document.documentElement.dataset.theme = 'dark';
++    });
++
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/05-error-banner-scroll-${projectName}-dark.png`,
++    });
++
++    // Health Tab in Dark Mode
++    const healthTabBtn = page.locator('#tab-health');
++    await healthTabBtn.click();
++    await expect(healthPanel).toBeVisible();
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/06-health-tab-${projectName}-dark.png`,
++    });
++
++    // Backup Tab in Dark Mode
++    await backupTabBtn.click();
++    await expect(backupPanel).toBeVisible();
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/07-backup-tab-${projectName}-dark.png`,
++    });
++
++    // Compose Tab in Dark Mode
++    await composeTabBtn.click();
++    await expect(composePanel).toBeVisible();
++    await page.screenshot({
++      path: `${SCREENSHOT_DIR}/08-compose-tab-${projectName}-dark.png`,
++    });
++  });
++});
 diff --git a/kanban/web/e2e/support/test.ts b/kanban/web/e2e/support/test.ts
 index 827d54e..81b15d0 100644
 --- a/kanban/web/e2e/support/test.ts
@@ -502,7 +701,7 @@ index ce25d7a..9ce0fa0 100644
    .standalone-panel__copy-btn {
      min-height: var(--tap-min, 44px);
 diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
-index 79c6d94..f82db9a 100644
+index 33e2ff2..8602c7a 100644
 --- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
 +++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
 @@ -3,7 +3,7 @@
@@ -1501,7 +1700,7 @@ index 79c6d94..f82db9a 100644
  
      expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
  
-@@ -1005,5 +1976,27 @@ describe('ComposeExportTab', () => {
+@@ -1005,6 +1976,28 @@ describe('ComposeExportTab', () => {
        screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
      ).toBeDefined();
      expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
@@ -1528,7 +1727,8 @@ index 79c6d94..f82db9a 100644
 +    fireEvent.click(dlSingleBtn);
 +    unmount();
    });
- });
+ 
+   it('handles automated backup schedule editing and saving', async () => {
 diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
 index 895813f..e3289a8 100644
 --- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
@@ -1963,7 +2163,7 @@ index 7ffc6f1..38a648c 100644
 +    )
 +
 diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
-index ed11486..c1a0ad1 100644
+index f2aabd2..6e640c9 100644
 --- a/tests/deploy/test_standalone_entrypoint.py
 +++ b/tests/deploy/test_standalone_entrypoint.py
 @@ -19,6 +19,7 @@ from deploy.standalone.entrypoint import (
@@ -1974,7 +2174,7 @@ index ed11486..c1a0ad1 100644
      initialize_cluster,
      log_phase,
      main,
-@@ -707,3 +708,22 @@ def test_warm_boot_stale_alembic_digest_runs_migrations(
+@@ -727,3 +728,22 @@ def test_warm_boot_stale_alembic_digest_runs_migrations(
      assert "upgrade" in alembic_calls[0]
      assert "head" in alembic_calls[0]
      assert (pgdata / ".alembic_head").read_text(encoding="utf-8").strip() != "stale-old-digest"

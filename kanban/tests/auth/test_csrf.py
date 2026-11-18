@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
@@ -455,22 +455,26 @@ async def test_csrf_fallback_cookie_and_scope_branches(hmac_key: bytes) -> None:
     assert "Max-Age=0" in clear_fb
 
     # 2. extract_csrf_cookie with fallback cookie and matching header
-    req_fb = Request({
-        "type": "http",
-        "headers": [
-            (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
-            (b"x-csrf-token", b"fb_val"),
-        ],
-    })
+    req_fb = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
+                (b"x-csrf-token", b"fb_val"),
+            ],
+        }
+    )
     assert extract_csrf_cookie(req_fb) == "fb_val"
 
-    req_fb_no_match = Request({
-        "type": "http",
-        "headers": [
-            (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
-            (b"x-csrf-token", b"other_val"),
-        ],
-    })
+    req_fb_no_match = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
+                (b"x-csrf-token", b"other_val"),
+            ],
+        }
+    )
     assert extract_csrf_cookie(req_fb_no_match) == "fb_val"
 
     # 3. Non-http scope in CsrfMiddleware
@@ -483,8 +487,14 @@ async def test_csrf_fallback_cookie_and_scope_branches(hmac_key: bytes) -> None:
         nonlocal called
         called = True
 
+    async def dummy_rcv() -> dict[str, Any]:
+        return {}
+
+    async def dummy_snd(_: object) -> None:
+        pass
+
     mw.app = mock_app
-    await mw(ws_scope, lambda: None, lambda _: None)  # type: ignore[arg-type]
+    await mw(ws_scope, dummy_rcv, dummy_snd)
     assert called is True
 
     # 4. Metadata validation when host header is missing
@@ -495,14 +505,16 @@ async def test_csrf_fallback_cookie_and_scope_branches(hmac_key: bytes) -> None:
     orig_pub = get_settings().public_origin
     try:
         object.__setattr__(get_settings(), "public_origin", "https://settings.kanban.test")
-        req_settings = Request({
-            "type": "http",
-            "path": "/",
-            "headers": [
-                (b"host", b"kanban.internal"),
-                (b"origin", b"https://settings.kanban.test"),
-            ],
-        })
+        req_settings = Request(
+            {
+                "type": "http",
+                "path": "/",
+                "headers": [
+                    (b"host", b"kanban.internal"),
+                    (b"origin", b"https://settings.kanban.test"),
+                ],
+            }
+        )
         assert mw._validate_metadata(req_settings) is None  # noqa: SLF001
     finally:
         object.__setattr__(get_settings(), "public_origin", orig_pub)
@@ -563,9 +575,9 @@ async def test_csrf_token_bypass_and_login_branches(hmac_key: bytes) -> None:
 
         app_login = SessionInjector(app2)
         trans_login = httpx.ASGITransport(app=app_login, raise_app_exceptions=False)
-        async with (
-            httpx.AsyncClient(transport=trans_login, base_url="http://testserver") as cl_login
-        ):
+        async with httpx.AsyncClient(
+            transport=trans_login, base_url="http://testserver"
+        ) as cl_login:
             res_login = await cl_login.post(
                 "/api/v1/auth/local/login",
                 headers={

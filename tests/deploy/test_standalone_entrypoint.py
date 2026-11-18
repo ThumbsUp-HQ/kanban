@@ -746,4 +746,3 @@ def test_ensure_backup_grants_executes_alembic_version_grant(
     assert len(executed_sqls) == 1
     assert "alembic_version" in executed_sqls[0]
     assert "GRANT SELECT ON TABLE alembic_version TO kanban_app" in executed_sqls[0]
-

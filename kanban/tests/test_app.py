@@ -209,9 +209,7 @@ async def test_app_lifespan_and_bootstrap_coverage(test_settings: Settings) -> N
 
     # Bootstrap error handling branch
     app_fail = create_app(test_settings)
-    app_fail.state.settings = MagicMock(
-        database_url="postgresql+asyncpg://user:pass@localhost/db"
-    )
+    app_fail.state.settings = MagicMock(database_url="postgresql+asyncpg://user:pass@localhost/db")
     with patch("kanban.app.create_async_engine", side_effect=RuntimeError("Engine fail")):
         assert _bootstrap_runtime_state(app_fail) is None
 
@@ -241,9 +239,7 @@ async def test_oauth2_error_handler_and_endpoints(test_settings: Settings) -> No
     )
     resp = await raw_resp if inspect.isawaitable(raw_resp) else raw_resp
     assert resp.status_code == 400
-    expected_body = (
-        b'{"error":"invalid_grant","error_description":"Invalid authorization code"}'
-    )
+    expected_body = b'{"error":"invalid_grant","error_description":"Invalid authorization code"}'
     assert resp.body == expected_body
 
     # Test favicon and oauth-protected-resource endpoints via HTTP client

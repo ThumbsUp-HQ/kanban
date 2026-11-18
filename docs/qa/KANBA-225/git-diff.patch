@@ -1,0 +1,1110 @@
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index 7198bd4..ac31a14 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -312,7 +312,10 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
+ 
+ def build_uvicorn_command() -> list[str]:
+     """Construct the setpriv argv list for spawning Uvicorn as UID 65532."""
+-    forwarded_allow_ips = os.environ.get("KB_FORWARDED_ALLOW_IPS", "*")
++    forwarded_allow_ips = os.environ.get(
++        "KB_FORWARDED_ALLOW_IPS",
++        os.environ.get("KB_TRUSTED_PROXIES", "") or os.environ.get("KANBAN_TRUSTED_PROXIES", ""),
++    )
+     return [
+         BIN_SETPRIV,
+         "--reuid=65532",
+@@ -329,7 +332,11 @@ def build_uvicorn_command() -> list[str]:
+         "--port",
+         "8080",
+         "--proxy-headers",
+-        f"--forwarded-allow-ips={forwarded_allow_ips}",
++        (
++            f"--forwarded-allow-ips={forwarded_allow_ips}"
++            if forwarded_allow_ips
++            else '--forwarded-allow-ips=""'
++        ),
+         "--loop",
+         "uvloop",
+         "--http",
+@@ -353,6 +360,8 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
+     "KANBAN_ENFORCE_HTTPS",
+     "KB_STANDALONE_CLEARTEXT_HOSTS",
+     "KB_FORWARDED_ALLOW_IPS",
++    "KB_TRUSTED_PROXIES",
++    "KANBAN_TRUSTED_PROXIES",
+     "KB_PUBLIC_ORIGIN",
+     "KANBAN_PUBLIC_ORIGIN",
+     "KB_PUBLIC_BASE_URL",
+diff --git a/kanban/api/v1/issue_delete.py b/kanban/api/v1/issue_delete.py
+index 9e97fee..90980ed 100644
+--- a/kanban/api/v1/issue_delete.py
++++ b/kanban/api/v1/issue_delete.py
+@@ -57,6 +57,14 @@ async def delete_preview(
+     "/issues/{issue_ref}",
+     response_model=IssueDeleteResponse,
+     summary="Soft-delete an issue into trash",
++    responses={
++        428: {
++            "description": (
++                "Precondition Required: Kb-Blast-Hash header is required. Directs callers to "
++                "GET /api/v1/issues/{id}/delete-preview to obtain blast_hash (confirm_blast_hash)."
++            )
++        }
++    },
+ )
+ async def delete_issue(
+     issue_ref: str,
+diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
+index 167251f..ea8e174 100644
+--- a/kanban/api/v1/issues.py
++++ b/kanban/api/v1/issues.py
+@@ -1,4 +1,7 @@
+-"""Issue endpoints: CRUD, keyset listing, and description ETag concurrency (S7.2 8a, S3.4)."""
++"""Issue endpoints CRUD and outbound secret scrubbing.
++
++Covers CRUD, keyset listing, description ETag concurrency, and secret redaction (S7.2, S3.4).
++"""
+ 
+ from __future__ import annotations
+ 
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index 8f136b8..976498e 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -11,6 +11,7 @@ import os
+ import secrets
+ import uuid
+ from typing import TYPE_CHECKING, Final
++from urllib.parse import urlsplit
+ 
+ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+ from starlette.responses import JSONResponse, Response
+@@ -18,6 +19,7 @@ from starlette.responses import JSONResponse, Response
+ from kanban.api.problems import Problem
+ from kanban.api.request_id import get_request_id
+ from kanban.security.keys import derive_subkey
++from kanban.settings import get_settings
+ 
+ if TYPE_CHECKING:
+     from starlette.requests import Request
+@@ -139,6 +141,62 @@ def build_clear_fallback_csrf_cookie_header() -> str:
+     return f"{FALLBACK_CSRF_COOKIE_NAME}=; Path=/; SameSite=Strict; Max-Age=0"
+ 
+ 
++def _resolve_public_origin() -> str | None:
++    """Retrieve public origin from environment or application settings."""
++    public_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN") or os.environ.get("KB_PUBLIC_ORIGIN")
++    if not public_origin:
++        try:
++            public_origin = get_settings().public_origin
++        except RuntimeError:
++            return None
++    return public_origin.strip().rstrip("/") if public_origin else None
++
++
++def _get_allowed_origins(request: Request, public_origin: str | None) -> set[str]:
++    """Build allowed origin strings from configured public origin and host header."""
++    allowed: set[str] = set()
++    if public_origin:
++        allowed.add(public_origin)
++    host = request.headers.get("host")
++    if host:
++        clean_host = host.strip()
++        allowed.add(f"{request.url.scheme}://{clean_host}")
++        allowed.add(f"https://{clean_host}")
++        allowed.add(f"http://{clean_host}")
++    return allowed
++
++
++def _check_origin_header(
++    origin: str, allowed_origins: set[str], public_origin: str | None
++) -> str | None:
++    """Validate Origin header against allowed origins."""
++    clean_origin = origin.strip().rstrip("/")
++    if not allowed_origins or clean_origin not in allowed_origins:
++        if public_origin:
++            return "Origin does not match configured public origin"
++        return "Origin does not match request host"
++    return None
++
++
++def _check_referer_header(
++    referer: str, allowed_origins: set[str], public_origin: str | None
++) -> str | None:
++    """Validate Referer header when Origin is omitted."""
++    try:
++        parsed_ref = urlsplit(referer.strip())
++        if parsed_ref.scheme not in ("http", "https") or not parsed_ref.netloc:
++            return "Referer header is malformed"
++        ref_origin = f"{parsed_ref.scheme}://{parsed_ref.netloc}".rstrip("/")
++    except ValueError:
++        return "Referer header is malformed"
++
++    if not allowed_origins or ref_origin not in allowed_origins:
++        if public_origin:
++            return "Referer does not match configured public origin"
++        return "Referer does not match request host"
++    return None
++
++
+ class CsrfMiddleware(BaseHTTPMiddleware):
+     """ASGI middleware enforcing session-bound double-submit CSRF and browser metadata defenses."""
+ 
+@@ -179,30 +237,22 @@ class CsrfMiddleware(BaseHTTPMiddleware):
+         return b"\x00" * 32
+ 
+     def _validate_metadata(self, request: Request) -> str | None:
+-        """Validate browser security headers (Sec-Fetch-Site and Origin)."""
++        """Validate browser security headers (Sec-Fetch-Site, Origin, and Referer)."""
+         sec_fetch_site = request.headers.get("sec-fetch-site")
+         if sec_fetch_site and sec_fetch_site.strip().lower() not in ("same-origin", "none"):
+             return "Sec-Fetch-Site not same-origin or none"
+ 
++        public_origin = _resolve_public_origin()
++        allowed_origins = _get_allowed_origins(request, public_origin)
++
+         origin = request.headers.get("origin")
+         if origin:
+-            clean_origin = origin.strip().rstrip("/")
+-            host = request.headers.get("host")
+-            allowed_origins: set[str] = set()
+-            public_origin = os.environ.get("KANBAN_PUBLIC_ORIGIN") or os.environ.get(
+-                "KB_PUBLIC_ORIGIN"
+-            )
+-            if public_origin:
+-                allowed_origins.add(public_origin.strip().rstrip("/"))
+-            if host:
+-                clean_host = host.strip()
+-                allowed_origins.add(f"{request.url.scheme}://{clean_host}")
+-                allowed_origins.add(f"https://{clean_host}")
+-                allowed_origins.add(f"http://{clean_host}")
+-            if allowed_origins and clean_origin not in allowed_origins:
+-                if public_origin:
+-                    return "Origin does not match configured public origin"
+-                return "Origin does not match request host"
++            return _check_origin_header(origin, allowed_origins, public_origin)
++
++        referer = request.headers.get("referer")
++        if referer:
++            return _check_referer_header(referer, allowed_origins, public_origin)
++
+         return None
+ 
+     async def _resolve_session_id(self, request: Request) -> uuid.UUID:
+diff --git a/kanban/security/client_ip.py b/kanban/security/client_ip.py
+index 4079485..efa5998 100644
+--- a/kanban/security/client_ip.py
++++ b/kanban/security/client_ip.py
+@@ -11,36 +11,47 @@ import os
+ from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
+ from typing import TYPE_CHECKING, Any
+ 
++from kanban.settings import get_settings
++
+ if TYPE_CHECKING:
+     from collections.abc import Mapping, Sequence
+ 
+ 
++def _get_raw_trusted_proxies() -> str:
++    """Retrieve raw trusted proxies string from environment or application settings."""
++    raw_env = os.environ.get("KANBAN_TRUSTED_PROXIES") or os.environ.get("KB_TRUSTED_PROXIES", "")
++    if not raw_env.strip():
++        try:
++            raw_env = get_settings().trusted_proxies
++        except RuntimeError:
++            return ""
++    return raw_env
++
++
+ def _parse_trusted_networks(
+     trusted: Sequence[IPv4Network | IPv6Network | str] | str | None,
+ ) -> tuple[IPv4Network | IPv6Network, ...]:
+     """Parse trusted proxy CIDR entries from sequence, string, or environment."""
+     if trusted is None:
+-        raw_env = os.environ.get("KANBAN_TRUSTED_PROXIES") or os.environ.get(
+-            "KB_TRUSTED_PROXIES", ""
+-        )
+-        if not raw_env.strip():
+-            return ()
+-        entries = [item.strip() for item in raw_env.replace(" ", ",").split(",") if item.strip()]
++        raw_str = _get_raw_trusted_proxies()
++        entries: Sequence[IPv4Network | IPv6Network | str] = [
++            item.strip() for item in raw_str.replace(" ", ",").split(",") if item.strip()
++        ]
+     elif isinstance(trusted, str):
+         entries = [item.strip() for item in trusted.replace(" ", ",").split(",") if item.strip()]
+     else:
+-        parsed: list[IPv4Network | IPv6Network] = []
+-        for item in trusted:
+-            if isinstance(item, (IPv4Network, IPv6Network)):
+-                parsed.append(item)
+-            elif item.strip():
+-                parsed.append(ipaddress.ip_network(item.strip(), strict=False))
+-        return tuple(parsed)
++        entries = trusted
+ 
+     parsed_list: list[IPv4Network | IPv6Network] = []
+-    for entry in entries:
++    for item in entries:
++        if isinstance(item, (IPv4Network, IPv6Network)):
++            parsed_list.append(item)
++            continue
++        token = item.strip()
++        if not token:
++            continue
+         try:
+-            parsed_list.append(ipaddress.ip_network(entry, strict=False))
++            parsed_list.append(ipaddress.ip_network(token, strict=False))
+         except ValueError:
+             continue
+     return tuple(parsed_list)
+@@ -66,6 +77,8 @@ def _format_ip(ip: IPv4Address | IPv6Address) -> str:
+ 
+ def _extract_direct_peer(scope: Mapping[str, Any]) -> IPv4Address | IPv6Address | str:
+     """Extract and normalize the direct peer IP from the ASGI connection scope."""
++    if hasattr(scope, "scope"):
++        scope = scope.scope
+     client_info = scope.get("client")
+     direct_peer_str: str = ""
+     if client_info and len(client_info) > 0 and client_info[0]:
+@@ -135,6 +148,8 @@ def resolve_client_ip(
+     Malformed entries immediately fall back to the direct peer. IPv4-mapped IPv6
+     addresses are normalized to IPv4. IPv6 clients are bucketed by their /64 prefix.
+     """
++    if hasattr(scope, "scope"):
++        scope = scope.scope
+     peer = _extract_direct_peer(scope)
+     if isinstance(peer, str):
+         return peer
+diff --git a/kanban/services/comments.py b/kanban/services/comments.py
+index 1f0e453..81b3866 100644
+--- a/kanban/services/comments.py
++++ b/kanban/services/comments.py
+@@ -32,6 +32,7 @@ from kanban.api.v1.schemas.comments import (
+ )
+ from kanban.content import ContentNormalizeError, normalize_to_markdown
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+ from kanban.services.mentions import extract_mentions, resolve_mentions
+@@ -303,7 +304,7 @@ async def create_comment(
+         parent_comment_id=comment.parent_comment_id,
+         author_id=caller.principal_id,
+         author=author_summary,
+-        body_markdown=normalized_body,
++        body_markdown=scrub_text(normalized_body) if normalized_body else normalized_body,
+         body_sha256=body_sha256_hex,
+         permalink=permalink,
+         created_at=comment.created_at,
+@@ -410,13 +411,14 @@ async def list_comments(
+             AuthorSummary(id=c.author_id, handle="", display_name="Deleted" if is_deleted else ""),
+         )
+         permalink = _build_permalink(project.identifier, issue.sequence_id, c.id)
++        scrubbed_body = scrub_text(body_text) if body_text else body_text
+         return CommentResponse(
+             id=c.id,
+             issue_id=c.issue_id,
+             parent_comment_id=c.parent_comment_id,
+             author_id=c.author_id,
+             author=author,
+-            body_markdown=body_text,
++            body_markdown=scrubbed_body,
+             body_sha256=sha_hex,
+             permalink=permalink,
+             created_at=c.created_at,
+@@ -565,7 +567,7 @@ async def update_comment(
+         parent_comment_id=comment.parent_comment_id,
+         author_id=comment.author_id,
+         author=author_summary,
+-        body_markdown=normalized_body,
++        body_markdown=scrub_text(normalized_body) if normalized_body else normalized_body,
+         body_sha256=new_sha256,
+         permalink=permalink,
+         created_at=comment.created_at,
+diff --git a/kanban/services/issue_delete.py b/kanban/services/issue_delete.py
+index ace7ba2..7d925f3 100644
+--- a/kanban/services/issue_delete.py
++++ b/kanban/services/issue_delete.py
+@@ -186,11 +186,21 @@ async def trash_issue(
+ ) -> IssueDeleteResponse:
+     """Soft-delete an issue into trash after validating blast radius concurrency."""
+     if not blast_hash_header or not blast_hash_header.strip():
++        preview_url = f"/api/v1/issues/{issue_ref}/delete-preview"
++        hint = (
++            f"Obtain blast_hash by calling GET {preview_url} "
++            f"and provide it via 'Kb-Blast-Hash' header (confirm_blast_hash) to confirm deletion."
++        )
+         raise ProblemException(
+             code="BLAST_HASH_REQUIRED",
+             status=428,
+             title="Blast Hash Required",
+-            detail="Header 'Kb-Blast-Hash' is required to delete an issue",
++            detail=f"Header 'Kb-Blast-Hash' is required to delete an issue. {hint}",
++            extra={
++                "preview_url": preview_url,
++                "hint": hint,
++                "confirm_blast_hash": "Kb-Blast-Hash",
++            },
+         )
+ 
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 6a64934..ec515b1 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -70,6 +70,7 @@ from kanban.security.permissions import (
+     evaluate_capabilities,
+     require_capability,
+ )
++from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import ActivityEventType, JSONValue, record_activity
+ from kanban.services.assignees import get_issue_assignees
+ from kanban.services.issue_keys import _ISSUE_KEY_RE, resolve_issue_ref
+@@ -605,7 +606,11 @@ async def serialize_issue(
+         id=issue.id,
+         key=f"{project.identifier}-{issue.sequence_id}",
+         summary=issue.summary,
+-        description_markdown=issue.description_markdown,
++        description_markdown=(
++            scrub_text(issue.description_markdown)
++            if issue.description_markdown
++            else issue.description_markdown
++        ),
+         description_sha256=sha256_hex,
+         state=StateSummary(id=state.id, name=state.name, group=state.state_group),
+         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
+diff --git a/kanban/settings.py b/kanban/settings.py
+index 8296313..8a16c50 100644
+--- a/kanban/settings.py
++++ b/kanban/settings.py
+@@ -110,6 +110,14 @@ class Settings(BaseSettings):
+             "disable_unlimited_mcp_keys",
+         ),
+     )
++    trusted_proxies: str = Field(
++        default="",
++        validation_alias=AliasChoices(
++            "KB_TRUSTED_PROXIES",
++            "KANBAN_TRUSTED_PROXIES",
++            "trusted_proxies",
++        ),
++    )
+ 
+     @field_validator("trash_retention_days")
+     @classmethod
+diff --git a/kanban/tests/api/test_issue_delete.py b/kanban/tests/api/test_issue_delete.py
+index b56fc0a..a84b377 100644
+--- a/kanban/tests/api/test_issue_delete.py
++++ b/kanban/tests/api/test_issue_delete.py
+@@ -236,11 +236,16 @@ async def test_case_2_concurrency_and_missing_hash(
+             creator_id=admin.id,
+         )
+ 
+-    # 3. Missing header returns 428 BLAST_HASH_REQUIRED
++    # 3. Missing header returns 428 BLAST_HASH_REQUIRED with actionable delete-preview link
+     missing_resp = await client.delete(f"/api/v1/issues/{target_key}")
+     contract_recorder.record("delete_missing_hash_428", missing_resp.request, missing_resp)
+     assert missing_resp.status_code == 428
+-    assert missing_resp.json()["code"] == "BLAST_HASH_REQUIRED"
++    body_428 = missing_resp.json()
++    assert body_428["code"] == "BLAST_HASH_REQUIRED"
++    assert f"/api/v1/issues/{target_key}/delete-preview" in body_428["detail"]
++    assert "confirm_blast_hash" in body_428["detail"]
++    assert body_428.get("preview_url") == f"/api/v1/issues/{target_key}/delete-preview"
++    assert "confirm_blast_hash" in body_428.get("hint", "")
+ 
+     # 4. Generate preview with 3 inbound links
+     preview_resp = await client.get(f"/api/v1/issues/{target_key}/delete-preview")
+diff --git a/kanban/tests/api/test_issues.py b/kanban/tests/api/test_issues.py
+index 2799aeb..bde7427 100644
+--- a/kanban/tests/api/test_issues.py
++++ b/kanban/tests/api/test_issues.py
+@@ -1119,3 +1119,90 @@ async def test_services_edge_cases_and_missing_branches(  # noqa: PLR0915
+                 if_match=iss_etag,
+             )
+         assert exc_toctou.value.code == "PRECONDITION_FAILED"
++
++
++async def test_issue_and_comment_free_text_secret_scrubbing(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify outbound REST issue descriptions and comments redact known secret patterns."""
++    user = await make_user("sec_scrub_user", workspace_role="WORKSPACE_ADMIN")
++    await make_project("SCRUB", created_by=user, roles={user: "PROJECT_ADMIN"})
++    client = as_principal(user)
++
++    pem_block = (
++        "-----BEGIN RSA PRIVATE KEY-----\n"
++        "MIIEowIBAAKCAQEA0Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
++        "KLMNOPQRSTUVWXYZ0123456789+/abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
++        "-----END RSA PRIVATE KEY-----"
++    )
++    raw_desc = (
++        "# Security Audit\n\n"
++        "Configured credentials:\n"
++        "- OpenAI: sk-proj-1234567890abcdef1234567890abcdef1234567890\n"
++        "- GitHub: ghp_1234567890abcdefghijklmnopqrstuvwxyz12\n"
++        "- AWS: AKIAIOSFODNN7EXAMPLE\n"
++        "- Agent: kb_agt_0123456789abcdef\n"
++        f"- PEM:\n```\n{pem_block}\n```\n\n"
++        "Normal markdown: **bold** and `code` formatting."
++    )
++
++    # 1. Create issue
++    resp_create = await client.post(
++        "/api/v1/projects/SCRUB/issues",
++        json={"summary": "Secret Issue", "description_markdown": raw_desc},
++    )
++    assert resp_create.status_code == 201
++    created_data = resp_create.json()
++    desc_out = created_data["description_markdown"]
++
++    # Verify secrets are scrubbed in POST response
++    assert "sk-proj-1234567890" not in desc_out
++    assert "ghp_1234567890" not in desc_out
++    assert "AKIAIOSFODNN7EXAMPLE" not in desc_out
++    assert "kb_agt_0123456789" not in desc_out
++    assert "BEGIN RSA PRIVATE KEY" not in desc_out
++
++    assert "[REDACTED:API_KEY]" in desc_out
++    assert "[REDACTED:GITHUB_TOKEN]" in desc_out
++    assert "[REDACTED:AWS_ACCESS_KEY]" in desc_out
++    assert "[REDACTED:KANBAN_KEY]" in desc_out
++    assert "[REDACTED:PRIVATE_KEY]" in desc_out
++    assert "# Security Audit" in desc_out
++    assert "**bold** and `code` formatting." in desc_out
++
++    issue_key = created_data["key"]
++    etag = resp_create.headers["ETag"]
++
++    # 2. GET issue
++    resp_get = await client.get(f"/api/v1/issues/{issue_key}")
++    assert resp_get.status_code == 200
++    assert "[REDACTED:API_KEY]" in resp_get.json()["description_markdown"]
++    assert "sk-proj-1234567890" not in resp_get.json()["description_markdown"]
++
++    # 3. GET with matching ETag returns 304
++    resp_304 = await client.get(f"/api/v1/issues/{issue_key}", headers={"If-None-Match": etag})
++    assert resp_304.status_code == 304
++
++    # 4. POST comment with secret
++    resp_comm = await client.post(
++        f"/api/v1/issues/{issue_key}/comments",
++        json={
++            "body_markdown": (
++                "Found leaked token: ghp_1234567890abcdefghijklmnopqrstuvwxyz12 in deployment."
++            )
++        },
++    )
++    assert resp_comm.status_code == 201
++    comm_data = resp_comm.json()
++    assert "ghp_1234567890" not in comm_data["body_markdown"]
++    assert "[REDACTED:GITHUB_TOKEN]" in comm_data["body_markdown"]
++
++    # 5. GET comments
++    resp_comm_list = await client.get(f"/api/v1/issues/{issue_key}/comments")
++    assert resp_comm_list.status_code == 200
++    comments_items = resp_comm_list.json()["items"]
++    assert len(comments_items) == 1
++    assert "[REDACTED:GITHUB_TOKEN]" in comments_items[0]["body_markdown"]
++    assert "ghp_1234567890" not in comments_items[0]["body_markdown"]
+diff --git a/kanban/tests/auth/test_csrf.py b/kanban/tests/auth/test_csrf.py
+index a44686f..8f24080 100644
+--- a/kanban/tests/auth/test_csrf.py
++++ b/kanban/tests/auth/test_csrf.py
+@@ -19,14 +19,19 @@ from kanban.auth.sessions.csrf import (
+     CSRF_COOKIE_NAME,
+     CSRF_EXEMPT_PATHS,
+     CSRF_HEADER_NAME,
++    FALLBACK_CSRF_COOKIE_NAME,
+     PRE_SESSION_ID,
+     CsrfMiddleware,
+     build_clear_csrf_cookie_header,
++    build_clear_fallback_csrf_cookie_header,
+     build_set_csrf_cookie_header,
++    build_set_fallback_csrf_cookie_header,
++    extract_csrf_cookie,
+     generate_csrf_token,
+     validate_csrf_token,
+ )
+ from kanban.security.keys import KeyMaterial
++from kanban.settings import get_settings
+ 
+ if TYPE_CHECKING:
+     from starlette.types import ASGIApp, Receive, Scope, Send
+@@ -193,6 +198,119 @@ async def test_case_8_security_csrf_protections(hmac_key: bytes) -> None:
+             assert res5.json() == {"status": "action_performed"}
+ 
+ 
++@pytest.mark.asyncio
++async def test_csrf_referer_validation(hmac_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify standalone Referer validation when Origin header is absent."""
++    test_app = FastAPI()
++    test_app.add_middleware(CsrfMiddleware, session_hmac_key=hmac_key)
++
++    @test_app.post("/api/v1/resource")
++    async def modify_resource() -> JSONResponse:
++        return JSONResponse({"status": "modified"})
++
++    session_id = uuid.uuid4()
++    token = generate_csrf_token(session_id, hmac_key)
++
++    class InjectSessionMiddleware:
++        def __init__(self, app: ASGIApp, sess_id: uuid.UUID) -> None:
++            self.app = app
++            self.sess_id = sess_id
++
++        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
++            if scope["type"] == "http":
++                scope["state"] = {
++                    "session_id": self.sess_id,
++                    "principal": PrincipalContext(
++                        principal_id=uuid.uuid4(),
++                        workspace_id=uuid.uuid4(),
++                        session_id=self.sess_id,
++                    ),
++                }
++            await self.app(scope, receive, send)
++
++    app_wrapped = InjectSessionMiddleware(test_app, session_id)
++    transport = httpx.ASGITransport(app=app_wrapped, raise_app_exceptions=False)
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        # 1. Origin absent, Referer: https://evil.example/attack -> 403 CSRF_REJECTED
++        res_evil = await client.post(
++            "/api/v1/resource",
++            headers={
++                "host": "testserver",
++                "referer": "https://evil.example/attack?param=value",
++                CSRF_HEADER_NAME: token,
++            },
++            cookies={CSRF_COOKIE_NAME: token},
++        )
++        assert res_evil.status_code == 403
++        assert res_evil.json()["code"] == "CSRF_REJECTED"
++
++        # 2. Origin absent, Referer: http://testserver/app/issues -> 200 OK
++        res_ok = await client.post(
++            "/api/v1/resource",
++            headers={
++                "host": "testserver",
++                "referer": "http://testserver/app/issues",
++                CSRF_HEADER_NAME: token,
++            },
++            cookies={CSRF_COOKIE_NAME: token},
++        )
++        assert res_ok.status_code == 200
++        assert res_ok.json() == {"status": "modified"}
++
++        # 3. Origin absent, malformed Referer -> 403 CSRF_REJECTED
++        res_malformed = await client.post(
++            "/api/v1/resource",
++            headers={
++                "host": "testserver",
++                "referer": "not-a-valid-url",
++                CSRF_HEADER_NAME: token,
++            },
++            cookies={CSRF_COOKIE_NAME: token},
++        )
++        assert res_malformed.status_code == 403
++        assert res_malformed.json()["code"] == "CSRF_REJECTED"
++
++        # 4. Origin absent, non-HTTP Referer -> 403 CSRF_REJECTED
++        res_js = await client.post(
++            "/api/v1/resource",
++            headers={
++                "host": "testserver",
++                "referer": "javascript:alert(1)",
++                CSRF_HEADER_NAME: token,
++            },
++            cookies={CSRF_COOKIE_NAME: token},
++        )
++        assert res_js.status_code == 403
++        assert res_js.json()["code"] == "CSRF_REJECTED"
++
++        # 5. Public origin configured: matches Referer
++        monkeypatch.setenv("KB_PUBLIC_ORIGIN", "https://kanban.example")
++        res_public_ok = await client.post(
++            "/api/v1/resource",
++            headers={
++                "host": "kanban.internal",
++                "referer": "https://kanban.example/board",
++                CSRF_HEADER_NAME: token,
++            },
++            cookies={CSRF_COOKIE_NAME: token},
++        )
++        assert res_public_ok.status_code == 200
++
++        # 6. Public origin configured: mismatch Referer -> 403 CSRF_REJECTED
++        res_public_mismatch = await client.post(
++            "/api/v1/resource",
++            headers={
++                "host": "kanban.internal",
++                "referer": "https://other.example/board",
++                CSRF_HEADER_NAME: token,
++            },
++            cookies={CSRF_COOKIE_NAME: token},
++        )
++        assert res_public_mismatch.status_code == 403
++        assert res_public_mismatch.json()["code"] == "CSRF_REJECTED"
++
++
+ def test_csrf_exempt_paths() -> None:
+     """Verify exempt paths constant contains required endpoints."""
+     assert "/api/v1/auth/session" in CSRF_EXEMPT_PATHS
+@@ -322,3 +440,138 @@ async def test_csrf_middleware_edge_cases(hmac_key: bytes, monkeypatch: pytest.M
+     req = Request({"type": "http", "app": app_no_km, "headers": []})
+     mw = CsrfMiddleware(app_no_km)
+     assert mw._get_key(req) == b"\x00" * 32  # noqa: SLF001
++
++
++@pytest.mark.asyncio
++async def test_csrf_fallback_cookie_and_scope_branches(hmac_key: bytes) -> None:
++    """Verify fallback cookies, non-http scopes, metadata fallbacks, and state principal."""
++    # 1. Fallback cookie headers
++    set_fb = build_set_fallback_csrf_cookie_header("fb_token")
++    assert f"{FALLBACK_CSRF_COOKIE_NAME}=fb_token" in set_fb
++    assert "SameSite=Strict" in set_fb
++
++    clear_fb = build_clear_fallback_csrf_cookie_header()
++    assert f"{FALLBACK_CSRF_COOKIE_NAME}=" in clear_fb
++    assert "Max-Age=0" in clear_fb
++
++    # 2. extract_csrf_cookie with fallback cookie and matching header
++    req_fb = Request({
++        "type": "http",
++        "headers": [
++            (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
++            (b"x-csrf-token", b"fb_val"),
++        ],
++    })
++    assert extract_csrf_cookie(req_fb) == "fb_val"
++
++    req_fb_no_match = Request({
++        "type": "http",
++        "headers": [
++            (b"cookie", f"{FALLBACK_CSRF_COOKIE_NAME}=fb_val".encode()),
++            (b"x-csrf-token", b"other_val"),
++        ],
++    })
++    assert extract_csrf_cookie(req_fb_no_match) == "fb_val"
++
++    # 3. Non-http scope in CsrfMiddleware
++    app = FastAPI()
++    mw = CsrfMiddleware(app, session_hmac_key=hmac_key)
++    ws_scope = {"type": "websocket"}
++    called = False
++
++    async def mock_app(_s: Scope, _r: Receive, _snd: Send) -> None:
++        nonlocal called
++        called = True
++
++    mw.app = mock_app
++    await mw(ws_scope, lambda: None, lambda _: None)  # type: ignore[arg-type]
++    assert called is True
++
++    # 4. Metadata validation when host header is missing
++    req_no_host = Request({"type": "http", "headers": [(b"origin", b"https://some.origin")]})
++    assert mw._validate_metadata(req_no_host) is not None  # noqa: SLF001
++
++    # 5. Metadata validation using settings.public_origin fallback
++    orig_pub = get_settings().public_origin
++    try:
++        object.__setattr__(get_settings(), "public_origin", "https://settings.kanban.test")
++        req_settings = Request({
++            "type": "http",
++            "path": "/",
++            "headers": [
++                (b"host", b"kanban.internal"),
++                (b"origin", b"https://settings.kanban.test"),
++            ],
++        })
++        assert mw._validate_metadata(req_settings) is None  # noqa: SLF001
++    finally:
++        object.__setattr__(get_settings(), "public_origin", orig_pub)
++
++    # 6. Principal on request.state fallback in _resolve_session_id
++    test_sid = uuid.uuid4()
++    req_princ = Request({"type": "http", "path": "/", "app": app, "headers": []})
++    req_princ.state.principal = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        session_id=test_sid,
++    )
++    resolved_sess = await mw._resolve_session_id(req_princ)  # noqa: SLF001
++    assert resolved_sess == test_sid
++
++
++@pytest.mark.asyncio
++async def test_csrf_token_bypass_and_login_branches(hmac_key: bytes) -> None:
++    """Verify subject/internal tokens bypass and login pre-session token grace."""
++    app2 = FastAPI()
++    app2.add_middleware(CsrfMiddleware, session_hmac_key=hmac_key)
++
++    @app2.post("/api/v1/agent-endpoint")
++    async def agent_act() -> JSONResponse:
++        return JSONResponse({"status": "agent_ok"})
++
++    transport = httpx.ASGITransport(app=app2, raise_app_exceptions=False)
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        # Subject token bypass
++        res_subj = await client.post(
++            "/api/v1/agent-endpoint",
++            headers={"x-kb-subject-token": "kb_agt_test"},
++        )
++        assert res_subj.status_code == 200
++
++        # Internal auth bypass
++        res_int = await client.post(
++            "/api/v1/agent-endpoint",
++            headers={"x-kb-internal-auth": "secret-internal"},
++        )
++        assert res_int.status_code == 200
++
++        # Pre-session token on /api/v1/auth/local/login with active session
++        pre_token = generate_csrf_token(PRE_SESSION_ID, hmac_key)
++
++        @app2.post("/api/v1/auth/local/login")
++        async def login_act() -> JSONResponse:
++            return JSONResponse({"status": "logged_in"})
++
++        class SessionInjector:
++            def __init__(self, inner: ASGIApp) -> None:
++                self.inner = inner
++
++            async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
++                if scope["type"] == "http":
++                    scope["state"] = {"session_id": uuid.uuid4()}
++                await self.inner(scope, receive, send)
++
++        app_login = SessionInjector(app2)
++        trans_login = httpx.ASGITransport(app=app_login, raise_app_exceptions=False)
++        async with (
++            httpx.AsyncClient(transport=trans_login, base_url="http://testserver") as cl_login
++        ):
++            res_login = await cl_login.post(
++                "/api/v1/auth/local/login",
++                headers={
++                    "host": "testserver",
++                    CSRF_HEADER_NAME: pre_token,
++                },
++                cookies={CSRF_COOKIE_NAME: pre_token},
++            )
++            assert res_login.status_code == 200
+diff --git a/kanban/tests/security/test_client_ip.py b/kanban/tests/security/test_client_ip.py
+index abec8bb..68314f5 100644
+--- a/kanban/tests/security/test_client_ip.py
++++ b/kanban/tests/security/test_client_ip.py
+@@ -182,3 +182,43 @@ def test_format_ip_and_header_scanning() -> None:
+         ],
+     )
+     assert resolve_client_ip(scope, trusted) == "198.51.100.12"
++
++
++def test_kb_trusted_proxies_env_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify KB_TRUSTED_PROXIES env var, Settings integration, and Request object support."""
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
++    monkeypatch.setenv("KB_TRUSTED_PROXIES", "192.168.1.0/24")
++
++    # Trusted proxy 192.168.1.10 forwards client 203.0.113.88
++    scope_trusted = _make_scope(
++        client_ip="192.168.1.10",
++        headers=[(b"x-forwarded-for", b"203.0.113.88")],
++    )
++    assert resolve_client_ip(scope_trusted) == "203.0.113.88"
++
++    # Untrusted client 203.0.113.55 tries spoofing X-Forwarded-For to bypass rate limiting
++    scope_untrusted = _make_scope(
++        client_ip="203.0.113.55",
++        headers=[(b"x-forwarded-for", b"1.2.3.4, 5.6.7.8")],
++    )
++    # Must resolve strictly to direct untrusted peer 203.0.113.55, NOT the spoofed header!
++    resolved = resolve_client_ip(scope_untrusted)
++    assert resolved == "203.0.113.55"
++
++    # Verify rate limit key derivation for auth_login_ip policy
++    auth_login_policy = RateLimitPolicy(name="auth_login_ip", limit=5, window_seconds=900)
++    key_untrusted = make_key(auth_login_policy, resolved, session_hmac_key=b"k" * 32)
++    expected_key = make_key(auth_login_policy, "203.0.113.55", session_hmac_key=b"k" * 32)
++    assert key_untrusted == expected_key
++
++    # Test object wrapping scope (e.g. Starlette Request)
++    class DummyRequest:
++        def __init__(self, s: dict[str, Any]) -> None:
++            self.scope = s
++
++    dummy_req = DummyRequest(scope_trusted)
++    assert resolve_client_ip(dummy_req) == "203.0.113.88"  # type: ignore[arg-type]
++
++    # Test Sequence of IPv4Network objects passed directly
++    net = ipaddress.ip_network("192.168.1.0/24")
++    assert resolve_client_ip(scope_trusted, [net]) == "203.0.113.88"
+diff --git a/kanban/tests/test_security_headers.py b/kanban/tests/test_security_headers.py
+index 19b6ee0..dbaf35d 100644
+--- a/kanban/tests/test_security_headers.py
++++ b/kanban/tests/test_security_headers.py
+@@ -385,13 +385,21 @@ async def test_standalone_idn_punycode_host_matching(dummy_dist: Path) -> None:
+ 
+ 
+ def test_build_uvicorn_command_forwarded_allow_ips(monkeypatch: pytest.MonkeyPatch) -> None:
+-    """Test build_uvicorn_command respects KB_FORWARDED_ALLOW_IPS environment variable."""
+-    # Default is '*'
++    """Test build_uvicorn_command forwarded_allow_ips non-wildcard defaults and env vars."""
++    # Default is safe non-wildcard ('--forwarded-allow-ips=""')
+     monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
++    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
+     cmd = build_uvicorn_command()
+-    assert "--forwarded-allow-ips=*" in cmd
++    assert '--forwarded-allow-ips=""' in cmd
+ 
+     # Explicit override
+     monkeypatch.setenv("KB_FORWARDED_ALLOW_IPS", "127.0.0.1,10.0.0.1")
+     cmd_custom = build_uvicorn_command()
+     assert "--forwarded-allow-ips=127.0.0.1,10.0.0.1" in cmd_custom
++
++    # Respects KB_TRUSTED_PROXIES when KB_FORWARDED_ALLOW_IPS is not set
++    monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
++    monkeypatch.setenv("KB_TRUSTED_PROXIES", "10.0.0.0/8")
++    cmd_trusted = build_uvicorn_command()
++    assert "--forwarded-allow-ips=10.0.0.0/8" in cmd_trusted
+diff --git a/mcp/surfaces/agent/read_ticket.py b/mcp/surfaces/agent/read_ticket.py
+index 8907e03..8932417 100644
+--- a/mcp/surfaces/agent/read_ticket.py
++++ b/mcp/surfaces/agent/read_ticket.py
+@@ -6,6 +6,7 @@ from __future__ import annotations
+ 
+ from typing import TYPE_CHECKING, Any, Final
+ 
++from kanban.security.scrubber import scrub_text
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+@@ -231,7 +232,8 @@ def _compact_single_comment(item: dict[str, Any]) -> dict[str, Any]:
+     elif "author_id" in item:
+         entry["author"] = _format_comment_author(item["author_id"])
+     if "body_markdown" in item:
+-        entry["body_markdown"] = item["body_markdown"]
++        bm = item["body_markdown"]
++        entry["body_markdown"] = scrub_text(bm) if isinstance(bm, str) else bm
+     if "created_at" in item:
+         entry["created_at"] = item["created_at"]
+     if "permalink" in item:
+@@ -407,7 +409,11 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+         "state": state_str,
+         "priority": pri_str,
+         "assignees": _format_assignees(issue_data.get("assignees", [])),
+-        "description_markdown": issue_data.get("description_markdown", ""),
++        "description_markdown": (
++            scrub_text(issue_data.get("description_markdown", ""))
++            if isinstance(issue_data.get("description_markdown"), str)
++            else ""
++        ),
+         "labels": labels_list,
+         "cycle": issue_data.get("cycle_id"),
+         "modules": issue_data.get("module_ids"),
+diff --git a/mcp/tests/agent/test_read_ticket.py b/mcp/tests/agent/test_read_ticket.py
+index 537ae30..1e2a549 100644
+--- a/mcp/tests/agent/test_read_ticket.py
++++ b/mcp/tests/agent/test_read_ticket.py
+@@ -444,3 +444,73 @@ async def test_read_ticket_full_compacts_manifest_activity_provenance(
+     if "provenance" in parsed:
+         assert "created_by" in parsed["provenance"]
+         assert str(parsed["provenance"]["created_by"]).startswith("@")
++
++
++@pytest.mark.asyncio
++async def test_read_ticket_free_text_secret_scrubbing(agent_test_env: AgentTestEnv) -> None:
++    """Verify read_ticket output scrubs known secret patterns in description and comments."""
++    env = agent_test_env
++
++    # 1. Create issue with secret patterns in description
++    pem_key = (
++        "-----BEGIN RSA PRIVATE KEY-----\n"
++        "MIIEowIBAAKCAQEA0Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
++        "KLMNOPQRSTUVWXYZ0123456789+/abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
++        "-----END RSA PRIVATE KEY-----"
++    )
++    desc_with_secrets = (
++        "# Secret Manifest\n\n"
++        "Testing outbound redaction:\n"
++        "- OpenAI: sk-proj-1234567890abcdef1234567890abcdef1234567890\n"
++        "- GitHub: ghp_1234567890abcdefghijklmnopqrstuvwxyz12\n"
++        "- AWS: AKIAIOSFODNN7EXAMPLE\n"
++        "- Kanban agent: kb_agt_0123456789abcdef\n"
++        f"- Private key:\n```\n{pem_key}\n```\n"
++    )
++
++    issue_res = await env.internal_client.request(
++        "POST",
++        "/api/v1/projects/KAN/issues",
++        json_data={"summary": "Ticket with Secrets", "description_markdown": desc_with_secrets},
++        subject_token=env.token_adam,
++    )
++    assert isinstance(issue_res, dict)
++    issue_key = str(issue_res["key"])
++
++    # 2. Add comment with secret patterns
++    await env.internal_client.request(
++        "POST",
++        f"/api/v1/issues/{issue_key}/comments",
++        json_data={
++            "body_markdown": (
++                "Comment secret: sk-proj-1234567890abcdef1234567890abcdef1234567890 "
++                "and AKIAIOSFODNN7EXAMPLE"
++            )
++        },
++        subject_token=env.token_adam,
++        mcp_session_id="test-session-secret-scrub",
++    )
++
++    # 3. Call read_ticket via MCP with lod=full
++    res = await _call_read_ticket(env, {"identifier": issue_key, "lod": "full"})
++    assert res["isError"] is False
++    yaml_text = res["content"][0]["text"]
++
++    # 4. Verify raw secrets are absent and redacted placeholders appear in YAML output
++    assert "sk-proj-1234567890" not in yaml_text
++    assert "ghp_1234567890" not in yaml_text
++    assert "AKIAIOSFODNN7EXAMPLE" not in yaml_text
++    assert "kb_agt_0123456789" not in yaml_text
++    assert "BEGIN RSA PRIVATE KEY" not in yaml_text
++
++    assert "[REDACTED:API_KEY]" in yaml_text
++    assert "[REDACTED:GITHUB_TOKEN]" in yaml_text
++    assert "[REDACTED:AWS_ACCESS_KEY]" in yaml_text
++    assert "[REDACTED:KANBAN_KEY]" in yaml_text
++    assert "[REDACTED:PRIVATE_KEY]" in yaml_text
++
++    # 5. Verify parsed structure also has scrubbed values
++    parsed = yaml.safe_load(yaml_text)
++    assert "[REDACTED:API_KEY]" in parsed["description_markdown"]
++    assert len(parsed["comments"]) > 0
++    assert "[REDACTED:API_KEY]" in parsed["comments"][0]["body_markdown"]
+diff --git a/mcp/tests/test_yaml_out.py b/mcp/tests/test_yaml_out.py
+index 4a363d5..edb951e 100644
+--- a/mcp/tests/test_yaml_out.py
++++ b/mcp/tests/test_yaml_out.py
+@@ -128,3 +128,55 @@ def test_dump_empty_cases() -> None:
+     assert dump_yaml([], strip_nulls=False) == "[]\n"
+     assert dump_yaml({"a": None}, strip_nulls=False) == "a: null\n"
+     assert dump_yaml({"empty_list": []}, strip_nulls=False) == "empty_list: []\n"
++
++
++def test_free_text_secret_scrubbing_in_yaml_and_dict() -> None:
++    """Verify free-text secret patterns are redacted in YAML output while preserving Markdown."""
++    pem_block = (
++        "-----BEGIN RSA PRIVATE KEY-----\n"
++        "MIIEowIBAAKCAQEA0Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
++        "KLMNOPQRSTUVWXYZ0123456789+/abcdefghijklmnopqrstuvwxyzABCDEFGHIJ\n"
++        "-----END RSA PRIVATE KEY-----"
++    )
++    raw_markdown = (
++        "# Security Audit Findings\n\n"
++        "Detected test keys in configuration:\n"
++        "- OpenAI key: sk-proj-1234567890abcdef1234567890abcdef1234567890\n"
++        "- GitHub token: ghp_1234567890abcdefghijklmnopqrstuvwxyz12\n"
++        "- AWS key ID: AKIAIOSFODNN7EXAMPLE\n"
++        "- Agent token: kb_agt_0123456789abcdef\n"
++        f"- Private key:\n```\n{pem_block}\n```\n\n"
++        "Normal markdown content: **bold** and `code` formatting."
++    )
++    payload = {
++        "key": "SEC-101",
++        "description_markdown": raw_markdown,
++        "comments": [
++            {
++                "body": (
++                    "Found credential: sk-proj-1234567890abcdef1234567890abcdef1234567890 in"
++                    " comment."
++                )
++            }
++        ],
++    }
++
++    dumped = dump_yaml(payload)
++
++    # 1. Raw secrets must NOT appear
++    assert "sk-proj-1234567890" not in dumped
++    assert "ghp_1234567890" not in dumped
++    assert "AKIAIOSFODNN7EXAMPLE" not in dumped
++    assert "kb_agt_0123456789" not in dumped
++    assert "BEGIN RSA PRIVATE KEY" not in dumped
++
++    # 2. Redacted placeholders must appear
++    assert "[REDACTED:API_KEY]" in dumped
++    assert "[REDACTED:GITHUB_TOKEN]" in dumped
++    assert "[REDACTED:AWS_ACCESS_KEY]" in dumped
++    assert "[REDACTED:KANBAN_KEY]" in dumped
++    assert "[REDACTED:PRIVATE_KEY]" in dumped
++
++    # 3. Normal Markdown formatting preserved
++    assert "# Security Audit Findings" in dumped
++    assert "**bold** and `code` formatting" in dumped
+diff --git a/mcp/yaml_out.py b/mcp/yaml_out.py
+index 8c1a87b..35aa807 100644
+--- a/mcp/yaml_out.py
++++ b/mcp/yaml_out.py
+@@ -7,6 +7,8 @@ from typing import Final
+ 
+ import yaml
+ 
++from kanban.security.scrubber import scrub_text
++
+ __all__ = [
+     "InlineSafeDumper",
+     "dump_yaml",
+@@ -31,7 +33,7 @@ _SECRET_KEY_NAMES: Final[frozenset[str]] = frozenset(
+ 
+ 
+ def redact_secrets(val: object) -> object:
+-    """Recursively replace secret fields with '***'."""
++    """Recursively replace secret fields with '***' and scrub free-text strings."""
+     if isinstance(val, dict):
+         cleaned_dict: dict[object, object] = {}
+         for k, v in val.items():
+@@ -44,6 +46,9 @@ def redact_secrets(val: object) -> object:
+     if isinstance(val, list):
+         return [redact_secrets(item) for item in val]
+ 
++    if isinstance(val, str):
++        return scrub_text(val)
++
+     return val
+ 
+ 
+diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
+index ed11486..f2aabd2 100644
+--- a/tests/deploy/test_standalone_entrypoint.py
++++ b/tests/deploy/test_standalone_entrypoint.py
+@@ -278,6 +278,26 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
+     assert kr_env["KB_MASTER_KEK_B64"] == kr.master_kek_b64
+ 
+ 
++def test_trusted_proxies_passthrough_and_uvicorn_non_wildcard(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify KB_TRUSTED_PROXIES is passed to child env and safe non-wildcard uvicorn command."""
++    monkeypatch.setenv("KB_TRUSTED_PROXIES", "10.0.0.0/8,172.16.0.0/12")
++    monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
++
++    env = build_child_env()
++    assert env["KB_TRUSTED_PROXIES"] == "10.0.0.0/8,172.16.0.0/12"
++
++    cmd = build_uvicorn_command()
++    assert "--forwarded-allow-ips=10.0.0.0/8,172.16.0.0/12" in cmd
++
++    # When both are unset, default is safe non-wildcard
++    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
++    cmd_default = build_uvicorn_command()
++    assert '--forwarded-allow-ips=""' in cmd_default
++
++
+ # -----------------------------------------------------------------------------
+ # Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
+ # -----------------------------------------------------------------------------

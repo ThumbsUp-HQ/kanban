@@ -46,6 +46,15 @@ export function LoginPage({
     return null;
   });
   const [copiedCommand, setCopiedCommand] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const alertRef = useRef<HTMLDivElement | null>(null);
 
@@ -111,7 +120,12 @@ export function LoginPage({
     try {
       await navigator.clipboard.writeText(cmd);
       setCopiedCommand(true);
-      setTimeout(() => { setCopiedCommand(false); }, 2000);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedCommand(false);
+      }, 2000);
     } catch {
       // fallback
     }

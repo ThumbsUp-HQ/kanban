@@ -1,0 +1,961 @@
+diff --git a/agent/cli.py b/agent/cli.py
+index 2b372f1..2b35133 100644
+--- a/agent/cli.py
++++ b/agent/cli.py
+@@ -144,7 +144,7 @@ class _CustomArgumentParser(argparse.ArgumentParser):
+     """Custom ArgumentParser exiting with code 2 on flag or validation errors."""
+ 
+     def error(self, message: str) -> NoReturn:
+-        sys.stderr.write(f"error: {message}\n")
++        sys.stderr.write(f"❌ error: {message}\n")
+         sys.exit(ExitCode.SCHEMA_OR_POLICY_VIOLATION.value)
+ 
+ 
+@@ -175,7 +175,7 @@ async def _async_main(
+         else:
+             report, exit_code = await spec.handler(args)
+     except Exception as err:  # noqa: BLE001  # Top-level CLI boundary catches all errors
+-        sys.stderr.write(f"error: {err}\n")
++        sys.stderr.write(f"❌ error: {err}\n")
+         return ExitCode.RUNTIME_ERROR.value
+ 
+     output = render_report(
+diff --git a/agent/cli_report.py b/agent/cli_report.py
+index 6fa3d18..caf8b5a 100644
+--- a/agent/cli_report.py
++++ b/agent/cli_report.py
+@@ -32,6 +32,7 @@ __all__ = [
+     "default_context_scrubber",
+     "map_exception_to_exit_code",
+     "render_report",
++    "resolve_report_status_symbol",
+ ]
+ 
+ ContextScrubber = Callable[[str], str]
+@@ -163,6 +164,17 @@ def _render_schema_section(
+     return lines
+ 
+ 
++def resolve_report_status_symbol(report: ValidationReport) -> str:
++    """Return semantic status symbol (👍 / ⛔ / ❌) for a validation report."""
++    if report.schema_status.valid:
++        return "👍"
++    status_lower = (report.schema_status.status or "").lower()
++    err_lower = (report.schema_status.error_code or "").lower()
++    if "error" in status_lower or "error" in err_lower or "runtime" in status_lower:
++        return "❌"
++    return "⛔"
++
++
+ def render_report(
+     report: ValidationReport,
+     fmt: Literal["text", "json"],
+@@ -214,4 +226,14 @@ def render_report(
+                 f"  - Provider: {cid} | Outcome: {outcome} | Breaker: {st} | TTFT: {ttft_fmt}"
+             )
+ 
+-    return "\n".join(lines)
++    icon = resolve_report_status_symbol(report)
++    prefixed_lines: list[str] = []
++    for line in lines:
++        if not line:
++            prefixed_lines.append(icon)
++        elif line.startswith(("👍", "⛔", "❌")):
++            prefixed_lines.append(line)
++        else:
++            prefixed_lines.append(f"{icon} {line}")
++
++    return "\n".join(prefixed_lines)
+diff --git a/kanban/auth/setup.py b/kanban/auth/setup.py
+index 99a875b..148e7bf 100644
+--- a/kanban/auth/setup.py
++++ b/kanban/auth/setup.py
+@@ -4,14 +4,17 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import base64
+ import hashlib
+ import hmac
+ import logging
++import os
+ import re
+ import secrets
+ import sys
+ import uuid
++from pathlib import Path
+ from typing import TYPE_CHECKING, Final
+ 
+ from sqlalchemy import text
+@@ -103,8 +106,30 @@ class SetupBootstrapService:
+         if self._settings is not None:
+             origin = self._settings.effective_origin
+ 
++        token_file = os.environ.get("KB_SETUP_TOKEN_FILE", "/run/kanban/setup_token")
++
++        def _persist_token(dest: str, secret: str) -> bool:
++            try:
++                p = Path(dest)
++                p.parent.mkdir(parents=True, exist_ok=True)
++                p.write_text(secret, encoding="utf-8")
++                p.chmod(0o600)
++            except OSError:
++                return False
++            else:
++                return True
++
++        written = await asyncio.to_thread(_persist_token, token_file, raw_token)
++        file_hint = (
++            f" (claim token written to {token_file})"
++            if written
++            else " (token claim available via setup wizard)"
++        )
++
+         out_stream = stdout if stdout is not None else sys.stdout
+-        out_stream.write(f"First-boot setup URL: {origin}/setup?token={raw_token}\n")
++        out_stream.write(
++            f"👍 First-boot setup URL: {origin}/setup?token=[REDACTED:SETUP_TOKEN]{file_hint}\n"
++        )
+         out_stream.flush()
+ 
+         return raw_token
+diff --git a/kanban/cli/jobs.py b/kanban/cli/jobs.py
+index 4d9ba18..170d363 100644
+--- a/kanban/cli/jobs.py
++++ b/kanban/cli/jobs.py
+@@ -14,7 +14,6 @@ from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+ 
+ from database.models.projects import Project, WorkflowState
+-from database.testing.pg_harness import build_dsn
+ from kanban.jobs.auto_archive import run_auto_archive
+ from kanban.jobs.board_rebalance import rebalance_column
+ from kanban.jobs.trash_purge import run_trash_purge
+@@ -127,10 +126,14 @@ def _handle_board_rebalance(args: argparse.Namespace) -> int:
+ 
+ async def _run_board_rebalance(project_filter: str | None = None) -> int:
+     """Run board rebalancing across columns."""
+-    db_name = os.environ.get("KB_DB_NAME") or os.environ.get("PGDATABASE", "kanban_test")
+-    socket_dir = os.environ.get("KB_TEST_PGHOST") or os.environ.get("PGHOST")
+-    user = os.environ.get("KB_TEST_PGUSER") or os.environ.get("PGUSER")
+-    dsn = build_dsn(database=db_name, host=socket_dir, user=user)
++    raw_dsn = os.environ.get("KANBAN_DATABASE_URL") or os.environ.get("DATABASE_URL")
++    if raw_dsn:
++        dsn = raw_dsn
++    else:
++        db_name = os.environ.get("KB_DB_NAME") or os.environ.get("PGDATABASE", "kanban_test")
++        socket_dir = os.environ.get("KB_TEST_PGHOST") or os.environ.get("PGHOST", "/tmp/kb-pgsock")  # noqa: S108
++        user = os.environ.get("KB_TEST_PGUSER") or os.environ.get("PGUSER", "kanban_test")
++        dsn = f"postgresql+asyncpg://{user}@/{db_name}?host={socket_dir}"
+     engine = create_async_engine(dsn)
+     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+ 
+diff --git a/kanban/logging.py b/kanban/logging.py
+index 2f38260..e7de272 100644
+--- a/kanban/logging.py
++++ b/kanban/logging.py
+@@ -28,11 +28,13 @@ __all__ = [
+     "KanbanLogFormatter",
+     "KanbanStreamHandler",
+     "configure_logging",
++    "extract_http_status_code",
+     "log_blocked",
+     "log_error",
+     "log_ok",
+     "sanitize_log_text",
+     "scrub_log_secrets",
++    "status_symbol_for_http_status",
+     "status_symbol_for_level",
+ ]
+ 
+@@ -51,6 +53,9 @@ _RE_BIDI_SPOOF: Final[re.Pattern[str]] = re.compile(r"[\u202a-\u202e\u2066-\u206
+ _RE_C0_C1_CONTROL: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+ 
+ # Credential scrubbing patterns for log entries
++_RE_SETUP_TOKEN: Final[re.Pattern[str]] = re.compile(
++    r"\bkb_setup_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
++)
+ _RE_COOKIES: Final[re.Pattern[str]] = re.compile(
+     r"\b(__Host-kb_session|kb_session|kb_csrf)=(?!\[REDACTED:)([^;\s&]+)"
+ )
+@@ -61,6 +66,9 @@ _RE_KV_SECRETS: Final[re.Pattern[str]] = re.compile(
+     r"(?i)\b(password|client_secret|secret)\s*([=:]\s*(?:\\*['\"])?)"
+     r"(?!\[REDACTED:)([^;'\"\s,]+)((?:\\*['\"])?)"
+ )
++_RE_HTTP_STATUS_IN_ACCESS_LOG: Final[re.Pattern[str]] = re.compile(
++    r'"\s+([1-5]\d\d)\b'
++)
+ 
+ _PACKAGE_LOGGERS: Final[tuple[str, ...]] = (
+     "kanban",
+@@ -74,6 +82,20 @@ _PACKAGE_LOGGERS: Final[tuple[str, ...]] = (
+ )
+ 
+ 
++_HTTP_CLIENT_ERROR_MIN: Final = 400
++_HTTP_SERVER_ERROR_MIN: Final = 500
++_UVICORN_ACCESS_ARGS_LEN: Final = 5
++_UVICORN_ACCESS_STATUS_IDX: Final = 4
++
++
++def _coerce_int_status(val: object) -> int | None:
++    if isinstance(val, int):
++        return val
++    if isinstance(val, str) and val.isdigit():
++        return int(val)
++    return None
++
++
+ def status_symbol_for_level(levelno: int) -> str:
+     """Return the semantic status symbol for a numeric log level.
+ 
+@@ -88,11 +110,55 @@ def status_symbol_for_level(levelno: int) -> str:
+     return STATUS_ERROR
+ 
+ 
++def status_symbol_for_http_status(status_code: int) -> str:
++    """Return the semantic status symbol for an HTTP status code.
++
++    - 1xx, 2xx, 3xx: 👍
++    - 4xx: ⛔
++    - 5xx: ❌
++    """
++    if status_code < _HTTP_CLIENT_ERROR_MIN:
++        return STATUS_OK
++    if status_code < _HTTP_SERVER_ERROR_MIN:
++        return STATUS_BLOCKED
++    return STATUS_ERROR
++
++
++def extract_http_status_code(record: logging.LogRecord) -> int | None:
++    """Extract HTTP status code from LogRecord if present."""
++    status = _coerce_int_status(getattr(record, "status_code", None))
++    if status is not None:
++        return status
++
++    args = record.args
++    if isinstance(args, tuple) and len(args) >= _UVICORN_ACCESS_ARGS_LEN:
++        status = _coerce_int_status(args[_UVICORN_ACCESS_STATUS_IDX])
++        if status is not None:
++            return status
++
++    if isinstance(args, dict):
++        status = _coerce_int_status(args.get("status_code") or args.get("status"))
++        if status is not None:
++            return status
++
++    name = record.name or ""
++    if "access" in name or name.startswith("uvicorn"):
++        msg = record.getMessage() if hasattr(record, "getMessage") else str(record.msg)
++        match = _RE_HTTP_STATUS_IN_ACCESS_LOG.search(msg)
++        if match:
++            return int(match.group(1))
++
++    return None
++
++
+ def scrub_log_secrets(text: str) -> str:
+     """Scrub sensitive credentials, tokens, session cookies, and database DSN passwords."""
+     if not text:
+         return text
+ 
++    # Redact setup tokens to explicit [REDACTED:SETUP_TOKEN]
++    text = _RE_SETUP_TOKEN.sub("[REDACTED:SETUP_TOKEN]", text)
++
+     # Pass through primary secret scrubber (API keys, JWT, Bearer, kb_* keys, PEM)
+     text = scrub_text(text)
+ 
+@@ -142,8 +208,22 @@ class KanbanLogFilter(logging.Filter):
+     """Logging filter that attaches the semantic status icon and active request_id."""
+ 
+     def filter(self, record: logging.LogRecord) -> bool:
+-        """Inject status_icon and request_id attributes into record."""
+-        record.status_icon = status_symbol_for_level(record.levelno)
++        """Inject status_icon and request_id attributes with accurate HTTP severity mapping."""
++        http_status = extract_http_status_code(record)
++        if http_status is not None:
++            record.status_icon = status_symbol_for_http_status(http_status)
++            if http_status >= _HTTP_SERVER_ERROR_MIN:
++                record.levelno = logging.ERROR
++                record.levelname = "ERROR"
++            elif http_status >= _HTTP_CLIENT_ERROR_MIN:
++                record.levelno = logging.WARNING
++                record.levelname = "WARNING"
++            elif record.levelno < logging.WARNING:
++                record.levelno = logging.INFO
++                record.levelname = "INFO"
++        else:
++            record.status_icon = status_symbol_for_level(record.levelno)
++
+         req_id = getattr(record, "request_id", None)
+         if not req_id or req_id == "-":
+             ctx_id = _REQUEST_ID_CTX.get()
+@@ -151,6 +231,24 @@ class KanbanLogFilter(logging.Filter):
+         return True
+ 
+ 
++def _resolve_record_status_icon(record: logging.LogRecord) -> str:
++    status_icon = getattr(record, "status_icon", None)
++    if status_icon is not None:
++        return str(status_icon)
++
++    http_status = extract_http_status_code(record)
++    if http_status is None:
++        return status_symbol_for_level(record.levelno)
++
++    if http_status >= _HTTP_SERVER_ERROR_MIN and record.levelno < logging.ERROR:
++        record.levelno = logging.ERROR
++        record.levelname = "ERROR"
++    elif http_status >= _HTTP_CLIENT_ERROR_MIN and record.levelno < logging.WARNING:
++        record.levelno = logging.WARNING
++        record.levelname = "WARNING"
++    return status_symbol_for_http_status(http_status)
++
++
+ class KanbanLogFormatter(logging.Formatter):
+     """Standardized single-line log formatter with semantic status icons."""
+ 
+@@ -165,9 +263,8 @@ class KanbanLogFormatter(logging.Formatter):
+                 sanitized_msg = sanitized_msg[len(icon) :].lstrip()
+                 break
+ 
+-        status_icon = getattr(record, "status_icon", None) or status_symbol_for_level(
+-            record.levelno
+-        )
++        status_icon = _resolve_record_status_icon(record)
++
+         req_id = getattr(record, "request_id", None)
+         if not req_id or req_id == "-":
+             ctx_id = _REQUEST_ID_CTX.get()
+diff --git a/kanban/tests/auth/test_setup_claim.py b/kanban/tests/auth/test_setup_claim.py
+index 45c5826..84767f4 100644
+--- a/kanban/tests/auth/test_setup_claim.py
++++ b/kanban/tests/auth/test_setup_claim.py
+@@ -176,8 +176,12 @@ async def test_case_1_positive_full_lifecycle(
+     )
+     assert token is not None
+     assert re.match(r"^kb_setup_[A-Za-z0-9_-]{43}$", token)
+-    expected_url = f"First-boot setup URL: {setup_settings.effective_origin}/setup?token={token}\n"
+-    assert expected_url in out.getvalue()
++    expected_banner = (
++        f"👍 First-boot setup URL: {setup_settings.effective_origin}/setup"
++        "?token=[REDACTED:SETUP_TOKEN]"
++    )
++    assert expected_banner in out.getvalue()
++    assert token not in out.getvalue()
+ 
+     transport = httpx.ASGITransport(app=app)
+     async with httpx.AsyncClient(
+@@ -801,7 +805,11 @@ async def test_mint_token_defaults_coverage(
+ 
+     tok = await svc.mint_token_if_uninitialized(stdout=None)
+     assert tok is not None
+-    assert f"First-boot setup URL: http://localhost:8080/setup?token={tok}\n" in captured.getvalue()
++    expected_msg = (
++        "👍 First-boot setup URL: http://localhost:8080/setup?token=[REDACTED:SETUP_TOKEN]"
++    )
++    assert expected_msg in captured.getvalue()
++    assert tok not in captured.getvalue()
+ 
+     # Test _resolve_key_material when key_material=None
+     svc_no_km = SetupBootstrapService(factory, key_material=None, settings=None)
+diff --git a/kanban/tests/test_logging_standard.py b/kanban/tests/test_logging_standard.py
+index 12d15d3..1051bdf 100644
+--- a/kanban/tests/test_logging_standard.py
++++ b/kanban/tests/test_logging_standard.py
+@@ -21,12 +21,16 @@ from kanban.logging import (
+     STATUS_OK,
+     KanbanLogFilter,
+     KanbanLogFormatter,
++    _find_or_create_handler,
++    _resolve_log_level,
+     configure_logging,
++    extract_http_status_code,
+     log_blocked,
+     log_error,
+     log_ok,
+     sanitize_log_text,
+     scrub_log_secrets,
++    status_symbol_for_http_status,
+     status_symbol_for_level,
+ )
+ from kanban.security.keys import KeyMaterial
+@@ -295,8 +299,8 @@ def test_configure_logging_integration(caplog: pytest.LogCaptureFixture) -> None
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_first_boot_setup_url_preserves_stdout() -> None:
+-    """Verify SetupBootstrapService outputs First-boot setup URL to stdout unredacted."""
++async def test_first_boot_setup_banner_redacted_with_emoji() -> None:
++    """Verify SetupBootstrapService formats First-boot setup URL with 👍 and redacted token."""
+     mock_session = AsyncMock()
+     mock_res = MagicMock()
+     mock_res.scalar_one.return_value = True
+@@ -320,7 +324,8 @@ async def test_first_boot_setup_url_preserves_stdout() -> None:
+     assert token is not None
+     assert token.startswith("kb_setup_")
+     rendered = out_buf.getvalue()
+-    assert f"First-boot setup URL: http://localhost:8080/setup?token={token}\n" == rendered
++    assert rendered.startswith("👍 First-boot setup URL: http://localhost:8080/setup?token=[REDACTED:SETUP_TOKEN]")
++    assert token not in rendered
+ 
+ 
+ def test_standalone_entrypoint_log_level_and_phase_formatting(
+@@ -376,3 +381,318 @@ async def test_problem_exception_logging() -> None:
+     assert "HTTP 404 NOT_FOUND" in lines[0]
+     assert lines[1].startswith("❌ ")
+     assert "HTTP 500 INTERNAL_ERROR" in lines[1]
++
++
++# -----------------------------------------------------------------------------
++# Case 4: HTTP Status Mapping & Access Logging (KANBA-224)
++# -----------------------------------------------------------------------------
++def test_http_status_symbol_mapping() -> None:
++    """Verify HTTP status code ranges map to canonical status emojis."""
++    # 2xx / 3xx -> STATUS_OK (👍)
++    assert status_symbol_for_http_status(200) == STATUS_OK
++    assert status_symbol_for_http_status(201) == STATUS_OK
++    assert status_symbol_for_http_status(204) == STATUS_OK
++    assert status_symbol_for_http_status(301) == STATUS_OK
++    assert status_symbol_for_http_status(304) == STATUS_OK
++
++    # 4xx -> STATUS_BLOCKED (⛔)
++    assert status_symbol_for_http_status(400) == STATUS_BLOCKED
++    assert status_symbol_for_http_status(401) == STATUS_BLOCKED
++    assert status_symbol_for_http_status(403) == STATUS_BLOCKED
++    assert status_symbol_for_http_status(404) == STATUS_BLOCKED
++    assert status_symbol_for_http_status(422) == STATUS_BLOCKED
++    assert status_symbol_for_http_status(429) == STATUS_BLOCKED
++
++    # 5xx -> STATUS_ERROR (❌)
++    assert status_symbol_for_http_status(500) == STATUS_ERROR
++    assert status_symbol_for_http_status(502) == STATUS_ERROR
++    assert status_symbol_for_http_status(503) == STATUS_ERROR
++    assert status_symbol_for_http_status(504) == STATUS_ERROR
++
++
++def test_uvicorn_access_log_severity_mapping() -> None:
++    """Verify uvicorn.access records map status codes to 👍/⛔/❌ and accurate log levels."""
++    stream = io.StringIO()
++    configure_logging(level="INFO", stream=stream)
++
++    access_logger = logging.getLogger("uvicorn.access")
++
++    # 200 OK -> 👍 [INFO]
++    access_logger.info(
++        '%s - "%s %s HTTP/%s" %d',
++        "127.0.0.1:45000",
++        "GET",
++        "/api/v1/issues",
++        "1.1",
++        200,
++    )
++    # 304 Not Modified -> 👍 [INFO]
++    access_logger.info(
++        '%s - "%s %s HTTP/%s" %d',
++        "127.0.0.1:45001",
++        "GET",
++        "/static/bundle.js",
++        "1.1",
++        304,
++    )
++    # 401 Unauthorized -> ⛔ [WARNING]
++    access_logger.info(
++        '%s - "%s %s HTTP/%s" %d',
++        "127.0.0.1:45002",
++        "GET",
++        "/api/v1/admin/auth-cards",
++        "1.1",
++        401,
++    )
++    # 404 Not Found -> ⛔ [WARNING]
++    access_logger.info(
++        '%s - "%s %s HTTP/%s" %d',
++        "127.0.0.1:45003",
++        "GET",
++        "/api/v1/missing",
++        "1.1",
++        404,
++    )
++    # 429 Too Many Requests -> ⛔ [WARNING]
++    access_logger.info(
++        '%s - "%s %s HTTP/%s" %d',
++        "127.0.0.1:45004",
++        "POST",
++        "/api/v1/setup/claim",
++        "1.1",
++        429,
++    )
++    # 500 Internal Server Error -> ❌ [ERROR]
++    access_logger.info(
++        '%s - "%s %s HTTP/%s" %d',
++        "127.0.0.1:45005",
++        "POST",
++        "/api/v1/issues",
++        "1.1",
++        500,
++    )
++
++    out = stream.getvalue()
++    lines = [line for line in out.splitlines() if line]
++    assert len(lines) == 6
++
++    # 200 line
++    assert lines[0].startswith("👍 ")
++    assert "[INFO]" in lines[0]
++    expected_uvicorn_200 = (
++        '[uvicorn.access] [req=-] 127.0.0.1:45000 - "GET /api/v1/issues HTTP/1.1" 200'
++    )
++    assert expected_uvicorn_200 in lines[0]
++
++    # 304 line
++    assert lines[1].startswith("👍 ")
++    assert "[INFO]" in lines[1]
++    assert "304" in lines[1]
++
++    # 401 line
++    assert lines[2].startswith("⛔ ")
++    assert "[WARNING]" in lines[2]
++    assert "401" in lines[2]
++
++    # 404 line
++    assert lines[3].startswith("⛔ ")
++    assert "[WARNING]" in lines[3]
++    assert "404" in lines[3]
++
++    # 429 line
++    assert lines[4].startswith("⛔ ")
++    assert "[WARNING]" in lines[4]
++    assert "429" in lines[4]
++
++    # 500 line
++    assert lines[5].startswith("❌ ")
++    assert "[ERROR]" in lines[5]
++    assert "500" in lines[5]
++
++
++def test_http_status_extraction_sources() -> None:
++    """Verify extract_http_status_code parses args tuple, dict, attr, and regex."""
++    # 1. Attribute
++    rec_attr = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
++    rec_attr.status_code = 404  # type: ignore[attr-defined]
++    assert extract_http_status_code(rec_attr) == 404
++
++    # 2. Tuple args (5-tuple uvicorn format)
++    rec_tuple = logging.LogRecord(
++        "uvicorn.access",
++        logging.INFO,
++        "",
++        0,
++        '%s - "%s %s HTTP/%s" %d',
++        ("127.0.0.1", "GET", "/path", "1.1", 503),
++        None,
++    )
++    assert extract_http_status_code(rec_tuple) == 503
++
++    # 3. Dict args
++    rec_dict = logging.LogRecord(
++        "custom.access",
++        logging.INFO,
++        "",
++        0,
++        "access event %(status_code)s",
++        ({"status_code": 422},),  # type: ignore[arg-type]
++        None,
++    )
++    assert extract_http_status_code(rec_dict) == 422
++
++    # 4. Message inspection for uvicorn logger
++    rec_msg = logging.LogRecord(
++        "uvicorn.access",
++        logging.INFO,
++        "",
++        0,
++        '10.0.0.1 - "GET /api/v1/health HTTP/1.1" 200 OK',
++        (),
++        None,
++    )
++    assert extract_http_status_code(rec_msg) == 200
++
++    # 5. Non-HTTP record returns None
++    rec_none = logging.LogRecord(
++        "kanban.engine", logging.INFO, "", 0, "DB pool initialized", (), None
++    )
++    assert extract_http_status_code(rec_none) is None
++
++
++def test_cli_ctl_help_without_pytest(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify kanban.cli.ctl runs --help cleanly without pytest in sys.modules (KANBA-224)."""
++    import sys  # noqa: PLC0415
++
++    from kanban.cli.ctl import main as ctl_main  # noqa: PLC0415
++
++    # Mask pytest and pytest_socket from import system
++    monkeypatch.setitem(sys.modules, "pytest", None)
++    monkeypatch.setitem(sys.modules, "pytest_socket", None)
++
++    code = ctl_main(["--help"])
++    assert code == 0
++
++
++def test_logging_edge_cases_helpers() -> None:
++    """Verify edge cases for sanitization, scrubbing, and log level resolution."""
++    # 1. Empty strings
++    assert sanitize_log_text("") == ""
++    assert scrub_log_secrets("") == ""
++
++    # 2. _resolve_log_level with int and string
++    assert _resolve_log_level(logging.DEBUG) == logging.DEBUG
++    assert _resolve_log_level("ERROR") == logging.ERROR
++
++    # 3. String-only logger calls (defaulting to 'kanban' logger)
++    log_ok("Default string ok")
++    log_blocked("Default string blocked")
++    log_error("Default string error")
++
++
++def test_logging_edge_cases_formatter() -> None:
++    """Verify edge cases for formatters, stack traces, and pre-existing handlers."""
++    fmt = KanbanLogFormatter()
++    rec_404 = logging.LogRecord(
++        "uvicorn.access",
++        logging.INFO,
++        "",
++        0,
++        '%s - "%s %s HTTP/%s" %d',
++        ("127.0.0.1", "GET", "/missing", "1.1", 404),
++        None,
++    )
++    line_404 = fmt.format(rec_404)
++    assert line_404.startswith("⛔ ")
++    assert "[WARNING]" in line_404
++
++    rec_500 = logging.LogRecord(
++        "uvicorn.access",
++        logging.INFO,
++        "",
++        0,
++        '%s - "%s %s HTTP/%s" %d',
++        ("127.0.0.1", "POST", "/crash", "1.1", 500),
++        None,
++    )
++    line_500 = fmt.format(rec_500)
++    assert line_500.startswith("❌ ")
++    assert "[ERROR]" in line_500
++
++    rec_stack = logging.LogRecord("test", logging.INFO, "", 0, "Stack test", (), None)
++    rec_stack.stack_info = "Traceback stack information"
++    line_stack = fmt.format(rec_stack)
++    assert " | stack=" in line_stack
++
++    # Formatter directly formatting 200 without filter
++    rec_fmt_200 = logging.LogRecord(
++        "uvicorn.access",
++        logging.INFO,
++        "",
++        0,
++        '%s - "%s %s HTTP/%s" %d',
++        ("127.0.0.1", "GET", "/ok", "1.1", 200),
++        None,
++    )
++    line_fmt_200 = fmt.format(rec_fmt_200)
++    assert line_fmt_200.startswith("👍 ")
++
++    # Pre-existing non-managed StreamHandler wrapping
++    dummy_root = logging.getLogger("test_root_unique")
++    pre_handler = logging.StreamHandler(io.StringIO())
++    dummy_root.addHandler(pre_handler)
++    found = _find_or_create_handler(dummy_root, None)
++    assert found is pre_handler
++
++    # Configure logging removes pre-existing foreign handler on package loggers
++    alembic_log = logging.getLogger("alembic")
++    foreign_handler = logging.StreamHandler(io.StringIO())
++    alembic_log.addHandler(foreign_handler)
++    configure_logging(level="INFO")
++    assert foreign_handler not in alembic_log.handlers
++
++
++def test_logging_edge_cases_status_extraction_and_filter() -> None:
++    """Verify edge cases for string representations, non-digit args, and request_id."""
++    # extract_http_status_code string representations
++    rec_str_attr = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
++    rec_str_attr.status_code = "404"  # type: ignore[attr-defined]
++    assert extract_http_status_code(rec_str_attr) == 404
++
++    rec_str_tuple = logging.LogRecord(
++        "test", logging.INFO, "", 0, "%s %s %s %s %s", ("ip", "GET", "/", "1.1", "502"), None
++    )
++    assert extract_http_status_code(rec_str_tuple) == 502
++
++    rec_str_dict = logging.LogRecord(
++        "test", logging.INFO, "", 0, "msg", ({"status": "403"},), None  # type: ignore[arg-type]
++    )
++    assert extract_http_status_code(rec_str_dict) == 403
++
++    rec_direct_dict = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
++    rec_direct_dict.args = {"status_code": 401}  # type: ignore[assignment]
++    assert extract_http_status_code(rec_direct_dict) == 401
++
++    rec_direct_dict_str = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
++    rec_direct_dict_str.args = {"status_code": "429"}  # type: ignore[assignment]
++    assert extract_http_status_code(rec_direct_dict_str) == 429
++
++    # Non-digit string candidates
++    bad_args = ("1", "2", "3", "4", "invalid")
++    rec_bad_tuple = logging.LogRecord(
++        "test", logging.INFO, "", 0, "%s %s %s %s %s", bad_args, None
++    )
++    assert extract_http_status_code(rec_bad_tuple) is None
++
++    rec_bad_dict = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
++    rec_bad_dict.args = {"status": "not_a_number"}  # type: ignore[assignment]
++    assert extract_http_status_code(rec_bad_dict) is None
++
++    # Pre-existing request_id preserved in filter
++    flt = KanbanLogFilter()
++    rec_preset_req = logging.LogRecord("test", logging.WARNING, "", 0, "msg", (), None)
++    rec_preset_req.request_id = "req_custom_set"  # type: ignore[attr-defined]
++    rec_preset_req.status_code = 200  # type: ignore[attr-defined]
++    assert flt.filter(rec_preset_req) is True
++    assert rec_preset_req.request_id == "req_custom_set"
++    assert rec_preset_req.levelno == logging.WARNING  # preserved because >= WARNING
+diff --git a/kanban/web/src/utils/logger.test.ts b/kanban/web/src/utils/logger.test.ts
+new file mode 100644
+index 0000000..41c42fa
+--- /dev/null
++++ b/kanban/web/src/utils/logger.test.ts
+@@ -0,0 +1,138 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import {
++  STATUS_BLOCKED,
++  STATUS_ERROR,
++  STATUS_OK,
++  formatLogArgs,
++  logBlocked,
++  logError,
++  logInfo,
++  logOk,
++  logWarn,
++  logger,
++  prefixLines,
++} from './logger';
++
++describe('logger utility (KANBA-224)', () => {
++  beforeEach(() => {
++    vi.spyOn(console, 'info').mockImplementation(vi.fn());
++    vi.spyOn(console, 'warn').mockImplementation(vi.fn());
++    vi.spyOn(console, 'error').mockImplementation(vi.fn());
++    vi.spyOn(console, 'debug').mockImplementation(vi.fn());
++    vi.spyOn(console, 'log').mockImplementation(vi.fn());
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  describe('prefixLines', () => {
++    it('returns icon when text is empty', () => {
++      expect(prefixLines(STATUS_OK, '')).toBe('👍');
++    });
++
++    it('prefixes a single line with icon and space', () => {
++      expect(prefixLines(STATUS_OK, 'System initialized')).toBe('👍 System initialized');
++      expect(prefixLines(STATUS_BLOCKED, 'Rate limit approaching')).toBe('⛔ Rate limit approaching');
++      expect(prefixLines(STATUS_ERROR, 'Uncaught crash')).toBe('❌ Uncaught crash');
++    });
++
++    it('prefixes every line in multi-line text', () => {
++      const input = 'First line\nSecond line\nThird line';
++      const expected = '👍 First line\n👍 Second line\n👍 Third line';
++      expect(prefixLines(STATUS_OK, input)).toBe(expected);
++    });
++
++    it('handles CRLF line breaks and empty lines within multi-line text', () => {
++      const input = 'Line A\r\n\r\nLine B';
++      const expected = '👍 Line A\n👍\n👍 Line B';
++      expect(prefixLines(STATUS_OK, input)).toBe(expected);
++    });
++
++    it('deduplicates leading icons if already present on lines', () => {
++      const input = '👍 Already ok\n⛔ Blocked\n❌ Error';
++      const result = prefixLines(STATUS_OK, input);
++      expect(result).toBe('👍 Already ok\n👍 Blocked\n👍 Error');
++      expect(result).not.toContain('👍 👍');
++    });
++  });
++
++  describe('formatLogArgs', () => {
++    it('returns array with icon when no args provided', () => {
++      expect(formatLogArgs(STATUS_OK)).toEqual(['👍']);
++    });
++
++    it('formats string first argument and preserves remaining arguments', () => {
++      const extraObj = { status: 200 };
++      const formatted = formatLogArgs(STATUS_OK, 'User login: %s', 'alice', extraObj);
++      expect(formatted).toEqual(['👍 User login: %s', 'alice', extraObj]);
++    });
++
++    it('formats Error instance using stack trace if available', () => {
++      const err = new Error('Test failure');
++      err.stack = 'Error: Test failure\n    at testFunction (/app/test.ts:10:5)';
++      const formatted = formatLogArgs(STATUS_ERROR, err);
++      expect(typeof formatted[0]).toBe('string');
++      expect(formatted[0]).toContain('❌ Error: Test failure');
++      expect(formatted[0]).toContain('❌ at testFunction');
++    });
++
++    it('formats Error instance using name and message if stack is empty', () => {
++      const err = new Error('No stack error');
++      err.stack = '';
++      const formatted = formatLogArgs(STATUS_ERROR, err);
++      expect(formatted[0]).toBe('❌ Error: No stack error');
++    });
++
++    it('prepends icon as first arg when first arg is not a string or Error', () => {
++      const numArg = 42;
++      const objArg = { id: 'item-1' };
++      const formatted = formatLogArgs(STATUS_BLOCKED, numArg, objArg);
++      expect(formatted).toEqual(['⛔', 42, { id: 'item-1' }]);
++    });
++  });
++
++  describe('logger methods and aliases', () => {
++    it('calls console.info with 👍 prefix', () => {
++      logger.info('Application ready');
++      expect(console.info).toHaveBeenCalledWith('👍 Application ready');
++    });
++
++    it('calls console.warn with ⛔ prefix', () => {
++      logger.warn('Token expiring');
++      expect(console.warn).toHaveBeenCalledWith('⛔ Token expiring');
++    });
++
++    it('calls console.error with ❌ prefix', () => {
++      logger.error('Failed to sync board');
++      expect(console.error).toHaveBeenCalledWith('❌ Failed to sync board');
++    });
++
++    it('calls console.debug with 👍 prefix', () => {
++      logger.debug('Debug payload', { traceId: '123' });
++      expect(console.debug).toHaveBeenCalledWith('👍 Debug payload', { traceId: '123' });
++    });
++
++    it('calls console.log with 👍 prefix', () => {
++      logger.log('General output');
++      expect(console.log).toHaveBeenCalledWith('👍 General output');
++    });
++
++    it('supports standalone alias exports', () => {
++      logOk('OK message');
++      expect(console.info).toHaveBeenCalledWith('👍 OK message');
++
++      logInfo('Info message');
++      expect(console.info).toHaveBeenCalledWith('👍 Info message');
++
++      logBlocked('Blocked message');
++      expect(console.warn).toHaveBeenCalledWith('⛔ Blocked message');
++
++      logWarn('Warn message');
++      expect(console.warn).toHaveBeenCalledWith('⛔ Warn message');
++
++      logError('Error message');
++      expect(console.error).toHaveBeenCalledWith('❌ Error message');
++    });
++  });
++});
+diff --git a/kanban/web/src/utils/logger.ts b/kanban/web/src/utils/logger.ts
+new file mode 100644
+index 0000000..45e439b
+--- /dev/null
++++ b/kanban/web/src/utils/logger.ts
+@@ -0,0 +1,88 @@
++/**
++ * Standardized semantic emoji logging helper (👍 / ⛔ / ❌) for the web client.
++ *
++ * Ensures all diagnostics and runtime console messages emitted across browser
++ * surfaces prepend consistent severity prefixes on every emitted line.
++ */
++
++export const STATUS_OK = '👍';
++export const STATUS_BLOCKED = '⛔';
++export const STATUS_ERROR = '❌';
++
++const STATUS_ICONS = [STATUS_OK, STATUS_BLOCKED, STATUS_ERROR] as const;
++
++/**
++ * Prepend a semantic icon prefix to every line in a text string.
++ * Deduplicates leading icons if already present.
++ */
++export function prefixLines(icon: string, text: string): string {
++  if (!text) {
++    return icon;
++  }
++
++  const lines = text.split(/\r?\n/);
++  const prefixed = lines.map((line) => {
++    let stripped = line.trimStart();
++    for (const knownIcon of STATUS_ICONS) {
++      if (stripped.startsWith(knownIcon)) {
++        stripped = stripped.slice(knownIcon.length).trimStart();
++        break;
++      }
++    }
++    return stripped.length > 0 ? `${icon} ${stripped}` : icon;
++  });
++
++  return prefixed.join('\n');
++}
++
++/**
++ * Format arguments for console output with a universal severity prefix on every line.
++ */
++export function formatLogArgs(icon: string, ...args: unknown[]): unknown[] {
++  if (args.length === 0) {
++    return [icon];
++  }
++
++  const first = args[0];
++  if (typeof first === 'string') {
++    return [prefixLines(icon, first), ...args.slice(1)];
++  }
++
++  if (first instanceof Error) {
++    const rawErrorText =
++      first.stack && first.stack.length > 0
++        ? first.stack
++        : `${first.name}: ${first.message}`;
++    const formattedMsg = prefixLines(icon, rawErrorText);
++    return [formattedMsg, ...args.slice(1)];
++  }
++
++  return [icon, ...args];
++}
++
++/**
++ * Unified frontend logger interface mirroring console logging with semantic prefixes.
++ */
++export const logger = {
++  info: (...args: unknown[]): void => {
++    console.info(...formatLogArgs(STATUS_OK, ...args));
++  },
++  warn: (...args: unknown[]): void => {
++    console.warn(...formatLogArgs(STATUS_BLOCKED, ...args));
++  },
++  error: (...args: unknown[]): void => {
++    console.error(...formatLogArgs(STATUS_ERROR, ...args));
++  },
++  debug: (...args: unknown[]): void => {
++    console.debug(...formatLogArgs(STATUS_OK, ...args));
++  },
++  log: (...args: unknown[]): void => {
++    console.log(...formatLogArgs(STATUS_OK, ...args));
++  },
++};
++
++export const logOk = logger.info;
++export const logBlocked = logger.warn;
++export const logError = logger.error;
++export const logInfo = logger.info;
++export const logWarn = logger.warn;

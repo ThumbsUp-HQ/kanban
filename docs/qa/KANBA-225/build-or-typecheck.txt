@@ -1,0 +1,45 @@
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+1696 files already formatted
+uv run mypy
+Success: no issues found in 1129 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 938 files, 3223 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 60 migrations valid. Single head: p4_21_workspace_project_rbac_fix
+
+uv run python -m scripts.license_gate
+SUMMARY python=116 node=1 violations=0
+
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
+> tsc -b --noEmit
+
+
+
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
+> eslint . --max-warnings 0
+

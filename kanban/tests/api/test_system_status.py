@@ -803,7 +803,6 @@ async def test_case_8_backup_schedule_and_snapshots_api(  # noqa: PLR0915
             assert "BACKUP_RUN_FAILED" in resp_run_none.text
 
 
-
 @pytest.mark.asyncio
 async def test_case_9_backup_verify_and_restore_api(
     db_session: AsyncSession,
