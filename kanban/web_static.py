@@ -28,6 +28,7 @@ _EXPLICIT_MIME_TYPES: Final[dict[str, str]] = {
     ".json": "application/json",
     ".wasm": "application/wasm",
     ".woff2": "font/woff2",
+    ".webmanifest": "application/manifest+json",
 }
 
 
@@ -142,6 +143,11 @@ class PrecompressedSPAStaticApp:
         """Determine Cache-Control header based on file type and path."""
         if is_spa_fallback or file_path.name == "index.html":
             return "no-cache"
+        if unquoted_path in ("/manifest.json", "/manifest.webmanifest") or file_path.name in (
+            "manifest.json",
+            "manifest.webmanifest",
+        ):
+            return "public, max-age=86400"
         if unquoted_path.startswith("/assets/"):
             return "public, max-age=31536000, immutable"
         return "no-cache"
@@ -266,9 +272,15 @@ class PrecompressedSPAStaticApp:
         etag = f'"{sha16}-{encoding_tag}"'
 
         suffix = file_to_serve.suffix.lower()
-        content_type = _EXPLICIT_MIME_TYPES.get(
-            suffix, mimetypes.guess_type(file_to_serve.name)[0] or "application/octet-stream"
-        )
+        if unquoted_path in ("/manifest.json", "/manifest.webmanifest") or file_to_serve.name in (
+            "manifest.json",
+            "manifest.webmanifest",
+        ):
+            content_type = "application/manifest+json"
+        else:
+            content_type = _EXPLICIT_MIME_TYPES.get(
+                suffix, mimetypes.guess_type(file_to_serve.name)[0] or "application/octet-stream"
+            )
         cache_control = self._get_cache_control(
             file_to_serve, unquoted_path, is_spa_fallback=is_spa_fallback
         )

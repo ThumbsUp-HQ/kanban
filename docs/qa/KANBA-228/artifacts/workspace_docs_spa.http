@@ -1,0 +1,30 @@
+HTTP/1.1 200 OK
+content-type: text/html; charset=utf-8
+content-length: 412
+etag: "1dc1b1f29f247914-identity"
+vary: Accept-Encoding
+cache-control: no-cache
+x-request-id: dd82b25d0a1b47c5a0ff06a71b91bc00
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>👍kanban</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

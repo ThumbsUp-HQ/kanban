@@ -1,0 +1,32 @@
+HTTP/1.1 200 OK
+cache-control: public, max-age=86400
+content-length: 379
+content-type: application/manifest+json
+x-request-id: 942b30f071404fd68aff75e0cf6ce9d9
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+strict-transport-security: max-age=63072000; includeSubDomains
+
+{
+  "name": "👍kanban",
+  "short_name": "👍kanban",
+  "description": "Agent-First, Security-First Kanban Platform",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#1d4ed8",
+  "background_color": "#f7f8fa",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

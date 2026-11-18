@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import HTMLResponse, RedirectResponse
 
 from database.session import RLSSessionFactory
 from kanban.api.deps import DenyAllResolver
@@ -34,6 +35,12 @@ from kanban.api.sse import handle_sse_endpoint
 from kanban.api.v1 import build_v1_router
 from kanban.api.v1.oauth import OAuth2Error, oauth_root_router
 from kanban.api.ws import handle_ws_connection
+from kanban.api_docs import (
+    DOCS_CSS,
+    MANIFEST_BYTES,
+    get_redoc_html,
+    get_swagger_ui_html,
+)
 from kanban.auth.identity_service import DatabaseIdentityResolver
 from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.auth.sessions.resolver import SessionCookieResolver
@@ -64,6 +71,47 @@ _FAVICON_SVG: Final[str] = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
     '<text y=".9em" font-size="90">👍</text></svg>'
 )
+
+
+def _mount_api_docs_and_manifest(app: FastAPI) -> None:
+    """Mount OpenAPI redirect, web manifest, and interactive API doc routes."""
+
+    @app.api_route("/openapi.json", methods=["GET", "HEAD"], include_in_schema=False)
+    async def openapi_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/api/openapi.json", status_code=307)
+
+    @app.get("/manifest.json", include_in_schema=False)
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    async def manifest_endpoint() -> Response:
+        return Response(
+            content=MANIFEST_BYTES,
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/api/docs/docs.css", include_in_schema=False)
+    async def api_docs_css_endpoint() -> Response:
+        return Response(
+            content=DOCS_CSS.encode("utf-8"),
+            media_type="text/css; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/api/docs", include_in_schema=False)
+    async def swagger_ui_endpoint(request: Request) -> HTMLResponse:
+        return HTMLResponse(
+            content=get_swagger_ui_html(request.app.openapi()),
+            status_code=200,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    @app.get("/api/redoc", include_in_schema=False)
+    async def redoc_endpoint(request: Request) -> HTMLResponse:
+        return HTMLResponse(
+            content=get_redoc_html(request.app.openapi()),
+            status_code=200,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
 
 def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
@@ -252,6 +300,9 @@ def create_app(
 
     # Register activity listener for notifications and auto-subscriptions
     register_notifications_listener()
+
+    # Mount OpenAPI redirect, web manifest, and interactive API documentation routes
+    _mount_api_docs_and_manifest(app)
 
     # Fallback API router for legacy/subpath 404s
     api_router = APIRouter(prefix="/api")

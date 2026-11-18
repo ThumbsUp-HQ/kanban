@@ -3,6 +3,7 @@
 import contextlib
 import gzip
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -235,3 +236,150 @@ async def test_non_asset_file_caching_and_asgi_scope(static_dist: Path) -> None:
     async with httpx.AsyncClient(transport=empty_transport, base_url="http://localhost") as c:
         resp_no_index = await c.get("/some/route")
         assert resp_no_index.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_precompressed_webmanifest_mime_and_cache(tmp_path: Path) -> None:
+    """Test PrecompressedSPAStaticApp serves webmanifest files with correct MIME and caching."""
+    dist_dir = tmp_path / "manifest_dist"
+    dist_dir.mkdir()
+    manifest_bytes = b'{"name": "test-app", "display": "standalone"}'
+    (dist_dir / "manifest.json").write_bytes(manifest_bytes)
+    (dist_dir / "manifest.webmanifest").write_bytes(manifest_bytes)
+    (dist_dir / "index.html").write_bytes(b"<!doctype html><html></html>")
+
+    app = PrecompressedSPAStaticApp(dist_dir=dist_dir)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        # Test manifest.json served from disk
+        r_json = await client.get("/manifest.json")
+        assert r_json.status_code == 200
+        assert r_json.headers.get("content-type") == "application/manifest+json"
+        assert r_json.headers.get("cache-control") == "public, max-age=86400"
+
+        # Test manifest.webmanifest served from disk
+        r_webmanifest = await client.get("/manifest.webmanifest")
+        assert r_webmanifest.status_code == 200
+        assert r_webmanifest.headers.get("content-type") == "application/manifest+json"
+        assert r_webmanifest.headers.get("cache-control") == "public, max-age=86400"
+
+
+@pytest.mark.asyncio
+async def test_web_static_encoding_and_resolution_edge_cases(tmp_path: Path) -> None:
+    """Test PrecompressedSPAStaticApp encodings, multi-ETag, and symlink defenses."""
+    dist_dir = tmp_path / "edge_dist"
+    dist_dir.mkdir()
+    (dist_dir / "index.html").write_bytes(b"<!doctype html><html></html>")
+    normal_file = dist_dir / "normal.txt"
+    normal_file.write_bytes(b"hello world")
+
+    # Outside symlink test
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "secret.txt"
+    outside_file.write_bytes(b"top secret")
+    symlink_target = dist_dir / "symlink_escape.txt"
+    symlink_target.symlink_to(outside_file)
+
+    outside_index = outside_dir / "outside_index.html"
+    outside_index.write_bytes(b"outside index")
+    symlink_index_dist = tmp_path / "symlink_index_dist"
+    symlink_index_dist.mkdir()
+    (symlink_index_dist / "index.html").symlink_to(outside_index)
+
+    static_app = PrecompressedSPAStaticApp(dist_dir=dist_dir)
+    transport = httpx.ASGITransport(app=static_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        # Accept-encoding parsing branch with non-q parameters and invalid q-value
+        resp_enc = await client.get(
+            "/normal.txt",
+            headers={"Accept-Encoding": "gzip; other_param=1; q=0.8, br; q=invalid"},
+        )
+        assert resp_enc.status_code == 200
+
+        # Multi-value ETag matching branch
+        etag = resp_enc.headers.get("etag")
+        assert etag is not None
+        resp_304 = await client.get(
+            "/normal.txt",
+            headers={"If-None-Match": f'"other-tag", {etag}'},
+        )
+        assert resp_304.status_code == 304
+
+        resp_nomatch = await client.get(
+            "/normal.txt",
+            headers={"If-None-Match": '"other-tag", "different-tag"'},
+        )
+        assert resp_nomatch.status_code == 200
+
+        # Symlink escape outside dist_dir returns 404 (line 86-87 branch)
+        resp_symlink = await client.get("/symlink_escape.txt")
+        assert resp_symlink.status_code == 404
+
+    # Symlink index outside dist_dir returns None for fallback
+    symlink_app = PrecompressedSPAStaticApp(dist_dir=symlink_index_dist)
+    symlink_transport = httpx.ASGITransport(app=symlink_app)
+    async with httpx.AsyncClient(
+        transport=symlink_transport, base_url="http://localhost"
+    ) as client:
+        resp_out_fallback = await client.get("/extensionless/route")
+        assert resp_out_fallback.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_web_static_io_errors_and_limits(tmp_path: Path) -> None:
+    """Test PrecompressedSPAStaticApp I/O error handling, method checks, and file limits."""
+    dist_dir = tmp_path / "io_dist"
+    dist_dir.mkdir()
+    (dist_dir / "index.html").write_bytes(b"<!doctype html><html></html>")
+    (dist_dir / "empty.txt").write_bytes(b"")
+    normal_file = dist_dir / "normal.txt"
+    normal_file.write_bytes(b"hello world")
+
+    static_app = PrecompressedSPAStaticApp(dist_dir=dist_dir)
+    transport = httpx.ASGITransport(app=static_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        # Method not allowed (405)
+        resp_post = await client.post("/normal.txt")
+        assert resp_post.status_code == 405
+        assert "allow" in resp_post.headers
+
+        # Empty 0-byte file (line 248 branch)
+        resp_empty = await client.get("/empty.txt")
+        assert resp_empty.status_code == 200
+        assert resp_empty.content == b""
+
+        # Oversized file (> 50MB) returns 404 via patched limit
+        with patch("kanban.web_static._MAX_FILE_SIZE", 5):
+            resp_oversize = await client.get("/normal.txt")
+            assert resp_oversize.status_code == 404
+
+        # Target file resolve raises OSError returns 404
+        with patch.object(Path, "resolve", side_effect=OSError("Disk failure")):
+            resp_res_err = await client.get("/normal.txt")
+            assert resp_res_err.status_code == 404
+
+            resp_fallback_err = await client.get("/route")
+            assert resp_fallback_err.status_code == 404
+
+        # SPA fallback non-relative index returns 404
+        with patch.object(Path, "is_relative_to", return_value=False):
+            resp_non_rel = await client.get("/route")
+            assert resp_non_rel.status_code == 404
+
+        # Read_bytes raises OSError returns 404
+        with patch.object(Path, "read_bytes", side_effect=OSError("Read error")):
+            resp_read_err = await client.get("/normal.txt")
+            assert resp_read_err.status_code == 404
+
+        # Stat raises OSError returns 404
+        with (
+            patch.object(
+                PrecompressedSPAStaticApp,
+                "_resolve_file",
+                return_value=(normal_file, False),
+            ),
+            patch.object(Path, "stat", side_effect=OSError("Disk error")),
+        ):
+            resp_stat_err = await client.get("/normal.txt")
+            assert resp_stat_err.status_code == 404

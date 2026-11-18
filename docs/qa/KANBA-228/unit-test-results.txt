@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-dx-2606e1ab
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 26 items
+
+kanban/tests/test_api_docs.py ........                                   [ 30%]
+kanban/tests/test_app.py ..........                                      [ 69%]
+kanban/tests/test_web_static.py ........                                 [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/test_app.py::test_api_not_found_problem_json
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-dx-2606e1ab/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                   Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------
+kanban/api_docs.py       126      0     38      2    99%   553->556, 663->665
+kanban/app.py            196      3     28      4    97%   139, 144, 146, 202->220
+kanban/web_static.py     162      0     58      0   100%
+------------------------------------------------------------------
+TOTAL                    484      3    124      6    99%
+======================== 26 passed, 1 warning in 32.68s ========================
