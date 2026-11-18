@@ -26,13 +26,13 @@ _PROJECT_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Z0-9]{1,9
 
 async def resolve_object_ref(
     session: AsyncSession,
-    ref: str,
+    ref: str | uuid.UUID,
     expected_type: ObjectKind | None = None,
 ) -> ObjectRecord | None:
     """Resolve an object reference (UUID, issue key, or project key) through RLS.
 
     Accepts:
-        - UUID string (e.g. 018f3a21-9876-7123-8abc-def012345678)
+        - UUID or UUID string (e.g. 018f3a21-9876-7123-8abc-def012345678)
         - Issue canonical key (e.g. KAN-142)
         - Project identifier (e.g. KAN)
         - General canonical key matching objects.canonical_key
@@ -42,7 +42,7 @@ async def resolve_object_ref(
         - Soft-deleted objects (deleted_at IS NOT NULL) return None.
         - Unreadable objects (filtered by PostgreSQL RLS) return None.
     """
-    clean_ref = ref.strip()
+    clean_ref = str(ref).strip()
     if not clean_ref or len(clean_ref) > MAX_OBJECT_REF_LENGTH:
         return None
 

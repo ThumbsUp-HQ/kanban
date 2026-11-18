@@ -34,8 +34,8 @@ export function AuthCardButton({
     ? `Sign in with ${card.display_name}`
     : `Continue with ${card.display_name}`;
 
-  const clampedDisplayName = clampText(card.display_name, 120);
-  const clampedSubtext = clampText(card.button_subtext, 200);
+  const clampedDisplayName = clampText(card.display_name, 80);
+  const clampedSubtext = clampText(card.button_subtext, 120);
 
   const handleClick = () => {
     if (isLdap) {

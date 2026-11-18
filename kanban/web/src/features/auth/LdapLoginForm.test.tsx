@@ -53,6 +53,7 @@ describe('LdapLoginForm (KB-P3-35)', () => {
       expect(submitSpy).toHaveBeenCalledWith('corp-ad', {
         username: 'alice',
         password: 'SecretPass123!',
+        remember_me: true,
       });
       expect(onSuccess).toHaveBeenCalledWith({ status: 'authenticated' });
     });

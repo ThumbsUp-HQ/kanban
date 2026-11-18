@@ -1082,7 +1082,7 @@ describe('Workflow Studio Coverage Booster', () => {
       fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
 
       // Change Wasm module select
-      const wasmSelect = screen.getByLabelText(/Approved Wasm Module/i);
+      const wasmSelect = screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i);
       fireEvent.change(wasmSelect, { target: { value: api.DEFAULT_WASM_MODULES[1]?.sha256 ?? 'sha' } });
 
       // Change Failure Policy select

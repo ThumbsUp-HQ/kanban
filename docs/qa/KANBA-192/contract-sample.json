@@ -1,0 +1,120 @@
+{
+  "post_projects": {
+    "request": {
+      "identifier": "KANBA",
+      "name": "Kanban Core"
+    },
+    "status": 201,
+    "response": {
+      "id": "01a1ec31-1045-77ae-a8b2-3f336f9e87a0",
+      "identifier": "KANBA",
+      "name": "Kanban Core",
+      "description_markdown": "",
+      "modules_enabled": false,
+      "default_module_ids": [],
+      "auto_archive_days": null,
+      "access_manifest": {
+        "pill_label": "Workspace",
+        "explicit_grant_count": 0,
+        "inherited_scope": {
+          "kind": "workspace",
+          "scope_label": "Workspace: Primary Engineering WS",
+          "workspace_id": "e818ed03-93f0-47da-bf87-83e72f9c4166",
+          "workspace_name": "Primary Engineering WS",
+          "project_id": null,
+          "project_key": null,
+          "project_name": null
+        },
+        "users": [
+          {
+            "principal_id": "f433c316-0090-405a-b698-f9089b5f1844",
+            "handle": "@usr-f433c31600",
+            "display_name": "Server Admin",
+            "capabilities": [
+              "VIEW",
+              "COMMENT",
+              "EDIT",
+              "TRANSITION",
+              "LINK",
+              "SHARE",
+              "ADMIN",
+              "DELETE"
+            ],
+            "grant_source": "workspace_role"
+          },
+          {
+            "principal_id": "7172beea-d3e9-4393-8a2d-7dd53fc4d73d",
+            "handle": "@usr-7172beead3",
+            "display_name": "Member User",
+            "capabilities": [
+              "VIEW",
+              "COMMENT",
+              "EDIT",
+              "TRANSITION",
+              "LINK"
+            ],
+            "grant_source": "workspace_role"
+          }
+        ],
+        "groups": [],
+        "agents": [],
+        "deny_overrides": [],
+        "redacted_entries": [],
+        "redacted_count": 0,
+        "caller_capabilities": [
+          "VIEW",
+          "COMMENT",
+          "EDIT",
+          "TRANSITION",
+          "LINK",
+          "SHARE",
+          "ADMIN",
+          "DELETE"
+        ],
+        "canonical_key": "KANBA",
+        "object_type": "project"
+      },
+      "capabilities": [
+        "VIEW",
+        "COMMENT",
+        "EDIT",
+        "TRANSITION",
+        "LINK",
+        "SHARE",
+        "ADMIN",
+        "DELETE"
+      ]
+    }
+  },
+  "workspace_switch_roundtrip": {
+    "switch_to_b": {
+      "target_workspace_id": "01a1ec31-1168-77ab-83f3-04e9a902d4d7",
+      "status": 200,
+      "response": {
+        "workspace_id": "01a1ec31-1168-77ab-83f3-04e9a902d4d7",
+        "status": "switched",
+        "csrf_token": "a2JGR7mX2uUTuLJGocEVEg.C0qM4iz2UTISwGTUjelGdjGJSZQnvc8h10YGvgJzXgM"
+      }
+    },
+    "switch_back_to_a": {
+      "target_workspace_id": "e818ed03-93f0-47da-bf87-83e72f9c4166",
+      "status": 200,
+      "response": {
+        "workspace_id": "e818ed03-93f0-47da-bf87-83e72f9c4166",
+        "status": "switched",
+        "csrf_token": "xZ21W4kw6kB6meqzVfQMow.6OHRgpioiemjQD7z0aeayvhjiEijwSPcoiWLTbDc1_w"
+      }
+    }
+  },
+  "get_object_access_by_key": {
+    "path": "/api/v1/objects/KAN/access",
+    "status": 404,
+    "response": {
+      "type": "urn:kanban:problem:NOT_FOUND",
+      "title": "Not Found",
+      "status": 404,
+      "code": "NOT_FOUND",
+      "request_id": "070af567b4b945e493973a0859d60f13"
+    }
+  }
+}

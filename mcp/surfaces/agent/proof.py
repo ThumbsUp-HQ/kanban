@@ -66,4 +66,3 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
     "required": ["qa_dir", "artifacts", "reality_checker", "ci_run_url"],
     "additionalProperties": False,
 }
-

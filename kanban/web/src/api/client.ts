@@ -63,8 +63,11 @@ export function setCsrfToken(token: string | null): void {
     return;
   }
   try {
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     if (token !== null && token.length > 0) {
-      document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
+      if (!isHttps) {
+        document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
+      }
     } else {
       document.cookie = 'kb_csrf=; Path=/; SameSite=Strict; Max-Age=0';
     }
@@ -78,9 +81,9 @@ export function getCsrfToken(): string | null {
   if (typeof document !== 'undefined') {
     const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
     if (matches.length > 0) {
-      const kbMatch = matches.find((m) => m[1] === 'kb_csrf');
-      const chosen =
-        cachedCsrfToken !== null && kbMatch !== undefined ? kbMatch : matches[0];
+      const hostMatch = matches.find((m) => m[1] === '__Host-kb_csrf');
+      const fallbackMatch = matches.find((m) => m[1] === 'kb_csrf');
+      const chosen = hostMatch ?? fallbackMatch ?? matches[0];
       const raw = chosen?.[2];
       if (raw !== undefined) {
         try {

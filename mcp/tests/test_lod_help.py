@@ -598,4 +598,3 @@ async def test_build_help_workflow_tools() -> None:
     assert cw_help["params"]["identifier"] == "KAN-142 | uuid"
     assert cw_help["params"]["summary_markdown"] == "str"
     assert cw_help["params"]["verification_proof"] == "object"
-

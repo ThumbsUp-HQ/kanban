@@ -197,6 +197,20 @@ async def _verify_access_and_kill_switch(
     )
     res_a = await client.get(f"/api/v1/objects/{data.issue_id}/access")
     assert res_a.status_code == 200
+
+    # Positive & Boundary (KANBA-192): Project Key & Canonical Key access resolution
+    res_key = await client.get("/api/v1/objects/KAN/access")
+    assert res_key.status_code == 200
+    assert (
+        res_key.json()["inherited_scope"]["kind"] == "workspace"
+        or "Project" in res_key.json()["pill_label"]
+    )
+
+    res_canonical = await client.get("/api/v1/objects/KAN-1/access")
+    assert res_canonical.status_code == 200
+
+    res_nonexistent = await client.get("/api/v1/objects/NONEXISTENT/access")
+    assert res_nonexistent.status_code == 404
     data_a = res_a.json()
     assert "pill_label" in data_a
     assert any(u["handle"] == "@viewer_user" for u in data_a["users"])
@@ -479,25 +493,25 @@ async def test_objects_access_handlers_direct_unit(
     )
 
     # 1. get_object_access_manifest directly
-    manifest = await get_object_access_manifest(issue_id, admin_ctx, db_session)
+    manifest = await get_object_access_manifest(str(issue_id), admin_ctx, db_session)
     assert manifest.pill_label == "Project + 2"
 
     # 2. agent_kill_switch lacking VIEW -> 404
     with pytest.raises(ProblemException) as exc_404:
-        await agent_kill_switch(issue_id, outsider_ctx, db_session)
+        await agent_kill_switch(str(issue_id), outsider_ctx, db_session)
     assert exc_404.value.status == 404
 
     # 3. agent_kill_switch with VIEW only -> 403
     with pytest.raises(ProblemException) as exc_403:
-        await agent_kill_switch(issue_id, viewer_ctx, db_session)
+        await agent_kill_switch(str(issue_id), viewer_ctx, db_session)
     assert exc_403.value.status == 403
 
     # 4. agent_kill_switch with non-existent object record but valid caps (hits line 71)
     with patch("kanban.api.v1.objects_access.evaluate_capabilities", return_value=Capability.ALL):
         with pytest.raises(ProblemException) as exc_rec:
-            await agent_kill_switch(uuid.uuid4(), admin_ctx, db_session)
+            await agent_kill_switch(str(uuid.uuid4()), admin_ctx, db_session)
         assert exc_rec.value.status == 404
 
     # 5. agent_kill_switch execute directly with admin_ctx
-    res_manifest = await agent_kill_switch(issue_id, admin_ctx, db_session)
+    res_manifest = await agent_kill_switch(str(issue_id), admin_ctx, db_session)
     assert res_manifest.agents == []

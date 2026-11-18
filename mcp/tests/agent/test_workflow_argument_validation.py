@@ -380,4 +380,3 @@ def test_schema_contracts_and_proof_definitions() -> None:
     desc_desc = UPDATE_TICKET_SCHEMA["properties"]["description_markdown"]["description"]
     assert "description_markdown" in if_match_desc
     assert "if_match" in desc_desc
-

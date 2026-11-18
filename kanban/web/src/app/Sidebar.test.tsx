@@ -370,6 +370,55 @@ describe('Sidebar', () => {
     });
   });
 
+  it('independently toggles expand/collapse for multiple projects (KANBA-192 Positive Case 3)', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { identifier: 'KANBA', name: 'kanban', modules_enabled: true },
+                { identifier: 'PIKVM', name: 'PiKVM Controller', modules_enabled: true },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KANBA" projectName="kanban" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    const kanbaRow = await screen.findByRole('button', { name: 'Project: kanban' });
+    const pikvmRow = await screen.findByRole('button', { name: 'Project: PiKVM Controller' });
+
+    expect(kanbaRow.getAttribute('aria-expanded')).toBe('true');
+    expect(pikvmRow.getAttribute('aria-expanded')).toBe('true');
+
+    // Click PIKVM to collapse it
+    act(() => {
+      pikvmRow.click();
+    });
+
+    expect(pikvmRow.getAttribute('aria-expanded')).toBe('false');
+    // KANBA should remain expanded!
+    expect(kanbaRow.getAttribute('aria-expanded')).toBe('true');
+
+    // Click PIKVM again to expand it back
+    act(() => {
+      pikvmRow.click();
+    });
+
+    expect(pikvmRow.getAttribute('aria-expanded')).toBe('true');
+    expect(kanbaRow.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('renders project layout view links (List, Board, Table, Calendar, Timeline) with SVG icons (KANBA-174)', () => {
     render(
       <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list']}>

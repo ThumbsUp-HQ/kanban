@@ -676,8 +676,7 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
                 status=422,
                 title="Invalid Transition",
                 detail=(
-                    "Project has no workflow state configured in the 'completed' group. "
-                    f"{hint}"
+                    f"Project has no workflow state configured in the 'completed' group. {hint}"
                 ),
                 extra={"hint": hint, "valid_states": valid_names},
             )

@@ -45,7 +45,7 @@ describe('AuthCardButton (KB-P3-35)', () => {
     fireEvent.click(btn);
 
     expect(assignMock).toHaveBeenCalledWith(
-      '/api/v1/auth/cards/okta-workforce/start?next=%2Fprojects%2FKAN%2Fissues',
+      '/api/v1/auth/cards/okta-workforce/start?next=%2Fprojects%2FKAN%2Fissues&remember_me=1',
     );
   });
 
@@ -162,7 +162,7 @@ describe('AuthCardButton (KB-P3-35)', () => {
     const btn = screen.getByRole('button', { name: /Continue with No Subtext Provider/i });
     fireEvent.click(btn);
     expect(assignMock).toHaveBeenCalledWith(
-      '/api/v1/auth/cards/no-sub/start?next=%2Fcustom-next',
+      '/api/v1/auth/cards/no-sub/start?next=%2Fcustom-next&remember_me=1',
     );
   });
 });

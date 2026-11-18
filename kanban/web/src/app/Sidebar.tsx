@@ -6,6 +6,7 @@
 
 import React, {
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -18,6 +19,8 @@ import { registerShortcut } from './shortcuts';
 import { CreateProjectModal } from '../features/projects/CreateProjectModal';
 import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+import { setCsrfToken } from '../api/client';
+import { QueryClientContext } from '@tanstack/react-query';
 import {
   ListTodo,
   Kanban,
@@ -60,6 +63,69 @@ export function sanitizeSidebarState(value: string | null): 'open' | 'collapsed'
     return value;
   }
   return 'open';
+}
+
+async function fetchWorkspaces(): Promise<WorkspaceNavData[]> {
+  try {
+    const res = await fetch('/api/v1/workspaces', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (res.ok) {
+      const data = (await res.json()) as WorkspaceNavData[];
+      if (Array.isArray(data)) {
+        return data;
+      }
+    }
+  } catch {
+    // Offline / unit test fallback
+  }
+  return [];
+}
+
+async function fetchProjects(): Promise<ProjectNavData[]> {
+  try {
+    const res = await fetch('/api/v1/projects', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (!res.ok) {
+      return [];
+    }
+    const data = (await res.json()) as
+      | {
+          items?: {
+            identifier?: string;
+            key?: string;
+            name?: string;
+            modules_enabled?: boolean;
+          }[];
+        }
+      | {
+          identifier?: string;
+          key?: string;
+          name?: string;
+          modules_enabled?: boolean;
+        }[];
+    const rawItems = Array.isArray(data) ? data : (data.items ?? []);
+    const parsed: ProjectNavData[] = [];
+    for (const item of rawItems) {
+      const key = item.identifier ?? item.key;
+      if (typeof key === 'string' && key.length > 0 && typeof item.name === 'string') {
+        parsed.push({
+          key,
+          name: item.name,
+          modules_enabled: item.modules_enabled ?? true,
+        });
+      }
+    }
+    return parsed;
+  } catch {
+    // Offline or unmocked unit test environment
+    return [];
+  }
 }
 
 export function Sidebar({
@@ -114,39 +180,25 @@ export function Sidebar({
     }
   });
 
-  const [projectExpanded, setProjectExpanded] = useState(true);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceNavData[]>([]);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
 
+  const queryClient = useContext(QueryClientContext);
   const sidebarRef = useRef<HTMLElement>(null);
   const firstItemRef = useRef<HTMLButtonElement>(null);
   const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
-
-    async function loadWorkspaces(): Promise<void> {
-      try {
-        const res = await fetch('/api/v1/workspaces', {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-        });
-        if (res.ok && active) {
-          const data = (await res.json()) as WorkspaceNavData[];
-          if (Array.isArray(data)) {
-            setWorkspaces(data);
-          }
-        }
-      } catch {
-        // Offline / unit test fallback
+    void fetchWorkspaces().then((data) => {
+      if (active && data.length > 0) {
+        setWorkspaces(data);
       }
-    }
-
-    void loadWorkspaces();
+    });
     return () => {
       active = false;
     };
@@ -191,10 +243,43 @@ export function Sidebar({
         credentials: 'same-origin',
       });
       if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { csrf_token?: string };
+        if (data.csrf_token) {
+          setCsrfToken(data.csrf_token);
+        }
+        queryClient?.clear();
+
+        // Update local workspace current flag immediately
+        setWorkspaces((prev) =>
+          prev.map((w) => ({
+            ...w,
+            is_current: w.id === targetId,
+          })),
+        );
+
+        // Re-fetch workspaces and projects in new workspace
+        const updatedWorkspaces = await fetchWorkspaces();
+        if (updatedWorkspaces.length > 0) {
+          setWorkspaces(updatedWorkspaces);
+        }
+        const updatedProjects = await fetchProjects();
+        setFetchedProjects(updatedProjects);
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('kb:workspace-switched', { detail: { workspaceId: targetId } }),
+          );
+        }
+
+        const firstProj = updatedProjects[0];
+        const targetRoute =
+          firstProj !== undefined
+            ? `/projects/${firstProj.key}/issues`
+            : '/';
         if (navigateFn) {
-          navigateFn('/');
+          navigateFn(targetRoute);
         } else if (typeof window !== 'undefined') {
-          window.location.assign('/');
+          window.location.assign(targetRoute);
         }
       }
     } catch {
@@ -227,56 +312,36 @@ export function Sidebar({
 
   useEffect(() => {
     let active = true;
+    const refresh = (): void => {
+      void fetchProjects().then((items) => {
+        if (active && items.length > 0) {
+          setFetchedProjects(items);
+        }
+      });
+    };
+    refresh();
 
-    async function loadProjects(): Promise<void> {
-      try {
-        const res = await fetch('/api/v1/projects', {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-        });
-        if (!res.ok || !active) {
-          return;
+    const handleProjectCreated = (e: Event): void => {
+      const customEvent = e as CustomEvent<{ identifier?: string; key?: string; name?: string; modules_enabled?: boolean } | null | undefined>;
+      const detail = customEvent.detail;
+      if (detail && typeof detail.name === 'string') {
+        const key = detail.identifier ?? detail.key;
+        const projName = detail.name;
+        if (typeof key === 'string' && key.length > 0) {
+          setFetchedProjects((prev) => {
+            if (prev.some((p) => p.key === key)) return prev;
+            return [
+              ...prev,
+              {
+                key,
+                name: projName,
+                modules_enabled: detail.modules_enabled ?? true,
+              },
+            ];
+          });
         }
-        const data = (await res.json()) as
-          | {
-              items?: {
-                identifier?: string;
-                key?: string;
-                name?: string;
-                modules_enabled?: boolean;
-              }[];
-            }
-          | {
-              identifier?: string;
-              key?: string;
-              name?: string;
-              modules_enabled?: boolean;
-            }[];
-        const rawItems = Array.isArray(data) ? data : (data.items ?? []);
-        const parsed: ProjectNavData[] = [];
-        for (const item of rawItems) {
-          const key = item.identifier ?? item.key;
-          if (typeof key === 'string' && key.length > 0 && typeof item.name === 'string') {
-            parsed.push({
-              key,
-              name: item.name,
-              modules_enabled: item.modules_enabled ?? true,
-            });
-          }
-        }
-        if (parsed.length > 0) {
-          setFetchedProjects(parsed);
-        }
-      } catch {
-        // Offline or unmocked unit test environment
       }
-    }
-
-    void loadProjects();
-
-    const handleProjectCreated = (): void => {
-      void loadProjects();
+      refresh();
     };
     const handleOpenCreateProject = (): void => {
       setCreateProjectOpen(true);
@@ -583,25 +648,29 @@ export function Sidebar({
           <nav aria-label="Projects navigation">
             {projectList.map((proj) => {
               const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
+              const isProjExpanded = expandedProjects[proj.key] ?? true;
               return (
                 <div key={proj.key}>
                   <button
                     type="button"
                     className="kb-project-expand-row"
                     aria-label={`Project: ${proj.name}`}
-                    aria-expanded={projectExpanded}
+                    aria-expanded={isProjExpanded}
                     onClick={() => {
-                      setProjectExpanded(!projectExpanded);
+                      setExpandedProjects((prev) => ({
+                        ...prev,
+                        [proj.key]: !isProjExpanded,
+                      }));
                     }}
                   >
                     <span className="kb-project-expand-label">
                       <span aria-hidden="true">⚡</span>
                       <span>{proj.name}</span>
                     </span>
-                    <span aria-hidden="true">{projectExpanded ? '▾' : '▸'}</span>
+                    <span aria-hidden="true">{isProjExpanded ? '▾' : '▸'}</span>
                   </button>
 
-                  {projectExpanded && (
+                  {isProjExpanded && (
                     <ul className="kb-project-subitems">
                       <li>
                         <NavLink

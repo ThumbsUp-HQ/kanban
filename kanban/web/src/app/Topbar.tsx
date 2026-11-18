@@ -35,6 +35,7 @@ export interface TopbarProps {
   onOpenPalette?: (() => void) | undefined;
   workspaceName?: string | undefined;
   projectKey?: string | undefined;
+  projectId?: string | undefined;
   projectName?: string | undefined;
   currentSection?: string | undefined;
   issueCount?: number | null | undefined;
@@ -56,6 +57,7 @@ export function Topbar({
   onOpenPalette,
   workspaceName = 'kanban',
   projectKey = 'KAN',
+  projectId,
   projectName = 'kanban',
   currentSection = 'Work Items',
   issueCount,
@@ -192,7 +194,7 @@ export function Topbar({
       {/* Right: Header Pills, Layout Switcher & Avatar Menu */}
       <div className="kb-topbar-right">
         <HeaderPills
-          projectId={projectKey}
+          projectId={projectId ?? projectKey}
           projectName={projectName}
           accessManifest={accessManifest}
           systemStatus={systemStatus}

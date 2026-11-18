@@ -110,11 +110,13 @@ def validate_csrf_token(token: str, session_id: uuid.UUID, session_hmac_key: byt
 def extract_csrf_cookie(request: Request) -> str | None:
     """Extract __Host-kb_csrf (or plain-HTTP kb_csrf fallback) cookie from request."""
     host_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+    if host_cookie:
+        return host_cookie
     fallback_cookie = request.cookies.get(FALLBACK_CSRF_COOKIE_NAME)
     header_token = request.headers.get(CSRF_HEADER_NAME)
     if header_token and fallback_cookie and hmac.compare_digest(header_token, fallback_cookie):
         return fallback_cookie
-    return host_cookie or fallback_cookie
+    return fallback_cookie
 
 
 def build_set_csrf_cookie_header(csrf_token: str) -> str:

@@ -30,6 +30,7 @@ import {
   type RouteObject,
 } from 'react-router';
 import { AppShell } from './AppShell';
+import type { AccessManifestData } from './HeaderPills';
 import { TokenStory } from '../dev/TokenStory';
 import { EmojiStory } from '../dev/EmojiStory';
 import { EditorStory } from '../dev/EditorStory';
@@ -224,10 +225,15 @@ export function WorkspaceHomeView(): JSX.Element {
     const handleCreated = (): void => {
       void loadProjects();
     };
+    const handleSwitched = (): void => {
+      void loadProjects();
+    };
     window.addEventListener('kb:project-created', handleCreated);
+    window.addEventListener('kb:workspace-switched', handleSwitched);
     return () => {
       active = false;
       window.removeEventListener('kb:project-created', handleCreated);
+      window.removeEventListener('kb:workspace-switched', handleSwitched);
     };
   }, []);
 
@@ -879,7 +885,12 @@ export function ProjectRouteContainer(): JSX.Element {
       if (!res.ok) {
         return null;
       }
-      return (await res.json()) as { name?: string; modules_enabled?: boolean };
+      return (await res.json()) as {
+        id?: string;
+        name?: string;
+        modules_enabled?: boolean;
+        access_manifest?: AccessManifestData;
+      };
     },
     enabled: isValidProject && isValidIssue,
     staleTime: 60000,
@@ -903,15 +914,17 @@ export function ProjectRouteContainer(): JSX.Element {
     >
       <AppShell
         projectKey={resolvedKey}
+        projectId={projectQuery.data?.id}
         projectName={projectName}
         modulesEnabled={modulesEnabled}
+        accessManifest={projectQuery.data?.access_manifest}
       />
     </ProjectRouteContext.Provider>
   );
 }
 
 export function RootShellLayout(): JSX.Element {
-  return <AppShell projectKey="KAN" />;
+  return <AppShell projectKey={undefined} projectId={undefined} />;
 }
 
 export const appRoutes: RouteObject[] = [

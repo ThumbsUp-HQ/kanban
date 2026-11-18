@@ -373,9 +373,9 @@ describe('CommandPalette', () => {
       screen.getByRole('option', { name: /Go to Personal MCP Keys/ }).click();
     });
 
-    fireEvent.change(input, { target: { value: 'Go to Standalone Status' } });
+    fireEvent.change(input, { target: { value: 'Go to System Storage, Backups & Deployment' } });
     act(() => {
-      screen.getByRole('option', { name: /Go to Standalone Status/ }).click();
+      screen.getByRole('option', { name: /Go to System Storage, Backups & Deployment/ }).click();
     });
 
     window.removeEventListener('kb:open-create-project', projectModalListener);

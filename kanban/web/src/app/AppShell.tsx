@@ -33,6 +33,7 @@ registerShellPanel('standalone', StandaloneStatusPanel);
 export interface AppShellProps {
   children?: ReactNode;
   projectKey?: string | undefined;
+  projectId?: string | undefined;
   projectName?: string | undefined;
   modulesEnabled?: boolean | undefined;
   issueCount?: number | null | undefined;
@@ -82,6 +83,7 @@ export function computeCurrentSection(pathname: string, fallback = 'Work Items')
 export function AppShell({
   children,
   projectKey = 'KAN',
+  projectId,
   projectName = 'kanban',
   modulesEnabled = true,
   issueCount,
@@ -158,6 +160,7 @@ export function AppShell({
           onOpenPalette={() => { setPaletteOpen(true); }}
           workspaceName={isInsideProject ? 'kanban' : undefined}
           projectKey={activeProjectKey}
+          projectId={isInsideProject ? (projectId ?? activeProjectKey) : undefined}
           projectName={projectName}
           currentSection={computedSection}
           issueCount={issueCount}

@@ -59,12 +59,14 @@ export function isPublicPath(pathname: string): boolean {
  */
 export async function ensureSessionCsrfToken(): Promise<string | null> {
   if (typeof document !== 'undefined') {
-    const match = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/.exec(document.cookie);
-    if (match?.[1]) {
+    const hostMatch = /(?:^|;\s*)__Host-kb_csrf=([^;]+)/.exec(document.cookie);
+    const fallbackMatch = /(?:^|;\s*)kb_csrf=([^;]+)/.exec(document.cookie);
+    const chosen = hostMatch ?? fallbackMatch;
+    if (chosen?.[1]) {
       try {
-        return decodeURIComponent(match[1]);
+        return decodeURIComponent(chosen[1]);
       } catch {
-        return match[1];
+        return chosen[1];
       }
     }
   }

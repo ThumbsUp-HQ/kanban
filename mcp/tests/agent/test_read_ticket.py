@@ -444,6 +444,3 @@ async def test_read_ticket_full_compacts_manifest_activity_provenance(
     if "provenance" in parsed:
         assert "created_by" in parsed["provenance"]
         assert str(parsed["provenance"]["created_by"]).startswith("@")
-
-
-

@@ -221,7 +221,6 @@ async def test_transition_ticket_unknown_state_hints(agent_test_env: AgentTestEn
     assert "Backlog" in err_text or "Todo" in err_text or "In Progress" in err_text
 
 
-
 async def test_complete_work_help_and_validations(agent_test_env: AgentTestEnv) -> None:
     """complete_work validates proof paths, traversal, and verdict."""
     env = agent_test_env

@@ -1,0 +1,1928 @@
+diff --git a/database/migrations/sql/p4_21_workspace_project_rbac_fix.down.sql b/database/migrations/sql/p4_21_workspace_project_rbac_fix.down.sql
+new file mode 100644
+index 0000000..8be6a4d
+--- /dev/null
++++ b/database/migrations/sql/p4_21_workspace_project_rbac_fix.down.sql
+@@ -0,0 +1,142 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Restore previous projects_insert_rls policy
++DROP POLICY IF EXISTS projects_insert_rls ON projects;
++CREATE POLICY projects_insert_rls ON projects
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
++    );
++
++-- 2. Restore previous objects_insert_rls policy
++DROP POLICY IF EXISTS objects_insert_rls ON objects;
++CREATE POLICY objects_insert_rls ON objects
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_current_principal_id() IS NOT NULL
++        AND (
++            (project_id IS NULL AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']))
++            OR (project_id IS NOT NULL AND app_has_object_capability(project_id, 4))
++        )
++    );
++
++-- 3. Restore previous kb_auth_list_user_workspaces function (from p4_18)
++CREATE OR REPLACE FUNCTION kb_auth_list_user_workspaces(p_principal_id UUID)
++RETURNS TABLE (
++    id UUID,
++    name TEXT,
++    slug TEXT,
++    role TEXT
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_email TEXT;
++    v_is_server_admin BOOLEAN := FALSE;
++BEGIN
++    SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']) INTO v_is_server_admin;
++    IF v_is_server_admin THEN
++        RETURN QUERY
++        SELECT w.id, w.name, w.slug, 'SERVER_ADMIN'::TEXT
++        FROM workspaces w
++        ORDER BY w.created_at ASC;
++        RETURN;
++    END IF;
++
++    SELECT u.email INTO v_email FROM users u WHERE u.id = p_principal_id;
++    IF v_email IS NOT NULL THEN
++        RETURN QUERY
++        SELECT DISTINCT w.id, w.name, w.slug, rb.role::TEXT
++        FROM workspaces w
++        JOIN principals p ON p.workspace_id = w.id
++        JOIN users u ON u.id = p.id
++        LEFT JOIN role_bindings rb ON rb.workspace_id = w.id AND rb.principal_id = p.id
++        WHERE lower(u.email) = lower(v_email) AND p.status = 'ACTIVE'
++        ORDER BY w.name ASC;
++    END IF;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_list_user_workspaces(UUID) TO kanban_app;
++
++-- 4. Restore previous kb_auth_switch_workspace function (from p4_18)
++CREATE OR REPLACE FUNCTION kb_auth_switch_workspace(
++    p_target_workspace_id UUID,
++    p_caller_principal_id UUID
++)
++RETURNS TABLE (
++    workspace_id UUID,
++    principal_id UUID
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++    v_target_ws workspaces%ROWTYPE;
++    v_target_pid UUID;
++    v_is_server_admin BOOLEAN := FALSE;
++    v_email TEXT;
++    v_display_name TEXT;
++    v_ckey TEXT;
++BEGIN
++    SELECT * INTO v_target_ws FROM workspaces WHERE id = p_target_workspace_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'WORKSPACE_NOT_FOUND';
++    END IF;
++
++    SELECT EXISTS (
++        SELECT 1 FROM role_bindings rb WHERE rb.principal_id = p_caller_principal_id AND rb.role = 'SERVER_ADMIN'
++    ) INTO v_is_server_admin;
++
++    -- Check direct principal match
++    SELECT p.id INTO v_target_pid
++    FROM principals p
++    WHERE p.id = p_caller_principal_id AND p.workspace_id = p_target_workspace_id AND p.status = 'ACTIVE';
++
++    -- Check email match
++    IF v_target_pid IS NULL THEN
++        SELECT u.email, p.display_name INTO v_email, v_display_name
++        FROM users u JOIN principals p ON p.id = u.id
++        WHERE u.id = p_caller_principal_id;
++
++        IF v_email IS NOT NULL THEN
++            SELECT p.id INTO v_target_pid
++            FROM principals p
++            JOIN users u ON u.id = p.id
++            WHERE p.workspace_id = p_target_workspace_id AND lower(u.email) = lower(v_email) AND p.status = 'ACTIVE'
++            LIMIT 1;
++        END IF;
++    END IF;
++
++    -- If server admin and no principal in target workspace, auto-provision
++    IF v_target_pid IS NULL AND v_is_server_admin THEN
++        v_target_pid := uuidv7();
++        IF v_email IS NULL THEN v_email := 'server-admin@local.kanban'; END IF;
++        IF v_display_name IS NULL THEN v_display_name := 'Server Admin'; END IF;
++        v_ckey := 'usr-' || substr(replace(v_target_pid::text, '-', ''), 1, 12);
++
++        PERFORM register_object('user'::object_kind, p_target_workspace_id, NULL, v_ckey, v_display_name, v_target_pid, v_target_pid);
++
++        INSERT INTO principals (id, principal_type, workspace_id, display_name, status)
++        VALUES (v_target_pid, 'USER', p_target_workspace_id, v_display_name, 'ACTIVE');
++
++        INSERT INTO users (id, object_type, principal_type, workspace_id, email)
++        VALUES (v_target_pid, 'user', 'USER', p_target_workspace_id, v_email);
++
++        INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id)
++        VALUES (uuidv7(), p_target_workspace_id, v_target_pid, 'SERVER_ADMIN', 'server', NULL);
++    END IF;
++
++    IF v_target_pid IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'FORBIDDEN_WORKSPACE_SWITCH';
++    END IF;
++
++    RETURN QUERY SELECT p_target_workspace_id, v_target_pid;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_switch_workspace(UUID, UUID) TO kanban_app;
+diff --git a/database/migrations/sql/p4_21_workspace_project_rbac_fix.up.sql b/database/migrations/sql/p4_21_workspace_project_rbac_fix.up.sql
+new file mode 100644
+index 0000000..2c1cd98
+--- /dev/null
++++ b/database/migrations/sql/p4_21_workspace_project_rbac_fix.up.sql
+@@ -0,0 +1,189 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Update kb_auth_switch_workspace:
++-- Ensures SERVER_ADMIN check checks app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])
++-- OR any principal with caller's email holding SERVER_ADMIN, and calls kb_auth_ensure_server_admin_role
++-- even when target principal already existed.
++CREATE OR REPLACE FUNCTION kb_auth_switch_workspace(
++    p_target_workspace_id UUID,
++    p_caller_principal_id UUID
++)
++RETURNS TABLE (
++    workspace_id UUID,
++    principal_id UUID
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++    v_target_ws workspaces%ROWTYPE;
++    v_target_pid UUID;
++    v_is_server_admin BOOLEAN := FALSE;
++    v_email TEXT;
++    v_display_name TEXT;
++    v_ckey TEXT;
++BEGIN
++    SELECT * INTO v_target_ws FROM workspaces WHERE id = p_target_workspace_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'WORKSPACE_NOT_FOUND';
++    END IF;
++
++    -- Check if caller directly holds SERVER_ADMIN or via session helper
++    SELECT (
++        app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])
++        OR EXISTS (
++            SELECT 1 FROM role_bindings rb
++            WHERE rb.principal_id = p_caller_principal_id AND rb.role = 'SERVER_ADMIN'
++        )
++    ) INTO v_is_server_admin;
++
++    -- Check direct principal match in target workspace
++    SELECT p.id INTO v_target_pid
++    FROM principals p
++    WHERE p.id = p_caller_principal_id AND p.workspace_id = p_target_workspace_id AND p.status = 'ACTIVE';
++
++    -- Resolve caller email and display name
++    SELECT u.email, p.display_name INTO v_email, v_display_name
++    FROM users u JOIN principals p ON p.id = u.id
++    WHERE u.id = p_caller_principal_id;
++
++    -- If not already server admin, check if caller's email holds SERVER_ADMIN in any workspace
++    IF NOT v_is_server_admin AND v_email IS NOT NULL THEN
++        SELECT EXISTS (
++            SELECT 1
++            FROM role_bindings rb
++            JOIN principals p ON p.id = rb.principal_id
++            JOIN users u ON u.id = p.id
++            WHERE lower(u.email) = lower(v_email)
++              AND rb.role = 'SERVER_ADMIN'
++              AND p.status = 'ACTIVE'
++        ) INTO v_is_server_admin;
++    END IF;
++
++    -- Check email match in target workspace
++    IF v_target_pid IS NULL AND v_email IS NOT NULL THEN
++        SELECT p.id INTO v_target_pid
++        FROM principals p
++        JOIN users u ON u.id = p.id
++        WHERE p.workspace_id = p_target_workspace_id AND lower(u.email) = lower(v_email) AND p.status = 'ACTIVE'
++        LIMIT 1;
++    END IF;
++
++    -- If server admin and no principal in target workspace, auto-provision
++    IF v_target_pid IS NULL AND v_is_server_admin THEN
++        v_target_pid := uuidv7();
++        IF v_email IS NULL THEN v_email := 'server-admin@local.kanban'; END IF;
++        IF v_display_name IS NULL THEN v_display_name := 'Server Admin'; END IF;
++        v_ckey := 'usr-' || substr(replace(v_target_pid::text, '-', ''), 1, 12);
++
++        PERFORM register_object('user'::object_kind, p_target_workspace_id, NULL, v_ckey, v_display_name, v_target_pid, v_target_pid);
++
++        INSERT INTO principals (id, principal_type, workspace_id, display_name, status)
++        VALUES (v_target_pid, 'USER', p_target_workspace_id, v_display_name, 'ACTIVE');
++
++        INSERT INTO users (id, object_type, principal_type, workspace_id, email)
++        VALUES (v_target_pid, 'user', 'USER', p_target_workspace_id, v_email);
++
++        INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id)
++        VALUES (uuidv7(), p_target_workspace_id, v_target_pid, 'SERVER_ADMIN', 'server', NULL);
++    END IF;
++
++    IF v_target_pid IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'FORBIDDEN_WORKSPACE_SWITCH';
++    END IF;
++
++    -- If caller is a server admin, always ensure SERVER_ADMIN binding exists on target principal
++    IF v_is_server_admin THEN
++        PERFORM kb_auth_ensure_server_admin_role(p_target_workspace_id, v_target_pid);
++    END IF;
++
++    RETURN QUERY SELECT p_target_workspace_id, v_target_pid;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_switch_workspace(UUID, UUID) TO kanban_app;
++
++-- 2. Update kb_auth_list_user_workspaces:
++-- Checks app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']) OR any principal with caller's email holding SERVER_ADMIN
++CREATE OR REPLACE FUNCTION kb_auth_list_user_workspaces(p_principal_id UUID)
++RETURNS TABLE (
++    id UUID,
++    name TEXT,
++    slug TEXT,
++    role TEXT
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_email TEXT;
++    v_is_server_admin BOOLEAN := FALSE;
++BEGIN
++    SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']) INTO v_is_server_admin;
++
++    IF NOT v_is_server_admin THEN
++        SELECT u.email INTO v_email FROM users u WHERE u.id = p_principal_id;
++        IF v_email IS NOT NULL THEN
++            SELECT EXISTS (
++                SELECT 1
++                FROM role_bindings rb
++                JOIN principals p ON p.id = rb.principal_id
++                JOIN users u ON u.id = p.id
++                WHERE lower(u.email) = lower(v_email)
++                  AND rb.role = 'SERVER_ADMIN'
++                  AND p.status = 'ACTIVE'
++            ) INTO v_is_server_admin;
++        END IF;
++    END IF;
++
++    IF v_is_server_admin THEN
++        RETURN QUERY
++        SELECT w.id, w.name, w.slug, 'SERVER_ADMIN'::TEXT
++        FROM workspaces w
++        ORDER BY w.created_at ASC;
++        RETURN;
++    END IF;
++
++    IF v_email IS NULL THEN
++        SELECT u.email INTO v_email FROM users u WHERE u.id = p_principal_id;
++    END IF;
++
++    IF v_email IS NOT NULL THEN
++        RETURN QUERY
++        SELECT DISTINCT w.id, w.name, w.slug, COALESCE(rb.role::TEXT, 'WORKSPACE_MEMBER')
++        FROM workspaces w
++        JOIN principals p ON p.workspace_id = w.id
++        JOIN users u ON u.id = p.id
++        LEFT JOIN role_bindings rb ON rb.workspace_id = w.id AND rb.principal_id = p.id
++        WHERE lower(u.email) = lower(v_email) AND p.status = 'ACTIVE'
++        ORDER BY w.name ASC;
++    END IF;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_list_user_workspaces(UUID) TO kanban_app;
++
++-- 3. Update objects_insert_rls policy:
++-- Allow WORKSPACE_MEMBER users to register project objects (project_id IS NULL)
++DROP POLICY IF EXISTS objects_insert_rls ON objects;
++CREATE POLICY objects_insert_rls ON objects
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_current_principal_id() IS NOT NULL
++        AND (
++            (project_id IS NULL AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER']))
++            OR (project_id IS NOT NULL AND app_has_object_capability(project_id, 4))
++        )
++    );
++
++-- 4. Update projects_insert_rls policy:
++-- Allow authenticated WORKSPACE_MEMBER users to insert projects into their active workspace
++DROP POLICY IF EXISTS projects_insert_rls ON projects;
++CREATE POLICY projects_insert_rls ON projects
++    FOR INSERT WITH CHECK (
++        workspace_id = app_current_workspace_id()
++        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER'])
++    );
+diff --git a/database/migrations/versions/p4_21_workspace_project_rbac_fix.py b/database/migrations/versions/p4_21_workspace_project_rbac_fix.py
+new file mode 100644
+index 0000000..ca00811
+--- /dev/null
++++ b/database/migrations/versions/p4_21_workspace_project_rbac_fix.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""workspace project rbac fix.
++
++Revision ID: p4_21_workspace_project_rbac_fix
++Revises: p4_20_user_personal_settings
++Create Date: 2026-11-18 00:36:23.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_21_workspace_project_rbac_fix"
++down_revision: str | None = "p4_20_user_personal_settings"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p4_21_workspace_project_rbac_fix migration."""
++    execute_sql_file("p4_21_workspace_project_rbac_fix.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p4_21_workspace_project_rbac_fix migration."""
++    execute_sql_file("p4_21_workspace_project_rbac_fix.down.sql")
+diff --git a/database/tests/migrations/test_p4_21_workspace_project_rbac_fix_migration.py b/database/tests/migrations/test_p4_21_workspace_project_rbac_fix_migration.py
+new file mode 100644
+index 0000000..a812f61
+--- /dev/null
++++ b/database/tests/migrations/test_p4_21_workspace_project_rbac_fix_migration.py
+@@ -0,0 +1,24 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p4_21_workspace_project_rbac_fix."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p4_21_workspace_project_rbac_fix_migration_lifecycle() -> None:
++    """Verify p4_21_workspace_project_rbac_fix upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p4_21_workspace_project_rbac_fix")
++        assert prev_rev == "p4_20_user_personal_settings"
++
++        # 1. Upgrade to p4_21_workspace_project_rbac_fix
++        await harness.upgrade("p4_21_workspace_project_rbac_fix")
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p4_21_workspace_project_rbac_fix")
+diff --git a/kanban/api/v1/objects_access.py b/kanban/api/v1/objects_access.py
+index e2a62b1..ff0e717 100644
+--- a/kanban/api/v1/objects_access.py
++++ b/kanban/api/v1/objects_access.py
+@@ -3,7 +3,6 @@
+ from __future__ import annotations
+ 
+ import json
+-import uuid  # noqa: TC003
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends
+@@ -16,6 +15,7 @@ from kanban.api.problems import ProblemException, not_found
+ from kanban.api.timing import timing_floor
+ from kanban.security.access_manifest import AccessManifest, build_access_manifest
+ from kanban.security.permissions import Capability, evaluate_capabilities
++from kanban.services.object_ref import resolve_object_ref
+ 
+ router = APIRouter(prefix="/objects", tags=["objects-access"])
+ 
+@@ -26,13 +26,16 @@ router = APIRouter(prefix="/objects", tags=["objects-access"])
+     summary="Get anti-enumeration access manifest for an object",
+ )
+ async def get_object_access_manifest(
+-    object_id: uuid.UUID,
++    object_id: str,
+     caller: Annotated[PrincipalContext, Depends(get_principal)],
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> AccessManifest:
+     """Retrieve structured access sharing metadata for an object under S3.4 rules."""
+     async with timing_floor(floor_ms=25.0):
+-        return await build_access_manifest(session, caller, object_id)
++        obj = await resolve_object_ref(session, object_id)
++        if obj is None:
++            not_found()
++        return await build_access_manifest(session, caller, obj.id)
+ 
+ 
+ @router.post(
+@@ -41,7 +44,7 @@ async def get_object_access_manifest(
+     summary="Revoke access for all automated agents on an object",
+ )
+ async def agent_kill_switch(
+-    object_id: uuid.UUID,
++    object_id: str,
+     caller: Annotated[PrincipalContext, Depends(get_principal)],
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> AccessManifest:
+@@ -51,8 +54,13 @@ async def agent_kill_switch(
+     Appends an immutable AGENT_ACCESS_KILLED entry to the activity ledger and returns
+     the refreshed AccessManifest.
+     """
++    resolved_obj = await resolve_object_ref(session, object_id)
++    if resolved_obj is None:
++        not_found()
++    resolved_id = resolved_obj.id
++
+     # 1. Require SHARE or ADMIN capability on object
+-    caps = await evaluate_capabilities(session, caller, object_id)
++    caps = await evaluate_capabilities(session, caller, resolved_id)
+     if Capability.VIEW not in caps:
+         not_found()
+ 
+@@ -66,14 +74,14 @@ async def agent_kill_switch(
+         )
+ 
+     # 2. Fetch object record
+-    object_rec = await session.get(ObjectRecord, object_id)
++    object_rec = await session.get(ObjectRecord, resolved_id)
+     if object_rec is None:
+         not_found()
+ 
+     # 3. Find all active agents holding access on object
+     agent_types = ("AGENT", "SERVICE_PRINCIPAL")
+     era_has_access = exists().where(
+-        EffectiveResourceAccess.object_id == object_id,
++        EffectiveResourceAccess.object_id == resolved_id,
+         EffectiveResourceAccess.principal_id == Principal.id,
+         EffectiveResourceAccess.allow_mask > 0,
+     )
+@@ -91,7 +99,7 @@ async def agent_kill_switch(
+         select(ResourceAclEntry.principal_id)
+         .join(Principal, Principal.id == ResourceAclEntry.principal_id)
+         .where(
+-            ResourceAclEntry.object_id == object_id,
++            ResourceAclEntry.object_id == resolved_id,
+             ResourceAclEntry.effect == "ALLOW",
+             Principal.status == "ACTIVE",
+             Principal.principal_type.in_(agent_types),
+@@ -115,7 +123,7 @@ async def agent_kill_switch(
+             """),
+             {
+                 "ws_id": object_rec.workspace_id,
+-                "obj_id": object_id,
++                "obj_id": resolved_id,
+                 "agent_id": agent_id,
+                 "caller_id": caller.principal_id,
+             },
+@@ -131,7 +139,7 @@ async def agent_kill_switch(
+     payload = json.dumps(
+         {
+             "killed_agent_ids": [str(a) for a in killed_ids],
+-            "object_id": str(object_id),
++            "object_id": str(resolved_id),
+         }
+     )
+     await session.execute(
+@@ -147,7 +155,7 @@ async def agent_kill_switch(
+         """),
+         {
+             "ws_id": object_rec.workspace_id,
+-            "obj_id": object_id,
++            "obj_id": resolved_id,
+             "obj_type": (
+                 object_rec.object_type.value
+                 if hasattr(object_rec.object_type, "value")
+@@ -161,4 +169,4 @@ async def agent_kill_switch(
+     await session.flush()
+ 
+     # 7. Return refreshed AccessManifest
+-    return await build_access_manifest(session, caller, object_id)
++    return await build_access_manifest(session, caller, resolved_id)
+diff --git a/kanban/api/v1/workspaces.py b/kanban/api/v1/workspaces.py
+index 5952480..97a0afd 100644
+--- a/kanban/api/v1/workspaces.py
++++ b/kanban/api/v1/workspaces.py
+@@ -20,6 +20,12 @@ from kanban.api.problems import ProblemException
+ from kanban.auth.sessions.cookies import (
+     SESSION_COOKIE_NAME,
+     attach_session_and_csrf_cookies,
++    extract_session_cookie,
++    is_plain_http,
++)
++from kanban.auth.sessions.csrf import (
++    FALLBACK_CSRF_COOKIE_NAME,
++    build_clear_fallback_csrf_cookie_header,
+ )
+ 
+ if TYPE_CHECKING:
+@@ -273,12 +279,16 @@ async def switch_workspace_endpoint(
+ 
+     session_service: SessionService | None = getattr(request.app.state, "session_service", None)
+     if session_service is not None:
++        cookie_hdr = request.headers.get("cookie")
++        existing_sess = extract_session_cookie(cookie_hdr) or request.cookies.get(
++            SESSION_COOKIE_NAME
++        )
+         issued = await session_service.create_after_login(
+             session,
+             principal_id=target_principal_id,
+             workspace_id=workspace_id,
+             aal_level=caller.aal_level,
+-            existing_cookie=request.cookies.get(SESSION_COOKIE_NAME),
++            existing_cookie=existing_sess,
+         )
+         await session.commit()
+ 
+@@ -296,6 +306,10 @@ async def switch_workspace_endpoint(
+             issued.csrf_token,
+             persistent=issued.is_persistent,
+         )
++        if not is_plain_http(request) and FALLBACK_CSRF_COOKIE_NAME in request.cookies:
++            response.raw_headers.append(
++                (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
++            )
+         return response
+ 
+     return JSONResponse(
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index 03771e2..8f136b8 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -110,11 +110,13 @@ def validate_csrf_token(token: str, session_id: uuid.UUID, session_hmac_key: byt
+ def extract_csrf_cookie(request: Request) -> str | None:
+     """Extract __Host-kb_csrf (or plain-HTTP kb_csrf fallback) cookie from request."""
+     host_cookie = request.cookies.get(CSRF_COOKIE_NAME)
++    if host_cookie:
++        return host_cookie
+     fallback_cookie = request.cookies.get(FALLBACK_CSRF_COOKIE_NAME)
+     header_token = request.headers.get(CSRF_HEADER_NAME)
+     if header_token and fallback_cookie and hmac.compare_digest(header_token, fallback_cookie):
+         return fallback_cookie
+-    return host_cookie or fallback_cookie
++    return fallback_cookie
+ 
+ 
+ def build_set_csrf_cookie_header(csrf_token: str) -> str:
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+index d87e913..2b80b15 100644
+--- a/kanban/issues/workflow_service.py
++++ b/kanban/issues/workflow_service.py
+@@ -676,8 +676,7 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+                 status=422,
+                 title="Invalid Transition",
+                 detail=(
+-                    "Project has no workflow state configured in the 'completed' group. "
+-                    f"{hint}"
++                    f"Project has no workflow state configured in the 'completed' group. {hint}"
+                 ),
+                 extra={"hint": hint, "valid_states": valid_names},
+             )
+diff --git a/kanban/services/object_ref.py b/kanban/services/object_ref.py
+index 5e21f3d..569e6d0 100644
+--- a/kanban/services/object_ref.py
++++ b/kanban/services/object_ref.py
+@@ -26,13 +26,13 @@ _PROJECT_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Z0-9]{1,9
+ 
+ async def resolve_object_ref(
+     session: AsyncSession,
+-    ref: str,
++    ref: str | uuid.UUID,
+     expected_type: ObjectKind | None = None,
+ ) -> ObjectRecord | None:
+     """Resolve an object reference (UUID, issue key, or project key) through RLS.
+ 
+     Accepts:
+-        - UUID string (e.g. 018f3a21-9876-7123-8abc-def012345678)
++        - UUID or UUID string (e.g. 018f3a21-9876-7123-8abc-def012345678)
+         - Issue canonical key (e.g. KAN-142)
+         - Project identifier (e.g. KAN)
+         - General canonical key matching objects.canonical_key
+@@ -42,7 +42,7 @@ async def resolve_object_ref(
+         - Soft-deleted objects (deleted_at IS NOT NULL) return None.
+         - Unreadable objects (filtered by PostgreSQL RLS) return None.
+     """
+-    clean_ref = ref.strip()
++    clean_ref = str(ref).strip()
+     if not clean_ref or len(clean_ref) > MAX_OBJECT_REF_LENGTH:
+         return None
+ 
+diff --git a/kanban/services/projects.py b/kanban/services/projects.py
+index aac7a9a..8a2bcaf 100644
+--- a/kanban/services/projects.py
++++ b/kanban/services/projects.py
+@@ -108,14 +108,18 @@ def decode_cursor(cursor: str) -> str:
+ 
+ 
+ async def _require_project_creator(session: AsyncSession, caller: PrincipalContext) -> None:
+-    """Allow only workspace or server admins holding a token scope that includes ADMIN."""
+-    is_admin = (
++    """Allow workspace/server admins or members holding a token scope that includes ADMIN."""
++    is_member = (
+         await session.execute(
+-            text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
++            text(
++                "SELECT app_principal_has_role("
++                "  NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER']"
++                ")"
++            )
+         )
+     ).scalar_one()
+     scope_ok = Capability.ADMIN in parse_token_scope_mask(caller.token_scopes)
+-    if caller.agent_principal_id is not None or not is_admin or not scope_ok:
++    if caller.agent_principal_id is not None or not is_member or not scope_ok:
+         raise _problem(code="INSUFFICIENT_CAPABILITY", status=403, title="Insufficient Capability")
+ 
+ 
+diff --git a/kanban/tests/api/test_objects_access_endpoint.py b/kanban/tests/api/test_objects_access_endpoint.py
+index 93a1431..554e4f5 100644
+--- a/kanban/tests/api/test_objects_access_endpoint.py
++++ b/kanban/tests/api/test_objects_access_endpoint.py
+@@ -197,6 +197,20 @@ async def _verify_access_and_kill_switch(
+     )
+     res_a = await client.get(f"/api/v1/objects/{data.issue_id}/access")
+     assert res_a.status_code == 200
++
++    # Positive & Boundary (KANBA-192): Project Key & Canonical Key access resolution
++    res_key = await client.get("/api/v1/objects/KAN/access")
++    assert res_key.status_code == 200
++    assert (
++        res_key.json()["inherited_scope"]["kind"] == "workspace"
++        or "Project" in res_key.json()["pill_label"]
++    )
++
++    res_canonical = await client.get("/api/v1/objects/KAN-1/access")
++    assert res_canonical.status_code == 200
++
++    res_nonexistent = await client.get("/api/v1/objects/NONEXISTENT/access")
++    assert res_nonexistent.status_code == 404
+     data_a = res_a.json()
+     assert "pill_label" in data_a
+     assert any(u["handle"] == "@viewer_user" for u in data_a["users"])
+@@ -479,25 +493,25 @@ async def test_objects_access_handlers_direct_unit(
+     )
+ 
+     # 1. get_object_access_manifest directly
+-    manifest = await get_object_access_manifest(issue_id, admin_ctx, db_session)
++    manifest = await get_object_access_manifest(str(issue_id), admin_ctx, db_session)
+     assert manifest.pill_label == "Project + 2"
+ 
+     # 2. agent_kill_switch lacking VIEW -> 404
+     with pytest.raises(ProblemException) as exc_404:
+-        await agent_kill_switch(issue_id, outsider_ctx, db_session)
++        await agent_kill_switch(str(issue_id), outsider_ctx, db_session)
+     assert exc_404.value.status == 404
+ 
+     # 3. agent_kill_switch with VIEW only -> 403
+     with pytest.raises(ProblemException) as exc_403:
+-        await agent_kill_switch(issue_id, viewer_ctx, db_session)
++        await agent_kill_switch(str(issue_id), viewer_ctx, db_session)
+     assert exc_403.value.status == 403
+ 
+     # 4. agent_kill_switch with non-existent object record but valid caps (hits line 71)
+     with patch("kanban.api.v1.objects_access.evaluate_capabilities", return_value=Capability.ALL):
+         with pytest.raises(ProblemException) as exc_rec:
+-            await agent_kill_switch(uuid.uuid4(), admin_ctx, db_session)
++            await agent_kill_switch(str(uuid.uuid4()), admin_ctx, db_session)
+         assert exc_rec.value.status == 404
+ 
+     # 5. agent_kill_switch execute directly with admin_ctx
+-    res_manifest = await agent_kill_switch(issue_id, admin_ctx, db_session)
++    res_manifest = await agent_kill_switch(str(issue_id), admin_ctx, db_session)
+     assert res_manifest.agents == []
+diff --git a/kanban/tests/api/test_workspaces_api.py b/kanban/tests/api/test_workspaces_api.py
+index 494d77a..8a86cd2 100644
+--- a/kanban/tests/api/test_workspaces_api.py
++++ b/kanban/tests/api/test_workspaces_api.py
+@@ -27,8 +27,15 @@ from kanban.api.v1.workspaces import (
+     list_workspaces_endpoint,
+     switch_workspace_endpoint,
+ )
+-from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
+-from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, CsrfMiddleware
++from kanban.auth.sessions.cookies import (
++    SESSION_COOKIE_NAME,
++)
++from kanban.auth.sessions.csrf import (
++    CSRF_COOKIE_NAME,
++    CSRF_HEADER_NAME,
++    FALLBACK_CSRF_COOKIE_NAME,
++    CsrfMiddleware,
++)
+ from kanban.auth.sessions.resolver import SessionCookieResolver
+ from kanban.auth.sessions.service import SessionService
+ from kanban.security.keys import KeyMaterial
+@@ -700,3 +707,128 @@ async def test_case_8_workspaces_under_kanban_app_force_rls(
+         request=req,
+     )
+     assert switched_resp.status_code == 200
++
++
++@pytest.mark.asyncio
++async def test_case_9_multi_workspace_switch_roundtrip_project_creation(  # noqa: PLR0915
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Case 9: Multi-workspace switch roundtrip and project creation with stale CSRF."""
++    ws_id, admin_id, member_id = await _setup_workspace_and_principals(db_session)
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        # 1. Member in default workspace creates project (WORKSPACE_MEMBER RBAC fix)
++        _, member_csrf = await _login_and_elevate(
++            client, session_service, db_session, member_id, ws_id, aal_level=1
++        )
++        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_fallback_csrf_val")
++
++        resp_mem_proj = await client.post(
++            "/api/v1/projects",
++            json={"identifier": "MEMPRJ", "name": "Member Project"},
++            headers={CSRF_HEADER_NAME: member_csrf},
++        )
++        assert resp_mem_proj.status_code == 201, resp_mem_proj.text
++        assert resp_mem_proj.json()["identifier"] == "MEMPRJ"
++
++        # 2. Server admin creates project in default workspace
++        client.cookies.clear()
++        _, admin_csrf = await _login_and_elevate(
++            client, session_service, db_session, admin_id, ws_id, aal_level=2
++        )
++        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_fallback_csrf_val")
++
++        resp_proj1 = await client.post(
++            "/api/v1/projects",
++            json={"identifier": "DEFPRJ", "name": "Default Project"},
++            headers={CSRF_HEADER_NAME: admin_csrf},
++        )
++        assert resp_proj1.status_code == 201, resp_proj1.text
++        assert resp_proj1.json()["identifier"] == "DEFPRJ"
++
++        # 3. Create second workspace B
++        ws_b_slug = f"ws-b-{uuid.uuid4().hex[:8]}"
++        resp_ws_b = await client.post(
++            "/api/v1/workspaces",
++            json={"name": "Workspace Beta", "slug": ws_b_slug},
++            headers={CSRF_HEADER_NAME: admin_csrf},
++        )
++        assert resp_ws_b.status_code == 201, resp_ws_b.text
++        ws_b_data = resp_ws_b.json()
++        ws_b_id = uuid.UUID(ws_b_data["id"])
++
++        # 4. Switch to B
++        resp_switch_b = await client.post(
++            f"/api/v1/workspaces/{ws_b_id}/switch",
++            headers={CSRF_HEADER_NAME: admin_csrf},
++        )
++        assert resp_switch_b.status_code == 200, resp_switch_b.text
++        switch_b_data = resp_switch_b.json()
++        assert switch_b_data["workspace_id"] == str(ws_b_id)
++        csrf_b = switch_b_data["csrf_token"]
++
++        # Update client session and csrf cookies cleanly (preventing duplicate cookie ambiguity)
++        sess_cookie_b = resp_switch_b.cookies.get(SESSION_COOKIE_NAME)
++        csrf_cookie_b = resp_switch_b.cookies.get(CSRF_COOKIE_NAME)
++        client.cookies.delete(SESSION_COOKIE_NAME)
++        client.cookies.delete(CSRF_COOKIE_NAME)
++        if sess_cookie_b:
++            client.cookies.set(SESSION_COOKIE_NAME, sess_cookie_b)
++        if csrf_cookie_b:
++            client.cookies.set(CSRF_COOKIE_NAME, csrf_cookie_b)
++
++        # Inject stale fallback CSRF cookie to verify precedence over stale cookie
++        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_csrf_cookie_in_b")
++
++        # 5. Create project in B
++        resp_proj_b = await client.post(
++            "/api/v1/projects",
++            json={"identifier": "BETAPRJ", "name": "Beta Project"},
++            headers={CSRF_HEADER_NAME: csrf_b},
++        )
++        assert resp_proj_b.status_code == 201, resp_proj_b.text
++        assert resp_proj_b.json()["identifier"] == "BETAPRJ"
++
++        # 6. Switch back to default workspace A
++        resp_switch_a = await client.post(
++            f"/api/v1/workspaces/{ws_id}/switch",
++            headers={CSRF_HEADER_NAME: csrf_b},
++        )
++        assert resp_switch_a.status_code == 200, resp_switch_a.text
++        switch_a_data = resp_switch_a.json()
++        assert switch_a_data["workspace_id"] == str(ws_id)
++        csrf_a2 = switch_a_data["csrf_token"]
++
++        sess_cookie_a = resp_switch_a.cookies.get(SESSION_COOKIE_NAME)
++        csrf_cookie_a = resp_switch_a.cookies.get(CSRF_COOKIE_NAME)
++        client.cookies.delete(SESSION_COOKIE_NAME)
++        client.cookies.delete(CSRF_COOKIE_NAME)
++        if sess_cookie_a:
++            client.cookies.set(SESSION_COOKIE_NAME, sess_cookie_a)
++        if csrf_cookie_a:
++            client.cookies.set(CSRF_COOKIE_NAME, csrf_cookie_a)
++
++        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_csrf_cookie_in_a")
++
++        # 7. Create another project in A
++        resp_proj_a2 = await client.post(
++            "/api/v1/projects",
++            json={"identifier": "ALPHAP2", "name": "Alpha Project Two"},
++            headers={CSRF_HEADER_NAME: csrf_a2},
++        )
++        assert resp_proj_a2.status_code == 201, resp_proj_a2.text
++        assert resp_proj_a2.json()["identifier"] == "ALPHAP2"
++
++        # 8. Verify listing in A contains A's projects but not B's
++        resp_list_a = await client.get("/api/v1/projects")
++        assert resp_list_a.status_code == 200
++        items_a = [p["identifier"] for p in resp_list_a.json()["items"]]
++        assert "DEFPRJ" in items_a
++        assert "MEMPRJ" in items_a
++        assert "ALPHAP2" in items_a
++        assert "BETAPRJ" not in items_a
+diff --git a/kanban/web/e2e/workspaces/workspace-project.spec.ts b/kanban/web/e2e/workspaces/workspace-project.spec.ts
+new file mode 100644
+index 0000000..647dab8
+--- /dev/null
++++ b/kanban/web/e2e/workspaces/workspace-project.spec.ts
+@@ -0,0 +1,369 @@
++/**
++ * Playwright E2E & Visual Verification for Workspaces and Projects (KANBA-192 / KB-WS-PROJ).
++ * Tests project creation, independent project expand/collapse in sidebar,
++ * and live workspace switching across desktop (1440x900), tablet (1024x768), and mobile (390x844).
++ */
++
++import { test, expect } from '../support/test';
++import { annotatedScreenshot } from '../support/annotate';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++
++function getBaseHandlers(): MockHandlers {
++  return {
++    'GET /api/v1/system/status': { json: loadFixture('system-status-prod') },
++    'GET /api/v1/setup/status': { json: { is_initialized: true } },
++    'GET /api/v1/users/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/me': { json: loadFixture('me-adam') },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        user: loadFixture('me-adam'),
++        csrf_token: 'csrf-token-valid-abc123',
++      },
++    },
++    'GET /api/v1/projects/:key': (req) => {
++      const key = req.params.key ?? 'KAN';
++      const isKan = key === 'KAN';
++      const isInfra = key === 'INFRA';
++      const fixture = loadFixture<Record<string, unknown>>('project-kan');
++      return {
++        json: {
++          ...fixture,
++          id: isKan
++            ? '01a1e706-8153-72a8-a253-2f44444546bc'
++            : isInfra
++              ? '01a1ec27-bd50-79c5-8e0e-8384849fef99'
++              : '01a1ec27-bd50-79c5-8e0e-8384849fef88',
++          key,
++          identifier: key,
++          name: isKan ? 'Kanban' : isInfra ? 'Core Infrastructure' : 'Security Shield',
++          modules_enabled: true,
++        },
++      };
++    },
++    'GET /api/v1/projects/:key/issues': { json: loadFixture('issues-kan') },
++    'GET /api/v1/projects/:key/states': {
++      json: {
++        items: [
++          { id: 'state-backlog', name: 'Backlog', group: 'backlog' },
++          { id: 'state-in-progress', name: 'In Progress', group: 'started' },
++          { id: 'state-done', name: 'Done', group: 'completed' },
++        ],
++      },
++    },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/issues': { json: loadFixture('issues-kan') },
++    'GET /api/v1/media-proxy': {
++      status: 200,
++      contentType: 'image/png',
++      body: Buffer.from(
++        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
++        'base64',
++      ),
++    },
++  };
++}
++
++test.describe('Workspace & Project Navigation E2E (KANBA-192 / KB-WS-PROJ)', () => {
++  test('01: project creation in default workspace with 0 console errors', async ({
++    page,
++  }, testInfo) => {
++    const consoleErrors: string[] = [];
++    page.on('console', (msg) => {
++      if (msg.type() === 'error') {
++        const text = msg.text();
++        if (text.startsWith('The source list for the Content Security Policy directive')) {
++          return;
++        }
++        consoleErrors.push(text);
++      }
++    });
++
++    await mockApi(page, {
++      ...getBaseHandlers(),
++      'GET /api/v1/workspaces': {
++        json: [
++          {
++            id: '01a1e706-8146-7e4c-b3e0-0b1bd00d479b',
++            name: 'Platform Engineering',
++            slug: 'platform-eng',
++            is_current: true,
++            role: 'WORKSPACE_MEMBER',
++          },
++        ],
++      },
++      'GET /api/v1/projects': {
++        json: {
++          items: [
++            {
++              key: 'KAN',
++              name: 'Kanban',
++              modules_enabled: true,
++            },
++          ],
++        },
++      },
++      'POST /api/v1/projects': {
++        status: 201,
++        json: {
++          id: '01a1ec27-bd50-79c5-8e0e-8384849fef99',
++          key: 'INFRA',
++          identifier: 'INFRA',
++          name: 'Core Infrastructure',
++          description_markdown: 'Core platform and infrastructure services',
++          modules_enabled: true,
++        },
++      },
++    });
++
++    await page.goto('/projects/KAN/issues');
++    await page.waitForLoadState('networkidle');
++
++    if (testInfo.project.name !== 'desktop') {
++      const hamburger = page.locator('.kb-topbar-hamburger');
++      if (await hamburger.isVisible()) {
++        await hamburger.click();
++      }
++    }
++
++    const addProjectBtn = page.locator('.kb-sidebar-add-project-btn');
++    if (await addProjectBtn.isVisible()) {
++      await addProjectBtn.click();
++    } else {
++      await page.evaluate(() => {
++        window.dispatchEvent(new CustomEvent('kb:open-create-project'));
++      });
++    }
++
++    const modal = page.locator('.kb-create-project-dialog');
++    await expect(modal).toBeVisible();
++
++    const nameInput = page.locator('#create-project-name');
++    const idInput = page.locator('#create-project-identifier');
++    const descInput = page.locator('#create-project-description');
++
++    await nameInput.fill('Core Infrastructure');
++    await idInput.fill('INFRA');
++    await descInput.fill('Core platform and infrastructure services');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-project-creation-default-workspace',
++      annotations: [
++        {
++          selector: '.kb-create-project-dialog',
++          label: 'Create Project Modal',
++          note: 'Accessible dialog for project creation in current workspace',
++        },
++        {
++          selector: '#create-project-name',
++          label: 'Project Name Input',
++          note: 'Sanitized input with auto-derived identifier',
++        },
++        {
++          selector: '#create-project-identifier',
++          label: 'Identifier Input',
++          note: 'Uppercase alphanumeric 2-10 char identifier',
++        },
++        {
++          selector: '[data-testid="create-project-submit"]',
++          label: 'Create Action Button',
++          note: 'Dispatches POST /api/v1/projects with CSRF token',
++        },
++      ],
++    });
++
++    // Close modal cleanly
++    const submitBtn = page.locator('[data-testid="create-project-submit"]');
++    await submitBtn.click();
++    await expect(modal).not.toBeVisible();
++
++    // Verify zero console errors
++    expect(consoleErrors).toHaveLength(0);
++  });
++
++  test('02: independent expand/collapse of multiple projects in Sidebar', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, {
++      ...getBaseHandlers(),
++      'GET /api/v1/workspaces': {
++        json: [
++          {
++            id: '01a1e706-8146-7e4c-b3e0-0b1bd00d479b',
++            name: 'Platform Engineering',
++            slug: 'platform-eng',
++            is_current: true,
++          },
++        ],
++      },
++      'GET /api/v1/projects': {
++        json: {
++          items: [
++            {
++              key: 'KAN',
++              name: 'Kanban',
++              modules_enabled: true,
++            },
++            {
++              key: 'INFRA',
++              name: 'Core Infrastructure',
++              modules_enabled: true,
++            },
++          ],
++        },
++      },
++    });
++
++    await page.goto('/projects/KAN/issues');
++    await page.waitForLoadState('networkidle');
++
++    if (testInfo.project.name !== 'desktop') {
++      const hamburger = page.locator('.kb-topbar-hamburger');
++      if (await hamburger.isVisible()) {
++        await hamburger.click();
++      }
++    }
++
++    const kanRow = page.locator('button[aria-label="Project: Kanban"]');
++    const infraRow = page.locator('button[aria-label="Project: Core Infrastructure"]');
++
++    await expect(kanRow).toBeVisible();
++    await expect(infraRow).toBeVisible();
++
++    // Collapse KAN while leaving INFRA expanded
++    await kanRow.click();
++    await expect(kanRow).toHaveAttribute('aria-expanded', 'false');
++    await expect(infraRow).toHaveAttribute('aria-expanded', 'true');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-sidebar-independent-projects',
++      annotations: [
++        {
++          selector: 'button[aria-label="Project: Kanban"]',
++          label: 'Collapsed Project (KAN)',
++          note: 'Collapsed project state (arrow right) without subitems',
++        },
++        {
++          selector: 'button[aria-label="Project: Core Infrastructure"]',
++          label: 'Expanded Project (INFRA)',
++          note: 'Independent expanded project state (arrow down)',
++        },
++        {
++          selector: '.kb-project-subitems',
++          label: 'Project Subitems',
++          note: 'Sub-navigation visible for expanded project only',
++        },
++      ],
++    });
++  });
++
++  test('03: live workspace switching updating dropdown, breadcrumb, and projects without page reload', async ({
++    page,
++  }, testInfo) => {
++    let currentWorkspaceId = '01a1e706-8146-7e4c-b3e0-0b1bd00d479b';
++
++    await mockApi(page, {
++      ...getBaseHandlers(),
++      'GET /api/v1/workspaces': () => ({
++        json: [
++          {
++            id: '01a1e706-8146-7e4c-b3e0-0b1bd00d479b',
++            name: 'Platform Engineering',
++            slug: 'platform-eng',
++            is_current: currentWorkspaceId === '01a1e706-8146-7e4c-b3e0-0b1bd00d479b',
++          },
++          {
++            id: '01a1e706-8146-7e4c-b3e0-0b1bd00d479c',
++            name: 'Security Operations',
++            slug: 'sec-ops',
++            is_current: currentWorkspaceId === '01a1e706-8146-7e4c-b3e0-0b1bd00d479c',
++          },
++        ],
++      }),
++      'GET /api/v1/projects': () => ({
++        json: {
++          items:
++            currentWorkspaceId === '01a1e706-8146-7e4c-b3e0-0b1bd00d479b'
++              ? [
++                  {
++                    key: 'KAN',
++                    name: 'Kanban',
++                    modules_enabled: true,
++                  },
++                ]
++              : [
++                  {
++                    key: 'SEC',
++                    name: 'Security Shield',
++                    modules_enabled: true,
++                  },
++                ],
++        },
++      }),
++      'POST /api/v1/workspaces/:id/switch': (req) => {
++        currentWorkspaceId = req.params.id ?? '01a1e706-8146-7e4c-b3e0-0b1bd00d479c';
++        return {
++          status: 200,
++          json: {
++            workspace: {
++              id: currentWorkspaceId,
++              name: 'Security Operations',
++              slug: 'sec-ops',
++            },
++          },
++        };
++      },
++    });
++
++    await page.goto('/projects/KAN/issues');
++    await page.waitForLoadState('networkidle');
++
++    if (testInfo.project.name !== 'desktop') {
++      const hamburger = page.locator('.kb-topbar-hamburger');
++      if (await hamburger.isVisible()) {
++        await hamburger.click();
++      }
++    }
++
++    const switcher = page.locator('.kb-workspace-switcher');
++    await expect(switcher).toBeVisible();
++
++    // Open workspace switcher dropdown
++    await switcher.click();
++    const dropdown = page.locator('.kb-workspace-dropdown');
++    await expect(dropdown).toBeVisible();
++
++    const activeItem = page.locator('.kb-workspace-dropdown-item-active');
++    await expect(activeItem).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-live-workspace-switch',
++      annotations: [
++        {
++          selector: '.kb-workspace-switcher',
++          label: 'Workspace Switcher Anchor',
++          note: 'Displays active workspace brand with dropdown toggle',
++        },
++        {
++          selector: '.kb-workspace-dropdown',
++          label: 'Workspace Dropdown',
++          note: 'Multi-workspace menu with live switch action',
++        },
++        {
++          selector: '.kb-workspace-dropdown-item-active',
++          label: 'Active Workspace Item',
++          note: 'Current workspace marked with checkmark badge',
++        },
++      ],
++    });
++
++    // Click to switch workspace live
++    const secOpsItem = page.locator('.kb-workspace-dropdown-item', { hasText: 'Security Operations' });
++    await secOpsItem.click();
++    await page.waitForLoadState('networkidle');
++
++    // Confirm dropdown closed and switcher displays new workspace
++    await expect(dropdown).not.toBeVisible();
++    await expect(switcher).toContainText('Security Operations');
++  });
++});
+diff --git a/kanban/web/src/api/client.ts b/kanban/web/src/api/client.ts
+index 46918b7..52caf8a 100644
+--- a/kanban/web/src/api/client.ts
++++ b/kanban/web/src/api/client.ts
+@@ -63,8 +63,11 @@ export function setCsrfToken(token: string | null): void {
+     return;
+   }
+   try {
++    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+     if (token !== null && token.length > 0) {
+-      document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
++      if (!isHttps) {
++        document.cookie = `kb_csrf=${encodeURIComponent(token)}; Path=/; SameSite=Strict`;
++      }
+     } else {
+       document.cookie = 'kb_csrf=; Path=/; SameSite=Strict; Max-Age=0';
+     }
+@@ -78,9 +81,9 @@ export function getCsrfToken(): string | null {
+   if (typeof document !== 'undefined') {
+     const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
+     if (matches.length > 0) {
+-      const kbMatch = matches.find((m) => m[1] === 'kb_csrf');
+-      const chosen =
+-        cachedCsrfToken !== null && kbMatch !== undefined ? kbMatch : matches[0];
++      const hostMatch = matches.find((m) => m[1] === '__Host-kb_csrf');
++      const fallbackMatch = matches.find((m) => m[1] === 'kb_csrf');
++      const chosen = hostMatch ?? fallbackMatch ?? matches[0];
+       const raw = chosen?.[2];
+       if (raw !== undefined) {
+         try {
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 3dd2852..baaf0e4 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -33,6 +33,7 @@ registerShellPanel('standalone', StandaloneStatusPanel);
+ export interface AppShellProps {
+   children?: ReactNode;
+   projectKey?: string | undefined;
++  projectId?: string | undefined;
+   projectName?: string | undefined;
+   modulesEnabled?: boolean | undefined;
+   issueCount?: number | null | undefined;
+@@ -82,6 +83,7 @@ export function computeCurrentSection(pathname: string, fallback = 'Work Items')
+ export function AppShell({
+   children,
+   projectKey = 'KAN',
++  projectId,
+   projectName = 'kanban',
+   modulesEnabled = true,
+   issueCount,
+@@ -158,6 +160,7 @@ export function AppShell({
+           onOpenPalette={() => { setPaletteOpen(true); }}
+           workspaceName={isInsideProject ? 'kanban' : undefined}
+           projectKey={activeProjectKey}
++          projectId={isInsideProject ? (projectId ?? activeProjectKey) : undefined}
+           projectName={projectName}
+           currentSection={computedSection}
+           issueCount={issueCount}
+diff --git a/kanban/web/src/app/CommandPalette.test.tsx b/kanban/web/src/app/CommandPalette.test.tsx
+index 5be7a79..ea478ec 100644
+--- a/kanban/web/src/app/CommandPalette.test.tsx
++++ b/kanban/web/src/app/CommandPalette.test.tsx
+@@ -373,9 +373,9 @@ describe('CommandPalette', () => {
+       screen.getByRole('option', { name: /Go to Personal MCP Keys/ }).click();
+     });
+ 
+-    fireEvent.change(input, { target: { value: 'Go to Standalone Status' } });
++    fireEvent.change(input, { target: { value: 'Go to System Storage, Backups & Deployment' } });
+     act(() => {
+-      screen.getByRole('option', { name: /Go to Standalone Status/ }).click();
++      screen.getByRole('option', { name: /Go to System Storage, Backups & Deployment/ }).click();
+     });
+ 
+     window.removeEventListener('kb:open-create-project', projectModalListener);
+diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
+index 62350a2..867b5d1 100644
+--- a/kanban/web/src/app/Sidebar.test.tsx
++++ b/kanban/web/src/app/Sidebar.test.tsx
+@@ -370,6 +370,55 @@ describe('Sidebar', () => {
+     });
+   });
+ 
++  it('independently toggles expand/collapse for multiple projects (KANBA-192 Positive Case 3)', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/projects')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              items: [
++                { identifier: 'KANBA', name: 'kanban', modules_enabled: true },
++                { identifier: 'PIKVM', name: 'PiKVM Controller', modules_enabled: true },
++              ],
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response('[]', { status: 200 }));
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/']}>
++        <Sidebar projectKey="KANBA" projectName="kanban" modulesEnabled={true} />
++      </MemoryRouter>,
++    );
++
++    const kanbaRow = await screen.findByRole('button', { name: 'Project: kanban' });
++    const pikvmRow = await screen.findByRole('button', { name: 'Project: PiKVM Controller' });
++
++    expect(kanbaRow.getAttribute('aria-expanded')).toBe('true');
++    expect(pikvmRow.getAttribute('aria-expanded')).toBe('true');
++
++    // Click PIKVM to collapse it
++    act(() => {
++      pikvmRow.click();
++    });
++
++    expect(pikvmRow.getAttribute('aria-expanded')).toBe('false');
++    // KANBA should remain expanded!
++    expect(kanbaRow.getAttribute('aria-expanded')).toBe('true');
++
++    // Click PIKVM again to expand it back
++    act(() => {
++      pikvmRow.click();
++    });
++
++    expect(pikvmRow.getAttribute('aria-expanded')).toBe('true');
++    expect(kanbaRow.getAttribute('aria-expanded')).toBe('true');
++  });
++
+   it('renders project layout view links (List, Board, Table, Calendar, Timeline) with SVG icons (KANBA-174)', () => {
+     render(
+       <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list']}>
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index e847473..3fcb361 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -6,6 +6,7 @@
+ 
+ import React, {
+   useCallback,
++  useContext,
+   useEffect,
+   useMemo,
+   useRef,
+@@ -18,6 +19,8 @@ import { registerShortcut } from './shortcuts';
+ import { CreateProjectModal } from '../features/projects/CreateProjectModal';
+ import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
+ import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
++import { setCsrfToken } from '../api/client';
++import { QueryClientContext } from '@tanstack/react-query';
+ import {
+   ListTodo,
+   Kanban,
+@@ -62,6 +65,69 @@ export function sanitizeSidebarState(value: string | null): 'open' | 'collapsed'
+   return 'open';
+ }
+ 
++async function fetchWorkspaces(): Promise<WorkspaceNavData[]> {
++  try {
++    const res = await fetch('/api/v1/workspaces', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    if (res.ok) {
++      const data = (await res.json()) as WorkspaceNavData[];
++      if (Array.isArray(data)) {
++        return data;
++      }
++    }
++  } catch {
++    // Offline / unit test fallback
++  }
++  return [];
++}
++
++async function fetchProjects(): Promise<ProjectNavData[]> {
++  try {
++    const res = await fetch('/api/v1/projects', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    if (!res.ok) {
++      return [];
++    }
++    const data = (await res.json()) as
++      | {
++          items?: {
++            identifier?: string;
++            key?: string;
++            name?: string;
++            modules_enabled?: boolean;
++          }[];
++        }
++      | {
++          identifier?: string;
++          key?: string;
++          name?: string;
++          modules_enabled?: boolean;
++        }[];
++    const rawItems = Array.isArray(data) ? data : (data.items ?? []);
++    const parsed: ProjectNavData[] = [];
++    for (const item of rawItems) {
++      const key = item.identifier ?? item.key;
++      if (typeof key === 'string' && key.length > 0 && typeof item.name === 'string') {
++        parsed.push({
++          key,
++          name: item.name,
++          modules_enabled: item.modules_enabled ?? true,
++        });
++      }
++    }
++    return parsed;
++  } catch {
++    // Offline or unmocked unit test environment
++    return [];
++  }
++}
++
+ export function Sidebar({
+   isOpen = true,
+   onClose,
+@@ -114,39 +180,25 @@ export function Sidebar({
+     }
+   });
+ 
+-  const [projectExpanded, setProjectExpanded] = useState(true);
++  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+   const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
+   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+   const [workspaces, setWorkspaces] = useState<WorkspaceNavData[]>([]);
+   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+ 
++  const queryClient = useContext(QueryClientContext);
+   const sidebarRef = useRef<HTMLElement>(null);
+   const firstItemRef = useRef<HTMLButtonElement>(null);
+   const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
+ 
+   useEffect(() => {
+     let active = true;
+-
+-    async function loadWorkspaces(): Promise<void> {
+-      try {
+-        const res = await fetch('/api/v1/workspaces', {
+-          method: 'GET',
+-          headers: { Accept: 'application/json' },
+-          credentials: 'same-origin',
+-        });
+-        if (res.ok && active) {
+-          const data = (await res.json()) as WorkspaceNavData[];
+-          if (Array.isArray(data)) {
+-            setWorkspaces(data);
+-          }
+-        }
+-      } catch {
+-        // Offline / unit test fallback
++    void fetchWorkspaces().then((data) => {
++      if (active && data.length > 0) {
++        setWorkspaces(data);
+       }
+-    }
+-
+-    void loadWorkspaces();
++    });
+     return () => {
+       active = false;
+     };
+@@ -191,10 +243,43 @@ export function Sidebar({
+         credentials: 'same-origin',
+       });
+       if (res.ok) {
++        const data = (await res.json().catch(() => ({}))) as { csrf_token?: string };
++        if (data.csrf_token) {
++          setCsrfToken(data.csrf_token);
++        }
++        queryClient?.clear();
++
++        // Update local workspace current flag immediately
++        setWorkspaces((prev) =>
++          prev.map((w) => ({
++            ...w,
++            is_current: w.id === targetId,
++          })),
++        );
++
++        // Re-fetch workspaces and projects in new workspace
++        const updatedWorkspaces = await fetchWorkspaces();
++        if (updatedWorkspaces.length > 0) {
++          setWorkspaces(updatedWorkspaces);
++        }
++        const updatedProjects = await fetchProjects();
++        setFetchedProjects(updatedProjects);
++
++        if (typeof window !== 'undefined') {
++          window.dispatchEvent(
++            new CustomEvent('kb:workspace-switched', { detail: { workspaceId: targetId } }),
++          );
++        }
++
++        const firstProj = updatedProjects[0];
++        const targetRoute =
++          firstProj !== undefined
++            ? `/projects/${firstProj.key}/issues`
++            : '/';
+         if (navigateFn) {
+-          navigateFn('/');
++          navigateFn(targetRoute);
+         } else if (typeof window !== 'undefined') {
+-          window.location.assign('/');
++          window.location.assign(targetRoute);
+         }
+       }
+     } catch {
+@@ -227,56 +312,36 @@ export function Sidebar({
+ 
+   useEffect(() => {
+     let active = true;
+-
+-    async function loadProjects(): Promise<void> {
+-      try {
+-        const res = await fetch('/api/v1/projects', {
+-          method: 'GET',
+-          headers: { Accept: 'application/json' },
+-          credentials: 'same-origin',
+-        });
+-        if (!res.ok || !active) {
+-          return;
+-        }
+-        const data = (await res.json()) as
+-          | {
+-              items?: {
+-                identifier?: string;
+-                key?: string;
+-                name?: string;
+-                modules_enabled?: boolean;
+-              }[];
+-            }
+-          | {
+-              identifier?: string;
+-              key?: string;
+-              name?: string;
+-              modules_enabled?: boolean;
+-            }[];
+-        const rawItems = Array.isArray(data) ? data : (data.items ?? []);
+-        const parsed: ProjectNavData[] = [];
+-        for (const item of rawItems) {
+-          const key = item.identifier ?? item.key;
+-          if (typeof key === 'string' && key.length > 0 && typeof item.name === 'string') {
+-            parsed.push({
+-              key,
+-              name: item.name,
+-              modules_enabled: item.modules_enabled ?? true,
+-            });
+-          }
++    const refresh = (): void => {
++      void fetchProjects().then((items) => {
++        if (active && items.length > 0) {
++          setFetchedProjects(items);
+         }
+-        if (parsed.length > 0) {
+-          setFetchedProjects(parsed);
++      });
++    };
++    refresh();
++
++    const handleProjectCreated = (e: Event): void => {
++      const customEvent = e as CustomEvent<{ identifier?: string; key?: string; name?: string; modules_enabled?: boolean } | null | undefined>;
++      const detail = customEvent.detail;
++      if (detail && typeof detail.name === 'string') {
++        const key = detail.identifier ?? detail.key;
++        const projName = detail.name;
++        if (typeof key === 'string' && key.length > 0) {
++          setFetchedProjects((prev) => {
++            if (prev.some((p) => p.key === key)) return prev;
++            return [
++              ...prev,
++              {
++                key,
++                name: projName,
++                modules_enabled: detail.modules_enabled ?? true,
++              },
++            ];
++          });
+         }
+-      } catch {
+-        // Offline or unmocked unit test environment
+       }
+-    }
+-
+-    void loadProjects();
+-
+-    const handleProjectCreated = (): void => {
+-      void loadProjects();
++      refresh();
+     };
+     const handleOpenCreateProject = (): void => {
+       setCreateProjectOpen(true);
+@@ -583,25 +648,29 @@ export function Sidebar({
+           <nav aria-label="Projects navigation">
+             {projectList.map((proj) => {
+               const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
++              const isProjExpanded = expandedProjects[proj.key] ?? true;
+               return (
+                 <div key={proj.key}>
+                   <button
+                     type="button"
+                     className="kb-project-expand-row"
+                     aria-label={`Project: ${proj.name}`}
+-                    aria-expanded={projectExpanded}
++                    aria-expanded={isProjExpanded}
+                     onClick={() => {
+-                      setProjectExpanded(!projectExpanded);
++                      setExpandedProjects((prev) => ({
++                        ...prev,
++                        [proj.key]: !isProjExpanded,
++                      }));
+                     }}
+                   >
+                     <span className="kb-project-expand-label">
+                       <span aria-hidden="true">⚡</span>
+                       <span>{proj.name}</span>
+                     </span>
+-                    <span aria-hidden="true">{projectExpanded ? '▾' : '▸'}</span>
++                    <span aria-hidden="true">{isProjExpanded ? '▾' : '▸'}</span>
+                   </button>
+ 
+-                  {projectExpanded && (
++                  {isProjExpanded && (
+                     <ul className="kb-project-subitems">
+                       <li>
+                         <NavLink
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index c3f0ec2..9bcf4e6 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -35,6 +35,7 @@ export interface TopbarProps {
+   onOpenPalette?: (() => void) | undefined;
+   workspaceName?: string | undefined;
+   projectKey?: string | undefined;
++  projectId?: string | undefined;
+   projectName?: string | undefined;
+   currentSection?: string | undefined;
+   issueCount?: number | null | undefined;
+@@ -56,6 +57,7 @@ export function Topbar({
+   onOpenPalette,
+   workspaceName = 'kanban',
+   projectKey = 'KAN',
++  projectId,
+   projectName = 'kanban',
+   currentSection = 'Work Items',
+   issueCount,
+@@ -192,7 +194,7 @@ export function Topbar({
+       {/* Right: Header Pills, Layout Switcher & Avatar Menu */}
+       <div className="kb-topbar-right">
+         <HeaderPills
+-          projectId={projectKey}
++          projectId={projectId ?? projectKey}
+           projectName={projectName}
+           accessManifest={accessManifest}
+           systemStatus={systemStatus}
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index ec1e4f4..4191453 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -30,6 +30,7 @@ import {
+   type RouteObject,
+ } from 'react-router';
+ import { AppShell } from './AppShell';
++import type { AccessManifestData } from './HeaderPills';
+ import { TokenStory } from '../dev/TokenStory';
+ import { EmojiStory } from '../dev/EmojiStory';
+ import { EditorStory } from '../dev/EditorStory';
+@@ -224,10 +225,15 @@ export function WorkspaceHomeView(): JSX.Element {
+     const handleCreated = (): void => {
+       void loadProjects();
+     };
++    const handleSwitched = (): void => {
++      void loadProjects();
++    };
+     window.addEventListener('kb:project-created', handleCreated);
++    window.addEventListener('kb:workspace-switched', handleSwitched);
+     return () => {
+       active = false;
+       window.removeEventListener('kb:project-created', handleCreated);
++      window.removeEventListener('kb:workspace-switched', handleSwitched);
+     };
+   }, []);
+ 
+@@ -879,7 +885,12 @@ export function ProjectRouteContainer(): JSX.Element {
+       if (!res.ok) {
+         return null;
+       }
+-      return (await res.json()) as { name?: string; modules_enabled?: boolean };
++      return (await res.json()) as {
++        id?: string;
++        name?: string;
++        modules_enabled?: boolean;
++        access_manifest?: AccessManifestData;
++      };
+     },
+     enabled: isValidProject && isValidIssue,
+     staleTime: 60000,
+@@ -903,15 +914,17 @@ export function ProjectRouteContainer(): JSX.Element {
+     >
+       <AppShell
+         projectKey={resolvedKey}
++        projectId={projectQuery.data?.id}
+         projectName={projectName}
+         modulesEnabled={modulesEnabled}
++        accessManifest={projectQuery.data?.access_manifest}
+       />
+     </ProjectRouteContext.Provider>
+   );
+ }
+ 
+ export function RootShellLayout(): JSX.Element {
+-  return <AppShell projectKey="KAN" />;
++  return <AppShell projectKey={undefined} projectId={undefined} />;
+ }
+ 
+ export const appRoutes: RouteObject[] = [
+diff --git a/kanban/web/src/features/auth/AuthCardButton.test.tsx b/kanban/web/src/features/auth/AuthCardButton.test.tsx
+index f65ddfd..a24a975 100644
+--- a/kanban/web/src/features/auth/AuthCardButton.test.tsx
++++ b/kanban/web/src/features/auth/AuthCardButton.test.tsx
+@@ -45,7 +45,7 @@ describe('AuthCardButton (KB-P3-35)', () => {
+     fireEvent.click(btn);
+ 
+     expect(assignMock).toHaveBeenCalledWith(
+-      '/api/v1/auth/cards/okta-workforce/start?next=%2Fprojects%2FKAN%2Fissues',
++      '/api/v1/auth/cards/okta-workforce/start?next=%2Fprojects%2FKAN%2Fissues&remember_me=1',
+     );
+   });
+ 
+@@ -162,7 +162,7 @@ describe('AuthCardButton (KB-P3-35)', () => {
+     const btn = screen.getByRole('button', { name: /Continue with No Subtext Provider/i });
+     fireEvent.click(btn);
+     expect(assignMock).toHaveBeenCalledWith(
+-      '/api/v1/auth/cards/no-sub/start?next=%2Fcustom-next',
++      '/api/v1/auth/cards/no-sub/start?next=%2Fcustom-next&remember_me=1',
+     );
+   });
+ });
+diff --git a/kanban/web/src/features/auth/AuthCardButton.tsx b/kanban/web/src/features/auth/AuthCardButton.tsx
+index ecd9275..e4f4fd0 100644
+--- a/kanban/web/src/features/auth/AuthCardButton.tsx
++++ b/kanban/web/src/features/auth/AuthCardButton.tsx
+@@ -34,8 +34,8 @@ export function AuthCardButton({
+     ? `Sign in with ${card.display_name}`
+     : `Continue with ${card.display_name}`;
+ 
+-  const clampedDisplayName = clampText(card.display_name, 120);
+-  const clampedSubtext = clampText(card.button_subtext, 200);
++  const clampedDisplayName = clampText(card.display_name, 80);
++  const clampedSubtext = clampText(card.button_subtext, 120);
+ 
+   const handleClick = () => {
+     if (isLdap) {
+diff --git a/kanban/web/src/features/auth/LdapLoginForm.test.tsx b/kanban/web/src/features/auth/LdapLoginForm.test.tsx
+index 9989fee..f4f80f4 100644
+--- a/kanban/web/src/features/auth/LdapLoginForm.test.tsx
++++ b/kanban/web/src/features/auth/LdapLoginForm.test.tsx
+@@ -53,6 +53,7 @@ describe('LdapLoginForm (KB-P3-35)', () => {
+       expect(submitSpy).toHaveBeenCalledWith('corp-ad', {
+         username: 'alice',
+         password: 'SecretPass123!',
++        remember_me: true,
+       });
+       expect(onSuccess).toHaveBeenCalledWith({ status: 'authenticated' });
+     });
+diff --git a/kanban/web/src/features/auth/useSessionGuard.ts b/kanban/web/src/features/auth/useSessionGuard.ts
+index 5e12804..c1c496b 100644
+--- a/kanban/web/src/features/auth/useSessionGuard.ts
++++ b/kanban/web/src/features/auth/useSessionGuard.ts
+@@ -59,12 +59,14 @@ export function isPublicPath(pathname: string): boolean {
+  */
+ export async function ensureSessionCsrfToken(): Promise<string | null> {
+   if (typeof document !== 'undefined') {
+-    const match = /(?:^|;\s*)(?:__Host-kb_csrf|kb_csrf)=([^;]+)/.exec(document.cookie);
+-    if (match?.[1]) {
++    const hostMatch = /(?:^|;\s*)__Host-kb_csrf=([^;]+)/.exec(document.cookie);
++    const fallbackMatch = /(?:^|;\s*)kb_csrf=([^;]+)/.exec(document.cookie);
++    const chosen = hostMatch ?? fallbackMatch;
++    if (chosen?.[1]) {
+       try {
+-        return decodeURIComponent(match[1]);
++        return decodeURIComponent(chosen[1]);
+       } catch {
+-        return match[1];
++        return chosen[1];
+       }
+     }
+   }
+diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+index 8c0435d..6fc155d 100644
+--- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+@@ -75,7 +75,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     );
+ 
+     // Initial is sync_validator
+-    expect(screen.getByLabelText(/Approved Wasm Module/i)).toBeDefined();
++    expect(screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i)).toBeDefined();
+     expect(screen.queryByLabelText(/Agent Definition/i)).toBeNull();
+ 
+     // Check mutable field labels checkbox is disabled for sync_validator
+@@ -84,7 +84,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+ 
+     // Switch to sync_mutator: Wasm module is visible, mutable fields are enabled
+     fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
+-    expect(screen.getByLabelText(/Approved Wasm Module/i)).toBeDefined();
++    expect(screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i)).toBeDefined();
+     expect(screen.queryByLabelText(/Agent Definition/i)).toBeNull();
+     expect(labelsCheckbox.disabled).toBe(false);
+ 
+diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+index 1b1ba52..b4ec512 100644
+--- a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+@@ -1082,7 +1082,7 @@ describe('Workflow Studio Coverage Booster', () => {
+       fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
+ 
+       // Change Wasm module select
+-      const wasmSelect = screen.getByLabelText(/Approved Wasm Module/i);
++      const wasmSelect = screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i);
+       fireEvent.change(wasmSelect, { target: { value: api.DEFAULT_WASM_MODULES[1]?.sha256 ?? 'sha' } });
+ 
+       // Change Failure Policy select
+diff --git a/mcp/surfaces/agent/proof.py b/mcp/surfaces/agent/proof.py
+index 483bfd1..9c5055b 100644
+--- a/mcp/surfaces/agent/proof.py
++++ b/mcp/surfaces/agent/proof.py
+@@ -66,4 +66,3 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
+     "required": ["qa_dir", "artifacts", "reality_checker", "ci_run_url"],
+     "additionalProperties": False,
+ }
+-
+diff --git a/mcp/tests/agent/test_read_ticket.py b/mcp/tests/agent/test_read_ticket.py
+index 9f40f84..537ae30 100644
+--- a/mcp/tests/agent/test_read_ticket.py
++++ b/mcp/tests/agent/test_read_ticket.py
+@@ -444,6 +444,3 @@ async def test_read_ticket_full_compacts_manifest_activity_provenance(
+     if "provenance" in parsed:
+         assert "created_by" in parsed["provenance"]
+         assert str(parsed["provenance"]["created_by"]).startswith("@")
+-
+-
+-
+diff --git a/mcp/tests/agent/test_workflow_argument_validation.py b/mcp/tests/agent/test_workflow_argument_validation.py
+index 4df27a9..b3a2015 100644
+--- a/mcp/tests/agent/test_workflow_argument_validation.py
++++ b/mcp/tests/agent/test_workflow_argument_validation.py
+@@ -380,4 +380,3 @@ def test_schema_contracts_and_proof_definitions() -> None:
+     desc_desc = UPDATE_TICKET_SCHEMA["properties"]["description_markdown"]["description"]
+     assert "description_markdown" in if_match_desc
+     assert "if_match" in desc_desc
+-
+diff --git a/mcp/tests/agent/test_workflow_tools.py b/mcp/tests/agent/test_workflow_tools.py
+index c98f620..87a1817 100644
+--- a/mcp/tests/agent/test_workflow_tools.py
++++ b/mcp/tests/agent/test_workflow_tools.py
+@@ -221,7 +221,6 @@ async def test_transition_ticket_unknown_state_hints(agent_test_env: AgentTestEn
+     assert "Backlog" in err_text or "Todo" in err_text or "In Progress" in err_text
+ 
+ 
+-
+ async def test_complete_work_help_and_validations(agent_test_env: AgentTestEnv) -> None:
+     """complete_work validates proof paths, traversal, and verdict."""
+     env = agent_test_env
+diff --git a/mcp/tests/test_lod_help.py b/mcp/tests/test_lod_help.py
+index b32add0..d873bdd 100644
+--- a/mcp/tests/test_lod_help.py
++++ b/mcp/tests/test_lod_help.py
+@@ -598,4 +598,3 @@ async def test_build_help_workflow_tools() -> None:
+     assert cw_help["params"]["identifier"] == "KAN-142 | uuid"
+     assert cw_help["params"]["summary_markdown"] == "str"
+     assert cw_help["params"]["verification_proof"] == "object"
+-

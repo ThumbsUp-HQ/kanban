@@ -20,6 +20,12 @@ from kanban.api.problems import ProblemException
 from kanban.auth.sessions.cookies import (
     SESSION_COOKIE_NAME,
     attach_session_and_csrf_cookies,
+    extract_session_cookie,
+    is_plain_http,
+)
+from kanban.auth.sessions.csrf import (
+    FALLBACK_CSRF_COOKIE_NAME,
+    build_clear_fallback_csrf_cookie_header,
 )
 
 if TYPE_CHECKING:
@@ -273,12 +279,16 @@ async def switch_workspace_endpoint(
 
     session_service: SessionService | None = getattr(request.app.state, "session_service", None)
     if session_service is not None:
+        cookie_hdr = request.headers.get("cookie")
+        existing_sess = extract_session_cookie(cookie_hdr) or request.cookies.get(
+            SESSION_COOKIE_NAME
+        )
         issued = await session_service.create_after_login(
             session,
             principal_id=target_principal_id,
             workspace_id=workspace_id,
             aal_level=caller.aal_level,
-            existing_cookie=request.cookies.get(SESSION_COOKIE_NAME),
+            existing_cookie=existing_sess,
         )
         await session.commit()
 
@@ -296,6 +306,10 @@ async def switch_workspace_endpoint(
             issued.csrf_token,
             persistent=issued.is_persistent,
         )
+        if not is_plain_http(request) and FALLBACK_CSRF_COOKIE_NAME in request.cookies:
+            response.raw_headers.append(
+                (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
+            )
         return response
 
     return JSONResponse(

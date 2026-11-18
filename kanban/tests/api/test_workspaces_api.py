@@ -27,8 +27,15 @@ from kanban.api.v1.workspaces import (
     list_workspaces_endpoint,
     switch_workspace_endpoint,
 )
-from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
-from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, CsrfMiddleware
+from kanban.auth.sessions.cookies import (
+    SESSION_COOKIE_NAME,
+)
+from kanban.auth.sessions.csrf import (
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    FALLBACK_CSRF_COOKIE_NAME,
+    CsrfMiddleware,
+)
 from kanban.auth.sessions.resolver import SessionCookieResolver
 from kanban.auth.sessions.service import SessionService
 from kanban.security.keys import KeyMaterial
@@ -700,3 +707,128 @@ async def test_case_8_workspaces_under_kanban_app_force_rls(
         request=req,
     )
     assert switched_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_case_9_multi_workspace_switch_roundtrip_project_creation(  # noqa: PLR0915
+    db_session: AsyncSession,
+    key_material: KeyMaterial,
+) -> None:
+    """Case 9: Multi-workspace switch roundtrip and project creation with stale CSRF."""
+    ws_id, admin_id, member_id = await _setup_workspace_and_principals(db_session)
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    session_service = SessionService(key_material.session_hmac_key)
+    app = _create_test_app(factory, key_material, session_service)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Member in default workspace creates project (WORKSPACE_MEMBER RBAC fix)
+        _, member_csrf = await _login_and_elevate(
+            client, session_service, db_session, member_id, ws_id, aal_level=1
+        )
+        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_fallback_csrf_val")
+
+        resp_mem_proj = await client.post(
+            "/api/v1/projects",
+            json={"identifier": "MEMPRJ", "name": "Member Project"},
+            headers={CSRF_HEADER_NAME: member_csrf},
+        )
+        assert resp_mem_proj.status_code == 201, resp_mem_proj.text
+        assert resp_mem_proj.json()["identifier"] == "MEMPRJ"
+
+        # 2. Server admin creates project in default workspace
+        client.cookies.clear()
+        _, admin_csrf = await _login_and_elevate(
+            client, session_service, db_session, admin_id, ws_id, aal_level=2
+        )
+        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_fallback_csrf_val")
+
+        resp_proj1 = await client.post(
+            "/api/v1/projects",
+            json={"identifier": "DEFPRJ", "name": "Default Project"},
+            headers={CSRF_HEADER_NAME: admin_csrf},
+        )
+        assert resp_proj1.status_code == 201, resp_proj1.text
+        assert resp_proj1.json()["identifier"] == "DEFPRJ"
+
+        # 3. Create second workspace B
+        ws_b_slug = f"ws-b-{uuid.uuid4().hex[:8]}"
+        resp_ws_b = await client.post(
+            "/api/v1/workspaces",
+            json={"name": "Workspace Beta", "slug": ws_b_slug},
+            headers={CSRF_HEADER_NAME: admin_csrf},
+        )
+        assert resp_ws_b.status_code == 201, resp_ws_b.text
+        ws_b_data = resp_ws_b.json()
+        ws_b_id = uuid.UUID(ws_b_data["id"])
+
+        # 4. Switch to B
+        resp_switch_b = await client.post(
+            f"/api/v1/workspaces/{ws_b_id}/switch",
+            headers={CSRF_HEADER_NAME: admin_csrf},
+        )
+        assert resp_switch_b.status_code == 200, resp_switch_b.text
+        switch_b_data = resp_switch_b.json()
+        assert switch_b_data["workspace_id"] == str(ws_b_id)
+        csrf_b = switch_b_data["csrf_token"]
+
+        # Update client session and csrf cookies cleanly (preventing duplicate cookie ambiguity)
+        sess_cookie_b = resp_switch_b.cookies.get(SESSION_COOKIE_NAME)
+        csrf_cookie_b = resp_switch_b.cookies.get(CSRF_COOKIE_NAME)
+        client.cookies.delete(SESSION_COOKIE_NAME)
+        client.cookies.delete(CSRF_COOKIE_NAME)
+        if sess_cookie_b:
+            client.cookies.set(SESSION_COOKIE_NAME, sess_cookie_b)
+        if csrf_cookie_b:
+            client.cookies.set(CSRF_COOKIE_NAME, csrf_cookie_b)
+
+        # Inject stale fallback CSRF cookie to verify precedence over stale cookie
+        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_csrf_cookie_in_b")
+
+        # 5. Create project in B
+        resp_proj_b = await client.post(
+            "/api/v1/projects",
+            json={"identifier": "BETAPRJ", "name": "Beta Project"},
+            headers={CSRF_HEADER_NAME: csrf_b},
+        )
+        assert resp_proj_b.status_code == 201, resp_proj_b.text
+        assert resp_proj_b.json()["identifier"] == "BETAPRJ"
+
+        # 6. Switch back to default workspace A
+        resp_switch_a = await client.post(
+            f"/api/v1/workspaces/{ws_id}/switch",
+            headers={CSRF_HEADER_NAME: csrf_b},
+        )
+        assert resp_switch_a.status_code == 200, resp_switch_a.text
+        switch_a_data = resp_switch_a.json()
+        assert switch_a_data["workspace_id"] == str(ws_id)
+        csrf_a2 = switch_a_data["csrf_token"]
+
+        sess_cookie_a = resp_switch_a.cookies.get(SESSION_COOKIE_NAME)
+        csrf_cookie_a = resp_switch_a.cookies.get(CSRF_COOKIE_NAME)
+        client.cookies.delete(SESSION_COOKIE_NAME)
+        client.cookies.delete(CSRF_COOKIE_NAME)
+        if sess_cookie_a:
+            client.cookies.set(SESSION_COOKIE_NAME, sess_cookie_a)
+        if csrf_cookie_a:
+            client.cookies.set(CSRF_COOKIE_NAME, csrf_cookie_a)
+
+        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_csrf_cookie_in_a")
+
+        # 7. Create another project in A
+        resp_proj_a2 = await client.post(
+            "/api/v1/projects",
+            json={"identifier": "ALPHAP2", "name": "Alpha Project Two"},
+            headers={CSRF_HEADER_NAME: csrf_a2},
+        )
+        assert resp_proj_a2.status_code == 201, resp_proj_a2.text
+        assert resp_proj_a2.json()["identifier"] == "ALPHAP2"
+
+        # 8. Verify listing in A contains A's projects but not B's
+        resp_list_a = await client.get("/api/v1/projects")
+        assert resp_list_a.status_code == 200
+        items_a = [p["identifier"] for p in resp_list_a.json()["items"]]
+        assert "DEFPRJ" in items_a
+        assert "MEMPRJ" in items_a
+        assert "ALPHAP2" in items_a
+        assert "BETAPRJ" not in items_a

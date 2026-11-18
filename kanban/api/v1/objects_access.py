@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import uuid  # noqa: TC003
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -16,6 +15,7 @@ from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
 from kanban.security.access_manifest import AccessManifest, build_access_manifest
 from kanban.security.permissions import Capability, evaluate_capabilities
+from kanban.services.object_ref import resolve_object_ref
 
 router = APIRouter(prefix="/objects", tags=["objects-access"])
 
@@ -26,13 +26,16 @@ router = APIRouter(prefix="/objects", tags=["objects-access"])
     summary="Get anti-enumeration access manifest for an object",
 )
 async def get_object_access_manifest(
-    object_id: uuid.UUID,
+    object_id: str,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> AccessManifest:
     """Retrieve structured access sharing metadata for an object under S3.4 rules."""
     async with timing_floor(floor_ms=25.0):
-        return await build_access_manifest(session, caller, object_id)
+        obj = await resolve_object_ref(session, object_id)
+        if obj is None:
+            not_found()
+        return await build_access_manifest(session, caller, obj.id)
 
 
 @router.post(
@@ -41,7 +44,7 @@ async def get_object_access_manifest(
     summary="Revoke access for all automated agents on an object",
 )
 async def agent_kill_switch(
-    object_id: uuid.UUID,
+    object_id: str,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> AccessManifest:
@@ -51,8 +54,13 @@ async def agent_kill_switch(
     Appends an immutable AGENT_ACCESS_KILLED entry to the activity ledger and returns
     the refreshed AccessManifest.
     """
+    resolved_obj = await resolve_object_ref(session, object_id)
+    if resolved_obj is None:
+        not_found()
+    resolved_id = resolved_obj.id
+
     # 1. Require SHARE or ADMIN capability on object
-    caps = await evaluate_capabilities(session, caller, object_id)
+    caps = await evaluate_capabilities(session, caller, resolved_id)
     if Capability.VIEW not in caps:
         not_found()
 
@@ -66,14 +74,14 @@ async def agent_kill_switch(
         )
 
     # 2. Fetch object record
-    object_rec = await session.get(ObjectRecord, object_id)
+    object_rec = await session.get(ObjectRecord, resolved_id)
     if object_rec is None:
         not_found()
 
     # 3. Find all active agents holding access on object
     agent_types = ("AGENT", "SERVICE_PRINCIPAL")
     era_has_access = exists().where(
-        EffectiveResourceAccess.object_id == object_id,
+        EffectiveResourceAccess.object_id == resolved_id,
         EffectiveResourceAccess.principal_id == Principal.id,
         EffectiveResourceAccess.allow_mask > 0,
     )
@@ -91,7 +99,7 @@ async def agent_kill_switch(
         select(ResourceAclEntry.principal_id)
         .join(Principal, Principal.id == ResourceAclEntry.principal_id)
         .where(
-            ResourceAclEntry.object_id == object_id,
+            ResourceAclEntry.object_id == resolved_id,
             ResourceAclEntry.effect == "ALLOW",
             Principal.status == "ACTIVE",
             Principal.principal_type.in_(agent_types),
@@ -115,7 +123,7 @@ async def agent_kill_switch(
             """),
             {
                 "ws_id": object_rec.workspace_id,
-                "obj_id": object_id,
+                "obj_id": resolved_id,
                 "agent_id": agent_id,
                 "caller_id": caller.principal_id,
             },
@@ -131,7 +139,7 @@ async def agent_kill_switch(
     payload = json.dumps(
         {
             "killed_agent_ids": [str(a) for a in killed_ids],
-            "object_id": str(object_id),
+            "object_id": str(resolved_id),
         }
     )
     await session.execute(
@@ -147,7 +155,7 @@ async def agent_kill_switch(
         """),
         {
             "ws_id": object_rec.workspace_id,
-            "obj_id": object_id,
+            "obj_id": resolved_id,
             "obj_type": (
                 object_rec.object_type.value
                 if hasattr(object_rec.object_type, "value")
@@ -161,4 +169,4 @@ async def agent_kill_switch(
     await session.flush()
 
     # 7. Return refreshed AccessManifest
-    return await build_access_manifest(session, caller, object_id)
+    return await build_access_manifest(session, caller, resolved_id)

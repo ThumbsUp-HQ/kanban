@@ -75,7 +75,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     );
 
     // Initial is sync_validator
-    expect(screen.getByLabelText(/Approved Wasm Module/i)).toBeDefined();
+    expect(screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i)).toBeDefined();
     expect(screen.queryByLabelText(/Agent Definition/i)).toBeNull();
 
     // Check mutable field labels checkbox is disabled for sync_validator
@@ -84,7 +84,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
 
     // Switch to sync_mutator: Wasm module is visible, mutable fields are enabled
     fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
-    expect(screen.getByLabelText(/Approved Wasm Module/i)).toBeDefined();
+    expect(screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i)).toBeDefined();
     expect(screen.queryByLabelText(/Agent Definition/i)).toBeNull();
     expect(labelsCheckbox.disabled).toBe(false);
 
