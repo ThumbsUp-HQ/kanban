@@ -335,14 +335,18 @@ class TierAWasmRunner:
             # Invoke guest run entrypoint
             ret = kb_run(store, alloc_ptr, len(input_bytes))
         except wasmtime.Trap as trap:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
             trap_str = str(trap).lower()
+            if "interrupt" in trap_str or (
+                effective_limits.timeout_ms < _MAX_PERMITTED_TIMEOUT_MS
+                and elapsed_ms >= effective_limits.timeout_ms
+            ):
+                msg = f"WebAssembly execution timed out (> {effective_limits.timeout_ms}ms)"
+                raise WasmRunError(msg, code="SCRIPT_TIMEOUT") from trap
             fuel_remaining = store.get_fuel()
             if fuel_remaining == 0 or "all fuel consumed" in trap_str:
                 msg = "WebAssembly execution exhausted instruction fuel (<= 50M)"
                 raise WasmRunError(msg, code="SCRIPT_FUEL_EXHAUSTED") from trap
-            if "interrupt" in trap_str:
-                msg = f"WebAssembly execution timed out (> {effective_limits.timeout_ms}ms)"
-                raise WasmRunError(msg, code="SCRIPT_TIMEOUT") from trap
             if "memory" in trap_str or "out of bounds" in trap_str:
                 msg = "WebAssembly execution exceeded linear memory limits"
                 raise WasmRunError(msg, code="SCRIPT_MEMORY_LIMIT") from trap
