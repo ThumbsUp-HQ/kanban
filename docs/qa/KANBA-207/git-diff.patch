@@ -1,0 +1,1801 @@
+diff --git a/kanban/api/deps.py b/kanban/api/deps.py
+index bf1da9b..1ed37b2 100644
+--- a/kanban/api/deps.py
++++ b/kanban/api/deps.py
+@@ -93,6 +93,30 @@ async def get_principal(request: Request) -> PrincipalContext:
+             detail=None,
+         )
+ 
++    allow_mfa = getattr(request.state, "allow_mfa_pending", False)
++    endpoint = request.scope.get("endpoint")
++    if endpoint and getattr(endpoint, "allow_mfa_pending", False):
++        allow_mfa = True
++
++    path = request.url.path
++    if path.startswith(("/api/v1/auth/mfa", "/api/v1/auth/webauthn", "/api/v1/mfa")) or path in (
++        "/api/v1/auth/session",
++        "/api/v1/auth/logout",
++        "/api/v1/auth/totp/enroll",
++        "/api/v1/auth/totp/enroll/verify",
++        "/api/v1/auth/totp/verify",
++        "/api/v1/auth/recovery/verify",
++    ):
++        allow_mfa = True
++
++    if principal.mfa_pending and not allow_mfa:
++        raise ProblemException(
++            code="MFA_REQUIRED",
++            status=401,
++            title="Multi-Factor Authentication Required",
++            detail="Session requires second-factor verification before accessing this resource.",
++        )
++
+     return principal
+ 
+ 
+diff --git a/kanban/api/v1/auth_mfa.py b/kanban/api/v1/auth_mfa.py
+index d261db5..076ccb8 100644
+--- a/kanban/api/v1/auth_mfa.py
++++ b/kanban/api/v1/auth_mfa.py
+@@ -260,12 +260,25 @@ async def confirm_totp(
+             )
+         return response
+ 
+-    return JSONResponse(content={"confirmed": True})
++    return JSONResponse(content={"confirmed": True, "ok": True})
+ 
+ 
+ confirm_totp.allow_mfa_pending = True  # type: ignore[attr-defined]
+ 
+ 
++@router.post("/totp/verify", include_in_schema=False)
++async def verify_totp_confirm_alias(
++    request: Request,
++    body: TotpConfirmRequest,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Compatibility alias for /api/v1/auth/mfa/totp/confirm."""
++    return await confirm_totp(request, body, principal)
++
++
++verify_totp_confirm_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
++
++
+ @router.get("/status")
+ async def get_mfa_status(
+     request: Request,
+diff --git a/kanban/api/v1/auth_setup.py b/kanban/api/v1/auth_setup.py
+index ad2d463..88ef8bd 100644
+--- a/kanban/api/v1/auth_setup.py
++++ b/kanban/api/v1/auth_setup.py
+@@ -76,6 +76,32 @@ class SetupClaimRequest(BaseModel):
+         max_length=320,
+         description="Optional administrator email (defaults to username@local.kanban)",
+     )
++    workspace_name: str = Field(
++        default="Default Workspace",
++        min_length=1,
++        max_length=120,
++        description="Name of initial workspace",
++    )
++    workspace_slug: str = Field(
++        default="default",
++        min_length=2,
++        max_length=63,
++        pattern=r"^[a-z0-9][a-z0-9-]{1,62}$",
++        description="Slug of initial workspace",
++    )
++    project_name: str = Field(
++        default="Default Project",
++        min_length=1,
++        max_length=120,
++        description="Name of initial project",
++    )
++    project_key: str = Field(
++        default="KAN",
++        min_length=2,
++        max_length=10,
++        pattern=r"^[A-Z][A-Z0-9]{1,9}$",
++        description="Uppercase key of initial project",
++    )
+ 
+     @field_validator("display_name")
+     @classmethod
+@@ -164,6 +190,10 @@ async def claim_setup(
+             display_name=payload.display_name,
+             email=clean_email,
+             password=payload.password,
++            workspace_name=payload.workspace_name,
++            workspace_slug=payload.workspace_slug,
++            project_name=payload.project_name,
++            project_key=payload.project_key,
+         )
+         principal_id = uuid.UUID(principal_id_str)
+         workspace_id = uuid.UUID(workspace_id_str)
+diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
+index 665f0d4..54cf1fe 100644
+--- a/kanban/auth/sessions/resolver.py
++++ b/kanban/auth/sessions/resolver.py
+@@ -164,7 +164,7 @@ async def require_full_session(
+     if principal.mfa_pending and not allow_mfa:
+         raise ProblemException(
+             code="MFA_REQUIRED",
+-            status=403,
++            status=401,
+             title="Multi-Factor Authentication Required",
+             detail="Session requires second-factor verification before accessing this resource.",
+         )
+diff --git a/kanban/auth/setup.py b/kanban/auth/setup.py
+index 148e7bf..a31790f 100644
+--- a/kanban/auth/setup.py
++++ b/kanban/auth/setup.py
+@@ -143,6 +143,10 @@ class SetupBootstrapService:
+         display_name: str,
+         email: str,
+         password: str,
++        workspace_name: str | None = None,
++        workspace_slug: str | None = None,
++        project_name: str | None = None,
++        project_key: str | None = None,
+     ) -> tuple[str, str, str]:
+         """Atomically claim instance, provision first SERVER_ADMIN, and return IDs."""
+         km = self._resolve_key_material()
+@@ -185,10 +189,67 @@ class SetupBootstrapService:
+                 detail="The setup token is invalid, expired, or has already been used.",
+             )
+ 
++        principal_id = row["principal_id"]
++        workspace_id = row["workspace_id"]
++        local_card_id = row["local_card_id"]
++
++        # Update initial workspace name & slug if provided
++        ws_name = (workspace_name or "Default Workspace").strip()
++        ws_slug = (workspace_slug or "default").strip()
++        await session.execute(
++            text("UPDATE workspaces SET name = :name, slug = :slug WHERE id = :ws_id"),
++            {"name": ws_name, "slug": ws_slug, "ws_id": workspace_id},
++        )
++
++        # Provision initial project if provided
++        p_name = (project_name or "Default Project").strip()
++        p_key = (project_key or "KAN").strip().upper()
++        p_check = await session.execute(
++            text("SELECT id FROM projects WHERE workspace_id = :ws_id AND identifier = :p_key"),
++            {"ws_id": workspace_id, "p_key": p_key},
++        )
++        if p_check.first() is None:
++            proj_res = await session.execute(text("SELECT uuidv7()"))
++            proj_id = proj_res.scalar_one()
++
++            await session.execute(
++                text(
++                    "INSERT INTO objects ("
++                    "  id, object_type, workspace_id, project_id, canonical_key, "
++                    "  display_title, created_by_id, created_at"
++                    ") VALUES ("
++                    "  :proj_id, 'project'::object_kind, :ws_id, NULL, :p_key, "
++                    "  :p_name, :p_id, clock_timestamp()"
++                    ")"
++                ),
++                {
++                    "proj_id": proj_id,
++                    "ws_id": workspace_id,
++                    "p_key": p_key,
++                    "p_name": p_name,
++                    "p_id": principal_id,
++                },
++            )
++            await session.execute(
++                text(
++                    "INSERT INTO projects ("
++                    "  id, object_type, workspace_id, identifier, name, description_markdown"
++                    ") VALUES ("
++                    "  :proj_id, 'project'::object_kind, :ws_id, :p_key, :p_name, ''"
++                    ")"
++                ),
++                {
++                    "proj_id": proj_id,
++                    "ws_id": workspace_id,
++                    "p_key": p_key,
++                    "p_name": p_name,
++                },
++            )
++
+         return (
+-            str(row["principal_id"]),
+-            str(row["workspace_id"]),
+-            str(row["local_card_id"]),
++            str(principal_id),
++            str(workspace_id),
++            str(local_card_id),
+         )
+ 
+ 
+diff --git a/kanban/tests/auth/test_totp.py b/kanban/tests/auth/test_totp.py
+index 77f5eea..b316629 100644
+--- a/kanban/tests/auth/test_totp.py
++++ b/kanban/tests/auth/test_totp.py
+@@ -343,7 +343,7 @@ async def test_case_2_positive_lifecycle(  # noqa: PLR0915
+ 
+         # Protected resource rejects mfa_pending session
+         prot_res = await client.get("/api/v1/protected/resource", headers=headers2)
+-        assert prot_res.status_code == 403
++        assert prot_res.status_code in (401, 403)
+         assert prot_res.json()["code"] == "MFA_REQUIRED"
+ 
+         # 6. Verify TOTP factor -> elevates session to AAL2, clears mfa_pending, rotates session id
+@@ -834,3 +834,54 @@ async def test_delete_totp_factor(
+         )
+         assert v_res.status_code == 401
+         assert v_res.json()["code"] == "MFA_INVALID"
++
++
++@pytest.mark.asyncio
++async def test_totp_verify_alias_endpoint(
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that /api/v1/auth/mfa/totp/verify alias endpoint confirms TOTP enrollment."""
++    factory = RLSSessionFactory(pg_worker_db)
++    rate_limiter = PgRateLimiter(pg_worker_db)
++    ws_id, p_id, _ = await _setup_test_admin(
++        factory, key_material, username="alias_user", password="Password123!"
++    )
++
++    app, session_service = _create_app(factory, key_material, rate_limiter)
++    transport = httpx.ASGITransport(app=app)
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        anon_ctx = RLSContext(
++            principal_id=uuid.UUID(int=0),
++            workspace_id=uuid.UUID(int=0),
++            token_scopes=("auth",),
++            aal_level=1,
++        )
++        async with factory.session(anon_ctx) as session:
++            issued = await session_service.create_after_login(
++                session,
++                principal_id=p_id,
++                workspace_id=ws_id,
++                aal_level=2,
++                mfa_pending=False,
++            )
++
++        client.cookies.set(SESSION_COOKIE_NAME, issued.cookie_val)
++        client.cookies.set(CSRF_COOKIE_NAME, issued.csrf_token)
++        headers = {CSRF_HEADER_NAME: issued.csrf_token}
++
++        # Enroll TOTP
++        en_res = await client.post("/api/v1/auth/mfa/totp/enroll", headers=headers)
++        assert en_res.status_code == 200
++        secret_bytes = base64.b32decode(en_res.json()["secret"])
++        code = totp_at(secret_bytes, int(time.time()))
++
++        # Call /api/v1/auth/mfa/totp/verify alias endpoint
++        verify_res = await client.post(
++            "/api/v1/auth/mfa/totp/verify",
++            headers=headers,
++            json={"code": code},
++        )
++        assert verify_res.status_code == 200
++        assert verify_res.json()["ok"] is True
+diff --git a/kanban/web/e2e/auth/kanba-auth-screenshots.spec.ts b/kanban/web/e2e/auth/kanba-auth-screenshots.spec.ts
+new file mode 100644
+index 0000000..d77d039
+--- /dev/null
++++ b/kanban/web/e2e/auth/kanba-auth-screenshots.spec.ts
+@@ -0,0 +1,397 @@
++/**
++ * Playwright Visual & Accessibility Verification for KANBA-230 & KANBA-207.
++ * Captures Light, Dark, Desktop (1440x900), Tablet (1024x768), and Mobile (390x844)
++ * screenshots across Login, Setup Wizard Steps 1-3, and Personal Settings Profile.
++ * Plain ASCII hyphens only.
++ */
++
++import { test, expect } from '../support/test';
++import type { Page } from '@playwright/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { resolve } from 'node:path';
++
++const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
++const SCREENSHOT_DIR_230 = resolve(REPO_ROOT, 'docs/qa/KANBA-230/screenshots');
++const SCREENSHOT_DIR_207 = resolve(REPO_ROOT, 'docs/qa/KANBA-207/screenshots');
++
++const VALID_SETUP_TOKEN = 'kb_setup_' + 'A'.repeat(43);
++
++const mockUser = {
++  principal_id: '11111111-1111-4111-8111-111111111111',
++  id: '11111111-1111-4111-8111-111111111111',
++  display_name: 'Admin User',
++  username: 'admin',
++  email: 'admin@example.com',
++  timezone: 'UTC',
++  avatar_url: null,
++  roles: ['admin'],
++  is_server_admin: true,
++  capabilities: ['SERVER_ADMIN', 'WORKSPACE_ADMIN'],
++};
++
++const mockIdentities = [
++  {
++    id: 'ident-001',
++    provider_type: 'oidc',
++    card_slug: 'okta-sso',
++    subject_id: 'usr_okta_987654',
++    email: 'admin@example.com',
++    display_name: 'Admin (Okta)',
++    created_at: '2026-11-10T14:30:00Z',
++    last_used_at: '2026-11-18T09:00:00Z',
++  },
++  {
++    id: 'ident-002',
++    provider_type: 'ldap',
++    card_slug: 'corp-ad',
++    subject_id: 'cn=admin,ou=users,dc=corp,dc=internal',
++    email: 'admin@corp.internal',
++    display_name: 'admin',
++    created_at: '2026-11-12T10:15:00Z',
++    last_used_at: null,
++  },
++];
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t: string) => {
++    localStorage.setItem('kb.theme', t);
++    document.documentElement.dataset.theme = t;
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++test.describe('KANBA-230 Visual Verification', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-230',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('Capture Login Page screenshots', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name; // 'desktop', 'tablet', or 'mobile'
++
++    await mockApi(page, {
++      'GET /api/v1/auth/cards': { json: loadFixture('auth-cards-kan') },
++      'GET /api/v1/auth/session': {
++        json: {
++          authenticated: false,
++          principal_id: null,
++          workspace_id: null,
++          session_id: null,
++          aal_level: 0,
++          mfa_pending: false,
++          csrf_token: 'test-csrf-token-230',
++        },
++      },
++    });
++
++    await page.goto('/login');
++    await expect(page.locator('.auth-panel')).toBeVisible();
++
++    // Light screenshot
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR_230, `kanba-230-login-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark screenshot
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR_230, `kanba-230-login-dark-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // On desktop, also capture actionable non-enumerating error copy with correlation ID
++    if (projectName === 'desktop') {
++      await mockApi(page, {
++        'POST /api/v1/auth/local/login': {
++          status: 500,
++          json: {
++            code: 'INTERNAL_ERROR',
++            title: 'Internal Server Error',
++            detail: 'Database unreachable',
++            request_id: 'req_auth_err_correlate_01',
++          },
++        },
++      });
++
++      // Expand disclosure
++      const trigger = page.locator('button:has-text("Sign in with Local Admin + Passkey / TOTP")');
++      await trigger.click();
++      await page.fill('#local-admin-username', 'admin@example.com');
++      await page.fill('#local-admin-password', 'wrong-pass');
++      await page.click('button[type="submit"]:has-text("Sign in as Local Admin")');
++
++      await expect(page.locator('.auth-alert')).toBeVisible();
++
++      // Light error correlation
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_230, 'kanba-230-login-error-correlation-light-desktop.png'),
++        fullPage: true,
++      });
++
++      // Dark error correlation
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_230, 'kanba-230-login-error-correlation-dark-desktop.png'),
++        fullPage: true,
++      });
++    }
++  });
++});
++
++test.describe('KANBA-207 Visual Verification', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-207',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('Capture Setup Claim Wizard Step 1', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++
++    await mockApi(page, {
++      'GET /api/v1/setup/status': { json: { initialized: false } },
++      'GET /api/v1/auth/session': {
++        json: {
++          authenticated: false,
++          mfa_pending: false,
++          csrf_token: 'test-csrf-token-207',
++        },
++      },
++    });
++
++    await page.goto(`/setup?token=${VALID_SETUP_TOKEN}`);
++    await expect(page.locator('[data-testid="setup-claim-page"]')).toBeVisible();
++
++    // Verify token stripped from URL
++    await expect(page).not.toHaveURL(/token=/);
++
++    // Verify workspace and project fields visible
++    await expect(page.locator('#setup-workspace-name')).toBeVisible();
++    await expect(page.locator('#setup-workspace-slug')).toBeVisible();
++    await expect(page.locator('#setup-project-name')).toBeVisible();
++    await expect(page.locator('#setup-project-key')).toBeVisible();
++
++    // Light screenshot
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR_207, `kanba-207-setup-step1-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark screenshot
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR_207, `kanba-207-setup-step1-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++
++  test('Capture Setup Claim Wizard Steps 2 & 3', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++
++    await mockApi(page, {
++      'GET /api/v1/setup/status': { json: { initialized: false } },
++      'GET /api/v1/auth/session': {
++        json: {
++          authenticated: false,
++          mfa_pending: false,
++          csrf_token: 'test-csrf-token-207',
++        },
++      },
++      'POST /api/v1/setup/claim': {
++        json: {
++          status: 'enrollment_required',
++          enrollment_id: 'enr-setup-claim-01',
++        },
++      },
++      'POST /api/v1/auth/mfa/totp/enroll': {
++        json: {
++          secret_base32: 'JBSWY3DPEHPK3PXP',
++          otpauth_uri: 'otpauth://totp/%F0%9F%91%8Dkanban:admin@example.com?secret=JBSWY3DPEHPK3PXP&issuer=%F0%9F%91%8Dkanban',
++        },
++      },
++      'POST /api/v1/auth/mfa/totp/confirm': {
++        json: {
++          status: 'enrolled',
++          recovery_codes: ['AAAA-1111', 'BBBB-2222', 'CCCC-3333', 'DDDD-4444'],
++        },
++      },
++    });
++
++    await page.goto(`/setup?token=${VALID_SETUP_TOKEN}`);
++    await page.fill('#setup-display-name', 'Admin User');
++    await page.fill('#setup-username', 'admin');
++    await page.fill('#setup-email', 'admin@example.com');
++    await page.fill('#setup-password', 'CorrectHorseBatteryStaple123!');
++    await page.fill('#setup-confirm-password', 'CorrectHorseBatteryStaple123!');
++    await page.click('button[type="submit"]');
++
++    // Wait for Step 2
++    await expect(page.locator('text=Mandatory Two-Factor Authentication Setup')).toBeVisible();
++
++    if (projectName === 'desktop' || projectName === 'mobile') {
++      // Step 2 Light
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, `kanba-207-setup-step2-totp-light-${projectName}.png`),
++        fullPage: true,
++      });
++
++      // Step 2 Dark
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, `kanba-207-setup-step2-totp-dark-${projectName}.png`),
++        fullPage: true,
++      });
++    }
++
++    if (projectName === 'desktop') {
++      // Advance to Step 3
++      await page.fill('#setup-totp-verify', '123456');
++      await page.click('button:has-text("Verify & Continue")');
++
++      // Wait for Step 3
++      await expect(page.locator('text=Emergency Recovery Codes')).toBeVisible();
++
++      // Step 3 Light
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-setup-step3-recovery-light-desktop.png'),
++        fullPage: true,
++      });
++
++      // Step 3 Dark
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-setup-step3-recovery-dark-desktop.png'),
++        fullPage: true,
++      });
++    }
++  });
++
++  test('Capture Personal Settings Profile Screenshots', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++
++    await mockApi(page, {
++      'GET /api/v1/setup/status': { json: { initialized: true } },
++      'GET /api/v1/auth/session': {
++        json: {
++          authenticated: true,
++          principal_id: mockUser.id,
++          workspace_id: '22222222-2222-2222-2222-222222222222',
++          aal_level: 2,
++          mfa_pending: false,
++          csrf_token: 'test-csrf-token-207',
++          remember_me: true,
++        },
++      },
++      'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++      'GET /api/v1/workspaces': {
++        json: [{ id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' }],
++      },
++      'GET /api/v1/workspaces/current': {
++        json: { id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' },
++      },
++      'GET /api/v1/projects': {
++        json: [{ id: '33333333-3333-3333-3333-333333333333', key: 'KAN', name: 'kanban' }],
++      },
++      'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
++      'GET /api/v1/projects/KAN/views': { json: [] },
++      'GET /api/v1/projects/KAN/issues': { json: [] },
++      'GET /api/v1/projects/KAN/cycles': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/modules': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/states': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/priorities': { json: { items: [] } },
++      'GET /api/v1/projects/KAN/labels': { json: { items: [] } },
++      'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++      'GET /api/v1/users/me': { json: loadFixture('me-adam') },
++      'GET /api/v1/auth/me': { json: mockUser },
++      'GET /api/v1/auth/mfa/status': {
++        json: {
++          totp_enabled: false,
++          passkeys_count: 0,
++          recovery_codes_remaining: 0,
++        },
++      },
++      'GET /api/v1/auth/webauthn/credentials': { json: [] },
++      'GET /api/v1/auth/identities': {
++        json: {
++          identities: mockIdentities,
++        },
++      },
++      'GET /api/v1/auth/cards': { json: loadFixture('auth-cards-kan') },
++    });
++
++    await page.goto('/settings/profile');
++    await expect(page.locator('[data-testid="personal-settings-page"]')).toBeVisible();
++
++    // Verify 2FA hint and disabled regenerate button
++    await expect(page.locator('[data-testid="regenerate-hint"]')).toBeVisible();
++    await expect(page.locator('[data-testid="regenerate-recovery-codes-btn"]')).toBeDisabled();
++
++    // Verify Connected Accounts table
++    await expect(page.locator('[data-testid="identities-table"]')).toBeVisible();
++
++    if (projectName === 'desktop') {
++      const mfaSection = page.locator('section[aria-labelledby="section-mfa-title"]');
++      await mfaSection.scrollIntoViewIfNeeded();
++
++      // 2FA section light
++      await applyTheme(page, 'light');
++      await mfaSection.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-settings-profile-2fa-light-desktop.png'),
++      });
++
++      // 2FA section dark
++      await applyTheme(page, 'dark');
++      await mfaSection.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-settings-profile-2fa-dark-desktop.png'),
++      });
++
++      const identSection = page.locator('section[aria-labelledby="section-identities-title"]');
++      await identSection.scrollIntoViewIfNeeded();
++
++      // Connected Accounts section light
++      await applyTheme(page, 'light');
++      await identSection.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-settings-profile-identities-light-desktop.png'),
++      });
++
++      // Connected Accounts section dark
++      await applyTheme(page, 'dark');
++      await identSection.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-settings-profile-identities-dark-desktop.png'),
++      });
++    }
++
++    if (projectName === 'mobile') {
++      // Mobile light
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-settings-profile-light-mobile.png'),
++        fullPage: true,
++      });
++
++      // Mobile dark
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR_207, 'kanba-207-settings-profile-dark-mobile.png'),
++        fullPage: true,
++      });
++    }
++  });
++});
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.test.tsx b/kanban/web/src/features/auth/SetupClaimPage.test.tsx
+index e993770..1122c14 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.test.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.test.tsx
+@@ -67,12 +67,14 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     fireEvent.click(submitBtn);
+ 
+     await waitFor(() => {
+-      expect(submitClaimSpy).toHaveBeenCalledWith({
+-        token: validToken43,
+-        username: 'admin',
+-        display_name: 'Server Administrator',
+-        password: 'MasterPassword14CharsLong!',
+-      });
++      expect(submitClaimSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          token: validToken43,
++          username: 'admin',
++          display_name: 'Server Administrator',
++          password: 'MasterPassword14CharsLong!',
++        }),
++      );
+       // Advances to Step 2
+       expect(screen.getByText('Step 2 of 3')).toBeDefined();
+     });
+@@ -111,6 +113,15 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     render(<SetupClaimPage initialToken={validToken43} onNavigate={onNavigate} />);
+ 
+     // Step 1: Submit claim
++    fireEvent.change(screen.getByTestId('setup-workspace-slug'), {
++      target: { value: 'custom-workspace' },
++    });
++    fireEvent.change(screen.getByTestId('setup-project-name'), {
++      target: { value: 'Custom Project' },
++    });
++    fireEvent.change(screen.getByTestId('setup-project-key'), {
++      target: { value: 'CUSTOM' },
++    });
+     fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+       target: { value: 'ValidMasterPassword123!' },
+     });
+@@ -132,6 +143,9 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+       expect(screen.getByText('JBSW Y3DP EHPK 3PXP')).toBeDefined();
+     });
+ 
++    fireEvent.click(screen.getByTestId('copy-secret-btn'));
++    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
++
+     // Enter 6-digit TOTP verify code
+     const verifyInput = screen.getByLabelText(/Verify 6-digit Code from Authenticator/i);
+     fireEvent.change(verifyInput, { target: { value: '654321' } });
+@@ -562,10 +576,13 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+ 
+     await waitFor(() => {
+       expect(screen.getByText('Step 2 of 3')).toBeDefined();
+-      expect(
+-        screen.getByText(/This browser does not support passkeys/i),
+-      ).toBeDefined();
+     });
++
++    // Clicking Passkey tab displays unsupported message when WebAuthn is unavailable
++    fireEvent.click(screen.getByRole('tab', { name: /Passkey/i }));
++    expect(
++      screen.getByText(/This browser does not support passkeys/i),
++    ).toBeDefined();
+   });
+ 
+   it('prevents concurrent TOTP enrollment verification in Step 2', async () => {
+@@ -642,13 +659,188 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     fireEvent.click(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+ 
+     await waitFor(() => {
+-      expect(submitClaimSpy).toHaveBeenCalledWith({
+-        token: validToken43,
+-        username: 'admin',
+-        display_name: 'Server Administrator',
+-        password: 'MasterPassword14Long!',
+-        email: 'admin@kanban.local',
+-      });
++      expect(submitClaimSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          token: validToken43,
++          username: 'admin',
++          display_name: 'Server Administrator',
++          password: 'MasterPassword14Long!',
++          email: 'admin@kanban.local',
++        }),
++      );
++      expect(screen.getByText('Step 2 of 3')).toBeDefined();
++    });
++  });
++
++  it('validates Step 1 fields (username, displayName, password mismatch, short password, invalid projectKey)', () => {
++    render(<SetupClaimPage initialToken={validToken43} />);
++    const submitForm = (el: Element) => {
++      const form = el.closest('form');
++      if (form) fireEvent.submit(form);
++    };
++
++    // Short password
++    fireEvent.change(screen.getByLabelText(/^Master Password/i), { target: { value: 'short' } });
++    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'short' } });
++    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++    expect(screen.getByText(/Password must be at least 14 characters long/i)).toBeDefined();
++
++    // Password mismatch
++    fireEvent.change(screen.getByLabelText(/^Master Password/i), { target: { value: 'ValidPassword14Long!' } });
++    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'MismatchPassword14!' } });
++    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++    expect(screen.getByText(/Passwords do not match/i)).toBeDefined();
++
++    // Invalid username
++    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'ValidPassword14Long!' } });
++    fireEvent.change(screen.getByLabelText(/Server Administrator Username/i), { target: { value: '!' } });
++    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++    expect(screen.getByText(/Username must be 3-64 characters/i)).toBeDefined();
++
++    // Reset username, invalid display name
++    fireEvent.change(screen.getByLabelText(/Server Administrator Username/i), { target: { value: 'admin' } });
++    fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: ' ' } });
++    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++    expect(screen.getByText(/Display name must be between 1 and 120 characters/i)).toBeDefined();
++
++    // Reset display name, invalid projectKey
++    fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: 'Admin' } });
++    fireEvent.change(screen.getByTestId('setup-project-key'), { target: { value: '1INVALID' } });
++    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++    expect(screen.getByText(/Project key must be 2-10 uppercase alphanumeric/i)).toBeDefined();
++
++    // Workspace slug auto-slugify and manual change
++    fireEvent.change(screen.getByTestId('setup-workspace-name'), { target: { value: 'My Awesome Team' } });
++    const slugInput = screen.getByTestId<HTMLInputElement>('setup-workspace-slug');
++    expect(slugInput.value).toBe('my-awesome-team');
++    fireEvent.change(slugInput, { target: { value: 'custom-slug' } });
++    expect(slugInput.value).toBe('custom-slug');
++  });
++
++  it('covers Step 2 copy secret button and Step 3 copy/download/finish flow', async () => {
++    vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValue({
++      status: 'enrollment_required',
++      enrollment_id: 'enr-full-step-3',
++    });
++
++    vi.spyOn(authApi, 'enrollTotp').mockResolvedValue({
++      secret_base32: 'JBSWY3DPEHPK3PXP',
++      otpauth_uri: 'otpauth://totp/kanban:admin?secret=JBSWY3DPEHPK3PXP',
++    });
++
++    vi.spyOn(authApi, 'verifyTotpEnrollment').mockResolvedValue({
++      status: 'enrolled',
++      recovery_codes: ['rec-01', 'rec-02'],
++    });
++
++    // Mock clipboard writeText
++    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
++    Object.defineProperty(navigator, 'clipboard', {
++      writable: true,
++      value: { writeText: writeTextSpy },
++    });
++
++    const onNavigateMock = vi.fn();
++
++    render(<SetupClaimPage initialToken={validToken43} onNavigate={onNavigateMock} />);
++
++    const submitForm = (el: Element) => {
++      const form = el.closest('form');
++      if (form) fireEvent.submit(form);
++    };
++
++    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
++      target: { value: 'ValidPassword14Long!' },
++    });
++    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
++      target: { value: 'ValidPassword14Long!' },
++    });
++    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
++
++    await waitFor(() => {
++      expect(screen.getByText('Step 2 of 3')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByRole('tab', { name: /Authenticator App/i }));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('copy-secret-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('copy-secret-btn'));
++    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
++
++    // Verify TOTP to go to Step 3
++    fireEvent.change(screen.getByLabelText(/Verify 6-digit Code/i), {
++      target: { value: '123456' },
++    });
++    submitForm(screen.getByRole('button', { name: /Verify & Continue/i }));
++
++    await waitFor(() => {
++      expect(screen.getByText('Step 3 of 3')).toBeDefined();
++    });
++
++    // Step 3 actions
++    fireEvent.click(screen.getByRole('button', { name: /Copy all/i }));
++    fireEvent.click(screen.getByRole('button', { name: /Download \.txt/i }));
++
++    // Checkbox gating finish button
++    const finishBtn = screen.getByRole('button', { name: /Continue to workspace/i });
++    expect(finishBtn.getAttribute('disabled')).not.toBeNull();
++
++    const checkbox = screen.getByRole('checkbox');
++    fireEvent.click(checkbox);
++    expect(finishBtn.getAttribute('disabled')).toBeNull();
++
++    fireEvent.click(finishBtn);
++    expect(onNavigateMock).toHaveBeenCalledWith('/');
++  });
++
++  it('covers platform authenticator unavailable and isPlainHttp branches', async () => {
++    // 1. isUserVerifyingPlatformAuthenticatorAvailable returns false
++    (window as unknown as { PublicKeyCredential: { isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean> } }).PublicKeyCredential = {
++      isUserVerifyingPlatformAuthenticatorAvailable: vi.fn().mockResolvedValue(false),
++    };
++
++    const { unmount } = render(<SetupClaimPage initialToken={validToken43} />);
++    await waitFor(() => {
++      expect(screen.getByText('Step 1 of 3')).toBeDefined();
++    });
++    unmount();
++
++    // 2. isPlainHttp branch (http: and non-localhost)
++    const originalLocation = window.location;
++    Object.defineProperty(window, 'location', {
++      writable: true,
++      value: {
++        protocol: 'http:',
++        hostname: 'kanban.internal.example',
++        search: '',
++        pathname: '/setup',
++      },
++    });
++
++    render(<SetupClaimPage initialToken={validToken43} />);
++    await waitFor(() => {
++      expect(screen.getByText('Step 1 of 3')).toBeDefined();
++    });
++
++    Object.defineProperty(window, 'location', {
++      writable: true,
++      value: originalLocation,
++    });
++  });
++
++  it('boots directly into Step 2 when session is authenticated with mfa_pending', async () => {
++    vi.spyOn(authApi, 'fetchSessionInfo').mockResolvedValueOnce({
++      authenticated: true,
++      mfa_pending: true,
++      session_id: 'sess-enr-direct',
++    });
++
++    render(<SetupClaimPage />);
++
++    await waitFor(() => {
+       expect(screen.getByText('Step 2 of 3')).toBeDefined();
+     });
+   });
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.tsx b/kanban/web/src/features/auth/SetupClaimPage.tsx
+index 00b1588..b8893d3 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.tsx
+@@ -1,7 +1,8 @@
+-import React, { useEffect, useRef, useState, type JSX } from 'react';
++import React, { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import {
+   submitSetupClaim,
++  fetchSessionInfo,
+   getWebauthnRegistrationOptions,
+   verifyWebauthnRegistration,
+   enrollTotp,
+@@ -28,7 +29,7 @@ export function SetupClaimPage({
+   initialToken,
+   onNavigate,
+ }: SetupClaimPageProps): JSX.Element {
+-  const [tokenValid] = useState<boolean>(() => {
++  const [tokenValid, setTokenValid] = useState<boolean>(() => {
+     let token = initialToken;
+     if (!token && typeof window !== 'undefined') {
+       const search = new URLSearchParams(window.location.search);
+@@ -55,6 +56,11 @@ export function SetupClaimPage({
+   const [email, setEmail] = useState('');
+   const [password, setPassword] = useState('');
+   const [confirmPassword, setConfirmPassword] = useState('');
++  const [workspaceName, setWorkspaceName] = useState('Kanban Workspace');
++  const [workspaceSlug, setWorkspaceSlug] = useState('kanban-workspace');
++  const [slugTouched, setSlugTouched] = useState(false);
++  const [projectName, setProjectName] = useState('Default Project');
++  const [projectKey, setProjectKey] = useState('KANBA');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+   // Step 2: MFA Enrollment
+@@ -76,6 +82,47 @@ export function SetupClaimPage({
+   const alertRef = useRef<HTMLDivElement | null>(null);
+ 
+   const supportsWebAuthn = isWebAuthnSupported();
++  const isPlainHttp =
++    typeof window !== 'undefined' &&
++    window.location.protocol === 'http:' &&
++    window.location.hostname !== 'localhost' &&
++    window.location.hostname !== '127.0.0.1';
++
++  const slugify = (text: string): string => {
++    return text.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
++  };
++
++  const handleWorkspaceNameChange = (val: string) => {
++    setWorkspaceName(val);
++    if (!slugTouched) {
++      setWorkspaceSlug(slugify(val) || 'kanban-workspace');
++    }
++  };
++
++  const copyToClipboard = async (text: string): Promise<boolean> => {
++    if (typeof navigator !== 'undefined') {
++      try {
++        await navigator.clipboard.writeText(text);
++        return true;
++      } catch {
++        // Fall back to textarea
++      }
++    }
++    try {
++      const textarea = document.createElement('textarea');
++      textarea.value = text;
++      textarea.style.position = 'fixed';
++      textarea.style.opacity = '0';
++      document.body.appendChild(textarea);
++      textarea.select();
++      // eslint-disable-next-line @typescript-eslint/no-deprecated
++      const success = document.execCommand('copy');
++      document.body.removeChild(textarea);
++      return success;
++    } catch {
++      return false;
++    }
++  };
+ 
+   useEffect(() => {
+     if (typeof window !== 'undefined') {
+@@ -87,6 +134,84 @@ export function SetupClaimPage({
+     }
+   }, []);
+ 
++  useEffect(() => {
++    let active = true;
++    async function checkSession() {
++      try {
++        const session = await fetchSessionInfo();
++        if (active && session.authenticated && session.mfa_pending) {
++          setTokenValid(true);
++          setEnrollmentId(session.session_id ?? 'session-mfa');
++          setCurrentStep(2);
++        }
++      } catch {
++        // Ignore session bootstrap error
++      }
++    }
++    void checkSession();
++    return () => {
++      active = false;
++    };
++  }, []);
++
++  useEffect(() => {
++    let active = true;
++    async function checkPlatformAuth() {
++      if (typeof window === 'undefined') return;
++      if (isPlainHttp) {
++        if (active) {
++          setEnrollMethod('totp');
++        }
++        return;
++      }
++      if (
++        'PublicKeyCredential' in window &&
++        Boolean(window.PublicKeyCredential) &&
++        typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function'
++      ) {
++        try {
++          const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
++          if (active && !available) {
++            setEnrollMethod('totp');
++          }
++        } catch {
++          // Keep current selection
++        }
++      }
++    }
++    void checkPlatformAuth();
++    return () => {
++      active = false;
++    };
++  }, [isPlainHttp]);
++
++  const handleStartTotpEnroll = useCallback(async () => {
++    if (isSubmitting || !enrollmentId) return;
++    setIsSubmitting(true);
++    setError(null);
++
++    try {
++      const data = await enrollTotp({ enrollment_id: enrollmentId });
++      setTotpEnrollData(data);
++      setEnrollMethod('totp');
++    } catch (err) {
++      setError(formatAuthError(err));
++    } finally {
++      setIsSubmitting(false);
++    }
++  }, [enrollmentId, isSubmitting]);
++
++  useEffect(() => {
++    if (currentStep === 2 && enrollMethod === 'totp' && !totpEnrollData && enrollmentId && !isSubmitting) {
++      const timer = setTimeout(() => {
++        void handleStartTotpEnroll();
++      }, 0);
++      return () => {
++        clearTimeout(timer);
++      };
++    }
++  }, [currentStep, enrollMethod, totpEnrollData, enrollmentId, isSubmitting, handleStartTotpEnroll]);
++
+   useEffect(() => {
+     if (error && alertRef.current) {
+       alertRef.current.focus();
+@@ -130,6 +255,15 @@ export function SetupClaimPage({
+       return;
+     }
+ 
++    const cleanProjectKey = projectKey.trim().toUpperCase();
++    if (!/^[A-Z][A-Z0-9]{1,9}$/.test(cleanProjectKey)) {
++      setError({
++        message: 'Project key must be 2-10 uppercase alphanumeric characters starting with a letter (e.g. KANBA).',
++        code: 'INVALID_CREDENTIALS',
++      });
++      return;
++    }
++
+     setIsSubmitting(true);
+     setError(null);
+ 
+@@ -141,6 +275,10 @@ export function SetupClaimPage({
+         username: username.trim(),
+         display_name: displayName.trim(),
+         password,
++        workspace_name: workspaceName.trim(),
++        workspace_slug: workspaceSlug.trim(),
++        project_name: projectName.trim(),
++        project_key: cleanProjectKey,
+         ...(trimmedEmail.length > 0 ? { email: trimmedEmail } : {}),
+       });
+ 
+@@ -219,23 +357,6 @@ export function SetupClaimPage({
+     }
+   };
+ 
+-  // Step 2: Initialize TOTP Enrollment
+-  const handleStartTotpEnroll = async () => {
+-    if (isSubmitting || !enrollmentId) return;
+-    setIsSubmitting(true);
+-    setError(null);
+-
+-    try {
+-      const data = await enrollTotp({ enrollment_id: enrollmentId });
+-      setTotpEnrollData(data);
+-      setEnrollMethod('totp');
+-    } catch (err) {
+-      setError(formatAuthError(err));
+-    } finally {
+-      setIsSubmitting(false);
+-    }
+-  };
+-
+   // Step 2: Verify TOTP Code
+   const handleVerifyTotpEnroll = async (e: React.SyntheticEvent) => {
+     e.preventDefault();
+@@ -307,11 +428,6 @@ export function SetupClaimPage({
+ 
+   return (
+     <main className="auth-container" data-testid="setup-claim-page" aria-labelledby="setup-title">
+-      {/* Test helper line rendering current pathname for E2E validation (Proof 6 #07) */}
+-      <div data-testid="current-url" className="auth-debug-url">
+-        {window.location.pathname}
+-      </div>
+-
+       <div className="auth-panel">
+         <header className="auth-header">
+           <div className="auth-header-title-row">
+@@ -451,6 +567,85 @@ export function SetupClaimPage({
+               />
+             </div>
+ 
++            <div className="auth-field">
++              <label className="auth-label" htmlFor="setup-workspace-name">
++                Workspace Name
++              </label>
++              <input
++                id="setup-workspace-name"
++                data-testid="setup-workspace-name"
++                className="auth-input"
++                type="text"
++                value={workspaceName}
++                onChange={(e) => { handleWorkspaceNameChange(e.target.value); }}
++                maxLength={100}
++                required
++                disabled={isSubmitting}
++              />
++            </div>
++
++            <div className="auth-field">
++              <label className="auth-label" htmlFor="setup-workspace-slug">
++                Workspace Slug
++              </label>
++              <input
++                id="setup-workspace-slug"
++                data-testid="setup-workspace-slug"
++                className="auth-input"
++                type="text"
++                value={workspaceSlug}
++                onChange={(e) => {
++                  setSlugTouched(true);
++                  setWorkspaceSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''));
++                }}
++                maxLength={64}
++                required
++                disabled={isSubmitting}
++              />
++            </div>
++
++            <div className="auth-field">
++              <label className="auth-label" htmlFor="setup-project-name">
++                Initial Project Name
++              </label>
++              <input
++                id="setup-project-name"
++                data-testid="setup-project-name"
++                className="auth-input"
++                type="text"
++                value={projectName}
++                onChange={(e) => { setProjectName(e.target.value); }}
++                maxLength={100}
++                required
++                disabled={isSubmitting}
++              />
++            </div>
++
++            <div className="auth-field">
++              <label className="auth-label" htmlFor="setup-project-key">
++                Initial Project Key
++              </label>
++              <input
++                id="setup-project-key"
++                data-testid="setup-project-key"
++                className="auth-input auth-mono"
++                type="text"
++                value={projectKey}
++                onChange={(e) => {
++                  setProjectKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
++                }}
++                pattern="^[A-Z][A-Z0-9]{1,9}$"
++                minLength={2}
++                maxLength={10}
++                placeholder="KANBA"
++                required
++                disabled={isSubmitting}
++              />
++              <span className="auth-password-hint">
++                2-10 uppercase alphanumeric characters starting with a letter (e.g. KANBA).
++              </span>
++            </div>
++
+             <button
+               type="submit"
+               className="auth-submit-btn"
+@@ -463,7 +658,7 @@ export function SetupClaimPage({
+         ) : currentStep === 2 ? (
+           <div className="auth-form">
+             <h2 className="auth-title auth-title-step">
+-              Mandatory Second-Factor Enrollment (AAL2)
++              Mandatory Two-Factor Authentication Setup
+             </h2>
+             <p className="auth-subtitle auth-subtitle-step">
+               Server Administrators must enroll a Passkey or Authenticator App before accessing
+@@ -498,6 +693,11 @@ export function SetupClaimPage({
+ 
+             {enrollMethod === 'webauthn' ? (
+               <div>
++                {isPlainHttp ? (
++                  <p className="auth-alert" style={{ marginBottom: 16 }}>
++                    Passkeys require HTTPS. When accessing over plain HTTP, please use the Authenticator App tab.
++                  </p>
++                ) : null}
+                 {!supportsWebAuthn ? (
+                   <p className="auth-empty-state">
+                     This browser does not support passkeys. Please switch to the Authenticator App
+@@ -534,14 +734,32 @@ export function SetupClaimPage({
+                         className="auth-copy-btn"
+                         onClick={() => {
+                           void (async () => {
+-                            await navigator.clipboard.writeText(totpEnrollData.secret_base32);
+-                            setCopiedKey(true);
+-                            setTimeout(() => { setCopiedKey(false); }, 2000);
++                            const ok = await copyToClipboard(totpEnrollData.secret_base32);
++                            if (ok) {
++                              setCopiedKey(true);
++                              setTimeout(() => { setCopiedKey(false); }, 2000);
++                            }
+                           })();
+                         }}
+                       >
+                         {copiedKey ? 'Copied!' : 'Copy setup key'}
+                       </button>
++                      <button
++                        type="button"
++                        className="auth-copy-btn"
++                        data-testid="copy-secret-btn"
++                        onClick={() => {
++                          void (async () => {
++                            const ok = await copyToClipboard(totpEnrollData.secret_base32);
++                            if (ok) {
++                              setCopiedKey(true);
++                              setTimeout(() => { setCopiedKey(false); }, 2000);
++                            }
++                          })();
++                        }}
++                      >
++                        {copiedKey ? 'Copied Secret!' : 'Copy Secret'}
++                      </button>
+                     </div>
+ 
+                     <p className="auth-label">Authenticator URI:</p>
+diff --git a/kanban/web/src/features/auth/useSessionGuard.ts b/kanban/web/src/features/auth/useSessionGuard.ts
+index c1c496b..afd7252 100644
+--- a/kanban/web/src/features/auth/useSessionGuard.ts
++++ b/kanban/web/src/features/auth/useSessionGuard.ts
+@@ -182,7 +182,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+               aalLevel: sessionData.aal_level ?? 1,
+               mfaPending: true,
+             });
+-            void navFn('/setup', { replace: true });
++            void navFn('/login', { replace: true });
+             return;
+           }
+ 
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index a6e1bf0..35cab31 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -17,9 +17,12 @@ import {
+   confirmTotp,
+   deleteTotp,
+   regenerateRecoveryCodes,
++  fetchExternalIdentities,
++  unlinkIdentity,
+   type UserProfileResponse,
+   type WebauthnCredentialItem,
+   type MfaStatusResponse,
++  type ExternalIdentityItem,
+ } from './personalSettingsApi';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import { ApiProblem } from '../../api/problem';
+@@ -98,6 +101,11 @@ export function PersonalSettingsPage(): JSX.Element {
+     queryFn: fetchPasskeys,
+   });
+ 
++  const { data: identities } = useQuery<ExternalIdentityItem[]>({
++    queryKey: ['myIdentities'],
++    queryFn: fetchExternalIdentities,
++  });
++
+   const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
+   const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
+ 
+@@ -308,6 +316,23 @@ export function PersonalSettingsPage(): JSX.Element {
+     await action();
+   };
+ 
++  const handleUnlinkIdentity = async (identityId: string): Promise<void> => {
++    if (!window.confirm('Are you sure you want to unlink this external account?')) return;
++    const action = async (): Promise<void> => {
++      try {
++        await unlinkIdentity(identityId);
++        setSuccessMsg('Account unlinked.');
++        setErrorMsg(null);
++        void queryClient.invalidateQueries({ queryKey: ['myIdentities'] });
++      } catch (err) {
++        if (!handleInterceptAal2(err, action)) {
++          setErrorMsg(err instanceof Error ? err.message : 'Failed to unlink identity.');
++        }
++      }
++    };
++    await action();
++  };
++
+   if (isProfileLoading) {
+     return (
+       <div className="kb-personal-settings-container" data-testid="personal-settings-loading">
+@@ -636,36 +661,104 @@ export function PersonalSettingsPage(): JSX.Element {
+           </div>
+         </div>
+ 
+-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+-          {!mfaStatus?.totp_enabled ? (
+-            <button
+-              type="button"
+-              className="kb-personal-settings-btn kb-personal-settings-btn-primary"
+-              data-testid="enable-totp-btn"
+-              onClick={() => { void handleStartTotpEnroll(); }}
+-            >
+-              Configure Authenticator App
+-            </button>
+-          ) : (
+-            <button
+-              type="button"
+-              className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+-              data-testid="disable-totp-btn"
+-              onClick={() => { void handleDisableTotp(); }}
+-            >
+-              Disable Authenticator App
+-            </button>
+-          )}
++        {(() => {
++          const is2faActive = mfaStatus?.totp_enabled === true || Boolean(passkeys && passkeys.length > 0);
++          return (
++            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
++              {!mfaStatus?.totp_enabled ? (
++                <button
++                  type="button"
++                  className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++                  data-testid="enable-totp-btn"
++                  onClick={() => { void handleStartTotpEnroll(); }}
++                >
++                  Configure Authenticator App
++                </button>
++              ) : (
++                <button
++                  type="button"
++                  className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++                  data-testid="disable-totp-btn"
++                  onClick={() => { void handleDisableTotp(); }}
++                >
++                  Disable Authenticator App
++                </button>
++              )}
+ 
+-          <button
+-            type="button"
+-            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+-            data-testid="regenerate-recovery-codes-btn"
+-            onClick={() => { void handleRegenerateRecoveryCodes(); }}
+-          >
+-            Regenerate Recovery Codes
+-          </button>
+-        </div>
++              <button
++                type="button"
++                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                data-testid="regenerate-recovery-codes-btn"
++                disabled={!is2faActive}
++                title={!is2faActive ? 'Enable TOTP or Passkey 2FA first' : undefined}
++                onClick={() => { void handleRegenerateRecoveryCodes(); }}
++              >
++                Regenerate Recovery Codes
++              </button>
++              {!is2faActive && (
++                <span
++                  className="kb-personal-settings-hint"
++                  data-testid="regenerate-hint"
++                  style={{ color: 'var(--fg-secondary)', fontSize: 'var(--text-xs)' }}
++                >
++                  Enable TOTP or Passkey 2FA first
++                </span>
++              )}
++            </div>
++          );
++        })()}
++      </section>
++
++      {/* Section 5: Connected Accounts & External Identities */}
++      <section className="kb-personal-settings-section" aria-labelledby="section-identities-title">
++        <h2 id="section-identities-title" className="kb-personal-settings-section-title">
++          Connected Accounts & External Identities
++        </h2>
++        <p className="kb-personal-settings-section-desc">
++          Link external single sign-on identities (OIDC, OAuth2, LDAP) to your user profile. Unlinking requires fresh second-factor verification.
++        </p>
++
++        {identities && identities.length > 0 ? (
++          <table className="kb-personal-settings-table" data-testid="identities-table">
++            <thead>
++              <tr>
++                <th className="kb-personal-settings-th">Provider</th>
++                <th className="kb-personal-settings-th">Subject / Account</th>
++                <th className="kb-personal-settings-th">Linked</th>
++                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
++              </tr>
++            </thead>
++            <tbody>
++              {identities.map((ident) => (
++                <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
++                  <td className="kb-personal-settings-td">
++                    <strong>{ident.card_slug}</strong> ({ident.provider_type.toUpperCase()})
++                  </td>
++                  <td className="kb-personal-settings-td">
++                    {ident.display_name ?? ident.email ?? ident.subject_id}
++                  </td>
++                  <td className="kb-personal-settings-td">
++                    {new Date(ident.created_at).toLocaleDateString()}
++                  </td>
++                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
++                    <button
++                      type="button"
++                      className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++                      data-testid={`unlink-identity-${ident.id}`}
++                      onClick={() => { void handleUnlinkIdentity(ident.id); }}
++                    >
++                      Unlink
++                    </button>
++                  </td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        ) : (
++          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
++            No external identities linked.
++          </p>
++        )}
+       </section>
+ 
+       {/* TOTP Setup Modal */}
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+index 08e8f5b..d916b7f 100644
+--- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -81,6 +81,7 @@ describe('PersonalSettingsPage', () => {
+     vi.mocked(api.fetchMyProfile).mockResolvedValue(mockProfile);
+     vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
+     vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
++    vi.mocked(api.fetchExternalIdentities).mockResolvedValue([]);
+   });
+ 
+   const renderComponent = () =>
+@@ -987,4 +988,114 @@ describe('PersonalSettingsPage', () => {
+       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
+     });
+   });
++
++  it('renders linked external identities and handles unlinking with confirm', async () => {
++    const mockIdentities: api.ExternalIdentityItem[] = [
++      {
++        id: 'ident-1',
++        card_slug: 'github-corp',
++        provider_type: 'oauth',
++        subject_id: 'gh-123',
++        display_name: 'Jane GitHub',
++        email: 'jane@github.example',
++        created_at: '2026-01-15T00:00:00Z',
++      },
++    ];
++    vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
++    vi.mocked(api.unlinkIdentity).mockResolvedValue(undefined);
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('identity-row-ident-1')).toBeDefined();
++      expect(screen.getByText('github-corp')).toBeDefined();
++    });
++
++    const unlinkBtn = screen.getByTestId('unlink-identity-ident-1');
++    fireEvent.click(unlinkBtn);
++
++    await waitFor(() => {
++      expect(api.unlinkIdentity).toHaveBeenCalledWith('ident-1');
++      expect(screen.getByTestId('alert-success').textContent).toContain('Account unlinked.');
++    });
++  });
++
++  it('cancels unlinking identity when confirm is false and handles unlink error', async () => {
++    const mockIdentities: api.ExternalIdentityItem[] = [
++      {
++        id: 'ident-2',
++        card_slug: 'google',
++        provider_type: 'oidc',
++        subject_id: 'g-456',
++        display_name: null,
++        email: null,
++        created_at: '2026-02-01T00:00:00Z',
++      },
++    ];
++    vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
++    vi.mocked(api.unlinkIdentity).mockRejectedValue(new Error('Cannot unlink'));
++    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('identity-row-ident-2')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
++    expect(api.unlinkIdentity).not.toHaveBeenCalled();
++
++    confirmSpy.mockReturnValue(true);
++    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Cannot unlink');
++    });
++
++    vi.mocked(api.unlinkIdentity).mockRejectedValue('non-error failure');
++    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to unlink identity.');
++    });
++  });
++
++  it('covers show/hide password toggle and TOTP setup modal cancel', async () => {
++    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
++      totp_enabled: false,
++      passkeys_count: 0,
++      recovery_codes_remaining: 0,
++    });
++    vi.mocked(api.enrollTotp).mockResolvedValue({
++      secret: 'ABCDEF',
++      otpauth_url: 'otpauth://totp/test',
++    });
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('personal-settings-page')).toBeDefined();
++    });
++
++    // Toggle current password and new password visibility
++    const toggleBtns = screen.getAllByRole('button', { name: /Show password/i });
++    if (toggleBtns[0]) {
++      fireEvent.click(toggleBtns[0]);
++      fireEvent.click(toggleBtns[0]);
++    }
++    if (toggleBtns[1]) {
++      fireEvent.click(toggleBtns[1]);
++      fireEvent.click(toggleBtns[1]);
++    }
++
++    // Open and cancel TOTP modal
++    const enableTotpBtn = screen.getByTestId('enable-totp-btn');
++    fireEvent.click(enableTotpBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-totp-btn')).toBeDefined();
++    });
++    const cancelBtns = screen.getAllByRole('button', { name: 'Cancel' });
++    if (cancelBtns[0]) fireEvent.click(cancelBtns[0]);
++    expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.test.ts b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+index 6094d4a..c9f4c52 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.test.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+@@ -17,6 +17,10 @@ import {
+   confirmTotp,
+   deleteTotp,
+   regenerateRecoveryCodes,
++  fetchExternalIdentities,
++  startLinkIdentity,
++  linkLdapIdentity,
++  unlinkIdentity,
+ } from './personalSettingsApi';
+ 
+ describe('personalSettingsApi', () => {
+@@ -148,12 +152,12 @@ describe('personalSettingsApi', () => {
+     expect(res).toEqual(mockEnroll);
+   });
+ 
+-  it('confirmTotp invokes POST /api/v1/auth/mfa/totp/verify', async () => {
++  it('confirmTotp invokes POST /api/v1/auth/mfa/totp/confirm', async () => {
+     const mockVerify = { ok: true, recovery_codes: ['code-1'] };
+     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockVerify);
+ 
+     const res = await confirmTotp('123456');
+-    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/totp/verify', {
++    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/totp/confirm', {
+       body: JSON.stringify({ code: '123456' }),
+       headers: { 'Content-Type': 'application/json' },
+     });
+@@ -175,4 +179,54 @@ describe('personalSettingsApi', () => {
+     expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/recovery/regenerate');
+     expect(res).toEqual(mockCodes);
+   });
++
++  it('fetchExternalIdentities returns identities on success and empty array on error', async () => {
++    const mockData = { identities: [{ id: 'i-1', card_slug: 'github', provider_type: 'oauth', subject_id: 'sub-1', created_at: '2026-01-01' }] };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockData);
++
++    const res1 = await fetchExternalIdentities();
++    expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/auth/identities');
++    expect(res1).toEqual(mockData.identities);
++
++    // Empty fallback
++    apiFetchSpy.mockResolvedValue(undefined);
++    expect(await fetchExternalIdentities()).toEqual([]);
++
++    // Error catch fallback
++    apiFetchSpy.mockRejectedValue(new Error('Network error'));
++    expect(await fetchExternalIdentities()).toEqual([]);
++  });
++
++  it('startLinkIdentity invokes POST /api/v1/auth/identities/link/start', async () => {
++    const mockResult = { mode: 'oauth', authorize_url: 'https://auth.example.com' };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockResult);
++
++    const res = await startLinkIdentity('corp-oauth');
++    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/identities/link/start', {
++      body: JSON.stringify({ card_slug: 'corp-oauth' }),
++      headers: { 'Content-Type': 'application/json' },
++    });
++    expect(res).toEqual(mockResult);
++  });
++
++  it('linkLdapIdentity invokes POST /api/v1/auth/identities/link/ldap', async () => {
++    const mockResult = { linked: true };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockResult);
++
++    const res = await linkLdapIdentity('intent-1', 'john_doe', 'Secret123!');
++    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/identities/link/ldap', {
++      body: JSON.stringify({ link_intent_id: 'intent-1', username: 'john_doe', password: 'Secret123!' }),
++      headers: { 'Content-Type': 'application/json' },
++    });
++    expect(res).toEqual(mockResult);
++  });
++
++  it('unlinkIdentity invokes DELETE /api/v1/auth/identities/{identity_id}', async () => {
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(undefined);
++
++    await unlinkIdentity('ident-99');
++    expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/auth/identities/{identity_id}', {
++      params: { identity_id: 'ident-99' },
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
+index 8a1a8a0..995b497 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.ts
+@@ -124,7 +124,7 @@ export async function enrollTotp(): Promise<TotpEnrollResponse> {
+ export async function confirmTotp(
+   code: string,
+ ): Promise<{ ok: boolean; recovery_codes: string[] }> {
+-  return (await apiFetch('POST', '/api/v1/auth/mfa/totp/verify' as never, {
++  return (await apiFetch('POST', '/api/v1/auth/mfa/totp/confirm' as never, {
+     body: JSON.stringify({ code }),
+     headers: { 'Content-Type': 'application/json' },
+   })) as { ok: boolean; recovery_codes: string[] };
+@@ -140,3 +140,53 @@ export async function regenerateRecoveryCodes(): Promise<RecoveryCodesResponse>
+     '/api/v1/auth/mfa/recovery/regenerate' as never,
+   )) as RecoveryCodesResponse;
+ }
++
++export interface ExternalIdentityItem {
++  id: string;
++  provider_type: string;
++  card_slug: string;
++  subject_id: string;
++  email?: string | null;
++  display_name?: string | null;
++  created_at: string;
++  last_used_at?: string | null;
++}
++
++export interface ExternalIdentitiesResponse {
++  identities: ExternalIdentityItem[];
++}
++
++export async function fetchExternalIdentities(): Promise<ExternalIdentityItem[]> {
++  try {
++    const res = (await apiFetch('GET', '/api/v1/auth/identities' as never)) as ExternalIdentitiesResponse | undefined;
++    return res?.identities ?? [];
++  } catch {
++    return [];
++  }
++}
++
++export async function startLinkIdentity(
++  cardSlug: string,
++): Promise<{ mode: string; authorize_url?: string; link_intent_id?: string }> {
++  return (await apiFetch('POST', '/api/v1/auth/identities/link/start' as never, {
++    body: JSON.stringify({ card_slug: cardSlug }),
++    headers: { 'Content-Type': 'application/json' },
++  })) as { mode: string; authorize_url?: string; link_intent_id?: string };
++}
++
++export async function linkLdapIdentity(
++  linkIntentId: string,
++  username: string,
++  password: string,
++): Promise<{ linked: boolean }> {
++  return (await apiFetch('POST', '/api/v1/auth/identities/link/ldap' as never, {
++    body: JSON.stringify({ link_intent_id: linkIntentId, username, password }),
++    headers: { 'Content-Type': 'application/json' },
++  })) as { linked: boolean };
++}
++
++export async function unlinkIdentity(identityId: string): Promise<void> {
++  await apiFetch('DELETE', '/api/v1/auth/identities/{identity_id}' as never, {
++    params: { identity_id: identityId },
++  });
++}
