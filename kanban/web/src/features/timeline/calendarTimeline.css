@@ -792,6 +792,25 @@
   stroke-dasharray: 4 4;
 }
 
+.calendar-error-banner,
+.timeline-error-banner {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-md, 6px);
+  padding: 8px 12px;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.timeline-range-heading {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--fg-primary);
+  margin-left: 8px;
+}
+
 /* Mobile Timeline (< 767px): shrink left pane to 132px key rail */
 @media (max-width: 767px) {
   .timeline-left-pane {

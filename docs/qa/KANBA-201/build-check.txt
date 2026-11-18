@@ -1,0 +1,32 @@
+=== Backend Ruff Check ===
+All checks passed!
+
+=== Backend Mypy Strict ===
+Success: no issues found in 507 source files
+
+=== Frontend Typecheck & Lint & Build ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-cal-cycles-builder-6383f6e7/kanban/web
+> tsc -b --noEmit
+
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-cal-cycles-builder-6383f6e7/kanban/web
+> eslint . --max-warnings 0
+
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-cal-cycles-builder-6383f6e7/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 643 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.39 kB │ gzip:   0.27 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-CN-uG-jM.css            262.58 kB │ gzip:  38.62 kB
+dist/assets/index-DP_vgar5.js           1,578.89 kB │ gzip: 445.57 kB
+
+✓ built in 1.02s
+
+=== Zero Em-Dashes / En-Dashes Check ===

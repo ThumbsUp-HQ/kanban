@@ -1,0 +1,85 @@
+{
+  "ticket_id": "KANBA-201",
+  "feature": "Calendar & Timeline 14-day scoping, CSRF-secured scheduling mutations, rollback error banners, and accessible Cycles/Modules form controls",
+  "samples": {
+    "patch_issue_schedule_request": {
+      "method": "PATCH",
+      "endpoint": "/api/v1/issues/KAN-142",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-CSRF-Token": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+      },
+      "credentials": "same-origin",
+      "body": {
+        "start_date": "2026-11-12",
+        "due_date": "2026-11-19"
+      }
+    },
+    "patch_issue_schedule_response": {
+      "status": 200,
+      "json": {
+        "id": "019330a1-b842-7000-8000-000000000142",
+        "key": "KAN-142",
+        "summary": "Harden Multi-Card OIDC & LDAPS Auth Studio",
+        "start_date": "2026-11-12",
+        "due_date": "2026-11-19",
+        "updated_at": "2026-11-18T04:40:00Z"
+      }
+    },
+    "missing_capability_403_response": {
+      "status": 403,
+      "code": "INSUFFICIENT_CAPABILITY",
+      "detail": "Missing required capability: EDIT (requires Project Member, Project Admin, Workspace Admin, or Server Admin role)."
+    },
+    "missing_admin_capability_403_response": {
+      "status": 403,
+      "code": "INSUFFICIENT_CAPABILITY",
+      "detail": "Missing required capability: ADMIN (requires Project Admin, Workspace Admin, or Server Admin role)."
+    },
+    "create_cycle_request": {
+      "method": "POST",
+      "endpoint": "/api/v1/projects/KAN/cycles",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-CSRF-Token": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+      },
+      "credentials": "same-origin",
+      "body": {
+        "name": "Sprint 42",
+        "start_date": "2026-11-15",
+        "end_date": "2026-11-28"
+      }
+    },
+    "create_module_request": {
+      "method": "POST",
+      "endpoint": "/api/v1/projects/KAN/modules",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-CSRF-Token": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+      },
+      "credentials": "same-origin",
+      "body": {
+        "name": "Audit Service",
+        "status": "in_progress",
+        "start_date": "2026-11-15",
+        "target_date": "2026-11-28",
+        "description_markdown": "Audit ledger persistence"
+      }
+    },
+    "calendar_two_week_grid_sample": {
+      "anchor_date": "2026-11-18",
+      "range_start": "2026-11-15",
+      "range_end": "2026-11-28",
+      "range_label": "2026-11-15 - 2026-11-28",
+      "days_count": 14,
+      "zoom_px_per_day": {
+        "day": 64,
+        "week": 36,
+        "quarter": 16
+      }
+    }
+  }
+}

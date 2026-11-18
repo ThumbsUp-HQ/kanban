@@ -197,10 +197,10 @@ async def create_module(
     project_ref: str,
     body: ModuleCreate,
 ) -> ModuleResponse:
-    """Create a new module within a project (project ADMIN required)."""
+    """Create a new module within a project (project EDIT required)."""
     project = await get_project_or_404(session, caller, project_ref)
     require_modules_enabled(project)
-    await require_capability(session, caller, project.id, Capability.ADMIN)
+    await require_capability(session, caller, project.id, Capability.EDIT)
 
     # Check case-insensitive name uniqueness within project
     existing = (
@@ -307,9 +307,9 @@ async def patch_module(  # noqa: C901
     module_id: uuid.UUID,
     body: ModulePatch,
 ) -> ModuleResponse:
-    """Update a module partially (project ADMIN required)."""
+    """Update a module partially (project EDIT required)."""
     mod, project = await get_module_or_404(session, caller, module_id)
-    await require_capability(session, caller, project.id, Capability.ADMIN)
+    await require_capability(session, caller, project.id, Capability.EDIT)
 
     changes: dict[str, Any] = {}
 

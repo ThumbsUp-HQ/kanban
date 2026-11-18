@@ -203,11 +203,32 @@ async def require_capability(
         not_found()
 
     if (caps & required) != required:
+        missing_mask = required & ~caps
+        missing_caps = [name for cap, name in _ORDERED_CAPABILITIES if cap in missing_mask]
+        cap_names = ", ".join(missing_caps) if missing_caps else str(required)
+
+        if missing_mask & (Capability.ADMIN | Capability.DELETE | Capability.SHARE):
+            role_hint = "requires Project Admin, Workspace Admin, or Server Admin role"
+        elif missing_mask & (
+            Capability.EDIT | Capability.COMMENT | Capability.TRANSITION | Capability.LINK
+        ):
+            role_hint = (
+                "requires Project Member, Project Admin, Workspace Admin, or Server Admin role"
+            )
+        elif missing_mask & Capability.VIEW:
+            role_hint = (
+                "requires Project Viewer, Project Member, Project Admin, "
+                "Workspace Admin, or Server Admin role"
+            )
+        else:
+            role_hint = "requires Project Admin, Workspace Admin, or Server Admin role"
+
+        detail = f"Missing required capability: {cap_names} ({role_hint})."
         raise ProblemException(
             code="INSUFFICIENT_CAPABILITY",
             status=403,
             title="Insufficient Capability",
-            detail=None,
+            detail=detail,
         )
 
     return caps

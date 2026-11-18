@@ -529,11 +529,12 @@ async def test_case_7_security_permissions(
     """Case 7: Project-level role enforcement: member write (403), non-viewer read (404)."""
     admin = await make_user("admin7", workspace_role="WORKSPACE_ADMIN")
     member = await make_user("member7")
+    viewer = await make_user("viewer7")
     outsider = await make_user("outsider7")
     _ = await make_project(
         "SEC1",
         created_by=admin,
-        roles={admin: "PROJECT_ADMIN", member: "MEMBER"},
+        roles={admin: "PROJECT_ADMIN", member: "MEMBER", viewer: "VIEWER"},
     )
 
     admin_client = as_principal(admin)
@@ -541,29 +542,60 @@ async def test_case_7_security_permissions(
         await admin_client.post("/api/v1/projects/SEC1/cycles", json={"name": "Sec Sprint"})
     ).json()
 
-    # Member (EDIT capability, but not ADMIN) attempts write operations -> 403
-    member_client = as_principal(member)
-    post_403 = await member_client.post(
+    # Viewer (VIEW only, lacks EDIT) attempts write operations -> 403 with descriptive detail
+    viewer_client = as_principal(viewer)
+    post_403 = await viewer_client.post(
         "/api/v1/projects/SEC1/cycles",
-        json={"name": "Member Sprint"},
+        json={"name": "Viewer Sprint"},
     )
     contract_recorder.record("forbidden_403", post_403.request, post_403)
     assert post_403.status_code == 403, post_403.text
+    assert post_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
+    assert (
+        "Missing required capability: EDIT (requires Project Member, Project Admin, "
+        "Workspace Admin, or Server Admin role)."
+        in post_403.json()["detail"]
+    )
 
-    patch_403 = await member_client.patch(
+    patch_403 = await viewer_client.patch(
         f"/api/v1/cycles/{c1['id']}",
         json={"name": "Hacked"},
     )
     assert patch_403.status_code == 403
+    assert patch_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
 
-    start_403 = await member_client.post(f"/api/v1/cycles/{c1['id']}/start")
+    start_403 = await viewer_client.post(f"/api/v1/cycles/{c1['id']}/start")
     assert start_403.status_code == 403
 
-    comp_403 = await member_client.post(f"/api/v1/cycles/{c1['id']}/complete", json={})
+    comp_403 = await viewer_client.post(f"/api/v1/cycles/{c1['id']}/complete", json={})
     assert comp_403.status_code == 403
 
-    del_403 = await member_client.delete(f"/api/v1/cycles/{c1['id']}")
+    del_403 = await viewer_client.delete(f"/api/v1/cycles/{c1['id']}")
     assert del_403.status_code == 403
+
+    # Member (EDIT capability) can create and update cycles
+    member_client = as_principal(member)
+    post_member = await member_client.post(
+        "/api/v1/projects/SEC1/cycles",
+        json={"name": "Member Sprint"},
+    )
+    assert post_member.status_code == 201, post_member.text
+
+    patch_member = await member_client.patch(
+        f"/api/v1/cycles/{c1['id']}",
+        json={"name": "Sec Sprint Updated"},
+    )
+    assert patch_member.status_code == 200, patch_member.text
+
+    # But member cannot delete (requires ADMIN) -> 403 with ADMIN detail
+    del_member_403 = await member_client.delete(f"/api/v1/cycles/{c1['id']}")
+    assert del_member_403.status_code == 403
+    assert del_member_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
+    assert (
+        "Missing required capability: ADMIN (requires Project Admin, "
+        "Workspace Admin, or Server Admin role)."
+        in del_member_403.json()["detail"]
+    )
 
     # Outsider (no project access) attempts GET -> 404
     outsider_client = as_principal(outsider)

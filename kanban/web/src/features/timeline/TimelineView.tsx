@@ -147,6 +147,7 @@ interface TimelineMilestoneProps {
   issue: TimelineIssueItem;
   geom: BarGeometry;
   isOverdue: boolean;
+  onPointerDownMove?: (e: PointerEvent<HTMLDivElement>, issue: TimelineIssueItem) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>, issue: TimelineIssueItem) => void;
 }
 
@@ -154,6 +155,7 @@ function TimelineMilestone({
   issue,
   geom,
   isOverdue,
+  onPointerDownMove,
   onKeyDown,
 }: TimelineMilestoneProps): JSX.Element {
   const milestoneRef = useRef<HTMLDivElement>(null);
@@ -174,6 +176,7 @@ function TimelineMilestone({
       tabIndex={0}
       role="button"
       aria-label={`Milestone for ${issue.key} on ${geom.dueDate}`}
+      onPointerDown={(e) => { onPointerDownMove?.(e, issue); }}
       onKeyDown={(e) => { onKeyDown(e, issue); }}
       title={`${issue.key} milestone: ${geom.dueDate}`}
       data-issue-key={issue.key}
@@ -202,9 +205,11 @@ export function TimelineView({
   const [scheduleOverrides, setScheduleOverrides] = useState<
     Record<string, { start_date: string | null; due_date: string | null }>
   >({});
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   const { reschedule, announcement } = useRescheduleIssue({
     onOptimisticUpdate: (key, patch) => {
+      setScheduleError(null);
       setScheduleOverrides((prev) => ({
         ...prev,
         [key]: {
@@ -222,6 +227,12 @@ export function TimelineView({
         },
       }));
     },
+    onError: (_key, err) => {
+      setScheduleError(err.message || 'Failed to reschedule issue');
+    },
+    onSuccess: () => {
+      setScheduleError(null);
+    },
   });
 
   const effIssues = useMemo(() => {
@@ -238,28 +249,17 @@ export function TimelineView({
 
   const pxPerDay = ZOOM_PX_PER_DAY[zoomScale];
 
-  // Determine timeline start date
-  const timelineStartDate = useMemo(() => {
+  // Start of current 2-week window: Sunday of todayDate (or initialStartDate if provided)
+  const defaultAnchorStart = useMemo(() => {
     if (initialStartDate) return initialStartDate;
-    let earliest = todayDate;
-    for (const issue of effIssues) {
-      if (issue.start_date && issue.start_date < earliest) earliest = issue.start_date;
-      if (issue.due_date && issue.due_date < earliest) earliest = issue.due_date;
-    }
-    // Start 7 days prior to earliest scheduled item
-    return addDays(earliest, -7);
-  }, [initialStartDate, todayDate, effIssues]);
+    const dt = new Date(todayDate + 'T00:00:00Z');
+    const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
+    return addDays(todayDate, -dayOfWeek);
+  }, [initialStartDate, todayDate]);
 
-  // Determine number of days to render (minimum 60 days or latest date + 14 days)
-  const daysCount = useMemo(() => {
-    let latest = todayDate;
-    for (const issue of effIssues) {
-      if (issue.due_date && issue.due_date > latest) latest = issue.due_date;
-      if (issue.start_date && issue.start_date > latest) latest = issue.start_date;
-    }
-    const span = diffDays(latest, timelineStartDate) + 21;
-    return Math.max(60, span);
-  }, [todayDate, timelineStartDate, effIssues]);
+  const [anchorStart, setAnchorStart] = useState<string>(defaultAnchorStart);
+  const timelineStartDate = anchorStart;
+  const daysCount = 14;
 
   const canvasWidth = daysCount * pxPerDay;
   const canvasHeight = Math.max(effIssues.length * LIST_ROW_HEIGHT_PX, 400);
@@ -444,6 +444,8 @@ export function TimelineView({
           issueRef: issue.key,
           startDate: shifted.startDate,
           dueDate: shifted.dueDate,
+          originalStartDate: initialStart,
+          originalDueDate: initialDue,
         });
       } else if (mode === 'resize-start') {
         const newStart = resizeStartDate(initialStart, initialDue, deltaDays);
@@ -451,6 +453,8 @@ export function TimelineView({
           issueRef: issue.key,
           startDate: newStart,
           dueDate: initialDue,
+          originalStartDate: initialStart,
+          originalDueDate: initialDue,
         });
       } else {
         const newDue = resizeDueDate(initialStart, initialDue, deltaDays);
@@ -458,6 +462,8 @@ export function TimelineView({
           issueRef: issue.key,
           startDate: initialStart,
           dueDate: newDue,
+          originalStartDate: initialStart,
+          originalDueDate: initialDue,
         });
       }
     };
@@ -484,6 +490,8 @@ export function TimelineView({
           issueRef: issue.key,
           startDate: currentStart,
           dueDate: newDue,
+          originalStartDate: currentStart,
+          originalDueDate: currentDue,
         });
       }
     } else {
@@ -499,6 +507,8 @@ export function TimelineView({
           issueRef: issue.key,
           startDate: shifted.startDate,
           dueDate: shifted.dueDate,
+          originalStartDate: currentStart,
+          originalDueDate: currentDue,
         });
       }
     }
@@ -519,6 +529,8 @@ export function TimelineView({
       issueRef: issue.key,
       startDate: clickedDate,
       dueDate: clickedDate,
+      originalStartDate: null,
+      originalDueDate: null,
     });
   };
 
@@ -547,6 +559,50 @@ export function TimelineView({
       {/* Timeline Toolbar */}
       <div className="timeline-toolbar" role="toolbar" aria-label="Timeline navigation">
         <div className="timeline-toolbar-left">
+          <button
+            type="button"
+            className="calendar-toolbar-btn"
+            onClick={() => {
+              setAnchorStart((prev) => addDays(prev, -14));
+            }}
+            aria-label="Previous 2 weeks"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            className="calendar-toolbar-btn"
+            onClick={() => {
+              const dt = new Date(todayDate + 'T00:00:00Z');
+              const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
+              setAnchorStart(addDays(todayDate, -dayOfWeek));
+            }}
+            aria-label="Jump to today"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            className="calendar-toolbar-btn"
+            onClick={() => {
+              setAnchorStart((prev) => addDays(prev, 14));
+            }}
+            aria-label="Next 2 weeks"
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            className="calendar-toolbar-btn"
+            onClick={handleScrollToToday}
+            aria-label="Scroll to today"
+          >
+            Scroll to today
+          </button>
+          <span className="timeline-range-heading" aria-live="polite">
+            {`${anchorStart} - ${addDays(anchorStart, 13)}`}
+          </span>
+
           <div
             className="timeline-zoom-group"
             role="radiogroup"
@@ -580,15 +636,6 @@ export function TimelineView({
               Quarter
             </button>
           </div>
-
-          <button
-            type="button"
-            className="calendar-toolbar-btn"
-            onClick={handleScrollToToday}
-            aria-label="Scroll to today"
-          >
-            Today
-          </button>
         </div>
 
         <div className="timeline-toolbar-right">
@@ -602,6 +649,12 @@ export function TimelineView({
           </label>
         </div>
       </div>
+
+      {scheduleError && (
+        <div className="timeline-error-banner" role="alert" data-testid="timeline-error-banner">
+          {scheduleError}
+        </div>
+      )}
 
       {/* Split Grid: Left sticky rail + Right canvas */}
       <div className="timeline-split-container">
@@ -717,6 +770,7 @@ export function TimelineView({
                         issue={issue}
                         geom={geom}
                         isOverdue={isOverdue}
+                        onPointerDownMove={(e, iss) => { handlePointerDown(e, 'move', iss); }}
                         onKeyDown={handleBarKeyDown}
                       />
                     )}

@@ -7,6 +7,7 @@ import {
   formatMonthYear,
   getUtcTodayDate,
   buildMonthGrid,
+  buildTwoWeekGrid,
 } from './calendarGrid';
 
 describe('calendarGrid pure date math', () => {
@@ -99,5 +100,21 @@ describe('calendarGrid pure date math', () => {
     const cell03 = matrix.weeks[0]?.[3];
     expect(cell03?.date).toBe('2026-07-01');
     expect(cell03?.isCurrentMonth).toBe(true);
+  });
+
+  it('builds two-week grid returning 14 continuous days starting on Sunday', () => {
+    // 2026-11-18 is Wednesday. Preceding Sunday is 2026-11-15.
+    const cells = buildTwoWeekGrid('2026-11-18', '2026-11-18');
+    expect(cells).toHaveLength(14);
+    expect(cells[0]?.date).toBe('2026-11-15');
+    expect(cells[13]?.date).toBe('2026-11-28');
+
+    const todayCell = cells.find((c) => c.date === '2026-11-18');
+    expect(todayCell?.isToday).toBe(true);
+    expect(todayCell?.dayOfMonth).toBe(18);
+
+    const nonTodayCell = cells.find((c) => c.date === '2026-11-15');
+    expect(nonTodayCell?.isToday).toBe(false);
+    expect(nonTodayCell?.dayOfMonth).toBe(15);
   });
 });

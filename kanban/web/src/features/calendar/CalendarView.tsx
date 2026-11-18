@@ -9,12 +9,12 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
 import type { ViewComponentProps } from '../views/viewRegistry';
 import type { IssueItem } from '../views/viewsApi';
 import {
-  buildMonthGrid,
+  buildTwoWeekGrid,
   addDays,
   diffDays,
   dateToEpochDays,
   epochDaysToDate,
-  type CalendarCell,
+  type CalendarDayCell,
 } from './calendarGrid';
 import { useRescheduleIssue } from '../timeline/scheduleMutation';
 import '../timeline/calendarTimeline.css';
@@ -24,21 +24,6 @@ export interface CalendarViewProps extends ViewComponentProps {
   initialMonth?: number;
   today?: string;
 }
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -53,27 +38,19 @@ export function CalendarView({
     return today ?? new Date().toISOString().slice(0, 10);
   }, [today]);
 
-  // Determine initial year and month
-  const defaultYearMonth = useMemo(() => {
+  // Determine initial anchor date for the 2-week view
+  const defaultAnchorDate = useMemo(() => {
+    if (today) return today;
     if (initialYear && initialMonth) {
-      return { year: initialYear, month: initialMonth };
+      return `${String(initialYear)}-${String(initialMonth).padStart(2, '0')}-01`;
     }
     const firstDue = issues.find((i: IssueItem) => Boolean(i.due_date))?.due_date;
-    if (firstDue) {
-      return {
-        year: parseInt(firstDue.slice(0, 4), 10),
-        month: parseInt(firstDue.slice(5, 7), 10),
-      };
-    }
-    const now = new Date();
-    return {
-      year: now.getUTCFullYear(),
-      month: now.getUTCMonth() + 1,
-    };
-  }, [initialYear, initialMonth, issues]);
+    if (firstDue) return firstDue;
+    return new Date().toISOString().slice(0, 10);
+  }, [initialYear, initialMonth, issues, today]);
 
-  const [year, setYear] = useState<number>(defaultYearMonth.year);
-  const [month, setMonth] = useState<number>(defaultYearMonth.month);
+  const [anchorDate, setAnchorDate] = useState<string>(defaultAnchorDate);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [isUnscheduledOpen, setIsUnscheduledOpen] = useState<boolean>(false);
   const [popoverDate, setPopoverDate] = useState<string | null>(null);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
@@ -85,6 +62,7 @@ export function CalendarView({
 
   const { reschedule, announcement } = useRescheduleIssue({
     onOptimisticUpdate: (key, patch) => {
+      setScheduleError(null);
       setScheduleOverrides((prev) => ({
         ...prev,
         [key]: {
@@ -101,6 +79,12 @@ export function CalendarView({
           due_date: original.dueDate,
         },
       }));
+    },
+    onError: (_key, err) => {
+      setScheduleError(err.message || 'Failed to reschedule issue');
+    },
+    onSuccess: () => {
+      setScheduleError(null);
     },
   });
 
@@ -134,9 +118,13 @@ export function CalendarView({
     return { issuesByDate: byDate, unscheduledIssues: unscheduled };
   }, [effIssues]);
 
-  const monthGrid = useMemo(() => {
-    return buildMonthGrid(year, month, todayDate);
-  }, [year, month, todayDate]);
+  const twoWeekGrid = useMemo(() => {
+    return buildTwoWeekGrid(anchorDate, todayDate);
+  }, [anchorDate, todayDate]);
+
+  const rangeStart = twoWeekGrid[0]?.date ?? anchorDate;
+  const rangeEnd = twoWeekGrid[13]?.date ?? anchorDate;
+  const rangeLabel = `${rangeStart} - ${rangeEnd}`;
 
   // Mobile week strip: compute 7 days around mobileSelectedDate
   const mobileWeekDays = useMemo(() => {
@@ -159,33 +147,19 @@ export function CalendarView({
     return days;
   }, [mobileSelectedDate]);
 
-  // Month navigation handlers
-  const handlePrevMonth = () => {
-    setMonth((m) => {
-      if (m === 1) {
-        setYear((y) => y - 1);
-        return 12;
-      }
-      return m - 1;
-    });
+  // 2-week navigation handlers
+  const handlePrev = () => {
+    setAnchorDate(addDays(rangeStart, -14));
     setPopoverDate(null);
   };
 
-  const handleNextMonth = () => {
-    setMonth((m) => {
-      if (m === 12) {
-        setYear((y) => y + 1);
-        return 1;
-      }
-      return m + 1;
-    });
+  const handleNext = () => {
+    setAnchorDate(addDays(rangeStart, 14));
     setPopoverDate(null);
   };
 
   const handleToday = () => {
-    const now = new Date();
-    setYear(now.getUTCFullYear());
-    setMonth(now.getUTCMonth() + 1);
+    setAnchorDate(todayDate);
     setMobileSelectedDate(todayDate);
     setPopoverDate(null);
   };
@@ -211,6 +185,8 @@ export function CalendarView({
       issueRef: issue.key,
       dueDate: targetDate,
       startDate: newStartDate,
+      originalStartDate: issue.start_date ?? null,
+      originalDueDate: issue.due_date ?? null,
     });
   };
 
@@ -278,9 +254,6 @@ export function CalendarView({
     return 'priorityMedium';
   };
 
-  const monthName = String(MONTH_NAMES[(month - 1) % 12]);
-  const monthLabel = `${monthName} ${String(year)}`;
-
   return (
     <div className="calendar-view" data-testid="calendar-view">
       {/* Calendar Toolbar */}
@@ -289,8 +262,8 @@ export function CalendarView({
           <button
             type="button"
             className="calendar-toolbar-btn"
-            onClick={handlePrevMonth}
-            aria-label="Previous month"
+            onClick={handlePrev}
+            aria-label="Previous 2 weeks"
           >
             Prev
           </button>
@@ -305,13 +278,13 @@ export function CalendarView({
           <button
             type="button"
             className="calendar-toolbar-btn"
-            onClick={handleNextMonth}
-            aria-label="Next month"
+            onClick={handleNext}
+            aria-label="Next 2 weeks"
           >
             Next
           </button>
           <span className="calendar-month-heading" aria-live="polite">
-            {monthLabel}
+            {rangeLabel}
           </span>
         </div>
 
@@ -328,14 +301,20 @@ export function CalendarView({
         </div>
       </div>
 
+      {scheduleError && (
+        <div className="calendar-error-banner" role="alert" data-testid="calendar-error-banner">
+          {scheduleError}
+        </div>
+      )}
+
       {announcement && (
         <div className="calendar-live-announcement sr-only" role="status" aria-live="polite">
           {announcement}
         </div>
       )}
 
-      {/* 7-column Month Grid (Desktop & Tablet) */}
-      <div className="calendar-month-grid" role="grid" aria-label={`Month grid for ${monthLabel}`}>
+      {/* 7-column 2-Week Grid (14 Day Cells, Desktop & Tablet) */}
+      <div className="calendar-month-grid" role="grid" aria-label={`2-week grid for ${rangeLabel}`}>
         {/* Weekday headers */}
         {WEEKDAY_NAMES.map((name) => (
           <div key={name} className="calendar-weekday-header" role="columnheader">
@@ -343,8 +322,8 @@ export function CalendarView({
           </div>
         ))}
 
-        {/* 42 Day cells */}
-        {monthGrid.weeks.flat().map((cell: CalendarCell) => {
+        {/* 14 Day cells */}
+        {twoWeekGrid.map((cell: CalendarDayCell) => {
           const cellIssues = issuesByDate[cell.date] ?? [];
           const visibleIssues = cellIssues.slice(0, 3);
           const hiddenCount = cellIssues.length - 3;

@@ -47,13 +47,15 @@ describe('CalendarView', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    document.cookie = 'kb_csrf=test-csrf-token-123; Path=/';
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/';
   });
 
-  it('renders month grid for November 2026 and places KAN-142 in cell 2026-11-18', () => {
+  it('renders 2-week grid for November 2026 and places KAN-142 in cell 2026-11-18', () => {
     const { container } = render(
       <CalendarView
         issues={TEST_ISSUES}
@@ -64,11 +66,11 @@ describe('CalendarView', () => {
       />
     );
 
-    expect(screen.getByText('November 2026')).toBeDefined();
+    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
 
-    // Check that 42 day cells are rendered
+    // Check that 14 day cells are rendered
     const dayCells = container.querySelectorAll('.calendar-day-cell');
-    expect(dayCells.length).toBe(42);
+    expect(dayCells.length).toBe(14);
 
     // KAN-142 is in cell 2026-11-18
     const cell18 = container.querySelector('[data-date="2026-11-18"]');
@@ -85,9 +87,10 @@ describe('CalendarView', () => {
     }
   });
 
-  it('infers initial year and month from first issue due date when initialYear is omitted', () => {
+  it('infers initial anchor date from first issue due date when initialYear is omitted', () => {
     render(<CalendarView issues={TEST_ISSUES} projectKey="KAN" />);
-    expect(screen.getByText('November 2026')).toBeDefined();
+    // First issue with due_date is KAN-100 (2026-11-10). Week starts Sunday 2026-11-08.
+    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
   });
 
   it('navigates Prev, Next, and Today in toolbar', () => {
@@ -101,26 +104,20 @@ describe('CalendarView', () => {
       />
     );
 
-    expect(screen.getByText('November 2026')).toBeDefined();
+    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
 
-    // Click Next
-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-    expect(screen.getByText('December 2026')).toBeDefined();
+    // Click Next (advances 14 days)
+    fireEvent.click(screen.getByRole('button', { name: 'Next 2 weeks' }));
+    expect(screen.getByText('2026-11-22 - 2026-12-05')).toBeDefined();
 
-    // Click Prev twice -> October 2026
-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
-    expect(screen.getByText('October 2026')).toBeDefined();
+    // Click Prev twice -> 2026-10-25 - 2026-11-07
+    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
+    expect(screen.getByText('2026-10-25 - 2026-11-07')).toBeDefined();
 
-    // Click Today
+    // Click Today -> returns to 2026-11-08 - 2026-11-21
     fireEvent.click(screen.getByRole('button', { name: 'Jump to today' }));
-    const now = new Date();
-    const expectedMonthYear = now.toLocaleDateString('en-US', {
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
-    expect(screen.getByText(expectedMonthYear)).toBeDefined();
+    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
   });
 
   it('opens and closes Unscheduled tray listing issues lacking due_date', () => {
@@ -308,6 +305,8 @@ describe('CalendarView', () => {
     expect(pill142?.classList.contains('calendar-issue-pill--overdue')).toBe(false);
 
     // KAN-143 is due 2026-11-05 (before today) but state.group is 'completed' -> NOT overdue
+    // In 2-week view anchored at 2026-11-08 - 2026-11-21, navigate Prev to see 2026-11-05
+    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
     const pill143 = container.querySelector('[data-issue-key="KAN-143"]');
     expect(pill143?.classList.contains('calendar-issue-pill--overdue')).toBe(false);
   });
@@ -360,7 +359,9 @@ describe('CalendarView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ due_date: '2026-11-20' }),
     });
   });
@@ -402,7 +403,9 @@ describe('CalendarView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-12', due_date: '2026-11-19' }),
     });
   });
@@ -464,7 +467,7 @@ describe('CalendarView', () => {
     }
   });
 
-  it('navigates year boundaries (January to December, December to January)', () => {
+  it('navigates 2-week windows across year boundaries', () => {
     // Start in January 2026
     const { unmount } = render(
       <CalendarView
@@ -472,15 +475,16 @@ describe('CalendarView', () => {
         projectKey="KAN"
         initialYear={2026}
         initialMonth={1}
-        today="2026-01-15"
+        today="2026-01-05"
       />
     );
 
-    expect(screen.getByText('January 2026')).toBeDefined();
+    // Week starts Sunday 2026-01-04 to 2026-01-17
+    expect(screen.getByText('2026-01-04 - 2026-01-17')).toBeDefined();
 
     // Click Prev -> December 2025
-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
-    expect(screen.getByText('December 2025')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
+    expect(screen.getByText('2025-12-21 - 2026-01-03')).toBeDefined();
 
     unmount();
 
@@ -491,15 +495,16 @@ describe('CalendarView', () => {
         projectKey="KAN"
         initialYear={2026}
         initialMonth={12}
-        today="2026-12-15"
+        today="2026-12-28"
       />
     );
 
-    expect(screen.getByText('December 2026')).toBeDefined();
+    // Week starts Sunday 2026-12-27 to 2027-01-09
+    expect(screen.getByText('2026-12-27 - 2027-01-09')).toBeDefined();
 
     // Click Next -> January 2027
-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-    expect(screen.getByText('January 2027')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Next 2 weeks' }));
+    expect(screen.getByText('2027-01-10 - 2027-01-23')).toBeDefined();
   });
 
   it('handles keyboard Alt+ArrowLeft, Alt+ArrowUp, Alt+ArrowDown, and ignores non-alt keys', async () => {

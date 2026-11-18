@@ -1,0 +1,46 @@
+=== Backend Pytest Results ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-cal-cycles-builder-6383f6e7/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-cal-cycles-builder-6383f6e7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 15 items
+
+kanban/tests/api/test_cycles.py::test_case_1_positive_crud_and_status_filtering PASSED [  6%]
+kanban/tests/api/test_cycles.py::test_case_2_status_transitions_and_concurrency PASSED [ 13%]
+kanban/tests/api/test_cycles.py::test_case_3_completed_immutability_and_delete PASSED [ 20%]
+kanban/tests/api/test_cycles.py::test_case_4_rollover_on_complete PASSED [ 26%]
+kanban/tests/api/test_cycles.py::test_case_5_rollover_error_handling PASSED [ 33%]
+kanban/tests/api/test_cycles.py::test_case_6_issue_membership_put_and_delete PASSED [ 40%]
+kanban/tests/api/test_cycles.py::test_case_7_security_permissions PASSED [ 46%]
+kanban/tests/api/test_cycles.py::test_case_8_boundaries_and_feature_toggle PASSED [ 53%]
+kanban/tests/api/test_cycles.py::test_case_9_not_found_branches_and_conflicts PASSED [ 60%]
+kanban/tests/api/test_modules.py::test_case_1_positive_module_lifecycle_and_assignment PASSED [ 66%]
+kanban/tests/api/test_modules.py::test_case_2_feature_flag_modules_disabled PASSED [ 73%]
+kanban/tests/api/test_modules.py::test_case_3_security_anti_enumeration_and_rbac PASSED [ 80%]
+kanban/tests/api/test_modules.py::test_case_4_boundary_validations_and_limits PASSED [ 86%]
+kanban/tests/api/test_modules.py::test_case_5_delete_cascade_and_activity PASSED [ 93%]
+kanban/tests/api/test_modules.py::test_case_6_patch_and_granular_endpoints PASSED [100%]
+
+============================== 15 passed in 8.97s ==============================
+
+=== Frontend Vitest Results ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-cal-cycles-builder-6383f6e7/kanban/web
+
+ ✓ src/features/timeline/timelineGeometry.test.ts (16 tests) 13ms
+ ✓ src/features/calendar/calendarGrid.test.ts (9 tests) 26ms
+ ✓ src/features/timeline/scheduleMutation.test.tsx (7 tests) 54ms
+ ✓ src/features/calendar/CalendarView.test.tsx (16 tests) 693ms
+ ✓ src/features/timeline/TimelineView.test.tsx (19 tests) 796ms
+ ✓ src/app/routes.test.tsx (19 tests) 1647ms
+   ✓ routes and AppShell integration (13)
+     ✓ renders AppShell with sidebar items, breadcrumb, and layout=board selection 355ms
+     ✓ renders various project routes, auth routes, and dev story routes 513ms
+
+ Test Files  6 passed (6)
+      Tests  86 passed (86)
+   Start at  23:47:07
+   Duration  3.42s (environment 50%, tests 35%, import 10%, transform 5%, worker 1%)
+

@@ -45,9 +45,9 @@ describe('timelineGeometry', () => {
   });
 
   it('snaps pointer delta to integer days across zoom scales', () => {
-    expect(snapPointerDeltaToDays(32, ZOOM_PX_PER_DAY.week)).toBe(2);
-    expect(snapPointerDeltaToDays(-16, ZOOM_PX_PER_DAY.week)).toBe(-1);
-    expect(snapPointerDeltaToDays(36, ZOOM_PX_PER_DAY.day)).toBe(1);
+    expect(snapPointerDeltaToDays(72, ZOOM_PX_PER_DAY.week)).toBe(2);
+    expect(snapPointerDeltaToDays(-36, ZOOM_PX_PER_DAY.week)).toBe(-1);
+    expect(snapPointerDeltaToDays(64, ZOOM_PX_PER_DAY.day)).toBe(1);
   });
 
   it('shifts both dates together on range shift', () => {

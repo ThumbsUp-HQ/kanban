@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useState } from 'react';
+import { getCsrfToken } from '../../api/client';
 import type { IssueItem } from '../views/viewsApi';
 
 export interface SchedulePatch {
@@ -16,6 +17,43 @@ export interface UseRescheduleIssueOptions {
   onRollback?: (key: string, original: { startDate: string | null; dueDate: string | null }) => void;
   onSuccess?: (key: string, updated: IssueItem) => void;
   onError?: (key: string, error: Error) => void;
+}
+
+export interface RescheduleTarget {
+  issueRef: string;
+  dueDate?: string | null;
+  startDate?: string | null;
+  originalStartDate?: string | null;
+  originalDueDate?: string | null;
+  originalDates?: { startDate: string | null; dueDate: string | null };
+  etag?: string;
+}
+
+/**
+ * Ensures a valid CSRF token is available in document cookie or session bootstrap cache.
+ */
+export async function ensureCsrfToken(): Promise<string | null> {
+  const existing = getCsrfToken();
+  if (existing) {
+    return existing;
+  }
+  try {
+    const res = await fetch('/api/v1/auth/session', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    const data = (await res.json()) as { csrf_token?: string };
+    if (data.csrf_token) {
+      if (typeof document !== 'undefined') {
+        document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; Path=/; SameSite=Lax`;
+      }
+      return data.csrf_token;
+    }
+  } catch {
+    // Ignore bootstrap failures in offline unit tests
+  }
+  return getCsrfToken();
 }
 
 /**
@@ -34,10 +72,15 @@ export async function patchIssueSchedule(
     body.due_date = patch.dueDate;
   }
 
+  const csrfToken = (await ensureCsrfToken()) ?? getCsrfToken();
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
   if (etag) {
     headers['If-Match'] = etag;
   }
@@ -45,6 +88,7 @@ export async function patchIssueSchedule(
   const res = await fetch(`/api/v1/issues/${encodeURIComponent(issueKey)}`, {
     method: 'PATCH',
     headers,
+    credentials: 'same-origin',
     body: JSON.stringify(body),
   });
 
@@ -84,6 +128,7 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
     async (
       issueOrTarget:
         | (Pick<IssueItem, 'key' | 'start_date' | 'due_date'> & { etag?: string })
+        | RescheduleTarget
         | {
             issueRef: string;
             dueDate?: string | null | undefined;
@@ -110,12 +155,18 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
         etag = iss.etag;
       } else {
         const target = issueOrTarget as {
-          issueRef: string;
-          dueDate?: string | null;
+          issueRef?: string;
+          key?: string;
           startDate?: string | null;
+          dueDate?: string | null;
+          start_date?: string | null;
+          due_date?: string | null;
+          originalStartDate?: string | null;
+          originalDueDate?: string | null;
+          originalDates?: { startDate: string | null; dueDate: string | null };
           etag?: string;
         };
-        key = target.issueRef;
+        key = target.issueRef ?? target.key ?? '';
         patch = {};
         if (target.startDate !== undefined) {
           patch.startDate = target.startDate;
@@ -123,10 +174,28 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
         if (target.dueDate !== undefined) {
           patch.dueDate = target.dueDate;
         }
-        originalDates = {
-          startDate: target.startDate ?? null,
-          dueDate: target.dueDate ?? null,
-        };
+
+        if (target.originalDates) {
+          originalDates = {
+            startDate: target.originalDates.startDate,
+            dueDate: target.originalDates.dueDate,
+          };
+        } else if (target.originalStartDate !== undefined || target.originalDueDate !== undefined) {
+          originalDates = {
+            startDate: target.originalStartDate ?? null,
+            dueDate: target.originalDueDate ?? null,
+          };
+        } else if (target.start_date !== undefined || target.due_date !== undefined) {
+          originalDates = {
+            startDate: target.start_date ?? null,
+            dueDate: target.due_date ?? null,
+          };
+        } else {
+          originalDates = {
+            startDate: null,
+            dueDate: null,
+          };
+        }
         etag = target.etag;
       }
 
@@ -137,6 +206,11 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
       try {
         const updated = await patchIssueSchedule(key, patch, etag);
         setAnnouncement(`Rescheduled ${key} successfully.`);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('kb:issue-updated', { detail: { key, updated } }),
+          );
+        }
         options.onSuccess?.(key, updated);
         return true;
       } catch (err) {

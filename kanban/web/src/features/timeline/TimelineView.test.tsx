@@ -74,10 +74,12 @@ describe('TimelineView', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    document.cookie = 'kb_csrf=test-csrf-token-123; Path=/';
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/';
   });
 
   it('renders left sticky pane with work items and links to peek', () => {
@@ -164,9 +166,9 @@ describe('TimelineView', () => {
       toJSON: () => ({}),
     });
 
-    // Click at 64px (4 days offset at 16px/day: 2026-11-01 + 4 = 2026-11-05)
+    // Click at 72px (2 days offset at 36px/day: 2026-11-01 + 2 = 2026-11-03)
     await act(async () => {
-      fireEvent.click(trackRow999, { clientX: 64 });
+      fireEvent.click(trackRow999, { clientX: 72 });
       await Promise.resolve();
     });
 
@@ -175,8 +177,10 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
-      body: JSON.stringify({ start_date: '2026-11-05', due_date: '2026-11-05' }),
+      credentials: 'same-origin',
+      body: JSON.stringify({ start_date: '2026-11-03', due_date: '2026-11-03' }),
     });
   });
 
@@ -315,7 +319,9 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-13' }),
     });
 
@@ -330,7 +336,9 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-14' }),
     });
   });
@@ -384,10 +392,10 @@ describe('TimelineView', () => {
 
     const bar100 = screen.getByTestId('timeline-bar-KAN-100');
 
-    // Pointer down at 100px, pointer up at 132px (+32px = +2 days at 16px/day)
+    // Pointer down at 100px, pointer up at 172px (+72px = +2 days at 36px/day)
     fireEvent.pointerDown(bar100, { clientX: 100 });
     await act(async () => {
-      fireEvent.pointerUp(window, { clientX: 132 });
+      fireEvent.pointerUp(window, { clientX: 172 });
       await Promise.resolve();
     });
 
@@ -396,7 +404,9 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-07', due_date: '2026-11-14' }),
     });
   });
@@ -419,11 +429,11 @@ describe('TimelineView', () => {
       />
     );
 
-    // Left handle resize: start_date shifts +1 day (16px)
+    // Left handle resize: start_date shifts +1 day (36px at week zoom)
     const handleLeft = screen.getByTestId('handle-left-KAN-100');
     fireEvent.pointerDown(handleLeft, { clientX: 50 });
     await act(async () => {
-      fireEvent.pointerUp(window, { clientX: 66 });
+      fireEvent.pointerUp(window, { clientX: 86 });
       await Promise.resolve();
     });
 
@@ -432,15 +442,17 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-12' }),
     });
 
-    // Right handle resize: due_date shifts +2 days (32px)
+    // Right handle resize: due_date shifts +2 days (72px at week zoom)
     const handleRight = screen.getByTestId('handle-right-KAN-100');
     fireEvent.pointerDown(handleRight, { clientX: 200 });
     await act(async () => {
-      fireEvent.pointerUp(window, { clientX: 232 });
+      fireEvent.pointerUp(window, { clientX: 272 });
       await Promise.resolve();
     });
 
@@ -449,7 +461,9 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-14' }),
     });
   });
@@ -489,7 +503,9 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-04', due_date: '2026-11-11' }),
     });
 
@@ -504,7 +520,9 @@ describe('TimelineView', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-04', due_date: '2026-11-10' }),
     });
   });

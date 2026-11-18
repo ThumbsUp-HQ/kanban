@@ -80,6 +80,39 @@ export function getUtcTodayDate(): string {
 }
 
 /**
+ * Builds an exact 14-day (2 weeks x 7 columns) grid starting on Sunday of anchorDate's week.
+ */
+export function buildTwoWeekGrid(
+  anchorDate: string,
+  todayDate: string = getUtcTodayDate(),
+): CalendarDayCell[] {
+  const dt = new Date(anchorDate + 'T00:00:00Z');
+  const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
+  const anchorEpoch = isNaN(dt.getTime())
+    ? Math.floor(Date.now() / MS_PER_DAY)
+    : Math.floor(dt.getTime() / MS_PER_DAY);
+  const startEpoch = anchorEpoch - dayOfWeek;
+
+  const cells: CalendarDayCell[] = [];
+  for (let i = 0; i < 14; i += 1) {
+    const cellDt = new Date((startEpoch + i) * MS_PER_DAY);
+    const cellYear = cellDt.getUTCFullYear();
+    const cellMonth = cellDt.getUTCMonth() + 1;
+    const cellDay = cellDt.getUTCDate();
+    const dateStr = `${String(cellYear)}-${String(cellMonth).padStart(2, '0')}-${String(cellDay).padStart(2, '0')}`;
+
+    cells.push({
+      date: dateStr,
+      dayOfMonth: cellDay,
+      isCurrentMonth: true,
+      isToday: dateStr === todayDate,
+    });
+  }
+
+  return cells;
+}
+
+/**
  * Builds an exact 42-day (6 weeks x 7 columns) month grid starting on Sunday.
  */
 export function buildMonthGrid(

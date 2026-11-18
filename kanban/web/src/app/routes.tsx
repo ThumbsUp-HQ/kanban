@@ -500,7 +500,13 @@ export interface ProjectCycleItem {
   end_date?: string | null;
 }
 
-function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Element {
+function ProjectCyclesViewInner({
+  projectKey,
+  capabilities: propCapabilities,
+}: {
+  projectKey: string;
+  capabilities?: string[];
+}): JSX.Element {
   const key = projectKey;
   const queryClient = useQueryClient();
 
@@ -508,6 +514,32 @@ function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Ele
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data: projectData } = useQuery<{ capabilities?: string[] }>({
+    queryKey: ['projects', key, 'detail'],
+    queryFn: async () => {
+      try {
+        const res = await apiFetch('GET', '/api/v1/projects/{project_ref}' as never, {
+          params: { project_ref: key },
+        });
+        if (
+          res &&
+          typeof res === 'object' &&
+          'capabilities' in res &&
+          Array.isArray(res.capabilities)
+        ) {
+          return res as { capabilities: string[] };
+        }
+      } catch {
+        // fallback
+      }
+      return { capabilities: ['EDIT', 'ADMIN'] };
+    },
+    enabled: propCapabilities === undefined,
+  });
+
+  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
+  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
 
   const { data: cycles = [], isLoading } = useQuery<ProjectCycleItem[]>({
     queryKey: ['projects', key, 'cycles'],
@@ -556,49 +588,60 @@ function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Ele
         <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
-        <h3>Create New Cycle</h3>
-        {errorMsg && (
-          <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
-            {errorMsg}
+      {canCreate && (
+        <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
+          <h3>Create New Cycle</h3>
+          {errorMsg && (
+            <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
+              {errorMsg}
+            </div>
+          )}
+          <div className="kb-form-row">
+            <label className="kb-form-field">
+              <span className="kb-form-label">Cycle Name</span>
+              <input
+                type="text"
+                className="kb-form-input"
+                data-testid="new-cycle-name-input"
+                placeholder="Sprint / Cycle name..."
+                value={newName}
+                onChange={(e) => { setNewName(e.target.value); }}
+                required
+              />
+            </label>
+            <label className="kb-form-field">
+              <span className="kb-form-label">Start Date</span>
+              <input
+                type="date"
+                className="kb-form-input"
+                data-testid="new-cycle-start-input"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); }}
+                title="Start date"
+              />
+            </label>
+            <label className="kb-form-field">
+              <span className="kb-form-label">End Date</span>
+              <input
+                type="date"
+                className="kb-form-input"
+                data-testid="new-cycle-end-input"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); }}
+                title="End date"
+              />
+            </label>
+            <button
+              type="submit"
+              className="kb-btn-primary"
+              data-testid="create-cycle-btn"
+              disabled={createMutation.isPending || !newName.trim()}
+            >
+              {createMutation.isPending ? 'Creating...' : '+ Create Cycle'}
+            </button>
           </div>
-        )}
-        <div className="kb-form-row">
-          <input
-            type="text"
-            className="kb-form-input"
-            data-testid="new-cycle-name-input"
-            placeholder="Sprint / Cycle name..."
-            value={newName}
-            onChange={(e) => { setNewName(e.target.value); }}
-            required
-          />
-          <input
-            type="date"
-            className="kb-form-input"
-            data-testid="new-cycle-start-input"
-            value={startDate}
-            onChange={(e) => { setStartDate(e.target.value); }}
-            title="Start date"
-          />
-          <input
-            type="date"
-            className="kb-form-input"
-            data-testid="new-cycle-end-input"
-            value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); }}
-            title="End date"
-          />
-          <button
-            type="submit"
-            className="kb-btn-primary"
-            data-testid="create-cycle-btn"
-            disabled={createMutation.isPending || !newName.trim()}
-          >
-            {createMutation.isPending ? 'Creating...' : '+ Create Cycle'}
-          </button>
-        </div>
-      </form>
+        </form>
+      )}
 
       <div className="kb-cycles-list-wrapper">
         {isLoading && <p>Loading cycles...</p>}
@@ -649,13 +692,48 @@ export interface ProjectModuleItem {
   description_markdown?: string;
 }
 
-function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.Element {
+function ProjectModulesViewInner({
+  projectKey,
+  capabilities: propCapabilities,
+}: {
+  projectKey: string;
+  capabilities?: string[];
+}): JSX.Element {
   const key = projectKey;
   const queryClient = useQueryClient();
 
   const [newName, setNewName] = useState('');
+  const [status, setStatus] = useState('planned');
+  const [startDate, setStartDate] = useState('');
+  const [targetDate, setTargetDate] = useState('');
   const [description, setDescription] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data: projectData } = useQuery<{ capabilities?: string[] }>({
+    queryKey: ['projects', key, 'detail'],
+    queryFn: async () => {
+      try {
+        const res = await apiFetch('GET', '/api/v1/projects/{project_ref}' as never, {
+          params: { project_ref: key },
+        });
+        if (
+          res &&
+          typeof res === 'object' &&
+          'capabilities' in res &&
+          Array.isArray(res.capabilities)
+        ) {
+          return res as { capabilities: string[] };
+        }
+      } catch {
+        // fallback
+      }
+      return { capabilities: ['EDIT', 'ADMIN'] };
+    },
+    enabled: propCapabilities === undefined,
+  });
+
+  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
+  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
 
   const { data: modules = [], isLoading } = useQuery<ProjectModuleItem[]>({
     queryKey: ['projects', key, 'modules'],
@@ -675,12 +753,18 @@ function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.El
         params: { project_ref: key },
         body: {
           name: newName.trim(),
+          status,
+          ...(startDate ? { start_date: startDate } : {}),
+          ...(targetDate ? { target_date: targetDate } : {}),
           ...(description.trim() ? { description_markdown: description.trim() } : {}),
         },
       });
     },
     onSuccess: () => {
       setNewName('');
+      setStatus('planned');
+      setStartDate('');
+      setTargetDate('');
       setDescription('');
       void queryClient.invalidateQueries({ queryKey: ['projects', key, 'modules'] });
     },
@@ -702,41 +786,87 @@ function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.El
         <p>Feature modules and sub-project groupings for {key}.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
-        <h3>Create New Module</h3>
-        {errorMsg && (
-          <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
-            {errorMsg}
+      {canCreate && (
+        <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
+          <h3>Create New Module</h3>
+          {errorMsg && (
+            <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
+              {errorMsg}
+            </div>
+          )}
+          <div className="kb-form-row">
+            <label className="kb-form-field">
+              <span className="kb-form-label">Module Name</span>
+              <input
+                type="text"
+                className="kb-form-input"
+                data-testid="new-module-name-input"
+                placeholder="Module name..."
+                value={newName}
+                onChange={(e) => { setNewName(e.target.value); }}
+                required
+              />
+            </label>
+            <label className="kb-form-field">
+              <span className="kb-form-label">Status</span>
+              <select
+                className="kb-form-input"
+                data-testid="new-module-status-select"
+                value={status}
+                onChange={(e) => { setStatus(e.target.value); }}
+              >
+                <option value="planned">Planned</option>
+                <option value="backlog">Backlog</option>
+                <option value="in_progress">In Progress</option>
+                <option value="paused">Paused</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+            <label className="kb-form-field">
+              <span className="kb-form-label">Start Date</span>
+              <input
+                type="date"
+                className="kb-form-input"
+                data-testid="new-module-start-input"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); }}
+                title="Start date"
+              />
+            </label>
+            <label className="kb-form-field">
+              <span className="kb-form-label">Target Date</span>
+              <input
+                type="date"
+                className="kb-form-input"
+                data-testid="new-module-target-input"
+                value={targetDate}
+                onChange={(e) => { setTargetDate(e.target.value); }}
+                title="Target date"
+              />
+            </label>
+            <label className="kb-form-field">
+              <span className="kb-form-label">Description</span>
+              <input
+                type="text"
+                className="kb-form-input"
+                data-testid="new-module-desc-input"
+                placeholder="Description (optional)..."
+                value={description}
+                onChange={(e) => { setDescription(e.target.value); }}
+              />
+            </label>
+            <button
+              type="submit"
+              className="kb-btn-primary"
+              data-testid="create-module-btn"
+              disabled={createMutation.isPending || !newName.trim()}
+            >
+              {createMutation.isPending ? 'Creating...' : '+ Create Module'}
+            </button>
           </div>
-        )}
-        <div className="kb-form-row">
-          <input
-            type="text"
-            className="kb-form-input"
-            data-testid="new-module-name-input"
-            placeholder="Module name..."
-            value={newName}
-            onChange={(e) => { setNewName(e.target.value); }}
-            required
-          />
-          <input
-            type="text"
-            className="kb-form-input"
-            data-testid="new-module-desc-input"
-            placeholder="Description (optional)..."
-            value={description}
-            onChange={(e) => { setDescription(e.target.value); }}
-          />
-          <button
-            type="submit"
-            className="kb-btn-primary"
-            data-testid="create-module-btn"
-            disabled={createMutation.isPending || !newName.trim()}
-          >
-            {createMutation.isPending ? 'Creating...' : '+ Create Module'}
-          </button>
-        </div>
-      </form>
+        </form>
+      )}
 
       <div className="kb-modules-list-wrapper">
         {isLoading && <p>Loading modules...</p>}

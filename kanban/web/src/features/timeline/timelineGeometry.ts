@@ -7,9 +7,9 @@ import { addDays, diffDays } from '../calendar/calendarGrid';
 export type ZoomScale = 'day' | 'week' | 'quarter';
 
 export const ZOOM_PX_PER_DAY: Record<ZoomScale, number> = {
-  day: 36,
-  week: 16,
-  quarter: 6,
+  day: 64,
+  week: 36,
+  quarter: 16,
 };
 
 export const LIST_ROW_HEIGHT_PX = 46;

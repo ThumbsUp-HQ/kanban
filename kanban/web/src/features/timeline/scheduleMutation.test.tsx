@@ -7,13 +7,15 @@ describe('scheduleMutation', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    document.cookie = 'kb_csrf=test-csrf-token-123; Path=/';
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
   });
 
-  it('patchIssueSchedule sends PATCH request with JSON body and If-Match header', async () => {
+  it('patchIssueSchedule sends PATCH request with JSON body, X-CSRF-Token, credentials, and If-Match header', async () => {
     const mockResponse = {
       id: 'issue-142',
       key: 'KAN-142',
@@ -42,8 +44,10 @@ describe('scheduleMutation', () => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-CSRF-Token': 'test-csrf-token-123',
         'If-Match': '"etag-abc"',
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ start_date: '2026-11-12', due_date: '2026-11-20' }),
     });
     expect(result.due_date).toBe('2026-11-20');
@@ -218,7 +222,7 @@ describe('scheduleMutation', () => {
       });
     });
 
-    // 5. Non-Error throw in fetch to test String(err) fallback
+    // 5. Non-Error throw in fetch to test String(err) fallback and genuine rollback to null
     globalThis.fetch = vi.fn().mockRejectedValueOnce('raw network failure string');
     let failResult = true;
     await act(async () => {
@@ -230,7 +234,59 @@ describe('scheduleMutation', () => {
 
     expect(failResult).toBe(false);
     expect(onError).toHaveBeenCalledWith('KAN-ERR', expect.any(Error));
-    expect(onRollback).toHaveBeenCalledWith('KAN-ERR', { startDate: null, dueDate: '2026-11-25' });
+    expect(onRollback).toHaveBeenCalledWith('KAN-ERR', { startDate: null, dueDate: null });
     expect(result.current.announcement).toContain('rolled back');
+
+    // 6. Genuine rollback to explicitly provided pre-mutation dates
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve(JSON.stringify({ code: 'CSRF_REJECTED' })),
+    });
+    let failOriginal = true;
+    await act(async () => {
+      failOriginal = await result.current.reschedule({
+        issueRef: 'KAN-ERR-2',
+        startDate: '2026-11-20',
+        dueDate: '2026-11-25',
+        originalStartDate: '2026-11-05',
+        originalDueDate: '2026-11-12',
+      });
+    });
+    expect(failOriginal).toBe(false);
+    expect(onRollback).toHaveBeenCalledWith('KAN-ERR-2', {
+      startDate: '2026-11-05',
+      dueDate: '2026-11-12',
+    });
+  });
+
+  it('dispatches kb:issue-updated CustomEvent on window on successful reschedule', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    const mockResponse = {
+      id: 'issue-142',
+      key: 'KAN-142',
+      start_date: '2026-11-12',
+      due_date: '2026-11-20',
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    const { result } = renderHook(() => useRescheduleIssue());
+    await act(async () => {
+      await result.current.reschedule({
+        issueRef: 'KAN-142',
+        startDate: '2026-11-12',
+        dueDate: '2026-11-20',
+      });
+    });
+
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'kb:issue-updated',
+      }),
+    );
   });
 });

@@ -266,13 +266,14 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
     """Case 3: Non-viewer receives plain 404 NOT_FOUND; member create 403; lead 422."""
     admin = await make_user("admin3", workspace_role="WORKSPACE_ADMIN")
     member = await make_user("member3")
+    viewer = await make_user("viewer3")
     outsider = await make_user("outsider3")
     inactive_user = await make_user("inactive3")
 
     proj_id = await make_project(
         "SEC1",
         created_by=admin,
-        roles={admin: "PROJECT_ADMIN", member: "MEMBER"},
+        roles={admin: "PROJECT_ADMIN", member: "MEMBER", viewer: "VIEWER"},
         modules_enabled=True,
     )
     mod_id = await make_module(proj_id, "Security Mod", created_by=admin)
@@ -309,25 +310,55 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
     b_mod_nonexistent.pop("request_id", None)
     assert b_mod_unreadable == b_mod_nonexistent
 
-    # 2. Member with PROJECT_MEMBER (VIEW + EDIT on issues, but NOT ADMIN on project)
-    client_member = as_principal(member)
-    r_create_denied = await client_member.post(
+    # 2. Viewer with PROJECT_VIEWER (lacks EDIT) -> 403 with descriptive detail
+    client_viewer = as_principal(viewer)
+    r_create_denied = await client_viewer.post(
         "/api/v1/projects/SEC1/modules",
         json={"name": "Unauthorized Module"},
     )
     assert r_create_denied.status_code == 403, r_create_denied.text
     assert r_create_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
+    assert (
+        "Missing required capability: EDIT (requires Project Member, Project Admin, "
+        "Workspace Admin, or Server Admin role)."
+        in r_create_denied.json()["detail"]
+    )
 
-    r_patch_denied = await client_member.patch(
+    r_patch_denied = await client_viewer.patch(
         f"/api/v1/modules/{mod_id}",
         json={"name": "Hacked Module"},
     )
     assert r_patch_denied.status_code == 403
     assert r_patch_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
+    assert (
+        "Missing required capability: EDIT (requires Project Member, Project Admin, "
+        "Workspace Admin, or Server Admin role)."
+        in r_patch_denied.json()["detail"]
+    )
 
+    # Member with PROJECT_MEMBER (holds EDIT) can create and patch modules
+    client_member = as_principal(member)
+    r_member_create = await client_member.post(
+        "/api/v1/projects/SEC1/modules",
+        json={"name": "Member Module"},
+    )
+    assert r_member_create.status_code == 201, r_member_create.text
+
+    r_member_patch = await client_member.patch(
+        f"/api/v1/modules/{mod_id}",
+        json={"name": "Member Updated Mod"},
+    )
+    assert r_member_patch.status_code == 200, r_member_patch.text
+
+    # But member cannot delete (requires ADMIN) -> 403 with ADMIN detail
     r_del_denied = await client_member.delete(f"/api/v1/modules/{mod_id}")
     assert r_del_denied.status_code == 403
     assert r_del_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
+    assert (
+        "Missing required capability: ADMIN (requires Project Admin, "
+        "Workspace Admin, or Server Admin role)."
+        in r_del_denied.json()["detail"]
+    )
 
     # 3. Lead principal eligibility
     client_admin = as_principal(admin)

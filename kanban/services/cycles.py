@@ -164,7 +164,7 @@ async def create_cycle(
     body: CycleCreate,
 ) -> CycleResponse:
     """Create a new cycle in upcoming status."""
-    project = await _resolve_project(session, caller, project_ref, Capability.ADMIN)
+    project = await _resolve_project(session, caller, project_ref, Capability.EDIT)
     _validate_dates(body.start_date, body.end_date)
 
     cycle_id = uuid.uuid4()
@@ -248,7 +248,7 @@ async def patch_cycle(
     if cycle is None:
         not_found()
 
-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
+    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
     project = await session.get(Project, cycle.project_id)
     if project is not None:
         _check_cycles_enabled(project)
@@ -318,7 +318,7 @@ async def start_cycle(
     if cycle is None:
         not_found()
 
-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
+    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
     project = await session.get(Project, cycle.project_id)
     if project is not None:
         _check_cycles_enabled(project)
@@ -382,7 +382,7 @@ async def complete_cycle(
     if cycle is None:
         not_found()
 
-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
+    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
     project = await session.get(Project, cycle.project_id)
     if project is not None:
         _check_cycles_enabled(project)
@@ -509,7 +509,7 @@ async def rollover_cycle(
     if cycle is None:
         not_found()
 
-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
+    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
     project = await session.get(Project, cycle.project_id)
     if project is not None:
         _check_cycles_enabled(project)
