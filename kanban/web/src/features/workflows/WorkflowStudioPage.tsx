@@ -77,7 +77,7 @@ export function WorkflowStudioPage({
     if (caps && Array.isArray(caps)) {
       return caps.includes('ADMIN') || caps.includes('PROJECT_ADMIN');
     }
-    return true;
+    return false;
   }, [queryNonAdmin, propIsAdmin, projectQuery.data]);
 
   // Main rules query

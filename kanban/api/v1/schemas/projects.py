@@ -7,7 +7,8 @@ accepted by ``ProjectPatch`` only so the service can answer ``422 IDENTIFIER_IMM
 from __future__ import annotations
 
 import uuid  # noqa: TC003  # Required at runtime by Pydantic field resolution
-from typing import Annotated
+from datetime import datetime  # noqa: TC003
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
@@ -105,6 +106,41 @@ class ProjectResponse(BaseModel):
     capabilities: list[str] = Field(
         description="Effective capabilities held by the calling principal on this project"
     )
+    is_project_admin: bool = Field(
+        default=False,
+        description="Whether the caller is an administrator of this project",
+    )
+    project_role: str | None = Field(
+        default=None,
+        description="Role held by caller on this project (PROJECT_ADMIN, MEMBER, VIEWER)",
+    )
+
+
+class ProjectMemberAdd(BaseModel):
+    """Payload for adding or updating a member on a project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: uuid.UUID = Field(description="Principal UUID to bind to the project")
+    role: Literal["PROJECT_ADMIN", "MEMBER", "VIEWER"] = Field(
+        default="MEMBER",
+        description="Role to grant on project scope",
+    )
+
+
+class ProjectMemberResponse(BaseModel):
+    """Member binding on a project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID = Field(description="Unique role binding UUID")
+    principal_id: uuid.UUID = Field(description="Bound principal UUID")
+    project_id: uuid.UUID = Field(description="Target project UUID")
+    role: str = Field(description="Assigned role: PROJECT_ADMIN, MEMBER, or VIEWER")
+    display_name: str | None = Field(default=None, description="Principal display name")
+    handle: str | None = Field(default=None, description="User handle or slug")
+    email: str | None = Field(default=None, description="User email address if user principal")
+    created_at: datetime = Field(description="Binding creation timestamp")
 
 
 class ProjectList(BaseModel):

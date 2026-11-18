@@ -1,0 +1,165 @@
+{
+  "ticket": "KANBA-202",
+  "name": "RBAC & Administrative Settings Studio",
+  "surfaces_audited": 19,
+  "roles_evaluated": [
+    "SERVER_ADMIN",
+    "WORKSPACE_ADMIN",
+    "WORKSPACE_MEMBER",
+    "WORKSPACE_GUEST"
+  ],
+  "surfaces": [
+    {
+      "surface_id": 1,
+      "surface_name": "Topbar Admin Auth Studio Link",
+      "server_admin": "visible",
+      "workspace_admin": "hidden",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 2,
+      "surface_name": "Topbar Admin MCP Keys Link",
+      "server_admin": "visible",
+      "workspace_admin": "hidden",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 3,
+      "surface_name": "Topbar System Storage, Backups & Deployment Link",
+      "server_admin": "visible",
+      "workspace_admin": "hidden",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 4,
+      "surface_name": "Topbar Workspace Settings Link",
+      "server_admin": "visible",
+      "workspace_admin": "visible",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 5,
+      "surface_name": "Topbar Workspace MCP Keys Link",
+      "server_admin": "visible",
+      "workspace_admin": "visible",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 6,
+      "surface_name": "Sidebar Redundant Views Item",
+      "server_admin": "removed",
+      "workspace_admin": "removed",
+      "workspace_member": "removed",
+      "workspace_guest": "removed"
+    },
+    {
+      "surface_id": 7,
+      "surface_name": "Sidebar Project Settings Item",
+      "server_admin": "visible_with_admin_capability",
+      "workspace_admin": "visible_with_admin_capability",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 8,
+      "surface_name": "Sidebar Workflows Navigation Link",
+      "server_admin": "visible_with_admin_capability",
+      "workspace_admin": "visible_with_admin_capability",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 9,
+      "surface_name": "Sidebar Custom Fields Navigation Link",
+      "server_admin": "visible_with_admin_capability",
+      "workspace_admin": "visible_with_admin_capability",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 10,
+      "surface_name": "Sidebar Workspace Settings in Workspace Dropdown",
+      "server_admin": "visible",
+      "workspace_admin": "visible",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 11,
+      "surface_name": "Command Palette Go to Auth Studio",
+      "server_admin": "visible",
+      "workspace_admin": "hidden",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 12,
+      "surface_name": "Command Palette Go to System Storage, Backups & Deployment",
+      "server_admin": "visible",
+      "workspace_admin": "hidden",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 13,
+      "surface_name": "Board Column + Workflow Trigger Button",
+      "server_admin": "visible_with_admin_capability",
+      "workspace_admin": "visible_with_admin_capability",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 14,
+      "surface_name": "List View + Workflow Trigger Button",
+      "server_admin": "visible_with_admin_capability",
+      "workspace_admin": "visible_with_admin_capability",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 15,
+      "surface_name": "Board View Gate Cancel Action (canCancelGate)",
+      "server_admin": "enabled_for_admin",
+      "workspace_admin": "enabled_for_admin",
+      "workspace_member": "disabled",
+      "workspace_guest": "disabled"
+    },
+    {
+      "surface_id": 16,
+      "surface_name": "Workflow Studio Direct Route (/projects/:key/settings/workflows)",
+      "server_admin": "accessible",
+      "workspace_admin": "accessible",
+      "workspace_member": "fail_closed_denied",
+      "workspace_guest": "fail_closed_denied"
+    },
+    {
+      "surface_id": 17,
+      "surface_name": "Custom Fields Direct Route (/projects/:key/settings/custom-fields)",
+      "server_admin": "accessible",
+      "workspace_admin": "accessible",
+      "workspace_member": "fail_closed_denied",
+      "workspace_guest": "fail_closed_denied"
+    },
+    {
+      "surface_id": 18,
+      "surface_name": "MCP Access Studio /mcp/admin Scope Option",
+      "server_admin": "visible",
+      "workspace_admin": "visible",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    },
+    {
+      "surface_id": 19,
+      "surface_name": "Bulk Action Bar Delete Button",
+      "server_admin": "visible_with_delete_or_admin",
+      "workspace_admin": "visible_with_delete_or_admin",
+      "workspace_member": "hidden",
+      "workspace_guest": "hidden"
+    }
+  ]
+}

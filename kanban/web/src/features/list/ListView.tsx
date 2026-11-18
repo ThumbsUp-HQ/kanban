@@ -16,6 +16,7 @@ export interface ListViewProps {
   focusedKey?: string | null;
   onOpenPeek?: (issueKey: string) => void;
   activeKey?: string | null;
+  canManageWorkflows?: boolean;
 }
 
 interface GroupSection {
@@ -38,6 +39,7 @@ export function ListView({
   focusedKey,
   onOpenPeek,
   activeKey,
+  canManageWorkflows = true,
 }: ListViewProps): JSX.Element {
   // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -405,22 +407,24 @@ export function ListView({
               </button>
 
               <div className="list-section-actions">
-                <button
-                  type="button"
-                  className="list-section-add-workflow-btn"
-                  data-testid={`section-add-workflow-btn-${section.name}`}
-                  title={`Attach workflow transition to ${section.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (typeof window !== 'undefined') {
-                      window.location.assign(
-                        `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(section.name)}&attach=1`,
-                      );
-                    }
-                  }}
-                >
-                  + Workflow
-                </button>
+                {canManageWorkflows && (
+                  <button
+                    type="button"
+                    className="list-section-add-workflow-btn"
+                    data-testid={`section-add-workflow-btn-${section.name}`}
+                    title={`Attach workflow transition to ${section.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (typeof window !== 'undefined') {
+                        window.location.assign(
+                          `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(section.name)}&attach=1`,
+                        );
+                      }
+                    }}
+                  >
+                    + Workflow
+                  </button>
+                )}
                 <button
                   type="button"
                   className="list-section-new-btn"

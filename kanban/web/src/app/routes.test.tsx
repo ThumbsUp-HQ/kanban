@@ -57,7 +57,7 @@ describe('routes and AppShell integration', () => {
     expect(screen.getByRole('link', { name: /Work Items/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
-    expect(screen.getByRole('link', { name: /Views/ })).toBeDefined();
+    expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
     expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
 
@@ -180,7 +180,8 @@ describe('routes and AppShell integration', () => {
       { path: '/your-work', expected: 'your-work-view' },
       { path: '/projects/KAN/cycles', expected: 'project-cycles-view' },
       { path: '/projects/KAN/modules', expected: 'project-modules-view' },
-      { path: '/projects/KAN/views', expected: 'project-views-view' },
+      { path: '/projects/KAN/settings', expected: 'project-settings-page' },
+      { path: '/workspaces/settings', expected: 'workspace-settings-page' },
       { path: '/__dev/tokens', expected: 'token-story' },
       { path: '/__dev/emoji', expected: 'emoji-story' },
       { path: '/__dev/editor', expected: 'editor-story' },

@@ -942,7 +942,7 @@ async def remove_group_member(
     return {"status": "member_removed", "group_id": str(group_id), "member_id": str(member_id)}
 
 
-async def bind_role(  # noqa: C901, PLR0913, PLR0917
+async def bind_role(  # noqa: C901, PLR0912, PLR0913, PLR0917
     session: AsyncSession,
     workspace_id: uuid.UUID,
     actor_id: uuid.UUID,
@@ -985,6 +985,28 @@ async def bind_role(  # noqa: C901, PLR0913, PLR0917
             detail=msg,
             errors=[FieldError(path="role", message=msg)],
         ) from exc
+
+    # Block non-SERVER_ADMIN from granting SERVER_ADMIN role
+    if rbac_role == RbacRole.SERVER_ADMIN:
+        admin_check = await session.execute(
+            text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+        )
+        is_sa = bool(admin_check.scalar())
+        if not is_sa:
+            actor_check = await session.execute(
+                select(RoleBinding).where(
+                    RoleBinding.principal_id == actor_id,
+                    RoleBinding.role == RbacRole.SERVER_ADMIN,
+                )
+            )
+            is_sa = actor_check.scalar_one_or_none() is not None
+        if not is_sa:
+            raise ProblemException(
+                code="INSUFFICIENT_CAPABILITY",
+                status=403,
+                title="Insufficient Capability",
+                detail="Only SERVER_ADMIN can grant SERVER_ADMIN role.",
+            )
 
     # Enforce scope and role constraints
     if st == "server":

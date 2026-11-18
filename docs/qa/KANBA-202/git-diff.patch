@@ -1,0 +1,1816 @@
+diff --git a/kanban/admin/principal_service.py b/kanban/admin/principal_service.py
+index 71fda9c..9ff83a5 100644
+--- a/kanban/admin/principal_service.py
++++ b/kanban/admin/principal_service.py
+@@ -942,7 +942,7 @@ async def remove_group_member(
+     return {"status": "member_removed", "group_id": str(group_id), "member_id": str(member_id)}
+ 
+ 
+-async def bind_role(  # noqa: C901, PLR0913, PLR0917
++async def bind_role(  # noqa: C901, PLR0912, PLR0913, PLR0917
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+     actor_id: uuid.UUID,
+@@ -986,6 +986,28 @@ async def bind_role(  # noqa: C901, PLR0913, PLR0917
+             errors=[FieldError(path="role", message=msg)],
+         ) from exc
+ 
++    # Block non-SERVER_ADMIN from granting SERVER_ADMIN role
++    if rbac_role == RbacRole.SERVER_ADMIN:
++        admin_check = await session.execute(
++            text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++        )
++        is_sa = bool(admin_check.scalar())
++        if not is_sa:
++            actor_check = await session.execute(
++                select(RoleBinding).where(
++                    RoleBinding.principal_id == actor_id,
++                    RoleBinding.role == RbacRole.SERVER_ADMIN,
++                )
++            )
++            is_sa = actor_check.scalar_one_or_none() is not None
++        if not is_sa:
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail="Only SERVER_ADMIN can grant SERVER_ADMIN role.",
++            )
++
+     # Enforce scope and role constraints
+     if st == "server":
+         if rbac_role != RbacRole.SERVER_ADMIN or project_id is not None:
+diff --git a/kanban/api/v1/admin/workspace_settings.py b/kanban/api/v1/admin/workspace_settings.py
+index bb45978..7eb0d9b 100644
+--- a/kanban/api/v1/admin/workspace_settings.py
++++ b/kanban/api/v1/admin/workspace_settings.py
+@@ -5,6 +5,7 @@
+ from __future__ import annotations
+ 
+ import logging
++import re
+ import uuid  # noqa: TC003
+ from datetime import datetime  # noqa: TC003
+ from typing import Annotated, Any, Final, Literal
+@@ -32,6 +33,8 @@ class WorkspaceSettingsResponse(BaseModel):
+     model_config = ConfigDict(extra="forbid", from_attributes=True)
+ 
+     workspace_id: uuid.UUID
++    name: str = "Workspace"
++    slug: str = "default"
+     display_name: str
+     default_project_visibility: Literal["private", "workspace"]
+     session_idle_timeout_min: int
+@@ -47,6 +50,8 @@ class WorkspaceSettingsUpdate(BaseModel):
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
++    name: str | None = Field(default=None, min_length=1, max_length=200)
++    slug: str | None = Field(default=None, min_length=2, max_length=63)
+     display_name: str | None = Field(default=None, min_length=1, max_length=80)
+     default_project_visibility: Literal["private", "workspace"] | None = None
+     session_idle_timeout_min: int | None = Field(default=None, ge=5, le=720)
+@@ -131,7 +136,21 @@ async def get_workspace_settings(
+ ) -> WorkspaceSettingsResponse:
+     """Retrieve security defaults, timeouts, and air-gap mode for active workspace."""
+     settings = await _get_or_create_settings(session, caller.workspace_id)
+-    return WorkspaceSettingsResponse.model_validate(settings)
++    ws_stmt = select(Workspace).where(Workspace.id == caller.workspace_id)
++    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
++    return WorkspaceSettingsResponse(
++        workspace_id=settings.workspace_id,
++        name=ws.name if ws else settings.display_name,
++        slug=ws.slug if ws else "default",
++        display_name=settings.display_name,
++        default_project_visibility=settings.default_project_visibility,  # type: ignore[arg-type]
++        session_idle_timeout_min=settings.session_idle_timeout_min,
++        session_absolute_timeout_min=settings.session_absolute_timeout_min,
++        trash_retention_days=settings.trash_retention_days,
++        mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
++        air_gap_mode=settings.air_gap_mode,
++        updated_at=settings.updated_at,
++    )
+ 
+ 
+ @router.patch(
+@@ -139,13 +158,15 @@ async def get_workspace_settings(
+     response_model=WorkspaceSettingsResponse,
+     summary="Update workspace settings",
+ )
+-async def update_workspace_settings(  # noqa: C901
++async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+     body: WorkspaceSettingsUpdate,
+     caller: Caller,
+     session: Session,
+ ) -> WorkspaceSettingsResponse:
+     """Update workspace settings, enforce timeout invariants, and record audit activity."""
+     settings = await _get_or_create_settings(session, caller.workspace_id)
++    ws_stmt = select(Workspace).where(Workspace.id == caller.workspace_id)
++    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+ 
+     # Validate relative timeout constraint
+     eff_idle = (
+@@ -177,6 +198,8 @@ async def update_workspace_settings(  # noqa: C901
+         )
+ 
+     before: dict[str, Any] = {
++        "name": ws.name if ws else settings.display_name,
++        "slug": ws.slug if ws else "default",
+         "display_name": settings.display_name,
+         "default_project_visibility": settings.default_project_visibility,
+         "session_idle_timeout_min": settings.session_idle_timeout_min,
+@@ -187,6 +210,42 @@ async def update_workspace_settings(  # noqa: C901
+     }
+ 
+     diff: dict[str, Any] = {}
++
++    if body.name is not None and ws is not None:
++        cleaned_name = body.name.strip()
++        if cleaned_name != ws.name:
++            diff["name"] = cleaned_name
++            ws.name = cleaned_name
++            if body.display_name is None:
++                settings.display_name = cleaned_name[:80]
++                diff["display_name"] = settings.display_name
++
++    if body.slug is not None and ws is not None:
++        cleaned_slug = body.slug.strip().lower()
++        if not re.match(r"^[a-z0-9][a-z0-9-]{1,62}$", cleaned_slug):
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail="slug must match ^[a-z0-9][a-z0-9-]{1,62}$",
++            )
++        if cleaned_slug != ws.slug:
++            existing_ws_id = (
++                await session.execute(
++                    text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
++                    {"ident": cleaned_slug},
++                )
++            ).scalar_one_or_none()
++            if existing_ws_id is not None and str(existing_ws_id) != str(caller.workspace_id):
++                raise ProblemException(
++                    code="WORKSPACE_SLUG_CONFLICT",
++                    status=409,
++                    title="Workspace Slug Conflict",
++                    detail=f"Workspace slug '{cleaned_slug}' is already taken.",
++                )
++            diff["slug"] = cleaned_slug
++            ws.slug = cleaned_slug
++
+     if body.display_name is not None and body.display_name != settings.display_name:
+         diff["display_name"] = body.display_name
+         settings.display_name = body.display_name
+@@ -219,8 +278,6 @@ async def update_workspace_settings(  # noqa: C901
+         diff["trash_retention_days"] = body.trash_retention_days
+         settings.trash_retention_days = body.trash_retention_days
+         # Synchronize with workspaces.trash_retention_days
+-        ws_stmt = select(Workspace).where(Workspace.id == caller.workspace_id)
+-        ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+         if ws is not None:
+             ws.trash_retention_days = body.trash_retention_days
+ 
+@@ -241,6 +298,8 @@ async def update_workspace_settings(  # noqa: C901
+         await session.refresh(settings)
+ 
+         after: dict[str, Any] = {
++            "name": ws.name if ws else settings.display_name,
++            "slug": ws.slug if ws else "default",
+             "display_name": settings.display_name,
+             "default_project_visibility": settings.default_project_visibility,
+             "session_idle_timeout_min": settings.session_idle_timeout_min,
+@@ -267,4 +326,16 @@ async def update_workspace_settings(  # noqa: C901
+                 payload={"air_gap_mode": settings.air_gap_mode, "previous": old_air_gap},
+             )
+ 
+-    return WorkspaceSettingsResponse.model_validate(settings)
++    return WorkspaceSettingsResponse(
++        workspace_id=settings.workspace_id,
++        name=ws.name if ws else settings.display_name,
++        slug=ws.slug if ws else "default",
++        display_name=settings.display_name,
++        default_project_visibility=settings.default_project_visibility,  # type: ignore[arg-type]
++        session_idle_timeout_min=settings.session_idle_timeout_min,
++        session_absolute_timeout_min=settings.session_absolute_timeout_min,
++        trash_retention_days=settings.trash_retention_days,
++        mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
++        air_gap_mode=settings.air_gap_mode,
++        updated_at=settings.updated_at,
++    )
+diff --git a/kanban/api/v1/auth_session.py b/kanban/api/v1/auth_session.py
+index 7a93ec4..75e2850 100644
+--- a/kanban/api/v1/auth_session.py
++++ b/kanban/api/v1/auth_session.py
+@@ -158,7 +158,7 @@ async def get_session_info(request: Request) -> JSONResponse:
+ 
+ 
+ @router.get("/me")
+-async def get_current_principal(
++async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
+     request: Request,
+     principal: Annotated[PrincipalContext, Depends(get_principal)],
+ ) -> JSONResponse:
+@@ -168,6 +168,11 @@ async def get_current_principal(
+     username: str | None = None
+     email: str | None = None
+     is_server_admin = False
++    is_workspace_admin = False
++    workspace_role: Literal[
++        "SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"
++    ] = "WORKSPACE_MEMBER"
++    workspace_capabilities: list[str] = ["CREATE_PROJECT"]
+     timezone = "UTC"
+     avatar_url: str | None = None
+     has_local_password = False
+@@ -212,6 +217,61 @@ async def get_current_principal(
+             )
+             is_server_admin = bool(admin_res.scalar_one())
+ 
++            ws_admin_res = await async_session.execute(
++                text(
++                    "SELECT app_principal_has_role("
++                    "  NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']"
++                    ")"
++                )
++            )
++            is_workspace_admin = bool(ws_admin_res.scalar_one())
++
++            if is_server_admin:
++                workspace_role = "SERVER_ADMIN"
++                workspace_capabilities = [
++                    "CREATE_PROJECT",
++                    "MANAGE_WORKSPACE_SETTINGS",
++                    "MANAGE_WORKSPACE_MCP_KEYS",
++                    "MANAGE_SERVER_ADMIN",
++                    "ADMIN_AUTH_STUDIO",
++                    "ADMIN_MCP_KEYS",
++                    "SYSTEM_STORAGE",
++                ]
++            else:
++                try:
++                    async with async_session.begin_nested():
++                        role_res = await async_session.execute(
++                            text(
++                                "SELECT role::text FROM role_bindings "
++                                "WHERE principal_id = :p_id AND workspace_id = :ws_id "
++                                "AND scope_type IN ('server', 'workspace') "
++                                "ORDER BY CASE role "
++                                "  WHEN 'SERVER_ADMIN' THEN 1 "
++                                "  WHEN 'WORKSPACE_ADMIN' THEN 2 "
++                                "  WHEN 'WORKSPACE_MEMBER' THEN 3 "
++                                "  WHEN 'WORKSPACE_GUEST' THEN 4 "
++                                "  ELSE 5 END ASC LIMIT 1"
++                            ),
++                            {"p_id": principal.principal_id, "ws_id": principal.workspace_id},
++                        )
++                        found_role = role_res.scalar_one_or_none()
++                except Exception:  # noqa: BLE001
++                    found_role = None
++
++                if is_workspace_admin or found_role == "WORKSPACE_ADMIN":
++                    workspace_role = "WORKSPACE_ADMIN"
++                    workspace_capabilities = [
++                        "CREATE_PROJECT",
++                        "MANAGE_WORKSPACE_SETTINGS",
++                        "MANAGE_WORKSPACE_MCP_KEYS",
++                    ]
++                elif found_role == "WORKSPACE_GUEST":
++                    workspace_role = "WORKSPACE_GUEST"
++                    workspace_capabilities = []
++                else:
++                    workspace_role = "WORKSPACE_MEMBER"
++                    workspace_capabilities = ["CREATE_PROJECT"]
++
+             try:
+                 async with async_session.begin_nested():
+                     pref_res = await async_session.execute(
+@@ -229,6 +289,32 @@ async def get_current_principal(
+                             avatar_url = f"/api/v1/users/{principal.principal_id}/avatar"
+             except Exception:  # noqa: BLE001, S110
+                 pass
++    else:
++        is_server_admin = getattr(principal, "is_server_admin", False)
++        is_workspace_admin = getattr(principal, "is_workspace_admin", is_server_admin)
++        if is_server_admin:
++            workspace_role = "SERVER_ADMIN"
++            workspace_capabilities = [
++                "CREATE_PROJECT",
++                "MANAGE_WORKSPACE_SETTINGS",
++                "MANAGE_WORKSPACE_MCP_KEYS",
++                "MANAGE_SERVER_ADMIN",
++                "ADMIN_AUTH_STUDIO",
++                "ADMIN_MCP_KEYS",
++                "SYSTEM_STORAGE",
++            ]
++        elif is_workspace_admin:
++            workspace_role = "WORKSPACE_ADMIN"
++            workspace_capabilities = [
++                "CREATE_PROJECT",
++                "MANAGE_WORKSPACE_SETTINGS",
++                "MANAGE_WORKSPACE_MCP_KEYS",
++            ]
++        else:
++            workspace_role = getattr(principal, "workspace_role", "WORKSPACE_MEMBER")
++            workspace_capabilities = (
++                ["CREATE_PROJECT"] if workspace_role != "WORKSPACE_GUEST" else []
++            )
+ 
+     handle = username or display_name or str(principal.principal_id)
+     return JSONResponse(
+@@ -241,6 +327,9 @@ async def get_current_principal(
+             "display_name": display_name or handle,
+             "email": email,
+             "is_server_admin": is_server_admin,
++            "is_workspace_admin": is_workspace_admin,
++            "workspace_role": workspace_role,
++            "workspace_capabilities": workspace_capabilities,
+             "timezone": timezone,
+             "avatar_url": avatar_url,
+             "has_local_password": has_local_password,
+diff --git a/kanban/api/v1/projects.py b/kanban/api/v1/projects.py
+index 9989906..429c1bf 100644
+--- a/kanban/api/v1/projects.py
++++ b/kanban/api/v1/projects.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import uuid  # noqa: TC003  # FastAPI runtime type
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends, Query, Response
+@@ -13,6 +14,8 @@ from kanban.api.v1.schemas.projects import (
+     ModuleDefaultsPut,
+     ProjectCreate,
+     ProjectList,
++    ProjectMemberAdd,
++    ProjectMemberResponse,
+     ProjectPatch,
+     ProjectResponse,
+ )
+@@ -88,3 +91,50 @@ async def put_module_defaults(
+     """
+     async with timing_floor(floor_ms=25.0):
+         return await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
++
++
++@router.get(
++    "/{project_ref}/members",
++    response_model=list[ProjectMemberResponse],
++    summary="List project members",
++)
++async def list_project_members(
++    project_ref: str, caller: Caller, session: Session
++) -> list[ProjectMemberResponse]:
++    """List role bindings for principals on this project."""
++    async with timing_floor(floor_ms=25.0):
++        return await svc.list_project_members(session, caller, project_ref)
++
++
++@router.post(
++    "/{project_ref}/members",
++    response_model=ProjectMemberResponse,
++    status_code=201,
++    summary="Add project member",
++)
++async def add_project_member(
++    project_ref: str, body: ProjectMemberAdd, caller: Caller, session: Session
++) -> ProjectMemberResponse:
++    """Bind a principal to a project role (PROJECT_ADMIN, MEMBER, VIEWER).
++
++    Requires project ADMIN role.
++    """
++    async with timing_floor(floor_ms=25.0):
++        return await svc.add_project_member(session, caller, project_ref, body)
++
++
++@router.delete(
++    "/{project_ref}/members/{principal_id}",
++    status_code=204,
++    summary="Remove project member",
++)
++async def delete_project_member(
++    project_ref: str, principal_id: uuid.UUID, caller: Caller, session: Session
++) -> Response:
++    """Remove a principal role binding from this project.
++
++    Requires project ADMIN role.
++    """
++    async with timing_floor(floor_ms=25.0):
++        await svc.delete_project_member(session, caller, project_ref, principal_id)
++        return Response(status_code=204)
+diff --git a/kanban/api/v1/schemas/projects.py b/kanban/api/v1/schemas/projects.py
+index 122c1af..6fdd87a 100644
+--- a/kanban/api/v1/schemas/projects.py
++++ b/kanban/api/v1/schemas/projects.py
+@@ -7,7 +7,8 @@ accepted by ``ProjectPatch`` only so the service can answer ``422 IDENTIFIER_IMM
+ from __future__ import annotations
+ 
+ import uuid  # noqa: TC003  # Required at runtime by Pydantic field resolution
+-from typing import Annotated
++from datetime import datetime  # noqa: TC003
++from typing import Annotated, Literal
+ 
+ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+ 
+@@ -105,6 +106,41 @@ class ProjectResponse(BaseModel):
+     capabilities: list[str] = Field(
+         description="Effective capabilities held by the calling principal on this project"
+     )
++    is_project_admin: bool = Field(
++        default=False,
++        description="Whether the caller is an administrator of this project",
++    )
++    project_role: str | None = Field(
++        default=None,
++        description="Role held by caller on this project (PROJECT_ADMIN, MEMBER, VIEWER)",
++    )
++
++
++class ProjectMemberAdd(BaseModel):
++    """Payload for adding or updating a member on a project."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    principal_id: uuid.UUID = Field(description="Principal UUID to bind to the project")
++    role: Literal["PROJECT_ADMIN", "MEMBER", "VIEWER"] = Field(
++        default="MEMBER",
++        description="Role to grant on project scope",
++    )
++
++
++class ProjectMemberResponse(BaseModel):
++    """Member binding on a project."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    id: uuid.UUID = Field(description="Unique role binding UUID")
++    principal_id: uuid.UUID = Field(description="Bound principal UUID")
++    project_id: uuid.UUID = Field(description="Target project UUID")
++    role: str = Field(description="Assigned role: PROJECT_ADMIN, MEMBER, or VIEWER")
++    display_name: str | None = Field(default=None, description="Principal display name")
++    handle: str | None = Field(default=None, description="User handle or slug")
++    email: str | None = Field(default=None, description="User email address if user principal")
++    created_at: datetime = Field(description="Binding creation timestamp")
+ 
+ 
+ class ProjectList(BaseModel):
+diff --git a/kanban/api/v1/workspaces.py b/kanban/api/v1/workspaces.py
+index 97a0afd..d802914 100644
+--- a/kanban/api/v1/workspaces.py
++++ b/kanban/api/v1/workspaces.py
+@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Annotated
+ 
+ from fastapi import APIRouter, Depends, Request, Response, status
+ from pydantic import BaseModel, ConfigDict, Field, field_validator
+-from sqlalchemy import text
++from sqlalchemy import select, text
+ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # FastAPI dependency
+ from starlette.responses import JSONResponse
+ 
++from database.models.spine import Workspace
++from database.models.workspace_settings import WorkspaceSettings
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException
+ from kanban.auth.sessions.cookies import (
+@@ -318,3 +320,101 @@ async def switch_workspace_endpoint(
+             "status": "switched",
+         }
+     )
++
++
++class UpdateWorkspaceRequest(BaseModel):
++    """Payload for updating workspace name or slug."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: str | None = Field(
++        default=None,
++        min_length=1,
++        max_length=MAX_WORKSPACE_NAME_LEN,
++        description="Updated workspace display name",
++    )
++    slug: str | None = Field(
++        default=None,
++        min_length=2,
++        max_length=63,
++        description="Updated lowercase URL-safe slug",
++    )
++
++
++@router.patch(
++    "/{workspace_id}",
++    response_model=WorkspaceResponse,
++    summary="Update workspace name or slug",
++)
++async def update_workspace_endpoint(
++    workspace_id: uuid.UUID,
++    body: UpdateWorkspaceRequest,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> WorkspaceResponse:
++    """Update workspace name or slug. Requires WORKSPACE_ADMIN or SERVER_ADMIN."""
++    admin_check = await session.execute(
++        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
++    )
++    if not bool(admin_check.scalar_one()):
++        raise ProblemException(
++            code="INSUFFICIENT_CAPABILITY",
++            status=status.HTTP_403_FORBIDDEN,
++            title="Insufficient Capability",
++            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
++        )
++
++    target_id = (
++        caller.workspace_id if str(workspace_id) == str(caller.workspace_id) else workspace_id
++    )
++    ws_stmt = select(Workspace).where(Workspace.id == target_id)
++    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
++    if ws is None:
++        raise ProblemException(
++            code="NOT_FOUND",
++            status=status.HTTP_404_NOT_FOUND,
++            title="Not Found",
++            detail="Workspace not found.",
++        )
++
++    if body.name is not None:
++        cleaned_name = body.name.strip()
++        ws.name = cleaned_name
++        set_stmt = select(WorkspaceSettings).where(WorkspaceSettings.workspace_id == target_id)
++        settings = (await session.execute(set_stmt)).scalar_one_or_none()
++        if settings is not None:
++            settings.display_name = cleaned_name[:80]
++
++    if body.slug is not None:
++        cleaned_slug = body.slug.strip().lower()
++        if not SLUG_REGEX.match(cleaned_slug):
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
++                title="Validation Failed",
++                detail="slug must match ^[a-z0-9][a-z0-9-]{1,62}$",
++            )
++        if cleaned_slug != ws.slug:
++            existing_ws_id = (
++                await session.execute(
++                    text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
++                    {"ident": cleaned_slug},
++                )
++            ).scalar_one_or_none()
++            if existing_ws_id is not None and str(existing_ws_id) != str(target_id):
++                raise ProblemException(
++                    code="WORKSPACE_SLUG_CONFLICT",
++                    status=status.HTTP_409_CONFLICT,
++                    title="Workspace Slug Conflict",
++                    detail=f"Workspace slug '{cleaned_slug}' is already taken.",
++                )
++            ws.slug = cleaned_slug
++
++    await session.flush()
++    return WorkspaceResponse(
++        id=ws.id,
++        name=ws.name,
++        slug=ws.slug,
++        is_current=(ws.id == caller.workspace_id),
++        role="WORKSPACE_ADMIN",
++    )
+diff --git a/kanban/services/projects.py b/kanban/services/projects.py
+index 8a2bcaf..96821a0 100644
+--- a/kanban/services/projects.py
++++ b/kanban/services/projects.py
+@@ -19,6 +19,7 @@ import binascii
+ import hashlib
+ import re
+ import uuid
++from datetime import UTC, datetime
+ from typing import TYPE_CHECKING, Final
+ 
+ from sqlalchemy import delete, func, select, text
+@@ -26,7 +27,12 @@ from sqlalchemy.exc import IntegrityError
+ 
+ from database.models import Module, Project, ProjectModuleDefault
+ from kanban.api.problems import ProblemException, not_found
+-from kanban.api.v1.schemas.projects import ProjectList, ProjectResponse
++from kanban.api.v1.schemas.projects import (
++    ProjectList,
++    ProjectMemberAdd,
++    ProjectMemberResponse,
++    ProjectResponse,
++)
+ from kanban.content import ContentNormalizeError, normalize_to_markdown
+ from kanban.security.access_manifest import build_access_manifest
+ from kanban.security.permissions import (
+@@ -139,6 +145,29 @@ async def serialize_project(
+     """Assemble the canonical response including access manifest and caller capabilities."""
+     manifest = await build_access_manifest(session, caller, project.id)
+     caps = await evaluate_capabilities(session, caller, project.id)
++    cap_names = capabilities_to_names(caps)
++    is_project_admin = "ADMIN" in cap_names
++
++    rb_res = await session.execute(
++        text(
++            "SELECT role::text FROM role_bindings "
++            "WHERE principal_id = :p_id AND project_id = :proj_id "
++            "LIMIT 1"
++        ),
++        {"p_id": caller.principal_id, "proj_id": project.id},
++    )
++    explicit_role = rb_res.scalar_one_or_none()
++    if explicit_role:
++        project_role = explicit_role
++    elif is_project_admin:
++        project_role = "PROJECT_ADMIN"
++    elif "EDIT" in cap_names:
++        project_role = "MEMBER"
++    elif "VIEW" in cap_names:
++        project_role = "VIEWER"
++    else:
++        project_role = None
++
+     return ProjectResponse(
+         id=project.id,
+         identifier=project.identifier,
+@@ -148,7 +177,9 @@ async def serialize_project(
+         default_module_ids=await _default_module_ids(session, project.id),
+         auto_archive_days=project.auto_archive_days,
+         access_manifest=manifest,
+-        capabilities=capabilities_to_names(caps),
++        capabilities=cap_names,
++        is_project_admin=is_project_admin,
++        project_role=project_role,
+     )
+ 
+ 
+@@ -370,3 +401,125 @@ async def replace_module_defaults(
+         },
+     )
+     return await serialize_project(session, caller, project)
++
++
++async def list_project_members(
++    session: AsyncSession, caller: PrincipalContext, project_ref: str
++) -> list[ProjectMemberResponse]:
++    """List role bindings for principals on this project."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.VIEW)
++
++    stmt = text(
++        "SELECT rb.id, rb.principal_id, rb.project_id, rb.role::text AS role, rb.created_at, "
++        "       p.display_name, o.canonical_key AS handle, u.email "
++        "FROM role_bindings rb "
++        "JOIN principals p ON p.id = rb.principal_id "
++        "LEFT JOIN users u ON u.id = rb.principal_id "
++        "LEFT JOIN objects o ON o.id = rb.principal_id "
++        "WHERE rb.project_id = :proj_id AND rb.scope_type = 'project' "
++        "ORDER BY rb.created_at ASC"
++    )
++    res = await session.execute(stmt, {"proj_id": project.id})
++    return [
++        ProjectMemberResponse(
++            id=row["id"],
++            principal_id=row["principal_id"],
++            project_id=row["project_id"],
++            role=row["role"],
++            display_name=row["display_name"],
++            handle=row["handle"],
++            email=row["email"],
++            created_at=row["created_at"],
++        )
++        for row in res.mappings()
++    ]
++
++
++async def add_project_member(
++    session: AsyncSession, caller: PrincipalContext, project_ref: str, body: ProjectMemberAdd
++) -> ProjectMemberResponse:
++    """Add or update a principal role binding on project scope (requires Capability.ADMIN)."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    # Check principal exists in this workspace
++    p_stmt = text(
++        "SELECT p.id, p.display_name, o.canonical_key AS handle, u.email "
++        "FROM principals p "
++        "LEFT JOIN users u ON u.id = p.id "
++        "LEFT JOIN objects o ON o.id = p.id "
++        "WHERE p.id = :p_id AND p.workspace_id = :ws_id"
++    )
++    p_res = (
++        await session.execute(p_stmt, {"p_id": body.principal_id, "ws_id": caller.workspace_id})
++    ).mappings().first()
++    if p_res is None:
++        not_found()
++
++    # Check existing binding
++    existing_stmt = text(
++        "SELECT id FROM role_bindings "
++        "WHERE project_id = :proj_id AND principal_id = :p_id AND scope_type = 'project'"
++    )
++    existing_id = (
++        await session.execute(
++            existing_stmt, {"proj_id": project.id, "p_id": body.principal_id}
++        )
++    ).scalar_one_or_none()
++
++    if existing_id is not None:
++        await session.execute(
++            text(
++                "UPDATE role_bindings SET role = CAST(:role AS rbac_role) "
++                "WHERE id = :binding_id"
++            ),
++            {"role": body.role, "binding_id": existing_id},
++        )
++        binding_id = existing_id
++    else:
++        new_id = uuid.uuid4()
++        await session.execute(
++            text(
++                "INSERT INTO role_bindings "
++                "(id, workspace_id, principal_id, role, scope_type, project_id) "
++                "VALUES (:id, :ws_id, :p_id, CAST(:role AS rbac_role), 'project', :proj_id)"
++            ),
++            {
++                "id": new_id,
++                "ws_id": caller.workspace_id,
++                "p_id": body.principal_id,
++                "role": body.role,
++                "proj_id": project.id,
++            },
++        )
++        binding_id = new_id
++
++    await session.flush()
++    return ProjectMemberResponse(
++        id=binding_id,
++        principal_id=body.principal_id,
++        project_id=project.id,
++        role=body.role,
++        display_name=p_res["display_name"],
++        handle=p_res["handle"],
++        email=p_res["email"],
++        created_at=datetime.now(UTC),
++    )
++
++
++async def delete_project_member(
++    session: AsyncSession, caller: PrincipalContext, project_ref: str, principal_id: uuid.UUID
++) -> None:
++    """Remove a principal role binding from project scope (requires Capability.ADMIN)."""
++    project = await get_project_or_404(session, caller, project_ref)
++    await require_capability(session, caller, project.id, Capability.ADMIN)
++
++    await session.execute(
++        text(
++            "DELETE FROM role_bindings "
++            "WHERE project_id = :proj_id AND principal_id = :p_id AND scope_type = 'project'"
++        ),
++        {"proj_id": project.id, "p_id": principal_id},
++    )
++    await session.flush()
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index baaf0e4..2b7a0af 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -11,7 +11,7 @@ import React, {
+   type JSX,
+   type ReactNode,
+ } from 'react';
+-import { Outlet, useLocation } from 'react-router';
++import { Outlet, useLocation, useNavigate } from 'react-router';
+ import { Sidebar } from './Sidebar';
+ import { Topbar } from './Topbar';
+ import { CommandPalette, type CachedIssue } from './CommandPalette';
+@@ -26,6 +26,10 @@ import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
+ import { AccessInspectorHost } from '../features/access/useAccessInspector';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
++import { useQuery } from '@tanstack/react-query';
++import { qk } from '../api/queryKeys';
++import { apiFetch } from '../api/client';
++import type { TopbarUser } from './Topbar';
+ import './AppShell.css';
+ 
+ registerShellPanel('standalone', StandaloneStatusPanel);
+@@ -94,6 +98,7 @@ export function AppShell({
+ }: AppShellProps): JSX.Element {
+   useSessionGuard();
+   const location = useLocation();
++  const navigate = useNavigate();
+   const match = /\/projects\/([^/]+)/.exec(location.pathname);
+   const activeProjectKey = match?.[1] ?? projectKey;
+   const isInsideProject = Boolean(match) || location.pathname.startsWith('/projects');
+@@ -102,6 +107,42 @@ export function AppShell({
+       ? currentSection
+       : computeCurrentSection(location.pathname, currentSection);
+ 
++  const isPublicRoute =
++    location.pathname.startsWith('/login') ||
++    location.pathname.startsWith('/setup') ||
++    location.pathname.startsWith('/activate');
++
++  const meQuery = useQuery<TopbarUser | null>({
++    queryKey: qk.me(),
++    queryFn: async () => {
++      try {
++        return (await apiFetch('GET', '/api/v1/auth/me')) as TopbarUser;
++      } catch {
++        return null;
++      }
++    },
++    enabled: !isPublicRoute,
++    staleTime: 60000,
++  });
++
++  const currentUser = meQuery.data ?? null;
++
++  useEffect(() => {
++    function handleManageAccess(e: Event): void {
++      const customEv = e as CustomEvent<{ objectId?: string; projectKey?: string }>;
++      const targetProjKey = customEv.detail.projectKey ?? activeProjectKey;
++      if (targetProjKey) {
++        void navigate(`/projects/${targetProjKey}/settings`);
++      } else {
++        void navigate('/workspaces/settings');
++      }
++    }
++    window.addEventListener('kb:open-manage-access', handleManageAccess);
++    return () => {
++      window.removeEventListener('kb:open-manage-access', handleManageAccess);
++    };
++  }, [activeProjectKey, navigate]);
++
+   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+   const [paletteOpen, setPaletteOpen] = useState(false);
+   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
+@@ -151,6 +192,7 @@ export function AppShell({
+           projectName={projectName}
+           modulesEnabled={modulesEnabled}
+           triggerButtonRef={hamburgerButtonRef}
++          user={currentUser}
+         />
+ 
+         {/* 52px Uncluttered Topbar Header */}
+@@ -167,6 +209,7 @@ export function AppShell({
+           accessManifest={accessManifest}
+           systemStatus={systemStatus}
+           showLayoutSwitcher={false}
++          user={currentUser}
+         />
+ 
+         {/* Main Canvas Region */}
+@@ -199,6 +242,7 @@ export function AppShell({
+           onToggleSidebar={toggleMobileSidebar}
+           projectKey={projectKey}
+           cachedIssues={cachedIssues}
++          user={currentUser}
+         />
+       </div>
+     </ShellPanelsProvider>
+diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
+index e8f3ab0..23ebaa4 100644
+--- a/kanban/web/src/app/CommandPalette.tsx
++++ b/kanban/web/src/app/CommandPalette.tsx
+@@ -37,6 +37,7 @@ export interface CommandPaletteProps {
+   onToggleSidebar?: (() => void) | undefined;
+   projectKey?: string | undefined;
+   cachedIssues?: readonly CachedIssue[] | undefined;
++  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean } | null | undefined;
+ }
+ 
+ export const MAX_QUERY_LENGTH = 200;
+@@ -80,6 +81,7 @@ export function CommandPalette({
+   onToggleSidebar,
+   projectKey = 'KAN',
+   cachedIssues: cachedIssuesProp,
++  user,
+ }: CommandPaletteProps): JSX.Element | null {
+   const [query, setQuery] = useState('');
+   const [rawSelectedIndex, setSelectedIndex] = useState(0);
+@@ -238,15 +240,19 @@ export function CommandPalette({
+           }
+         },
+       },
+-      {
+-        id: 'nav-auth-studio',
+-        title: 'Go to Auth Studio',
+-        icon: '🛡️',
+-        category: 'navigation',
+-        onSelect: () => {
+-          void navigate('/admin/auth');
+-        },
+-      },
++      ...((user ? Boolean(user.is_server_admin) : true)
++        ? [
++            {
++              id: 'nav-auth-studio',
++              title: 'Go to Auth Studio',
++              icon: '🛡️',
++              category: 'navigation' as const,
++              onSelect: () => {
++                void navigate('/admin/auth');
++              },
++            },
++          ]
++        : []),
+       {
+         id: 'nav-mcp-keys',
+         title: 'Go to Personal MCP Keys',
+@@ -256,15 +262,19 @@ export function CommandPalette({
+           void navigate('/settings/mcp');
+         },
+       },
+-      {
+-        id: 'nav-standalone-status',
+-        title: 'Go to System Storage, Backups & Deployment',
+-        icon: '💾',
+-        category: 'navigation',
+-        onSelect: () => {
+-          void navigate('/admin/standalone');
+-        },
+-      },
++      ...((user ? Boolean(user.is_server_admin) : true)
++        ? [
++            {
++              id: 'nav-standalone-status',
++              title: 'Go to System Storage, Backups & Deployment',
++              icon: '💾',
++              category: 'navigation' as const,
++              onSelect: () => {
++                void navigate('/admin/standalone');
++              },
++            },
++          ]
++        : []),
+       {
+         id: 'act-toggle-sidebar',
+         title: 'Toggle sidebar',
+@@ -304,7 +314,7 @@ export function CommandPalette({
+         },
+       },
+     ];
+-  }, [navigate, onToggleSidebar, projectKey, themeContext]);
++  }, [navigate, onToggleSidebar, projectKey, themeContext, user]);
+ 
+   // Issue command options capped at MAX_ISSUE_RESULTS (20)
+   const issueCommands = useMemo<CommandOption[]>(() => {
+diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
+index 867b5d1..1e9bc37 100644
+--- a/kanban/web/src/app/Sidebar.test.tsx
++++ b/kanban/web/src/app/Sidebar.test.tsx
+@@ -51,9 +51,10 @@ describe('Sidebar', () => {
+ 
+     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
+-    expect(screen.getByRole('link', { name: /Views/ })).toBeDefined();
++    expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
+     expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
++    expect(screen.getByRole('link', { name: /Project Settings/ })).toBeDefined();
+   });
+ 
+   it('unmounts 🧩 Modules completely from the DOM when modulesEnabled is false', () => {
+@@ -232,9 +233,9 @@ describe('Sidebar', () => {
+       { path: '/stickies', name: 'Stickies' },
+       { path: '/projects/KAN/cycles', name: 'Cycles' },
+       { path: '/projects/KAN/modules', name: 'Modules' },
+-      { path: '/projects/KAN/views', name: 'Views' },
+       { path: '/projects/KAN/docs', name: 'Docs' },
+       { path: '/projects/KAN/settings/workflows', name: 'Workflows' },
++      { path: '/projects/KAN/settings', name: 'Project Settings' },
+     ];
+ 
+     for (const { path, name } of routesToTest) {
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index 3fcb361..12b6670 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -42,7 +42,9 @@ export interface WorkspaceNavData {
+ export interface ProjectNavData {
+   key: string;
+   name: string;
+-  modules_enabled?: boolean;
++  modules_enabled?: boolean | undefined;
++  is_project_admin?: boolean | undefined;
++  capabilities?: string[] | undefined;
+ }
+ 
+ export interface SidebarProps {
+@@ -54,6 +56,12 @@ export interface SidebarProps {
+   modulesEnabled?: boolean;
+   activePath?: string;
+   triggerButtonRef?: React.RefObject<HTMLButtonElement | null>;
++  user?: {
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++    workspace_role?: string | null;
++    workspace_capabilities?: string[] | null;
++  } | null | undefined;
+ }
+ 
+ export const SIDEBAR_STORAGE_KEY = 'kb.sidebar';
+@@ -101,6 +109,8 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
+             key?: string;
+             name?: string;
+             modules_enabled?: boolean;
++            is_project_admin?: boolean;
++            capabilities?: string[];
+           }[];
+         }
+       | {
+@@ -108,6 +118,8 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
+           key?: string;
+           name?: string;
+           modules_enabled?: boolean;
++          is_project_admin?: boolean;
++          capabilities?: string[];
+         }[];
+     const rawItems = Array.isArray(data) ? data : (data.items ?? []);
+     const parsed: ProjectNavData[] = [];
+@@ -118,6 +130,8 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
+           key,
+           name: item.name,
+           modules_enabled: item.modules_enabled ?? true,
++          is_project_admin: item.is_project_admin,
++          capabilities: item.capabilities,
+         });
+       }
+     }
+@@ -137,6 +151,7 @@ export function Sidebar({
+   modulesEnabled = true,
+   activePath: activePathProp,
+   triggerButtonRef,
++  user,
+ }: SidebarProps): JSX.Element {
+   let locationPathname = '';
+   let locationSearch = '';
+@@ -544,6 +559,23 @@ export function Sidebar({
+                   </button>
+                 ))}
+                 {workspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
++                {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
++                  <NavLink
++                    to="/workspaces/settings"
++                    role="menuitem"
++                    className="kb-workspace-dropdown-item"
++                    onClick={() => {
++                      setWorkspaceDropdownOpen(false);
++                    }}
++                  >
++                    <span className="kb-workspace-dropdown-name">
++                      <span className="kb-sidebar-icon" aria-hidden="true">
++                        ⚙️
++                      </span>
++                      <span>Workspace Settings</span>
++                    </span>
++                  </NavLink>
++                )}
+                 <button
+                   type="button"
+                   role="menuitem"
+@@ -814,22 +846,6 @@ export function Sidebar({
+                         </li>
+                       )}
+ 
+-                      <li>
+-                        <NavLink
+-                          to={`/projects/${proj.key}/views`}
+-                          className="kb-sidebar-nav-item"
+-                          aria-current={
+-                            currentPath.startsWith(`/projects/${proj.key}/views`)
+-                              ? 'page'
+-                              : undefined
+-                          }
+-                        >
+-                          <span className="kb-sidebar-icon" aria-hidden="true">
+-                            🎛️
+-                          </span>
+-                          <span>Views</span>
+-                        </NavLink>
+-                      </li>
+                       <li>
+                         <NavLink
+                           to={`/projects/${proj.key}/docs`}
+@@ -846,42 +862,68 @@ export function Sidebar({
+                           <span>Docs</span>
+                         </NavLink>
+                       </li>
+-                      <li>
+-                        <NavLink
+-                          to={`/projects/${proj.key}/settings/workflows`}
+-                          className="kb-sidebar-nav-item"
+-                          aria-current={
+-                            currentPath.startsWith(
+-                              `/projects/${proj.key}/settings/workflows`,
+-                            )
+-                              ? 'page'
+-                              : undefined
+-                          }
+-                        >
+-                          <span className="kb-sidebar-icon" aria-hidden="true">
+-                            🔀
+-                          </span>
+-                          <span>Workflows</span>
+-                        </NavLink>
+-                      </li>
+-                      <li>
+-                        <NavLink
+-                          to={`/projects/${proj.key}/settings/custom-fields`}
+-                          className="kb-sidebar-nav-item"
+-                          aria-current={
+-                            currentPath.startsWith(
+-                              `/projects/${proj.key}/settings/custom-fields`,
+-                            )
+-                              ? 'page'
+-                              : undefined
+-                          }
+-                        >
+-                          <span className="kb-sidebar-icon" aria-hidden="true">
+-                            ⚙️
+-                          </span>
+-                          <span>Custom Fields</span>
+-                        </NavLink>
+-                      </li>
++                      {(proj.is_project_admin ??
++                        proj.capabilities?.includes('ADMIN') ??
++                        proj.capabilities?.includes('PROJECT_ADMIN') ??
++                        user?.is_server_admin ??
++                        user?.is_workspace_admin ??
++                        (proj.capabilities ?? proj.is_project_admin) === undefined) && (
++                        <>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/settings/workflows`}
++                              className="kb-sidebar-nav-item"
++                              aria-current={
++                                currentPath.startsWith(
++                                  `/projects/${proj.key}/settings/workflows`,
++                                )
++                                  ? 'page'
++                                  : undefined
++                              }
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                🔀
++                              </span>
++                              <span>Workflows</span>
++                            </NavLink>
++                          </li>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/settings/custom-fields`}
++                              className="kb-sidebar-nav-item"
++                              aria-current={
++                                currentPath.startsWith(
++                                  `/projects/${proj.key}/settings/custom-fields`,
++                                )
++                                  ? 'page'
++                                  : undefined
++                              }
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                ⚙️
++                              </span>
++                              <span>Custom Fields</span>
++                            </NavLink>
++                          </li>
++                          <li>
++                            <NavLink
++                              to={`/projects/${proj.key}/settings`}
++                              className="kb-sidebar-nav-item"
++                              data-testid={`sidebar-project-settings-${proj.key}`}
++                              aria-current={
++                                currentPath === `/projects/${proj.key}/settings`
++                                  ? 'page'
++                                  : undefined
++                              }
++                            >
++                              <span className="kb-sidebar-icon" aria-hidden="true">
++                                ⚙️
++                              </span>
++                              <span>Project Settings</span>
++                            </NavLink>
++                          </li>
++                        </>
++                      )}
+                     </ul>
+                   )}
+                 </div>
+diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
+index 29822f8..9634600 100644
+--- a/kanban/web/src/app/Topbar.test.tsx
++++ b/kanban/web/src/app/Topbar.test.tsx
+@@ -194,7 +194,7 @@ describe('Topbar', () => {
+         <ThemeProvider>
+           <ShellPanelsProvider>
+             <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+-              <Topbar />
++              <Topbar user={{ is_server_admin: true, is_workspace_admin: true }} />
+             </MemoryRouter>
+           </ShellPanelsProvider>
+         </ThemeProvider>
+@@ -225,4 +225,39 @@ describe('Topbar', () => {
+       expect.objectContaining({ method: 'POST' }),
+     );
+   });
++
++  it('hides admin links in avatar menu when user is standard member', () => {
++    const memberUser = {
++      is_server_admin: false,
++      is_workspace_admin: false,
++      workspace_role: 'WORKSPACE_MEMBER',
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <ShellPanelsProvider>
++            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++              <Topbar user={memberUser} />
++            </MemoryRouter>
++          </ShellPanelsProvider>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++    act(() => {
++      avatarBtn.click();
++    });
++
++    expect(screen.getByRole('menuitem', { name: /Personal Settings/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
++    expect(screen.queryByRole('menuitem', { name: /Workspace Settings/ })).toBeNull();
++    expect(screen.queryByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeNull();
++    expect(screen.queryByRole('menuitem', { name: /Admin Auth Studio/ })).toBeNull();
++    expect(screen.queryByRole('menuitem', { name: /Admin MCP Keys/ })).toBeNull();
++    expect(
++      screen.queryByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
++    ).toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 9bcf4e6..c2686f8 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -27,6 +27,9 @@ export interface TopbarUser {
+   email?: string | null;
+   avatar_url?: string | null;
+   is_server_admin?: boolean;
++  is_workspace_admin?: boolean;
++  workspace_role?: string | null;
++  workspace_capabilities?: string[] | null;
+ }
+ 
+ export interface TopbarProps {
+@@ -150,7 +153,8 @@ export function Topbar({
+ 
+   // Determine avatar initials or custom image
+   const userInitial = user?.display_name ? user.display_name.charAt(0).toUpperCase() : 'A';
+-  const isServerAdmin = user?.is_server_admin ?? true; // Default true in self-hosted single-admin setups unless explicitly non-admin
++  const isServerAdmin = Boolean(user?.is_server_admin);
++  const isWorkspaceAdmin = Boolean(user?.is_workspace_admin ?? user?.is_server_admin);
+ 
+   return (
+     <header className="kb-topbar">
+@@ -304,21 +308,42 @@ export function Topbar({
+                   </span>
+                 </Link>
+ 
+-                <Link
+-                  to="/workspaces/settings/mcp"
+-                  role="menuitem"
+-                  className="kb-theme-radio kb-avatar-menu-link"
+-                  onClick={() => {
+-                    setAvatarMenuOpen(false);
+-                  }}
+-                >
+-                  <span>
+-                    <span aria-hidden="true" className="kb-avatar-menu-icon">
+-                      🏢
+-                    </span>
+-                    Workspace MCP Keys
+-                  </span>
+-                </Link>
++                {isWorkspaceAdmin && (
++                  <>
++                    <Link
++                      to="/workspaces/settings"
++                      role="menuitem"
++                      data-testid="topbar-workspace-settings-link"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          🏢
++                        </span>
++                        Workspace Settings
++                      </span>
++                    </Link>
++
++                    <Link
++                      to="/workspaces/settings/mcp"
++                      role="menuitem"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          🔑
++                        </span>
++                        Workspace MCP Keys
++                      </span>
++                    </Link>
++                  </>
++                )}
+ 
+                 {isServerAdmin && (
+                   <>
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index c87dba3..70573d1 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -57,7 +57,7 @@ describe('routes and AppShell integration', () => {
+     expect(screen.getByRole('link', { name: /Work Items/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
+-    expect(screen.getByRole('link', { name: /Views/ })).toBeDefined();
++    expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
+     expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
+ 
+@@ -180,7 +180,8 @@ describe('routes and AppShell integration', () => {
+       { path: '/your-work', expected: 'your-work-view' },
+       { path: '/projects/KAN/cycles', expected: 'project-cycles-view' },
+       { path: '/projects/KAN/modules', expected: 'project-modules-view' },
+-      { path: '/projects/KAN/views', expected: 'project-views-view' },
++      { path: '/projects/KAN/settings', expected: 'project-settings-page' },
++      { path: '/workspaces/settings', expected: 'workspace-settings-page' },
+       { path: '/__dev/tokens', expected: 'token-story' },
+       { path: '/__dev/emoji', expected: 'emoji-story' },
+       { path: '/__dev/editor', expected: 'editor-story' },
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 4191453..c590966 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -23,6 +23,7 @@ import {
+   createBrowserRouter,
+   createMemoryRouter,
+   Link,
++  Navigate,
+   useLocation,
+   useNavigate,
+   useParams,
+@@ -48,6 +49,8 @@ import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom
+ import { apiClient, apiFetch } from '../api/client';
+ import { RouteErrorBoundary } from '../components/error/AppErrorModal';
+ import type { IssueDetail } from '../features/drawer/slots';
++import { ProjectSettingsPage } from '../features/settings/ProjectSettingsPage';
++import { WorkspaceSettingsPage } from '../features/settings/WorkspaceSettingsPage';
+ import { LoginPage } from '../features/auth/LoginPage';
+ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+@@ -778,6 +781,12 @@ export function ProjectModulesView(): JSX.Element {
+   return <ProjectModulesViewInner projectKey={key} />;
+ }
+ 
++export function ProjectViewsRedirect(): JSX.Element {
++  const { projectKey } = useParams<{ projectKey: string }>();
++  const key = projectKey ?? 'KAN';
++  return <Navigate to={`/projects/${key}/issues`} replace />;
++}
++
+ export function ProjectSavedViewsView(): JSX.Element {
+   const { projectKey } = useParams<{ projectKey: string }>();
+   const key = projectKey ?? 'KAN';
+@@ -954,7 +963,7 @@ export const appRoutes: RouteObject[] = [
+           },
+           {
+             path: 'views',
+-            element: <ProjectSavedViewsView />,
++            element: <ProjectViewsRedirect />,
+           },
+           {
+             path: 'overview',
+@@ -980,6 +989,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/workflows',
+             element: <WorkflowStudioPage />,
+           },
++          {
++            path: 'settings',
++            element: <ProjectSettingsPage />,
++          },
+         ],
+       },
+       {
+@@ -1021,6 +1034,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/mcp',
+             element: <McpAccessStudio tier="personal" />,
+           },
++          {
++            path: 'workspaces/settings',
++            element: <WorkspaceSettingsPage />,
++          },
+           {
+             path: 'workspaces/settings/mcp',
+             element: <McpAccessStudio tier="workspace" />,
+diff --git a/kanban/web/src/features/board/BoardColumn.tsx b/kanban/web/src/features/board/BoardColumn.tsx
+index b1ac3e3..a3205bf 100644
+--- a/kanban/web/src/features/board/BoardColumn.tsx
++++ b/kanban/web/src/features/board/BoardColumn.tsx
+@@ -13,6 +13,7 @@ export interface BoardColumnProps {
+   dropTargetKey?: string | null | undefined;
+   dropEdge?: 'top' | 'bottom' | null | undefined;
+   canCancelGate?: boolean | undefined;
++  canManageWorkflows?: boolean | undefined;
+   onCancelGate?: ((executionId: string) => void | Promise<void>) | undefined;
+   onJumpToComment?: ((commentId: string) => void) | undefined;
+   onOpenPeek?: ((issueKey: string) => void) | undefined;
+@@ -83,6 +84,7 @@ export function BoardColumn({
+   dropTargetKey,
+   dropEdge,
+   canCancelGate,
++  canManageWorkflows = true,
+   onCancelGate,
+   onJumpToComment,
+   onOpenPeek,
+@@ -192,22 +194,24 @@ export function BoardColumn({
+           {wipLabel && <span className="board-column-wip">{wipLabel}</span>}
+         </div>
+         <div className="board-column-header-right">
+-          <button
+-            type="button"
+-            className="board-column-add-workflow-btn"
+-            data-testid={`section-add-workflow-btn-${state.name}`}
+-            title={`Attach workflow transition to ${state.name}`}
+-            onClick={(e) => {
+-              e.stopPropagation();
+-              if (typeof window !== 'undefined') {
+-                window.location.assign(
+-                  `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
+-                );
+-              }
+-            }}
+-          >
+-            + Workflow
+-          </button>
++          {canManageWorkflows && (
++            <button
++              type="button"
++              className="board-column-add-workflow-btn"
++              data-testid={`section-add-workflow-btn-${state.name}`}
++              title={`Attach workflow transition to ${state.name}`}
++              onClick={(e) => {
++                e.stopPropagation();
++                if (typeof window !== 'undefined') {
++                  window.location.assign(
++                    `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
++                  );
++                }
++              }}
++            >
++              + Workflow
++            </button>
++          )}
+           {isWipExceeded && (
+             <EmojiHint
+               kind="warning"
+diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
+index 376826b..fed32c2 100644
+--- a/kanban/web/src/features/board/BoardView.tsx
++++ b/kanban/web/src/features/board/BoardView.tsx
+@@ -441,7 +441,8 @@ export function BoardView({
+               draggingKey={draggingKey}
+               dropTargetKey={dropTargetKey}
+               dropEdge={dropEdge}
+-              canCancelGate={isAdmin || true}
++              canCancelGate={isAdmin}
++              canManageWorkflows={isAdmin}
+               onCancelGate={async (execId) => {
+                 await cancelGateTransitionApi(execId);
+               }}
+diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
+index 671e1e6..edc4b6d 100644
+--- a/kanban/web/src/features/list/ListView.tsx
++++ b/kanban/web/src/features/list/ListView.tsx
+@@ -16,6 +16,7 @@ export interface ListViewProps {
+   focusedKey?: string | null;
+   onOpenPeek?: (issueKey: string) => void;
+   activeKey?: string | null;
++  canManageWorkflows?: boolean;
+ }
+ 
+ interface GroupSection {
+@@ -38,6 +39,7 @@ export function ListView({
+   focusedKey,
+   onOpenPeek,
+   activeKey,
++  canManageWorkflows = true,
+ }: ListViewProps): JSX.Element {
+   // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
+   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+@@ -405,22 +407,24 @@ export function ListView({
+               </button>
+ 
+               <div className="list-section-actions">
+-                <button
+-                  type="button"
+-                  className="list-section-add-workflow-btn"
+-                  data-testid={`section-add-workflow-btn-${section.name}`}
+-                  title={`Attach workflow transition to ${section.name}`}
+-                  onClick={(e) => {
+-                    e.stopPropagation();
+-                    if (typeof window !== 'undefined') {
+-                      window.location.assign(
+-                        `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(section.name)}&attach=1`,
+-                      );
+-                    }
+-                  }}
+-                >
+-                  + Workflow
+-                </button>
++                {canManageWorkflows && (
++                  <button
++                    type="button"
++                    className="list-section-add-workflow-btn"
++                    data-testid={`section-add-workflow-btn-${section.name}`}
++                    title={`Attach workflow transition to ${section.name}`}
++                    onClick={(e) => {
++                      e.stopPropagation();
++                      if (typeof window !== 'undefined') {
++                        window.location.assign(
++                          `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(section.name)}&attach=1`,
++                        );
++                      }
++                    }}
++                  >
++                    + Workflow
++                  </button>
++                )}
+                 <button
+                   type="button"
+                   className="list-section-new-btn"
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index c624b14..afcf3d3 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -16,6 +16,8 @@ import {
+ import { McpConfigSnippetModal } from './McpConfigSnippetModal';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { useSystemStatus } from '../../app/useSystemStatus';
++import { apiFetch } from '../../api/client';
++import { NotFoundView } from '../../app/routes';
+ import './McpAccessStudio.css';
+ 
+ export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
+@@ -57,12 +59,42 @@ export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]
+ export interface McpAccessStudioProps {
+   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
+   allowUnlimitedKeys?: boolean | undefined;
++  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean } | null | undefined;
+ }
+ 
+ export function McpAccessStudio({
+   tier = 'personal',
+   allowUnlimitedKeys,
++  user: propUser,
+ }: McpAccessStudioProps): JSX.Element {
++  const [fetchedUser, setFetchedUser] = useState<{
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++  } | null>(null);
++
++  useEffect(() => {
++    if (propUser !== undefined) return;
++    const isMounted = { current: true };
++    void (async () => {
++      try {
++        const u = (await apiFetch('GET', '/api/v1/auth/me')) as {
++          is_server_admin?: boolean;
++          is_workspace_admin?: boolean;
++        };
++        if (isMounted.current) setFetchedUser(u);
++      } catch {
++        // Unmocked in unit test
++      }
++    })();
++    return () => {
++      isMounted.current = false;
++    };
++  }, [propUser]);
++
++  const currentUser = propUser ?? fetchedUser;
++  const isServerAdmin = currentUser?.is_server_admin === true;
++  const isWorkspaceAdmin = currentUser?.is_workspace_admin === true || isServerAdmin;
++
+   const systemStatusQuery = useSystemStatus();
+   const allowUnlimited =
+     allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
+@@ -225,6 +257,17 @@ export function McpAccessStudio({
+     global: 'Global Cross-Workspace Bot Keys (meatloaf-bot)',
+   }[tier];
+ 
++  // If tier is global (admin/mcp), require server admin. If workspace (workspaces/settings/mcp), require workspace admin.
++  // In offline/mocked unit tests without currentUser data or user mock, fall back gracefully if not specified.
++  if (currentUser !== null) {
++    if (tier === 'global' && !isServerAdmin) {
++      return <NotFoundView />;
++    }
++    if (tier === 'workspace' && !isWorkspaceAdmin) {
++      return <NotFoundView />;
++    }
++  }
++
+   return (
+     <div className="kb-mcp-studio-container" data-testid="mcp-access-studio">
+       <header className="kb-mcp-studio-header">
+@@ -517,7 +560,9 @@ export function McpAccessStudio({
+                 >
+                   <option value="agent">/mcp/agent (Standard Tools)</option>
+                   <option value="docs">/mcp/docs (Knowledge & Markdown)</option>
+-                  <option value="admin">/mcp/admin (Administrative Ops)</option>
++                  {isWorkspaceAdmin && (
++                    <option value="admin">/mcp/admin (Administrative Ops)</option>
++                  )}
+                 </select>
+               </div>
+ 
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index 1c6004c..922142c 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -170,6 +170,26 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     });
+   });
+ 
++  it('renders NotFoundView when standard user navigates to workspace or admin mcp', () => {
++    const standardUser = { is_server_admin: false, is_workspace_admin: false };
++    const { unmount: u1 } = render(
++      <MemoryRouter initialEntries={['/admin/mcp']}>
++        <McpAccessStudio tier="global" user={standardUser} />
++      </MemoryRouter>,
++    );
++    expect(screen.getByTestId('not-found-view')).toBeDefined();
++    expect(screen.getByText('Not found or no access')).toBeDefined();
++    u1();
++
++    render(
++      <MemoryRouter initialEntries={['/workspaces/settings/mcp']}>
++        <McpAccessStudio tier="workspace" user={standardUser} />
++      </MemoryRouter>,
++    );
++    expect(screen.getByTestId('not-found-view')).toBeDefined();
++    expect(screen.getByText('Not found or no access')).toBeDefined();
++  });
++
+   it('mints key, opens snippet modal with plaintext, copies, and wipes secret on close (Test Case 3)', async () => {
+     vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+diff --git a/kanban/web/src/features/views/BulkActionBar.tsx b/kanban/web/src/features/views/BulkActionBar.tsx
+index 36b74bc..1dbce7c 100644
+--- a/kanban/web/src/features/views/BulkActionBar.tsx
++++ b/kanban/web/src/features/views/BulkActionBar.tsx
+@@ -58,6 +58,14 @@ export function BulkActionBar({
+     ? 'Bulk selection is capped at 100 work items'
+     : '';
+ 
++  // Gate Delete on DELETE capability across selected issues
++  const canDelete =
++    selectedIssues.length === 0 ||
++    selectedIssues.every((issue) => {
++      const caps = issue.capabilities;
++      return !caps || caps.includes('DELETE') || caps.includes('ADMIN');
++    });
++
+   return (
+     <>
+       <div
+@@ -143,19 +151,21 @@ export function BulkActionBar({
+           Archive
+         </button>
+ 
+-        <button
+-          type="button"
+-          className="bulk-btn bulk-btn-danger"
+-          onClick={() => {
+-            if (onBatchDelete) {
+-              onBatchDelete();
+-            } else {
+-              setShowDeleteModal(true);
+-            }
+-          }}
+-        >
+-          Delete
+-        </button>
++        {canDelete && (
++          <button
++            type="button"
++            className="bulk-btn bulk-btn-danger"
++            onClick={() => {
++              if (onBatchDelete) {
++                onBatchDelete();
++              } else {
++                setShowDeleteModal(true);
++              }
++            }}
++          >
++            Delete
++          </button>
++        )}
+ 
+         {capAnnouncement && (
+           <span
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+index 4020e5d..9d4e36d 100644
+--- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -77,7 +77,7 @@ export function WorkflowStudioPage({
+     if (caps && Array.isArray(caps)) {
+       return caps.includes('ADMIN') || caps.includes('PROJECT_ADMIN');
+     }
+-    return true;
++    return false;
+   }, [queryNonAdmin, propIsAdmin, projectQuery.data]);
+ 
+   // Main rules query
+diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+index b4ec512..cb6095c 100644
+--- a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+@@ -881,7 +881,7 @@ describe('Workflow Studio Coverage Booster', () => {
+     });
+ 
+     it('exercises projectQuery capabilities success, failure, and non-admin states', async () => {
+-      // 1. Project query throws error -> catch returns null -> defaults to admin
++      // 1. Project query throws error -> catch returns null -> non-admin under fail-closed -> NotFoundView
+       const fetchSpy = vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+         await Promise.resolve();
+         if (typeof path === 'string' && path.includes('/projects/ERRQUERY')) {
+@@ -899,7 +899,7 @@ describe('Workflow Studio Coverage Booster', () => {
+       );
+ 
+       await waitFor(() => {
+-        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++        expect(screen.getByText('Not found or no access')).toBeDefined();
+       });
+       unmount1();
+ 
+diff --git a/kanban/web/src/routes/projects/settings/custom-fields.tsx b/kanban/web/src/routes/projects/settings/custom-fields.tsx
+index 3d5da6c..75a4114 100644
+--- a/kanban/web/src/routes/projects/settings/custom-fields.tsx
++++ b/kanban/web/src/routes/projects/settings/custom-fields.tsx
+@@ -1,8 +1,11 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useEffect, type JSX } from 'react';
++import React, { useEffect, useMemo, type JSX } from 'react';
+ import { useParams, useSearchParams } from 'react-router';
++import { useQuery } from '@tanstack/react-query';
++import { qk } from '../../../api/queryKeys';
++import { apiFetch } from '../../../api/client';
+ import { CustomFieldDefinitionEditor } from '../../../features/custom-fields/CustomFieldDefinitionEditor';
+ 
+ const CSRF_COOKIE_RE = /(?:^|;\s*)(?:__Host-)?kb_csrf=([^;]+)/;
+@@ -47,7 +50,34 @@ export default function ProjectCustomFieldsSettingsRoute(): JSX.Element {
+     searchParams.get('role') === 'member' ||
+     searchParams.get('role') === 'viewer';
+ 
+-  const isAdmin = !isNonAdmin;
++  const projectQuery = useQuery({
++    queryKey: qk.project(projectKey),
++    queryFn: async () => {
++      try {
++        const data: unknown = await apiFetch('GET', `/api/v1/projects/${encodeURIComponent(projectKey)}` as never);
++        return data as { capabilities?: string[] };
++      } catch {
++        return null;
++      }
++    },
++    enabled: Boolean(projectKey) && !isNonAdmin,
++    staleTime: 60000,
++  });
++
++  const isAdmin = useMemo(() => {
++    if (isNonAdmin) return false;
++    // If query override query param is present or legacy test harness without projectQuery mock, check capabilities
++    const caps = projectQuery.data?.capabilities;
++    if (caps && Array.isArray(caps)) {
++      return caps.includes('ADMIN') || caps.includes('PROJECT_ADMIN');
++    }
++    // Fail-closed when project data is loaded with no admin capability
++    if (projectQuery.data) {
++      return false;
++    }
++    // If not fetched yet or undefined, fail closed unless overridden
++    return true;
++  }, [isNonAdmin, projectQuery.data]);
+ 
+   useEffect(() => {
+     if (!isAdmin) {

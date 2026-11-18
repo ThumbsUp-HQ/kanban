@@ -58,6 +58,14 @@ export function BulkActionBar({
     ? 'Bulk selection is capped at 100 work items'
     : '';
 
+  // Gate Delete on DELETE capability across selected issues
+  const canDelete =
+    selectedIssues.length === 0 ||
+    selectedIssues.every((issue) => {
+      const caps = issue.capabilities;
+      return !caps || caps.includes('DELETE') || caps.includes('ADMIN');
+    });
+
   return (
     <>
       <div
@@ -143,19 +151,21 @@ export function BulkActionBar({
           Archive
         </button>
 
-        <button
-          type="button"
-          className="bulk-btn bulk-btn-danger"
-          onClick={() => {
-            if (onBatchDelete) {
-              onBatchDelete();
-            } else {
-              setShowDeleteModal(true);
-            }
-          }}
-        >
-          Delete
-        </button>
+        {canDelete && (
+          <button
+            type="button"
+            className="bulk-btn bulk-btn-danger"
+            onClick={() => {
+              if (onBatchDelete) {
+                onBatchDelete();
+              } else {
+                setShowDeleteModal(true);
+              }
+            }}
+          >
+            Delete
+          </button>
+        )}
 
         {capAnnouncement && (
           <span

@@ -51,9 +51,10 @@ describe('Sidebar', () => {
 
     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
-    expect(screen.getByRole('link', { name: /Views/ })).toBeDefined();
+    expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
     expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Project Settings/ })).toBeDefined();
   });
 
   it('unmounts 🧩 Modules completely from the DOM when modulesEnabled is false', () => {
@@ -232,9 +233,9 @@ describe('Sidebar', () => {
       { path: '/stickies', name: 'Stickies' },
       { path: '/projects/KAN/cycles', name: 'Cycles' },
       { path: '/projects/KAN/modules', name: 'Modules' },
-      { path: '/projects/KAN/views', name: 'Views' },
       { path: '/projects/KAN/docs', name: 'Docs' },
       { path: '/projects/KAN/settings/workflows', name: 'Workflows' },
+      { path: '/projects/KAN/settings', name: 'Project Settings' },
     ];
 
     for (const { path, name } of routesToTest) {

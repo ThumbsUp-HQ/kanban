@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # FastAPI dependency
 from starlette.responses import JSONResponse
 
+from database.models.spine import Workspace
+from database.models.workspace_settings import WorkspaceSettings
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.auth.sessions.cookies import (
@@ -317,4 +319,102 @@ async def switch_workspace_endpoint(
             "workspace_id": str(workspace_id),
             "status": "switched",
         }
+    )
+
+
+class UpdateWorkspaceRequest(BaseModel):
+    """Payload for updating workspace name or slug."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_WORKSPACE_NAME_LEN,
+        description="Updated workspace display name",
+    )
+    slug: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=63,
+        description="Updated lowercase URL-safe slug",
+    )
+
+
+@router.patch(
+    "/{workspace_id}",
+    response_model=WorkspaceResponse,
+    summary="Update workspace name or slug",
+)
+async def update_workspace_endpoint(
+    workspace_id: uuid.UUID,
+    body: UpdateWorkspaceRequest,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> WorkspaceResponse:
+    """Update workspace name or slug. Requires WORKSPACE_ADMIN or SERVER_ADMIN."""
+    admin_check = await session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    )
+    if not bool(admin_check.scalar_one()):
+        raise ProblemException(
+            code="INSUFFICIENT_CAPABILITY",
+            status=status.HTTP_403_FORBIDDEN,
+            title="Insufficient Capability",
+            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+        )
+
+    target_id = (
+        caller.workspace_id if str(workspace_id) == str(caller.workspace_id) else workspace_id
+    )
+    ws_stmt = select(Workspace).where(Workspace.id == target_id)
+    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+    if ws is None:
+        raise ProblemException(
+            code="NOT_FOUND",
+            status=status.HTTP_404_NOT_FOUND,
+            title="Not Found",
+            detail="Workspace not found.",
+        )
+
+    if body.name is not None:
+        cleaned_name = body.name.strip()
+        ws.name = cleaned_name
+        set_stmt = select(WorkspaceSettings).where(WorkspaceSettings.workspace_id == target_id)
+        settings = (await session.execute(set_stmt)).scalar_one_or_none()
+        if settings is not None:
+            settings.display_name = cleaned_name[:80]
+
+    if body.slug is not None:
+        cleaned_slug = body.slug.strip().lower()
+        if not SLUG_REGEX.match(cleaned_slug):
+            raise ProblemException(
+                code="VALIDATION_FAILED",
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                title="Validation Failed",
+                detail="slug must match ^[a-z0-9][a-z0-9-]{1,62}$",
+            )
+        if cleaned_slug != ws.slug:
+            existing_ws_id = (
+                await session.execute(
+                    text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
+                    {"ident": cleaned_slug},
+                )
+            ).scalar_one_or_none()
+            if existing_ws_id is not None and str(existing_ws_id) != str(target_id):
+                raise ProblemException(
+                    code="WORKSPACE_SLUG_CONFLICT",
+                    status=status.HTTP_409_CONFLICT,
+                    title="Workspace Slug Conflict",
+                    detail=f"Workspace slug '{cleaned_slug}' is already taken.",
+                )
+            ws.slug = cleaned_slug
+
+    await session.flush()
+    return WorkspaceResponse(
+        id=ws.id,
+        name=ws.name,
+        slug=ws.slug,
+        is_current=(ws.id == caller.workspace_id),
+        role="WORKSPACE_ADMIN",
     )

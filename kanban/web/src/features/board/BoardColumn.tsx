@@ -13,6 +13,7 @@ export interface BoardColumnProps {
   dropTargetKey?: string | null | undefined;
   dropEdge?: 'top' | 'bottom' | null | undefined;
   canCancelGate?: boolean | undefined;
+  canManageWorkflows?: boolean | undefined;
   onCancelGate?: ((executionId: string) => void | Promise<void>) | undefined;
   onJumpToComment?: ((commentId: string) => void) | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
@@ -83,6 +84,7 @@ export function BoardColumn({
   dropTargetKey,
   dropEdge,
   canCancelGate,
+  canManageWorkflows = true,
   onCancelGate,
   onJumpToComment,
   onOpenPeek,
@@ -192,22 +194,24 @@ export function BoardColumn({
           {wipLabel && <span className="board-column-wip">{wipLabel}</span>}
         </div>
         <div className="board-column-header-right">
-          <button
-            type="button"
-            className="board-column-add-workflow-btn"
-            data-testid={`section-add-workflow-btn-${state.name}`}
-            title={`Attach workflow transition to ${state.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (typeof window !== 'undefined') {
-                window.location.assign(
-                  `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
-                );
-              }
-            }}
-          >
-            + Workflow
-          </button>
+          {canManageWorkflows && (
+            <button
+              type="button"
+              className="board-column-add-workflow-btn"
+              data-testid={`section-add-workflow-btn-${state.name}`}
+              title={`Attach workflow transition to ${state.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof window !== 'undefined') {
+                  window.location.assign(
+                    `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
+                  );
+                }
+              }}
+            >
+              + Workflow
+            </button>
+          )}
           {isWipExceeded && (
             <EmojiHint
               kind="warning"

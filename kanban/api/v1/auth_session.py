@@ -158,7 +158,7 @@ async def get_session_info(request: Request) -> JSONResponse:
 
 
 @router.get("/me")
-async def get_current_principal(
+async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
     request: Request,
     principal: Annotated[PrincipalContext, Depends(get_principal)],
 ) -> JSONResponse:
@@ -168,6 +168,11 @@ async def get_current_principal(
     username: str | None = None
     email: str | None = None
     is_server_admin = False
+    is_workspace_admin = False
+    workspace_role: Literal[
+        "SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"
+    ] = "WORKSPACE_MEMBER"
+    workspace_capabilities: list[str] = ["CREATE_PROJECT"]
     timezone = "UTC"
     avatar_url: str | None = None
     has_local_password = False
@@ -212,6 +217,61 @@ async def get_current_principal(
             )
             is_server_admin = bool(admin_res.scalar_one())
 
+            ws_admin_res = await async_session.execute(
+                text(
+                    "SELECT app_principal_has_role("
+                    "  NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']"
+                    ")"
+                )
+            )
+            is_workspace_admin = bool(ws_admin_res.scalar_one())
+
+            if is_server_admin:
+                workspace_role = "SERVER_ADMIN"
+                workspace_capabilities = [
+                    "CREATE_PROJECT",
+                    "MANAGE_WORKSPACE_SETTINGS",
+                    "MANAGE_WORKSPACE_MCP_KEYS",
+                    "MANAGE_SERVER_ADMIN",
+                    "ADMIN_AUTH_STUDIO",
+                    "ADMIN_MCP_KEYS",
+                    "SYSTEM_STORAGE",
+                ]
+            else:
+                try:
+                    async with async_session.begin_nested():
+                        role_res = await async_session.execute(
+                            text(
+                                "SELECT role::text FROM role_bindings "
+                                "WHERE principal_id = :p_id AND workspace_id = :ws_id "
+                                "AND scope_type IN ('server', 'workspace') "
+                                "ORDER BY CASE role "
+                                "  WHEN 'SERVER_ADMIN' THEN 1 "
+                                "  WHEN 'WORKSPACE_ADMIN' THEN 2 "
+                                "  WHEN 'WORKSPACE_MEMBER' THEN 3 "
+                                "  WHEN 'WORKSPACE_GUEST' THEN 4 "
+                                "  ELSE 5 END ASC LIMIT 1"
+                            ),
+                            {"p_id": principal.principal_id, "ws_id": principal.workspace_id},
+                        )
+                        found_role = role_res.scalar_one_or_none()
+                except Exception:  # noqa: BLE001
+                    found_role = None
+
+                if is_workspace_admin or found_role == "WORKSPACE_ADMIN":
+                    workspace_role = "WORKSPACE_ADMIN"
+                    workspace_capabilities = [
+                        "CREATE_PROJECT",
+                        "MANAGE_WORKSPACE_SETTINGS",
+                        "MANAGE_WORKSPACE_MCP_KEYS",
+                    ]
+                elif found_role == "WORKSPACE_GUEST":
+                    workspace_role = "WORKSPACE_GUEST"
+                    workspace_capabilities = []
+                else:
+                    workspace_role = "WORKSPACE_MEMBER"
+                    workspace_capabilities = ["CREATE_PROJECT"]
+
             try:
                 async with async_session.begin_nested():
                     pref_res = await async_session.execute(
@@ -229,6 +289,32 @@ async def get_current_principal(
                             avatar_url = f"/api/v1/users/{principal.principal_id}/avatar"
             except Exception:  # noqa: BLE001, S110
                 pass
+    else:
+        is_server_admin = getattr(principal, "is_server_admin", False)
+        is_workspace_admin = getattr(principal, "is_workspace_admin", is_server_admin)
+        if is_server_admin:
+            workspace_role = "SERVER_ADMIN"
+            workspace_capabilities = [
+                "CREATE_PROJECT",
+                "MANAGE_WORKSPACE_SETTINGS",
+                "MANAGE_WORKSPACE_MCP_KEYS",
+                "MANAGE_SERVER_ADMIN",
+                "ADMIN_AUTH_STUDIO",
+                "ADMIN_MCP_KEYS",
+                "SYSTEM_STORAGE",
+            ]
+        elif is_workspace_admin:
+            workspace_role = "WORKSPACE_ADMIN"
+            workspace_capabilities = [
+                "CREATE_PROJECT",
+                "MANAGE_WORKSPACE_SETTINGS",
+                "MANAGE_WORKSPACE_MCP_KEYS",
+            ]
+        else:
+            workspace_role = getattr(principal, "workspace_role", "WORKSPACE_MEMBER")
+            workspace_capabilities = (
+                ["CREATE_PROJECT"] if workspace_role != "WORKSPACE_GUEST" else []
+            )
 
     handle = username or display_name or str(principal.principal_id)
     return JSONResponse(
@@ -241,6 +327,9 @@ async def get_current_principal(
             "display_name": display_name or handle,
             "email": email,
             "is_server_admin": is_server_admin,
+            "is_workspace_admin": is_workspace_admin,
+            "workspace_role": workspace_role,
+            "workspace_capabilities": workspace_capabilities,
             "timezone": timezone,
             "avatar_url": avatar_url,
             "has_local_password": has_local_password,

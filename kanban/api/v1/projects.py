@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid  # noqa: TC003  # FastAPI runtime type
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -13,6 +14,8 @@ from kanban.api.v1.schemas.projects import (
     ModuleDefaultsPut,
     ProjectCreate,
     ProjectList,
+    ProjectMemberAdd,
+    ProjectMemberResponse,
     ProjectPatch,
     ProjectResponse,
 )
@@ -88,3 +91,50 @@ async def put_module_defaults(
     """
     async with timing_floor(floor_ms=25.0):
         return await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
+
+
+@router.get(
+    "/{project_ref}/members",
+    response_model=list[ProjectMemberResponse],
+    summary="List project members",
+)
+async def list_project_members(
+    project_ref: str, caller: Caller, session: Session
+) -> list[ProjectMemberResponse]:
+    """List role bindings for principals on this project."""
+    async with timing_floor(floor_ms=25.0):
+        return await svc.list_project_members(session, caller, project_ref)
+
+
+@router.post(
+    "/{project_ref}/members",
+    response_model=ProjectMemberResponse,
+    status_code=201,
+    summary="Add project member",
+)
+async def add_project_member(
+    project_ref: str, body: ProjectMemberAdd, caller: Caller, session: Session
+) -> ProjectMemberResponse:
+    """Bind a principal to a project role (PROJECT_ADMIN, MEMBER, VIEWER).
+
+    Requires project ADMIN role.
+    """
+    async with timing_floor(floor_ms=25.0):
+        return await svc.add_project_member(session, caller, project_ref, body)
+
+
+@router.delete(
+    "/{project_ref}/members/{principal_id}",
+    status_code=204,
+    summary="Remove project member",
+)
+async def delete_project_member(
+    project_ref: str, principal_id: uuid.UUID, caller: Caller, session: Session
+) -> Response:
+    """Remove a principal role binding from this project.
+
+    Requires project ADMIN role.
+    """
+    async with timing_floor(floor_ms=25.0):
+        await svc.delete_project_member(session, caller, project_ref, principal_id)
+        return Response(status_code=204)
