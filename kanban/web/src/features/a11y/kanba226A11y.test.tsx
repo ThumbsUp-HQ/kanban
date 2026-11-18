@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React, { useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
@@ -56,7 +56,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
   });
 
   describe('1. Cyclic Focus Traps and aria-modal="true" on Modals & Drawers', () => {
-    it('QuickCreateIssueModal enforces role="dialog", aria-modal="true", and cyclic Tab / Shift+Tab focus trap', async () => {
+    it('QuickCreateIssueModal enforces role="dialog", aria-modal="true", and cyclic Tab / Shift+Tab focus trap', () => {
       const onClose = vi.fn();
       const onCreate = vi.fn();
 
@@ -103,7 +103,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
       expect(document.activeElement).toBe(cancelBtn);
     });
 
-    it('AccessInspectorPopover enforces role="dialog", aria-modal="true", and cyclic focus trap', async () => {
+    it('AccessInspectorPopover enforces role="dialog", aria-modal="true", and cyclic focus trap', () => {
       const onClose = vi.fn();
 
       const { container } = render(
@@ -232,27 +232,24 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
       document.body.appendChild(openerBtn);
       openerBtn.focus();
 
-      let open = true;
-      const { rerender } = render(
-        <QueryClientProvider client={queryClient}>
-          {open && (
-            <AccessInspectorPopover
-              objectId="11111111-1111-1111-1111-111111111111"
-              anchorEl={openerBtn}
-              onClose={() => { open = false; }}
-            />
-          )}
-        </QueryClientProvider>
-      );
+      function AccessTestWrapper() {
+        const [isOpen, setIsOpen] = React.useState(true);
+        return (
+          <QueryClientProvider client={queryClient}>
+            {isOpen ? (
+              <AccessInspectorPopover
+                objectId="11111111-1111-1111-1111-111111111111"
+                anchorEl={openerBtn}
+                onClose={() => { setIsOpen(false); }}
+              />
+            ) : <div />}
+          </QueryClientProvider>
+        );
+      }
+      render(<AccessTestWrapper />);
 
       const dialog = screen.getByRole('dialog');
       fireEvent.keyDown(dialog, { key: 'Escape' });
-
-      rerender(
-        <QueryClientProvider client={queryClient}>
-          {open ? <div /> : null}
-        </QueryClientProvider>
-      );
 
       expect(document.activeElement).toBe(openerBtn);
       document.body.removeChild(openerBtn);
@@ -336,7 +333,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
       fireEvent.click(screen.getByTestId('post-create-view-btn'));
     });
 
-    it('IssueSurface drawer restores focus to exact trigger card upon Escape', async () => {
+    it('IssueSurface drawer restores focus to exact trigger card upon Escape', () => {
       // Create trigger card in DOM
       const cardEl = document.createElement('div');
       cardEl.setAttribute('data-issue-key', 'KAN-226');
@@ -346,7 +343,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
 
       setOpenerElement(cardEl);
 
-      const { container, unmount } = render(
+      const { unmount } = render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-226']}>
             <IssueSurfaceRoot
@@ -367,7 +364,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
       document.body.removeChild(cardEl);
     });
 
-    it('IssueSurface drawer falls back to data-issue-key element if opener is null', async () => {
+    it('IssueSurface drawer falls back to data-issue-key element if opener is null', () => {
       const cardEl = document.createElement('div');
       cardEl.setAttribute('data-issue-key', 'KAN-226');
       cardEl.tabIndex = 0;
@@ -397,7 +394,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
 
     it('BoardCard sets opener and BoardCard restores focus when drawer closes', () => {
       const onOpenPeek = vi.fn();
-      const { container } = render(
+      render(
         <BoardCard
           issue={sampleBoardIssue}
           stateGroup="unstarted"
@@ -514,7 +511,7 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
         const btn = screen.getByTestId('create-root-doc-btn');
         expect(btn).toBeDefined();
         expect(btn.getAttribute('aria-label')).toContain('New Doc');
-        expect(btn.textContent?.trim()).toContain('New Doc');
+        expect(btn.textContent.trim()).toContain('New Doc');
       });
     });
 
