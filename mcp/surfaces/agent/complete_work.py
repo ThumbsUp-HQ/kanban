@@ -11,7 +11,11 @@ from pydantic import ValidationError
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
-from mcp.surfaces.agent.proof import VerificationProof, validate_proof_ticket_key
+from mcp.surfaces.agent.proof import (
+    VERIFICATION_PROOF_SCHEMA,
+    VerificationProof,
+    validate_proof_ticket_key,
+)
 
 if TYPE_CHECKING:
     from mcp.internal_client import KanbanApiClient
@@ -36,10 +40,7 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
             "type": "string",
             "description": "Summary",
         },
-        "verification_proof": {
-            "type": "object",
-            "description": "Proof packet",
-        },
+        "verification_proof": VERIFICATION_PROOF_SCHEMA,
         "to_state": {
             "type": "string",
             "description": "Target state",

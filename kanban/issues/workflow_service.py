@@ -169,11 +169,23 @@ async def _resolve_state_by_ref(
     if found_by_name:
         return found_by_name
 
+    valid_states_res = await session.execute(
+        select(WorkflowState.name)
+        .where(WorkflowState.project_id == project_id)
+        .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
+    )
+    valid_state_names = list(valid_states_res.scalars().all())
+    hint = (
+        f"Valid states: {', '.join(valid_state_names)}"
+        if valid_state_names
+        else "No states configured in project"
+    )
     raise ProblemException(
         code="INVALID_TRANSITION",
         status=422,
         title="Invalid Transition",
-        detail=f"Target state '{state_ref}' not found in project",
+        detail=f"Target state '{state_ref}' not found in project. {hint}",
+        extra={"hint": hint, "valid_states": valid_state_names},
     )
 
 
@@ -614,11 +626,28 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
     if to_state_ref:
         target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
         if target_state.state_group != "completed":
+            valid_comp_res = await session.execute(
+                select(WorkflowState.name)
+                .where(
+                    WorkflowState.project_id == issue.project_id,
+                    WorkflowState.state_group == "completed",
+                )
+                .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
+            )
+            valid_comp_names = list(valid_comp_res.scalars().all())
+            hint = (
+                f"Valid completed states: {', '.join(valid_comp_names)}"
+                if valid_comp_names
+                else "No completed states configured in project"
+            )
             raise ProblemException(
                 code="INVALID_TRANSITION",
                 status=422,
                 title="Invalid Transition",
-                detail=f"Target state '{target_state.name}' is not in the 'completed' group",
+                detail=(
+                    f"Target state '{target_state.name}' is not in the 'completed' group. {hint}"
+                ),
+                extra={"hint": hint, "valid_states": valid_comp_names},
             )
     else:
         stmt_comp = (
@@ -631,11 +660,26 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
         )
         comp_state = (await session.execute(stmt_comp)).scalars().first()
         if comp_state is None:
+            valid_res = await session.execute(
+                select(WorkflowState.name)
+                .where(WorkflowState.project_id == issue.project_id)
+                .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
+            )
+            valid_names = list(valid_res.scalars().all())
+            hint = (
+                f"Valid states: {', '.join(valid_names)}"
+                if valid_names
+                else "No states configured in project"
+            )
             raise ProblemException(
                 code="INVALID_TRANSITION",
                 status=422,
                 title="Invalid Transition",
-                detail="Project has no workflow state configured in the 'completed' group",
+                detail=(
+                    "Project has no workflow state configured in the 'completed' group. "
+                    f"{hint}"
+                ),
+                extra={"hint": hint, "valid_states": valid_names},
             )
         target_state = comp_state
 

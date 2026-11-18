@@ -1,0 +1,215 @@
+{
+  "COMPLETE_WORK_SCHEMA": {
+    "type": "object",
+    "properties": {
+      "identifier": {
+        "type": "string",
+        "description": "Issue ref"
+      },
+      "summary_markdown": {
+        "type": "string",
+        "description": "Summary"
+      },
+      "verification_proof": {
+        "type": "object",
+        "description": "Proof packet",
+        "properties": {
+          "qa_dir": {
+            "type": "string",
+            "description": "QA directory path"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "QA artifact paths"
+          },
+          "reality_checker": {
+            "type": "object",
+            "description": "Reality-checker audit verdict",
+            "properties": {
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "READY",
+                  "NEEDS_WORK"
+                ]
+              },
+              "grade": {
+                "type": "string",
+                "pattern": "^[A-F]$"
+              },
+              "report_path": {
+                "type": "string",
+                "description": "Report path"
+              }
+            },
+            "required": [
+              "verdict",
+              "grade",
+              "report_path"
+            ],
+            "additionalProperties": false
+          },
+          "ci_run_url": {
+            "type": "string",
+            "description": "CI run URL"
+          }
+        },
+        "required": [
+          "qa_dir",
+          "artifacts",
+          "reality_checker",
+          "ci_run_url"
+        ],
+        "additionalProperties": false
+      },
+      "to_state": {
+        "type": "string",
+        "description": "Target state"
+      }
+    },
+    "required": [
+      "identifier",
+      "summary_markdown",
+      "verification_proof"
+    ],
+    "additionalProperties": false
+  },
+  "UPDATE_TICKET_SCHEMA": {
+    "type": "object",
+    "properties": {
+      "identifier": {
+        "type": "string",
+        "description": "Issue ref"
+      },
+      "if_match": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "64-char SHA-256 hex ETag (required when description_markdown is provided)"
+      },
+      "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500,
+        "description": "New summary"
+      },
+      "description_markdown": {
+        "type": "string",
+        "description": "Description (requires if_match)"
+      },
+      "description_mode": {
+        "type": "string",
+        "enum": [
+          "append",
+          "replace"
+        ],
+        "default": "append",
+        "description": "append or replace"
+      },
+      "assignees_add": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Assignees to add"
+      },
+      "assignees_remove": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Assignees to remove"
+      },
+      "priority": {
+        "type": "string",
+        "description": "Priority slug"
+      },
+      "start_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "format": "date",
+        "description": "Start date"
+      },
+      "due_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "format": "date",
+        "description": "Due date"
+      },
+      "cycle": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Cycle"
+      },
+      "modules_add": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Modules to add"
+      },
+      "modules_remove": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Modules to remove"
+      },
+      "labels_add": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Labels to add"
+      },
+      "labels_remove": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Labels to remove"
+      },
+      "parent": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Parent issue ref"
+      }
+    },
+    "required": [
+      "identifier"
+    ],
+    "additionalProperties": false
+  },
+  "INVALID_TRANSITION_sample": {
+    "code": "INVALID_TRANSITION",
+    "status": 422,
+    "title": "Invalid Transition",
+    "detail": "Target state 'FlyingToMars' not found in project. Valid states: Backlog, Todo, In Progress, Done, Cancelled",
+    "extra": {
+      "hint": "Valid states: Backlog, Todo, In Progress, Done, Cancelled",
+      "valid_states": [
+        "Backlog",
+        "Todo",
+        "In Progress",
+        "Done",
+        "Cancelled"
+      ]
+    }
+  }
+}

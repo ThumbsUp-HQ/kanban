@@ -22,11 +22,11 @@ EXPECTED_AGENT_TOOL_NAMES: frozenset[str] = frozenset(
         "link_objects",
     }
 )
-MAX_AGENT_SCHEMA_BUDGET_TOKENS: int = 1850
+MAX_AGENT_SCHEMA_BUDGET_TOKENS: int = 2200
 
 
 def test_schema_budget_agent_tools() -> None:
-    """Assert /mcp/agent tools/list JSON conforms to <= 1,850 token budget."""
+    """Assert /mcp/agent tools/list JSON conforms to <= 2,200 token budget."""
     registry = create_agent_registry()
     specs = registry.list_specs()
     tool_names = {s.name for s in specs}

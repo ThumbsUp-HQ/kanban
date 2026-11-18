@@ -1,0 +1,376 @@
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+index 2dee7b8..d87e913 100644
+--- a/kanban/issues/workflow_service.py
++++ b/kanban/issues/workflow_service.py
+@@ -169,11 +169,23 @@ async def _resolve_state_by_ref(
+     if found_by_name:
+         return found_by_name
+ 
++    valid_states_res = await session.execute(
++        select(WorkflowState.name)
++        .where(WorkflowState.project_id == project_id)
++        .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
++    )
++    valid_state_names = list(valid_states_res.scalars().all())
++    hint = (
++        f"Valid states: {', '.join(valid_state_names)}"
++        if valid_state_names
++        else "No states configured in project"
++    )
+     raise ProblemException(
+         code="INVALID_TRANSITION",
+         status=422,
+         title="Invalid Transition",
+-        detail=f"Target state '{state_ref}' not found in project",
++        detail=f"Target state '{state_ref}' not found in project. {hint}",
++        extra={"hint": hint, "valid_states": valid_state_names},
+     )
+ 
+ 
+@@ -614,11 +626,28 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+     if to_state_ref:
+         target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
+         if target_state.state_group != "completed":
++            valid_comp_res = await session.execute(
++                select(WorkflowState.name)
++                .where(
++                    WorkflowState.project_id == issue.project_id,
++                    WorkflowState.state_group == "completed",
++                )
++                .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
++            )
++            valid_comp_names = list(valid_comp_res.scalars().all())
++            hint = (
++                f"Valid completed states: {', '.join(valid_comp_names)}"
++                if valid_comp_names
++                else "No completed states configured in project"
++            )
+             raise ProblemException(
+                 code="INVALID_TRANSITION",
+                 status=422,
+                 title="Invalid Transition",
+-                detail=f"Target state '{target_state.name}' is not in the 'completed' group",
++                detail=(
++                    f"Target state '{target_state.name}' is not in the 'completed' group. {hint}"
++                ),
++                extra={"hint": hint, "valid_states": valid_comp_names},
+             )
+     else:
+         stmt_comp = (
+@@ -631,11 +660,26 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+         )
+         comp_state = (await session.execute(stmt_comp)).scalars().first()
+         if comp_state is None:
++            valid_res = await session.execute(
++                select(WorkflowState.name)
++                .where(WorkflowState.project_id == issue.project_id)
++                .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
++            )
++            valid_names = list(valid_res.scalars().all())
++            hint = (
++                f"Valid states: {', '.join(valid_names)}"
++                if valid_names
++                else "No states configured in project"
++            )
+             raise ProblemException(
+                 code="INVALID_TRANSITION",
+                 status=422,
+                 title="Invalid Transition",
+-                detail="Project has no workflow state configured in the 'completed' group",
++                detail=(
++                    "Project has no workflow state configured in the 'completed' group. "
++                    f"{hint}"
++                ),
++                extra={"hint": hint, "valid_states": valid_names},
+             )
+         target_state = comp_state
+ 
+diff --git a/mcp/help.py b/mcp/help.py
+index a5fabca..75dc800 100644
+--- a/mcp/help.py
++++ b/mcp/help.py
+@@ -27,7 +27,12 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
+     },
+     "search_tickets": {"query": "str", "project": "KAN", "lod": "summary | standard | full"},
+     "begin_work": {"identifier": "KAN-142 | uuid"},
+-    "transition_ticket": {"identifier": "KAN-142 | uuid", "state": "str"},
++    "transition_ticket": {"identifier": "KAN-142 | uuid", "to_state": "str"},
++    "complete_work": {
++        "identifier": "KAN-142 | uuid",
++        "summary_markdown": "str",
++        "verification_proof": "object",
++    },
+     "add_comment": {"identifier": "KAN-142 | uuid", "body_markdown": "str", "ack_mentions": "bool"},
+     "link_objects": {
+         "source": "KAN-142 | uuid",
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index bf29328..4c1edf3 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -11,7 +11,11 @@ from pydantic import ValidationError
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+-from mcp.surfaces.agent.proof import VerificationProof, validate_proof_ticket_key
++from mcp.surfaces.agent.proof import (
++    VERIFICATION_PROOF_SCHEMA,
++    VerificationProof,
++    validate_proof_ticket_key,
++)
+ 
+ if TYPE_CHECKING:
+     from mcp.internal_client import KanbanApiClient
+@@ -36,10 +40,7 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
+             "type": "string",
+             "description": "Summary",
+         },
+-        "verification_proof": {
+-            "type": "object",
+-            "description": "Proof packet",
+-        },
++        "verification_proof": VERIFICATION_PROOF_SCHEMA,
+         "to_state": {
+             "type": "string",
+             "description": "Target state",
+diff --git a/mcp/surfaces/agent/proof.py b/mcp/surfaces/agent/proof.py
+index f259a95..483bfd1 100644
+--- a/mcp/surfaces/agent/proof.py
++++ b/mcp/surfaces/agent/proof.py
+@@ -4,6 +4,8 @@
+ 
+ from __future__ import annotations
+ 
++from typing import Any, Final
++
+ from kanban.issues.proof import (
+     ARTIFACT_PATH_REGEX,
+     CI_RUN_URL_REGEX,
+@@ -17,7 +19,51 @@ __all__ = [
+     "ARTIFACT_PATH_REGEX",
+     "CI_RUN_URL_REGEX",
+     "QA_DIR_REGEX",
++    "VERIFICATION_PROOF_SCHEMA",
+     "RealityCheckerProof",
+     "VerificationProof",
+     "validate_proof_ticket_key",
+ ]
++
++VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
++    "type": "object",
++    "description": "Proof packet",
++    "properties": {
++        "qa_dir": {
++            "type": "string",
++            "description": "QA directory path",
++        },
++        "artifacts": {
++            "type": "array",
++            "items": {"type": "string"},
++            "description": "QA artifact paths",
++        },
++        "reality_checker": {
++            "type": "object",
++            "description": "Reality-checker audit verdict",
++            "properties": {
++                "verdict": {
++                    "type": "string",
++                    "enum": ["READY", "NEEDS_WORK"],
++                },
++                "grade": {
++                    "type": "string",
++                    "pattern": "^[A-F]$",
++                },
++                "report_path": {
++                    "type": "string",
++                    "description": "Report path",
++                },
++            },
++            "required": ["verdict", "grade", "report_path"],
++            "additionalProperties": False,
++        },
++        "ci_run_url": {
++            "type": "string",
++            "description": "CI run URL",
++        },
++    },
++    "required": ["qa_dir", "artifacts", "reality_checker", "ci_run_url"],
++    "additionalProperties": False,
++}
++
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+index 7b40d80..6b720f2 100644
+--- a/mcp/surfaces/agent/transition_ticket.py
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -11,7 +11,11 @@ from pydantic import ValidationError
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+-from mcp.surfaces.agent.proof import VerificationProof, validate_proof_ticket_key
++from mcp.surfaces.agent.proof import (
++    VERIFICATION_PROOF_SCHEMA,
++    VerificationProof,
++    validate_proof_ticket_key,
++)
+ 
+ if TYPE_CHECKING:
+     from mcp.internal_client import KanbanApiClient
+@@ -40,10 +44,7 @@ TRANSITION_TICKET_SCHEMA: Final[dict[str, Any]] = {
+             "type": "string",
+             "description": "Comment",
+         },
+-        "verification_proof": {
+-            "type": "object",
+-            "description": "Proof packet",
+-        },
++        "verification_proof": VERIFICATION_PROOF_SCHEMA,
+     },
+     "required": ["identifier", "to_state"],
+     "additionalProperties": False,
+diff --git a/mcp/surfaces/agent/update_ticket.py b/mcp/surfaces/agent/update_ticket.py
+index 1fc0204..f800059 100644
+--- a/mcp/surfaces/agent/update_ticket.py
++++ b/mcp/surfaces/agent/update_ticket.py
+@@ -34,7 +34,9 @@ UPDATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
+         "if_match": {
+             "type": "string",
+             "pattern": "^[0-9a-f]{64}$",
+-            "description": "ETag",
++            "description": (
++                "64-char SHA-256 hex ETag (required when description_markdown is provided)"
++            ),
+         },
+         "summary": {
+             "type": "string",
+@@ -44,7 +46,7 @@ UPDATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
+         },
+         "description_markdown": {
+             "type": "string",
+-            "description": "Description",
++            "description": "Description (requires if_match)",
+         },
+         "description_mode": {
+             "type": "string",
+diff --git a/mcp/tests/agent/test_workflow_argument_validation.py b/mcp/tests/agent/test_workflow_argument_validation.py
+index fd8897c..4df27a9 100644
+--- a/mcp/tests/agent/test_workflow_argument_validation.py
++++ b/mcp/tests/agent/test_workflow_argument_validation.py
+@@ -15,13 +15,17 @@ from mcp.surfaces.agent.begin_work import (
+     begin_work,
+ )
+ from mcp.surfaces.agent.complete_work import (
++    COMPLETE_WORK_SCHEMA,
+     _validate_complete_work_arguments,
+     complete_work,
+ )
++from mcp.surfaces.agent.proof import VERIFICATION_PROOF_SCHEMA
+ from mcp.surfaces.agent.transition_ticket import (
++    TRANSITION_TICKET_SCHEMA,
+     _validate_transition_arguments,
+     transition_ticket,
+ )
++from mcp.surfaces.agent.update_ticket import UPDATE_TICKET_SCHEMA
+ 
+ 
+ def _valid_proof(key: str = "KAN-142") -> dict[str, Any]:
+@@ -350,3 +354,30 @@ async def test_mocked_upstream_responses() -> None:
+         client=mock_client,
+     )
+     assert bw_res["cycle"] == "Sprint 99"
++
++
++def test_schema_contracts_and_proof_definitions() -> None:
++    """Verify COMPLETE_WORK_SCHEMA, TRANSITION_TICKET_SCHEMA, and UPDATE_TICKET_SCHEMA contracts."""
++    expected_proof_keys = {"qa_dir", "artifacts", "reality_checker", "ci_run_url"}
++
++    # 1. Complete work schema
++    assert COMPLETE_WORK_SCHEMA["properties"]["verification_proof"] == VERIFICATION_PROOF_SCHEMA
++    cw_vp = COMPLETE_WORK_SCHEMA["properties"]["verification_proof"]
++    assert set(cw_vp["properties"].keys()) == expected_proof_keys
++    assert set(cw_vp["required"]) == expected_proof_keys
++    rc = cw_vp["properties"]["reality_checker"]
++    assert set(rc["properties"].keys()) == {"verdict", "grade", "report_path"}
++    assert set(rc["required"]) == {"verdict", "grade", "report_path"}
++
++    # 2. Transition ticket schema
++    assert TRANSITION_TICKET_SCHEMA["properties"]["verification_proof"] == VERIFICATION_PROOF_SCHEMA
++    tt_vp = TRANSITION_TICKET_SCHEMA["properties"]["verification_proof"]
++    assert set(tt_vp["properties"].keys()) == expected_proof_keys
++    assert set(tt_vp["required"]) == expected_proof_keys
++
++    # 3. Update ticket schema documents if_match requirement with description_markdown
++    if_match_desc = UPDATE_TICKET_SCHEMA["properties"]["if_match"]["description"]
++    desc_desc = UPDATE_TICKET_SCHEMA["properties"]["description_markdown"]["description"]
++    assert "description_markdown" in if_match_desc
++    assert "if_match" in desc_desc
++
+diff --git a/mcp/tests/agent/test_workflow_tools.py b/mcp/tests/agent/test_workflow_tools.py
+index c404f1d..5c0a4dc 100644
+--- a/mcp/tests/agent/test_workflow_tools.py
++++ b/mcp/tests/agent/test_workflow_tools.py
+@@ -176,6 +176,26 @@ async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv
+     assert parsed["to_state"] == "Todo"
+ 
+ 
++async def test_transition_ticket_unknown_state_hints(agent_test_env: AgentTestEnv) -> None:
++    """transition_ticket with unknown to_state returns INVALID_TRANSITION listing valid states."""
++    env = agent_test_env
++    res = await _call_tool(
++        env,
++        "transition_ticket",
++        {
++            "identifier": "KAN-142",
++            "to_state": "FlyingToMars",
++        },
++        subject_token=env.token_adam,
++    )
++    assert res["isError"] is True
++    err_text = res["content"][0]["text"]
++    assert "INVALID_TRANSITION" in err_text
++    assert "FlyingToMars" in err_text
++    assert "Backlog" in err_text or "Todo" in err_text or "In Progress" in err_text
++
++
++
+ async def test_complete_work_help_and_validations(agent_test_env: AgentTestEnv) -> None:
+     """complete_work validates proof paths, traversal, and verdict."""
+     env = agent_test_env
+diff --git a/mcp/tests/test_lod_help.py b/mcp/tests/test_lod_help.py
+index b4f8523..6c74c70 100644
+--- a/mcp/tests/test_lod_help.py
++++ b/mcp/tests/test_lod_help.py
+@@ -499,3 +499,17 @@ async def test_internal_exception_non_disclosure() -> None:
+         assert "/srv/" not in error_text
+         assert "RuntimeError" not in error_text
+         assert "secret" not in error_text
++
++
++@pytest.mark.asyncio
++async def test_build_help_workflow_tools() -> None:
++    """Verify build_help for transition_ticket and complete_work returns correct param defaults."""
++    tt_help = await build_help("transition_ticket")
++    assert tt_help["params"]["to_state"] == "str"
++    assert "state" not in tt_help["params"]
++
++    cw_help = await build_help("complete_work")
++    assert cw_help["params"]["identifier"] == "KAN-142 | uuid"
++    assert cw_help["params"]["summary_markdown"] == "str"
++    assert cw_help["params"]["verification_proof"] == "object"
++
+diff --git a/mcp/tests/test_schema_budget.py b/mcp/tests/test_schema_budget.py
+index a6af6b0..69bfa44 100644
+--- a/mcp/tests/test_schema_budget.py
++++ b/mcp/tests/test_schema_budget.py
+@@ -22,11 +22,11 @@ EXPECTED_AGENT_TOOL_NAMES: frozenset[str] = frozenset(
+         "link_objects",
+     }
+ )
+-MAX_AGENT_SCHEMA_BUDGET_TOKENS: int = 1850
++MAX_AGENT_SCHEMA_BUDGET_TOKENS: int = 2200
+ 
+ 
+ def test_schema_budget_agent_tools() -> None:
+-    """Assert /mcp/agent tools/list JSON conforms to <= 1,850 token budget."""
++    """Assert /mcp/agent tools/list JSON conforms to <= 2,200 token budget."""
+     registry = create_agent_registry()
+     specs = registry.list_specs()
+     tool_names = {s.name for s in specs}

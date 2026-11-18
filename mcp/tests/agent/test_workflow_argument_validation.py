@@ -15,13 +15,17 @@ from mcp.surfaces.agent.begin_work import (
     begin_work,
 )
 from mcp.surfaces.agent.complete_work import (
+    COMPLETE_WORK_SCHEMA,
     _validate_complete_work_arguments,
     complete_work,
 )
+from mcp.surfaces.agent.proof import VERIFICATION_PROOF_SCHEMA
 from mcp.surfaces.agent.transition_ticket import (
+    TRANSITION_TICKET_SCHEMA,
     _validate_transition_arguments,
     transition_ticket,
 )
+from mcp.surfaces.agent.update_ticket import UPDATE_TICKET_SCHEMA
 
 
 def _valid_proof(key: str = "KAN-142") -> dict[str, Any]:
@@ -350,3 +354,30 @@ async def test_mocked_upstream_responses() -> None:
         client=mock_client,
     )
     assert bw_res["cycle"] == "Sprint 99"
+
+
+def test_schema_contracts_and_proof_definitions() -> None:
+    """Verify COMPLETE_WORK_SCHEMA, TRANSITION_TICKET_SCHEMA, and UPDATE_TICKET_SCHEMA contracts."""
+    expected_proof_keys = {"qa_dir", "artifacts", "reality_checker", "ci_run_url"}
+
+    # 1. Complete work schema
+    assert COMPLETE_WORK_SCHEMA["properties"]["verification_proof"] == VERIFICATION_PROOF_SCHEMA
+    cw_vp = COMPLETE_WORK_SCHEMA["properties"]["verification_proof"]
+    assert set(cw_vp["properties"].keys()) == expected_proof_keys
+    assert set(cw_vp["required"]) == expected_proof_keys
+    rc = cw_vp["properties"]["reality_checker"]
+    assert set(rc["properties"].keys()) == {"verdict", "grade", "report_path"}
+    assert set(rc["required"]) == {"verdict", "grade", "report_path"}
+
+    # 2. Transition ticket schema
+    assert TRANSITION_TICKET_SCHEMA["properties"]["verification_proof"] == VERIFICATION_PROOF_SCHEMA
+    tt_vp = TRANSITION_TICKET_SCHEMA["properties"]["verification_proof"]
+    assert set(tt_vp["properties"].keys()) == expected_proof_keys
+    assert set(tt_vp["required"]) == expected_proof_keys
+
+    # 3. Update ticket schema documents if_match requirement with description_markdown
+    if_match_desc = UPDATE_TICKET_SCHEMA["properties"]["if_match"]["description"]
+    desc_desc = UPDATE_TICKET_SCHEMA["properties"]["description_markdown"]["description"]
+    assert "description_markdown" in if_match_desc
+    assert "if_match" in desc_desc
+

@@ -499,3 +499,17 @@ async def test_internal_exception_non_disclosure() -> None:
         assert "/srv/" not in error_text
         assert "RuntimeError" not in error_text
         assert "secret" not in error_text
+
+
+@pytest.mark.asyncio
+async def test_build_help_workflow_tools() -> None:
+    """Verify build_help for transition_ticket and complete_work returns correct param defaults."""
+    tt_help = await build_help("transition_ticket")
+    assert tt_help["params"]["to_state"] == "str"
+    assert "state" not in tt_help["params"]
+
+    cw_help = await build_help("complete_work")
+    assert cw_help["params"]["identifier"] == "KAN-142 | uuid"
+    assert cw_help["params"]["summary_markdown"] == "str"
+    assert cw_help["params"]["verification_proof"] == "object"
+

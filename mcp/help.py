@@ -27,7 +27,12 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
     },
     "search_tickets": {"query": "str", "project": "KAN", "lod": "summary | standard | full"},
     "begin_work": {"identifier": "KAN-142 | uuid"},
-    "transition_ticket": {"identifier": "KAN-142 | uuid", "state": "str"},
+    "transition_ticket": {"identifier": "KAN-142 | uuid", "to_state": "str"},
+    "complete_work": {
+        "identifier": "KAN-142 | uuid",
+        "summary_markdown": "str",
+        "verification_proof": "object",
+    },
     "add_comment": {"identifier": "KAN-142 | uuid", "body_markdown": "str", "ack_mentions": "bool"},
     "link_objects": {
         "source": "KAN-142 | uuid",

@@ -34,7 +34,9 @@ UPDATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
         "if_match": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$",
-            "description": "ETag",
+            "description": (
+                "64-char SHA-256 hex ETag (required when description_markdown is provided)"
+            ),
         },
         "summary": {
             "type": "string",
@@ -44,7 +46,7 @@ UPDATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
         },
         "description_markdown": {
             "type": "string",
-            "description": "Description",
+            "description": "Description (requires if_match)",
         },
         "description_mode": {
             "type": "string",

@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-builder-fcb10f25/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-builder-fcb10f25
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 39 items
+
+mcp/tests/agent/test_workflow_argument_validation.py::test_begin_work_argument_validation PASSED [  2%]
+mcp/tests/agent/test_workflow_argument_validation.py::test_transition_ticket_argument_validation PASSED [  5%]
+mcp/tests/agent/test_workflow_argument_validation.py::test_complete_work_argument_validation PASSED [  7%]
+mcp/tests/agent/test_workflow_argument_validation.py::test_tool_invocations_without_client PASSED [ 10%]
+mcp/tests/agent/test_workflow_argument_validation.py::test_mocked_upstream_responses PASSED [ 12%]
+mcp/tests/agent/test_workflow_argument_validation.py::test_schema_contracts_and_proof_definitions PASSED [ 15%]
+mcp/tests/agent/test_workflow_tools.py::test_begin_work_help PASSED      [ 17%]
+mcp/tests/agent/test_workflow_tools.py::test_begin_work_validation_errors PASSED [ 20%]
+mcp/tests/agent/test_workflow_tools.py::test_begin_work_positive_execution PASSED [ 23%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_help_and_guards PASSED [ 25%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_positive_execution PASSED [ 28%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_unknown_state_hints PASSED [ 30%]
+mcp/tests/agent/test_workflow_tools.py::test_complete_work_help_and_validations PASSED [ 33%]
+mcp/tests/agent/test_workflow_tools.py::test_complete_work_positive_execution PASSED [ 35%]
+mcp/tests/agent/test_update_ticket.py::test_case_1_positive_append PASSED [ 38%]
+mcp/tests/agent/test_update_ticket.py::test_case_2_concurrency_stale_etag PASSED [ 41%]
+mcp/tests/agent/test_update_ticket.py::test_case_3_boundary_validations PASSED [ 43%]
+mcp/tests/agent/test_update_ticket.py::test_case_4_assignees_add_and_remove PASSED [ 46%]
+mcp/tests/agent/test_update_ticket.py::test_case_5_update_ticket_help PASSED [ 48%]
+mcp/tests/agent/test_update_ticket.py::test_case_6_scope_insufficient PASSED [ 51%]
+mcp/tests/agent/test_update_ticket.py::test_update_ticket_context_none PASSED [ 53%]
+mcp/tests/agent/test_update_ticket.py::test_update_ticket_formatting_helpers PASSED [ 56%]
+mcp/tests/agent/test_update_ticket.py::test_update_ticket_validation_errors PASSED [ 58%]
+mcp/tests/agent/test_update_ticket.py::test_update_ticket_assignees_and_summary_length PASSED [ 61%]
+mcp/tests/agent/test_update_ticket.py::test_update_ticket_modules_labels_unit_branches PASSED [ 64%]
+mcp/tests/test_schema_budget.py::test_schema_budget_agent_tools PASSED   [ 66%]
+mcp/tests/test_lod_help.py::test_parse_lod_valid_and_invalid PASSED      [ 69%]
+mcp/tests/test_lod_help.py::test_issue_summary_projection_keys PASSED    [ 71%]
+mcp/tests/test_lod_help.py::test_issue_summary_gate_included_only_when_pending PASSED [ 74%]
+mcp/tests/test_lod_help.py::test_issue_standard_and_full_projections PASSED [ 76%]
+mcp/tests/test_lod_help.py::test_doc_sticky_project_entity_projections PASSED [ 79%]
+mcp/tests/test_lod_help.py::test_issue_projections_edge_cases PASSED     [ 82%]
+mcp/tests/test_lod_help.py::test_build_help_with_mock_client PASSED      [ 84%]
+mcp/tests/test_lod_help.py::test_build_help_with_live_project_metadata_success PASSED [ 87%]
+mcp/tests/test_lod_help.py::test_build_help_modules_disabled_omits_modules PASSED [ 89%]
+mcp/tests/test_lod_help.py::test_build_help_yaml_rendering PASSED        [ 92%]
+mcp/tests/test_lod_help.py::test_mcp_transcript_help_and_ambiguity PASSED [ 94%]
+mcp/tests/test_lod_help.py::test_internal_exception_non_disclosure PASSED [ 97%]
+mcp/tests/test_lod_help.py::test_build_help_workflow_tools PASSED        [100%]
+
+============================== 39 passed in 8.52s ==============================
