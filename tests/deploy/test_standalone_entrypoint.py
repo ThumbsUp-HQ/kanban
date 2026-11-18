@@ -19,6 +19,7 @@ from deploy.standalone.entrypoint import (
     bootstrap_database,
     build_child_env,
     build_uvicorn_command,
+    ensure_backup_grants,
     initialize_cluster,
     log_phase,
     main,
@@ -727,3 +728,22 @@ def test_warm_boot_stale_alembic_digest_runs_migrations(
     assert "upgrade" in alembic_calls[0]
     assert "head" in alembic_calls[0]
     assert (pgdata / ".alembic_head").read_text(encoding="utf-8").strip() != "stale-old-digest"
+
+
+def test_ensure_backup_grants_executes_alembic_version_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validate ensure_backup_grants grants SELECT on alembic_version (KANBA-208)."""
+    executed_sqls: list[str] = []
+
+    def mock_run_psql(sql: str, dbname: str = "postgres", run_dir: str = "/tmp") -> None:
+        _ = (dbname, run_dir)
+        executed_sqls.append(sql)
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_psql_script", mock_run_psql)
+
+    ensure_backup_grants(run_dir="/tmp/test_run")
+    assert len(executed_sqls) == 1
+    assert "alembic_version" in executed_sqls[0]
+    assert "GRANT SELECT ON TABLE alembic_version TO kanban_app" in executed_sqls[0]
+

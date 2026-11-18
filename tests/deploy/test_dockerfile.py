@@ -299,3 +299,24 @@ def test_parse_dockerfile_stages_structure() -> None:
     assert stages[0]["name"] == "first"
     assert stages[1]["name"] == "second"
     assert stages[1]["image"] == "first"
+
+
+def test_kanban_ctl_and_agent_in_container_path() -> None:
+    """Validate kanban-ctl and kanban-agent executables and PATH (KANBA-208)."""
+    content = DOCKERFILE_PATH.read_text(encoding="utf-8")
+    stages = parse_dockerfile_stages(content)
+    stage_dict = {s["name"]: s for s in stages}
+
+    slim_stage = stage_dict["runtime-slim"]
+    slim_runs = [body for inst, body in slim_stage["instructions"] if inst == "RUN"]
+    combined_runs = " ".join(slim_runs)
+
+    assert "kanban-ctl" in combined_runs, "runtime-slim must install kanban-ctl executable"
+    assert "kanban-agent" in combined_runs, "runtime-slim must install kanban-agent executable"
+
+    env_instructions = [body for inst, body in slim_stage["instructions"] if inst == "ENV"]
+    combined_env = " ".join(env_instructions)
+    assert "/opt/kanban/.venv/bin" in combined_env, (
+        "runtime-slim PATH must include /opt/kanban/.venv/bin"
+    )
+

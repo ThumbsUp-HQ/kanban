@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -287,6 +288,7 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
     log_phase("migrations", "schema migrations applied successfully")
 
     # Ensure column-level SELECT (principal_id, username) + RLS policy for kanban_app,
+    # grant SELECT on alembic_version for pg_dump backups,
     # then drop LOGIN privilege on kanban_migrator.
     post_mig_sql = """
     GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials TO kanban_app;
@@ -304,10 +306,41 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
       END IF;
     END
     $$;
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'alembic_version'
+      ) THEN
+        GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;
+      END IF;
+    END
+    $$;
     """
     run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
     run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
     log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
+
+
+def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
+    """Ensure kanban_app has SELECT on alembic_version so pg_dump succeeds."""
+    grant_sql = """
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'alembic_version'
+      ) THEN
+        GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;
+      END IF;
+    END
+    $$;
+    """
+    try:
+        run_psql_script(grant_sql, dbname="kanban", run_dir=run_dir)
+        log_phase("backup_grants", "granted SELECT on alembic_version to kanban_app")
+    except Exception as exc:  # noqa: BLE001
+        log_phase("backup_grants", f"Warning: grant SELECT on alembic_version failed: {exc}")
 
 
 def build_uvicorn_command() -> list[str]:
@@ -514,6 +547,20 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
     alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
 
+    # Ensure data and backups directories exist with kanban ownership
+    data_dir = pgdata.parent
+    data_dir.mkdir(parents=True, exist_ok=True)
+    backups_dir = data_dir / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    if os.getuid() == 0:
+        try:
+            shutil.chown(str(data_dir), user=65532, group=65532)
+            shutil.chown(str(backups_dir), user=65532, group=65532)
+            data_dir.chmod(0o775)
+            backups_dir.chmod(0o775)
+        except OSError as exc:
+            log_phase("init_dirs", f"Warning: chown data_dir failed: {exc}")
+
     keyring_path = Path(
         os.environ.get(
             "KB_KEYRING_PATH",
@@ -565,6 +612,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         if not (pgdata / "conf.d" / "kanban.conf").is_file():
             configure_postgres(pgdata, run_dir=run_dir)
         start_postgres(pgdata, run_dir=run_dir)
+        ensure_backup_grants(run_dir=run_dir)
     else:
         # Storage probe & ephemeral warning
         status = probe(pgdata.parent, mode="standalone_embedded_pg")
@@ -592,6 +640,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         # Bootstrap SQL & Migrations
         bootstrap_database(run_dir=run_dir, keyring=keyring)
         run_migrations(pgdata, alembic_ini, run_dir=run_dir)
+        ensure_backup_grants(run_dir=run_dir)
         if current_digest:
             mig_digest_file.parent.mkdir(parents=True, exist_ok=True)
             mig_digest_file.write_text(current_digest, encoding="utf-8")

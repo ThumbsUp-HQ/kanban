@@ -89,14 +89,20 @@ def resolve_schedule_path(override: Path | None = None) -> Path:
 def get_backup_schedule(config_path: Path | None = None) -> dict[str, Any]:
     """Retrieve current backup schedule configuration."""
     target = resolve_schedule_path(config_path)
-    if target.is_file():
-        try:
-            content = target.read_text(encoding="utf-8")
-            data = json.loads(content)
-            if isinstance(data, dict):
-                return ScheduledBackupConfig.from_dict(data).to_dict()
-        except Exception:
-            logger.warning("Failed to parse backup schedule from %s", target, exc_info=True)
+    candidates = [target]
+    fallback = Path(".backup_schedule.json")
+    if config_path is None and target != fallback:
+        candidates.append(fallback)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            try:
+                content = candidate.read_text(encoding="utf-8")
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    return ScheduledBackupConfig.from_dict(data).to_dict()
+            except Exception:
+                logger.warning("Failed to parse backup schedule from %s", candidate, exc_info=True)
     return ScheduledBackupConfig().to_dict()
 
 
@@ -129,8 +135,21 @@ def update_backup_schedule(
     )
 
     target = resolve_schedule_path(config_path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
+    except OSError as err:
+        fallback = Path(".backup_schedule.json")
+        if config_path is None and target != fallback:
+            logger.warning(
+                "Failed to write backup schedule to %s (%s); falling back to %s",
+                target,
+                err,
+                fallback,
+            )
+            fallback.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
+        else:
+            raise
 
     return config.to_dict()
 

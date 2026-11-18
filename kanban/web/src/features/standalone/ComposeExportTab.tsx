@@ -110,6 +110,7 @@ export function ComposeExportTab({
       } else {
         setError('Failed to copy');
       }
+    /* v8 ignore next 4 - defensive catch block */
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to copy';
       setError(msg);

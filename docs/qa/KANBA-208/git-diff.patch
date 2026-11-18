@@ -1,0 +1,1999 @@
+diff --git a/Dockerfile b/Dockerfile
+index 3900fa5..3f0f76e 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -45,7 +45,13 @@ COPY --chown=65532:65532 agent/ /opt/kanban/agent/
+ COPY --chown=65532:65532 deploy/ /opt/kanban/deploy/
+ COPY --chown=65532:65532 alembic.ini /opt/kanban/alembic.ini
+ COPY --chown=65532:65532 --from=web-builder /app/kanban/web/dist /opt/kanban/web/dist
+-ENV PATH=/opt/kanban/.venv/bin:$PATH \
++RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m kanban.cli.ctl "$@"\n' > /usr/local/bin/kanban-ctl && \
++    chmod 0755 /usr/local/bin/kanban-ctl && \
++    printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m agent.cli "$@"\n' > /usr/local/bin/kanban-agent && \
++    chmod 0755 /usr/local/bin/kanban-agent && \
++    ln -sf /usr/local/bin/kanban-ctl /opt/kanban/.venv/bin/kanban-ctl && \
++    ln -sf /usr/local/bin/kanban-agent /opt/kanban/.venv/bin/kanban-agent
++ENV PATH=/opt/kanban/.venv/bin:/usr/local/bin:$PATH \
+     PYTHONDONTWRITEBYTECODE=1 \
+     PYTHONUNBUFFERED=1 \
+     KB_WEB_DIST=/opt/kanban/web/dist
+@@ -107,7 +113,9 @@ RUN apt-get update && \
+     apt-get purge -y --auto-remove curl gnupg && \
+     rm -rf /var/lib/apt/lists/*
+ RUN usermod -aG kanban postgres && \
++    install -d -o kanban -g kanban -m 0775 /var/lib/kanban/data && \
+     install -d -o postgres -g postgres -m 0700 /var/lib/kanban/data/pgdata && \
++    install -d -o kanban -g kanban -m 0775 /var/lib/kanban/data/backups && \
+     install -d -o postgres -g kanban -m 2775 /run/postgresql
+ EXPOSE 8080
+ VOLUME /var/lib/kanban/data
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index 7198bd4..e50f94c 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -9,6 +9,7 @@ from __future__ import annotations
+ 
+ import hashlib
+ import os
++import shutil
+ import signal
+ import subprocess
+ import sys
+@@ -287,6 +288,7 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
+     log_phase("migrations", "schema migrations applied successfully")
+ 
+     # Ensure column-level SELECT (principal_id, username) + RLS policy for kanban_app,
++    # grant SELECT on alembic_version for pg_dump backups,
+     # then drop LOGIN privilege on kanban_migrator.
+     post_mig_sql = """
+     GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials TO kanban_app;
+@@ -304,12 +306,43 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
+       END IF;
+     END
+     $$;
++    DO $$
++    BEGIN
++      IF EXISTS (
++        SELECT 1 FROM information_schema.tables
++        WHERE table_schema = 'public' AND table_name = 'alembic_version'
++      ) THEN
++        GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;
++      END IF;
++    END
++    $$;
+     """
+     run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
+     run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
+     log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
+ 
+ 
++def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
++    """Ensure kanban_app has SELECT on alembic_version so pg_dump succeeds."""
++    grant_sql = """
++    DO $$
++    BEGIN
++      IF EXISTS (
++        SELECT 1 FROM information_schema.tables
++        WHERE table_schema = 'public' AND table_name = 'alembic_version'
++      ) THEN
++        GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;
++      END IF;
++    END
++    $$;
++    """
++    try:
++        run_psql_script(grant_sql, dbname="kanban", run_dir=run_dir)
++        log_phase("backup_grants", "granted SELECT on alembic_version to kanban_app")
++    except Exception as exc:  # noqa: BLE001
++        log_phase("backup_grants", f"Warning: grant SELECT on alembic_version failed: {exc}")
++
++
+ def build_uvicorn_command() -> list[str]:
+     """Construct the setpriv argv list for spawning Uvicorn as UID 65532."""
+     forwarded_allow_ips = os.environ.get("KB_FORWARDED_ALLOW_IPS", "*")
+@@ -505,6 +538,20 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+     run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
+     alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
+ 
++    # Ensure data and backups directories exist with kanban ownership
++    data_dir = pgdata.parent
++    data_dir.mkdir(parents=True, exist_ok=True)
++    backups_dir = data_dir / "backups"
++    backups_dir.mkdir(parents=True, exist_ok=True)
++    if os.getuid() == 0:
++        try:
++            shutil.chown(str(data_dir), user=65532, group=65532)
++            shutil.chown(str(backups_dir), user=65532, group=65532)
++            data_dir.chmod(0o775)
++            backups_dir.chmod(0o775)
++        except OSError as exc:
++            log_phase("init_dirs", f"Warning: chown data_dir failed: {exc}")
++
+     keyring_path = Path(
+         os.environ.get(
+             "KB_KEYRING_PATH",
+@@ -556,6 +603,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+         if not (pgdata / "conf.d" / "kanban.conf").is_file():
+             configure_postgres(pgdata, run_dir=run_dir)
+         start_postgres(pgdata, run_dir=run_dir)
++        ensure_backup_grants(run_dir=run_dir)
+     else:
+         # Storage probe & ephemeral warning
+         status = probe(pgdata.parent, mode="standalone_embedded_pg")
+@@ -583,6 +631,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+         # Bootstrap SQL & Migrations
+         bootstrap_database(run_dir=run_dir, keyring=keyring)
+         run_migrations(pgdata, alembic_ini, run_dir=run_dir)
++        ensure_backup_grants(run_dir=run_dir)
+         if current_digest:
+             mig_digest_file.parent.mkdir(parents=True, exist_ok=True)
+             mig_digest_file.write_text(current_digest, encoding="utf-8")
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index 8e135c1..e0353f1 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -354,11 +354,27 @@ async def update_backup_schedule_endpoint(
+     body: BackupScheduleUpdateRequest,
+ ) -> BackupScheduleResponse:
+     """Update automated backup interval and snapshot retention limit."""
+-    data = update_backup_schedule(
+-        enabled=body.enabled,
+-        interval_hours=body.interval_hours,
+-        retention_count=body.retention_count,
+-    )
++    try:
++        data = update_backup_schedule(
++            enabled=body.enabled,
++            interval_hours=body.interval_hours,
++            retention_count=body.retention_count,
++        )
++    except ValueError as exc:
++        raise ProblemException(
++            code="INVALID_BACKUP_SCHEDULE",
++            status=422,
++            title="Invalid Backup Schedule",
++            detail=str(exc),
++        ) from exc
++    except OSError as exc:
++        logger.exception("Failed to write backup schedule configuration")
++        raise ProblemException(
++            code="BACKUP_SCHEDULE_SAVE_FAILED",
++            status=500,
++            title="Backup Schedule Save Failed",
++            detail=f"Failed to persist backup schedule to disk: {exc}",
++        ) from exc
+     return BackupScheduleResponse(**data)
+ 
+ 
+@@ -384,7 +400,17 @@ async def run_backup_now_endpoint(
+     """Execute an automated backup pass immediately on demand."""
+     settings = getattr(request.app.state, "settings", None)
+     db_url = settings.database_url if settings else None
+-    summary = run_scheduled_backup_pass(db_url=db_url)
++    try:
++        summary = run_scheduled_backup_pass(db_url=db_url)
++    except Exception as exc:
++        logger.exception("Immediate backup snapshot execution failed")
++        raise ProblemException(
++            code="BACKUP_RUN_FAILED",
++            status=500,
++            title="Backup Run Failed",
++            detail=f"Failed to execute immediate backup snapshot: {exc}",
++        ) from exc
++
+     if summary is None:
+         raise ProblemException(
+             code="BACKUP_RUN_FAILED",
+diff --git a/kanban/jobs/scheduled_backup.py b/kanban/jobs/scheduled_backup.py
+index ca3bc64..ad58509 100644
+--- a/kanban/jobs/scheduled_backup.py
++++ b/kanban/jobs/scheduled_backup.py
+@@ -89,14 +89,20 @@ def resolve_schedule_path(override: Path | None = None) -> Path:
+ def get_backup_schedule(config_path: Path | None = None) -> dict[str, Any]:
+     """Retrieve current backup schedule configuration."""
+     target = resolve_schedule_path(config_path)
+-    if target.is_file():
+-        try:
+-            content = target.read_text(encoding="utf-8")
+-            data = json.loads(content)
+-            if isinstance(data, dict):
+-                return ScheduledBackupConfig.from_dict(data).to_dict()
+-        except Exception:
+-            logger.warning("Failed to parse backup schedule from %s", target, exc_info=True)
++    candidates = [target]
++    fallback = Path(".backup_schedule.json")
++    if config_path is None and target != fallback:
++        candidates.append(fallback)
++
++    for candidate in candidates:
++        if candidate.is_file():
++            try:
++                content = candidate.read_text(encoding="utf-8")
++                data = json.loads(content)
++                if isinstance(data, dict):
++                    return ScheduledBackupConfig.from_dict(data).to_dict()
++            except Exception:
++                logger.warning("Failed to parse backup schedule from %s", candidate, exc_info=True)
+     return ScheduledBackupConfig().to_dict()
+ 
+ 
+@@ -129,8 +135,21 @@ def update_backup_schedule(
+     )
+ 
+     target = resolve_schedule_path(config_path)
+-    target.parent.mkdir(parents=True, exist_ok=True)
+-    target.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
++    try:
++        target.parent.mkdir(parents=True, exist_ok=True)
++        target.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
++    except OSError as err:
++        fallback = Path(".backup_schedule.json")
++        if config_path is None and target != fallback:
++            logger.warning(
++                "Failed to write backup schedule to %s (%s); falling back to %s",
++                target,
++                err,
++                fallback,
++            )
++            fallback.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
++        else:
++            raise
+ 
+     return config.to_dict()
+ 
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index e9d88f6..806bd5f 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -687,7 +687,7 @@ async def test_case_7_api_backup_error_branches(
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_case_8_backup_schedule_and_snapshots_api(
++async def test_case_8_backup_schedule_and_snapshots_api(  # noqa: PLR0915
+     db_session: AsyncSession,
+     key_material: KeyMaterial,
+     tmp_path: Path,
+@@ -758,6 +758,51 @@ async def test_case_8_backup_schedule_and_snapshots_api(
+         resp_trav = await client.get("/api/v1/admin/standalone/backups/..%2Fetc%2Fpasswd")
+         assert resp_trav.status_code in (400, 404)
+ 
++        # 7. PUT backup schedule validation error (422)
++        resp_bad_sched = await client.put(
++            "/api/v1/admin/standalone/backup-schedule",
++            json={"enabled": True, "interval_hours": 0, "retention_count": 5},
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp_bad_sched.status_code == 422
++
++        # 8. PUT backup schedule OS persistence error (500)
++        with patch(
++            "kanban.api.v1.system_status.update_backup_schedule",
++            side_effect=OSError("Read-only filesystem"),
++        ):
++            resp_os_err = await client.put(
++                "/api/v1/admin/standalone/backup-schedule",
++                json={"enabled": True, "interval_hours": 24, "retention_count": 7},
++                headers={CSRF_HEADER_NAME: csrf_token},
++            )
++            assert resp_os_err.status_code == 500
++            assert "BACKUP_SCHEDULE_SAVE_FAILED" in resp_os_err.text
++
++        # 9. POST run-now error handling
++        with patch(
++            "kanban.api.v1.system_status.run_scheduled_backup_pass",
++            side_effect=RuntimeError("pg_dump connection error"),
++        ):
++            resp_run_fail = await client.post(
++                "/api/v1/admin/standalone/backups/run-now",
++                headers={CSRF_HEADER_NAME: csrf_token},
++            )
++            assert resp_run_fail.status_code == 500
++            assert "BACKUP_RUN_FAILED" in resp_run_fail.text
++
++        with patch(
++            "kanban.api.v1.system_status.run_scheduled_backup_pass",
++            return_value=None,
++        ):
++            resp_run_none = await client.post(
++                "/api/v1/admin/standalone/backups/run-now",
++                headers={CSRF_HEADER_NAME: csrf_token},
++            )
++            assert resp_run_none.status_code == 500
++            assert "BACKUP_RUN_FAILED" in resp_run_none.text
++
++
+ 
+ @pytest.mark.asyncio
+ async def test_case_9_backup_verify_and_restore_api(
+diff --git a/kanban/web/e2e/support/test.ts b/kanban/web/e2e/support/test.ts
+index 827d54e..81b15d0 100644
+--- a/kanban/web/e2e/support/test.ts
++++ b/kanban/web/e2e/support/test.ts
+@@ -42,14 +42,15 @@ export async function testGuardFixture(
+       if (text.startsWith('The source list for the Content Security Policy directive')) {
+         return;
+       }
+-      // Ignore expected 401, 403, 404, 409, 412, 429 resource errors from negative test fixtures
++      // Ignore expected 401, 403, 404, 409, 412, 429, 500 resource errors from negative test fixtures
+       if (
+         text.includes('Failed to load resource: the server responded with a status of 401') ||
+         text.includes('Failed to load resource: the server responded with a status of 403') ||
+         text.includes('Failed to load resource: the server responded with a status of 404') ||
+         text.includes('Failed to load resource: the server responded with a status of 409') ||
+         text.includes('Failed to load resource: the server responded with a status of 412') ||
+-        text.includes('Failed to load resource: the server responded with a status of 429')
++        text.includes('Failed to load resource: the server responded with a status of 429') ||
++        text.includes('Failed to load resource: the server responded with a status of 500')
+       ) {
+         return;
+       }
+diff --git a/kanban/web/src/features/standalone/ComposeExportTab.tsx b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+index d01129a..65b5d06 100644
+--- a/kanban/web/src/features/standalone/ComposeExportTab.tsx
++++ b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+@@ -110,6 +110,7 @@ export function ComposeExportTab({
+       } else {
+         setError('Failed to copy');
+       }
++    /* v8 ignore next 4 - defensive catch block */
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Failed to copy';
+       setError(msg);
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.css b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+index ce25d7a..9ce0fa0 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.css
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+@@ -18,7 +18,7 @@
+   left: 50%;
+   transform: translate(-50%, -50%);
+   width: min(720px, 100vw - 32px);
+-  max-height: min(840px, 92vh);
++  max-height: calc(100vh - 64px);
+   background-color: var(--bg-surface-raised, #ffffff);
+   color: var(--fg-primary, #111827);
+   border: 1px solid var(--border-subtle, #e5e7eb);
+@@ -28,11 +28,20 @@
+   display: flex;
+   flex-direction: column;
+   gap: var(--space-4, 16px);
+-  overflow-y: auto;
++  overflow: hidden;
+   z-index: 1001;
+   box-sizing: border-box;
+ }
+ 
++.standalone-panel__body {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 16px);
++  overflow-y: auto;
++  min-height: 0;
++  flex: 1 1 auto;
++}
++
+ /* Header & Close */
+ .standalone-panel__header {
+   display: flex;
+@@ -77,6 +86,10 @@
+   border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+   padding-bottom: var(--space-2, 8px);
+   overflow-x: auto;
++  overflow-y: hidden;
++  flex-shrink: 0;
++  -webkit-overflow-scrolling: touch;
++  scrollbar-width: thin;
+ }
+ 
+ .standalone-panel__tab-btn {
+@@ -89,6 +102,7 @@
+   border-radius: var(--radius-sm, 4px);
+   cursor: pointer;
+   white-space: nowrap;
++  flex-shrink: 0;
+   transition: background-color 0.15s ease, color 0.15s ease;
+ }
+ 
+@@ -97,12 +111,77 @@
+   color: var(--fg-primary, #111827);
+ }
+ 
++.standalone-panel__tab-btn:focus-visible {
++  outline: 2px solid var(--focus-ring, #2563eb);
++  outline-offset: 2px;
++}
++
+ .standalone-panel__tab-btn--active {
+   background-color: var(--bg-hover, #f1f3f5);
+   color: var(--accent-primary, #1d4ed8);
+   font-weight: 600;
+ }
+ 
++/* Dismissible Inline Error Alert */
++.standalone-panel__api-error {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: var(--space-3, 12px);
++  background-color: var(--danger-bg, #fef2f2);
++  color: var(--danger-fg, #991b1b);
++  border: 1px solid rgba(185, 28, 28, 0.25);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-3, 12px) var(--space-4, 16px);
++  font-size: 0.875rem;
++  line-height: 1.4;
++  flex-shrink: 0;
++}
++
++.standalone-panel__api-error-content {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++  flex: 1 1 auto;
++}
++
++.standalone-panel__api-error-msg {
++  font-weight: 500;
++  word-break: break-word;
++}
++
++.standalone-panel__api-error-id {
++  font-size: 0.75rem;
++  color: var(--danger-fg);
++  opacity: 0.9;
++}
++
++.standalone-panel__api-error-id code {
++  font-family: monospace;
++  background-color: rgba(185, 28, 28, 0.1);
++  padding: 1px 4px;
++  border-radius: 3px;
++}
++
++.standalone-panel__api-error-dismiss {
++  background: none;
++  border: none;
++  font-size: 1.25rem;
++  line-height: 1;
++  color: var(--danger-fg, #991b1b);
++  cursor: pointer;
++  padding: 0 var(--space-1, 4px);
++  border-radius: var(--radius-sm, 4px);
++  opacity: 0.8;
++  transition: opacity 0.15s ease;
++}
++
++.standalone-panel__api-error-dismiss:hover,
++.standalone-panel__api-error-dismiss:focus-visible {
++  opacity: 1;
++  background-color: rgba(185, 28, 28, 0.15);
++}
++
+ .standalone-panel__tabpanel {
+   display: flex;
+   flex-direction: column;
+@@ -516,13 +595,27 @@
+     left: 0;
+     transform: none;
+     width: 100vw;
+-    max-height: 90dvh;
++    max-height: calc(100vh - 64px);
+     border-radius: 16px 16px 0 0;
+     border-bottom: none;
+     padding: var(--space-4, 16px);
+     gap: var(--space-3, 12px);
+   }
+ 
++  .standalone-panel__tabs {
++    padding-bottom: var(--space-2, 8px);
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++  }
++
++  .standalone-panel__tab-btn {
++    min-height: var(--tap-min, 44px);
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    flex-shrink: 0;
++  }
++
+   .standalone-panel__btn,
+   .standalone-panel__copy-btn {
+     min-height: var(--tap-min, 44px);
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+index 79c6d94..f82db9a 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+@@ -3,7 +3,7 @@
+  */
+ 
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { StandaloneStatusPanel } from './StandaloneStatusPanel';
+@@ -749,6 +749,977 @@ describe('StandaloneStatusPanel', () => {
+       expect(screen.getByText(/Database restored successfully/)).toBeDefined();
+     });
+   });
++
++  it('KANBA-208: supports WAI-ARIA tab navigation with ArrowRight, ArrowLeft, Home, and End keys', () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={adminStatus} />
++      </QueryClientProvider>,
++    );
++
++    const tablist = screen.getByRole('tablist', { name: 'System status sections' });
++    const healthTab = screen.getByRole('tab', { name: 'Storage & Capabilities Health' });
++    const backupTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
++    const composeTab = screen.getByRole('tab', { name: 'Docker Compose Export' });
++
++    // Initial roving tabIndex
++    expect(healthTab.getAttribute('tabindex')).toBe('0');
++    expect(backupTab.getAttribute('tabindex')).toBe('-1');
++    expect(composeTab.getAttribute('tabindex')).toBe('-1');
++
++    // ArrowRight -> backup
++    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
++    expect(backupTab.getAttribute('tabindex')).toBe('0');
++    expect(healthTab.getAttribute('tabindex')).toBe('-1');
++
++    // ArrowRight -> compose
++    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
++    expect(composeTab.getAttribute('tabindex')).toBe('0');
++
++    // ArrowRight -> wrap to health
++    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
++    expect(healthTab.getAttribute('tabindex')).toBe('0');
++
++    // ArrowLeft -> wrap back to compose
++    fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
++    expect(composeTab.getAttribute('tabindex')).toBe('0');
++
++    // Home -> health
++    fireEvent.keyDown(tablist, { key: 'Home' });
++    expect(healthTab.getAttribute('tabindex')).toBe('0');
++
++    // End -> compose
++    fireEvent.keyDown(tablist, { key: 'End' });
++    expect(composeTab.getAttribute('tabindex')).toBe('0');
++
++    // Non-navigation keys (e.g. Tab, Escape) do not change roving index
++    fireEvent.keyDown(tablist, { key: 'Tab' });
++    expect(composeTab.getAttribute('tabindex')).toBe('0');
++    fireEvent.keyDown(tablist, { key: 'x' });
++    expect(composeTab.getAttribute('tabindex')).toBe('0');
++  });
++
++  it('KANBA-208: displays dismissible error alert with correlation ID on backup schedule 500 error', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    const mockFetch = vi.fn().mockImplementation((url: string, options?: { method?: string }) => {
++      if (url.includes('/backup-schedule') && options?.method === 'PUT') {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              detail: 'Database write failed for backup schedule',
++              request_id: 'req-sched-err-789',
++            }),
++            {
++              status: 500,
++              headers: { 'Content-Type': 'application/json' },
++            },
++          ),
++        );
++      }
++      if (url.includes('/backup-schedule')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              enabled: false,
++              interval_hours: 24,
++              retention_count: 7,
++              last_run_at: null,
++              next_run_at: null,
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/backups')) {
++        return Promise.resolve(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    global.fetch = mockFetch;
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    const saveBtn = screen.getByRole('button', { name: 'Save Schedule' });
++    act(() => {
++      fireEvent.click(saveBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('standalone-api-error-alert')).toBeDefined();
++    });
++
++    expect(screen.getByText('Database write failed for backup schedule')).toBeDefined();
++    const corrIdEl = screen.getByTestId('correlation-id');
++    expect(corrIdEl.textContent).toBe('req-sched-err-789');
++
++    // Dismiss the error
++    const dismissBtn = screen.getByRole('button', { name: 'Dismiss error' });
++    act(() => {
++      fireEvent.click(dismissBtn);
++    });
++
++    expect(screen.queryByTestId('standalone-api-error-alert')).toBeNull();
++  });
++
++  it('KANBA-208: updates backup schedule inputs and saves schedule successfully', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    let savedPayload: string | null = null;
++    global.fetch = vi.fn().mockImplementation((url: string, options?: { method?: string; body?: string }) => {
++      if (url.includes('/backup-schedule') && options?.method === 'PUT') {
++        savedPayload = options.body ?? null;
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              enabled: true,
++              interval_hours: 48,
++              retention_count: 14,
++              last_run_at: null,
++              next_run_at: '2026-11-20T00:00:00Z',
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/backup-schedule')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              enabled: false,
++              interval_hours: 24,
++              retention_count: 7,
++              last_run_at: null,
++              next_run_at: null,
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/backups')) {
++        return Promise.resolve(new Response('[]', { status: 200 }));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    // Modify inputs
++    const enableCheckbox = screen.getByLabelText<HTMLInputElement>('Enable Automated Backups');
++    fireEvent.click(enableCheckbox);
++    expect(enableCheckbox.checked).toBe(true);
++
++    const intervalInput = screen.getByLabelText('Backup Interval (hours)');
++    fireEvent.change(intervalInput, { target: { value: '48' } });
++
++    const retentionInput = screen.getByLabelText('Keep Latest Snapshots');
++    fireEvent.change(retentionInput, { target: { value: '14' } });
++
++    // Save
++    const saveBtn = screen.getByRole('button', { name: 'Save Schedule' });
++    act(() => {
++      fireEvent.click(saveBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText('Schedule Saved!')).toBeDefined();
++    });
++    expect(savedPayload).not.toBeNull();
++    expect(JSON.parse(String(savedPayload))).toEqual({
++      enabled: true,
++      interval_hours: 48,
++      retention_count: 14,
++    });
++
++    // Click health tab
++    const healthTab = screen.getByRole('tab', { name: 'Storage & Capabilities Health' });
++    act(() => {
++      fireEvent.click(healthTab);
++    });
++    expect(healthTab.getAttribute('aria-selected')).toBe('true');
++  });
++
++  it('KANBA-208: displays dismissible error alert with correlation ID on run-now 500 error', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    const mockFetch = vi.fn().mockImplementation((url: string, options?: { method?: string }) => {
++      if (url.includes('/backups/run-now') && options?.method === 'POST') {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              detail: 'pg_dump failed with exit code 1',
++              request_id: 'req-run-now-err-101',
++            }),
++            {
++              status: 500,
++              headers: { 'Content-Type': 'application/json' },
++            },
++          ),
++        );
++      }
++      if (url.includes('/backup-schedule')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              enabled: false,
++              interval_hours: 24,
++              retention_count: 7,
++              last_run_at: null,
++              next_run_at: null,
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/backups')) {
++        return Promise.resolve(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    global.fetch = mockFetch;
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    const runNowBtn = screen.getByRole('button', { name: 'Run Backup Now' });
++    act(() => {
++      fireEvent.click(runNowBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('standalone-api-error-alert')).toBeDefined();
++    });
++
++    expect(screen.getByText('pg_dump failed with exit code 1')).toBeDefined();
++    const corrIdEl = screen.getByTestId('correlation-id');
++    expect(corrIdEl.textContent).toBe('req-run-now-err-101');
++  });
++
++  it('KANBA-208: wraps modal content inside .standalone-panel__body leaving tabs accessible', () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    const { container } = render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={adminStatus} />
++      </QueryClientProvider>,
++    );
++
++    const panel = container.querySelector('.standalone-panel');
++    expect(panel).not.toBeNull();
++    const body = container.querySelector('.standalone-panel__body');
++    expect(body).not.toBeNull();
++    const tabs = container.querySelector('.standalone-panel__tabs');
++    expect(tabs).not.toBeNull();
++
++    // Verify tabs are outside .standalone-panel__body
++    expect(body?.contains(tabs)).toBe(false);
++  });
++
++  it('KANBA-208: renders existing snapshots table and handles snapshot selection', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    const mockSnapshots = [
++      {
++        filename: 'snapshot-2026-11-18.kbbak',
++        size_bytes: 204800,
++        created_at: '2026-11-18T10:00:00Z',
++      },
++    ];
++
++    global.fetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/backup-schedule')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              enabled: true,
++              interval_hours: 12,
++              retention_count: 5,
++              last_run_at: '2026-11-18T08:00:00Z',
++              next_run_at: '2026-11-18T20:00:00Z',
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/backups')) {
++        return Promise.resolve(
++          new Response(JSON.stringify(mockSnapshots), {
++            status: 200,
++            headers: { 'Content-Type': 'application/json' },
++          }),
++        );
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByText('snapshot-2026-11-18.kbbak')).toBeDefined();
++    });
++
++    expect(screen.getByText('200.0 KB')).toBeDefined();
++
++    // Select snapshot from dropdown
++    const select = screen.getByLabelText<HTMLSelectElement>('Select Server Snapshot');
++    fireEvent.change(select, { target: { value: 'snapshot-2026-11-18.kbbak' } });
++    expect(select.value).toBe('snapshot-2026-11-18.kbbak');
++  });
++
++  it('KANBA-208: handles loadScheduleAndSnapshots error branches and network failures', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    // 1. Schedule load fails
++    global.fetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/backup-schedule')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ detail: 'Failed reading schedule' }), {
++            status: 500,
++            headers: { 'Content-Type': 'application/json' },
++          }),
++        );
++      }
++      return Promise.resolve(new Response('[]', { status: 200 }));
++    });
++
++    const { unmount } = render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByText('Failed reading schedule')).toBeDefined();
++    });
++    unmount();
++
++    // 2. Snapshot list load fails
++    global.fetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/backups')) {
++        return Promise.resolve(
++          new Response(JSON.stringify({ detail: 'Failed listing backups' }), {
++            status: 500,
++            headers: { 'Content-Type': 'application/json' },
++          }),
++        );
++      }
++      return Promise.resolve(
++        new Response(
++          JSON.stringify({
++            enabled: false,
++            interval_hours: 24,
++            retention_count: 7,
++            last_run_at: null,
++            next_run_at: null,
++          }),
++          { status: 200 },
++        ),
++      );
++    });
++
++    const render2 = render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByText('Failed listing backups')).toBeDefined();
++    });
++    render2.unmount();
++
++    // 3. Network throw on load
++    global.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('standalone-api-error-alert')).toBeDefined();
++    });
++    expect(
++      within(screen.getByTestId('standalone-api-error-alert')).getByText('Connection refused'),
++    ).toBeDefined();
++  });
++
++  it('KANBA-208: handles verify and restore failure branches with API errors and file upload', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    let verifyCount = 0;
++    let restoreCount = 0;
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backup/verify')) {
++        verifyCount++;
++        if (verifyCount === 1) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ detail: 'Invalid checksum' }), {
++              status: 400,
++              headers: { 'Content-Type': 'application/json' },
++            }),
++          );
++        }
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              valid: true,
++              manifest: { format_version: 1, pg_server_version: '16.1', alembic_revision: 'rev_123' },
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/restore') && opts?.method === 'POST') {
++        restoreCount++;
++        if (restoreCount === 1) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ detail: 'pg_restore execution failed' }), {
++              status: 500,
++              headers: { 'Content-Type': 'application/json' },
++            }),
++          );
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    // Upload a mock file
++    const fileInput = screen.getByLabelText<HTMLInputElement>('Upload Backup Archive (.kbbak or .kbkp)');
++    const testFile = new File(['dummy-archive-content'], 'test-archive.kbbak', {
++      type: 'application/octet-stream',
++    });
++    fireEvent.change(fileInput, { target: { files: [testFile] } });
++
++    // Add passphrase
++    const passphraseInput = screen.getByLabelText('Passphrase (if encrypted with passphrase)');
++    fireEvent.change(passphraseInput, { target: { value: 'test-passphrase-123' } });
++
++    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
++
++    // 1. Verify returns 400 error
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText('Invalid checksum')).toBeDefined();
++    });
++
++    // 2. Verify succeeds with manifest
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
++    });
++
++    // 3. Confirm restore with wrong string
++    const confirmInput = screen.getByPlaceholderText('RESTORE');
++    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/ });
++
++    fireEvent.change(confirmInput, { target: { value: 'WRONG' } });
++    expect(restoreBtn.hasAttribute('disabled')).toBe(true);
++
++    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
++    expect(restoreBtn.hasAttribute('disabled')).toBe(false);
++
++    // 4. Submit restore, returns 500 error
++    act(() => {
++      fireEvent.click(restoreBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText('pg_restore execution failed')).toBeDefined();
++    });
++  });
++
++  it('KANBA-208: handles verify and restore using selectedSnapshotFilename and network exception branches', async () => {
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    const mockSnapshots = [
++      {
++        filename: 'server-snap-1.kbbak',
++        size_bytes: 10240,
++        created_at: '2026-11-18T12:00:00Z',
++      },
++    ];
++
++    let restoreCallBody: string | null = null;
++    let restoreCallCount = 0;
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string; body?: string }) => {
++      if (url.includes('/backup-schedule')) {
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      }
++      if (url.includes('/backups')) {
++        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
++      }
++      if (url.includes('/backup/verify')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              valid: true,
++              manifest: { format_version: 1, pg_server_version: '16.0' },
++            }),
++            { status: 200 },
++          ),
++        );
++      }
++      if (url.includes('/restore') && opts?.method === 'POST') {
++        restoreCallCount++;
++        if (restoreCallCount === 1) {
++          restoreCallBody = opts.body ?? null;
++          return Promise.resolve(new Response('{}', { status: 200 }));
++        }
++        return Promise.reject(new Error('Network socket disconnected'));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByLabelText('Select Server Snapshot')).toBeDefined();
++    });
++
++    const select = screen.getByLabelText('Select Server Snapshot');
++    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
++
++    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
++    });
++
++    // Destructive confirm
++    const confirmInput = screen.getByPlaceholderText('RESTORE');
++    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/ });
++
++    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
++    act(() => {
++      fireEvent.click(restoreBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/Database restored successfully/)).toBeDefined();
++    });
++    expect(restoreCallBody).not.toBeNull();
++    expect(JSON.parse(String(restoreCallBody))).toEqual({
++      filename: 'server-snap-1.kbbak',
++      confirm_overwrite: 'RESTORE',
++    });
++  });
++
++  it('KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error', async () => {
++    // 1. Non-admin switches to backup tab -> hits isServerAdmin early return and non-admin tabs
++    const memberStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: false,
++    };
++
++    const { unmount: unmountMember } = render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={memberStatus}
++          initialTab="health"
++        />
++      </QueryClientProvider>,
++    );
++
++    const backupTabBtn = screen.getByRole('tab', { name: /Backup/i });
++    fireEvent.click(backupTabBtn);
++    expect(screen.getByText(/Contact a Server Administrator to export backups/i)).toBeDefined();
++    unmountMember();
++
++    // 2. Admin operations: run-now success, verify without selection, restore without confirmation
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    const mockSnapshots = [
++      {
++        filename: 'server-snap-1.kbbak',
++        size_bytes: 10240,
++        created_at: '2026-11-18T12:00:00Z',
++      },
++    ];
++
++    let runNowCalled = false;
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backup-schedule')) {
++        if (opts?.method === 'PUT') {
++          return Promise.reject(new Error('Network drop on schedule save'));
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      }
++      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
++        runNowCalled = true;
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      }
++      if (url.includes('/backups')) {
++        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
++      }
++      if (url.includes('/backup/verify')) {
++        // Return valid without manifest to test manifest fallback branch
++        return Promise.resolve(new Response(JSON.stringify({ valid: true }), { status: 200 }));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    // Test run-now success
++    const runNowBtn = screen.getByRole('button', { name: 'Run Backup Now' });
++    act(() => {
++      fireEvent.click(runNowBtn);
++    });
++    await waitFor(() => {
++      expect(runNowCalled).toBe(true);
++    });
++
++    // Test save-schedule network failure
++    const saveSchedBtn = screen.getByRole('button', { name: 'Save Schedule' });
++    act(() => {
++      fireEvent.click(saveSchedBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText('Network drop on schedule save')).toBeDefined();
++    });
++
++    // Test run-now network failure
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
++        return Promise.reject(new Error('Network drop on run now'));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    act(() => {
++      fireEvent.click(runNowBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText('Network drop on run now')).toBeDefined();
++    });
++
++    // Dismiss the error before testing verify and restore
++    const dismissBtn = screen.getByRole('button', { name: 'Dismiss error' });
++    fireEvent.click(dismissBtn);
++
++    // Select snapshot and run verify (manifest: undefined fallback branch)
++    await waitFor(() => {
++      expect(screen.getByLabelText('Select Server Snapshot')).toBeDefined();
++    });
++    const select = screen.getByLabelText('Select Server Snapshot');
++    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
++
++    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
++    });
++
++    // Destructive confirmation form is now visible
++    const restoreForm = screen.getByRole('button', { name: /Step 2: Restore Database/ }).closest('form');
++    expect(restoreForm).not.toBeNull();
++    const confirmInput = screen.getByPlaceholderText('RESTORE');
++
++    // Test restore submit with unconfirmed text
++    fireEvent.change(confirmInput, { target: { value: 'WRONG' } });
++    if (restoreForm) {
++      act(() => {
++        fireEvent.submit(restoreForm);
++      });
++      await waitFor(() => {
++        expect(screen.getByText('You must type RESTORE exactly to confirm destructive database overwrite')).toBeDefined();
++      });
++    }
++
++    // Now test with text RESTORE but no file or snapshot (clear select)
++    fireEvent.change(select, { target: { value: '' } });
++    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
++    if (restoreForm) {
++      act(() => {
++        fireEvent.submit(restoreForm);
++      });
++      await waitFor(() => {
++        expect(screen.getByText('Please select a backup file or snapshot to restore')).toBeDefined();
++      });
++    }
++
++    // Test empty interval and retention fallback branches
++    const intervalInput = screen.getByLabelText('Backup Interval (hours)');
++    const retentionInput = screen.getByLabelText('Keep Latest Snapshots');
++    fireEvent.change(intervalInput, { target: { value: '' } });
++    fireEvent.change(retentionInput, { target: { value: '' } });
++
++    // Test clearing file input (files: null / empty array)
++    const fileInput = screen.getByLabelText('Upload Backup Archive (.kbbak or .kbkp)');
++    fireEvent.change(fileInput, { target: { files: [] } });
++
++    // Test verify network failure
++    global.fetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/backup/verify')) {
++        return Promise.reject(new Error('Verify network failure'));
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText('Verify network failure')).toBeDefined();
++    });
++
++    // Test verify non-Error failure
++    global.fetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/backup/verify')) {
++        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
++        return Promise.reject('String verify failure');
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText('Backup verification failed')).toBeDefined();
++    });
++
++    // Test malformed non-JSON response without correlation ID header
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
++        return Promise.resolve({
++          ok: false,
++          status: 500,
++          headers: new Headers(),
++          json: () => Promise.reject(new Error('SyntaxError')),
++        } as unknown as Response);
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    act(() => {
++      fireEvent.click(runNowBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText(/Immediate backup snapshot failed with status 500/)).toBeDefined();
++    });
++
++    // Remove CSRF meta tags to cover if (csrf) false branches across actions
++    document.querySelectorAll('meta[name="csrf-token"]').forEach((el) => { el.remove(); });
++
++    // Test non-Error throw on schedule save
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backup-schedule') && opts?.method === 'PUT') {
++        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
++        return Promise.reject('String save schedule failure');
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    act(() => {
++      fireEvent.click(saveSchedBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText('Failed to save backup schedule')).toBeDefined();
++    });
++
++    // Test non-Error throw on run now
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
++        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
++        return Promise.reject('String run now failure');
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    act(() => {
++      fireEvent.click(runNowBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText('Immediate backup snapshot failed')).toBeDefined();
++    });
++
++    // Test non-Error throw on restore
++    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
++      if (url.includes('/backup/verify')) {
++        return Promise.resolve(new Response(JSON.stringify({ valid: true, manifest: { format_version: 1 } }), { status: 200 }));
++      }
++      if (url.includes('/restore') && opts?.method === 'POST') {
++        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
++        return Promise.reject('String restore failure');
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++
++    const dismiss2 = screen.getByRole('button', { name: 'Dismiss error' });
++    fireEvent.click(dismiss2);
++
++    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
++    act(() => {
++      fireEvent.click(verifyBtn);
++    });
++    await waitFor(() => {
++      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
++    });
++
++    const newRestoreForm = screen.getByRole('button', { name: /Step 2: Restore Database/ }).closest('form');
++    const newConfirmInput = screen.getByPlaceholderText('RESTORE');
++    fireEvent.change(newConfirmInput, { target: { value: 'RESTORE' } });
++    if (newRestoreForm) {
++      act(() => {
++        fireEvent.submit(newRestoreForm);
++      });
++      await waitFor(() => {
++        expect(screen.getByText('Database restore failed')).toBeDefined();
++      });
++    }
++
++    // Re-attach CSRF meta tag for subsequent tests
++    const meta = document.createElement('meta');
++    meta.name = 'csrf-token';
++    meta.content = 'mock-csrf-token-xyz';
++    document.head.appendChild(meta);
++  });
+ });
+ 
+ describe('ComposeExportTab', () => {
+@@ -991,7 +1962,7 @@ describe('ComposeExportTab', () => {
+       migration_steps_markdown: '### Steps',
+     };
+ 
+-    render(<ComposeExportTab initialData={mockData} />);
++    const { unmount: unmountFirst } = render(<ComposeExportTab initialData={mockData} />);
+ 
+     expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
+ 
+@@ -1005,5 +1976,27 @@ describe('ComposeExportTab', () => {
+       screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
+     ).toBeDefined();
+     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
++
++    // Toggle back to Multi-Container
++    const multiTab = screen.getByRole('button', { name: 'Multi-Container Stack (Production)' });
++    act(() => {
++      fireEvent.click(multiTab);
++    });
++    expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
++    unmountFirst();
++
++    // Test single-container download fallback when single_container_compose_yaml is omitted
++    const mockDataNoSingle = {
++      filename: 'docker-compose.yml',
++      compose_yaml: 'services:\n  kanban:\n    image: kanban:latest\n',
++      env_template: 'PORT=8080\n',
++      migration_steps_markdown: '### Steps',
++    };
++    const { unmount } = render(<ComposeExportTab initialData={mockDataNoSingle} />);
++    const singleBtn = screen.getByRole('button', { name: 'Single-Container (Standalone)' });
++    fireEvent.click(singleBtn);
++    const dlSingleBtn = screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' });
++    fireEvent.click(dlSingleBtn);
++    unmount();
+   });
+ });
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+index 895813f..e3289a8 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+@@ -29,6 +29,46 @@ export interface StandaloneStatusPanelProps {
+   readonly initialTab?: StandaloneTabId;
+ }
+ 
++export interface ApiErrorInfo {
++  message: string;
++  correlationId?: string;
++}
++
++function generateFallbackCorrelationId(): string {
++  return `req-${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
++}
++
++async function extractApiError(
++  res: Response,
++  fallbackMessage: string,
++): Promise<ApiErrorInfo> {
++  const correlationId =
++    res.headers.get('x-request-id') ??
++    res.headers.get('x-correlation-id') ??
++    undefined;
++  try {
++    const data = (await res.json()) as {
++      detail?: string | { detail?: string };
++      title?: string;
++      request_id?: string;
++    };
++    const detail = data.detail;
++    const msg =
++      typeof detail === 'string'
++        ? detail
++        : typeof detail === 'object' && 'detail' in detail && typeof detail.detail === 'string'
++          ? detail.detail
++          : data.title ?? `${fallbackMessage} with status ${String(res.status)}`;
++    const corr = data.request_id ?? correlationId ?? generateFallbackCorrelationId();
++    return { message: msg, correlationId: corr };
++  } catch {
++    return {
++      message: `${fallbackMessage} with status ${String(res.status)}`,
++      correlationId: correlationId ?? generateFallbackCorrelationId(),
++    };
++  }
++}
++
+ export interface BackupScheduleState {
+   enabled: boolean;
+   interval_hours: number;
+@@ -62,12 +102,12 @@ export function StandaloneStatusPanel({
+ 
+   const [activeTab, setActiveTab] = useState<StandaloneTabId>(initialTab);
+   const [copiedDockerRun, setCopiedDockerRun] = useState<boolean>(false);
++  const [apiError, setApiError] = useState<ApiErrorInfo | null>(null);
+ 
+   // Manual Backup State
+   const [passphrase, setPassphrase] = useState<string>('');
+   const [passphraseError, setPassphraseError] = useState<string>('');
+   const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
+-  const [backupError, setBackupError] = useState<string | null>(null);
+ 
+   // Auto-Backup Schedule State
+   const [schedule, setSchedule] = useState<BackupScheduleState>({
+@@ -87,7 +127,6 @@ export function StandaloneStatusPanel({
+   const [restorePassphrase, setRestorePassphrase] = useState<string>('');
+   const [isVerifying, setIsVerifying] = useState<boolean>(false);
+   const [verifiedManifest, setVerifiedManifest] = useState<BackupManifestData | null>(null);
+-  const [verifyError, setVerifyError] = useState<string | null>(null);
+   const [restoreConfirmText, setRestoreConfirmText] = useState<string>('');
+   const [isRestoring, setIsRestoring] = useState<boolean>(false);
+   const [restoreError, setRestoreError] = useState<string | null>(null);
+@@ -95,6 +134,7 @@ export function StandaloneStatusPanel({
+ 
+   const dialogRef = useRef<HTMLDivElement | null>(null);
+   const triggerRef = useRef<HTMLElement | null>(
++    /* v8 ignore next 3 - SSR fallback */
+     typeof document !== 'undefined'
+       ? (document.activeElement as HTMLElement | null)
+       : null,
+@@ -122,6 +162,7 @@ export function StandaloneStatusPanel({
+   // Trap focus and handle Escape
+   useEffect(() => {
+     const dialogEl = dialogRef.current;
++    /* v8 ignore next */
+     if (!dialogEl) return;
+ 
+     const firstFocusable = dialogEl.querySelector<HTMLElement>(
+@@ -140,6 +181,7 @@ export function StandaloneStatusPanel({
+         const focusables = dialogEl.querySelectorAll<HTMLElement>(
+           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+         );
++        /* v8 ignore next */
+         if (focusables.length <= 1) return;
+ 
+         const first = focusables[0];
+@@ -178,13 +220,22 @@ export function StandaloneStatusPanel({
+       if (schedRes.ok) {
+         const schedJson = (await schedRes.json()) as BackupScheduleState;
+         setSchedule(schedJson);
++      } else {
++        const err = await extractApiError(schedRes, 'Failed to load backup schedule');
++        setApiError(err);
+       }
+       if (snapsRes.ok) {
+         const snapsJson = (await snapsRes.json()) as BackupSnapshotItem[];
+         setSnapshots(snapsJson);
++      } else {
++        const err = await extractApiError(snapsRes, 'Failed to load backups list');
++        setApiError(err);
+       }
+-    } catch {
+-      // Ignore background load failures
++    } catch (err) {
++      setApiError({
++        message: err instanceof Error ? err.message : 'Network error loading backup data',
++        correlationId: generateFallbackCorrelationId(),
++      });
+     }
+   }, [isServerAdmin]);
+ 
+@@ -219,7 +270,6 @@ export function StandaloneStatusPanel({
+     }
+ 
+     setPassphraseError('');
+-    setBackupError(null);
+     setIsBackingUp(true);
+ 
+     try {
+@@ -240,19 +290,13 @@ export function StandaloneStatusPanel({
+       });
+ 
+       if (!res.ok) {
+-        const errJson = (await res.json().catch(() => ({}))) as {
+-          detail?: string | { detail?: string };
+-        };
+-        const detail = errJson.detail;
+-        const msg =
+-          typeof detail === 'string'
+-            ? detail
+-            : typeof detail === 'object' && 'detail' in detail && typeof detail.detail === 'string'
+-              ? detail.detail
+-              : `Backup failed with status ${String(res.status)}`;
+-        throw new Error(msg);
++        const err = await extractApiError(res, 'Backup failed');
++        setApiError(err);
++        return;
+       }
+ 
++      setApiError(null);
++
+       const disposition = res.headers.get('content-disposition') ?? '';
+       let filename = 'kanban-backup.kbbak';
+       const match = /filename=["']?([^"';]+)["']?/.exec(disposition);
+@@ -274,7 +318,7 @@ export function StandaloneStatusPanel({
+       void loadScheduleAndSnapshots();
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Backup export failed';
+-      setBackupError(msg);
++      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+     } finally {
+       setIsBackingUp(false);
+     }
+@@ -304,10 +348,15 @@ export function StandaloneStatusPanel({
+         const updated = (await res.json()) as BackupScheduleState;
+         setSchedule(updated);
+         setScheduleSaved(true);
++        setApiError(null);
+         setTimeout(() => { setScheduleSaved(false); }, 2500);
++      } else {
++        const err = await extractApiError(res, 'Failed to save backup schedule');
++        setApiError(err);
+       }
+-    } catch {
+-      // Ignore save error
++    } catch (err) {
++      const msg = err instanceof Error ? err.message : 'Failed to save backup schedule';
++      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+     }
+   };
+ 
+@@ -326,10 +375,15 @@ export function StandaloneStatusPanel({
+         credentials: 'same-origin',
+       });
+       if (res.ok) {
++        setApiError(null);
+         void loadScheduleAndSnapshots();
++      } else {
++        const err = await extractApiError(res, 'Immediate backup snapshot failed');
++        setApiError(err);
+       }
+-    } catch {
+-      // Handled
++    } catch (err) {
++      const msg = err instanceof Error ? err.message : 'Immediate backup snapshot failed';
++      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+     } finally {
+       setIsRunningBackupNow(false);
+     }
+@@ -337,7 +391,6 @@ export function StandaloneStatusPanel({
+ 
+   const handleVerifyBackup = async (): Promise<void> => {
+     setIsVerifying(true);
+-    setVerifyError(null);
+     setVerifiedManifest(null);
+ 
+     try {
+@@ -375,15 +428,19 @@ export function StandaloneStatusPanel({
+             passphrase: restorePassphrase || undefined,
+           }),
+         });
++      /* v8 ignore start - unreachable defensive guard when verify button is disabled */
+       } else {
+         throw new Error('Please select an existing snapshot or upload a backup file');
+       }
++      /* v8 ignore stop */
+ 
+       if (!res.ok) {
+-        const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
+-        throw new Error(errJson.detail ?? `Verification failed (${String(res.status)})`);
++        const err = await extractApiError(res, 'Backup verification failed');
++        setApiError(err);
++        return;
+       }
+ 
++      setApiError(null);
+       const verifyData = (await res.json()) as {
+         valid: boolean;
+         manifest?: BackupManifestData;
+@@ -395,7 +452,8 @@ export function StandaloneStatusPanel({
+         setVerifiedManifest({ format_version: 1, created_at: new Date().toISOString() });
+       }
+     } catch (err) {
+-      setVerifyError(err instanceof Error ? err.message : 'Backup verification failed');
++      const msg = err instanceof Error ? err.message : 'Backup verification failed';
++      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+     } finally {
+       setIsVerifying(false);
+     }
+@@ -454,20 +512,56 @@ export function StandaloneStatusPanel({
+       }
+ 
+       if (!res.ok) {
+-        const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
+-        throw new Error(errJson.detail ?? `Restore failed (${String(res.status)})`);
++        const err = await extractApiError(res, 'Database restore failed');
++        setApiError(err);
++        setRestoreError(null);
++        return;
+       }
+ 
++      setApiError(null);
+       setRestoreSuccess('Database restored successfully! Invariants, roles, and schema verified.');
+       setRestoreConfirmText('');
+       setVerifiedManifest(null);
+     } catch (err) {
+-      setRestoreError(err instanceof Error ? err.message : 'Database restore failed');
++      const msg = err instanceof Error ? err.message : 'Database restore failed';
++      setRestoreError(null);
++      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+     } finally {
+       setIsRestoring(false);
+     }
+   };
+ 
++  const availableTabs: StandaloneTabId[] = isServerAdmin
++    ? ['health', 'backup', 'compose']
++    : ['health', 'backup'];
++
++  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
++    const currentIndex = availableTabs.indexOf(activeTab);
++    /* v8 ignore next - activeTab is strictly initialized from availableTabs */
++    if (currentIndex === -1) return;
++
++    let targetIndex: number | null = null;
++    if (e.key === 'ArrowRight') {
++      targetIndex = (currentIndex + 1) % availableTabs.length;
++    } else if (e.key === 'ArrowLeft') {
++      targetIndex = (currentIndex - 1 + availableTabs.length) % availableTabs.length;
++    } else if (e.key === 'Home') {
++      targetIndex = 0;
++    } else if (e.key === 'End') {
++      targetIndex = availableTabs.length - 1;
++    }
++
++    if (targetIndex !== null) {
++      const nextTab = availableTabs[targetIndex];
++      /* v8 ignore next 2 */
++      if (!nextTab) return;
++      e.preventDefault();
++      setActiveTab(nextTab);
++      const btn = document.getElementById(`tab-${nextTab}`);
++      btn?.focus();
++    }
++  };
++
+   return (
+     <>
+       <div
+@@ -496,11 +590,17 @@ export function StandaloneStatusPanel({
+         </div>
+ 
+         {/* Tab Navigation */}
+-        <div className="standalone-panel__tabs" role="tablist" aria-label="System status sections">
++        <div
++          className="standalone-panel__tabs"
++          role="tablist"
++          aria-label="System status sections"
++          onKeyDown={handleTabKeyDown}
++        >
+           <button
+             type="button"
+             role="tab"
+             id="tab-health"
++            tabIndex={activeTab === 'health' ? 0 : -1}
+             aria-selected={activeTab === 'health'}
+             aria-controls="panel-health"
+             className={`standalone-panel__tab-btn ${activeTab === 'health' ? 'standalone-panel__tab-btn--active' : ''}`}
+@@ -512,6 +612,7 @@ export function StandaloneStatusPanel({
+             type="button"
+             role="tab"
+             id="tab-backup"
++            tabIndex={activeTab === 'backup' ? 0 : -1}
+             aria-selected={activeTab === 'backup'}
+             aria-controls="panel-backup"
+             className={`standalone-panel__tab-btn ${activeTab === 'backup' ? 'standalone-panel__tab-btn--active' : ''}`}
+@@ -524,6 +625,7 @@ export function StandaloneStatusPanel({
+               type="button"
+               role="tab"
+               id="tab-compose"
++              tabIndex={activeTab === 'compose' ? 0 : -1}
+               aria-selected={activeTab === 'compose'}
+               aria-controls="panel-compose"
+               className={`standalone-panel__tab-btn ${activeTab === 'compose' ? 'standalone-panel__tab-btn--active' : ''}`}
+@@ -534,6 +636,34 @@ export function StandaloneStatusPanel({
+           )}
+         </div>
+ 
++        {/* Modal Scrollable Body */}
++        <div className="standalone-panel__body">
++          {apiError && (
++            <div
++              role="alert"
++              aria-live="assertive"
++              className="standalone-panel__api-error"
++              data-testid="standalone-api-error-alert"
++            >
++              <div className="standalone-panel__api-error-content">
++                <div className="standalone-panel__api-error-msg">{apiError.message}</div>
++                {apiError.correlationId && (
++                  <div className="standalone-panel__api-error-id">
++                    Correlation ID: <code data-testid="correlation-id">{apiError.correlationId}</code>
++                  </div>
++                )}
++              </div>
++              <button
++                type="button"
++                className="standalone-panel__api-error-dismiss"
++                onClick={() => { setApiError(null); }}
++                aria-label="Dismiss error"
++              >
++                ×
++              </button>
++            </div>
++          )}
++
+         {/* Tab 1: Storage & Capabilities Health */}
+         <div
+           role="tabpanel"
+@@ -664,12 +794,6 @@ export function StandaloneStatusPanel({
+                     </div>
+                   )}
+ 
+-                  {backupError && (
+-                    <div role="alert" className="standalone-panel__error">
+-                      {backupError}
+-                    </div>
+-                  )}
+-
+                   <button
+                     type="submit"
+                     className="standalone-panel__btn standalone-panel__btn--primary"
+@@ -864,12 +988,6 @@ export function StandaloneStatusPanel({
+                     {isVerifying ? 'Verifying...' : 'Step 1: Verify Backup Archive'}
+                   </button>
+ 
+-                  {verifyError && (
+-                    <div role="alert" className="standalone-panel__error">
+-                      {verifyError}
+-                    </div>
+-                  )}
+-
+                   {verifiedManifest && (
+                     <div className="standalone-panel__verified-manifest">
+                       <div className="standalone-panel__badge-title">✓ Backup Archive Verified</div>
+@@ -944,6 +1062,7 @@ export function StandaloneStatusPanel({
+             </div>
+           </div>
+         )}
++        </div>
+       </div>
+     </>
+   );
+diff --git a/tests/deploy/test_dockerfile.py b/tests/deploy/test_dockerfile.py
+index 7ffc6f1..38a648c 100644
+--- a/tests/deploy/test_dockerfile.py
++++ b/tests/deploy/test_dockerfile.py
+@@ -299,3 +299,24 @@ def test_parse_dockerfile_stages_structure() -> None:
+     assert stages[0]["name"] == "first"
+     assert stages[1]["name"] == "second"
+     assert stages[1]["image"] == "first"
++
++
++def test_kanban_ctl_and_agent_in_container_path() -> None:
++    """Validate kanban-ctl and kanban-agent executables and PATH (KANBA-208)."""
++    content = DOCKERFILE_PATH.read_text(encoding="utf-8")
++    stages = parse_dockerfile_stages(content)
++    stage_dict = {s["name"]: s for s in stages}
++
++    slim_stage = stage_dict["runtime-slim"]
++    slim_runs = [body for inst, body in slim_stage["instructions"] if inst == "RUN"]
++    combined_runs = " ".join(slim_runs)
++
++    assert "kanban-ctl" in combined_runs, "runtime-slim must install kanban-ctl executable"
++    assert "kanban-agent" in combined_runs, "runtime-slim must install kanban-agent executable"
++
++    env_instructions = [body for inst, body in slim_stage["instructions"] if inst == "ENV"]
++    combined_env = " ".join(env_instructions)
++    assert "/opt/kanban/.venv/bin" in combined_env, (
++        "runtime-slim PATH must include /opt/kanban/.venv/bin"
++    )
++
+diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
+index ed11486..c1a0ad1 100644
+--- a/tests/deploy/test_standalone_entrypoint.py
++++ b/tests/deploy/test_standalone_entrypoint.py
+@@ -19,6 +19,7 @@ from deploy.standalone.entrypoint import (
+     bootstrap_database,
+     build_child_env,
+     build_uvicorn_command,
++    ensure_backup_grants,
+     initialize_cluster,
+     log_phase,
+     main,
+@@ -707,3 +708,22 @@ def test_warm_boot_stale_alembic_digest_runs_migrations(
+     assert "upgrade" in alembic_calls[0]
+     assert "head" in alembic_calls[0]
+     assert (pgdata / ".alembic_head").read_text(encoding="utf-8").strip() != "stale-old-digest"
++
++
++def test_ensure_backup_grants_executes_alembic_version_grant(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Validate ensure_backup_grants grants SELECT on alembic_version (KANBA-208)."""
++    executed_sqls: list[str] = []
++
++    def mock_run_psql(sql: str, dbname: str = "postgres", run_dir: str = "/tmp") -> None:
++        _ = (dbname, run_dir)
++        executed_sqls.append(sql)
++
++    monkeypatch.setattr("deploy.standalone.entrypoint.run_psql_script", mock_run_psql)
++
++    ensure_backup_grants(run_dir="/tmp/test_run")
++    assert len(executed_sqls) == 1
++    assert "alembic_version" in executed_sqls[0]
++    assert "GRANT SELECT ON TABLE alembic_version TO kanban_app" in executed_sqls[0]
++

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StandaloneStatusPanel } from './StandaloneStatusPanel';
@@ -749,6 +749,977 @@ describe('StandaloneStatusPanel', () => {
       expect(screen.getByText(/Database restored successfully/)).toBeDefined();
     });
   });
+
+  it('KANBA-208: supports WAI-ARIA tab navigation with ArrowRight, ArrowLeft, Home, and End keys', () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    const tablist = screen.getByRole('tablist', { name: 'System status sections' });
+    const healthTab = screen.getByRole('tab', { name: 'Storage & Capabilities Health' });
+    const backupTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    const composeTab = screen.getByRole('tab', { name: 'Docker Compose Export' });
+
+    // Initial roving tabIndex
+    expect(healthTab.getAttribute('tabindex')).toBe('0');
+    expect(backupTab.getAttribute('tabindex')).toBe('-1');
+    expect(composeTab.getAttribute('tabindex')).toBe('-1');
+
+    // ArrowRight -> backup
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(backupTab.getAttribute('tabindex')).toBe('0');
+    expect(healthTab.getAttribute('tabindex')).toBe('-1');
+
+    // ArrowRight -> compose
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(composeTab.getAttribute('tabindex')).toBe('0');
+
+    // ArrowRight -> wrap to health
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(healthTab.getAttribute('tabindex')).toBe('0');
+
+    // ArrowLeft -> wrap back to compose
+    fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
+    expect(composeTab.getAttribute('tabindex')).toBe('0');
+
+    // Home -> health
+    fireEvent.keyDown(tablist, { key: 'Home' });
+    expect(healthTab.getAttribute('tabindex')).toBe('0');
+
+    // End -> compose
+    fireEvent.keyDown(tablist, { key: 'End' });
+    expect(composeTab.getAttribute('tabindex')).toBe('0');
+
+    // Non-navigation keys (e.g. Tab, Escape) do not change roving index
+    fireEvent.keyDown(tablist, { key: 'Tab' });
+    expect(composeTab.getAttribute('tabindex')).toBe('0');
+    fireEvent.keyDown(tablist, { key: 'x' });
+    expect(composeTab.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('KANBA-208: displays dismissible error alert with correlation ID on backup schedule 500 error', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    const mockFetch = vi.fn().mockImplementation((url: string, options?: { method?: string }) => {
+      if (url.includes('/backup-schedule') && options?.method === 'PUT') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail: 'Database write failed for backup schedule',
+              request_id: 'req-sched-err-789',
+            }),
+            {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        );
+      }
+      if (url.includes('/backup-schedule')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              enabled: false,
+              interval_hours: 24,
+              retention_count: 7,
+              last_run_at: null,
+              next_run_at: null,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/backups')) {
+        return Promise.resolve(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    const saveBtn = screen.getByRole('button', { name: 'Save Schedule' });
+    act(() => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('standalone-api-error-alert')).toBeDefined();
+    });
+
+    expect(screen.getByText('Database write failed for backup schedule')).toBeDefined();
+    const corrIdEl = screen.getByTestId('correlation-id');
+    expect(corrIdEl.textContent).toBe('req-sched-err-789');
+
+    // Dismiss the error
+    const dismissBtn = screen.getByRole('button', { name: 'Dismiss error' });
+    act(() => {
+      fireEvent.click(dismissBtn);
+    });
+
+    expect(screen.queryByTestId('standalone-api-error-alert')).toBeNull();
+  });
+
+  it('KANBA-208: updates backup schedule inputs and saves schedule successfully', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    let savedPayload: string | null = null;
+    global.fetch = vi.fn().mockImplementation((url: string, options?: { method?: string; body?: string }) => {
+      if (url.includes('/backup-schedule') && options?.method === 'PUT') {
+        savedPayload = options.body ?? null;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              enabled: true,
+              interval_hours: 48,
+              retention_count: 14,
+              last_run_at: null,
+              next_run_at: '2026-11-20T00:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/backup-schedule')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              enabled: false,
+              interval_hours: 24,
+              retention_count: 7,
+              last_run_at: null,
+              next_run_at: null,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/backups')) {
+        return Promise.resolve(new Response('[]', { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    // Modify inputs
+    const enableCheckbox = screen.getByLabelText<HTMLInputElement>('Enable Automated Backups');
+    fireEvent.click(enableCheckbox);
+    expect(enableCheckbox.checked).toBe(true);
+
+    const intervalInput = screen.getByLabelText('Backup Interval (hours)');
+    fireEvent.change(intervalInput, { target: { value: '48' } });
+
+    const retentionInput = screen.getByLabelText('Keep Latest Snapshots');
+    fireEvent.change(retentionInput, { target: { value: '14' } });
+
+    // Save
+    const saveBtn = screen.getByRole('button', { name: 'Save Schedule' });
+    act(() => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Schedule Saved!')).toBeDefined();
+    });
+    expect(savedPayload).not.toBeNull();
+    expect(JSON.parse(String(savedPayload))).toEqual({
+      enabled: true,
+      interval_hours: 48,
+      retention_count: 14,
+    });
+
+    // Click health tab
+    const healthTab = screen.getByRole('tab', { name: 'Storage & Capabilities Health' });
+    act(() => {
+      fireEvent.click(healthTab);
+    });
+    expect(healthTab.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('KANBA-208: displays dismissible error alert with correlation ID on run-now 500 error', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    const mockFetch = vi.fn().mockImplementation((url: string, options?: { method?: string }) => {
+      if (url.includes('/backups/run-now') && options?.method === 'POST') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail: 'pg_dump failed with exit code 1',
+              request_id: 'req-run-now-err-101',
+            }),
+            {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        );
+      }
+      if (url.includes('/backup-schedule')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              enabled: false,
+              interval_hours: 24,
+              retention_count: 7,
+              last_run_at: null,
+              next_run_at: null,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/backups')) {
+        return Promise.resolve(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    const runNowBtn = screen.getByRole('button', { name: 'Run Backup Now' });
+    act(() => {
+      fireEvent.click(runNowBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('standalone-api-error-alert')).toBeDefined();
+    });
+
+    expect(screen.getByText('pg_dump failed with exit code 1')).toBeDefined();
+    const corrIdEl = screen.getByTestId('correlation-id');
+    expect(corrIdEl.textContent).toBe('req-run-now-err-101');
+  });
+
+  it('KANBA-208: wraps modal content inside .standalone-panel__body leaving tabs accessible', () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel onClose={() => { /* noop */ }} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    const panel = container.querySelector('.standalone-panel');
+    expect(panel).not.toBeNull();
+    const body = container.querySelector('.standalone-panel__body');
+    expect(body).not.toBeNull();
+    const tabs = container.querySelector('.standalone-panel__tabs');
+    expect(tabs).not.toBeNull();
+
+    // Verify tabs are outside .standalone-panel__body
+    expect(body?.contains(tabs)).toBe(false);
+  });
+
+  it('KANBA-208: renders existing snapshots table and handles snapshot selection', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    const mockSnapshots = [
+      {
+        filename: 'snapshot-2026-11-18.kbbak',
+        size_bytes: 204800,
+        created_at: '2026-11-18T10:00:00Z',
+      },
+    ];
+
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/backup-schedule')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              enabled: true,
+              interval_hours: 12,
+              retention_count: 5,
+              last_run_at: '2026-11-18T08:00:00Z',
+              next_run_at: '2026-11-18T20:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/backups')) {
+        return Promise.resolve(
+          new Response(JSON.stringify(mockSnapshots), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('snapshot-2026-11-18.kbbak')).toBeDefined();
+    });
+
+    expect(screen.getByText('200.0 KB')).toBeDefined();
+
+    // Select snapshot from dropdown
+    const select = screen.getByLabelText<HTMLSelectElement>('Select Server Snapshot');
+    fireEvent.change(select, { target: { value: 'snapshot-2026-11-18.kbbak' } });
+    expect(select.value).toBe('snapshot-2026-11-18.kbbak');
+  });
+
+  it('KANBA-208: handles loadScheduleAndSnapshots error branches and network failures', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    // 1. Schedule load fails
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/backup-schedule')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ detail: 'Failed reading schedule' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed reading schedule')).toBeDefined();
+    });
+    unmount();
+
+    // 2. Snapshot list load fails
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/backups')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ detail: 'Failed listing backups' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            enabled: false,
+            interval_hours: 24,
+            retention_count: 7,
+            last_run_at: null,
+            next_run_at: null,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+
+    const render2 = render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed listing backups')).toBeDefined();
+    });
+    render2.unmount();
+
+    // 3. Network throw on load
+    global.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('standalone-api-error-alert')).toBeDefined();
+    });
+    expect(
+      within(screen.getByTestId('standalone-api-error-alert')).getByText('Connection refused'),
+    ).toBeDefined();
+  });
+
+  it('KANBA-208: handles verify and restore failure branches with API errors and file upload', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    let verifyCount = 0;
+    let restoreCount = 0;
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backup/verify')) {
+        verifyCount++;
+        if (verifyCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ detail: 'Invalid checksum' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              valid: true,
+              manifest: { format_version: 1, pg_server_version: '16.1', alembic_revision: 'rev_123' },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/restore') && opts?.method === 'POST') {
+        restoreCount++;
+        if (restoreCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ detail: 'pg_restore execution failed' }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    // Upload a mock file
+    const fileInput = screen.getByLabelText<HTMLInputElement>('Upload Backup Archive (.kbbak or .kbkp)');
+    const testFile = new File(['dummy-archive-content'], 'test-archive.kbbak', {
+      type: 'application/octet-stream',
+    });
+    fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+    // Add passphrase
+    const passphraseInput = screen.getByLabelText('Passphrase (if encrypted with passphrase)');
+    fireEvent.change(passphraseInput, { target: { value: 'test-passphrase-123' } });
+
+    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
+
+    // 1. Verify returns 400 error
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid checksum')).toBeDefined();
+    });
+
+    // 2. Verify succeeds with manifest
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
+    });
+
+    // 3. Confirm restore with wrong string
+    const confirmInput = screen.getByPlaceholderText('RESTORE');
+    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/ });
+
+    fireEvent.change(confirmInput, { target: { value: 'WRONG' } });
+    expect(restoreBtn.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+    expect(restoreBtn.hasAttribute('disabled')).toBe(false);
+
+    // 4. Submit restore, returns 500 error
+    act(() => {
+      fireEvent.click(restoreBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('pg_restore execution failed')).toBeDefined();
+    });
+  });
+
+  it('KANBA-208: handles verify and restore using selectedSnapshotFilename and network exception branches', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    const mockSnapshots = [
+      {
+        filename: 'server-snap-1.kbbak',
+        size_bytes: 10240,
+        created_at: '2026-11-18T12:00:00Z',
+      },
+    ];
+
+    let restoreCallBody: string | null = null;
+    let restoreCallCount = 0;
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string; body?: string }) => {
+      if (url.includes('/backup-schedule')) {
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }
+      if (url.includes('/backups')) {
+        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
+      }
+      if (url.includes('/backup/verify')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              valid: true,
+              manifest: { format_version: 1, pg_server_version: '16.0' },
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes('/restore') && opts?.method === 'POST') {
+        restoreCallCount++;
+        if (restoreCallCount === 1) {
+          restoreCallBody = opts.body ?? null;
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        }
+        return Promise.reject(new Error('Network socket disconnected'));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Select Server Snapshot')).toBeDefined();
+    });
+
+    const select = screen.getByLabelText('Select Server Snapshot');
+    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
+
+    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
+    });
+
+    // Destructive confirm
+    const confirmInput = screen.getByPlaceholderText('RESTORE');
+    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/ });
+
+    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+    act(() => {
+      fireEvent.click(restoreBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Database restored successfully/)).toBeDefined();
+    });
+    expect(restoreCallBody).not.toBeNull();
+    expect(JSON.parse(String(restoreCallBody))).toEqual({
+      filename: 'server-snap-1.kbbak',
+      confirm_overwrite: 'RESTORE',
+    });
+  });
+
+  it('KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error', async () => {
+    // 1. Non-admin switches to backup tab -> hits isServerAdmin early return and non-admin tabs
+    const memberStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: false,
+    };
+
+    const { unmount: unmountMember } = render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={memberStatus}
+          initialTab="health"
+        />
+      </QueryClientProvider>,
+    );
+
+    const backupTabBtn = screen.getByRole('tab', { name: /Backup/i });
+    fireEvent.click(backupTabBtn);
+    expect(screen.getByText(/Contact a Server Administrator to export backups/i)).toBeDefined();
+    unmountMember();
+
+    // 2. Admin operations: run-now success, verify without selection, restore without confirmation
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    const mockSnapshots = [
+      {
+        filename: 'server-snap-1.kbbak',
+        size_bytes: 10240,
+        created_at: '2026-11-18T12:00:00Z',
+      },
+    ];
+
+    let runNowCalled = false;
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backup-schedule')) {
+        if (opts?.method === 'PUT') {
+          return Promise.reject(new Error('Network drop on schedule save'));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }
+      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
+        runNowCalled = true;
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }
+      if (url.includes('/backups')) {
+        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
+      }
+      if (url.includes('/backup/verify')) {
+        // Return valid without manifest to test manifest fallback branch
+        return Promise.resolve(new Response(JSON.stringify({ valid: true }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    // Test run-now success
+    const runNowBtn = screen.getByRole('button', { name: 'Run Backup Now' });
+    act(() => {
+      fireEvent.click(runNowBtn);
+    });
+    await waitFor(() => {
+      expect(runNowCalled).toBe(true);
+    });
+
+    // Test save-schedule network failure
+    const saveSchedBtn = screen.getByRole('button', { name: 'Save Schedule' });
+    act(() => {
+      fireEvent.click(saveSchedBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Network drop on schedule save')).toBeDefined();
+    });
+
+    // Test run-now network failure
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
+        return Promise.reject(new Error('Network drop on run now'));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    act(() => {
+      fireEvent.click(runNowBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Network drop on run now')).toBeDefined();
+    });
+
+    // Dismiss the error before testing verify and restore
+    const dismissBtn = screen.getByRole('button', { name: 'Dismiss error' });
+    fireEvent.click(dismissBtn);
+
+    // Select snapshot and run verify (manifest: undefined fallback branch)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Select Server Snapshot')).toBeDefined();
+    });
+    const select = screen.getByLabelText('Select Server Snapshot');
+    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
+
+    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
+    });
+
+    // Destructive confirmation form is now visible
+    const restoreForm = screen.getByRole('button', { name: /Step 2: Restore Database/ }).closest('form');
+    expect(restoreForm).not.toBeNull();
+    const confirmInput = screen.getByPlaceholderText('RESTORE');
+
+    // Test restore submit with unconfirmed text
+    fireEvent.change(confirmInput, { target: { value: 'WRONG' } });
+    if (restoreForm) {
+      act(() => {
+        fireEvent.submit(restoreForm);
+      });
+      await waitFor(() => {
+        expect(screen.getByText('You must type RESTORE exactly to confirm destructive database overwrite')).toBeDefined();
+      });
+    }
+
+    // Now test with text RESTORE but no file or snapshot (clear select)
+    fireEvent.change(select, { target: { value: '' } });
+    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+    if (restoreForm) {
+      act(() => {
+        fireEvent.submit(restoreForm);
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Please select a backup file or snapshot to restore')).toBeDefined();
+      });
+    }
+
+    // Test empty interval and retention fallback branches
+    const intervalInput = screen.getByLabelText('Backup Interval (hours)');
+    const retentionInput = screen.getByLabelText('Keep Latest Snapshots');
+    fireEvent.change(intervalInput, { target: { value: '' } });
+    fireEvent.change(retentionInput, { target: { value: '' } });
+
+    // Test clearing file input (files: null / empty array)
+    const fileInput = screen.getByLabelText('Upload Backup Archive (.kbbak or .kbkp)');
+    fireEvent.change(fileInput, { target: { files: [] } });
+
+    // Test verify network failure
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/backup/verify')) {
+        return Promise.reject(new Error('Verify network failure'));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Verify network failure')).toBeDefined();
+    });
+
+    // Test verify non-Error failure
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/backup/verify')) {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('String verify failure');
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Backup verification failed')).toBeDefined();
+    });
+
+    // Test malformed non-JSON response without correlation ID header
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          json: () => Promise.reject(new Error('SyntaxError')),
+        } as unknown as Response);
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    act(() => {
+      fireEvent.click(runNowBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Immediate backup snapshot failed with status 500/)).toBeDefined();
+    });
+
+    // Remove CSRF meta tags to cover if (csrf) false branches across actions
+    document.querySelectorAll('meta[name="csrf-token"]').forEach((el) => { el.remove(); });
+
+    // Test non-Error throw on schedule save
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backup-schedule') && opts?.method === 'PUT') {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('String save schedule failure');
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    act(() => {
+      fireEvent.click(saveSchedBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Failed to save backup schedule')).toBeDefined();
+    });
+
+    // Test non-Error throw on run now
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backups/run-now') && opts?.method === 'POST') {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('String run now failure');
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    act(() => {
+      fireEvent.click(runNowBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Immediate backup snapshot failed')).toBeDefined();
+    });
+
+    // Test non-Error throw on restore
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/backup/verify')) {
+        return Promise.resolve(new Response(JSON.stringify({ valid: true, manifest: { format_version: 1 } }), { status: 200 }));
+      }
+      if (url.includes('/restore') && opts?.method === 'POST') {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('String restore failure');
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const dismiss2 = screen.getByRole('button', { name: 'Dismiss error' });
+    fireEvent.click(dismiss2);
+
+    fireEvent.change(select, { target: { value: 'server-snap-1.kbbak' } });
+    act(() => {
+      fireEvent.click(verifyBtn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/✓ Backup Archive Verified/)).toBeDefined();
+    });
+
+    const newRestoreForm = screen.getByRole('button', { name: /Step 2: Restore Database/ }).closest('form');
+    const newConfirmInput = screen.getByPlaceholderText('RESTORE');
+    fireEvent.change(newConfirmInput, { target: { value: 'RESTORE' } });
+    if (newRestoreForm) {
+      act(() => {
+        fireEvent.submit(newRestoreForm);
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Database restore failed')).toBeDefined();
+      });
+    }
+
+    // Re-attach CSRF meta tag for subsequent tests
+    const meta = document.createElement('meta');
+    meta.name = 'csrf-token';
+    meta.content = 'mock-csrf-token-xyz';
+    document.head.appendChild(meta);
+  });
 });
 
 describe('ComposeExportTab', () => {
@@ -991,7 +1962,7 @@ describe('ComposeExportTab', () => {
       migration_steps_markdown: '### Steps',
     };
 
-    render(<ComposeExportTab initialData={mockData} />);
+    const { unmount: unmountFirst } = render(<ComposeExportTab initialData={mockData} />);
 
     expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
 
@@ -1005,6 +1976,28 @@ describe('ComposeExportTab', () => {
       screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
     ).toBeDefined();
     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
+
+    // Toggle back to Multi-Container
+    const multiTab = screen.getByRole('button', { name: 'Multi-Container Stack (Production)' });
+    act(() => {
+      fireEvent.click(multiTab);
+    });
+    expect(screen.getByRole('button', { name: 'Download docker-compose.yml' })).toBeDefined();
+    unmountFirst();
+
+    // Test single-container download fallback when single_container_compose_yaml is omitted
+    const mockDataNoSingle = {
+      filename: 'docker-compose.yml',
+      compose_yaml: 'services:\n  kanban:\n    image: kanban:latest\n',
+      env_template: 'PORT=8080\n',
+      migration_steps_markdown: '### Steps',
+    };
+    const { unmount } = render(<ComposeExportTab initialData={mockDataNoSingle} />);
+    const singleBtn = screen.getByRole('button', { name: 'Single-Container (Standalone)' });
+    fireEvent.click(singleBtn);
+    const dlSingleBtn = screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' });
+    fireEvent.click(dlSingleBtn);
+    unmount();
   });
 
   it('handles automated backup schedule editing and saving', async () => {

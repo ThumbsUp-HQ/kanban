@@ -45,7 +45,13 @@ COPY --chown=65532:65532 agent/ /opt/kanban/agent/
 COPY --chown=65532:65532 deploy/ /opt/kanban/deploy/
 COPY --chown=65532:65532 alembic.ini /opt/kanban/alembic.ini
 COPY --chown=65532:65532 --from=web-builder /app/kanban/web/dist /opt/kanban/web/dist
-ENV PATH=/opt/kanban/.venv/bin:$PATH \
+RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m kanban.cli.ctl "$@"\n' > /usr/local/bin/kanban-ctl && \
+    chmod 0755 /usr/local/bin/kanban-ctl && \
+    printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m agent.cli "$@"\n' > /usr/local/bin/kanban-agent && \
+    chmod 0755 /usr/local/bin/kanban-agent && \
+    ln -sf /usr/local/bin/kanban-ctl /opt/kanban/.venv/bin/kanban-ctl && \
+    ln -sf /usr/local/bin/kanban-agent /opt/kanban/.venv/bin/kanban-agent
+ENV PATH=/opt/kanban/.venv/bin:/usr/local/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     KB_WEB_DIST=/opt/kanban/web/dist
@@ -107,7 +113,9 @@ RUN apt-get update && \
     apt-get purge -y --auto-remove curl gnupg && \
     rm -rf /var/lib/apt/lists/*
 RUN usermod -aG kanban postgres && \
+    install -d -o kanban -g kanban -m 0775 /var/lib/kanban/data && \
     install -d -o postgres -g postgres -m 0700 /var/lib/kanban/data/pgdata && \
+    install -d -o kanban -g kanban -m 0775 /var/lib/kanban/data/backups && \
     install -d -o postgres -g kanban -m 2775 /run/postgresql
 EXPOSE 8080
 VOLUME /var/lib/kanban/data

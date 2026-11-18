@@ -1,0 +1,72 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-ops-36b685b2/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-ops-36b685b2
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 41 items
+
+tests/deploy/test_dockerfile.py::test_dockerfile_stages_and_sha256_pinning PASSED [  2%]
+tests/deploy/test_dockerfile.py::test_runtime_slim_and_standalone_directives PASSED [  4%]
+tests/deploy/test_dockerfile.py::test_security_zero_secrets_and_no_remote_add PASSED [  7%]
+tests/deploy/test_dockerfile.py::test_dockerignore_entries PASSED        [  9%]
+tests/deploy/test_dockerfile.py::test_runtime_slim_apt_install_packages PASSED [ 12%]
+tests/deploy/test_dockerfile.py::test_get_logical_lines_continuations PASSED [ 14%]
+tests/deploy/test_dockerfile.py::test_extract_env_arg_names_variants PASSED [ 17%]
+tests/deploy/test_dockerfile.py::test_security_rules_on_synthetic_samples PASSED [ 19%]
+tests/deploy/test_dockerfile.py::test_parse_dockerfile_stages_structure PASSED [ 21%]
+tests/deploy/test_dockerfile.py::test_kanban_ctl_and_agent_in_container_path PASSED [ 24%]
+tests/deploy/test_standalone_entrypoint.py::test_case_1_first_boot PASSED [ 26%]
+tests/deploy/test_standalone_entrypoint.py::test_case_2_warm_boot_skips_initdb PASSED [ 29%]
+tests/deploy/test_standalone_entrypoint.py::test_case_2_external_db_mode PASSED [ 31%]
+tests/deploy/test_standalone_entrypoint.py::test_case_3_security_configuration PASSED [ 34%]
+tests/deploy/test_standalone_entrypoint.py::test_case_4_non_root_uid_exits_78 PASSED [ 36%]
+tests/deploy/test_standalone_entrypoint.py::test_case_4_pg_start_timeout_exits_70 PASSED [ 39%]
+tests/deploy/test_standalone_entrypoint.py::test_case_4_migration_failure_exits_70 PASSED [ 41%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_shutdown_uvicorn_escalates_to_sigkill PASSED [ 43%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_shutdown_uvicorn_clean_exit PASSED [ 46%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_shutdown_uvicorn_already_dead PASSED [ 48%]
+tests/deploy/test_standalone_entrypoint.py::test_case_5_supervisor_detects_postmaster_death PASSED [ 51%]
+tests/deploy/test_standalone_entrypoint.py::test_signal_handler_clean_exit PASSED [ 53%]
+tests/deploy/test_standalone_entrypoint.py::test_log_phase PASSED        [ 56%]
+tests/deploy/test_standalone_entrypoint.py::test_initialize_cluster_called_process_error PASSED [ 58%]
+tests/deploy/test_standalone_entrypoint.py::test_bootstrap_database_creates_database_when_missing PASSED [ 60%]
+tests/deploy/test_standalone_entrypoint.py::test_keyring_error_exits_78 PASSED [ 63%]
+tests/deploy/test_standalone_entrypoint.py::test_bootstrap_database_with_keyring PASSED [ 65%]
+tests/deploy/test_standalone_entrypoint.py::test_run_as_postgres_real_wrapper PASSED [ 68%]
+tests/deploy/test_standalone_entrypoint.py::test_warm_boot_stale_alembic_digest_runs_migrations PASSED [ 70%]
+tests/deploy/test_standalone_entrypoint.py::test_ensure_backup_grants_executes_alembic_version_grant PASSED [ 73%]
+kanban/tests/api/test_system_status.py::test_case_1_system_status_admin_full_fields_and_member_redaction PASSED [ 75%]
+kanban/tests/api/test_system_status.py::test_case_1b_missing_status_file_defaults_to_production_multi_container PASSED [ 78%]
+kanban/tests/api/test_system_status.py::test_case_2_standalone_encrypted_backup_and_zero_shell PASSED [ 80%]
+kanban/tests/api/test_system_status.py::test_case_3_compose_export_secret_audit_and_network_topology PASSED [ 82%]
+kanban/tests/api/test_system_status.py::test_case_4_backup_encryption_and_decryption_edge_cases PASSED [ 85%]
+kanban/tests/api/test_system_status.py::test_case_5_run_pg_dump_execution_and_errors PASSED [ 87%]
+kanban/tests/api/test_system_status.py::test_case_6_standalone_status_edge_cases PASSED [ 90%]
+kanban/tests/api/test_system_status.py::test_case_7_api_backup_error_branches PASSED [ 92%]
+kanban/tests/api/test_system_status.py::test_case_8_backup_schedule_and_snapshots_api PASSED [ 95%]
+kanban/tests/api/test_system_status.py::test_case_9_backup_verify_and_restore_api PASSED [ 97%]
+kanban/tests/api/test_system_status.py::test_assert_admin_routes_protected_compliance PASSED [100%]
+
+============================== 41 passed in 3.97s ==============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-ops-36b685b2/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/standalone/StandaloneStatusPanel.test.tsx (29 tests) 2450ms
+   ✓ StandaloneStatusPanel (23)
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 481ms
+
+ Test Files  1 passed (1)
+      Tests  29 passed (29)
+   Start at  13:07:56
+   Duration  3.67s (tests 73%, environment 19%, import 5%, transform 3%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.41 |    95.29 |   98.11 |   99.69 |                   
+ ...eExportTab.tsx |   98.43 |    90.69 |     100 |   98.43 | 111               
+ ...tatusPanel.tsx |   99.64 |    96.22 |   97.61 |     100 | ...07,420,485,498 
+-------------------|---------|----------|---------|---------|-------------------

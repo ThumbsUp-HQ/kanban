@@ -354,11 +354,27 @@ async def update_backup_schedule_endpoint(
     body: BackupScheduleUpdateRequest,
 ) -> BackupScheduleResponse:
     """Update automated backup interval and snapshot retention limit."""
-    data = update_backup_schedule(
-        enabled=body.enabled,
-        interval_hours=body.interval_hours,
-        retention_count=body.retention_count,
-    )
+    try:
+        data = update_backup_schedule(
+            enabled=body.enabled,
+            interval_hours=body.interval_hours,
+            retention_count=body.retention_count,
+        )
+    except ValueError as exc:
+        raise ProblemException(
+            code="INVALID_BACKUP_SCHEDULE",
+            status=422,
+            title="Invalid Backup Schedule",
+            detail=str(exc),
+        ) from exc
+    except OSError as exc:
+        logger.exception("Failed to write backup schedule configuration")
+        raise ProblemException(
+            code="BACKUP_SCHEDULE_SAVE_FAILED",
+            status=500,
+            title="Backup Schedule Save Failed",
+            detail=f"Failed to persist backup schedule to disk: {exc}",
+        ) from exc
     return BackupScheduleResponse(**data)
 
 
@@ -384,7 +400,17 @@ async def run_backup_now_endpoint(
     """Execute an automated backup pass immediately on demand."""
     settings = getattr(request.app.state, "settings", None)
     db_url = settings.database_url if settings else None
-    summary = run_scheduled_backup_pass(db_url=db_url)
+    try:
+        summary = run_scheduled_backup_pass(db_url=db_url)
+    except Exception as exc:
+        logger.exception("Immediate backup snapshot execution failed")
+        raise ProblemException(
+            code="BACKUP_RUN_FAILED",
+            status=500,
+            title="Backup Run Failed",
+            detail=f"Failed to execute immediate backup snapshot: {exc}",
+        ) from exc
+
     if summary is None:
         raise ProblemException(
             code="BACKUP_RUN_FAILED",

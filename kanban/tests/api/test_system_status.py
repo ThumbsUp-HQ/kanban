@@ -687,7 +687,7 @@ async def test_case_7_api_backup_error_branches(
 
 
 @pytest.mark.asyncio
-async def test_case_8_backup_schedule_and_snapshots_api(
+async def test_case_8_backup_schedule_and_snapshots_api(  # noqa: PLR0915
     db_session: AsyncSession,
     key_material: KeyMaterial,
     tmp_path: Path,
@@ -757,6 +757,51 @@ async def test_case_8_backup_schedule_and_snapshots_api(
         # 6. Traversal attack prevented
         resp_trav = await client.get("/api/v1/admin/standalone/backups/..%2Fetc%2Fpasswd")
         assert resp_trav.status_code in (400, 404)
+
+        # 7. PUT backup schedule validation error (422)
+        resp_bad_sched = await client.put(
+            "/api/v1/admin/standalone/backup-schedule",
+            json={"enabled": True, "interval_hours": 0, "retention_count": 5},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_bad_sched.status_code == 422
+
+        # 8. PUT backup schedule OS persistence error (500)
+        with patch(
+            "kanban.api.v1.system_status.update_backup_schedule",
+            side_effect=OSError("Read-only filesystem"),
+        ):
+            resp_os_err = await client.put(
+                "/api/v1/admin/standalone/backup-schedule",
+                json={"enabled": True, "interval_hours": 24, "retention_count": 7},
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_os_err.status_code == 500
+            assert "BACKUP_SCHEDULE_SAVE_FAILED" in resp_os_err.text
+
+        # 9. POST run-now error handling
+        with patch(
+            "kanban.api.v1.system_status.run_scheduled_backup_pass",
+            side_effect=RuntimeError("pg_dump connection error"),
+        ):
+            resp_run_fail = await client.post(
+                "/api/v1/admin/standalone/backups/run-now",
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_run_fail.status_code == 500
+            assert "BACKUP_RUN_FAILED" in resp_run_fail.text
+
+        with patch(
+            "kanban.api.v1.system_status.run_scheduled_backup_pass",
+            return_value=None,
+        ):
+            resp_run_none = await client.post(
+                "/api/v1/admin/standalone/backups/run-now",
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_run_none.status_code == 500
+            assert "BACKUP_RUN_FAILED" in resp_run_none.text
+
 
 
 @pytest.mark.asyncio

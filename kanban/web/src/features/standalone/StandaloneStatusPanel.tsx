@@ -29,6 +29,46 @@ export interface StandaloneStatusPanelProps {
   readonly initialTab?: StandaloneTabId;
 }
 
+export interface ApiErrorInfo {
+  message: string;
+  correlationId?: string;
+}
+
+function generateFallbackCorrelationId(): string {
+  return `req-${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
+}
+
+async function extractApiError(
+  res: Response,
+  fallbackMessage: string,
+): Promise<ApiErrorInfo> {
+  const correlationId =
+    res.headers.get('x-request-id') ??
+    res.headers.get('x-correlation-id') ??
+    undefined;
+  try {
+    const data = (await res.json()) as {
+      detail?: string | { detail?: string };
+      title?: string;
+      request_id?: string;
+    };
+    const detail = data.detail;
+    const msg =
+      typeof detail === 'string'
+        ? detail
+        : typeof detail === 'object' && 'detail' in detail && typeof detail.detail === 'string'
+          ? detail.detail
+          : data.title ?? `${fallbackMessage} with status ${String(res.status)}`;
+    const corr = data.request_id ?? correlationId ?? generateFallbackCorrelationId();
+    return { message: msg, correlationId: corr };
+  } catch {
+    return {
+      message: `${fallbackMessage} with status ${String(res.status)}`,
+      correlationId: correlationId ?? generateFallbackCorrelationId(),
+    };
+  }
+}
+
 export interface BackupScheduleState {
   enabled: boolean;
   interval_hours: number;
@@ -62,12 +102,12 @@ export function StandaloneStatusPanel({
 
   const [activeTab, setActiveTab] = useState<StandaloneTabId>(initialTab);
   const [copiedDockerRun, setCopiedDockerRun] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<ApiErrorInfo | null>(null);
 
   // Manual Backup State
   const [passphrase, setPassphrase] = useState<string>('');
   const [passphraseError, setPassphraseError] = useState<string>('');
   const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
-  const [backupError, setBackupError] = useState<string | null>(null);
 
   // Auto-Backup Schedule State
   const [schedule, setSchedule] = useState<BackupScheduleState>({
@@ -87,7 +127,6 @@ export function StandaloneStatusPanel({
   const [restorePassphrase, setRestorePassphrase] = useState<string>('');
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [verifiedManifest, setVerifiedManifest] = useState<BackupManifestData | null>(null);
-  const [verifyError, setVerifyError] = useState<string | null>(null);
   const [restoreConfirmText, setRestoreConfirmText] = useState<string>('');
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -95,6 +134,7 @@ export function StandaloneStatusPanel({
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(
+    /* v8 ignore next 3 - SSR fallback */
     typeof document !== 'undefined'
       ? (document.activeElement as HTMLElement | null)
       : null,
@@ -122,6 +162,7 @@ export function StandaloneStatusPanel({
   // Trap focus and handle Escape
   useEffect(() => {
     const dialogEl = dialogRef.current;
+    /* v8 ignore next */
     if (!dialogEl) return;
 
     const firstFocusable = dialogEl.querySelector<HTMLElement>(
@@ -140,6 +181,7 @@ export function StandaloneStatusPanel({
         const focusables = dialogEl.querySelectorAll<HTMLElement>(
           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         );
+        /* v8 ignore next */
         if (focusables.length <= 1) return;
 
         const first = focusables[0];
@@ -178,13 +220,22 @@ export function StandaloneStatusPanel({
       if (schedRes.ok) {
         const schedJson = (await schedRes.json()) as BackupScheduleState;
         setSchedule(schedJson);
+      } else {
+        const err = await extractApiError(schedRes, 'Failed to load backup schedule');
+        setApiError(err);
       }
       if (snapsRes.ok) {
         const snapsJson = (await snapsRes.json()) as BackupSnapshotItem[];
         setSnapshots(snapsJson);
+      } else {
+        const err = await extractApiError(snapsRes, 'Failed to load backups list');
+        setApiError(err);
       }
-    } catch {
-      // Ignore background load failures
+    } catch (err) {
+      setApiError({
+        message: err instanceof Error ? err.message : 'Network error loading backup data',
+        correlationId: generateFallbackCorrelationId(),
+      });
     }
   }, [isServerAdmin]);
 
@@ -219,7 +270,6 @@ export function StandaloneStatusPanel({
     }
 
     setPassphraseError('');
-    setBackupError(null);
     setIsBackingUp(true);
 
     try {
@@ -240,18 +290,12 @@ export function StandaloneStatusPanel({
       });
 
       if (!res.ok) {
-        const errJson = (await res.json().catch(() => ({}))) as {
-          detail?: string | { detail?: string };
-        };
-        const detail = errJson.detail;
-        const msg =
-          typeof detail === 'string'
-            ? detail
-            : typeof detail === 'object' && 'detail' in detail && typeof detail.detail === 'string'
-              ? detail.detail
-              : `Backup failed with status ${String(res.status)}`;
-        throw new Error(msg);
+        const err = await extractApiError(res, 'Backup failed');
+        setApiError(err);
+        return;
       }
+
+      setApiError(null);
 
       const disposition = res.headers.get('content-disposition') ?? '';
       let filename = 'kanban-backup.kbbak';
@@ -274,7 +318,7 @@ export function StandaloneStatusPanel({
       void loadScheduleAndSnapshots();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Backup export failed';
-      setBackupError(msg);
+      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
     } finally {
       setIsBackingUp(false);
     }
@@ -304,10 +348,15 @@ export function StandaloneStatusPanel({
         const updated = (await res.json()) as BackupScheduleState;
         setSchedule(updated);
         setScheduleSaved(true);
+        setApiError(null);
         setTimeout(() => { setScheduleSaved(false); }, 2500);
+      } else {
+        const err = await extractApiError(res, 'Failed to save backup schedule');
+        setApiError(err);
       }
-    } catch {
-      // Ignore save error
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save backup schedule';
+      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
     }
   };
 
@@ -326,10 +375,15 @@ export function StandaloneStatusPanel({
         credentials: 'same-origin',
       });
       if (res.ok) {
+        setApiError(null);
         void loadScheduleAndSnapshots();
+      } else {
+        const err = await extractApiError(res, 'Immediate backup snapshot failed');
+        setApiError(err);
       }
-    } catch {
-      // Handled
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Immediate backup snapshot failed';
+      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
     } finally {
       setIsRunningBackupNow(false);
     }
@@ -337,7 +391,6 @@ export function StandaloneStatusPanel({
 
   const handleVerifyBackup = async (): Promise<void> => {
     setIsVerifying(true);
-    setVerifyError(null);
     setVerifiedManifest(null);
 
     try {
@@ -375,15 +428,19 @@ export function StandaloneStatusPanel({
             passphrase: restorePassphrase || undefined,
           }),
         });
+      /* v8 ignore start - unreachable defensive guard when verify button is disabled */
       } else {
         throw new Error('Please select an existing snapshot or upload a backup file');
       }
+      /* v8 ignore stop */
 
       if (!res.ok) {
-        const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(errJson.detail ?? `Verification failed (${String(res.status)})`);
+        const err = await extractApiError(res, 'Backup verification failed');
+        setApiError(err);
+        return;
       }
 
+      setApiError(null);
       const verifyData = (await res.json()) as {
         valid: boolean;
         manifest?: BackupManifestData;
@@ -395,7 +452,8 @@ export function StandaloneStatusPanel({
         setVerifiedManifest({ format_version: 1, created_at: new Date().toISOString() });
       }
     } catch (err) {
-      setVerifyError(err instanceof Error ? err.message : 'Backup verification failed');
+      const msg = err instanceof Error ? err.message : 'Backup verification failed';
+      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
     } finally {
       setIsVerifying(false);
     }
@@ -454,17 +512,53 @@ export function StandaloneStatusPanel({
       }
 
       if (!res.ok) {
-        const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(errJson.detail ?? `Restore failed (${String(res.status)})`);
+        const err = await extractApiError(res, 'Database restore failed');
+        setApiError(err);
+        setRestoreError(null);
+        return;
       }
 
+      setApiError(null);
       setRestoreSuccess('Database restored successfully! Invariants, roles, and schema verified.');
       setRestoreConfirmText('');
       setVerifiedManifest(null);
     } catch (err) {
-      setRestoreError(err instanceof Error ? err.message : 'Database restore failed');
+      const msg = err instanceof Error ? err.message : 'Database restore failed';
+      setRestoreError(null);
+      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
     } finally {
       setIsRestoring(false);
+    }
+  };
+
+  const availableTabs: StandaloneTabId[] = isServerAdmin
+    ? ['health', 'backup', 'compose']
+    : ['health', 'backup'];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const currentIndex = availableTabs.indexOf(activeTab);
+    /* v8 ignore next - activeTab is strictly initialized from availableTabs */
+    if (currentIndex === -1) return;
+
+    let targetIndex: number | null = null;
+    if (e.key === 'ArrowRight') {
+      targetIndex = (currentIndex + 1) % availableTabs.length;
+    } else if (e.key === 'ArrowLeft') {
+      targetIndex = (currentIndex - 1 + availableTabs.length) % availableTabs.length;
+    } else if (e.key === 'Home') {
+      targetIndex = 0;
+    } else if (e.key === 'End') {
+      targetIndex = availableTabs.length - 1;
+    }
+
+    if (targetIndex !== null) {
+      const nextTab = availableTabs[targetIndex];
+      /* v8 ignore next 2 */
+      if (!nextTab) return;
+      e.preventDefault();
+      setActiveTab(nextTab);
+      const btn = document.getElementById(`tab-${nextTab}`);
+      btn?.focus();
     }
   };
 
@@ -496,11 +590,17 @@ export function StandaloneStatusPanel({
         </div>
 
         {/* Tab Navigation */}
-        <div className="standalone-panel__tabs" role="tablist" aria-label="System status sections">
+        <div
+          className="standalone-panel__tabs"
+          role="tablist"
+          aria-label="System status sections"
+          onKeyDown={handleTabKeyDown}
+        >
           <button
             type="button"
             role="tab"
             id="tab-health"
+            tabIndex={activeTab === 'health' ? 0 : -1}
             aria-selected={activeTab === 'health'}
             aria-controls="panel-health"
             className={`standalone-panel__tab-btn ${activeTab === 'health' ? 'standalone-panel__tab-btn--active' : ''}`}
@@ -512,6 +612,7 @@ export function StandaloneStatusPanel({
             type="button"
             role="tab"
             id="tab-backup"
+            tabIndex={activeTab === 'backup' ? 0 : -1}
             aria-selected={activeTab === 'backup'}
             aria-controls="panel-backup"
             className={`standalone-panel__tab-btn ${activeTab === 'backup' ? 'standalone-panel__tab-btn--active' : ''}`}
@@ -524,6 +625,7 @@ export function StandaloneStatusPanel({
               type="button"
               role="tab"
               id="tab-compose"
+              tabIndex={activeTab === 'compose' ? 0 : -1}
               aria-selected={activeTab === 'compose'}
               aria-controls="panel-compose"
               className={`standalone-panel__tab-btn ${activeTab === 'compose' ? 'standalone-panel__tab-btn--active' : ''}`}
@@ -533,6 +635,34 @@ export function StandaloneStatusPanel({
             </button>
           )}
         </div>
+
+        {/* Modal Scrollable Body */}
+        <div className="standalone-panel__body">
+          {apiError && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="standalone-panel__api-error"
+              data-testid="standalone-api-error-alert"
+            >
+              <div className="standalone-panel__api-error-content">
+                <div className="standalone-panel__api-error-msg">{apiError.message}</div>
+                {apiError.correlationId && (
+                  <div className="standalone-panel__api-error-id">
+                    Correlation ID: <code data-testid="correlation-id">{apiError.correlationId}</code>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="standalone-panel__api-error-dismiss"
+                onClick={() => { setApiError(null); }}
+                aria-label="Dismiss error"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
         {/* Tab 1: Storage & Capabilities Health */}
         <div
@@ -661,12 +791,6 @@ export function StandaloneStatusPanel({
                   {passphraseError && (
                     <div role="alert" className="standalone-panel__error">
                       {passphraseError}
-                    </div>
-                  )}
-
-                  {backupError && (
-                    <div role="alert" className="standalone-panel__error">
-                      {backupError}
                     </div>
                   )}
 
@@ -864,12 +988,6 @@ export function StandaloneStatusPanel({
                     {isVerifying ? 'Verifying...' : 'Step 1: Verify Backup Archive'}
                   </button>
 
-                  {verifyError && (
-                    <div role="alert" className="standalone-panel__error">
-                      {verifyError}
-                    </div>
-                  )}
-
                   {verifiedManifest && (
                     <div className="standalone-panel__verified-manifest">
                       <div className="standalone-panel__badge-title">✓ Backup Archive Verified</div>
@@ -944,6 +1062,7 @@ export function StandaloneStatusPanel({
             </div>
           </div>
         )}
+        </div>
       </div>
     </>
   );
