@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-builder-fcb10f25/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-builder-fcb10f25
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 26 items
+
+mcp/tests/agent/test_workflow_tools.py::test_begin_work_help PASSED      [  3%]
+mcp/tests/agent/test_workflow_tools.py::test_begin_work_validation_errors PASSED [  7%]
+mcp/tests/agent/test_workflow_tools.py::test_begin_work_positive_execution PASSED [ 11%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_help_and_guards PASSED [ 15%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_positive_execution PASSED [ 19%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_dict_from_state_extraction PASSED [ 23%]
+mcp/tests/agent/test_workflow_tools.py::test_transition_ticket_unknown_state_hints PASSED [ 26%]
+mcp/tests/agent/test_workflow_tools.py::test_complete_work_help_and_validations PASSED [ 30%]
+mcp/tests/agent/test_workflow_tools.py::test_complete_work_positive_execution PASSED [ 34%]
+mcp/tests/agent/test_link_objects.py::test_case_1_positive_link_and_remove PASSED [ 38%]
+mcp/tests/agent/test_link_objects.py::test_case_2_link_objects_help PASSED [ 42%]
+mcp/tests/agent/test_link_objects.py::test_case_3_argument_validation PASSED [ 46%]
+mcp/tests/agent/test_link_objects.py::test_case_4_self_link_via_rpc PASSED [ 50%]
+mcp/tests/agent/test_link_objects.py::test_case_5_invalid_link_type_via_rpc PASSED [ 53%]
+mcp/tests/agent/test_link_objects.py::test_case_6_nonexistent_object PASSED [ 57%]
+mcp/tests/agent/test_link_objects.py::test_case_7_link_objects_remove_not_found_and_help PASSED [ 61%]
+mcp/tests/agent/test_link_objects.py::test_case_8_direct_handler_coverage PASSED [ 65%]
+mcp/tests/agent/test_read_ticket.py::test_case_1_positive_read_ticket_all_lods PASSED [ 69%]
+mcp/tests/agent/test_read_ticket.py::test_case_2_rls_security_identical_404 PASSED [ 73%]
+mcp/tests/agent/test_read_ticket.py::test_case_3_boundary_validation_read_ticket PASSED [ 76%]
+mcp/tests/agent/test_read_ticket.py::test_case_5_read_ticket_help PASSED [ 80%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_formatting_helpers PASSED [ 84%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_additional_validations PASSED [ 88%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_comments_limit_zero PASSED [ 92%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_links_projection_unit PASSED [ 96%]
+mcp/tests/agent/test_read_ticket.py::test_read_ticket_empty_links_omitted_standard PASSED [100%]
+
+============================== 26 passed in 6.90s ==============================

@@ -5,14 +5,18 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
 
+from mcp.context import McpRequestContext
 from mcp.errors import KbMcpError, McpErrorCode
+from mcp.registry import Surface
 from mcp.surfaces.agent.read_ticket import (
     _format_assignees,
     _format_parent,
+    _load_links,
     _validate_read_arguments,
     read_ticket,
 )
@@ -296,3 +300,83 @@ async def test_read_ticket_comments_limit_zero(agent_test_env: AgentTestEnv) -> 
     parsed = yaml.safe_load(res["content"][0]["text"])
     assert parsed["key"] == "KAN-142"
     assert parsed.get("comments", []) == []
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_links_projection_unit() -> None:
+    """Verify _load_links omits empty links and projects compact outbound/inbound and truncated."""
+    # 1. Empty outbound and inbound -> None
+    mock_client = AsyncMock()
+    mock_client.request.return_value = {"outbound": [], "inbound": [], "truncated": False}
+    ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
+    res_none = await _load_links("KAN-1", ctx)
+    assert res_none is None
+
+    # 2. Populated links with truncated=True
+    mock_client.request.return_value = {
+        "outbound": [
+            {
+                "id": "link-1",
+                "link_type": "BLOCKS",
+                "target": {"id": "uuid-2", "key": "KAN-2", "summary": "Blockee", "type": "issue"},
+            }
+        ],
+        "inbound": [
+            {
+                "id": "link-2",
+                "link_type": "RELATES_TO",
+                "source": {"id": "uuid-3", "key": "KAN-3", "summary": "Relater", "type": "issue"},
+            }
+        ],
+        "truncated": True,
+    }
+    res_links = await _load_links("KAN-1", ctx)
+    assert res_links is not None
+    assert res_links["truncated"] is True
+    assert res_links["outbound"] == [
+        {"link_type": "BLOCKS", "target": {"key": "KAN-2", "summary": "Blockee"}}
+    ]
+    assert res_links["inbound"] == [
+        {"link_type": "RELATES_TO", "source": {"key": "KAN-3", "summary": "Relater"}}
+    ]
+
+    # 3. Populated links with truncated=False -> truncated key omitted
+    mock_client.request.return_value = {
+        "outbound": [
+            {
+                "id": "link-1",
+                "link_type": "BLOCKS",
+                "target": {"key": "KAN-2"},
+            }
+        ],
+        "inbound": [],
+        "truncated": False,
+    }
+    res_links_notrunc = await _load_links("KAN-1", ctx)
+    assert res_links_notrunc is not None
+    assert "truncated" not in res_links_notrunc
+    assert "inbound" not in res_links_notrunc
+    assert res_links_notrunc["outbound"] == [{"link_type": "BLOCKS", "target": {"key": "KAN-2"}}]
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_empty_links_omitted_standard(agent_test_env: AgentTestEnv) -> None:
+    """Verify read_ticket with lod=standard omits links when empty and formats populated links."""
+    env = agent_test_env
+
+    # 1. KAN-3 has no links -> links omitted
+    res = await _call_read_ticket(env, {"identifier": "KAN-3", "lod": "standard"})
+    assert res["isError"] is False
+    parsed = yaml.safe_load(res["content"][0]["text"])
+    assert "links" not in parsed
+
+    # 2. KAN-142 has links -> compact link entries without truncated=false
+    res_142 = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "standard"})
+    parsed_142 = yaml.safe_load(res_142["content"][0]["text"])
+    assert "links" in parsed_142
+    assert "outbound" in parsed_142["links"]
+    assert "truncated" not in parsed_142["links"]
+    assert parsed_142["links"]["outbound"][0]["link_type"] == "RELATES_TO"
+    assert parsed_142["links"]["outbound"][0]["target"]["key"] == "KAN-150"
+
+

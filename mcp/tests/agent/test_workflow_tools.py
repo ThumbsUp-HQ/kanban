@@ -11,9 +11,12 @@ Covers:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
+
+from mcp.surfaces.agent.transition_ticket import transition_ticket
 
 if TYPE_CHECKING:
     from mcp.tests.agent.conftest import AgentTestEnv
@@ -174,6 +177,29 @@ async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv
     assert parsed["status"] == "transitioned"
     assert parsed["key"] == "KAN-142"
     assert parsed["to_state"] == "Todo"
+    assert parsed["from_state"] == "In Progress"
+
+
+async def test_transition_ticket_dict_from_state_extraction() -> None:
+    """transition_ticket extracts scalar from_state string when upstream returns dict."""
+    mock_client = AsyncMock()
+    mock_client.request.return_value = {
+        "key": "KAN-142",
+        "from_state": {
+            "id": "01932e6a-7a54-7221-a3f1-e7a9b0c1d2e3",
+            "name": "In Progress",
+            "group": "started",
+        },
+        "state": {"name": "Todo"},
+        "target_state": "Todo",
+    }
+    res = await transition_ticket(
+        {"identifier": "KAN-142", "to_state": "Todo"},
+        client=mock_client,
+    )
+    assert res["status"] == "transitioned"
+    assert res["from_state"] == "In Progress"
+    assert isinstance(res["from_state"], str)
 
 
 async def test_transition_ticket_unknown_state_hints(agent_test_env: AgentTestEnv) -> None:

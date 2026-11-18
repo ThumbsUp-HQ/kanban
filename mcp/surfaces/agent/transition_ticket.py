@@ -150,11 +150,15 @@ async def transition_ticket(
 
     # Check for 202 Accepted pending_agent_gate hold
     if "execution_id" in resp_data and "active_agent" in resp_data:
+        from_val = resp_data.get("from_state")
+        from_str = from_val.get("name", "") if isinstance(from_val, dict) else str(from_val or "")
+        to_val = resp_data.get("to_state")
+        to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
         return {
             "status": "pending_agent_gate",
             "key": str(resp_data.get("key", identifier)),
-            "from_state": str(resp_data.get("from_state", "")),
-            "to_state": str(resp_data.get("to_state", "")),
+            "from_state": from_str,
+            "to_state": to_str,
             "execution_id": str(resp_data.get("execution_id", "")),
             "active_agent": str(resp_data.get("active_agent", "")),
             "hint": "transition is held; poll read_ticket for the gate verdict",
@@ -165,7 +169,10 @@ async def transition_ticket(
     state_str = (
         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
     )
-    from_state = str(resp_data.get("from_state", ""))
+    from_val = resp_data.get("from_state")
+    from_state = (
+        str(from_val.get("name", "")) if isinstance(from_val, dict) else str(from_val or "")
+    )
 
     return {
         "status": "transitioned",

@@ -181,7 +181,6 @@ async def link_objects(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C9
             "link": {
                 "source": source_key,
                 "link_type": link_type,
-                "type": link_type,
                 "target": resolved_target_key,
             },
         }
@@ -254,7 +253,6 @@ async def link_objects(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C9
         "link": {
             "source": source_key,
             "link_type": link_type,
-            "type": link_type,
             "target": target_key,
         },
     }

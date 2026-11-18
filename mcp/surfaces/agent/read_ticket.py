@@ -141,8 +141,37 @@ def _format_parent(raw_parent: object) -> object:
     return raw_parent
 
 
+def _compact_link_endpoint(endpoint: object) -> object:
+    if not isinstance(endpoint, dict):
+        return endpoint
+    if endpoint.get("restricted"):
+        return {"restricted": True, "label": endpoint.get("label", "🔒 Restricted Object")}
+    compact: dict[str, Any] = {}
+    if "key" in endpoint:
+        compact["key"] = endpoint["key"]
+    if endpoint.get("summary"):
+        compact["summary"] = endpoint["summary"]
+    return compact or endpoint
+
+
+def _project_compact_link_entries(
+    raw_links: list[object],
+    endpoint_key: str,
+) -> list[dict[str, Any]]:
+    """Project compact link entries for outbound or inbound lists."""
+    compact_entries: list[dict[str, Any]] = []
+    for item in raw_links:
+        if not isinstance(item, dict):
+            continue
+        entry: dict[str, Any] = {"link_type": item.get("link_type")}
+        if endpoint_key in item:
+            entry[endpoint_key] = _compact_link_endpoint(item[endpoint_key])
+        compact_entries.append(entry)
+    return compact_entries
+
+
 async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any] | None:
-    """Load object links for an issue, returning None on failure."""
+    """Load object links for an issue, returning None when empty or on failure."""
     if ctx.client is None:
         return None
     try:
@@ -152,11 +181,34 @@ async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any] 
             subject_token=ctx.subject_token,
             mcp_session_id=ctx.session_id,
         )
-        if isinstance(links_res, dict):
-            return links_res
+        if not isinstance(links_res, dict):
+            return None
     except KbMcpError:
         return None
-    return None
+
+    raw_outbound = links_res.get("outbound")
+    raw_inbound = links_res.get("inbound")
+    outbound_list = raw_outbound if isinstance(raw_outbound, list) else []
+    inbound_list = raw_inbound if isinstance(raw_inbound, list) else []
+
+    if not outbound_list and not inbound_list:
+        return None
+
+    projected: dict[str, Any] = {}
+    if outbound_list:
+        compact_out = _project_compact_link_entries(outbound_list, "target")
+        if compact_out:
+            projected["outbound"] = compact_out
+
+    if inbound_list:
+        compact_in = _project_compact_link_entries(inbound_list, "source")
+        if compact_in:
+            projected["inbound"] = compact_in
+
+    if links_res.get("truncated") is True:
+        projected["truncated"] = True
+
+    return projected or None
 
 
 async def _load_comments(issue_key: str, comments_limit: int, ctx: McpRequestContext) -> list[Any]:

@@ -90,6 +90,7 @@ async def test_case_1_positive_link_and_remove(agent_test_env: AgentTestEnv) -> 
     assert link_info["source"] == "KAN-142"
     assert link_info["target"] == "KAN-150"
     assert link_info["link_type"] == "blocks"
+    assert "type" not in link_info
 
     # 2. Remove link
     res_remove = await _call_link_objects(
@@ -107,6 +108,8 @@ async def test_case_1_positive_link_and_remove(agent_test_env: AgentTestEnv) -> 
     assert parsed_remove["status"] == "unlinked"
     assert parsed_remove["link"]["source"] == "KAN-142"
     assert parsed_remove["link"]["target"] == "KAN-150"
+    assert parsed_remove["link"]["link_type"] == "blocks"
+    assert "type" not in parsed_remove["link"]
 
 
 @pytest.mark.asyncio

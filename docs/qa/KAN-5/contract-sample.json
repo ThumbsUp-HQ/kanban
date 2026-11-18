@@ -1,0 +1,53 @@
+{
+  "transition_ticket_response": {
+    "status": "transitioned",
+    "key": "KAN-142",
+    "from_state": "In Progress",
+    "to_state": "Todo"
+  },
+  "link_objects_add_response": {
+    "status": "linked",
+    "link": {
+      "source": "KAN-142",
+      "link_type": "blocks",
+      "target": "KAN-150"
+    }
+  },
+  "link_objects_remove_response": {
+    "status": "unlinked",
+    "link": {
+      "source": "KAN-142",
+      "link_type": "blocks",
+      "target": "KAN-150"
+    }
+  },
+  "read_ticket_standard_with_no_links": {
+    "key": "KAN-3",
+    "summary": "Example Ticket Without Links",
+    "state": "Backlog",
+    "priority": "medium",
+    "assignees": [
+      "@admin"
+    ],
+    "description_markdown": "Ticket with zero object links - links key omitted"
+  },
+  "read_ticket_standard_with_links": {
+    "key": "KAN-142",
+    "summary": "Harden Multi-Card OIDC & LDAPS Auth Studio",
+    "state": "In Progress",
+    "priority": "urgent",
+    "assignees": [
+      "@adam"
+    ],
+    "links": {
+      "outbound": [
+        {
+          "link_type": "RELATES_TO",
+          "target": {
+            "key": "KAN-150"
+          }
+        }
+      ]
+    }
+  }
+}

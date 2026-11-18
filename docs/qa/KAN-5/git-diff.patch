@@ -1,0 +1,355 @@
+diff --git a/mcp/surfaces/agent/begin_work.py b/mcp/surfaces/agent/begin_work.py
+index f8a40ab..f71193d 100644
+--- a/mcp/surfaces/agent/begin_work.py
++++ b/mcp/surfaces/agent/begin_work.py
+@@ -115,11 +115,15 @@ async def begin_work(
+ 
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
++        from_val = resp_data.get("from_state")
++        from_str = from_val.get("name", "") if isinstance(from_val, dict) else str(from_val or "")
++        to_val = resp_data.get("to_state")
++        to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+             "key": str(resp_data.get("key", identifier)),
+-            "from_state": str(resp_data.get("from_state", "")),
+-            "to_state": str(resp_data.get("to_state", "")),
++            "from_state": from_str,
++            "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+             "active_agent": str(resp_data.get("active_agent", "")),
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index 4c1edf3..bda5153 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -160,11 +160,15 @@ async def complete_work(
+ 
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
++        from_val = resp_data.get("from_state")
++        from_str = from_val.get("name", "") if isinstance(from_val, dict) else str(from_val or "")
++        to_val = resp_data.get("to_state")
++        to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+             "key": str(resp_data.get("key", identifier)),
+-            "from_state": str(resp_data.get("from_state", "")),
+-            "to_state": str(resp_data.get("to_state", "")),
++            "from_state": from_str,
++            "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+             "active_agent": str(resp_data.get("active_agent", "")),
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+diff --git a/mcp/surfaces/agent/link_objects.py b/mcp/surfaces/agent/link_objects.py
+index 016b18a..bdfd256 100644
+--- a/mcp/surfaces/agent/link_objects.py
++++ b/mcp/surfaces/agent/link_objects.py
+@@ -181,7 +181,6 @@ async def link_objects(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C9
+             "link": {
+                 "source": source_key,
+                 "link_type": link_type,
+-                "type": link_type,
+                 "target": resolved_target_key,
+             },
+         }
+@@ -254,7 +253,6 @@ async def link_objects(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C9
+         "link": {
+             "source": source_key,
+             "link_type": link_type,
+-            "type": link_type,
+             "target": target_key,
+         },
+     }
+diff --git a/mcp/surfaces/agent/read_ticket.py b/mcp/surfaces/agent/read_ticket.py
+index ea364ed..c17e405 100644
+--- a/mcp/surfaces/agent/read_ticket.py
++++ b/mcp/surfaces/agent/read_ticket.py
+@@ -141,8 +141,37 @@ def _format_parent(raw_parent: object) -> object:
+     return raw_parent
+ 
+ 
++def _compact_link_endpoint(endpoint: object) -> object:
++    if not isinstance(endpoint, dict):
++        return endpoint
++    if endpoint.get("restricted"):
++        return {"restricted": True, "label": endpoint.get("label", "🔒 Restricted Object")}
++    compact: dict[str, Any] = {}
++    if "key" in endpoint:
++        compact["key"] = endpoint["key"]
++    if endpoint.get("summary"):
++        compact["summary"] = endpoint["summary"]
++    return compact or endpoint
++
++
++def _project_compact_link_entries(
++    raw_links: list[object],
++    endpoint_key: str,
++) -> list[dict[str, Any]]:
++    """Project compact link entries for outbound or inbound lists."""
++    compact_entries: list[dict[str, Any]] = []
++    for item in raw_links:
++        if not isinstance(item, dict):
++            continue
++        entry: dict[str, Any] = {"link_type": item.get("link_type")}
++        if endpoint_key in item:
++            entry[endpoint_key] = _compact_link_endpoint(item[endpoint_key])
++        compact_entries.append(entry)
++    return compact_entries
++
++
+ async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any] | None:
+-    """Load object links for an issue, returning None on failure."""
++    """Load object links for an issue, returning None when empty or on failure."""
+     if ctx.client is None:
+         return None
+     try:
+@@ -152,11 +181,34 @@ async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any]
+             subject_token=ctx.subject_token,
+             mcp_session_id=ctx.session_id,
+         )
+-        if isinstance(links_res, dict):
+-            return links_res
++        if not isinstance(links_res, dict):
++            return None
+     except KbMcpError:
+         return None
+-    return None
++
++    raw_outbound = links_res.get("outbound")
++    raw_inbound = links_res.get("inbound")
++    outbound_list = raw_outbound if isinstance(raw_outbound, list) else []
++    inbound_list = raw_inbound if isinstance(raw_inbound, list) else []
++
++    if not outbound_list and not inbound_list:
++        return None
++
++    projected: dict[str, Any] = {}
++    if outbound_list:
++        compact_out = _project_compact_link_entries(outbound_list, "target")
++        if compact_out:
++            projected["outbound"] = compact_out
++
++    if inbound_list:
++        compact_in = _project_compact_link_entries(inbound_list, "source")
++        if compact_in:
++            projected["inbound"] = compact_in
++
++    if links_res.get("truncated") is True:
++        projected["truncated"] = True
++
++    return projected or None
+ 
+ 
+ async def _load_comments(issue_key: str, comments_limit: int, ctx: McpRequestContext) -> list[Any]:
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+index 6b720f2..24e7b9e 100644
+--- a/mcp/surfaces/agent/transition_ticket.py
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -150,11 +150,15 @@ async def transition_ticket(
+ 
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
++        from_val = resp_data.get("from_state")
++        from_str = from_val.get("name", "") if isinstance(from_val, dict) else str(from_val or "")
++        to_val = resp_data.get("to_state")
++        to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+             "key": str(resp_data.get("key", identifier)),
+-            "from_state": str(resp_data.get("from_state", "")),
+-            "to_state": str(resp_data.get("to_state", "")),
++            "from_state": from_str,
++            "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+             "active_agent": str(resp_data.get("active_agent", "")),
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+@@ -165,7 +169,10 @@ async def transition_ticket(
+     state_str = (
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+     )
+-    from_state = str(resp_data.get("from_state", ""))
++    from_val = resp_data.get("from_state")
++    from_state = (
++        str(from_val.get("name", "")) if isinstance(from_val, dict) else str(from_val or "")
++    )
+ 
+     return {
+         "status": "transitioned",
+diff --git a/mcp/tests/agent/test_link_objects.py b/mcp/tests/agent/test_link_objects.py
+index 3e9b517..f737e95 100644
+--- a/mcp/tests/agent/test_link_objects.py
++++ b/mcp/tests/agent/test_link_objects.py
+@@ -90,6 +90,7 @@ async def test_case_1_positive_link_and_remove(agent_test_env: AgentTestEnv) ->
+     assert link_info["source"] == "KAN-142"
+     assert link_info["target"] == "KAN-150"
+     assert link_info["link_type"] == "blocks"
++    assert "type" not in link_info
+ 
+     # 2. Remove link
+     res_remove = await _call_link_objects(
+@@ -107,6 +108,8 @@ async def test_case_1_positive_link_and_remove(agent_test_env: AgentTestEnv) ->
+     assert parsed_remove["status"] == "unlinked"
+     assert parsed_remove["link"]["source"] == "KAN-142"
+     assert parsed_remove["link"]["target"] == "KAN-150"
++    assert parsed_remove["link"]["link_type"] == "blocks"
++    assert "type" not in parsed_remove["link"]
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/mcp/tests/agent/test_read_ticket.py b/mcp/tests/agent/test_read_ticket.py
+index 77f97fd..b1c6aec 100644
+--- a/mcp/tests/agent/test_read_ticket.py
++++ b/mcp/tests/agent/test_read_ticket.py
+@@ -5,14 +5,18 @@
+ from __future__ import annotations
+ 
+ from typing import TYPE_CHECKING, Any, cast
++from unittest.mock import AsyncMock
+ 
+ import pytest
+ import yaml
+ 
++from mcp.context import McpRequestContext
+ from mcp.errors import KbMcpError, McpErrorCode
++from mcp.registry import Surface
+ from mcp.surfaces.agent.read_ticket import (
+     _format_assignees,
+     _format_parent,
++    _load_links,
+     _validate_read_arguments,
+     read_ticket,
+ )
+@@ -296,3 +300,83 @@ async def test_read_ticket_comments_limit_zero(agent_test_env: AgentTestEnv) ->
+     parsed = yaml.safe_load(res["content"][0]["text"])
+     assert parsed["key"] == "KAN-142"
+     assert parsed.get("comments", []) == []
++
++
++@pytest.mark.asyncio
++async def test_read_ticket_links_projection_unit() -> None:
++    """Verify _load_links omits empty links and projects compact outbound/inbound and truncated."""
++    # 1. Empty outbound and inbound -> None
++    mock_client = AsyncMock()
++    mock_client.request.return_value = {"outbound": [], "inbound": [], "truncated": False}
++    ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
++    res_none = await _load_links("KAN-1", ctx)
++    assert res_none is None
++
++    # 2. Populated links with truncated=True
++    mock_client.request.return_value = {
++        "outbound": [
++            {
++                "id": "link-1",
++                "link_type": "BLOCKS",
++                "target": {"id": "uuid-2", "key": "KAN-2", "summary": "Blockee", "type": "issue"},
++            }
++        ],
++        "inbound": [
++            {
++                "id": "link-2",
++                "link_type": "RELATES_TO",
++                "source": {"id": "uuid-3", "key": "KAN-3", "summary": "Relater", "type": "issue"},
++            }
++        ],
++        "truncated": True,
++    }
++    res_links = await _load_links("KAN-1", ctx)
++    assert res_links is not None
++    assert res_links["truncated"] is True
++    assert res_links["outbound"] == [
++        {"link_type": "BLOCKS", "target": {"key": "KAN-2", "summary": "Blockee"}}
++    ]
++    assert res_links["inbound"] == [
++        {"link_type": "RELATES_TO", "source": {"key": "KAN-3", "summary": "Relater"}}
++    ]
++
++    # 3. Populated links with truncated=False -> truncated key omitted
++    mock_client.request.return_value = {
++        "outbound": [
++            {
++                "id": "link-1",
++                "link_type": "BLOCKS",
++                "target": {"key": "KAN-2"},
++            }
++        ],
++        "inbound": [],
++        "truncated": False,
++    }
++    res_links_notrunc = await _load_links("KAN-1", ctx)
++    assert res_links_notrunc is not None
++    assert "truncated" not in res_links_notrunc
++    assert "inbound" not in res_links_notrunc
++    assert res_links_notrunc["outbound"] == [{"link_type": "BLOCKS", "target": {"key": "KAN-2"}}]
++
++
++@pytest.mark.asyncio
++async def test_read_ticket_empty_links_omitted_standard(agent_test_env: AgentTestEnv) -> None:
++    """Verify read_ticket with lod=standard omits links when empty and formats populated links."""
++    env = agent_test_env
++
++    # 1. KAN-3 has no links -> links omitted
++    res = await _call_read_ticket(env, {"identifier": "KAN-3", "lod": "standard"})
++    assert res["isError"] is False
++    parsed = yaml.safe_load(res["content"][0]["text"])
++    assert "links" not in parsed
++
++    # 2. KAN-142 has links -> compact link entries without truncated=false
++    res_142 = await _call_read_ticket(env, {"identifier": "KAN-142", "lod": "standard"})
++    parsed_142 = yaml.safe_load(res_142["content"][0]["text"])
++    assert "links" in parsed_142
++    assert "outbound" in parsed_142["links"]
++    assert "truncated" not in parsed_142["links"]
++    assert parsed_142["links"]["outbound"][0]["link_type"] == "RELATES_TO"
++    assert parsed_142["links"]["outbound"][0]["target"]["key"] == "KAN-150"
++
++
+diff --git a/mcp/tests/agent/test_workflow_tools.py b/mcp/tests/agent/test_workflow_tools.py
+index 5c0a4dc..c98f620 100644
+--- a/mcp/tests/agent/test_workflow_tools.py
++++ b/mcp/tests/agent/test_workflow_tools.py
+@@ -11,10 +11,13 @@ Covers:
+ from __future__ import annotations
+ 
+ from typing import TYPE_CHECKING, Any, cast
++from unittest.mock import AsyncMock
+ 
+ import pytest
+ import yaml
+ 
++from mcp.surfaces.agent.transition_ticket import transition_ticket
++
+ if TYPE_CHECKING:
+     from mcp.tests.agent.conftest import AgentTestEnv
+ 
+@@ -174,6 +177,29 @@ async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv
+     assert parsed["status"] == "transitioned"
+     assert parsed["key"] == "KAN-142"
+     assert parsed["to_state"] == "Todo"
++    assert parsed["from_state"] == "In Progress"
++
++
++async def test_transition_ticket_dict_from_state_extraction() -> None:
++    """transition_ticket extracts scalar from_state string when upstream returns dict."""
++    mock_client = AsyncMock()
++    mock_client.request.return_value = {
++        "key": "KAN-142",
++        "from_state": {
++            "id": "01932e6a-7a54-7221-a3f1-e7a9b0c1d2e3",
++            "name": "In Progress",
++            "group": "started",
++        },
++        "state": {"name": "Todo"},
++        "target_state": "Todo",
++    }
++    res = await transition_ticket(
++        {"identifier": "KAN-142", "to_state": "Todo"},
++        client=mock_client,
++    )
++    assert res["status"] == "transitioned"
++    assert res["from_state"] == "In Progress"
++    assert isinstance(res["from_state"], str)
+ 
+ 
+ async def test_transition_ticket_unknown_state_hints(agent_test_env: AgentTestEnv) -> None:
