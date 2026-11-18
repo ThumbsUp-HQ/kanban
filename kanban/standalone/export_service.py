@@ -393,6 +393,19 @@ services:
       timeout: 5s
       retries: 5
 
+  kanban-migrate:
+    image: thumbs-up-kanban:latest
+    container_name: kanban-migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      KANBAN_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD}@postgres:5432/kanban"
+    networks:
+      - data_net
+
   kanban:
     image: thumbs-up-kanban:latest
     container_name: kanban-app
@@ -400,6 +413,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kanban-migrate:
+        condition: service_completed_successfully
     ports:
       - "${PORT:-8080}:8080"
     environment:

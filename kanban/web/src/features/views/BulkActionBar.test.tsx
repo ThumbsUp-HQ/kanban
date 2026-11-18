@@ -48,6 +48,29 @@ describe('BulkActionBar (KB-P3-40, S6.4 item 3, S7.2 8p, S7.2 8f)', () => {
     expect(handleUpdateState).toHaveBeenCalledWith('done');
   });
 
+  it('disables Delete button when any selected issue lacks DELETE or ADMIN capability', () => {
+    const firstIssue = FIXTURE_12_ISSUES[0];
+    if (!firstIssue) throw new Error('missing fixture');
+    const issuesWithCaps = [
+      {
+        ...firstIssue,
+        key: 'KAN-VIEW',
+        capabilities: ['VIEW'],
+      },
+    ];
+
+    render(
+      <BulkActionBar
+        selectedKeys={['KAN-VIEW']}
+        issues={issuesWithCaps}
+        onClearSelection={vi.fn()}
+        onBatchDelete={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
+  });
+
   it('archive rule: disabled with tooltip/reason when 1 of 3 selected items is In Progress (Test Case 4, S7.2 8p)', () => {
     // KAN-142 is In Progress ('started'), KAN-148 is Done ('completed'), KAN-150 is Cancelled ('cancelled')
     const selectedKeys = ['KAN-142', 'KAN-148', 'KAN-150'];

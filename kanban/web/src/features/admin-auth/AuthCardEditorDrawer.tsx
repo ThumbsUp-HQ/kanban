@@ -58,7 +58,7 @@ export function AuthCardEditorDrawer({
 
   // Handshake test state
   const [isTestingHandshake, setIsTestingHandshake] = useState(false);
-  const [handshakeResult, setHandshakeResult] = useState<{ status: 'healthy' | 'failed'; message: string } | null>(null);
+  const [handshakeResult, setHandshakeResult] = useState<{ status: 'healthy' | 'failed' | 'unverified'; message: string } | null>(null);
 
   // Common metadata
   const [prevCard, setPrevCard] = useState<AdminAuthCard | null>(card);
@@ -1528,7 +1528,13 @@ export function AuthCardEditorDrawer({
 
           {handshakeResult && (
             <div
-              className={`auth-drawer-handshake-result auth-health-chip--${handshakeResult.status}`}
+              className={`auth-drawer-handshake-result ${
+                handshakeResult.status === 'healthy'
+                  ? 'auth-health-chip--healthy'
+                  : handshakeResult.status === 'unverified'
+                    ? 'auth-health-chip--unverified'
+                    : 'auth-health-chip--failed'
+              }`}
               data-testid="drawer-handshake-result"
               role="status"
               style={{ padding: '8px 12px', margin: '12px 0', borderRadius: '4px', border: '1px solid currentColor' }}

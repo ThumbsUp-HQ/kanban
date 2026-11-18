@@ -506,4 +506,41 @@ describe('useIssueKeyboardMap (KB-P3-40, S6.4 item 4, S1.3 item 3)', () => {
       emptyHook.current.handleRowClick('KAN-140', true);
     });
   });
+
+  it('covers wrap-around on H and L and K with existing anchorKey', () => {
+    const { result } = renderHook(() => {
+      const [sel, setSel] = useState<string[]>([]);
+      return useIssueKeyboardMap({
+        issues: FIXTURE_12_ISSUES,
+        layout: 'board',
+        selectedIds: sel,
+        setSelectedIds: setSel,
+      });
+    });
+
+    // 1. Focus first issue
+    act(() => {
+      result.current.setFocusedKey('KAN-140');
+      result.current.setAnchorKey('KAN-140');
+    });
+
+    // Press 'k' when anchorKey is already present -> leaves anchorKey unchanged
+    fireEvent.keyDown(window, { key: 'k' });
+    expect(result.current.anchorKey).toBe('KAN-140');
+    expect(result.current.focusedKey).toBe(FIXTURE_12_ISSUES[FIXTURE_12_ISSUES.length - 1]?.key);
+
+    // Press 'h' at currentIndex = 0 (wrap around)
+    act(() => {
+      result.current.setFocusedKey('KAN-140');
+    });
+    fireEvent.keyDown(window, { key: 'h' });
+    expect(result.current.focusedKey).toBe(FIXTURE_12_ISSUES[FIXTURE_12_ISSUES.length - 1]?.key);
+
+    // Press 'l' at last index (wrap around to 0)
+    act(() => {
+      result.current.setFocusedKey(FIXTURE_12_ISSUES[FIXTURE_12_ISSUES.length - 1]?.key ?? '');
+    });
+    fireEvent.keyDown(window, { key: 'l' });
+    expect(result.current.focusedKey).toBe('KAN-140');
+  });
 });

@@ -119,6 +119,44 @@
         }
       }
     },
+    "kanban-migrate": {
+      "restart": "no",
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "alembic",
+        "upgrade",
+        "head"
+      ],
+      "entrypoint": null,
+      "image": "kanban:runtime-slim",
+      "mem_limit": "268435456",
+      "networks": {
+        "data_net": null
+      },
+      "pids_limit": 100,
+      "read_only": true,
+      "secrets": [
+        {
+          "source": "postgres_password",
+          "target": "/run/secrets/postgres_password"
+        }
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp"
+      ],
+      "user": "65532:65532",
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      }
+    },
     "mcp-server": {
       "restart": "unless-stopped",
       "cap_drop": [

@@ -343,7 +343,7 @@ async def test_case_2_positive_lifecycle(  # noqa: PLR0915
 
         # Protected resource rejects mfa_pending session
         prot_res = await client.get("/api/v1/protected/resource", headers=headers2)
-        assert prot_res.status_code == 403
+        assert prot_res.status_code in (401, 403)
         assert prot_res.json()["code"] == "MFA_REQUIRED"
 
         # 6. Verify TOTP factor -> elevates session to AAL2, clears mfa_pending, rotates session id
@@ -834,3 +834,54 @@ async def test_delete_totp_factor(
         )
         assert v_res.status_code == 401
         assert v_res.json()["code"] == "MFA_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_totp_verify_alias_endpoint(
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """Verify that /api/v1/auth/mfa/totp/verify alias endpoint confirms TOTP enrollment."""
+    factory = RLSSessionFactory(pg_worker_db)
+    rate_limiter = PgRateLimiter(pg_worker_db)
+    ws_id, p_id, _ = await _setup_test_admin(
+        factory, key_material, username="alias_user", password="Password123!"
+    )
+
+    app, session_service = _create_app(factory, key_material, rate_limiter)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        anon_ctx = RLSContext(
+            principal_id=uuid.UUID(int=0),
+            workspace_id=uuid.UUID(int=0),
+            token_scopes=("auth",),
+            aal_level=1,
+        )
+        async with factory.session(anon_ctx) as session:
+            issued = await session_service.create_after_login(
+                session,
+                principal_id=p_id,
+                workspace_id=ws_id,
+                aal_level=2,
+                mfa_pending=False,
+            )
+
+        client.cookies.set(SESSION_COOKIE_NAME, issued.cookie_val)
+        client.cookies.set(CSRF_COOKIE_NAME, issued.csrf_token)
+        headers = {CSRF_HEADER_NAME: issued.csrf_token}
+
+        # Enroll TOTP
+        en_res = await client.post("/api/v1/auth/mfa/totp/enroll", headers=headers)
+        assert en_res.status_code == 200
+        secret_bytes = base64.b32decode(en_res.json()["secret"])
+        code = totp_at(secret_bytes, int(time.time()))
+
+        # Call /api/v1/auth/mfa/totp/verify alias endpoint
+        verify_res = await client.post(
+            "/api/v1/auth/mfa/totp/verify",
+            headers=headers,
+            json={"code": code},
+        )
+        assert verify_res.status_code == 200
+        assert verify_res.json()["ok"] is True

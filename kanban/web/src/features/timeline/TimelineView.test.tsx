@@ -18,6 +18,11 @@ const TEST_ISSUES: TimelineIssueItem[] = [
         link_state: 'ACTIVE',
         restricted: false,
       },
+      {
+        target_key: 'KAN-999',
+        link_state: 'ACTIVE',
+        restricted: false,
+      },
     ],
   },
   {
@@ -124,6 +129,44 @@ describe('TimelineView', () => {
     // KAN-143 is a milestone diamond
     const milestone143 = screen.getByTestId('timeline-milestone-KAN-143');
     expect(milestone143).toBeDefined();
+  });
+
+  it('navigates timeline range with Prev, Next, and Today buttons', () => {
+    render(
+      <TimelineView
+        issues={TEST_ISSUES}
+        projectKey="KAN"
+        initialZoom="week"
+        initialStartDate="2026-11-01"
+        today="2026-11-12"
+      />
+    );
+
+    const prevBtn = screen.getByRole('button', { name: 'Previous 2 weeks' });
+    const nextBtn = screen.getByRole('button', { name: 'Next 2 weeks' });
+    const todayBtn = screen.getByRole('button', { name: 'Jump to today' });
+
+    fireEvent.click(prevBtn);
+    fireEvent.click(nextBtn);
+    fireEvent.click(todayBtn);
+  });
+
+  it('renders quarter zoom scale and pointerdown on milestone with null start_date', () => {
+    render(
+      <TimelineView
+        issues={TEST_ISSUES}
+        projectKey="KAN"
+        initialZoom="quarter"
+        initialStartDate="2026-11-01"
+        today="2026-11-12"
+      />
+    );
+
+    expect(screen.getByTestId('timeline-view')).toBeDefined();
+
+    // Trigger pointerdown on milestone diamond (KAN-143 which has null start_date)
+    const milestone143 = screen.getByTestId('timeline-milestone-KAN-143');
+    fireEvent.pointerDown(milestone143, { clientX: 100 });
   });
 
   it('renders ghost prompt for unscheduled issue and schedules on track click', async () => {
@@ -1004,6 +1047,44 @@ describe('TimelineView', () => {
     expect(milestoneDiamond).not.toBeNull();
     if (milestoneDiamond) {
       fireEvent.pointerDown(milestoneDiamond, { clientX: 150 });
+    }
+  });
+
+  it('covers pointerDown fallback when start_date or due_date is null', () => {
+    const issuesWithSingleDates: TimelineIssueItem[] = [
+      {
+        id: 'single-due',
+        key: 'KAN-SD',
+        summary: 'Only due date',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        start_date: null,
+        due_date: '2026-11-05',
+      },
+      {
+        id: 'single-start',
+        key: 'KAN-SS',
+        summary: 'Only start date',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        start_date: '2026-11-05',
+        due_date: null,
+      },
+    ];
+
+    const { container } = render(
+      <TimelineView
+        issues={issuesWithSingleDates}
+        projectKey="KAN"
+        initialStartDate="2026-11-01"
+      />
+    );
+
+    const milestones = container.querySelectorAll('.timeline-milestone');
+    expect(milestones.length).toBeGreaterThan(0);
+    for (const m of milestones) {
+      fireEvent.pointerDown(m, { clientX: 100 });
+      fireEvent.pointerUp(window, { clientX: 100 });
     }
   });
 });

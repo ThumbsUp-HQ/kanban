@@ -301,4 +301,69 @@ describe('StickyCard', () => {
 
     expect(container.querySelectorAll('img')).toHaveLength(0);
   });
+
+  it('covers capabilities ADMIN and VIEW-only hiding overflow menu', () => {
+    // 1. ADMIN capability allows edit and delete
+    const adminSticky: StickyItem = {
+      ...baseSticky,
+      capabilities: ['ADMIN'],
+    };
+    const { unmount } = render(
+      <StickyCard
+        sticky={adminSticky}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onPromote={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Sticky actions' })).toBeDefined();
+    unmount();
+
+    // 2. VIEW capability hides overflow menu
+    const viewSticky: StickyItem = {
+      ...baseSticky,
+      capabilities: ['VIEW'],
+    };
+    render(
+      <StickyCard
+        sticky={viewSticky}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onPromote={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Sticky actions' })).toBeNull();
+  });
+
+  it('falls back to default capabilities when sticky.capabilities is undefined', () => {
+    // 1. readOnly = false -> defaults to EDIT, DELETE, ADMIN
+    const unassignedSticky = {
+      ...baseSticky,
+      capabilities: undefined,
+    } as unknown as StickyItem;
+
+    const { unmount } = render(
+      <StickyCard
+        sticky={unassignedSticky}
+        readOnly={false}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onPromote={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Sticky actions' })).toBeDefined();
+    unmount();
+
+    // 2. readOnly = true -> defaults to VIEW
+    render(
+      <StickyCard
+        sticky={unassignedSticky}
+        readOnly={true}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onPromote={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Sticky actions' })).toBeNull();
+  });
 });

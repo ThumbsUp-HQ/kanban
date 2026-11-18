@@ -83,6 +83,10 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(membersTab);
     expect(await screen.findByText('Alice Admin')).toBeDefined();
 
+    // Switch back to General
+    fireEvent.click(generalTab);
+    expect(await screen.findByDisplayValue('Kanban Platform')).toBeDefined();
+
     // Switch to Automation & Integrations
     fireEvent.click(integrationsTab);
     expect(screen.getByText('Workflows & States')).toBeDefined();

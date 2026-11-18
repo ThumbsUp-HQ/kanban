@@ -141,4 +141,46 @@ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
     fireEvent.click(scrim);
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('covers missing csrf token, non-Error rejection, and nested/fallback error details', async () => {
+    // 1. Non-Error throw
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    vi.spyOn(window, 'fetch').mockImplementation(() => Promise.reject('Non-error string rejection'));
+
+    const { unmount } = render(
+      <CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />,
+    );
+
+    const nameInput = screen.getByLabelText(/Workspace Name/);
+    fireEvent.change(nameInput, { target: { value: 'Faulty WS' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Network error creating workspace')).toBeDefined();
+    });
+    unmount();
+
+    // 2. Nested error detail
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ detail: { detail: 'Deep nested failure' } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
+    const nameInput2 = screen.getByLabelText(/Workspace Name/);
+    fireEvent.change(nameInput2, { target: { value: 'Nested Error WS' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Deep nested failure')).toBeDefined();
+    });
+  });
 });

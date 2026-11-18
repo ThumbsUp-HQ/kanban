@@ -81,6 +81,7 @@ describe('PersonalSettingsPage', () => {
     vi.mocked(api.fetchMyProfile).mockResolvedValue(mockProfile);
     vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
     vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
+    vi.mocked(api.fetchExternalIdentities).mockResolvedValue([]);
   });
 
   const renderComponent = () =>
@@ -986,5 +987,115 @@ describe('PersonalSettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
     });
+  });
+
+  it('renders linked external identities and handles unlinking with confirm', async () => {
+    const mockIdentities: api.ExternalIdentityItem[] = [
+      {
+        id: 'ident-1',
+        card_slug: 'github-corp',
+        provider_type: 'oauth',
+        subject_id: 'gh-123',
+        display_name: 'Jane GitHub',
+        email: 'jane@github.example',
+        created_at: '2026-01-15T00:00:00Z',
+      },
+    ];
+    vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
+    vi.mocked(api.unlinkIdentity).mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-row-ident-1')).toBeDefined();
+      expect(screen.getByText('github-corp')).toBeDefined();
+    });
+
+    const unlinkBtn = screen.getByTestId('unlink-identity-ident-1');
+    fireEvent.click(unlinkBtn);
+
+    await waitFor(() => {
+      expect(api.unlinkIdentity).toHaveBeenCalledWith('ident-1');
+      expect(screen.getByTestId('alert-success').textContent).toContain('Account unlinked.');
+    });
+  });
+
+  it('cancels unlinking identity when confirm is false and handles unlink error', async () => {
+    const mockIdentities: api.ExternalIdentityItem[] = [
+      {
+        id: 'ident-2',
+        card_slug: 'google',
+        provider_type: 'oidc',
+        subject_id: 'g-456',
+        display_name: null,
+        email: null,
+        created_at: '2026-02-01T00:00:00Z',
+      },
+    ];
+    vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
+    vi.mocked(api.unlinkIdentity).mockRejectedValue(new Error('Cannot unlink'));
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-row-ident-2')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
+    expect(api.unlinkIdentity).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Cannot unlink');
+    });
+
+    vi.mocked(api.unlinkIdentity).mockRejectedValue('non-error failure');
+    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to unlink identity.');
+    });
+  });
+
+  it('covers show/hide password toggle and TOTP setup modal cancel', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 0,
+      recovery_codes_remaining: 0,
+    });
+    vi.mocked(api.enrollTotp).mockResolvedValue({
+      secret: 'ABCDEF',
+      otpauth_url: 'otpauth://totp/test',
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personal-settings-page')).toBeDefined();
+    });
+
+    // Toggle current password and new password visibility
+    const toggleBtns = screen.getAllByRole('button', { name: /Show password/i });
+    if (toggleBtns[0]) {
+      fireEvent.click(toggleBtns[0]);
+      fireEvent.click(toggleBtns[0]);
+    }
+    if (toggleBtns[1]) {
+      fireEvent.click(toggleBtns[1]);
+      fireEvent.click(toggleBtns[1]);
+    }
+
+    // Open and cancel TOTP modal
+    const enableTotpBtn = screen.getByTestId('enable-totp-btn');
+    fireEvent.click(enableTotpBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-totp-btn')).toBeDefined();
+    });
+    const cancelBtns = screen.getAllByRole('button', { name: 'Cancel' });
+    if (cancelBtns[0]) fireEvent.click(cancelBtns[0]);
+    expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
   });
 });

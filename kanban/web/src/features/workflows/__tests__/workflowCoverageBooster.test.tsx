@@ -488,6 +488,8 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // Invalid hook drop does nothing
       capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'non-existent' } } });
+      capturedOnDrop?.({ source: { data: { type: 'other' } } });
+      capturedOnDrop?.({ source: { data: null } });
     });
 
     it('handles non-Error rejection and drop error catch in TransitionRuleCard', async () => {
@@ -595,6 +597,64 @@ describe('Workflow Studio Coverage Booster', () => {
       );
 
       expect(screen.queryByText('forensic-code-check')).toBeNull();
+    });
+
+    it('handles keyboard move up and down with success and error rollbacks', async () => {
+      const onReorder = vi.fn().mockResolvedValue(undefined);
+      const { rerender } = render(
+        <TransitionRuleCard
+          rule={DEFAULT_TEST_RULE}
+          projectKey="KAN"
+          onReorder={onReorder}
+          onToggle={vi.fn()}
+          onEdit={vi.fn()}
+          onDetach={vi.fn()}
+          onAddHook={vi.fn()}
+          onDryRun={vi.fn()}
+        />,
+      );
+
+      // Move hook 0 down
+      const moveDownBtn = screen.getByRole('button', { name: `Move ${DEFAULT_TEST_HOOK.name} down` });
+      fireEvent.click(moveDownBtn);
+      await waitFor(() => {
+        expect(onReorder).toHaveBeenCalledWith(
+          { from_state: DEFAULT_TEST_RULE.from_state, to_state: DEFAULT_TEST_RULE.to_state },
+          ['hook-2', 'hook-1', 'hook-3'],
+        );
+      });
+
+      // Move hook 1 up
+      const secondHookName = DEFAULT_TEST_RULE.hooks[1]?.name ?? 'CI Gate';
+      const moveUpBtn = screen.getByRole('button', { name: `Move ${secondHookName} up` });
+      fireEvent.click(moveUpBtn);
+
+      // Reorder failure with Error instance
+      onReorder.mockRejectedValueOnce(new Error('Network disconnected'));
+      fireEvent.click(moveDownBtn);
+      await waitFor(() => {
+        expect(screen.getByText(/Network disconnected/)).toBeDefined();
+      });
+
+      // Reorder failure with non-Error
+      rerender(
+        <TransitionRuleCard
+          rule={DEFAULT_TEST_RULE}
+          projectKey="KAN"
+          onReorder={onReorder}
+          onToggle={vi.fn()}
+          onEdit={vi.fn()}
+          onDetach={vi.fn()}
+          onAddHook={vi.fn()}
+          onDryRun={vi.fn()}
+        />,
+      );
+      onReorder.mockRejectedValueOnce('Custom string error');
+      const downBtnAfterRerender = screen.getByRole('button', { name: `Move ${DEFAULT_TEST_HOOK.name} down` });
+      fireEvent.click(downBtnAfterRerender);
+      await waitFor(() => {
+        expect(screen.getByText(/Reorder failed: 422 REORDER_SET_MISMATCH/)).toBeDefined();
+      });
     });
   });
 

@@ -165,4 +165,18 @@ describe('AuthCardButton (KB-P3-35)', () => {
       '/api/v1/auth/cards/no-sub/start?next=%2Fcustom-next&remember_me=1',
     );
   });
+
+  it('passes remember_me=0 when rememberMe is false', () => {
+    const assignMock = vi.fn();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { assign: assignMock },
+    });
+
+    render(<AuthCardButton card={oidcCard} rememberMe={false} next="/issues" />);
+    fireEvent.click(screen.getByRole('button', { name: /Continue with Okta SSO/i }));
+    expect(assignMock).toHaveBeenCalledWith(
+      '/api/v1/auth/cards/okta-workforce/start?next=%2Fissues&remember_me=0',
+    );
+  });
 });

@@ -11,8 +11,11 @@ import {
 } from '../features/projects/CreateProjectModal';
 import {
   ensureSessionCsrfToken,
+  isPublicPath,
   useSessionGuard,
 } from '../features/auth/useSessionGuard';
+import { CommandPalette } from './CommandPalette';
+import { LayoutSwitcher } from './LayoutSwitcher';
 import * as clientModule from '../api/client';
 import {
   enrollTotp,
@@ -39,6 +42,9 @@ import { IssuesWorkspaceRoute } from '../features/views/viewRegistry';
 import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
 import { StickiesStory } from '../dev/StickiesStory';
+import { IconStory } from '../dev/IconStory';
+import { MediaStory } from '../dev/MediaStory';
+import { EditorStory } from '../dev/EditorStory';
 
 function GuardHarness({ enabled = true }: { enabled?: boolean }): React.JSX.Element {
   const state = useSessionGuard(enabled);
@@ -188,7 +194,7 @@ describe('Browser QA Branch Coverage Booster', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
       u2();
 
-      // mfa_pending === true -> redirects to /setup
+      // mfa_pending === true -> redirects to /login (KANBA-207 strict MFA isolation)
       fetchSpy
         .mockResolvedValueOnce(new Response(JSON.stringify({ initialized: true }), { status: 200 }))
         .mockResolvedValueOnce(
@@ -206,12 +212,12 @@ describe('Browser QA Branch Coverage Booster', () => {
         <MemoryRouter initialEntries={['/']}>
           <Routes>
             <Route path="/" element={<GuardHarness />} />
-            <Route path="/setup" element={<div data-testid="at-setup">Setup</div>} />
+            <Route path="/login" element={<div data-testid="at-login">Login</div>} />
           </Routes>
         </MemoryRouter>,
       );
       await waitFor(() => {
-        expect(screen.getByTestId('at-setup')).not.toBeNull();
+        expect(screen.getByTestId('at-login')).not.toBeNull();
       });
       u3();
 
@@ -237,6 +243,129 @@ describe('Browser QA Branch Coverage Booster', () => {
       await waitFor(() => {
         expect(screen.getByTestId('guard-state').textContent).toBe('authenticated:2');
       });
+    });
+
+    it('covers uninitialized setup redirect, unauthenticated redirect with safeNext, and public paths', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      // isPublicPath checks
+      expect(isPublicPath('/login')).toBe(true);
+      expect(isPublicPath('/setup/profile')).toBe(true);
+      expect(isPublicPath('/activate/claim')).toBe(true);
+      expect(isPublicPath('/__dev/stories')).toBe(true);
+      expect(isPublicPath('/projects/KANBA')).toBe(false);
+
+      // setup initialized === false -> redirects to /setup
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ initialized: false }), { status: 200 }),
+      );
+      const { unmount: u1 } = render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<GuardHarness />} />
+            <Route path="/setup" element={<div data-testid="at-setup">Setup</div>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('at-setup')).not.toBeNull();
+      });
+      u1();
+
+      // session authenticated === false with deep link -> redirects to /login?next=...
+      fetchSpy
+        .mockResolvedValueOnce(new Response(JSON.stringify({ initialized: true }), { status: 200 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              authenticated: false,
+              csrf_token: 'csrf-unauth',
+            }),
+            { status: 200 },
+          ),
+        );
+
+      const { unmount: u2 } = render(
+        <MemoryRouter initialEntries={['/projects/KANBA?tab=issues']}>
+          <Routes>
+            <Route path="/projects/:key" element={<GuardHarness />} />
+            <Route path="/login" element={<div data-testid="at-login-deeplink">Login Target</div>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('at-login-deeplink')).not.toBeNull();
+      });
+      u2();
+
+      // session authenticated === false with root path -> redirects to /login (no ?next=)
+      fetchSpy
+        .mockResolvedValueOnce(new Response(JSON.stringify({ initialized: true }), { status: 200 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              authenticated: false,
+            }),
+            { status: 200 },
+          ),
+        );
+
+      const { unmount: u3 } = render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<GuardHarness />} />
+            <Route path="/login" element={<div data-testid="at-login-root">Login Root</div>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('at-login-root')).not.toBeNull();
+      });
+      u3();
+    });
+
+    it('covers CommandPalette focus restore, global Escape, and LayoutSwitcher fallback config', () => {
+      const onClose = vi.fn();
+      const triggerBtn = document.createElement('button');
+      triggerBtn.id = 'external-trigger';
+      document.body.appendChild(triggerBtn);
+      triggerBtn.focus();
+
+      const { rerender, unmount } = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ThemeProvider>
+            <MemoryRouter>
+              <CommandPalette isOpen={true} onClose={onClose} />
+            </MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      // Escape key triggers onClose
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalled();
+
+      // Rerender as closed -> restores focus to previous element
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <ThemeProvider>
+            <MemoryRouter>
+              <CommandPalette isOpen={false} onClose={onClose} />
+            </MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(document.activeElement).toBe(triggerBtn);
+      unmount();
+      document.body.removeChild(triggerBtn);
+
+      // LayoutSwitcher fallback config and custom className
+      const { container } = render(
+        <LayoutSwitcher value={'unknown_layout' as never} className="custom-sw" />,
+      );
+      expect(container.querySelector('.custom-sw')).not.toBeNull();
+      expect(screen.getByRole('radio', { name: 'List' })).toBeDefined();
     });
   });
 
@@ -583,7 +712,7 @@ describe('Browser QA Branch Coverage Booster', () => {
       });
     });
 
-    it('covers dev stories (RailStory, DrawerActionsStory, StickiesStory)', () => {
+    it('covers dev stories (RailStory, DrawerActionsStory, StickiesStory, IconStory, MediaStory, EditorStory)', () => {
       // RailStory
       const { unmount: u1 } = render(
         <MemoryRouter>
@@ -618,7 +747,37 @@ describe('Browser QA Branch Coverage Booster', () => {
       fireEvent.click(screen.getByTestId('toggle-theme-btn'));
       fireEvent.click(screen.getByTestId('toggle-theme-btn'));
       fireEvent.click(screen.getByTestId('story-new-sticky-btn'));
+      const unarchiveBtn = screen.queryByTestId('unarchive-copy-btn');
+      if (unarchiveBtn) fireEvent.click(unarchiveBtn);
+      const promoteBtns = screen.queryAllByRole('button', { name: /Promote to Doc/i });
+      if (promoteBtns[0]) fireEvent.click(promoteBtns[0]);
       u3();
+
+      // IconStory
+      const { unmount: u4 } = render(<IconStory />);
+      expect(screen.getByTestId('icon-story')).toBeDefined();
+      u4();
+
+      // MediaStory
+      const { unmount: u5 } = render(<MediaStory />);
+      expect(screen.getByTestId('media-story')).toBeDefined();
+      u5();
+
+      // EditorStory
+      const { unmount: u6 } = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <EditorStory />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      fireEvent.click(screen.getByTestId('btn-fix-typo'));
+      fireEvent.click(screen.getByTestId('btn-undo'));
+      fireEvent.click(screen.getByTestId('btn-load-mermaid'));
+      fireEvent.click(screen.getByTestId('btn-load-fallback'));
+      fireEvent.click(screen.getByTestId('btn-toggle-theme'));
+      fireEvent.click(screen.getByTestId('btn-reset'));
+      u6();
     });
   });
 });

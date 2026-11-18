@@ -353,7 +353,7 @@ async def test_csrf_middleware_edge_cases(hmac_key: bytes, monkeypatch: pytest.M
     async def protected_action() -> JSONResponse:
         return JSONResponse({"status": "protected_ok"})
 
-    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=True)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         # 1. Non-api path bypassed
         res_non_api = await client.post("/non-api/action")
@@ -587,3 +587,57 @@ async def test_csrf_token_bypass_and_login_branches(hmac_key: bytes) -> None:
                 cookies={CSRF_COOKIE_NAME: pre_token},
             )
             assert res_login.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_csrf_middleware_dead_session_clears_cookies(hmac_key: bytes) -> None:
+    """Verify that dead session on CSRF failure clears cookies and reissues pre-session CSRF."""
+    app = FastAPI()
+    app.add_middleware(CsrfMiddleware, session_hmac_key=hmac_key)
+
+    @app.post("/api/v1/protected")
+    async def protected_act() -> JSONResponse:
+        return JSONResponse({"status": "ok"})
+
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=True)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # Request with a dead session cookie and invalid CSRF token
+        res = await client.post(
+            "/api/v1/protected",
+            headers={
+                "host": "testserver",
+                CSRF_HEADER_NAME: "invalid-token",
+            },
+            cookies={
+                "__Host-kb_session": "dead.cookie.token.value",
+                CSRF_COOKIE_NAME: "invalid-token",
+            },
+        )
+        assert res.status_code == 403
+        set_cookies = res.headers.get_list("set-cookie")
+        # Should clear session cookie and set fresh pre-session CSRF cookie
+        cookie_text = " ".join(set_cookies)
+        assert "Max-Age=0" in cookie_text or "kb_session=" in cookie_text
+        assert CSRF_COOKIE_NAME in cookie_text or FALLBACK_CSRF_COOKIE_NAME in cookie_text
+
+    # Request to /api/v1/setup/claim with dead session cookie and valid pre-session token
+    @app.post("/api/v1/setup/claim")
+    async def claim_act() -> JSONResponse:
+        return JSONResponse({"status": "claimed"})
+
+    pre_tok = generate_csrf_token(PRE_SESSION_ID, hmac_key)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        res_claim = await client.post(
+            "/api/v1/setup/claim",
+            headers={
+                "host": "testserver",
+                CSRF_HEADER_NAME: pre_tok,
+            },
+            cookies={
+                "__Host-kb_session": "dead.cookie.token.value",
+                CSRF_COOKIE_NAME: pre_tok,
+            },
+        )
+        assert res_claim.status_code == 200
+        set_cookies_claim = res_claim.headers.get_list("set-cookie")
+        assert any("Max-Age=0" in c for c in set_cookies_claim)

@@ -223,6 +223,16 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     fireEvent.click(clearBtn);
     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
 
+    // Select again and update state
+    fireEvent.keyDown(window, { key: 'x' });
+    const stateBtn = screen.getByRole('button', { name: /^state$/i });
+    fireEvent.click(stateBtn);
+
+    // Select again and update priority
+    fireEvent.keyDown(window, { key: 'x' });
+    const priorityBtn = screen.getByRole('button', { name: /^priority$/i });
+    fireEvent.click(priorityBtn);
+
     // Select again and delete batch
     fireEvent.keyDown(window, { key: 'x' });
     const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
@@ -230,6 +240,24 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
     // Bulk bar unmounts when selection cleared
     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
+  });
+
+  it('IssuesWorkspaceRoute: triggers onCreateIssue modal and covers BulkActionBar batch updates', () => {
+    render(
+      <IssuesWorkspaceRoute
+        projectKey="KAN"
+        modulesEnabled={true}
+        initialIssues={FIXTURE_12_ISSUES}
+      />
+    );
+
+    // Click New work item button in list view
+    const newBtn = screen.getByRole('button', { name: 'New work item' });
+    fireEvent.click(newBtn);
+    expect(screen.getByRole('dialog')).toBeDefined();
+
+    // Close modal
+    fireEvent.keyDown(window, { key: 'Escape' });
   });
 
   it('IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date', () => {
@@ -877,6 +905,58 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       await waitFor(() => {
         expect(screen.getByText('KAN-999')).toBeDefined();
       });
+
+      // Trigger error in refreshLive on kb:issue-updated event
+      fetchSpy.mockRejectedValueOnce(new Error('Network drop'));
+      fireEvent(window, new CustomEvent('kb:issue-updated'));
+    });
+
+    it('opens peek drawer via onOpenPeek and URL search param popstate', () => {
+      const onOpenPeek = vi.fn();
+      const { rerender } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          onOpenPeek={onOpenPeek}
+        />
+      );
+
+      // Click an issue key link to trigger onOpenPeek
+      const issueKeyLink = screen.getByText('KAN-142');
+      fireEvent.click(issueKeyLink);
+      expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
+
+      // Now rerender without onOpenPeek
+      rerender(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+        />
+      );
+
+      const popstateSpy = vi.fn();
+      window.addEventListener('popstate', popstateSpy);
+      fireEvent.click(screen.getByText('KAN-142'));
+      expect(popstateSpy).toHaveBeenCalled();
+      expect(window.location.search).toContain('peek=KAN-142');
+      window.removeEventListener('popstate', popstateSpy);
+    });
+
+    it('covers read-only capabilities VIEW hiding create and bulk actions', () => {
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          capabilities={['VIEW']}
+          isProjectAdmin={false}
+        />,
+      );
+
+      // Bulk action bar is not rendered
+      expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
+      // Keyboard shortcut 'c' for new item does not open modal when read-only
+      fireEvent.keyDown(window, { key: 'c' });
+      expect(screen.queryByRole('dialog', { name: /create/i })).toBeNull();
     });
   });
 });

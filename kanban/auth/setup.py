@@ -143,6 +143,10 @@ class SetupBootstrapService:
         display_name: str,
         email: str,
         password: str,
+        workspace_name: str | None = None,
+        workspace_slug: str | None = None,
+        project_name: str | None = None,
+        project_key: str | None = None,
     ) -> tuple[str, str, str]:
         """Atomically claim instance, provision first SERVER_ADMIN, and return IDs."""
         km = self._resolve_key_material()
@@ -185,10 +189,67 @@ class SetupBootstrapService:
                 detail="The setup token is invalid, expired, or has already been used.",
             )
 
+        principal_id = row["principal_id"]
+        workspace_id = row["workspace_id"]
+        local_card_id = row["local_card_id"]
+
+        # Update initial workspace name & slug if provided
+        ws_name = (workspace_name or "Default Workspace").strip()
+        ws_slug = (workspace_slug or "default").strip()
+        await session.execute(
+            text("UPDATE workspaces SET name = :name, slug = :slug WHERE id = :ws_id"),
+            {"name": ws_name, "slug": ws_slug, "ws_id": workspace_id},
+        )
+
+        # Provision initial project if provided
+        p_name = (project_name or "Default Project").strip()
+        p_key = (project_key or "KAN").strip().upper()
+        p_check = await session.execute(
+            text("SELECT id FROM projects WHERE workspace_id = :ws_id AND identifier = :p_key"),
+            {"ws_id": workspace_id, "p_key": p_key},
+        )
+        if p_check.first() is None:
+            proj_res = await session.execute(text("SELECT uuidv7()"))
+            proj_id = proj_res.scalar_one()
+
+            await session.execute(
+                text(
+                    "INSERT INTO objects ("
+                    "  id, object_type, workspace_id, project_id, canonical_key, "
+                    "  display_title, created_by_id, created_at"
+                    ") VALUES ("
+                    "  :proj_id, 'project'::object_kind, :ws_id, NULL, :p_key, "
+                    "  :p_name, :p_id, clock_timestamp()"
+                    ")"
+                ),
+                {
+                    "proj_id": proj_id,
+                    "ws_id": workspace_id,
+                    "p_key": p_key,
+                    "p_name": p_name,
+                    "p_id": principal_id,
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO projects ("
+                    "  id, object_type, workspace_id, identifier, name, description_markdown"
+                    ") VALUES ("
+                    "  :proj_id, 'project'::object_kind, :ws_id, :p_key, :p_name, ''"
+                    ")"
+                ),
+                {
+                    "proj_id": proj_id,
+                    "ws_id": workspace_id,
+                    "p_key": p_key,
+                    "p_name": p_name,
+                },
+            )
+
         return (
-            str(row["principal_id"]),
-            str(row["workspace_id"]),
-            str(row["local_card_id"]),
+            str(principal_id),
+            str(workspace_id),
+            str(local_card_id),
         )
 
 

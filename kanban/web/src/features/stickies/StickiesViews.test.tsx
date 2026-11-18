@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ProjectRouteContext } from '../../app/ProjectRouteContext';
 import { ProjectOverviewView } from './ProjectOverviewView';
 import { WorkspaceStickiesView } from './WorkspaceStickiesView';
 import {
@@ -261,6 +262,85 @@ describe('Stickies Views', () => {
           expect.objectContaining({ method: 'POST' }),
         );
       });
+    });
+
+    it('covers ProjectOverviewView read-only capabilities and fallback branches', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ items: [] }),
+      });
+
+      // 1. projectKey with VIEW-only capability -> canEdit is false, onCreateSticky is undefined
+      const { unmount: u1 } = render(
+        <QueryClientProvider client={queryClient}>
+          <ProjectRouteContext.Provider
+            value={{
+              projectKey: 'KAN',
+              projectName: 'Test Project',
+              modulesEnabled: true,
+              isProjectAdmin: false,
+              capabilities: ['VIEW'],
+            }}
+          >
+            <MemoryRouter initialEntries={['/projects/KAN/overview']}>
+              <Routes>
+                <Route path="/projects/:projectKey/overview" element={<ProjectOverviewView />} />
+              </Routes>
+            </MemoryRouter>
+          </ProjectRouteContext.Provider>
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByTestId('project-overview-page')).toBeDefined();
+      expect(screen.queryByTestId('new-sticky-btn')).toBeNull();
+      u1();
+
+      // 2. Empty projectKey with empty capabilities -> falls back to ['EDIT', 'ADMIN']
+      const { unmount: u2 } = render(
+        <QueryClientProvider client={queryClient}>
+          <ProjectRouteContext.Provider
+            value={{
+              projectKey: '',
+              projectName: 'Test Project',
+              modulesEnabled: true,
+              isProjectAdmin: false,
+              capabilities: [],
+            }}
+          >
+            <MemoryRouter initialEntries={['/projects/KAN/overview']}>
+              <Routes>
+                <Route path="/projects/:projectKey/overview" element={<ProjectOverviewView />} />
+              </Routes>
+            </MemoryRouter>
+          </ProjectRouteContext.Provider>
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByTestId('project-overview-page')).toBeDefined();
+      expect(screen.getByTestId('new-sticky-btn')).toBeDefined();
+      u2();
+
+      // 3. Empty projectKey with isProjectAdmin true
+      const { unmount: u3 } = render(
+        <QueryClientProvider client={queryClient}>
+          <ProjectRouteContext.Provider
+            value={{
+              projectKey: '',
+              projectName: 'Test Project',
+              modulesEnabled: true,
+              isProjectAdmin: true,
+              capabilities: ['VIEW'],
+            }}
+          >
+            <MemoryRouter initialEntries={['/projects/KAN/overview']}>
+              <Routes>
+                <Route path="/projects/:projectKey/overview" element={<ProjectOverviewView />} />
+              </Routes>
+            </MemoryRouter>
+          </ProjectRouteContext.Provider>
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByTestId('project-overview-page')).toBeDefined();
+      expect(screen.getByTestId('new-sticky-btn')).toBeDefined();
+      u3();
     });
   });
 
@@ -517,6 +597,26 @@ describe('Stickies Views', () => {
         );
       });
       expect(await screen.findByTestId('sticky-card-s-ws-fallback-proj')).toBeDefined();
+    });
+
+    it('renders WorkspaceStickiesView in readOnly mode without new sticky button', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ items: [] }),
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/stickies']}>
+            <Routes>
+              <Route path="/stickies" element={<WorkspaceStickiesView readOnly={true} />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('No stickies yet')).toBeDefined();
+      expect(screen.queryByTestId('new-sticky-btn')).toBeNull();
     });
   });
 });

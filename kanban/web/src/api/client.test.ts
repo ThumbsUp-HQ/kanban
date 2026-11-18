@@ -5,6 +5,7 @@ import {
   apiFetch,
   getCsrfToken,
   setCsrfToken,
+  apiClient,
 } from './client.ts';
 import { ApiProblem } from './problem.ts';
 
@@ -226,8 +227,134 @@ describe('getCsrfToken', () => {
     expect(getCsrfToken()).toBeNull();
   });
 
+  it('prefers cachedCsrfToken over document.cookie', () => {
+    setCookie('cookie-token');
+    setCsrfToken('cached-token');
+    expect(getCsrfToken()).toBe('cached-token');
+  });
+
   it('returns the raw value when it is not valid percent-encoding', () => {
     setCookie('%E0%A4%A');
     expect(getCsrfToken()).toBe('%E0%A4%A');
+  });
+});
+
+describe('CSRF bootstrap and retry (KANBA-230)', () => {
+  let fetchMock: Mock<typeof fetch>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    clearCookie();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    clearCookie();
+  });
+
+  it('retries unsafe /api/v1/auth/local/login once after refreshing CSRF token on 403 CSRF_REJECTED', async () => {
+    setCsrfToken('stale-token');
+    // Call 1: local login returns 403 CSRF_REJECTED
+    // Call 2: bootstrapCsrfToken GET /api/v1/auth/session returns fresh token
+    // Call 3: local login retry with fresh token succeeds
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { code: 'CSRF_REJECTED', title: 'CSRF validation failed' },
+          { status: 403 },
+          'application/problem+json',
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: false,
+          csrf_token: 'fresh-csrf-token',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: 'authenticated',
+        }),
+      );
+
+    const result = await apiFetch('POST', '/api/v1/auth/local/login' as never, {
+      body: { username: 'admin', password: 'password123' },
+    });
+
+    expect(result).toEqual({ status: 'authenticated' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const thirdCall = fetchMock.mock.calls[2];
+    expect(thirdCall).toBeDefined();
+    if (thirdCall) {
+      const retryInit = thirdCall[1];
+      const retryHeaders = retryInit?.headers as Record<string, string> | undefined;
+      expect(retryHeaders?.['X-CSRF-Token']).toBe('fresh-csrf-token');
+    }
+  });
+
+  it('retries unsafe /api/v1/setup/claim once on 403 CSRF_REJECTED', async () => {
+    setCsrfToken('stale-claim-token');
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: 'CSRF_REJECTED', title: 'CSRF validation failed' },
+          { status: 403 },
+          'application/problem+json',
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: false,
+          csrf_token: 'refreshed-claim-token',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: 'enrollment_required',
+          enrollment_id: 'enr-claim-1',
+        }),
+      );
+
+    const result = await apiFetch('POST', '/api/v1/setup/claim' as never, {
+      body: { token: 'kb_setup_123' },
+    });
+
+    expect(result).toEqual({ status: 'enrollment_required', enrollment_id: 'enr-claim-1' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('covers non-CSRF 403, bootstrapCsrfToken returning null on retry, and apiClient helpers', async () => {
+    // 1. 403 on local login that is NOT CSRF_REJECTED
+    setCsrfToken('valid-csrf-token');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ code: 'FORBIDDEN' }, { status: 403 }, 'application/problem+json'),
+    );
+    await expect(
+      apiFetch('POST', '/api/v1/auth/local/login' as never, { body: { username: 'a', password: 'b' } }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
+
+    // 2. 403 CSRF_REJECTED where bootstrapCsrfToken fails to get fresh token
+    setCsrfToken('initial-csrf-token');
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ code: 'CSRF_REJECTED' }, { status: 403 }, 'application/problem+json'),
+      )
+      .mockImplementationOnce(() => {
+        clearCookie();
+        return Promise.resolve(jsonResponse({ authenticated: false, csrf_token: null }));
+      });
+    await expect(
+      apiFetch('POST', '/api/v1/auth/local/login' as never, { body: { username: 'a', password: 'b' } }),
+    ).rejects.toMatchObject({ code: 'CSRF_REJECTED', status: 403 });
+
+    // 3. apiClient convenience wrappers
+    setCsrfToken('api-client-token');
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+    expect(await apiClient.get('/api/v1/x' as never)).toEqual({ ok: true });
+    expect(await apiClient.post('/api/v1/x' as never)).toEqual({ ok: true });
+    expect(await apiClient.put('/api/v1/x' as never)).toEqual({ ok: true });
+    expect(await apiClient.delete('/api/v1/x' as never)).toEqual({ ok: true });
   });
 });

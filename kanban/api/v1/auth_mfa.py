@@ -260,10 +260,23 @@ async def confirm_totp(
             )
         return response
 
-    return JSONResponse(content={"confirmed": True})
+    return JSONResponse(content={"confirmed": True, "ok": True})
 
 
 confirm_totp.allow_mfa_pending = True  # type: ignore[attr-defined]
+
+
+@router.post("/totp/verify", include_in_schema=False)
+async def verify_totp_confirm_alias(
+    request: Request,
+    body: TotpConfirmRequest,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Compatibility alias for /api/v1/auth/mfa/totp/confirm."""
+    return await confirm_totp(request, body, principal)
+
+
+verify_totp_confirm_alias.allow_mfa_pending = True  # type: ignore[attr-defined]
 
 
 @router.get("/status")

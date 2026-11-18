@@ -884,7 +884,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
         expect(screen.getByTestId('auth-users-table')).toBeDefined();
       });
 
-      const roleSelect = screen.getByLabelText('Role for alice');
+      const roleSelect = screen.getByLabelText(/Role for @?alice/i);
       fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
       await waitFor(() => {
         expect(screen.getByText('User role updated successfully.')).toBeDefined();
@@ -1992,7 +1992,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
       });
 
       // Role change error
-      fireEvent.change(screen.getByLabelText('Role for bareuser'), {
+      fireEvent.change(screen.getByLabelText(/Role for @?bareuser/i), {
         target: { value: 'SERVER_ADMIN' },
       });
       await waitFor(() => {

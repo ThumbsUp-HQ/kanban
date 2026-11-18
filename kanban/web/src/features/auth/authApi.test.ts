@@ -188,13 +188,25 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     ).toBe('Sign-in is unavailable right now.');
 
     expect(
-      formatAuthError(new ApiProblem(500, { code: 'CUSTOM_GATE_REJECTED' })).message,
+      formatAuthError(new ApiProblem(400, { code: 'CUSTOM_GATE_REJECTED' })).message,
     ).toBe('Sign-in is unavailable right now.');
 
     expect(
-      formatAuthError(new ApiProblem(500, { code: 'too_long_or_lowercase_code_not_matching_regex' }))
+      formatAuthError(new ApiProblem(400, { code: 'too_long_or_lowercase_code_not_matching_regex' }))
         .message,
     ).toBe('Sign-in is unavailable right now.');
+
+    expect(
+      formatAuthError(new ApiProblem(403, { code: 'CSRF_REJECTED' })).message,
+    ).toBe('Your browser session token is out of date - reload the page and try again.');
+
+    expect(
+      formatAuthError(new ApiProblem(500, { code: 'INTERNAL_ERROR', request_id: 'req-abc-123' })).message,
+    ).toBe('Server error (Request ID: req-abc-123). Please contact your administrator.');
+
+    expect(
+      formatAuthError(new ApiProblem(500, { code: 'CUSTOM_GATE_REJECTED' })).message,
+    ).toBe('Server error. Please contact your administrator.');
 
     expect(formatAuthError(new Error('Rate limit exceeded')).message).toBe(
       'Too many attempts. Try again in 60 seconds.',

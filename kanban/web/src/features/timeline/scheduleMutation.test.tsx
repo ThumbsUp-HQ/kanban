@@ -53,6 +53,33 @@ describe('scheduleMutation', () => {
     expect(result.due_date).toBe('2026-11-20');
   });
 
+  it('patchIssueSchedule sends PATCH request without etag, without CSRF, and with only dueDate', async () => {
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/';
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve({ ok: false });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ key: 'KAN-99', due_date: '2026-11-20' }),
+      });
+    });
+    globalThis.fetch = mockFetch;
+
+    const result = await patchIssueSchedule('KAN-99', { dueDate: '2026-11-20' });
+    expect(result.due_date).toBe('2026-11-20');
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/issues/KAN-99', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({ due_date: '2026-11-20' }),
+    });
+  });
+
   it('patchIssueSchedule parses error codes from failed responses', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -400,5 +427,168 @@ describe('scheduleMutation', () => {
     });
     const token = await ensureCsrfToken();
     expect(token).toBeNull();
+  });
+
+  it('covers reschedule object signature with originalDates on success and only dueDate patch', async () => {
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() => useRescheduleIssue({ onSuccess }));
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          key: 'KAN-OBJ-SUCCESS',
+          start_date: '2026-11-01',
+          due_date: '2026-11-10',
+        }),
+    });
+
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.reschedule({
+        key: 'KAN-OBJ-SUCCESS',
+        dueDate: '2026-11-10',
+        originalDates: {
+          startDate: '2026-11-01',
+          dueDate: '2026-11-05',
+        },
+        etag: '"etag-obj"',
+      });
+    });
+
+    expect(ok).toBe(true);
+    expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('covers reschedule object signature with originalStartDate, start_date, and default null originalDates', async () => {
+    const onRollback = vi.fn();
+    const { result } = renderHook(() => useRescheduleIssue({ onRollback }));
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve(''),
+    });
+
+    // 1. target with originalStartDate/originalDueDate and issueRef
+    await act(async () => {
+      await result.current.reschedule({
+        issueRef: 'KAN-REF-1',
+        startDate: '2026-11-02',
+        originalStartDate: '2026-11-01',
+        originalDueDate: '2026-11-05',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-1', { startDate: '2026-11-01', dueDate: '2026-11-05' });
+
+    // 1b. target with only originalDueDate (null originalStartDate fallback)
+    onRollback.mockClear();
+    await act(async () => {
+      await result.current.reschedule({
+        issueRef: 'KAN-REF-1B',
+        dueDate: '2026-11-05',
+        originalDueDate: '2026-11-05',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-1B', { startDate: null, dueDate: '2026-11-05' });
+
+    // 1c. target with only originalStartDate (null originalDueDate fallback)
+    onRollback.mockClear();
+    await act(async () => {
+      await result.current.reschedule({
+        issueRef: 'KAN-REF-1C',
+        startDate: '2026-11-01',
+        originalStartDate: '2026-11-01',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-1C', { startDate: '2026-11-01', dueDate: null });
+
+    // 2. target with start_date / due_date
+    onRollback.mockClear();
+    await act(async () => {
+      await result.current.reschedule({
+        key: 'KAN-REF-2',
+        startDate: '2026-11-03',
+        start_date: '2026-11-02',
+        due_date: '2026-11-06',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-2', { startDate: '2026-11-02', dueDate: '2026-11-06' });
+
+    // 2b. target with only start_date (null due_date fallback)
+    onRollback.mockClear();
+    await act(async () => {
+      await result.current.reschedule({
+        key: 'KAN-REF-2B',
+        startDate: '2026-11-03',
+        start_date: '2026-11-02',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-2B', { startDate: '2026-11-02', dueDate: null });
+
+    // 2c. target with only due_date (null start_date fallback)
+    onRollback.mockClear();
+    await act(async () => {
+      await result.current.reschedule({
+        key: 'KAN-REF-2C',
+        dueDate: '2026-11-06',
+        due_date: '2026-11-06',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-2C', { startDate: null, dueDate: '2026-11-06' });
+
+    // 3. target with neither
+    onRollback.mockClear();
+    await act(async () => {
+      await result.current.reschedule({
+        key: 'KAN-REF-3',
+        startDate: '2026-11-04',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-REF-3', { startDate: null, dueDate: null });
+  });
+
+  it('handles empty options, string rejection in onError, and target without key or issueRef', async () => {
+    const onError = vi.fn();
+    const { result } = renderHook(() => useRescheduleIssue({ onError }));
+
+    // 1. Success with empty options object
+    const { result: emptyHook } = renderHook(() => useRescheduleIssue({}));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ key: 'KAN-SUCCESS' }),
+    });
+
+    let ok = false;
+    await act(async () => {
+      ok = await emptyHook.current.reschedule({
+        key: 'KAN-SUCCESS',
+        dueDate: '2026-11-20',
+      });
+    });
+    expect(ok).toBe(true);
+
+    // 2. Failure with string rejection and empty target key
+    globalThis.fetch = vi.fn().mockRejectedValue('String network error');
+    let failOk = true;
+    await act(async () => {
+      failOk = await result.current.reschedule({
+        dueDate: '2026-11-25',
+      } as never);
+    });
+    expect(failOk).toBe(false);
+    expect(onError).toHaveBeenCalledWith('', expect.any(Error));
+
+    // 3. Failure with empty options hook and string rejection
+    let emptyFail = true;
+    await act(async () => {
+      emptyFail = await emptyHook.current.reschedule({
+        key: 'KAN-FAIL',
+        dueDate: '2026-11-26',
+      });
+    });
+    expect(emptyFail).toBe(false);
   });
 });

@@ -1642,5 +1642,48 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
         expect(saveMock).toHaveBeenCalled();
       });
     });
+
+    it('covers drawer handshake testing with onTestHandshake healthy, failed, and exception', async () => {
+      const mockTestHandshake = vi.fn().mockResolvedValue({
+        last_health_status: 'HEALTHY',
+        check_summary: 'OIDC discovery endpoint verified',
+      });
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+          onTestHandshake={mockTestHandshake}
+        />,
+      );
+
+      const testBtn = screen.getByTestId('drawer-test-handshake-btn');
+      fireEvent.click(testBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('HEALTHY: OIDC discovery endpoint verified');
+      });
+
+      // Failed handshake response
+      mockTestHandshake.mockResolvedValueOnce({
+        last_health_status: 'FAILED',
+        check_summary: 'Connection timeout',
+      });
+      fireEvent.click(testBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('FAILED: Connection timeout');
+      });
+
+      // Rejected promise / exception
+      mockTestHandshake.mockRejectedValueOnce(new Error('Network offline'));
+      fireEvent.click(testBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('FAILED: Network offline');
+      });
+    });
   });
 });

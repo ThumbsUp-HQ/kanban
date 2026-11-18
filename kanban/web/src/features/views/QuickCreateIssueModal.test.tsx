@@ -337,4 +337,74 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
     const summaryInput = screen.getByLabelText<HTMLInputElement>(/summary/i);
     expect(summaryInput.value).toBe('');
   });
+
+  it('updates url and dispatches popstate on View Issue when onOpenPeek is not provided and handles priority low/none', () => {
+    const handleCreate = vi.fn().mockReturnValue(undefined);
+    const handleClose = vi.fn();
+    const popstateSpy = vi.fn();
+    window.addEventListener('popstate', popstateSpy);
+
+    const { rerender } = render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={handleClose}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Low priority task' } });
+    fireEvent.change(screen.getByLabelText(/^priority$/i), { target: { value: 'low' } });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    const createdLow = handleCreate.mock.calls[0]?.[0] as Partial<IssueItem> | undefined;
+    expect(createdLow?.priority?.emoji).toBe('🔽');
+
+    // Click View Issue without onOpenPeek
+    fireEvent.click(screen.getByTestId('post-create-view-btn'));
+    expect(popstateSpy).toHaveBeenCalled();
+    expect(window.location.search).toContain('peek=KAN-NEW');
+    expect(handleClose).toHaveBeenCalled();
+
+    // Rerender with 'none' priority
+    handleCreate.mockReset();
+    rerender(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={handleClose}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'None priority task' } });
+    fireEvent.change(screen.getByLabelText(/^priority$/i), { target: { value: 'none' } });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    const createdNone = handleCreate.mock.calls[0]?.[0] as Partial<IssueItem> | undefined;
+    expect(createdNone?.priority?.emoji).toBe('➖');
+
+    window.removeEventListener('popstate', popstateSpy);
+  });
+
+  it('does not create issue when summary is whitespace or empty', () => {
+    const handleCreate = vi.fn();
+    const handleClose = vi.fn();
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={handleClose}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+
+    const form = screen.getByRole('dialog').querySelector('form');
+    if (!form) throw new Error('Form not found');
+
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: '   ' } });
+    fireEvent.submit(form);
+
+    expect(handleCreate).not.toHaveBeenCalled();
+    expect(handleClose).not.toHaveBeenCalled();
+  });
 });

@@ -164,7 +164,7 @@ async def require_full_session(
     if principal.mfa_pending and not allow_mfa:
         raise ProblemException(
             code="MFA_REQUIRED",
-            status=403,
+            status=401,
             title="Multi-Factor Authentication Required",
             detail="Session requires second-factor verification before accessing this resource.",
         )

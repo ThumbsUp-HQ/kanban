@@ -93,6 +93,30 @@ async def get_principal(request: Request) -> PrincipalContext:
             detail=None,
         )
 
+    allow_mfa = getattr(request.state, "allow_mfa_pending", False)
+    endpoint = request.scope.get("endpoint")
+    if endpoint and getattr(endpoint, "allow_mfa_pending", False):
+        allow_mfa = True
+
+    path = request.url.path
+    if path.startswith(("/api/v1/auth/mfa", "/api/v1/auth/webauthn", "/api/v1/mfa")) or path in (
+        "/api/v1/auth/session",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/totp/enroll",
+        "/api/v1/auth/totp/enroll/verify",
+        "/api/v1/auth/totp/verify",
+        "/api/v1/auth/recovery/verify",
+    ):
+        allow_mfa = True
+
+    if principal.mfa_pending and not allow_mfa:
+        raise ProblemException(
+            code="MFA_REQUIRED",
+            status=401,
+            title="Multi-Factor Authentication Required",
+            detail="Session requires second-factor verification before accessing this resource.",
+        )
+
     return principal
 
 

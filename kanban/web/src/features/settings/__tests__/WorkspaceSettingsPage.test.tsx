@@ -624,6 +624,13 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
             email: 'mem1@example.com',
             role: 'WORKSPACE_MEMBER',
           },
+          {
+            id: 'p-untyped',
+            handle: null,
+            display_name: 'Untyped User',
+            email: 'untyped@example.com',
+            role: 'WORKSPACE_MEMBER',
+          },
         ];
       }
       if (url.includes('/api/v1/admin/role-bindings') && m === 'POST') {
@@ -657,8 +664,15 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(screen.getByTestId('member-email-p-mem-1').textContent).toBe('mem1@example.com');
     expect(screen.getByTestId('type-pill-p-mem-1').textContent).toBe('User');
 
-    // Change role
+    // Change role error
     const roleSelect = screen.getByTestId('role-select-p-mem-1');
+    vi.mocked(clientModule.apiFetch).mockRejectedValueOnce({ detail: 'Failed to bind role' });
+    fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_MEMBER' } });
+    await waitFor(() => {
+      expect(screen.getByText('Failed to bind role')).toBeDefined();
+    });
+
+    // Change role success
     fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
 
     await waitFor(() => {
@@ -666,8 +680,15 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Member role updated.')).toBeDefined();
     });
 
-    // Remove member
+    // Remove member error
+    vi.mocked(clientModule.apiFetch).mockRejectedValueOnce({ detail: 'Cannot remove owner' });
     const removeBtn = screen.getByTestId('remove-member-btn-p-mem-1');
+    fireEvent.click(removeBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Cannot remove owner')).toBeDefined();
+    });
+
+    // Remove member success
     fireEvent.click(removeBtn);
 
     await waitFor(() => {
@@ -782,9 +803,21 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Group created successfully.')).toBeDefined();
     });
 
+    // Create group failure branch
+    vi.mocked(clientModule.apiFetch).mockRejectedValueOnce({ detail: 'Group creation rejected' });
+    fireEvent.change(screen.getByTestId('new-group-name'), { target: { value: 'Faulty Team' } });
+    fireEvent.change(screen.getByTestId('new-group-handle'), { target: { value: '@faulty' } });
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Group creation rejected')).toBeDefined();
+    });
+
     // Add nested group grp-core with cycle rejection
     simulateCycle = true;
     const addSelect = screen.getByTestId('add-group-member-select');
+    // Early return on empty memberId
+    fireEvent.change(addSelect, { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
     fireEvent.change(addSelect, { target: { value: 'grp-core' } });
     fireEvent.click(screen.getByTestId('add-group-member-btn'));
 
@@ -802,13 +835,155 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Member added to group successfully.')).toBeDefined();
     });
 
-    // Remove group member
+    // Remove group member error handling first
+    vi.mocked(clientModule.apiFetch).mockRejectedValueOnce({ detail: 'Cannot remove last owner' });
     const removeMemberBtn = screen.getByTestId('remove-group-member-usr-dev');
+    fireEvent.click(removeMemberBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Cannot remove last owner')).toBeDefined();
+    });
+
+    // Successfully remove group member
     fireEvent.click(removeMemberBtn);
 
     await waitFor(() => {
       expect(removedGroupMemberId).toBe('usr-dev');
       expect(screen.getByText('Member removed from group.')).toBeDefined();
     });
+
+    // Select second group
+    fireEvent.click(screen.getByTestId('group-item-grp-core'));
+    await waitFor(() => {
+      expect(screen.getByTestId('selected-group-name').textContent).toBe('Core Team');
+    });
+
+    // Group members load error handling
+    vi.mocked(clientModule.apiFetch).mockRejectedValueOnce({ detail: 'Database error loading members' });
+    fireEvent.click(screen.getByTestId('group-item-grp-eng'));
+    await waitFor(() => {
+      expect(screen.getByText('Database error loading members')).toBeDefined();
+    });
+
+    // Group creation error handling
+    fireEvent.change(screen.getByTestId('new-group-name'), { target: { value: 'Bad Group' } });
+    fireEvent.change(screen.getByTestId('new-group-handle'), { target: { value: 'bad-group' } });
+    vi.mocked(clientModule.apiFetch).mockRejectedValueOnce({ detail: 'Handle already exists' });
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Handle already exists')).toBeDefined();
+    });
+  });
+
+  it('covers empty groups list, null selected group, nested group rendering, and validation early returns', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      const url = path;
+      const m = method.toUpperCase();
+      if (url.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return Promise.resolve([
+          { id: 'usr-bare', type: 'USER', handle: '@bare', display_name: null },
+        ]);
+      }
+      return Promise.resolve({});
+    });
+
+    renderComponent();
+
+    // Switch to groups tab with empty groups list
+    const groupsTab = await screen.findByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    expect(await screen.findByText('No groups created yet.')).toBeDefined();
+    expect(screen.getByText('Select or create a group to view and manage membership.')).toBeDefined();
+
+    // Early returns for empty inputs on create group and create user
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+
+    // Switch to members tab and test empty user creation
+    fireEvent.click(screen.getByTestId('tab-members'));
+    expect(await screen.findByTestId('create-user-submit-btn')).toBeDefined();
+    fireEvent.click(screen.getByTestId('create-user-submit-btn'));
+  });
+
+  it('covers group selection, member table rendering (nested group, bare user, agent), member removal, and member addition cyclic rejection', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      const url = path;
+      const m = method.toUpperCase();
+      if (url.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return Promise.resolve([
+          { id: 'grp-devs', type: 'GROUP', handle: '@devs', display_name: 'Dev Team' },
+          { id: 'grp-bare', type: 'GROUP', handle: null, display_name: null },
+          { id: 'usr-alice', type: 'USER', handle: '@alice', display_name: 'Alice Cooper' },
+          { id: 'bare-p' },
+        ]);
+      }
+      if (url.includes('/api/v1/admin/groups/grp-bare/members') && m === 'GET') {
+        return Promise.resolve([]);
+      }
+      if (url.includes('/api/v1/admin/groups/grp-devs/members') && m === 'GET') {
+        return Promise.resolve([
+          { id: 'm-nested', principal_type: 'GROUP', display_name: 'Sub Team', handle: '@subteam' },
+          { id: 'm-bare', type: 'USER', display_name: null, handle: null },
+          { id: 'm-agent', type: 'AGENT', display_name: 'Audit Bot', handle: '@audit' },
+          { id: 'm-untyped', display_name: 'Untyped Member', handle: null },
+        ]);
+      }
+      if (url.includes('/api/v1/admin/groups/grp-devs/members/m-nested') && m === 'DELETE') {
+        return Promise.resolve({ ok: true });
+      }
+      if (url.includes('/api/v1/admin/groups/grp-devs/members/m-agent') && m === 'DELETE') {
+        return Promise.reject(new Error('Failed to remove group member.'));
+      }
+      if (url.includes('/api/v1/admin/groups/grp-devs/members/usr-alice') && m === 'POST') {
+        return Promise.reject(new Error('Cannot nest group: would introduce a cyclic dependency.'));
+      }
+      return Promise.resolve({});
+    });
+
+    renderComponent();
+
+    const groupsTab = await screen.findByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    expect(await screen.findByTestId('group-member-row-m-nested')).toBeDefined();
+    expect(screen.getByTestId('group-member-row-m-bare')).toBeDefined();
+    expect(screen.getByTestId('group-member-row-m-agent')).toBeDefined();
+
+    // Verify type pills
+    expect(screen.getByTestId('group-member-type-m-nested').textContent).toBe('Nested Group');
+    expect(screen.getByTestId('group-member-type-m-bare').textContent).toBe('User');
+    expect(screen.getByTestId('group-member-type-m-agent').textContent).toBe('Agent');
+
+    // Remove member
+    fireEvent.click(screen.getByTestId('remove-group-member-m-nested'));
+
+    // Remove member error
+    fireEvent.click(screen.getByTestId('remove-group-member-m-agent'));
+    await waitFor(() => {
+      expect(screen.getByText('Failed to remove group member.')).toBeDefined();
+    });
+
+    // Add member with cyclic error
+    const selectMember = screen.getByTestId('add-group-member-select');
+    fireEvent.change(selectMember, { target: { value: 'usr-alice' } });
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
+
+    expect(await screen.findByText(/Cannot nest group: would introduce a cyclic dependency/i)).toBeDefined();
+
+    // Select grp-bare to cover null display_name and handle fallbacks
+    fireEvent.click(screen.getByText('grp-bare'));
+    expect(screen.getByTestId('selected-group-name').textContent).toBe('');
+    expect(screen.getByTestId('selected-group-handle').textContent).toBe('@grp-bare');
   });
 });

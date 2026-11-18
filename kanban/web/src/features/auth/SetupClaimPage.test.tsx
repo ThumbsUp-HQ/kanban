@@ -67,12 +67,14 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
-      expect(submitClaimSpy).toHaveBeenCalledWith({
-        token: validToken43,
-        username: 'admin',
-        display_name: 'Server Administrator',
-        password: 'MasterPassword14CharsLong!',
-      });
+      expect(submitClaimSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: validToken43,
+          username: 'admin',
+          display_name: 'Server Administrator',
+          password: 'MasterPassword14CharsLong!',
+        }),
+      );
       // Advances to Step 2
       expect(screen.getByText('Step 2 of 3')).toBeDefined();
     });
@@ -111,6 +113,15 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     render(<SetupClaimPage initialToken={validToken43} onNavigate={onNavigate} />);
 
     // Step 1: Submit claim
+    fireEvent.change(screen.getByTestId('setup-workspace-slug'), {
+      target: { value: 'custom-workspace' },
+    });
+    fireEvent.change(screen.getByTestId('setup-project-name'), {
+      target: { value: 'Custom Project' },
+    });
+    fireEvent.change(screen.getByTestId('setup-project-key'), {
+      target: { value: 'CUSTOM' },
+    });
     fireEvent.change(screen.getByLabelText(/^Master Password/i), {
       target: { value: 'ValidMasterPassword123!' },
     });
@@ -131,6 +142,9 @@ describe('SetupClaimPage (KB-P3-35)', () => {
       expect(enrollTotpSpy).toHaveBeenCalledWith({ enrollment_id: 'enr-999' });
       expect(screen.getByText('JBSW Y3DP EHPK 3PXP')).toBeDefined();
     });
+
+    fireEvent.click(screen.getByTestId('copy-secret-btn'));
+    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
 
     // Enter 6-digit TOTP verify code
     const verifyInput = screen.getByLabelText(/Verify 6-digit Code from Authenticator/i);
@@ -562,10 +576,13 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Step 2 of 3')).toBeDefined();
-      expect(
-        screen.getByText(/This browser does not support passkeys/i),
-      ).toBeDefined();
     });
+
+    // Clicking Passkey tab displays unsupported message when WebAuthn is unavailable
+    fireEvent.click(screen.getByRole('tab', { name: /Passkey/i }));
+    expect(
+      screen.getByText(/This browser does not support passkeys/i),
+    ).toBeDefined();
   });
 
   it('prevents concurrent TOTP enrollment verification in Step 2', async () => {
@@ -642,13 +659,188 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
 
     await waitFor(() => {
-      expect(submitClaimSpy).toHaveBeenCalledWith({
-        token: validToken43,
-        username: 'admin',
-        display_name: 'Server Administrator',
-        password: 'MasterPassword14Long!',
-        email: 'admin@kanban.local',
-      });
+      expect(submitClaimSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: validToken43,
+          username: 'admin',
+          display_name: 'Server Administrator',
+          password: 'MasterPassword14Long!',
+          email: 'admin@kanban.local',
+        }),
+      );
+      expect(screen.getByText('Step 2 of 3')).toBeDefined();
+    });
+  });
+
+  it('validates Step 1 fields (username, displayName, password mismatch, short password, invalid projectKey)', () => {
+    render(<SetupClaimPage initialToken={validToken43} />);
+    const submitForm = (el: Element) => {
+      const form = el.closest('form');
+      if (form) fireEvent.submit(form);
+    };
+
+    // Short password
+    fireEvent.change(screen.getByLabelText(/^Master Password/i), { target: { value: 'short' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'short' } });
+    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+    expect(screen.getByText(/Password must be at least 14 characters long/i)).toBeDefined();
+
+    // Password mismatch
+    fireEvent.change(screen.getByLabelText(/^Master Password/i), { target: { value: 'ValidPassword14Long!' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'MismatchPassword14!' } });
+    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+    expect(screen.getByText(/Passwords do not match/i)).toBeDefined();
+
+    // Invalid username
+    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'ValidPassword14Long!' } });
+    fireEvent.change(screen.getByLabelText(/Server Administrator Username/i), { target: { value: '!' } });
+    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+    expect(screen.getByText(/Username must be 3-64 characters/i)).toBeDefined();
+
+    // Reset username, invalid display name
+    fireEvent.change(screen.getByLabelText(/Server Administrator Username/i), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: ' ' } });
+    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+    expect(screen.getByText(/Display name must be between 1 and 120 characters/i)).toBeDefined();
+
+    // Reset display name, invalid projectKey
+    fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: 'Admin' } });
+    fireEvent.change(screen.getByTestId('setup-project-key'), { target: { value: '1INVALID' } });
+    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+    expect(screen.getByText(/Project key must be 2-10 uppercase alphanumeric/i)).toBeDefined();
+
+    // Workspace slug auto-slugify and manual change
+    fireEvent.change(screen.getByTestId('setup-workspace-name'), { target: { value: 'My Awesome Team' } });
+    const slugInput = screen.getByTestId<HTMLInputElement>('setup-workspace-slug');
+    expect(slugInput.value).toBe('my-awesome-team');
+    fireEvent.change(slugInput, { target: { value: 'custom-slug' } });
+    expect(slugInput.value).toBe('custom-slug');
+  });
+
+  it('covers Step 2 copy secret button and Step 3 copy/download/finish flow', async () => {
+    vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValue({
+      status: 'enrollment_required',
+      enrollment_id: 'enr-full-step-3',
+    });
+
+    vi.spyOn(authApi, 'enrollTotp').mockResolvedValue({
+      secret_base32: 'JBSWY3DPEHPK3PXP',
+      otpauth_uri: 'otpauth://totp/kanban:admin?secret=JBSWY3DPEHPK3PXP',
+    });
+
+    vi.spyOn(authApi, 'verifyTotpEnrollment').mockResolvedValue({
+      status: 'enrolled',
+      recovery_codes: ['rec-01', 'rec-02'],
+    });
+
+    // Mock clipboard writeText
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      writable: true,
+      value: { writeText: writeTextSpy },
+    });
+
+    const onNavigateMock = vi.fn();
+
+    render(<SetupClaimPage initialToken={validToken43} onNavigate={onNavigateMock} />);
+
+    const submitForm = (el: Element) => {
+      const form = el.closest('form');
+      if (form) fireEvent.submit(form);
+    };
+
+    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+      target: { value: 'ValidPassword14Long!' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
+      target: { value: 'ValidPassword14Long!' },
+    });
+    submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Step 2 of 3')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Authenticator App/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-secret-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('copy-secret-btn'));
+    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
+
+    // Verify TOTP to go to Step 3
+    fireEvent.change(screen.getByLabelText(/Verify 6-digit Code/i), {
+      target: { value: '123456' },
+    });
+    submitForm(screen.getByRole('button', { name: /Verify & Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Step 3 of 3')).toBeDefined();
+    });
+
+    // Step 3 actions
+    fireEvent.click(screen.getByRole('button', { name: /Copy all/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Download \.txt/i }));
+
+    // Checkbox gating finish button
+    const finishBtn = screen.getByRole('button', { name: /Continue to workspace/i });
+    expect(finishBtn.getAttribute('disabled')).not.toBeNull();
+
+    const checkbox = screen.getByRole('checkbox');
+    fireEvent.click(checkbox);
+    expect(finishBtn.getAttribute('disabled')).toBeNull();
+
+    fireEvent.click(finishBtn);
+    expect(onNavigateMock).toHaveBeenCalledWith('/');
+  });
+
+  it('covers platform authenticator unavailable and isPlainHttp branches', async () => {
+    // 1. isUserVerifyingPlatformAuthenticatorAvailable returns false
+    (window as unknown as { PublicKeyCredential: { isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean> } }).PublicKeyCredential = {
+      isUserVerifyingPlatformAuthenticatorAvailable: vi.fn().mockResolvedValue(false),
+    };
+
+    const { unmount } = render(<SetupClaimPage initialToken={validToken43} />);
+    await waitFor(() => {
+      expect(screen.getByText('Step 1 of 3')).toBeDefined();
+    });
+    unmount();
+
+    // 2. isPlainHttp branch (http: and non-localhost)
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        protocol: 'http:',
+        hostname: 'kanban.internal.example',
+        search: '',
+        pathname: '/setup',
+      },
+    });
+
+    render(<SetupClaimPage initialToken={validToken43} />);
+    await waitFor(() => {
+      expect(screen.getByText('Step 1 of 3')).toBeDefined();
+    });
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalLocation,
+    });
+  });
+
+  it('boots directly into Step 2 when session is authenticated with mfa_pending', async () => {
+    vi.spyOn(authApi, 'fetchSessionInfo').mockResolvedValueOnce({
+      authenticated: true,
+      mfa_pending: true,
+      session_id: 'sess-enr-direct',
+    });
+
+    render(<SetupClaimPage />);
+
+    await waitFor(() => {
       expect(screen.getByText('Step 2 of 3')).toBeDefined();
     });
   });

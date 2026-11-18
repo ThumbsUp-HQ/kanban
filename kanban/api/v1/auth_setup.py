@@ -76,6 +76,32 @@ class SetupClaimRequest(BaseModel):
         max_length=320,
         description="Optional administrator email (defaults to username@local.kanban)",
     )
+    workspace_name: str = Field(
+        default="Default Workspace",
+        min_length=1,
+        max_length=120,
+        description="Name of initial workspace",
+    )
+    workspace_slug: str = Field(
+        default="default",
+        min_length=2,
+        max_length=63,
+        pattern=r"^[a-z0-9][a-z0-9-]{1,62}$",
+        description="Slug of initial workspace",
+    )
+    project_name: str = Field(
+        default="Default Project",
+        min_length=1,
+        max_length=120,
+        description="Name of initial project",
+    )
+    project_key: str = Field(
+        default="KAN",
+        min_length=2,
+        max_length=10,
+        pattern=r"^[A-Z][A-Z0-9]{1,9}$",
+        description="Uppercase key of initial project",
+    )
 
     @field_validator("display_name")
     @classmethod
@@ -164,6 +190,10 @@ async def claim_setup(
             display_name=payload.display_name,
             email=clean_email,
             password=payload.password,
+            workspace_name=payload.workspace_name,
+            workspace_slug=payload.workspace_slug,
+            project_name=payload.project_name,
+            project_key=payload.project_key,
         )
         principal_id = uuid.UUID(principal_id_str)
         workspace_id = uuid.UUID(workspace_id_str)

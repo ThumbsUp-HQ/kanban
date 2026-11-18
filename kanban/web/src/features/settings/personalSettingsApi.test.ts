@@ -17,6 +17,10 @@ import {
   confirmTotp,
   deleteTotp,
   regenerateRecoveryCodes,
+  fetchExternalIdentities,
+  startLinkIdentity,
+  linkLdapIdentity,
+  unlinkIdentity,
 } from './personalSettingsApi';
 
 describe('personalSettingsApi', () => {
@@ -148,12 +152,12 @@ describe('personalSettingsApi', () => {
     expect(res).toEqual(mockEnroll);
   });
 
-  it('confirmTotp invokes POST /api/v1/auth/mfa/totp/verify', async () => {
+  it('confirmTotp invokes POST /api/v1/auth/mfa/totp/confirm', async () => {
     const mockVerify = { ok: true, recovery_codes: ['code-1'] };
     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockVerify);
 
     const res = await confirmTotp('123456');
-    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/totp/verify', {
+    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/totp/confirm', {
       body: JSON.stringify({ code: '123456' }),
       headers: { 'Content-Type': 'application/json' },
     });
@@ -174,5 +178,55 @@ describe('personalSettingsApi', () => {
     const res = await regenerateRecoveryCodes();
     expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/recovery/regenerate');
     expect(res).toEqual(mockCodes);
+  });
+
+  it('fetchExternalIdentities returns identities on success and empty array on error', async () => {
+    const mockData = { identities: [{ id: 'i-1', card_slug: 'github', provider_type: 'oauth', subject_id: 'sub-1', created_at: '2026-01-01' }] };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockData);
+
+    const res1 = await fetchExternalIdentities();
+    expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/auth/identities');
+    expect(res1).toEqual(mockData.identities);
+
+    // Empty fallback
+    apiFetchSpy.mockResolvedValue(undefined);
+    expect(await fetchExternalIdentities()).toEqual([]);
+
+    // Error catch fallback
+    apiFetchSpy.mockRejectedValue(new Error('Network error'));
+    expect(await fetchExternalIdentities()).toEqual([]);
+  });
+
+  it('startLinkIdentity invokes POST /api/v1/auth/identities/link/start', async () => {
+    const mockResult = { mode: 'oauth', authorize_url: 'https://auth.example.com' };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockResult);
+
+    const res = await startLinkIdentity('corp-oauth');
+    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/identities/link/start', {
+      body: JSON.stringify({ card_slug: 'corp-oauth' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res).toEqual(mockResult);
+  });
+
+  it('linkLdapIdentity invokes POST /api/v1/auth/identities/link/ldap', async () => {
+    const mockResult = { linked: true };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockResult);
+
+    const res = await linkLdapIdentity('intent-1', 'john_doe', 'Secret123!');
+    expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/identities/link/ldap', {
+      body: JSON.stringify({ link_intent_id: 'intent-1', username: 'john_doe', password: 'Secret123!' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res).toEqual(mockResult);
+  });
+
+  it('unlinkIdentity invokes DELETE /api/v1/auth/identities/{identity_id}', async () => {
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(undefined);
+
+    await unlinkIdentity('ident-99');
+    expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/auth/identities/{identity_id}', {
+      params: { identity_id: 'ident-99' },
+    });
   });
 });

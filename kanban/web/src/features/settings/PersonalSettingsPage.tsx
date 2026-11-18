@@ -17,9 +17,12 @@ import {
   confirmTotp,
   deleteTotp,
   regenerateRecoveryCodes,
+  fetchExternalIdentities,
+  unlinkIdentity,
   type UserProfileResponse,
   type WebauthnCredentialItem,
   type MfaStatusResponse,
+  type ExternalIdentityItem,
 } from './personalSettingsApi';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import { ApiProblem } from '../../api/problem';
@@ -96,6 +99,11 @@ export function PersonalSettingsPage(): JSX.Element {
   const { data: passkeys } = useQuery<WebauthnCredentialItem[]>({
     queryKey: ['myPasskeys'],
     queryFn: fetchPasskeys,
+  });
+
+  const { data: identities } = useQuery<ExternalIdentityItem[]>({
+    queryKey: ['myIdentities'],
+    queryFn: fetchExternalIdentities,
   });
 
   const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
@@ -302,6 +310,23 @@ export function PersonalSettingsPage(): JSX.Element {
       } catch (err) {
         if (!handleInterceptAal2(err, action)) {
           setErrorMsg(err instanceof Error ? err.message : 'Failed to delete passkey.');
+        }
+      }
+    };
+    await action();
+  };
+
+  const handleUnlinkIdentity = async (identityId: string): Promise<void> => {
+    if (!window.confirm('Are you sure you want to unlink this external account?')) return;
+    const action = async (): Promise<void> => {
+      try {
+        await unlinkIdentity(identityId);
+        setSuccessMsg('Account unlinked.');
+        setErrorMsg(null);
+        void queryClient.invalidateQueries({ queryKey: ['myIdentities'] });
+      } catch (err) {
+        if (!handleInterceptAal2(err, action)) {
+          setErrorMsg(err instanceof Error ? err.message : 'Failed to unlink identity.');
         }
       }
     };
@@ -636,36 +661,104 @@ export function PersonalSettingsPage(): JSX.Element {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {!mfaStatus?.totp_enabled ? (
-            <button
-              type="button"
-              className="kb-personal-settings-btn kb-personal-settings-btn-primary"
-              data-testid="enable-totp-btn"
-              onClick={() => { void handleStartTotpEnroll(); }}
-            >
-              Configure Authenticator App
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="kb-personal-settings-btn kb-personal-settings-btn-danger"
-              data-testid="disable-totp-btn"
-              onClick={() => { void handleDisableTotp(); }}
-            >
-              Disable Authenticator App
-            </button>
-          )}
+        {(() => {
+          const is2faActive = mfaStatus?.totp_enabled === true || Boolean(passkeys && passkeys.length > 0);
+          return (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              {!mfaStatus?.totp_enabled ? (
+                <button
+                  type="button"
+                  className="kb-personal-settings-btn kb-personal-settings-btn-primary"
+                  data-testid="enable-totp-btn"
+                  onClick={() => { void handleStartTotpEnroll(); }}
+                >
+                  Configure Authenticator App
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+                  data-testid="disable-totp-btn"
+                  onClick={() => { void handleDisableTotp(); }}
+                >
+                  Disable Authenticator App
+                </button>
+              )}
 
-          <button
-            type="button"
-            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
-            data-testid="regenerate-recovery-codes-btn"
-            onClick={() => { void handleRegenerateRecoveryCodes(); }}
-          >
-            Regenerate Recovery Codes
-          </button>
-        </div>
+              <button
+                type="button"
+                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                data-testid="regenerate-recovery-codes-btn"
+                disabled={!is2faActive}
+                title={!is2faActive ? 'Enable TOTP or Passkey 2FA first' : undefined}
+                onClick={() => { void handleRegenerateRecoveryCodes(); }}
+              >
+                Regenerate Recovery Codes
+              </button>
+              {!is2faActive && (
+                <span
+                  className="kb-personal-settings-hint"
+                  data-testid="regenerate-hint"
+                  style={{ color: 'var(--fg-secondary)', fontSize: 'var(--text-xs)' }}
+                >
+                  Enable TOTP or Passkey 2FA first
+                </span>
+              )}
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* Section 5: Connected Accounts & External Identities */}
+      <section className="kb-personal-settings-section" aria-labelledby="section-identities-title">
+        <h2 id="section-identities-title" className="kb-personal-settings-section-title">
+          Connected Accounts & External Identities
+        </h2>
+        <p className="kb-personal-settings-section-desc">
+          Link external single sign-on identities (OIDC, OAuth2, LDAP) to your user profile. Unlinking requires fresh second-factor verification.
+        </p>
+
+        {identities && identities.length > 0 ? (
+          <table className="kb-personal-settings-table" data-testid="identities-table">
+            <thead>
+              <tr>
+                <th className="kb-personal-settings-th">Provider</th>
+                <th className="kb-personal-settings-th">Subject / Account</th>
+                <th className="kb-personal-settings-th">Linked</th>
+                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {identities.map((ident) => (
+                <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
+                  <td className="kb-personal-settings-td">
+                    <strong>{ident.card_slug}</strong> ({ident.provider_type.toUpperCase()})
+                  </td>
+                  <td className="kb-personal-settings-td">
+                    {ident.display_name ?? ident.email ?? ident.subject_id}
+                  </td>
+                  <td className="kb-personal-settings-td">
+                    {new Date(ident.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+                      data-testid={`unlink-identity-${ident.id}`}
+                      onClick={() => { void handleUnlinkIdentity(ident.id); }}
+                    >
+                      Unlink
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
+            No external identities linked.
+          </p>
+        )}
       </section>
 
       {/* TOTP Setup Modal */}

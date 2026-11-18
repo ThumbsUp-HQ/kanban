@@ -2,11 +2,12 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { McpAccessStudio } from '../McpAccessStudio';
 import * as settingsApi from '../settingsApi';
+import * as clientModule from '../../../api/client';
 
 vi.mock('../../../app/useSystemStatus', () => ({
   useSystemStatus: vi.fn(() => ({
@@ -110,6 +111,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+      is_server_admin: true,
+      is_workspace_admin: true,
+    });
   });
 
   it('renders scope tiers correctly across all 4 mount routes', async () => {
@@ -423,11 +428,13 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
 
     // Close via Escape key press
-    fireEvent.keyDown(window, { key: 'Escape' });
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' });
+    });
 
     await waitFor(() => {
       expect(screen.queryByTestId('mcp-snippet-modal')).toBeNull();
-    });
+    }, { timeout: 3000 });
   });
 
   it('closes mint modal via cancel button and backdrop click, handles empty label and load error', async () => {

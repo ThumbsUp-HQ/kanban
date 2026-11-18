@@ -124,7 +124,7 @@ export async function enrollTotp(): Promise<TotpEnrollResponse> {
 export async function confirmTotp(
   code: string,
 ): Promise<{ ok: boolean; recovery_codes: string[] }> {
-  return (await apiFetch('POST', '/api/v1/auth/mfa/totp/verify' as never, {
+  return (await apiFetch('POST', '/api/v1/auth/mfa/totp/confirm' as never, {
     body: JSON.stringify({ code }),
     headers: { 'Content-Type': 'application/json' },
   })) as { ok: boolean; recovery_codes: string[] };
@@ -139,4 +139,54 @@ export async function regenerateRecoveryCodes(): Promise<RecoveryCodesResponse> 
     'POST',
     '/api/v1/auth/mfa/recovery/regenerate' as never,
   )) as RecoveryCodesResponse;
+}
+
+export interface ExternalIdentityItem {
+  id: string;
+  provider_type: string;
+  card_slug: string;
+  subject_id: string;
+  email?: string | null;
+  display_name?: string | null;
+  created_at: string;
+  last_used_at?: string | null;
+}
+
+export interface ExternalIdentitiesResponse {
+  identities: ExternalIdentityItem[];
+}
+
+export async function fetchExternalIdentities(): Promise<ExternalIdentityItem[]> {
+  try {
+    const res = (await apiFetch('GET', '/api/v1/auth/identities' as never)) as ExternalIdentitiesResponse | undefined;
+    return res?.identities ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function startLinkIdentity(
+  cardSlug: string,
+): Promise<{ mode: string; authorize_url?: string; link_intent_id?: string }> {
+  return (await apiFetch('POST', '/api/v1/auth/identities/link/start' as never, {
+    body: JSON.stringify({ card_slug: cardSlug }),
+    headers: { 'Content-Type': 'application/json' },
+  })) as { mode: string; authorize_url?: string; link_intent_id?: string };
+}
+
+export async function linkLdapIdentity(
+  linkIntentId: string,
+  username: string,
+  password: string,
+): Promise<{ linked: boolean }> {
+  return (await apiFetch('POST', '/api/v1/auth/identities/link/ldap' as never, {
+    body: JSON.stringify({ link_intent_id: linkIntentId, username, password }),
+    headers: { 'Content-Type': 'application/json' },
+  })) as { linked: boolean };
+}
+
+export async function unlinkIdentity(identityId: string): Promise<void> {
+  await apiFetch('DELETE', '/api/v1/auth/identities/{identity_id}' as never, {
+    params: { identity_id: identityId },
+  });
 }

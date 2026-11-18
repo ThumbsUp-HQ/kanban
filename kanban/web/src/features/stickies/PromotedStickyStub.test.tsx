@@ -73,6 +73,25 @@ describe('PromotedStickyStub', () => {
     expect(openLink.getAttribute('href')).toBe('/docs/doc-fallback-id');
   });
 
+  it('handles sticky with null promoted_to_doc and null promoted_to_doc_id', () => {
+    const emptySticky: StickyItem = {
+      ...promotedSticky,
+      body_markdown: '',
+      promoted_to_doc: undefined,
+      promoted_to_doc_id: null,
+    };
+
+    render(
+      <PromotedStickyStub
+        sticky={emptySticky}
+        onUnarchiveCopy={vi.fn()}
+      />,
+    );
+
+    const openLink = screen.getByRole('link', { name: /Open Doc/i });
+    expect(openLink.getAttribute('href')).toBe('/docs/');
+  });
+
   it('disables unarchive button when isUnarchiving is true', () => {
     render(
       <PromotedStickyStub

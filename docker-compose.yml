@@ -61,9 +61,33 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kanban-migrate:
+        condition: service_completed_successfully
     secrets:
       - postgres_password
       - master_kek
+
+  kanban-migrate:
+    image: kanban:runtime-slim
+    restart: "no"
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    pids_limit: 100
+    mem_limit: 256m
+    tmpfs:
+      - /tmp
+    command: ["alembic", "upgrade", "head"]
+    networks:
+      - data_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    secrets:
+      - postgres_password
 
   mcp-server:
     image: kanban:runtime-slim
@@ -133,6 +157,9 @@ services:
     command: ["python", "-m", "database.outbox.relay"]
     networks:
       - data_net
+    depends_on:
+      kanban-migrate:
+        condition: service_completed_successfully
     secrets:
       - postgres_password
 

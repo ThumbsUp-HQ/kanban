@@ -101,6 +101,30 @@ def _get_compose_template() -> str:
     depends_on:
       postgres:
         condition: service_healthy
+      kanban-migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env.production
+
+  kanban-migrate:
+    image: kanban:runtime-slim
+    restart: "no"
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    pids_limit: 100
+    mem_limit: 256m
+    tmpfs:
+      - /tmp
+    command: ["alembic", "upgrade", "head"]
+    networks:
+      - data_net
+    depends_on:
+      postgres:
+        condition: service_healthy
     env_file:
       - .env.production
 
@@ -172,6 +196,9 @@ def _get_compose_template() -> str:
     command: ["python", "-m", "kanban.relay_placeholder"]
     networks:
       - data_net
+    depends_on:
+      kanban-migrate:
+        condition: service_completed_successfully
     env_file:
       - .env.production
 

@@ -25,6 +25,7 @@ from kanban.api.v1.auth_mfa import (
 from kanban.auth.sessions.cookies import (
     build_clear_cookie_header,
     build_clear_fallback_cookie_header,
+    extract_session_cookie,
     is_plain_http,
 )
 from kanban.auth.sessions.csrf import (
@@ -39,6 +40,8 @@ from kanban.auth.sessions.csrf import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from kanban.auth.sessions.service import SessionService
     from kanban.security.keys import KeyMaterial
 
@@ -50,6 +53,72 @@ class ChallengeCodeVerifyRequest(BaseModel):
 
     challenge_id: str | None = Field(default=None, description="Pending MFA session id")
     code: str = Field(description="6-digit TOTP code or recovery code")
+
+
+async def _fetch_session_expiry(
+    request: Request,
+    principal_ctx: PrincipalContext,
+) -> tuple[datetime | None, datetime | None, bool]:
+    """Retrieve idle and absolute expiration timestamps for an active session."""
+    user_session = getattr(request.state, "user_session", None)
+    if user_session is not None and getattr(user_session, "id", None) == principal_ctx.session_id:
+        return (
+            user_session.idle_expires_at,
+            user_session.absolute_expires_at,
+            getattr(user_session, "is_persistent", True),
+        )
+
+    session_factory = getattr(request.app.state, "session_factory", None)
+    if session_factory is not None:
+        anon_ctx = RLSContext(
+            principal_id=uuid.UUID(int=0),
+            workspace_id=uuid.UUID(int=0),
+            token_scopes=("session",),
+            aal_level=1,
+        )
+        async with session_factory.session(anon_ctx) as async_session:
+            meta_stmt = text(
+                "SELECT idle_expires_at, absolute_expires_at, is_persistent "
+                "FROM kb_auth.session_get_metadata(:p_id)"
+            )
+            meta_res = await async_session.execute(meta_stmt, {"p_id": principal_ctx.session_id})
+            row = meta_res.mappings().first()
+            if row is not None:
+                return (
+                    row["idle_expires_at"],
+                    row["absolute_expires_at"],
+                    bool(row["is_persistent"]),
+                )
+    return None, None, False
+
+
+def _append_session_and_csrf_cookies(
+    response: JSONResponse,
+    request: Request,
+    csrf_token: str,
+    *,
+    csrf_valid: bool,
+    has_dead_session: bool,
+) -> None:
+    """Attach session cleanup and CSRF Set-Cookie headers as appropriate."""
+    if has_dead_session:
+        response.raw_headers.append((b"set-cookie", build_clear_cookie_header().encode("latin-1")))
+        if is_plain_http(request):
+            response.raw_headers.append(
+                (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
+            )
+
+    if not csrf_valid or has_dead_session:
+        response.raw_headers.append(
+            (b"set-cookie", build_set_csrf_cookie_header(csrf_token).encode("latin-1"))
+        )
+        if is_plain_http(request):
+            response.raw_headers.append(
+                (
+                    b"set-cookie",
+                    build_set_fallback_csrf_cookie_header(csrf_token).encode("latin-1"),
+                )
+            )
 
 
 @router.get("/session")
@@ -83,46 +152,15 @@ async def get_session_info(request: Request) -> JSONResponse:
     else:
         csrf_token = generate_csrf_token(target_session_id, session_hmac_key)
 
-    idle_expires_at = None
-    absolute_expires_at = None
-    remember_me = False
-
     if authenticated and principal_ctx is not None and principal_ctx.session_id is not None:
-        user_session = getattr(request.state, "user_session", None)
-        if (
-            user_session is not None
-            and getattr(user_session, "id", None) == principal_ctx.session_id
-        ):
-            idle_expires_at = user_session.idle_expires_at
-            absolute_expires_at = user_session.absolute_expires_at
-            remember_me = getattr(user_session, "is_persistent", True)
-        else:
-            session_factory = getattr(request.app.state, "session_factory", None)
-            if session_factory is not None:
-                anon_ctx = RLSContext(
-                    principal_id=uuid.UUID(int=0),
-                    workspace_id=uuid.UUID(int=0),
-                    token_scopes=("session",),
-                    aal_level=1,
-                )
-                async with session_factory.session(anon_ctx) as async_session:
-                    meta_stmt = text(
-                        "SELECT idle_expires_at, absolute_expires_at, is_persistent "
-                        "FROM kb_auth.session_get_metadata(:p_id)"
-                    )
-                    meta_res = await async_session.execute(
-                        meta_stmt, {"p_id": principal_ctx.session_id}
-                    )
-                    row = meta_res.mappings().first()
-                    if row is not None:
-                        idle_expires_at = row["idle_expires_at"]
-                        absolute_expires_at = row["absolute_expires_at"]
-                        remember_me = bool(row["is_persistent"])
-
+        idle_expires_at, absolute_expires_at, remember_me = await _fetch_session_expiry(
+            request, principal_ctx
+        )
         data: dict[str, Any] = {
             "authenticated": True,
             "principal_id": str(principal_ctx.principal_id),
             "workspace_id": str(principal_ctx.workspace_id),
+            "session_id": str(principal_ctx.session_id),
             "aal_level": principal_ctx.aal_level,
             "mfa_pending": getattr(principal_ctx, "mfa_pending", False),
             "csrf_token": csrf_token,
@@ -137,6 +175,7 @@ async def get_session_info(request: Request) -> JSONResponse:
             "authenticated": False,
             "principal_id": None,
             "workspace_id": None,
+            "session_id": None,
             "aal_level": 0,
             "mfa_pending": False,
             "csrf_token": csrf_token,
@@ -146,14 +185,16 @@ async def get_session_info(request: Request) -> JSONResponse:
         }
 
     response = JSONResponse(content=data)
-    if not csrf_valid:
-        response.raw_headers.append(
-            (b"set-cookie", build_set_csrf_cookie_header(csrf_token).encode("latin-1"))
-        )
-        if is_plain_http(request):
-            response.raw_headers.append(
-                (b"set-cookie", build_set_fallback_csrf_cookie_header(csrf_token).encode("latin-1"))
-            )
+    has_dead_session = not authenticated and bool(
+        extract_session_cookie(request.headers.get("cookie"))
+    )
+    _append_session_and_csrf_cookies(
+        response,
+        request,
+        csrf_token,
+        csrf_valid=csrf_valid,
+        has_dead_session=has_dead_session,
+    )
     return response
 
 
@@ -428,7 +469,14 @@ async def logout(request: Request) -> JSONResponse:
         async with session_factory.session(rls_ctx) as async_session:
             await session_service.logout(async_session, principal_ctx.session_id)
 
-    response = JSONResponse(content={"status": "logged_out"})
+    key_material: KeyMaterial | None = getattr(request.app.state, "key_material", None)
+    session_hmac_key = b"\x00" * 32 if key_material is None else key_material.session_hmac_key
+    fresh_csrf = generate_csrf_token(PRE_SESSION_ID, session_hmac_key)
+
+    response = JSONResponse(
+        content={"status": "logged_out"},
+        headers={"X-CSRF-Token": fresh_csrf},
+    )
     # Clear both __Host-kb_session and __Host-kb_csrf cookies with Max-Age=0
     response.raw_headers.append((b"set-cookie", build_clear_cookie_header().encode("latin-1")))
     response.raw_headers.append((b"set-cookie", build_clear_csrf_cookie_header().encode("latin-1")))
@@ -439,5 +487,13 @@ async def logout(request: Request) -> JSONResponse:
         )
         response.raw_headers.append(
             (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
+        )
+    # Reissue valid pre-session CSRF cookie
+    response.raw_headers.append(
+        (b"set-cookie", build_set_csrf_cookie_header(fresh_csrf).encode("latin-1"))
+    )
+    if is_plain_http(request):
+        response.raw_headers.append(
+            (b"set-cookie", build_set_fallback_csrf_cookie_header(fresh_csrf).encode("latin-1"))
         )
     return response

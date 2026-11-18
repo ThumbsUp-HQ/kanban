@@ -13,6 +13,7 @@ from typing import Any
 EXPECTED_SERVICE_NETWORKS: dict[str, set[str]] = {
     "reverse-proxy": {"edge_net", "app_net"},
     "kanban-api": {"app_net", "data_net"},
+    "kanban-migrate": {"data_net"},
     "mcp-server": {"app_net"},
     "agent-runtime": {"app_net", "egress_llm_net"},
     "script-sandbox": {"sandbox_net"},

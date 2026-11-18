@@ -1,0 +1,151 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-auth-0166e9ca
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 24 items
+
+kanban/tests/auth/test_setup_claim.py .............                      [ 54%]
+kanban/tests/auth/test_totp.py ...........                               [100%]
+
+============================== 24 passed in 8.03s ==============================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-auth-0166e9ca/kanban/web
+> vitest run src/features/auth/SetupClaimPage.test.tsx src/features/settings/__tests__/PersonalSettingsPage.test.tsx src/features/settings/personalSettingsApi.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-auth-0166e9ca/kanban/web
+
+ ✓ src/features/settings/personalSettingsApi.test.ts (13 tests) 16ms
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > renders personal settings sections with loaded profile data
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > updates display name and timezone
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > rejects SVG avatar upload client-side
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > validates password length and matching confirmation
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > renames passkey and displays updated list
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > regenerates recovery codes and displays modal
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > renders loading state when profile is loading
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles valid avatar upload and avatar removal
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > toggles password visibility and handles successful password update
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles password change API error response and dismisses alert
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > manages TOTP enrollment and disabling
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+Not implemented: navigation to another Document
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > manages disabling TOTP when already active
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > manages passkey deletion with confirmation
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > cancels passkey rename modal when clicking cancel
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/auth/SetupClaimPage.test.tsx > SetupClaimPage (KB-P3-35) > prevents concurrent TOTP enrollment verification in Step 2
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > renders empty passkey notice when passkeys list is empty
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > enforces 14 character password minimum for server administrators
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+ ✓ src/features/auth/SetupClaimPage.test.tsx (14 tests) 802ms
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > intercepts AAL2_REQUIRED error on password change and opens step-up dialog
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > rejects oversized avatar files and renders fallback initials when avatar and name are absent
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles mutation errors for profile update, avatar deletion, and password visibility toggles
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles mutation errors during TOTP confirmation, TOTP disable, and recovery codes regen
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles AAL2 required stepup challenge on sensitive actions
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles SVG avatar rejection and empty avatar file selection
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles passkey rename and confirmation cancellations
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > handles non-Error string rejection in password update and passkey rename
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > covers AAL2 intercept and non-Error fallback errors for delete passkey, TOTP enroll/delete, and recovery regen
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > covers string error on enroll TOTP when totp is disabled
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > covers non-Error string rejection on avatar upload/delete and profile update
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > covers window.confirm cancellation on disable TOTP, regenerate recovery codes, and delete passkey
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > covers otpauth_url fallback and confirmTotp with empty recovery codes
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+stderr | src/features/settings/__tests__/PersonalSettingsPage.test.tsx > PersonalSettingsPage > covers AAL2_REQUIRED with fallback challengeId and methods, plus rename and confirm string errors
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["myIdentities"]
+
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (30 tests) 1337ms
+
+ Test Files  3 passed (3)
+      Tests  57 passed (57)
+   Start at  14:28:14
+   Duration  2.44s (environment 47%, tests 46%, import 6%, transform 1%)
+

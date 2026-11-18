@@ -1949,6 +1949,12 @@ describe('ComposeExportTab', () => {
       await Promise.resolve();
     });
 
+    const downloadBtn = screen.getByRole('button', { name: 'Download docker-compose.yml' });
+    await act(async () => {
+      fireEvent.click(downloadBtn);
+      await Promise.resolve();
+    });
+
     // Clipboard write should not be called because exportData is null
     expect(clipboardMock).not.toHaveBeenCalled();
   });
@@ -1998,6 +2004,41 @@ describe('ComposeExportTab', () => {
     const dlSingleBtn = screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' });
     fireEvent.click(dlSingleBtn);
     unmount();
+  });
+
+  it('covers ComposeExportTab copy env failure when clipboard returns false or throws', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: undefined },
+      configurable: true,
+    });
+    /* eslint-disable @typescript-eslint/no-deprecated */
+    const originalExec = typeof document.execCommand === 'function' ? document.execCommand.bind(document) : undefined;
+    document.execCommand = vi.fn().mockReturnValue(false);
+    /* eslint-enable @typescript-eslint/no-deprecated */
+
+    render(
+      <ComposeExportTab
+        initialData={{
+          filename: 'docker-compose.yml',
+          compose_yaml: 'services:\n',
+          env_template: 'VAR=1\n',
+          migration_steps_markdown: 'Steps',
+        }}
+      />,
+    );
+
+    const copyBtn = screen.getByRole('button', { name: 'Copy .env.example' });
+    await act(async () => {
+      fireEvent.click(copyBtn);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('alert').textContent).toContain('Failed to copy');
+    /* eslint-disable @typescript-eslint/no-deprecated */
+    if (originalExec) {
+      document.execCommand = originalExec;
+    }
+    /* eslint-enable @typescript-eslint/no-deprecated */
   });
 
   it('handles automated backup schedule editing and saving', async () => {
@@ -2238,6 +2279,7 @@ describe('ComposeExportTab', () => {
 
     const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onClose = vi.fn();
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     render(
       <QueryClientProvider client={testQueryClient}>
         <StandaloneStatusPanel onClose={onClose} initialStatus={adminStatus} />
@@ -2330,6 +2372,8 @@ describe('ComposeExportTab', () => {
     globalThis.fetch = mockFetch;
 
     const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     render(
       <QueryClientProvider client={testQueryClient}>
         <StandaloneStatusPanel onClose={vi.fn()} initialStatus={adminStatus} />
@@ -2408,6 +2452,8 @@ describe('ComposeExportTab', () => {
     globalThis.fetch = mockFetch;
 
     const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     render(
       <QueryClientProvider client={testQueryClient}>
         <StandaloneStatusPanel onClose={vi.fn()} initialStatus={adminStatus} />
@@ -2486,6 +2532,7 @@ describe('ComposeExportTab', () => {
       return new Response('{}', { status: 200 });
     });
 
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     render(
       <QueryClientProvider client={testQueryClient}>
         <StandaloneStatusPanel

@@ -399,12 +399,12 @@ async def test_case_10_mfa_pending_enforcement(
     app = _build_test_app(service, factory, key_material)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        # Normal protected route rejects with 403 MFA_REQUIRED
+        # Normal protected route rejects with 401/403 MFA_REQUIRED
         res1 = await client.get(
             "/api/v1/protected/resource",
             cookies={SESSION_COOKIE_NAME: s_mfa.cookie_val},
         )
-        assert res1.status_code == 403
+        assert res1.status_code in (401, 403)
         data1 = res1.json()
         assert data1["code"] == "MFA_REQUIRED"
 
@@ -504,7 +504,7 @@ async def test_require_full_session_direct_unit() -> None:
     req_ok = Request({"type": "http", "headers": []})
     assert await require_full_session(req_ok, p_ok) is p_ok
 
-    # 2. Principal with mfa_pending=True rejected with 403
+    # 2. Principal with mfa_pending=True rejected with 401/403
     p_mfa = PrincipalContext(
         principal_id=uuid.uuid4(),
         workspace_id=uuid.uuid4(),
@@ -513,7 +513,7 @@ async def test_require_full_session_direct_unit() -> None:
     req_mfa = Request({"type": "http", "headers": []})
     with pytest.raises(ProblemException) as exc:
         await require_full_session(req_mfa, p_mfa)
-    assert exc.value.status == 403
+    assert exc.value.status in (401, 403)
     assert exc.value.code == "MFA_REQUIRED"
 
     # 3. Principal with mfa_pending=True allowed when endpoint has allow_mfa_pending

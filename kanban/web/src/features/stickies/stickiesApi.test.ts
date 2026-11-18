@@ -256,5 +256,38 @@ describe('stickiesApi', () => {
     });
 
     await expect(deleteSticky('missing')).rejects.toThrow('HTTP 500');
+
+    // Body without detail field
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: () => Promise.resolve({}),
+    });
+    await expect(deleteSticky('no-detail')).rejects.toThrow('Failed to delete sticky: HTTP 400');
+
+    // snoozeStickyPromotion without charLength falls back to 0
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 404 }) // POST /snooze fails
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSticky),
+      }); // PATCH succeeds
+    await snoozeStickyPromotion('s-snooze', undefined, '"etag-1"');
+
+    // createSticky project 404 with empty fallback items
+    document.cookie = 'kb_csrf=csrf-token; path=/';
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ detail: 'Project missing' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ items: [] }),
+      });
+    await expect(createSticky('NOT_FOUND', { body_markdown: 'test' })).rejects.toThrow('Project missing');
   });
 });

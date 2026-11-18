@@ -383,4 +383,30 @@ describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
     expect(todoColumn?.querySelector('[data-issue-key="KAN-401"]')).not.toBeNull();
     expect(todoColumn?.querySelector('[data-issue-key="KAN-402"]')).not.toBeNull();
   });
+
+  it('handles unknown priority slug and unknown state falling back to default lane and column', () => {
+    const base = FIXTURE_12_ISSUES[0];
+    if (!base) throw new Error('missing fixture');
+    const exoticIssue: IssueItem = {
+      ...base,
+      key: 'KAN-999',
+      summary: 'Exotic Issue',
+      priority: { slug: 'unknown-priority', label: 'Custom' },
+      state: { id: 'custom-state', name: 'Weird State', group: 'nonexistent' },
+    };
+
+    render(
+      <SwimlaneBoardGrid
+        issues={[exoticIssue]}
+        projectKey="KAN"
+        groupBy="state"
+        subGroupBy="priority"
+        modulesEnabled={true}
+      />
+    );
+
+    // Placed in default lane (urgent) and default col (backlog)
+    const card = screen.getByText('Exotic Issue');
+    expect(card).toBeDefined();
+  });
 });

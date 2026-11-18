@@ -6,6 +6,7 @@ import {
   patchProjectIssue,
   deleteProjectIssue,
   ensureCsrfToken,
+  extractCsrfFromCookieString,
   normalizeIssueItem,
   normalizeStateKey,
   resolveStateUuid,
@@ -93,6 +94,12 @@ describe('viewsApi', () => {
       json: () => Promise.resolve({ csrf_token: 'session-csrf-789' }),
     });
     expect(await ensureCsrfToken()).toBe('session-csrf-789');
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    expect(await ensureCsrfToken()).toBeNull();
 
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('network error'));
     expect(await ensureCsrfToken()).toBeNull();
@@ -233,5 +240,38 @@ describe('viewsApi', () => {
     await expect(deleteProjectIssue('KANBA-100')).rejects.toThrow(
       'Failed to delete issue: 403 Forbidden'
     );
+  });
+
+  it('extractCsrfFromCookieString extracts prefix tokens or returns null', () => {
+    expect(extractCsrfFromCookieString('')).toBeNull();
+    expect(extractCsrfFromCookieString('session=xyz; other=123')).toBeNull();
+    expect(extractCsrfFromCookieString('kb_csrf=plain-token; session=xyz')).toBe('plain-token');
+    expect(extractCsrfFromCookieString('foo=bar; __Host-kb_csrf=host-token')).toBe('host-token');
+    expect(extractCsrfFromCookieString('kb_csrf=encoded%20token')).toBe('encoded token');
+  });
+
+  it('ensureCsrfToken covers cookie caching and fetch session error fallbacks', async () => {
+    document.cookie = 'kb_csrf=cached-csrf; Path=/';
+    const cached = await ensureCsrfToken();
+    expect(cached).toBe('cached-csrf');
+
+    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/';
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    });
+    const failedFetch = await ensureCsrfToken();
+    expect(failedFetch).toBeNull();
+
+    globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('Network offline'));
+    const thrownFetch = await ensureCsrfToken();
+    expect(thrownFetch).toBeNull();
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    const emptyBody = await ensureCsrfToken();
+    expect(emptyBody).toBeNull();
   });
 });

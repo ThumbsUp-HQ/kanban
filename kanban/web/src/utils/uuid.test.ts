@@ -161,5 +161,76 @@ describe('uuid and clipboard utilities', () => {
       expect(success).toBe(false);
       /* eslint-enable @typescript-eslint/no-deprecated */
     });
+
+    it('restores selection range when rangeCount > 0 and execCommand succeeds', async () => {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {},
+        writable: true,
+        configurable: true,
+      });
+
+      const mockRange = {} as Range;
+      const removeAllRangesSpy = vi.fn();
+      const addRangeSpy = vi.fn();
+      const getSelectionSpy = vi.spyOn(document, 'getSelection').mockReturnValue({
+        rangeCount: 1,
+        getRangeAt: vi.fn().mockReturnValue(mockRange),
+        removeAllRanges: removeAllRangesSpy,
+        addRange: addRangeSpy,
+      } as unknown as Selection);
+
+      /* eslint-disable @typescript-eslint/no-deprecated */
+      const execCommandMock = vi.fn().mockReturnValue(true);
+      document.execCommand = execCommandMock;
+
+      const success = await safeCopyToClipboard('preserved-selection');
+      expect(success).toBe(true);
+      expect(removeAllRangesSpy).toHaveBeenCalled();
+      expect(addRangeSpy).toHaveBeenCalledWith(mockRange);
+      getSelectionSpy.mockRestore();
+      /* eslint-enable @typescript-eslint/no-deprecated */
+    });
+
+    it('rethrows clipboardError if navigator.clipboard.writeText rejects and execCommand fails', async () => {
+      const originalErr = new Error('Clipboard rejected');
+      const writeTextMock = vi.fn().mockRejectedValue(originalErr);
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {
+          clipboard: {
+            writeText: writeTextMock,
+          },
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      /* eslint-disable @typescript-eslint/no-deprecated */
+      document.execCommand = vi.fn().mockReturnValue(false);
+
+      await expect(safeCopyToClipboard('failing-clipboard')).rejects.toThrow('Clipboard rejected');
+      /* eslint-enable @typescript-eslint/no-deprecated */
+    });
+
+    it('handles clipboard failure when document is undefined', async () => {
+      const originalDoc = globalThis.document;
+      const originalErr = new Error('No clipboard in worker');
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {
+          clipboard: {
+            writeText: vi.fn().mockRejectedValue(originalErr),
+          },
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      try {
+        // @ts-expect-error test undefined document in worker/node environment
+        delete globalThis.document;
+        await expect(safeCopyToClipboard('worker-text')).rejects.toThrow('No clipboard in worker');
+      } finally {
+        globalThis.document = originalDoc;
+      }
+    });
   });
 });

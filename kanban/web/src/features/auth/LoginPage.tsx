@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import {
   fetchAuthCards,
+  fetchSessionInfo,
   resolveSafeNext,
   formatAuthError,
   type AuthCard,
@@ -9,6 +10,7 @@ import {
   type FormattedError,
   type MfaMethod,
 } from './authApi';
+import { apiFetch } from '../../api/client';
 import { AuthCardButton } from './AuthCardButton';
 import { LdapLoginForm } from './LdapLoginForm';
 import { LocalAdminDisclosure } from './LocalAdminDisclosure';
@@ -64,10 +66,22 @@ export function LoginPage({
   const safeNext = resolveSafeNext(rawNext);
 
   useEffect(() => {
-    if (initialCards) return;
-
     const isMounted = { current: true };
     void (async () => {
+      try {
+        const sessionInfo = await fetchSessionInfo();
+        if (isMounted.current && sessionInfo.authenticated && sessionInfo.mfa_pending) {
+          setMfaChallenge({
+            challengeId: sessionInfo.session_id ?? 'session-mfa',
+            methods: ['totp', 'webauthn', 'recovery'],
+          });
+        }
+      } catch {
+        // Session bootstrap error non-fatal; continue to card fetching
+      }
+
+      if (initialCards) return;
+
       try {
         const response = await fetchAuthCards();
         if (isMounted.current) {
@@ -132,8 +146,9 @@ export function LoginPage({
   };
 
   // Filter top-level cards (OIDC, OAUTH2, LDAP) preserving server sort order
-  const topCards = cards.filter((c) => c.provider_kind !== 'LOCAL_ADMIN');
-  const hasLocalAdmin = cards.some((c) => c.provider_kind === 'LOCAL_ADMIN');
+  const safeCards = cards;
+  const topCards = safeCards.filter((c) => c.provider_kind !== 'LOCAL_ADMIN');
+  const hasLocalAdmin = safeCards.some((c) => c.provider_kind === 'LOCAL_ADMIN');
 
   return (
     <main className="auth-container" data-testid="login-page" aria-labelledby="login-title">
@@ -195,10 +210,12 @@ export function LoginPage({
                 message: 'Your sign-in session expired. Start again.',
                 code: 'CHALLENGE_EXPIRED',
               });
+              void apiFetch('POST', '/api/v1/auth/logout' as never).catch(() => undefined);
             }}
             onCancel={() => {
               setMfaChallenge(null);
               setError(null);
+              void apiFetch('POST', '/api/v1/auth/logout' as never).catch(() => undefined);
             }}
           />
         ) : loading ? (

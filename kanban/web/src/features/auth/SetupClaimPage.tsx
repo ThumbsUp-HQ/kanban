@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState, type JSX } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import {
   submitSetupClaim,
+  fetchSessionInfo,
   getWebauthnRegistrationOptions,
   verifyWebauthnRegistration,
   enrollTotp,
@@ -28,7 +29,7 @@ export function SetupClaimPage({
   initialToken,
   onNavigate,
 }: SetupClaimPageProps): JSX.Element {
-  const [tokenValid] = useState<boolean>(() => {
+  const [tokenValid, setTokenValid] = useState<boolean>(() => {
     let token = initialToken;
     if (!token && typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
@@ -55,6 +56,11 @@ export function SetupClaimPage({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [workspaceName, setWorkspaceName] = useState('Kanban Workspace');
+  const [workspaceSlug, setWorkspaceSlug] = useState('kanban-workspace');
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [projectName, setProjectName] = useState('Default Project');
+  const [projectKey, setProjectKey] = useState('KANBA');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Step 2: MFA Enrollment
@@ -76,6 +82,47 @@ export function SetupClaimPage({
   const alertRef = useRef<HTMLDivElement | null>(null);
 
   const supportsWebAuthn = isWebAuthnSupported();
+  const isPlainHttp =
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'http:' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+
+  const slugify = (text: string): string => {
+    return text.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  };
+
+  const handleWorkspaceNameChange = (val: string) => {
+    setWorkspaceName(val);
+    if (!slugTouched) {
+      setWorkspaceSlug(slugify(val) || 'kanban-workspace');
+    }
+  };
+
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    if (typeof navigator !== 'undefined') {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall back to textarea
+      }
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return success;
+    } catch {
+      return false;
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -86,6 +133,84 @@ export function SetupClaimPage({
       }
     }
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function checkSession() {
+      try {
+        const session = await fetchSessionInfo();
+        if (active && session.authenticated && session.mfa_pending) {
+          setTokenValid(true);
+          setEnrollmentId(session.session_id ?? 'session-mfa');
+          setCurrentStep(2);
+        }
+      } catch {
+        // Ignore session bootstrap error
+      }
+    }
+    void checkSession();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function checkPlatformAuth() {
+      if (typeof window === 'undefined') return;
+      if (isPlainHttp) {
+        if (active) {
+          setEnrollMethod('totp');
+        }
+        return;
+      }
+      if (
+        'PublicKeyCredential' in window &&
+        Boolean(window.PublicKeyCredential) &&
+        typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function'
+      ) {
+        try {
+          const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          if (active && !available) {
+            setEnrollMethod('totp');
+          }
+        } catch {
+          // Keep current selection
+        }
+      }
+    }
+    void checkPlatformAuth();
+    return () => {
+      active = false;
+    };
+  }, [isPlainHttp]);
+
+  const handleStartTotpEnroll = useCallback(async () => {
+    if (isSubmitting || !enrollmentId) return;
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const data = await enrollTotp({ enrollment_id: enrollmentId });
+      setTotpEnrollData(data);
+      setEnrollMethod('totp');
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [enrollmentId, isSubmitting]);
+
+  useEffect(() => {
+    if (currentStep === 2 && enrollMethod === 'totp' && !totpEnrollData && enrollmentId && !isSubmitting) {
+      const timer = setTimeout(() => {
+        void handleStartTotpEnroll();
+      }, 0);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [currentStep, enrollMethod, totpEnrollData, enrollmentId, isSubmitting, handleStartTotpEnroll]);
 
   useEffect(() => {
     if (error && alertRef.current) {
@@ -130,6 +255,15 @@ export function SetupClaimPage({
       return;
     }
 
+    const cleanProjectKey = projectKey.trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{1,9}$/.test(cleanProjectKey)) {
+      setError({
+        message: 'Project key must be 2-10 uppercase alphanumeric characters starting with a letter (e.g. KANBA).',
+        code: 'INVALID_CREDENTIALS',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -141,6 +275,10 @@ export function SetupClaimPage({
         username: username.trim(),
         display_name: displayName.trim(),
         password,
+        workspace_name: workspaceName.trim(),
+        workspace_slug: workspaceSlug.trim(),
+        project_name: projectName.trim(),
+        project_key: cleanProjectKey,
         ...(trimmedEmail.length > 0 ? { email: trimmedEmail } : {}),
       });
 
@@ -219,23 +357,6 @@ export function SetupClaimPage({
     }
   };
 
-  // Step 2: Initialize TOTP Enrollment
-  const handleStartTotpEnroll = async () => {
-    if (isSubmitting || !enrollmentId) return;
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      const data = await enrollTotp({ enrollment_id: enrollmentId });
-      setTotpEnrollData(data);
-      setEnrollMethod('totp');
-    } catch (err) {
-      setError(formatAuthError(err));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Step 2: Verify TOTP Code
   const handleVerifyTotpEnroll = async (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -307,11 +428,6 @@ export function SetupClaimPage({
 
   return (
     <main className="auth-container" data-testid="setup-claim-page" aria-labelledby="setup-title">
-      {/* Test helper line rendering current pathname for E2E validation (Proof 6 #07) */}
-      <div data-testid="current-url" className="auth-debug-url">
-        {window.location.pathname}
-      </div>
-
       <div className="auth-panel">
         <header className="auth-header">
           <div className="auth-header-title-row">
@@ -451,6 +567,85 @@ export function SetupClaimPage({
               />
             </div>
 
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="setup-workspace-name">
+                Workspace Name
+              </label>
+              <input
+                id="setup-workspace-name"
+                data-testid="setup-workspace-name"
+                className="auth-input"
+                type="text"
+                value={workspaceName}
+                onChange={(e) => { handleWorkspaceNameChange(e.target.value); }}
+                maxLength={100}
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="setup-workspace-slug">
+                Workspace Slug
+              </label>
+              <input
+                id="setup-workspace-slug"
+                data-testid="setup-workspace-slug"
+                className="auth-input"
+                type="text"
+                value={workspaceSlug}
+                onChange={(e) => {
+                  setSlugTouched(true);
+                  setWorkspaceSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''));
+                }}
+                maxLength={64}
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="setup-project-name">
+                Initial Project Name
+              </label>
+              <input
+                id="setup-project-name"
+                data-testid="setup-project-name"
+                className="auth-input"
+                type="text"
+                value={projectName}
+                onChange={(e) => { setProjectName(e.target.value); }}
+                maxLength={100}
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="setup-project-key">
+                Initial Project Key
+              </label>
+              <input
+                id="setup-project-key"
+                data-testid="setup-project-key"
+                className="auth-input auth-mono"
+                type="text"
+                value={projectKey}
+                onChange={(e) => {
+                  setProjectKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
+                }}
+                pattern="^[A-Z][A-Z0-9]{1,9}$"
+                minLength={2}
+                maxLength={10}
+                placeholder="KANBA"
+                required
+                disabled={isSubmitting}
+              />
+              <span className="auth-password-hint">
+                2-10 uppercase alphanumeric characters starting with a letter (e.g. KANBA).
+              </span>
+            </div>
+
             <button
               type="submit"
               className="auth-submit-btn"
@@ -463,7 +658,7 @@ export function SetupClaimPage({
         ) : currentStep === 2 ? (
           <div className="auth-form">
             <h2 className="auth-title auth-title-step">
-              Mandatory Second-Factor Enrollment (AAL2)
+              Mandatory Two-Factor Authentication Setup
             </h2>
             <p className="auth-subtitle auth-subtitle-step">
               Server Administrators must enroll a Passkey or Authenticator App before accessing
@@ -498,6 +693,11 @@ export function SetupClaimPage({
 
             {enrollMethod === 'webauthn' ? (
               <div>
+                {isPlainHttp ? (
+                  <p className="auth-alert" style={{ marginBottom: 16 }}>
+                    Passkeys require HTTPS. When accessing over plain HTTP, please use the Authenticator App tab.
+                  </p>
+                ) : null}
                 {!supportsWebAuthn ? (
                   <p className="auth-empty-state">
                     This browser does not support passkeys. Please switch to the Authenticator App
@@ -534,13 +734,31 @@ export function SetupClaimPage({
                         className="auth-copy-btn"
                         onClick={() => {
                           void (async () => {
-                            await navigator.clipboard.writeText(totpEnrollData.secret_base32);
-                            setCopiedKey(true);
-                            setTimeout(() => { setCopiedKey(false); }, 2000);
+                            const ok = await copyToClipboard(totpEnrollData.secret_base32);
+                            if (ok) {
+                              setCopiedKey(true);
+                              setTimeout(() => { setCopiedKey(false); }, 2000);
+                            }
                           })();
                         }}
                       >
                         {copiedKey ? 'Copied!' : 'Copy setup key'}
+                      </button>
+                      <button
+                        type="button"
+                        className="auth-copy-btn"
+                        data-testid="copy-secret-btn"
+                        onClick={() => {
+                          void (async () => {
+                            const ok = await copyToClipboard(totpEnrollData.secret_base32);
+                            if (ok) {
+                              setCopiedKey(true);
+                              setTimeout(() => { setCopiedKey(false); }, 2000);
+                            }
+                          })();
+                        }}
+                      >
+                        {copiedKey ? 'Copied Secret!' : 'Copy Secret'}
                       </button>
                     </div>
 

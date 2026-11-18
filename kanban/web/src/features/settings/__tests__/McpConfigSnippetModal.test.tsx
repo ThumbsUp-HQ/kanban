@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { McpConfigSnippetModal } from '../McpConfigSnippetModal';
 
@@ -59,7 +59,7 @@ describe('McpConfigSnippetModal direct unit tests', () => {
     expect(handleClose).toHaveBeenCalledTimes(2);
   });
 
-  it('handles clipboard copy and tabs/url scopes cleanly', () => {
+  it('handles clipboard copy and tabs/url scopes cleanly', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, {
@@ -97,8 +97,23 @@ describe('McpConfigSnippetModal direct unit tests', () => {
     // Copy buttons
     fireEvent.click(screen.getByTestId('copy-key-button'));
     expect(writeTextMock).toHaveBeenCalledWith('kb_agt_test_key');
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-key-button').textContent).toBe('Copied!');
+    });
 
     fireEvent.click(screen.getByTestId('copy-snippet-button'));
     expect(writeTextMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-snippet-button').textContent).toBe('Copied!');
+    });
+
+    // Clipboard copy error fallback
+    const writeErrorMock = vi.fn().mockRejectedValue(new Error('copy denied'));
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeErrorMock,
+      },
+    });
+    fireEvent.click(screen.getByTestId('copy-key-button'));
   });
 });

@@ -189,4 +189,23 @@ describe('LdapLoginForm (KB-P3-35)', () => {
     unmount();
     resolveLogin?.({ status: 'authenticated' });
   });
+
+  it('toggles password visibility between text and password', () => {
+    render(
+      <LdapLoginForm
+        card={ldapCard}
+        formId="test-ldap-form"
+        onSuccess={vi.fn()}
+        onError={vi.fn()}
+        onCollapse={vi.fn()}
+      />,
+    );
+    const pwdInput = screen.getByLabelText<HTMLInputElement>(/Password/i);
+    expect(pwdInput.type).toBe('password');
+    const toggleBtn = screen.getByRole('button', { name: /Show/i });
+    fireEvent.click(toggleBtn);
+    expect(pwdInput.type).toBe('text');
+    fireEvent.click(screen.getByRole('button', { name: /Hide/i }));
+    expect(pwdInput.type).toBe('password');
+  });
 });

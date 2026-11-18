@@ -265,4 +265,31 @@ describe('TableView', () => {
 
     expect(onSelectAll).toHaveBeenCalledWith(true);
   });
+
+  it('covers localStorage getItem throw and modulesEnabled prop toggle', () => {
+    // 1. localStorage.getItem throw
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementationOnce(() => {
+      throw new Error('SecurityError: access denied');
+    });
+
+    const { rerender } = render(
+      <TableView
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />
+    );
+    expect(screen.getByRole('table')).toBeDefined();
+
+    // 2. Prop change from modulesEnabled true -> false triggers activeColumns line 124
+    rerender(
+      <TableView
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        modulesEnabled={false}
+      />
+    );
+    expect(screen.queryByRole('columnheader', { name: /Modules/i })).toBeNull();
+    getItemSpy.mockRestore();
+  });
 });

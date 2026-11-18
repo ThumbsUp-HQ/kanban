@@ -78,6 +78,9 @@ export function setCsrfToken(token: string | null): void {
 
 /** Reads the `__Host-kb_csrf` or `kb_csrf` cookie value (or cached session token), or null when absent. */
 export function getCsrfToken(): string | null {
+  if (cachedCsrfToken !== null && cachedCsrfToken.length > 0) {
+    return cachedCsrfToken;
+  }
   if (typeof document !== 'undefined') {
     const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
     if (matches.length > 0) {
@@ -94,10 +97,16 @@ export function getCsrfToken(): string | null {
       }
     }
   }
-  return cachedCsrfToken;
+  return null;
 }
 
-async function bootstrapCsrfToken(signal: AbortSignal | undefined): Promise<string | null> {
+export async function bootstrapCsrfToken(
+  signal?: AbortSignal,
+  force = false,
+): Promise<string | null> {
+  if (!force && cachedCsrfToken !== null && cachedCsrfToken.length > 0) {
+    return cachedCsrfToken;
+  }
   try {
     const response = await fetch('/api/v1/auth/session', {
       method: 'GET',
@@ -223,11 +232,46 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
     }
   }
 
-  const response = await fetch(resolved, init);
-  const contentType = response.headers.get('content-type') ?? '';
+  let response = await fetch(resolved, init);
+  let contentType = response.headers.get('content-type') ?? '';
 
   if (!response.ok) {
-    throw new ApiProblem(response.status, await readProblemBody(response, contentType));
+    let problemBody = await readProblemBody(response, contentType);
+
+    const isCsrfRetryable =
+      response.status === 403 &&
+      UNSAFE_METHODS.has(method) &&
+      (resolved.startsWith('/api/v1/auth/local/login') ||
+        resolved.startsWith('/api/v1/setup/claim'));
+
+    if (isCsrfRetryable) {
+      const isCsrfRejected =
+        typeof problemBody === 'object' &&
+        problemBody !== null &&
+        (('code' in problemBody && (problemBody as { code?: unknown }).code === 'CSRF_REJECTED') ||
+          ('error' in problemBody && (problemBody as { error?: unknown }).error === 'CSRF_REJECTED') ||
+          ('title' in problemBody && String((problemBody as { title?: unknown }).title).includes('CSRF')));
+
+      if (isCsrfRejected) {
+        const freshCsrf = await bootstrapCsrfToken(opts.signal, true);
+        if (freshCsrf) {
+          headers['X-CSRF-Token'] = freshCsrf;
+          init.headers = headers;
+          response = await fetch(resolved, init);
+          contentType = response.headers.get('content-type') ?? '';
+          if (!response.ok) {
+            problemBody = await readProblemBody(response, contentType);
+            throw new ApiProblem(response.status, problemBody);
+          }
+        } else {
+          throw new ApiProblem(response.status, problemBody);
+        }
+      } else {
+        throw new ApiProblem(response.status, problemBody);
+      }
+    } else {
+      throw new ApiProblem(response.status, problemBody);
+    }
   }
   if (response.status === 204) {
     return undefined as ResponseBody<P, M>;

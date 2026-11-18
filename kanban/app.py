@@ -9,11 +9,15 @@ from __future__ import annotations
 import importlib
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi import APIRouter, FastAPI, Request, Response, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import HTMLResponse, RedirectResponse
@@ -114,6 +118,43 @@ def _mount_api_docs_and_manifest(app: FastAPI) -> None:
         )
 
 
+async def verify_schema_head(session_factory: RLSSessionFactory) -> None:
+    """Verify that database schema head matches code Alembic migration head."""
+    ini_candidates = [Path("alembic.ini"), Path("database/alembic.ini")]
+    ini_file = next((p for p in ini_candidates if p.is_file()), None)
+    if not ini_file:
+        return
+
+    try:
+        cfg = Config(str(ini_file))
+        script = ScriptDirectory.from_config(cfg)
+        code_heads = set(script.get_heads())
+        if not code_heads:
+            return
+
+        engine = getattr(session_factory, "_engine", None)
+        if engine is None:
+            return
+
+        db_heads: set[str] = set()
+        async with engine.connect() as conn:
+            res = await conn.execute(text("SELECT version_num FROM alembic_version"))
+            rows = res.fetchall()
+            db_heads = {str(row[0]) for row in rows}
+
+        if not code_heads.issubset(db_heads):
+            logger.error(
+                "❌ Database schema is out of date: database head %s is behind code head %s. "
+                "Run migrations before starting the application.",
+                db_heads or "none",
+                code_heads,
+            )
+        else:
+            logger.info("Database schema head verified: %s", db_heads)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Database schema head check skipped or failed: %s", exc)
+
+
 def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
     """Initialize RLSSessionFactory and auth state from settings when not pre-configured."""
     app_settings = getattr(app.state, "settings", None)
@@ -170,6 +211,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     should_run = getattr(app.state, "enable_background_jobs", False)
 
     if session_target is not None:
+        try:
+            await verify_schema_head(session_target)
+        except Exception:
+            logger.debug("Startup schema-head check skipped or failed", exc_info=True)
         try:
             key_material = getattr(app.state, "key_material", None)
             app_settings = getattr(app.state, "settings", None)

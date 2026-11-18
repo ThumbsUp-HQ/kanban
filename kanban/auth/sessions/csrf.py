@@ -18,6 +18,12 @@ from starlette.responses import JSONResponse, Response
 
 from kanban.api.problems import Problem
 from kanban.api.request_id import get_request_id
+from kanban.auth.sessions.cookies import (
+    build_clear_cookie_header,
+    build_clear_fallback_cookie_header,
+    extract_session_cookie,
+    is_plain_http,
+)
 from kanban.security.keys import derive_subkey
 from kanban.settings import get_settings
 
@@ -157,6 +163,12 @@ def _get_allowed_origins(request: Request, public_origin: str | None) -> set[str
     allowed: set[str] = set()
     if public_origin:
         allowed.add(public_origin)
+        try:
+            parsed = urlsplit(public_origin)
+            if parsed.scheme and parsed.netloc:
+                allowed.add(f"{parsed.scheme}://{parsed.netloc}".rstrip("/"))
+        except Exception:  # noqa: BLE001, S110
+            pass
     host = request.headers.get("host")
     if host:
         clean_host = host.strip()
@@ -311,20 +323,43 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api/") or path in CSRF_EXEMPT_PATHS:
             return await call_next(request)
 
+        # Double-submit token check against resolved session id
+        session_id = await self._resolve_session_id(request)
+        cookie_header = request.headers.get("cookie")
+        has_session_cookie = bool(extract_session_cookie(cookie_header))
+        is_dead_session = has_session_cookie and session_id == PRE_SESSION_ID
+
         # Defense-in-depth: Sec-Fetch-Site and Origin verification
         meta_err = self._validate_metadata(request)
         if meta_err is not None:
-            return self._csrf_rejected_response(meta_err)
+            return self._csrf_rejected_response(
+                meta_err, request=request, is_dead_session=is_dead_session
+            )
 
-        # Double-submit token check against resolved session id
-        session_id = await self._resolve_session_id(request)
         token_err = self._validate_double_submit(request, session_id)
         if token_err is not None:
-            return self._csrf_rejected_response(token_err)
+            return self._csrf_rejected_response(
+                token_err, request=request, is_dead_session=is_dead_session
+            )
 
-        return await call_next(request)
+        response = await call_next(request)
+        if is_dead_session:
+            response.raw_headers.append(
+                (b"set-cookie", build_clear_cookie_header().encode("latin-1"))
+            )
+            if is_plain_http(request):
+                response.raw_headers.append(
+                    (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
+                )
+        return response
 
-    def _csrf_rejected_response(self, detail: str) -> JSONResponse:
+    def _csrf_rejected_response(
+        self,
+        detail: str,
+        *,
+        request: Request | None = None,
+        is_dead_session: bool = False,
+    ) -> JSONResponse:
         """Construct standard RFC 7807 403 problem response for CSRF failure."""
         problem = Problem(
             type="https://kanban.hackedyour.info/problems/csrf-rejected",
@@ -334,8 +369,27 @@ class CsrfMiddleware(BaseHTTPMiddleware):
             code="CSRF_REJECTED",
             request_id=get_request_id(),
         )
-        return JSONResponse(
+        resp = JSONResponse(
             status_code=403,
             content=problem.model_dump(exclude_none=True),
             media_type="application/problem+json",
         )
+        if request is not None and is_dead_session:
+            # Clear stale session cookies (Max-Age=0) and reissue valid pre-session CSRF cookie
+            resp.raw_headers.append((b"set-cookie", build_clear_cookie_header().encode("latin-1")))
+            if is_plain_http(request):
+                resp.raw_headers.append(
+                    (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
+                )
+            fresh_csrf = generate_csrf_token(PRE_SESSION_ID, self._get_key(request))
+            resp.raw_headers.append(
+                (b"set-cookie", build_set_csrf_cookie_header(fresh_csrf).encode("latin-1"))
+            )
+            if is_plain_http(request):
+                resp.raw_headers.append(
+                    (
+                        b"set-cookie",
+                        build_set_fallback_csrf_cookie_header(fresh_csrf).encode("latin-1"),
+                    )
+                )
+        return resp

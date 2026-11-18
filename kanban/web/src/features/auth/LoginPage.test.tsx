@@ -546,7 +546,7 @@ describe('LoginPage (KB-P3-35)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Sign-in is unavailable right now.'),
+        screen.getByText('Server error. Please contact your administrator.'),
       ).toBeDefined();
     });
   });
@@ -699,6 +699,8 @@ describe('LoginPage (KB-P3-35)', () => {
 
     const copyBtn = screen.getByRole('button', { name: 'Copy' });
     fireEvent.click(copyBtn);
+    // Double click to cover clearTimeout
+    fireEvent.click(copyBtn);
 
     await waitFor(() => {
       expect(writeTextSpy).toHaveBeenCalledWith(
@@ -746,5 +748,36 @@ describe('LoginPage (KB-P3-35)', () => {
     const { unmount } = render(<LoginPage />);
     unmount();
     resolveCards?.({ cards: mock4Cards });
+  });
+
+  it('covers session mfa_pending bootstrap and remember-me toggle', async () => {
+    vi.spyOn(authApi, 'fetchSessionInfo').mockResolvedValueOnce({
+      authenticated: true,
+      mfa_pending: true,
+      session_id: 'sess-mfa-bootstrap',
+    });
+    vi.spyOn(authApi, 'fetchAuthCards').mockResolvedValue({ cards: mock4Cards });
+
+    render(<LoginPage />);
+
+    // Session mfa_pending boots directly into SecondFactorStep
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Authenticator code/i })).toBeDefined();
+    });
+
+    // Cancel back to login form
+    fireEvent.click(screen.getByRole('button', { name: /Cancel and return to sign-in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Okta SSO')).toBeDefined();
+    });
+
+    // Toggle remember-me checkbox
+    const rememberMeCheckbox = screen.getByTestId<HTMLInputElement>('login-remember-me-checkbox');
+    expect(rememberMeCheckbox.checked).toBe(true);
+    fireEvent.click(rememberMeCheckbox);
+    expect(rememberMeCheckbox.checked).toBe(false);
+    fireEvent.click(rememberMeCheckbox);
+    expect(rememberMeCheckbox.checked).toBe(true);
   });
 });

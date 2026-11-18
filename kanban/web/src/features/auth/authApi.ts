@@ -90,6 +90,25 @@ export interface FormattedError {
   retryAfterSeconds?: number;
 }
 
+export interface SessionInfoResponse {
+  authenticated: boolean;
+  user?: {
+    id: string;
+    username: string;
+    display_name?: string;
+    role?: string;
+    email?: string | null;
+  } | null;
+  mfa_pending?: boolean;
+  session_id?: string | null;
+  csrf_token?: string;
+}
+
+export async function fetchSessionInfo(): Promise<SessionInfoResponse> {
+  const result = await apiFetch('GET', '/api/v1/auth/session' as never);
+  return result as SessionInfoResponse;
+}
+
 /**
  * Maps API errors into uniform, safe error copy preventing principal enumeration (Action 8, Mandatory Test Case 5).
  */
@@ -98,6 +117,20 @@ export function formatAuthError(error: unknown): FormattedError {
     const code = error.code;
     if (code === 'INVALID_CREDENTIALS') {
       return { message: 'Sign-in failed. Check your credentials and try again.', code };
+    }
+    if (code === 'CSRF_REJECTED' || (error.status === 403 && String(error.title).includes('CSRF'))) {
+      return {
+        message: 'Your browser session token is out of date - reload the page and try again.',
+        code: 'CSRF_REJECTED',
+      };
+    }
+    if (code === 'INTERNAL_ERROR' || error.status >= 500) {
+      const rawReqId = error.data.request_id ?? error.data.requestId;
+      const reqId = typeof rawReqId === 'string' ? rawReqId : undefined;
+      const message = reqId
+        ? `Server error (Request ID: ${reqId}). Please contact your administrator.`
+        : 'Server error. Please contact your administrator.';
+      return { message, code: code !== 'UNKNOWN' ? code : 'INTERNAL_ERROR' };
     }
     if (code === 'RATE_LIMITED') {
       const retryAfter = parseRetryAfter(
@@ -233,6 +266,10 @@ export async function submitSetupClaim(body: {
   display_name: string;
   password: string;
   email?: string;
+  workspace_name?: string;
+  workspace_slug?: string;
+  project_name?: string;
+  project_key?: string;
 }): Promise<SetupClaimResponse> {
   const result = await apiFetch('POST', '/api/v1/setup/claim' as never, { body });
   return result as SetupClaimResponse;

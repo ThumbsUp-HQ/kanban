@@ -246,6 +246,14 @@ describe('DocsWorkspaceView', () => {
     const failingFetch = vi.fn().mockRejectedValueOnce(new Error('Offline'));
     expect(await ensureCustomFieldsCsrfToken(failingFetch)).toBeNull();
 
+    // Missing csrf_token in response returns null
+    const emptyTokenFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ authenticated: true }),
+    });
+    expect(await ensureCustomFieldsCsrfToken(emptyTokenFetch)).toBeNull();
+
+    let returnCsrf = true;
     const originalFetch = globalThis.fetch;
     const baseFetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url =
@@ -258,7 +266,12 @@ describe('DocsWorkspaceView', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ authenticated: true, csrf_token: 'cf-csrf-token-777' }),
+          json: () =>
+            Promise.resolve(
+              returnCsrf
+                ? { authenticated: true, csrf_token: 'cf-csrf-token-777' }
+                : { authenticated: true }
+            ),
         } as Response);
       }
       if (url === '/api/v1/projects/KAN/custom-fields' && (!init?.method || init.method === 'GET')) {
@@ -339,6 +352,19 @@ describe('DocsWorkspaceView', () => {
       await globalThis.fetch(new Request('http://localhost/api/v1/projects/KAN/custom-fields'), {
         method: 'POST',
       });
+      // Also call with existing X-CSRF-Token header to cover rawHeaders['X-CSRF-Token'] branch
+      await globalThis.fetch(new Request('http://localhost/api/v1/projects/KAN/custom-fields'), {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': 'existing-cf-token' },
+      });
+
+      // Also call when session returns no token so ensureCustomFieldsCsrfToken returns null falling back to ''
+      returnCsrf = false;
+      document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      await globalThis.fetch(new Request('http://localhost/api/v1/projects/KAN/custom-fields'), {
+        method: 'POST',
+      });
+      returnCsrf = true;
 
       fireEvent.change(screen.getByTestId('field-name-input'), {
         target: { value: 'CVSS Score' },
@@ -363,6 +389,57 @@ describe('DocsWorkspaceView', () => {
       unmount();
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('covers ProjectCustomFieldsSettingsRoute capabilities PROJECT_ADMIN, empty capabilities, role query params, and query error', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_m, url) => {
+      if (url.includes('/api/v1/projects/PROJ_ADMIN')) {
+        return Promise.resolve({ capabilities: ['PROJECT_ADMIN'] });
+      }
+      if (url.includes('/api/v1/projects/ADMIN_CAP')) {
+        return Promise.resolve({ capabilities: ['ADMIN'] });
+      }
+      if (url.includes('/api/v1/projects/EMPTY_OBJ')) {
+        return Promise.resolve({});
+      }
+      if (url.includes('/api/v1/projects/NO_CAPS')) {
+        return Promise.resolve({ capabilities: [] });
+      }
+      if (url.includes('/api/v1/projects/ERR_CAPS')) {
+        return Promise.reject(new Error('Project fetch failure'));
+      }
+      return Promise.resolve({});
+    });
+
+    const testCases = [
+      { entry: '/projects/PROJ_ADMIN/settings/custom-fields', expectedId: 'custom-fields-editor-layout' },
+      { entry: '/projects/ADMIN_CAP/settings/custom-fields', expectedId: 'custom-fields-editor-layout' },
+      { entry: '/projects/EMPTY_OBJ/settings/custom-fields', expectedId: 'not-found-view' },
+      { entry: '/projects/NO_CAPS/settings/custom-fields', expectedId: 'not-found-view' },
+      { entry: '/projects/KAN/settings/custom-fields?role=member', expectedId: 'not-found-view' },
+      { entry: '/projects/KAN/settings/custom-fields?role=viewer', expectedId: 'not-found-view' },
+      { entry: '/projects/ERR_CAPS/settings/custom-fields', expectedId: 'custom-fields-editor-layout' },
+    ];
+
+    for (const tc of testCases) {
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={[tc.entry]}>
+            <Routes>
+              <Route
+                path="/projects/:projectKey/settings/custom-fields"
+                element={<ProjectCustomFieldsSettingsRoute />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByTestId(tc.expectedId)).toBeDefined();
+      unmount();
     }
   });
 });

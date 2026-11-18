@@ -7,6 +7,8 @@ import {
   toggleAdminAuthCardEnabled,
   reorderAdminAuthCard,
   testAuthCardHandshake,
+  testDraftAuthCardHandshake,
+  parseGoogleOAuthJson,
   deleteAdminAuthCard,
   sanitizeAdminAuthCard,
   type AdminAuthCard,
@@ -178,5 +180,38 @@ describe('adminAuthApi (KB-P3-36)', () => {
     vi.spyOn(client, 'apiFetch').mockResolvedValue({});
     const res = await fetchAdminAuthCards();
     expect(res.cards).toEqual([]);
+  });
+
+  it('covers testDraftAuthCardHandshake and parseGoogleOAuthJson API calls', async () => {
+    vi.spyOn(client, 'apiFetch').mockImplementation((_method, path) => {
+      const pathStr = path as string;
+      if (pathStr.includes('/api/v1/admin/auth-cards/test-handshake')) {
+        return Promise.resolve({ ok: true, check_summary: 'Draft probe passed' });
+      }
+      if (pathStr.includes('/api/v1/admin/auth-cards/parse-google-json')) {
+        return Promise.resolve({ client_id: 'client-123', client_secret: 'sec-456' });
+      }
+      return Promise.resolve({});
+    });
+
+    const draftRes = await testDraftAuthCardHandshake({
+      provider_kind: 'OIDC',
+      slug: 'test-draft',
+      display_name: 'Test Draft',
+      button_subtext: null,
+      icon_preset: 'google',
+      is_enabled: true,
+      auto_provision_users: false,
+      allowed_email_domains: [],
+      public_config: { issuer_url: 'https://accounts.google.com' },
+    });
+
+    expect(draftRes.last_health_status).toBe('HEALTHY');
+    expect(draftRes.check_summary).toBe('Draft probe passed');
+
+    const googleRes = await parseGoogleOAuthJson({
+      google_oauth_json: '{"web":{}}',
+    });
+    expect(googleRes.client_id).toBe('client-123');
   });
 });

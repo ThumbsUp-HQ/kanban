@@ -182,7 +182,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               aalLevel: sessionData.aal_level ?? 1,
               mfaPending: true,
             });
-            void navFn('/setup', { replace: true });
+            void navFn('/login', { replace: true });
             return;
           }
 
