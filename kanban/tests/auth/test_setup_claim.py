@@ -176,8 +176,12 @@ async def test_case_1_positive_full_lifecycle(
     )
     assert token is not None
     assert re.match(r"^kb_setup_[A-Za-z0-9_-]{43}$", token)
-    expected_url = f"First-boot setup URL: {setup_settings.effective_origin}/setup?token={token}\n"
-    assert expected_url in out.getvalue()
+    expected_banner = (
+        f"👍 First-boot setup URL: {setup_settings.effective_origin}/setup"
+        "?token=[REDACTED:SETUP_TOKEN]"
+    )
+    assert expected_banner in out.getvalue()
+    assert token not in out.getvalue()
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
@@ -801,7 +805,11 @@ async def test_mint_token_defaults_coverage(
 
     tok = await svc.mint_token_if_uninitialized(stdout=None)
     assert tok is not None
-    assert f"First-boot setup URL: http://localhost:8080/setup?token={tok}\n" in captured.getvalue()
+    expected_msg = (
+        "👍 First-boot setup URL: http://localhost:8080/setup?token=[REDACTED:SETUP_TOKEN]"
+    )
+    assert expected_msg in captured.getvalue()
+    assert tok not in captured.getvalue()
 
     # Test _resolve_key_material when key_material=None
     svc_no_km = SetupBootstrapService(factory, key_material=None, settings=None)

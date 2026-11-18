@@ -32,6 +32,7 @@ __all__ = [
     "default_context_scrubber",
     "map_exception_to_exit_code",
     "render_report",
+    "resolve_report_status_symbol",
 ]
 
 ContextScrubber = Callable[[str], str]
@@ -163,6 +164,17 @@ def _render_schema_section(
     return lines
 
 
+def resolve_report_status_symbol(report: ValidationReport) -> str:
+    """Return semantic status symbol (👍 / ⛔ / ❌) for a validation report."""
+    if report.schema_status.valid:
+        return "👍"
+    status_lower = (report.schema_status.status or "").lower()
+    err_lower = (report.schema_status.error_code or "").lower()
+    if "error" in status_lower or "error" in err_lower or "runtime" in status_lower:
+        return "❌"
+    return "⛔"
+
+
 def render_report(
     report: ValidationReport,
     fmt: Literal["text", "json"],
@@ -214,4 +226,14 @@ def render_report(
                 f"  - Provider: {cid} | Outcome: {outcome} | Breaker: {st} | TTFT: {ttft_fmt}"
             )
 
-    return "\n".join(lines)
+    icon = resolve_report_status_symbol(report)
+    prefixed_lines: list[str] = []
+    for line in lines:
+        if not line:
+            prefixed_lines.append(icon)
+        elif line.startswith(("👍", "⛔", "❌")):
+            prefixed_lines.append(line)
+        else:
+            prefixed_lines.append(f"{icon} {line}")
+
+    return "\n".join(prefixed_lines)

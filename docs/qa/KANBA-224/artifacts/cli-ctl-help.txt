@@ -1,0 +1,18 @@
+usage: kanban-ctl [-h]
+                  {backup,restore,promote,jobs,auth,import,cutover,db} ...
+
+Kanban platform operational management utility
+
+positional arguments:
+  {backup,restore,promote,jobs,auth,import,cutover,db}
+    backup              Encrypted backup creation and verification commands
+    restore             Restore database from encrypted backup
+    promote             Standalone to production promotion helpers
+    jobs                Background jobs and maintenance operations
+    auth                Authentication and access control management
+    import              Data migration and external import utilities
+    cutover             Cutover verification and validation tools
+    db                  Database migration and schema governance commands
+
+options:
+  -h, --help            show this help message and exit

@@ -4,14 +4,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import logging
+import os
 import re
 import secrets
 import sys
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
@@ -103,8 +106,30 @@ class SetupBootstrapService:
         if self._settings is not None:
             origin = self._settings.effective_origin
 
+        token_file = os.environ.get("KB_SETUP_TOKEN_FILE", "/run/kanban/setup_token")
+
+        def _persist_token(dest: str, secret: str) -> bool:
+            try:
+                p = Path(dest)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(secret, encoding="utf-8")
+                p.chmod(0o600)
+            except OSError:
+                return False
+            else:
+                return True
+
+        written = await asyncio.to_thread(_persist_token, token_file, raw_token)
+        file_hint = (
+            f" (claim token written to {token_file})"
+            if written
+            else " (token claim available via setup wizard)"
+        )
+
         out_stream = stdout if stdout is not None else sys.stdout
-        out_stream.write(f"First-boot setup URL: {origin}/setup?token={raw_token}\n")
+        out_stream.write(
+            f"👍 First-boot setup URL: {origin}/setup?token=[REDACTED:SETUP_TOKEN]{file_hint}\n"
+        )
         out_stream.flush()
 
         return raw_token

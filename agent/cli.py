@@ -144,7 +144,7 @@ class _CustomArgumentParser(argparse.ArgumentParser):
     """Custom ArgumentParser exiting with code 2 on flag or validation errors."""
 
     def error(self, message: str) -> NoReturn:
-        sys.stderr.write(f"error: {message}\n")
+        sys.stderr.write(f"❌ error: {message}\n")
         sys.exit(ExitCode.SCHEMA_OR_POLICY_VIOLATION.value)
 
 
@@ -175,7 +175,7 @@ async def _async_main(
         else:
             report, exit_code = await spec.handler(args)
     except Exception as err:  # noqa: BLE001  # Top-level CLI boundary catches all errors
-        sys.stderr.write(f"error: {err}\n")
+        sys.stderr.write(f"❌ error: {err}\n")
         return ExitCode.RUNTIME_ERROR.value
 
     output = render_report(

@@ -14,7 +14,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from database.models.projects import Project, WorkflowState
-from database.testing.pg_harness import build_dsn
 from kanban.jobs.auto_archive import run_auto_archive
 from kanban.jobs.board_rebalance import rebalance_column
 from kanban.jobs.trash_purge import run_trash_purge
@@ -127,10 +126,14 @@ def _handle_board_rebalance(args: argparse.Namespace) -> int:
 
 async def _run_board_rebalance(project_filter: str | None = None) -> int:
     """Run board rebalancing across columns."""
-    db_name = os.environ.get("KB_DB_NAME") or os.environ.get("PGDATABASE", "kanban_test")
-    socket_dir = os.environ.get("KB_TEST_PGHOST") or os.environ.get("PGHOST")
-    user = os.environ.get("KB_TEST_PGUSER") or os.environ.get("PGUSER")
-    dsn = build_dsn(database=db_name, host=socket_dir, user=user)
+    raw_dsn = os.environ.get("KANBAN_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    if raw_dsn:
+        dsn = raw_dsn
+    else:
+        db_name = os.environ.get("KB_DB_NAME") or os.environ.get("PGDATABASE", "kanban_test")
+        socket_dir = os.environ.get("KB_TEST_PGHOST") or os.environ.get("PGHOST", "/tmp/kb-pgsock")  # noqa: S108
+        user = os.environ.get("KB_TEST_PGUSER") or os.environ.get("PGUSER", "kanban_test")
+        dsn = f"postgresql+asyncpg://{user}@/{db_name}?host={socket_dir}"
     engine = create_async_engine(dsn)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 

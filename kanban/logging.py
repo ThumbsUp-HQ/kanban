@@ -28,11 +28,13 @@ __all__ = [
     "KanbanLogFormatter",
     "KanbanStreamHandler",
     "configure_logging",
+    "extract_http_status_code",
     "log_blocked",
     "log_error",
     "log_ok",
     "sanitize_log_text",
     "scrub_log_secrets",
+    "status_symbol_for_http_status",
     "status_symbol_for_level",
 ]
 
@@ -51,6 +53,9 @@ _RE_BIDI_SPOOF: Final[re.Pattern[str]] = re.compile(r"[\u202a-\u202e\u2066-\u206
 _RE_C0_C1_CONTROL: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 # Credential scrubbing patterns for log entries
+_RE_SETUP_TOKEN: Final[re.Pattern[str]] = re.compile(
+    r"\bkb_setup_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
+)
 _RE_COOKIES: Final[re.Pattern[str]] = re.compile(
     r"\b(__Host-kb_session|kb_session|kb_csrf)=(?!\[REDACTED:)([^;\s&]+)"
 )
@@ -60,6 +65,9 @@ _RE_DSN_PASSWORD: Final[re.Pattern[str]] = re.compile(
 _RE_KV_SECRETS: Final[re.Pattern[str]] = re.compile(
     r"(?i)\b(password|client_secret|secret)\s*([=:]\s*(?:\\*['\"])?)"
     r"(?!\[REDACTED:)([^;'\"\s,]+)((?:\\*['\"])?)"
+)
+_RE_HTTP_STATUS_IN_ACCESS_LOG: Final[re.Pattern[str]] = re.compile(
+    r'"\s+([1-5]\d\d)\b'
 )
 
 _PACKAGE_LOGGERS: Final[tuple[str, ...]] = (
@@ -72,6 +80,20 @@ _PACKAGE_LOGGERS: Final[tuple[str, ...]] = (
     "uvicorn.access",
     "alembic",
 )
+
+
+_HTTP_CLIENT_ERROR_MIN: Final = 400
+_HTTP_SERVER_ERROR_MIN: Final = 500
+_UVICORN_ACCESS_ARGS_LEN: Final = 5
+_UVICORN_ACCESS_STATUS_IDX: Final = 4
+
+
+def _coerce_int_status(val: object) -> int | None:
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str) and val.isdigit():
+        return int(val)
+    return None
 
 
 def status_symbol_for_level(levelno: int) -> str:
@@ -88,10 +110,54 @@ def status_symbol_for_level(levelno: int) -> str:
     return STATUS_ERROR
 
 
+def status_symbol_for_http_status(status_code: int) -> str:
+    """Return the semantic status symbol for an HTTP status code.
+
+    - 1xx, 2xx, 3xx: 👍
+    - 4xx: ⛔
+    - 5xx: ❌
+    """
+    if status_code < _HTTP_CLIENT_ERROR_MIN:
+        return STATUS_OK
+    if status_code < _HTTP_SERVER_ERROR_MIN:
+        return STATUS_BLOCKED
+    return STATUS_ERROR
+
+
+def extract_http_status_code(record: logging.LogRecord) -> int | None:
+    """Extract HTTP status code from LogRecord if present."""
+    status = _coerce_int_status(getattr(record, "status_code", None))
+    if status is not None:
+        return status
+
+    args = record.args
+    if isinstance(args, tuple) and len(args) >= _UVICORN_ACCESS_ARGS_LEN:
+        status = _coerce_int_status(args[_UVICORN_ACCESS_STATUS_IDX])
+        if status is not None:
+            return status
+
+    if isinstance(args, dict):
+        status = _coerce_int_status(args.get("status_code") or args.get("status"))
+        if status is not None:
+            return status
+
+    name = record.name or ""
+    if "access" in name or name.startswith("uvicorn"):
+        msg = record.getMessage() if hasattr(record, "getMessage") else str(record.msg)
+        match = _RE_HTTP_STATUS_IN_ACCESS_LOG.search(msg)
+        if match:
+            return int(match.group(1))
+
+    return None
+
+
 def scrub_log_secrets(text: str) -> str:
     """Scrub sensitive credentials, tokens, session cookies, and database DSN passwords."""
     if not text:
         return text
+
+    # Redact setup tokens to explicit [REDACTED:SETUP_TOKEN]
+    text = _RE_SETUP_TOKEN.sub("[REDACTED:SETUP_TOKEN]", text)
 
     # Pass through primary secret scrubber (API keys, JWT, Bearer, kb_* keys, PEM)
     text = scrub_text(text)
@@ -142,13 +208,45 @@ class KanbanLogFilter(logging.Filter):
     """Logging filter that attaches the semantic status icon and active request_id."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Inject status_icon and request_id attributes into record."""
-        record.status_icon = status_symbol_for_level(record.levelno)
+        """Inject status_icon and request_id attributes with accurate HTTP severity mapping."""
+        http_status = extract_http_status_code(record)
+        if http_status is not None:
+            record.status_icon = status_symbol_for_http_status(http_status)
+            if http_status >= _HTTP_SERVER_ERROR_MIN:
+                record.levelno = logging.ERROR
+                record.levelname = "ERROR"
+            elif http_status >= _HTTP_CLIENT_ERROR_MIN:
+                record.levelno = logging.WARNING
+                record.levelname = "WARNING"
+            elif record.levelno < logging.WARNING:
+                record.levelno = logging.INFO
+                record.levelname = "INFO"
+        else:
+            record.status_icon = status_symbol_for_level(record.levelno)
+
         req_id = getattr(record, "request_id", None)
         if not req_id or req_id == "-":
             ctx_id = _REQUEST_ID_CTX.get()
             record.request_id = ctx_id or "-"
         return True
+
+
+def _resolve_record_status_icon(record: logging.LogRecord) -> str:
+    status_icon = getattr(record, "status_icon", None)
+    if status_icon is not None:
+        return str(status_icon)
+
+    http_status = extract_http_status_code(record)
+    if http_status is None:
+        return status_symbol_for_level(record.levelno)
+
+    if http_status >= _HTTP_SERVER_ERROR_MIN and record.levelno < logging.ERROR:
+        record.levelno = logging.ERROR
+        record.levelname = "ERROR"
+    elif http_status >= _HTTP_CLIENT_ERROR_MIN and record.levelno < logging.WARNING:
+        record.levelno = logging.WARNING
+        record.levelname = "WARNING"
+    return status_symbol_for_http_status(http_status)
 
 
 class KanbanLogFormatter(logging.Formatter):
@@ -165,9 +263,8 @@ class KanbanLogFormatter(logging.Formatter):
                 sanitized_msg = sanitized_msg[len(icon) :].lstrip()
                 break
 
-        status_icon = getattr(record, "status_icon", None) or status_symbol_for_level(
-            record.levelno
-        )
+        status_icon = _resolve_record_status_icon(record)
+
         req_id = getattr(record, "request_id", None)
         if not req_id or req_id == "-":
             ctx_id = _REQUEST_ID_CTX.get()

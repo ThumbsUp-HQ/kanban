@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-logs-111e2a1c
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 125 items
+
+kanban/tests/test_logging_standard.py ..................                 [ 14%]
+kanban/tests/auth/test_setup_claim.py .............                      [ 24%]
+agent/tests/cli/test_cli_skeleton.py ...........                         [ 33%]
+agent/tests/cli/test_validate_qa_packet.py ............                  [ 43%]
+agent/tests/cli/test_validate_sparkle.py ..................              [ 57%]
+agent/tests/cli/test_validate_sticky_promo.py .............              [ 68%]
+agent/tests/cli/test_validate_transition.py .........                    [ 75%]
+agent/tests/cli/test_validate_verdict.py ..............                  [ 86%]
+kanban/tests/jobs/test_auto_archive.py ....                              [ 89%]
+kanban/tests/jobs/test_board_rebalance.py .....                          [ 93%]
+kanban/tests/jobs/test_trash_purge.py ........                           [100%]
+
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w1-logs-111e2a1c/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 125 passed, 1 warning in 34.32s ========================

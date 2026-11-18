@@ -21,12 +21,16 @@ from kanban.logging import (
     STATUS_OK,
     KanbanLogFilter,
     KanbanLogFormatter,
+    _find_or_create_handler,
+    _resolve_log_level,
     configure_logging,
+    extract_http_status_code,
     log_blocked,
     log_error,
     log_ok,
     sanitize_log_text,
     scrub_log_secrets,
+    status_symbol_for_http_status,
     status_symbol_for_level,
 )
 from kanban.security.keys import KeyMaterial
@@ -295,8 +299,8 @@ def test_configure_logging_integration(caplog: pytest.LogCaptureFixture) -> None
 
 
 @pytest.mark.asyncio
-async def test_first_boot_setup_url_preserves_stdout() -> None:
-    """Verify SetupBootstrapService outputs First-boot setup URL to stdout unredacted."""
+async def test_first_boot_setup_banner_redacted_with_emoji() -> None:
+    """Verify SetupBootstrapService formats First-boot setup URL with 👍 and redacted token."""
     mock_session = AsyncMock()
     mock_res = MagicMock()
     mock_res.scalar_one.return_value = True
@@ -320,7 +324,8 @@ async def test_first_boot_setup_url_preserves_stdout() -> None:
     assert token is not None
     assert token.startswith("kb_setup_")
     rendered = out_buf.getvalue()
-    assert f"First-boot setup URL: http://localhost:8080/setup?token={token}\n" == rendered
+    assert rendered.startswith("👍 First-boot setup URL: http://localhost:8080/setup?token=[REDACTED:SETUP_TOKEN]")
+    assert token not in rendered
 
 
 def test_standalone_entrypoint_log_level_and_phase_formatting(
@@ -376,3 +381,318 @@ async def test_problem_exception_logging() -> None:
     assert "HTTP 404 NOT_FOUND" in lines[0]
     assert lines[1].startswith("❌ ")
     assert "HTTP 500 INTERNAL_ERROR" in lines[1]
+
+
+# -----------------------------------------------------------------------------
+# Case 4: HTTP Status Mapping & Access Logging (KANBA-224)
+# -----------------------------------------------------------------------------
+def test_http_status_symbol_mapping() -> None:
+    """Verify HTTP status code ranges map to canonical status emojis."""
+    # 2xx / 3xx -> STATUS_OK (👍)
+    assert status_symbol_for_http_status(200) == STATUS_OK
+    assert status_symbol_for_http_status(201) == STATUS_OK
+    assert status_symbol_for_http_status(204) == STATUS_OK
+    assert status_symbol_for_http_status(301) == STATUS_OK
+    assert status_symbol_for_http_status(304) == STATUS_OK
+
+    # 4xx -> STATUS_BLOCKED (⛔)
+    assert status_symbol_for_http_status(400) == STATUS_BLOCKED
+    assert status_symbol_for_http_status(401) == STATUS_BLOCKED
+    assert status_symbol_for_http_status(403) == STATUS_BLOCKED
+    assert status_symbol_for_http_status(404) == STATUS_BLOCKED
+    assert status_symbol_for_http_status(422) == STATUS_BLOCKED
+    assert status_symbol_for_http_status(429) == STATUS_BLOCKED
+
+    # 5xx -> STATUS_ERROR (❌)
+    assert status_symbol_for_http_status(500) == STATUS_ERROR
+    assert status_symbol_for_http_status(502) == STATUS_ERROR
+    assert status_symbol_for_http_status(503) == STATUS_ERROR
+    assert status_symbol_for_http_status(504) == STATUS_ERROR
+
+
+def test_uvicorn_access_log_severity_mapping() -> None:
+    """Verify uvicorn.access records map status codes to 👍/⛔/❌ and accurate log levels."""
+    stream = io.StringIO()
+    configure_logging(level="INFO", stream=stream)
+
+    access_logger = logging.getLogger("uvicorn.access")
+
+    # 200 OK -> 👍 [INFO]
+    access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:45000",
+        "GET",
+        "/api/v1/issues",
+        "1.1",
+        200,
+    )
+    # 304 Not Modified -> 👍 [INFO]
+    access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:45001",
+        "GET",
+        "/static/bundle.js",
+        "1.1",
+        304,
+    )
+    # 401 Unauthorized -> ⛔ [WARNING]
+    access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:45002",
+        "GET",
+        "/api/v1/admin/auth-cards",
+        "1.1",
+        401,
+    )
+    # 404 Not Found -> ⛔ [WARNING]
+    access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:45003",
+        "GET",
+        "/api/v1/missing",
+        "1.1",
+        404,
+    )
+    # 429 Too Many Requests -> ⛔ [WARNING]
+    access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:45004",
+        "POST",
+        "/api/v1/setup/claim",
+        "1.1",
+        429,
+    )
+    # 500 Internal Server Error -> ❌ [ERROR]
+    access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:45005",
+        "POST",
+        "/api/v1/issues",
+        "1.1",
+        500,
+    )
+
+    out = stream.getvalue()
+    lines = [line for line in out.splitlines() if line]
+    assert len(lines) == 6
+
+    # 200 line
+    assert lines[0].startswith("👍 ")
+    assert "[INFO]" in lines[0]
+    expected_uvicorn_200 = (
+        '[uvicorn.access] [req=-] 127.0.0.1:45000 - "GET /api/v1/issues HTTP/1.1" 200'
+    )
+    assert expected_uvicorn_200 in lines[0]
+
+    # 304 line
+    assert lines[1].startswith("👍 ")
+    assert "[INFO]" in lines[1]
+    assert "304" in lines[1]
+
+    # 401 line
+    assert lines[2].startswith("⛔ ")
+    assert "[WARNING]" in lines[2]
+    assert "401" in lines[2]
+
+    # 404 line
+    assert lines[3].startswith("⛔ ")
+    assert "[WARNING]" in lines[3]
+    assert "404" in lines[3]
+
+    # 429 line
+    assert lines[4].startswith("⛔ ")
+    assert "[WARNING]" in lines[4]
+    assert "429" in lines[4]
+
+    # 500 line
+    assert lines[5].startswith("❌ ")
+    assert "[ERROR]" in lines[5]
+    assert "500" in lines[5]
+
+
+def test_http_status_extraction_sources() -> None:
+    """Verify extract_http_status_code parses args tuple, dict, attr, and regex."""
+    # 1. Attribute
+    rec_attr = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
+    rec_attr.status_code = 404  # type: ignore[attr-defined]
+    assert extract_http_status_code(rec_attr) == 404
+
+    # 2. Tuple args (5-tuple uvicorn format)
+    rec_tuple = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1", "GET", "/path", "1.1", 503),
+        None,
+    )
+    assert extract_http_status_code(rec_tuple) == 503
+
+    # 3. Dict args
+    rec_dict = logging.LogRecord(
+        "custom.access",
+        logging.INFO,
+        "",
+        0,
+        "access event %(status_code)s",
+        ({"status_code": 422},),  # type: ignore[arg-type]
+        None,
+    )
+    assert extract_http_status_code(rec_dict) == 422
+
+    # 4. Message inspection for uvicorn logger
+    rec_msg = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '10.0.0.1 - "GET /api/v1/health HTTP/1.1" 200 OK',
+        (),
+        None,
+    )
+    assert extract_http_status_code(rec_msg) == 200
+
+    # 5. Non-HTTP record returns None
+    rec_none = logging.LogRecord(
+        "kanban.engine", logging.INFO, "", 0, "DB pool initialized", (), None
+    )
+    assert extract_http_status_code(rec_none) is None
+
+
+def test_cli_ctl_help_without_pytest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify kanban.cli.ctl runs --help cleanly without pytest in sys.modules (KANBA-224)."""
+    import sys  # noqa: PLC0415
+
+    from kanban.cli.ctl import main as ctl_main  # noqa: PLC0415
+
+    # Mask pytest and pytest_socket from import system
+    monkeypatch.setitem(sys.modules, "pytest", None)
+    monkeypatch.setitem(sys.modules, "pytest_socket", None)
+
+    code = ctl_main(["--help"])
+    assert code == 0
+
+
+def test_logging_edge_cases_helpers() -> None:
+    """Verify edge cases for sanitization, scrubbing, and log level resolution."""
+    # 1. Empty strings
+    assert sanitize_log_text("") == ""
+    assert scrub_log_secrets("") == ""
+
+    # 2. _resolve_log_level with int and string
+    assert _resolve_log_level(logging.DEBUG) == logging.DEBUG
+    assert _resolve_log_level("ERROR") == logging.ERROR
+
+    # 3. String-only logger calls (defaulting to 'kanban' logger)
+    log_ok("Default string ok")
+    log_blocked("Default string blocked")
+    log_error("Default string error")
+
+
+def test_logging_edge_cases_formatter() -> None:
+    """Verify edge cases for formatters, stack traces, and pre-existing handlers."""
+    fmt = KanbanLogFormatter()
+    rec_404 = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1", "GET", "/missing", "1.1", 404),
+        None,
+    )
+    line_404 = fmt.format(rec_404)
+    assert line_404.startswith("⛔ ")
+    assert "[WARNING]" in line_404
+
+    rec_500 = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1", "POST", "/crash", "1.1", 500),
+        None,
+    )
+    line_500 = fmt.format(rec_500)
+    assert line_500.startswith("❌ ")
+    assert "[ERROR]" in line_500
+
+    rec_stack = logging.LogRecord("test", logging.INFO, "", 0, "Stack test", (), None)
+    rec_stack.stack_info = "Traceback stack information"
+    line_stack = fmt.format(rec_stack)
+    assert " | stack=" in line_stack
+
+    # Formatter directly formatting 200 without filter
+    rec_fmt_200 = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1", "GET", "/ok", "1.1", 200),
+        None,
+    )
+    line_fmt_200 = fmt.format(rec_fmt_200)
+    assert line_fmt_200.startswith("👍 ")
+
+    # Pre-existing non-managed StreamHandler wrapping
+    dummy_root = logging.getLogger("test_root_unique")
+    pre_handler = logging.StreamHandler(io.StringIO())
+    dummy_root.addHandler(pre_handler)
+    found = _find_or_create_handler(dummy_root, None)
+    assert found is pre_handler
+
+    # Configure logging removes pre-existing foreign handler on package loggers
+    alembic_log = logging.getLogger("alembic")
+    foreign_handler = logging.StreamHandler(io.StringIO())
+    alembic_log.addHandler(foreign_handler)
+    configure_logging(level="INFO")
+    assert foreign_handler not in alembic_log.handlers
+
+
+def test_logging_edge_cases_status_extraction_and_filter() -> None:
+    """Verify edge cases for string representations, non-digit args, and request_id."""
+    # extract_http_status_code string representations
+    rec_str_attr = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
+    rec_str_attr.status_code = "404"  # type: ignore[attr-defined]
+    assert extract_http_status_code(rec_str_attr) == 404
+
+    rec_str_tuple = logging.LogRecord(
+        "test", logging.INFO, "", 0, "%s %s %s %s %s", ("ip", "GET", "/", "1.1", "502"), None
+    )
+    assert extract_http_status_code(rec_str_tuple) == 502
+
+    rec_str_dict = logging.LogRecord(
+        "test", logging.INFO, "", 0, "msg", ({"status": "403"},), None  # type: ignore[arg-type]
+    )
+    assert extract_http_status_code(rec_str_dict) == 403
+
+    rec_direct_dict = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
+    rec_direct_dict.args = {"status_code": 401}  # type: ignore[assignment]
+    assert extract_http_status_code(rec_direct_dict) == 401
+
+    rec_direct_dict_str = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
+    rec_direct_dict_str.args = {"status_code": "429"}  # type: ignore[assignment]
+    assert extract_http_status_code(rec_direct_dict_str) == 429
+
+    # Non-digit string candidates
+    bad_args = ("1", "2", "3", "4", "invalid")
+    rec_bad_tuple = logging.LogRecord(
+        "test", logging.INFO, "", 0, "%s %s %s %s %s", bad_args, None
+    )
+    assert extract_http_status_code(rec_bad_tuple) is None
+
+    rec_bad_dict = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
+    rec_bad_dict.args = {"status": "not_a_number"}  # type: ignore[assignment]
+    assert extract_http_status_code(rec_bad_dict) is None
+
+    # Pre-existing request_id preserved in filter
+    flt = KanbanLogFilter()
+    rec_preset_req = logging.LogRecord("test", logging.WARNING, "", 0, "msg", (), None)
+    rec_preset_req.request_id = "req_custom_set"  # type: ignore[attr-defined]
+    rec_preset_req.status_code = 200  # type: ignore[attr-defined]
+    assert flt.filter(rec_preset_req) is True
+    assert rec_preset_req.request_id == "req_custom_set"
+    assert rec_preset_req.levelno == logging.WARNING  # preserved because >= WARNING
