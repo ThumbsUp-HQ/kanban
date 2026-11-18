@@ -51,7 +51,7 @@
 }
 
 .kb-snippet-modal-close-btn:hover {
-  color: #ffffff;
+  color: var(--kb-color-text-primary, var(--fg-primary));
 }
 
 .kb-snippet-key-banner {
@@ -93,9 +93,9 @@
 .kb-snippet-copy-btn {
   height: 34px;
   padding: 0 14px;
-  background-color: #21262d;
-  border: 1px solid var(--border-subtle, #30363d);
-  color: #c9d1d9;
+  background-color: var(--bg-secondary, #f1f5f9);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
+  color: var(--kb-color-text-primary, var(--fg-primary, #111827));
   border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -103,8 +103,8 @@
 }
 
 .kb-snippet-copy-btn:hover {
-  background-color: #30363d;
-  color: #ffffff;
+  background-color: var(--bg-secondary-hover, var(--bg-hover, #e5e7eb));
+  color: var(--kb-color-text-primary, var(--fg-primary, #111827));
 }
 
 .kb-snippet-warning-note {

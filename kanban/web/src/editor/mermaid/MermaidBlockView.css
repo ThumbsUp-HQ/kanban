@@ -50,7 +50,24 @@
 
 .mermaid-block__preview {
   position: relative;
-  min-height: 120px;
+  min-height: 220px;
+}
+
+.mermaid-block__placeholder {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-canvas, #f7f8fa);
+}
+
+.mermaid-block .media-viewport__skeleton {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  color: var(--fg-muted, #525866);
 }
 
 .mermaid-block .media-viewport {

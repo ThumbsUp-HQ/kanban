@@ -6,11 +6,12 @@
   max-width: 960px;
   margin: 0 auto;
   padding: 2rem 1.5rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-settings-header {
   margin-bottom: 2rem;
-  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   padding-bottom: 1rem;
 }
 
@@ -18,12 +19,12 @@
   font-size: 1.75rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
-  color: var(--text-primary, #0f172a);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-settings-subtitle {
   font-size: 0.95rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
   margin: 0;
 }
 
@@ -49,7 +50,7 @@
 .kb-settings-tabs {
   display: flex;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   margin-bottom: 1.5rem;
 }
 
@@ -61,12 +62,12 @@
   cursor: pointer;
   font-size: 0.95rem;
   font-weight: 500;
-  color: var(--text-secondary, #64748b);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
   transition: all 0.2s ease;
 }
 
 .kb-settings-tab:hover {
-  color: var(--text-primary, #0f172a);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-settings-tab-active {
@@ -76,7 +77,8 @@
 }
 
 .kb-settings-panel {
-  background: var(--bg-surface, #ffffff);
+  background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
   border-radius: 8px;
 }
 
@@ -96,7 +98,7 @@
 .kb-form-group label {
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--text-primary, #0f172a);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-form-group-checkbox {
@@ -109,16 +111,16 @@
   gap: 0.5rem;
   cursor: pointer;
   font-size: 0.9rem;
-  color: var(--text-primary, #0f172a);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-input, .kb-textarea, .kb-select {
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-color, #cbd5e1);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #cbd5e1));
   border-radius: 6px;
   font-size: 0.95rem;
-  color: var(--text-primary, #0f172a);
-  background: var(--bg-input, #ffffff);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
+  background: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
 }
 
 .kb-input:focus, .kb-textarea:focus, .kb-select:focus {
@@ -191,21 +193,24 @@
 
 .kb-add-member-form {
   padding: 1rem;
-  background: var(--bg-secondary, #f8fafc);
-  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   border-radius: 6px;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-add-member-form h3 {
   margin: 0 0 0.75rem 0;
   font-size: 1rem;
   font-weight: 600;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-form-row {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .kb-table {
@@ -217,13 +222,17 @@
 
 .kb-table th, .kb-table td {
   padding: 0.75rem;
-  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
 }
 
 .kb-table th {
   font-weight: 600;
-  color: var(--text-secondary, #64748b);
-  background: var(--bg-secondary, #f8fafc);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
+}
+
+.kb-table td {
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-role-badge {
@@ -259,12 +268,12 @@
   display: flex;
   gap: 1rem;
   padding: 1.25rem;
-  border: 1px solid var(--border-color, #e2e8f0);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   border-radius: 8px;
   text-decoration: none;
-  color: inherit;
+  color: var(--kb-color-text-primary, var(--text-primary, inherit));
   transition: all 0.2s ease;
-  background: var(--bg-surface, #ffffff);
+  background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
 }
 
 .kb-integration-card:hover {
@@ -280,12 +289,13 @@
   margin: 0 0 0.25rem 0;
   font-size: 1.05rem;
   font-weight: 600;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-card-content p {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
 }
 
 .kb-danger-zone {
@@ -303,17 +313,19 @@
 .kb-danger-confirm-card {
   margin-top: 1rem;
   padding: 1rem;
-  background: #ffffff;
+  background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
   border-radius: 6px;
-  border: 1px solid var(--border-color, #cbd5e1);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #cbd5e1));
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-blast-radius-box {
-  background: #f8fafc;
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
   padding: 0.75rem;
   border-radius: 4px;
   margin-bottom: 1rem;
   font-size: 0.85rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-blast-radius-box ul {
@@ -339,7 +351,7 @@
   cursor: pointer;
   font-weight: 500;
   font-size: 0.95rem;
-  color: var(--text-primary, #0f172a);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-toggle-text {
@@ -349,7 +361,7 @@
 .kb-member-handle {
   display: block;
   font-size: 0.8rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
 }
 
 .kb-btn-danger-subtle {
@@ -406,18 +418,21 @@
 .kb-groups-header-row h3 {
   margin: 0 0 0.25rem 0;
   font-size: 1.25rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-add-group-form {
-  background: var(--bg-surface-raised, #f8fafc);
-  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   border-radius: 6px;
   padding: 1rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-add-group-form h4 {
   margin: 0 0 0.75rem 0;
   font-size: 0.95rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-groups-layout {
@@ -434,13 +449,14 @@
 }
 
 .kb-groups-list-sidebar {
-  border-right: 1px solid var(--border-color, #e2e8f0);
+  border-right: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   padding-right: 1rem;
 }
 
 .kb-groups-list-sidebar h4 {
   margin: 0 0 0.75rem 0;
   font-size: 0.95rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-groups-list {
@@ -475,12 +491,12 @@
 .kb-group-item-name {
   font-weight: 600;
   font-size: 0.9rem;
-  color: var(--text-primary, #0f172a);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-group-item-handle {
   font-size: 0.75rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
 }
 
 .kb-groups-detail-pane {
@@ -492,26 +508,30 @@
 .kb-group-detail-header h4 {
   margin: 0 0 0.2rem 0;
   font-size: 1.15rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-group-detail-handle {
   font-size: 0.85rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
 }
 
 .kb-add-group-member-box {
-  background: var(--bg-surface-raised, #f8fafc);
-  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   border-radius: 6px;
   padding: 0.85rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-add-group-member-box h5 {
   margin: 0 0 0.5rem 0;
   font-size: 0.9rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
 
 .kb-group-members-table-wrapper h5 {
   margin: 0 0 0.5rem 0;
   font-size: 0.95rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }

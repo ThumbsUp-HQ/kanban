@@ -20,12 +20,6 @@
   flex-direction: column;
 }
 
-@media (max-width: 767px) {
-  .kb-main-canvas {
-    padding: 16px;
-  }
-}
-
 .board-canvas {
   height: 100%;
   box-sizing: border-box;
@@ -45,9 +39,21 @@
   padding-bottom: var(--space-4, 16px);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
+  .kb-main-canvas {
+    padding: 12px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  .board-canvas {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
   .board-lanes {
     scroll-snap-type: x proximity;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -217,6 +223,13 @@
 }
 
 .board-card-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 2px 4px;
+  box-sizing: border-box;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.8125rem;
   font-weight: 600;

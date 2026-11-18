@@ -240,10 +240,15 @@ export function MermaidBlockView({
         </div>
       )}
 
-      {/* Loading State */}
-      {mode === 'preview' && status === 'rendering' && !blobUrl && (
-        <div className="mermaid-block__preview" data-testid={`${testId}-loading`}>
-          <div className="media-viewport__skeleton">Rendering Mermaid diagram...</div>
+      {/* Loading & Deterministic Min-Height Placeholder Container (KANBA-213: CLS <= 0.10) */}
+      {mode === 'preview' && (status === 'rendering' || status === 'idle' || !blobUrl) && status !== 'fallback' && (
+        <div
+          className="mermaid-block__preview mermaid-block__placeholder"
+          data-testid={`${testId}-loading`}
+        >
+          <div className="media-viewport__skeleton">
+            Rendering Mermaid diagram...
+          </div>
         </div>
       )}
 

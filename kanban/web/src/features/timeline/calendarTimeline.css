@@ -811,14 +811,43 @@
   margin-left: 8px;
 }
 
-/* Mobile Timeline (< 767px): shrink left pane to 132px key rail */
-@media (max-width: 767px) {
+/* Mobile Timeline (<= 768px, KANBA-213: zero horizontal overflow) */
+@media (max-width: 768px) {
+  .timeline-view {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .timeline-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .timeline-toolbar-left,
+  .timeline-toolbar-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .timeline-split-container {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .timeline-left-pane {
-    width: 132px;
-    min-width: 132px;
+    width: 90px;
+    min-width: 90px;
+    flex-shrink: 0;
   }
 
   .timeline-left-row .timeline-left-row-summary {
     display: none;
+  }
+
+  .timeline-right-pane {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

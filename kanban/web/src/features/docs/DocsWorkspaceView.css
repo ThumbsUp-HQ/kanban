@@ -854,7 +854,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   RESPONSIVE BREAKPOINTS (Desktop >= 1280, Tablet 768..1279, Mobile <= 767)
+   RESPONSIVE BREAKPOINTS (Desktop >= 1280, Tablet 769..1279, Mobile <= 768)
    -------------------------------------------------------------------------- */
 @media (min-width: 1280px) {
   .docs-tree-pane {
@@ -879,13 +879,14 @@
   }
 }
 
-@media (min-width: 768px) and (max-width: 1279px) {
+@media (min-width: 769px) and (max-width: 1279px) {
   .docs-tree-pane {
     width: 220px;
     flex: 0 0 220px;
   }
   .docs-center-pane {
     flex: 1 1 0;
+    min-width: 0;
   }
   .docs-rail-pane {
     position: fixed;
@@ -903,13 +904,23 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .docs-mobile-bar {
     display: flex;
   }
 
+  .docs-center-pane {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
   .docs-prose {
-    padding: 24px 20px;
+    padding: 24px 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .docs-tree-wrapper {
@@ -928,6 +939,7 @@
     left: 0;
     bottom: 0;
     width: 280px;
+    max-width: 80vw;
     z-index: 100;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
     transform: translateX(-100%);
@@ -944,6 +956,7 @@
     right: 0;
     bottom: 0;
     width: 280px;
+    max-width: 80vw;
     z-index: 100;
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.15);
     transform: translateX(100%);

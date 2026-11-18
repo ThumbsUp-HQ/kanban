@@ -24,6 +24,7 @@ import {
   Link,
   Navigate,
   Outlet,
+  useInRouterContext,
   useLocation,
   useNavigate,
   useParams,
@@ -88,16 +89,77 @@ export {
   useProjectRouteContext,
 };
 
-/**
- * Uniform 403 / 404 view preventing principal & object enumeration (S3.4).
- */
-export function NotFoundView(): JSX.Element {
+interface NotFoundViewContentProps {
+  pathname: string;
+  onReturn: () => void;
+}
+
+function NotFoundViewContent({
+  pathname,
+  onReturn,
+}: NotFoundViewContentProps): JSX.Element {
   return (
     <section data-testid="not-found-view" className="kb-not-found-view">
-      <h1>Not found or no access</h1>
-      <p>The requested resource does not exist or you do not have permission to view it.</p>
+      <div className="kb-not-found-card">
+        <div className="kb-not-found-badge" aria-hidden="true">
+          404
+        </div>
+        <h1 className="kb-not-found-title">404 - Page Not Found</h1>
+        <h2 className="kb-not-found-subtitle">Not found or no access</h2>
+        <p className="kb-not-found-message">
+          The requested resource{' '}
+          <code className="kb-not-found-path" data-testid="not-found-path">
+            {pathname || 'unknown'}
+          </code>{' '}
+          does not exist or you do not have permission to view it.
+        </p>
+        <button
+          type="button"
+          className="kb-btn kb-btn-primary kb-not-found-btn"
+          data-testid="return-workspace-btn"
+          onClick={onReturn}
+        >
+          Return to Workspace
+        </button>
+      </div>
     </section>
   );
+}
+
+function NotFoundViewRouted(): JSX.Element {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <NotFoundViewContent
+      pathname={location.pathname}
+      onReturn={() => void navigate('/')}
+    />
+  );
+}
+
+function NotFoundViewStatic(): JSX.Element {
+  return (
+    <NotFoundViewContent
+      pathname={typeof window !== 'undefined' ? window.location.pathname : ''}
+      onReturn={() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * Uniform 403 / 404 view preventing principal & object enumeration (S3.4, KANBA-213).
+ * Branded SPA 404 with path inspection and Return to Workspace action.
+ */
+export function NotFoundView(): JSX.Element {
+  const inRouter = useInRouterContext();
+  if (inRouter) {
+    return <NotFoundViewRouted />;
+  }
+  return <NotFoundViewStatic />;
 }
 
 export function RoutePlaceholder({ route }: { route: string }): JSX.Element {

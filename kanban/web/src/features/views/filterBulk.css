@@ -758,19 +758,36 @@
     padding: 0 var(--space-3, 12px);
   }
 
+  .swimlane-board-grid {
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .swimlane-col-headers {
     overflow-x: auto;
     width: 100%;
+    max-width: 100%;
+  }
+
+  .swimlane-band {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .swimlane-band-columns {
     flex-direction: column;
     row-gap: var(--space-4, 16px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .swimlane-band .board-column {
     width: 100%;
-    min-width: 100%;
+    min-width: 0;
     max-width: 100%;
   }
 }

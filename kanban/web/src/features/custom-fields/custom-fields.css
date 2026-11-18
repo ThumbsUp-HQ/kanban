@@ -777,16 +777,25 @@
 }
 
 /* --------------------------------------------------------------------------
-   RESPONSIVE ADAPTATIONS
+   RESPONSIVE ADAPTATIONS (<= 768px, KANBA-213)
    -------------------------------------------------------------------------- */
 
 @media (max-width: 768px) {
+  .kb-custom-fields-studio {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .custom-fields-editor-layout {
     flex-direction: column;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .custom-fields-editor-sidebar {
     width: 100%;
+    max-width: 100%;
     flex: 0 0 auto;
     max-height: 200px;
     border-right: none;
@@ -794,10 +803,21 @@
   }
 
   .custom-fields-editor-main {
-    padding: 16px;
+    padding: 16px 12px;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 
   .custom-fields-form-grid {
     grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+
+  .custom-fields-sha-chip {
+    max-width: 100%;
+    flex-wrap: wrap;
+    word-break: break-all;
   }
 }

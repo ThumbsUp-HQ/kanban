@@ -271,7 +271,7 @@ export function OutlineAndVersionsRail({
           className="docs-rail-panel"
         >
           <div className="docs-outline-section">
-            <h3 className="docs-rail-heading">Headings</h3>
+            <h2 className="docs-rail-heading">Headings</h2>
             {headings.length === 0 ? (
               <p className="docs-rail-empty">No headings found in document.</p>
             ) : (
@@ -307,7 +307,7 @@ export function OutlineAndVersionsRail({
 
           {/* Linked Work Items Section */}
           <div className="docs-linked-items-section">
-            <h3 className="docs-rail-heading">Linked Work Items</h3>
+            <h2 className="docs-rail-heading">Linked Work Items</h2>
             {objectLinks.length === 0 ? (
               <p className="docs-rail-empty">No linked issues.</p>
             ) : (
@@ -344,7 +344,7 @@ export function OutlineAndVersionsRail({
           className="docs-rail-panel"
         >
           <div className="docs-history-section">
-            <h3 className="docs-rail-heading">Version History</h3>
+            <h2 className="docs-rail-heading">Version History</h2>
             {isLoadingVersions && (
               <p className="docs-rail-empty" data-testid="versions-loading">
                 Loading versions...

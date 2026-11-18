@@ -100,6 +100,7 @@ export function DocsWorkspaceView(): JSX.Element {
 
   return (
     <div className="docs-workspace-view" data-testid="docs-workspace-view">
+      <h1 className="sr-only">Documentation - {pageData?.title ?? 'Workspace Docs'}</h1>
       {/* Mobile Topbar */}
       <div className="docs-mobile-bar" data-testid="docs-mobile-bar">
         <button
