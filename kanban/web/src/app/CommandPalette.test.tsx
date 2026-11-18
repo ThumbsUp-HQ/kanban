@@ -380,4 +380,63 @@ describe('CommandPalette', () => {
 
     window.removeEventListener('kb:open-create-project', projectModalListener);
   });
+
+  it('hides admin actions when user is non-server-admin, executes toggle sidebar and theme switching', () => {
+    const onToggleSidebar = vi.fn();
+    const nonAdminUser = { id: 'u1', handle: 'member', is_server_admin: false };
+
+    renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={noop}
+        onToggleSidebar={onToggleSidebar}
+        user={nonAdminUser}
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+
+    // Admin options should not exist
+    fireEvent.change(input, { target: { value: 'Auth Studio' } });
+    expect(screen.queryByRole('option', { name: /Go to Auth Studio/ })).toBeNull();
+
+    fireEvent.change(input, { target: { value: 'System Storage' } });
+    expect(screen.queryByRole('option', { name: /Go to System Storage/ })).toBeNull();
+
+    // Toggle sidebar
+    fireEvent.change(input, { target: { value: 'Toggle sidebar' } });
+    act(() => {
+      screen.getByRole('option', { name: /Toggle sidebar/ }).click();
+    });
+    expect(onToggleSidebar).toHaveBeenCalled();
+
+    // Theme options
+    fireEvent.change(input, { target: { value: 'Theme: Dark' } });
+    act(() => {
+      screen.getByRole('option', { name: /Theme: Dark/ }).click();
+    });
+
+    fireEvent.change(input, { target: { value: 'Theme: System' } });
+    act(() => {
+      screen.getByRole('option', { name: /Theme: System/ }).click();
+    });
+  });
+
+  it('extracts cached issues from React Query cache when cachedIssues prop is omitted', () => {
+    const client = new QueryClient();
+    client.setQueryData(['issues-array'], [
+      { key: 'KAN-CACHE-1', summary: 'Direct array cached item' },
+    ]);
+    client.setQueryData(['issues-container'], {
+      issues: [{ key: 'KAN-CACHE-2', summary: 'Contained issues item' }],
+    });
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />, client);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'KAN-CACHE' } });
+
+    expect(screen.getByRole('option', { name: /Direct array cached item/ })).toBeDefined();
+    expect(screen.getByRole('option', { name: /Contained issues item/ })).toBeDefined();
+  });
 });

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { IssueSurface, normalizeIssueDetail } from './IssueSurface';
+import { IssueSurface, IssueSurfaceRoot, normalizeIssueDetail } from './IssueSurface';
 import { setOpenerElement } from './IssueKeyLink';
 import { apiClient } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
@@ -441,6 +441,192 @@ describe('IssueSurface', () => {
       });
 
       globalThis.fetch = originalFetch;
+    });
+
+    it('covers all normalizeIssueDetail defensive fallback branches', () => {
+      // 1. Primitive non-object input
+      expect(normalizeIssueDetail('invalid' as unknown as IssueDetail, 'KAN')).toBe('invalid');
+      expect(normalizeIssueDetail(42 as unknown as IssueDetail, 'KAN')).toBe(42);
+
+      // 2. Candidate extracted from items array
+      const fromItems = normalizeIssueDetail(
+        { items: [{ id: 'i-nested', key: 'NEST-1', summary: 'Nested', description_sha256: 'sha1' }] } as unknown as IssueDetail,
+        null,
+      );
+      expect(fromItems.key).toBe('NEST-1');
+      expect(fromItems.project_key).toBe('NEST');
+      expect(fromItems.object_id).toBe('i-nested');
+      expect(fromItems.etag).toBe('"sha1"');
+
+      // 3. Fallback project key when key lacks hyphen
+      const noHyphen = normalizeIssueDetail(
+        { key: 'NOHYPHEN', id: 'i-nohyphen' } as unknown as IssueDetail,
+        'FALLBACK_PROJ',
+      );
+      expect(noHyphen.project_key).toBe('FALLBACK_PROJ');
+
+      // 4. Default 'KAN' project key when key lacks hyphen and no fallback
+      const defaultProj = normalizeIssueDetail(
+        { key: 'SIMPLE', id: 'i-simple' } as unknown as IssueDetail,
+        null,
+      );
+      expect(defaultProj.project_key).toBe('KAN');
+
+      // 5. Existing capabilities and labels as strings array
+      const withCustomCaps = normalizeIssueDetail(
+        {
+          key: 'KAN-99',
+          id: 'i-99',
+          capabilities: ['VIEW_ONLY'],
+          labels: ['label-string-1', 'label-string-2'],
+        } as unknown as IssueDetail,
+        'KAN',
+      );
+      expect(withCustomCaps.capabilities).toEqual(['VIEW_ONLY']);
+      expect(withCustomCaps.label_ids).toEqual(['label-string-1', 'label-string-2']);
+    });
+
+    it('renders IssueSurfaceRoot in split mode with nav toggle and new tab link', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <div className="kb-split-layout">
+              <IssueSurfaceRoot mode="split" issueKey="KAN-142" projectKey="KAN" />
+            </div>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('#KAN-142')).toBeDefined();
+      });
+
+      // Nav toggle button
+      const navToggle = screen.getByRole('button', { name: 'Hide Nav' });
+      expect(navToggle).toBeDefined();
+      fireEvent.click(navToggle);
+
+      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
+
+      // Open in new tab link
+      const newTabLink = screen.getByRole('link', { name: 'Open in new tab' });
+      expect(newTabLink.getAttribute('href')).toBe('/projects/KAN/issues/KAN-142');
+      expect(newTabLink.getAttribute('target')).toBe('_blank');
+    });
+
+    it('renders IssueSurfaceRoot outside of router context via fallback props', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <IssueSurfaceRoot mode="full" issueKey="KAN-142" projectKey="KAN" />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('KAN-142')).toBeDefined();
+      });
+    });
+
+    it('covers split mode nav toggle in loading and error states', async () => {
+      // 1. Loading state
+      let resolveFetch!: (v: unknown) => void;
+      const pendingPromise = new Promise((resolve) => {
+        resolveFetch = resolve;
+      });
+      vi.spyOn(apiClient, 'get').mockReturnValue(pendingPromise);
+      const queryClient1 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient1}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot mode="split" issueKey="KAN-999" projectKey="KAN" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const loadingNavToggle = screen.getByRole('button', { name: 'Hide Nav' });
+      fireEvent.click(loadingNavToggle);
+      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
+
+      resolveFetch(validIssue);
+      unmount();
+
+      // 2. Error state
+      vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Network drop'));
+      const queryClient2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient2}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot mode="split" issueKey="KAN-FAIL" projectKey="KAN" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Could not load KAN-FAIL.')).toBeDefined();
+      });
+
+      const errorNavToggle = screen.getByRole('button', { name: 'Hide Nav' });
+      fireEvent.click(errorNavToggle);
+      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
+    });
+
+    it('renders IssueSurfaceRoot outside Router context and handles fullscreen navigation fallback', async () => {
+      const originalAssign = window.location.assign.bind(window.location);
+      const assignMock = vi.fn();
+      delete (window as unknown as { location?: unknown }).location;
+      (window as unknown as { location: unknown }).location = {
+        assign: assignMock,
+        pathname: '/projects/KAN/issues',
+        search: '?peek=KAN-142',
+      };
+
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        project_name: undefined,
+        description_markdown: null,
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <IssueSurfaceRoot mode="drawer" issueKey="KAN-142" projectKey="KAN" />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /open in full screen/i })).toBeDefined();
+      });
+
+      const expandBtn = screen.getByRole('button', { name: /open in full screen/i });
+      fireEvent.click(expandBtn);
+      expect(assignMock).toHaveBeenCalledWith('/projects/KAN/issues/KAN-142');
+
+      (window as unknown as { location: unknown }).location = { assign: originalAssign, pathname: '/', search: '' };
+    });
+
+    it('covers normalizeIssueDetail edge cases: no hyphen key and empty description sha', () => {
+      const normalized1 = normalizeIssueDetail({
+        key: 'NOHYPHEN',
+        summary: 'No hyphen key',
+        description_sha256: '',
+      } as never, null);
+      expect(normalized1.project_key).toBe('KAN');
+      expect(normalized1.etag).toBeUndefined();
+
+      const normalized2 = normalizeIssueDetail({
+        key: 'CUSTOM-1',
+        summary: 'Custom key',
+        project_key: '',
+      }, null);
+      expect(normalized2.project_key).toBe('CUSTOM');
     });
   });
 });

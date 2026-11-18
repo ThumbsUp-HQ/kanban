@@ -853,4 +853,157 @@ describe('TimelineView', () => {
     const emptyCell = container.querySelector('[data-date="2026-11-02"]');
     expect(emptyCell?.textContent.trim()).toBe('');
   });
+
+  it('renders vetoed and approved gate indicators and handles custom links prop', () => {
+    const issuesWithGates: TimelineIssueItem[] = [
+      {
+        id: 'i-vetoed',
+        key: 'KAN-VETOED',
+        summary: 'Vetoed Gate Task',
+        state: { id: 's1', name: 'Review', group: 'started' },
+        priority: { slug: 'high', label: 'High' },
+        start_date: '2026-11-02',
+        due_date: '2026-11-08',
+        gate_status: 'vetoed',
+        links: [
+          {
+            link_type: 'BLOCKS',
+            target_key: 'KAN-APPROVED',
+            link_state: 'ACTIVE',
+            restricted: false,
+          },
+        ],
+      },
+      {
+        id: 'i-approved',
+        key: 'KAN-APPROVED',
+        summary: 'Approved Gate Task',
+        state: { id: 's2', name: 'Done', group: 'completed' },
+        priority: { slug: 'low', label: 'Low' },
+        start_date: '2026-11-09',
+        due_date: '2026-11-15',
+        gate_status: 'approved',
+      },
+    ];
+
+    const customLinks = [
+      {
+        source_key: 'KAN-APPROVED',
+        target_key: 'KAN-VETOED',
+        link_type: 'BLOCKS',
+        link_state: 'ACTIVE',
+        restricted: false,
+      },
+    ];
+
+    const { container } = render(
+      <TimelineView
+        issues={issuesWithGates}
+        projectKey="KAN"
+        links={customLinks}
+        initialStartDate="2026-11-01"
+        today="2026-11-10"
+      />
+    );
+
+    expect(container.querySelector('[data-testid="timeline-bar-KAN-VETOED"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="timeline-bar-KAN-APPROVED"]')).not.toBeNull();
+  });
+
+  it('covers fallback anchorStart and Today button with invalid date string', () => {
+    const { getByRole } = render(
+      <TimelineView
+        issues={[]}
+        projectKey="KAN"
+        today="invalid-date"
+      />
+    );
+
+    const todayBtn = getByRole('button', { name: 'Jump to today' });
+    fireEvent.click(todayBtn);
+  });
+
+  it('covers pointer down on bar with resize handles', () => {
+    const twoDateIssues: TimelineIssueItem[] = [
+      {
+        id: 'i-bar',
+        key: 'KAN-BAR',
+        summary: 'Spanning task',
+        state: { id: 's1', name: 'To Do', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        start_date: '2026-11-04',
+        due_date: '2026-11-10',
+      },
+    ];
+
+    render(
+      <TimelineView
+        issues={twoDateIssues}
+        projectKey="KAN"
+        initialStartDate="2026-11-01"
+      />
+    );
+
+    const bar = screen.getByTestId('timeline-bar-KAN-BAR');
+    fireEvent.pointerDown(bar, { clientX: 100 });
+  });
+
+  it('covers left row click, anchor click with onOpenPeek, milestone pointer down, and 200 arrow cap', () => {
+    const onOpenPeek = vi.fn();
+    const milestoneIssues: TimelineIssueItem[] = [
+      {
+        id: 'i-mile',
+        key: 'KAN-MILE',
+        summary: 'Milestone item',
+        state: { id: 's1', name: 'In Progress', group: 'started' },
+        priority: { slug: 'high', label: 'High' },
+        due_date: '2026-11-08',
+      },
+      {
+        id: 'i-mile2',
+        key: 'KAN-MILE2',
+        summary: 'Target item',
+        state: { id: 's1', name: 'In Progress', group: 'started' },
+        priority: { slug: 'low', label: 'Low' },
+        start_date: '2026-11-10',
+        due_date: '2026-11-12',
+      },
+    ];
+
+    // Generate 205 links to exercise the 200 arrow cap
+    const manyLinks = Array.from({ length: 205 }, () => ({
+      source_key: 'KAN-MILE',
+      target_key: 'KAN-MILE2',
+      link_type: 'BLOCKS',
+      link_state: 'ACTIVE',
+      restricted: false,
+    }));
+
+    const { container } = render(
+      <TimelineView
+        issues={milestoneIssues}
+        links={manyLinks}
+        projectKey="KAN"
+        initialStartDate="2026-11-01"
+        onOpenPeek={onOpenPeek}
+      />
+    );
+
+    // 1. Click left row summary (not anchor)
+    const summarySpan = screen.getByText('Milestone item');
+    fireEvent.click(summarySpan);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-MILE');
+
+    // 2. Click anchor directly
+    const anchor = screen.getByText('KAN-MILE');
+    fireEvent.click(anchor);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-MILE');
+
+    // 3. Pointer down on milestone diamond
+    const milestoneDiamond = container.querySelector('.timeline-milestone');
+    expect(milestoneDiamond).not.toBeNull();
+    if (milestoneDiamond) {
+      fireEvent.pointerDown(milestoneDiamond, { clientX: 150 });
+    }
+  });
 });

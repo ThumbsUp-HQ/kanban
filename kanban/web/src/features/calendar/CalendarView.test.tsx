@@ -696,4 +696,94 @@ describe('CalendarView', () => {
 
     expect(screen.getByRole('status').textContent).toContain('rolled back');
   });
+
+  it('uses initialYear and initialMonth when today is omitted, and invokes onOpenPeek on pill and agenda click', () => {
+    // 1. InitialYear/InitialMonth without today
+    const { unmount: u1 } = render(
+      <CalendarView
+        issues={[]}
+        projectKey="KAN"
+        initialYear={2027}
+        initialMonth={5}
+      />
+    );
+    expect(screen.getByText('2027-04-25 - 2027-05-08')).toBeDefined();
+    u1();
+
+    // 2. onOpenPeek handler on desktop pill and mobile agenda row
+    const onOpenPeek = vi.fn();
+    const overdueIssue: IssueItem = {
+      id: 'i-overdue',
+      key: 'KAN-OVERDUE',
+      summary: 'Overdue task',
+      state: { id: 's-todo', name: 'To Do', group: 'unstarted' },
+      priority: { slug: 'high', label: 'High' },
+      due_date: '2026-11-16',
+    };
+
+    const { container } = render(
+      <CalendarView
+        issues={[overdueIssue]}
+        projectKey="KAN"
+        today="2026-11-18"
+        onOpenPeek={onOpenPeek}
+      />
+    );
+
+    // Desktop pill click with onOpenPeek
+    const pill = screen.getByTestId('calendar-pill-KAN-OVERDUE');
+    fireEvent.click(pill);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-OVERDUE');
+
+    // Select date 2026-11-16 on mobile strip
+    const dateBtn = container.querySelector('button[data-date="2026-11-16"]');
+    expect(dateBtn).toBeTruthy();
+    if (dateBtn) {
+      fireEvent.click(dateBtn);
+    }
+
+    const agendaRow = screen.getByTestId('agenda-row-KAN-OVERDUE');
+    expect(agendaRow.className).toContain('calendar-agenda-row--overdue');
+
+    fireEvent.click(agendaRow);
+    expect(onOpenPeek).toHaveBeenCalledTimes(2);
+  });
+
+  it('covers outside month cell styling and overflow popover pill peek click', () => {
+    const onOpenPeek = vi.fn();
+    const fourIssues: IssueItem[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `ov-${String(i)}`,
+      key: `KAN-OV-${String(i)}`,
+      summary: `Overflow task ${String(i)}`,
+      state: { id: 's1', name: 'Todo', group: 'unstarted' },
+      priority: { slug: 'low', label: 'Low' },
+      due_date: '2026-11-30',
+    }));
+
+    render(
+      <CalendarView
+        issues={fourIssues}
+        projectKey="KAN"
+        today="2026-11-28"
+        onOpenPeek={onOpenPeek}
+      />
+    );
+
+    // Open overflow popover
+    const moreBtn = screen.getByTestId('calendar-more-2026-11-30');
+    fireEvent.click(moreBtn);
+
+    // Find popover and click pill inside
+    const popover = screen.getByRole('dialog', { name: 'Issues on 2026-11-30' });
+    expect(popover).toBeDefined();
+
+    const popoverPill = popover.querySelector('a[data-issue-key="KAN-OV-0"]');
+    if (popoverPill) fireEvent.click(popoverPill);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-OV-0');
+
+    // Close popover
+    const closeBtn = screen.getByRole('button', { name: 'Close overflow popover' });
+    fireEvent.click(closeBtn);
+    expect(screen.queryByRole('dialog', { name: 'Issues on 2026-11-30' })).toBeNull();
+  });
 });

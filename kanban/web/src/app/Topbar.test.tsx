@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -259,5 +259,178 @@ describe('Topbar', () => {
     expect(
       screen.queryByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
     ).toBeNull();
+  });
+
+  it('supports keyboard navigation (ArrowDown, ArrowUp, Escape) in avatar menu', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    act(() => {
+      avatarBtn.click();
+    });
+
+    const menu = screen.getByRole('menu');
+    expect(menu).toBeDefined();
+
+    // Test ArrowDown navigation
+    act(() => {
+      fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    });
+
+    // Test ArrowUp navigation
+    act(() => {
+      fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    });
+
+    // Test Escape to close
+    act(() => {
+      fireEvent.keyDown(menu, { key: 'Escape' });
+    });
+
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('closes avatar menu when clicking navigation links or clicking outside', () => {
+    const adminUser = {
+      is_server_admin: true,
+      is_workspace_admin: true,
+      workspace_role: 'WORKSPACE_ADMIN',
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar user={adminUser} />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+
+    // Open and click Personal Settings link
+    act(() => {
+      avatarBtn.click();
+    });
+    const personalSettingsLink = screen.getByRole('menuitem', { name: /Personal Settings/ });
+    act(() => {
+      personalSettingsLink.click();
+    });
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    // Open and click Workspace Settings link
+    act(() => {
+      avatarBtn.click();
+    });
+    const workspaceSettingsLink = screen.getByRole('menuitem', { name: /Workspace Settings/ });
+    act(() => {
+      workspaceSettingsLink.click();
+    });
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    // Open and click Admin Auth Studio link
+    act(() => {
+      avatarBtn.click();
+    });
+    const adminAuthLink = screen.getByRole('menuitem', { name: /Admin Auth Studio/ });
+    act(() => {
+      adminAuthLink.click();
+    });
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    // Open and click outside on document body
+    act(() => {
+      avatarBtn.click();
+    });
+    expect(screen.getByRole('menu')).toBeDefined();
+    act(() => {
+      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('supports ArrowDown and ArrowUp keyboard navigation in avatar menu', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    act(() => {
+      avatarBtn.click();
+    });
+
+    const menu = screen.getByRole('menu');
+    expect(menu).toBeDefined();
+
+    // ArrowDown moves focus
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+
+    // ArrowUp moves focus backward
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+
+    // Escape closes menu
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('renders avatar image with fallback alt and handles logout network failure', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockRejectedValue(new Error('Logout network drop'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar
+                user={{
+                  avatar_url: '/avatars/custom.png',
+                  display_name: null,
+                }}
+              />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    // Image alt fallback when display_name is empty
+    const avatarImg = screen.getByAltText('User avatar');
+    expect(avatarImg).toBeDefined();
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    act(() => {
+      avatarBtn.click();
+    });
+
+    const logoutBtn = screen.getByRole('menuitem', { name: /Log out/i });
+    await act(async () => {
+      logoutBtn.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

@@ -722,4 +722,61 @@ describe('EmojiHint Component', () => {
       fireEvent.keyDown(popup, { key: 'Tab', shiftKey: true });
     }
   });
+
+  it('handles regular tab wrapping on last focusable element and invokes onAction callback', () => {
+    const clock = new TestClock();
+    const ctrl = createHintController(clock);
+    const onAction = vi.fn();
+
+    render(
+      <EmojiHint
+        kind="rawMarkdown"
+        variant="interactive"
+        actionLabel="Execute Action"
+        onAction={onAction}
+        testId="tab-action-hint"
+        controller={ctrl}
+      />,
+    );
+
+    const trigger = screen.getByTestId('tab-action-hint');
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    const popup = screen.getByTestId('tab-action-hint-popup');
+    const actionBtn = screen.getByRole('button', { name: 'Execute Action' });
+
+    // Focus actionBtn (last element) and press Tab without shift
+    actionBtn.focus();
+    fireEvent.keyDown(popup, { key: 'Tab', shiftKey: false });
+
+    // Click action button to trigger onAction and close popup
+    act(() => {
+      fireEvent.click(actionBtn);
+    });
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('tab-action-hint-popup')).toBeNull();
+  });
+
+  it('supports dynamic content function', () => {
+    const contentFn = vi.fn().mockReturnValue(<span>Function Content</span>);
+    render(
+      <EmojiHint
+        kind="access"
+        testId="fn-content-hint"
+        content={contentFn}
+      />,
+    );
+
+    const trigger = screen.getByTestId('fn-content-hint');
+    expect(contentFn).not.toHaveBeenCalled();
+
+    act(() => {
+      fireEvent.focus(trigger);
+    });
+
+    expect(contentFn).toHaveBeenCalled();
+    expect(screen.getByText('Function Content')).toBeDefined();
+  });
 });

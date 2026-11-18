@@ -632,4 +632,59 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     expect(verifySpy).toHaveBeenCalledTimes(1);
     resolveRecovery?.({ status: 'authenticated' });
   });
+
+  it('supports keyboard navigation (ArrowRight, ArrowLeft, Home, End) across method tabs', () => {
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
+
+    render(
+      <SecondFactorStep
+        challengeId="chall-keyboard"
+        methods={['totp', 'webauthn', 'recovery']}
+        onSuccess={vi.fn()}
+        onError={vi.fn()}
+        onSessionExpired={vi.fn()}
+      />
+    );
+
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.length).toBe(3);
+    const tab0 = tabs[0];
+    const tab1 = tabs[1];
+    const tab2 = tabs[2];
+    expect(tab0).toBeDefined();
+    expect(tab1).toBeDefined();
+    expect(tab2).toBeDefined();
+    if (!tab0 || !tab1 || !tab2) return;
+
+    // Initial selected is totp (index 0)
+    expect(tab0.getAttribute('aria-selected')).toBe('true');
+
+    // ArrowRight moves to webauthn (index 1)
+    fireEvent.keyDown(tab0, { key: 'ArrowRight' });
+    expect(tab1.getAttribute('aria-selected')).toBe('true');
+
+    // ArrowDown moves to recovery (index 2)
+    fireEvent.keyDown(tab1, { key: 'ArrowDown' });
+    expect(tab2.getAttribute('aria-selected')).toBe('true');
+
+    // ArrowRight wraps to totp (index 0)
+    fireEvent.keyDown(tab2, { key: 'ArrowRight' });
+    expect(tab0.getAttribute('aria-selected')).toBe('true');
+
+    // ArrowLeft wraps to recovery (index 2)
+    fireEvent.keyDown(tab0, { key: 'ArrowLeft' });
+    expect(tab2.getAttribute('aria-selected')).toBe('true');
+
+    // ArrowUp moves to webauthn (index 1)
+    fireEvent.keyDown(tab2, { key: 'ArrowUp' });
+    expect(tab1.getAttribute('aria-selected')).toBe('true');
+
+    // Home moves to first (index 0)
+    fireEvent.keyDown(tab1, { key: 'Home' });
+    expect(tab0.getAttribute('aria-selected')).toBe('true');
+
+    // End moves to last (index 2)
+    fireEvent.keyDown(tab0, { key: 'End' });
+    expect(tab2.getAttribute('aria-selected')).toBe('true');
+  });
 });

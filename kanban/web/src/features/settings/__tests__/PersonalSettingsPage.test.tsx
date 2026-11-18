@@ -7,8 +7,38 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PersonalSettingsPage } from '../PersonalSettingsPage';
 import * as api from '../personalSettingsApi';
+import { ApiProblem } from '../../../api/problem';
 
 vi.mock('../personalSettingsApi');
+
+vi.mock('../../auth/SecondFactorStep', () => ({
+  SecondFactorStep: ({
+    onSuccess,
+    onError,
+    onSessionExpired,
+    onCancel,
+  }: {
+    onSuccess: () => void;
+    onError: () => void;
+    onSessionExpired: () => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="mock-second-factor-step">
+      <button data-testid="mock-2fa-success" onClick={onSuccess}>
+        BtnMockSuccess
+      </button>
+      <button data-testid="mock-2fa-error" onClick={onError}>
+        BtnMockError
+      </button>
+      <button data-testid="mock-2fa-expired" onClick={onSessionExpired}>
+        BtnMockExpired
+      </button>
+      <button data-testid="mock-2fa-cancel" onClick={onCancel}>
+        BtnMockCancel
+      </button>
+    </div>
+  ),
+}));
 
 const mockProfile: api.UserProfileResponse = {
   principal_id: '11111111-1111-4111-8111-111111111111',
@@ -194,5 +224,767 @@ describe('PersonalSettingsPage', () => {
 
     fireEvent.click(screen.getByTestId('close-recovery-modal-btn'));
     expect(screen.queryByTestId('recovery-codes-grid')).toBeNull();
+  });
+
+  it('renders loading state when profile is loading', () => {
+    vi.mocked(api.fetchMyProfile).mockReturnValue(new Promise(() => { /* never resolves */ }));
+    renderComponent();
+    expect(screen.getByTestId('personal-settings-loading')).toBeDefined();
+    expect(screen.getByText('Loading personal settings...')).toBeDefined();
+  });
+
+  it('handles valid avatar upload and avatar removal', async () => {
+    vi.mocked(api.uploadAvatar).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: '/api/v1/users/1111/avatar.png',
+    });
+    vi.mocked(api.deleteAvatar).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: null,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-avatar-btn')).toBeDefined();
+    });
+
+    // Upload picture button triggers file input click
+    const fileInput = screen.getByTestId('avatar-file-input');
+    const clickSpy = vi.spyOn(fileInput, 'click');
+    fireEvent.click(screen.getByTestId('upload-avatar-btn'));
+    expect(clickSpy).toHaveBeenCalled();
+
+    // Upload valid image file
+    const validFile = new File(['valid-image-bytes'], 'avatar.png', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [validFile] } });
+
+    await waitFor(() => {
+      expect(api.uploadAvatar).toHaveBeenCalledWith(validFile);
+      expect(screen.getByTestId('alert-success').textContent).toContain('Avatar uploaded successfully.');
+    });
+
+    // Remove avatar
+    expect(screen.getByTestId('remove-avatar-btn')).toBeDefined();
+    fireEvent.click(screen.getByTestId('remove-avatar-btn'));
+
+    await waitFor(() => {
+      expect(api.deleteAvatar).toHaveBeenCalled();
+      expect(screen.getByTestId('alert-success').textContent).toContain('Avatar removed.');
+    });
+  });
+
+  it('toggles password visibility and handles successful password update', async () => {
+    vi.mocked(api.changePassword).mockResolvedValue({ ok: true, message: 'Password updated' });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-password-input')).toBeDefined();
+    });
+
+    const currentPwInput = screen.getByTestId<HTMLInputElement>('current-password-input');
+    const newPwInput = screen.getByTestId<HTMLInputElement>('new-password-input');
+
+    // Toggle current password visibility
+    const showPwButtons = screen.getAllByLabelText('Show password');
+    const firstShowPwBtn = showPwButtons[0];
+    if (firstShowPwBtn) fireEvent.click(firstShowPwBtn);
+    expect(currentPwInput.type).toBe('text');
+    fireEvent.click(screen.getByLabelText('Hide password'));
+    expect(currentPwInput.type).toBe('password');
+
+    // Enter valid passwords
+    fireEvent.change(currentPwInput, { target: { value: 'oldpassword123' } });
+    fireEvent.change(newPwInput, { target: { value: 'newpassword12345' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'newpassword12345' } });
+    fireEvent.click(screen.getByTestId('change-password-btn'));
+
+    await waitFor(() => {
+      expect(api.changePassword).toHaveBeenCalledWith({
+        current_password: 'oldpassword123',
+        new_password: 'newpassword12345',
+      });
+      expect(screen.getByTestId('alert-success').textContent).toContain('Password updated successfully.');
+    });
+
+    // Dismiss success alert
+    fireEvent.click(screen.getByText('Dismiss'));
+    expect(screen.queryByTestId('alert-success')).toBeNull();
+  });
+
+  it('handles password change API error response and dismisses alert', async () => {
+    vi.mocked(api.changePassword).mockRejectedValue(new Error('Incorrect current password'));
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-password-input')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'wrongpassword' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'newpassword12345' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'newpassword12345' } });
+    fireEvent.click(screen.getByTestId('change-password-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Incorrect current password');
+    });
+
+    fireEvent.click(screen.getByText('Dismiss'));
+    expect(screen.queryByTestId('alert-error')).toBeNull();
+  });
+
+  it('manages TOTP enrollment and disabling', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      ...mockMfaStatus,
+      totp_enabled: false,
+    });
+    vi.mocked(api.enrollTotp).mockResolvedValue({
+      secret: 'MOCKSECRET123456',
+      provisioning_uri: 'otpauth://totp/kanban:jane?secret=MOCKSECRET123456',
+    });
+    vi.mocked(api.confirmTotp).mockResolvedValue({
+      ok: true,
+      recovery_codes: ['rec-code-1', 'rec-code-2'],
+    });
+    vi.mocked(api.deleteTotp).mockResolvedValue(undefined);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('enable-totp-btn')).toBeDefined();
+    });
+
+    // Start TOTP enrollment
+    fireEvent.click(screen.getByTestId('enable-totp-btn'));
+
+    await waitFor(() => {
+      expect(api.enrollTotp).toHaveBeenCalled();
+      expect(screen.getByTestId('totp-secret-key').textContent).toBe('MOCKSECRET123456');
+    });
+
+    // Confirm TOTP with valid 6-digit code
+    fireEvent.change(screen.getByTestId('totp-verification-input'), { target: { value: '654321' } });
+    fireEvent.click(screen.getByTestId('confirm-totp-btn'));
+
+    await waitFor(() => {
+      expect(api.confirmTotp).toHaveBeenCalledWith('654321');
+      expect(screen.getByTestId('alert-success').textContent).toContain('Two-factor authentication enabled successfully.');
+      expect(screen.getByTestId('recovery-codes-grid')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('close-recovery-modal-btn'));
+  });
+
+  it('manages disabling TOTP when already active', async () => {
+    vi.mocked(api.deleteTotp).mockResolvedValue(undefined);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('disable-totp-btn')).toBeDefined();
+    });
+
+    // Disable TOTP with confirm: false (should not call deleteTotp)
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+    expect(api.deleteTotp).not.toHaveBeenCalled();
+
+    // Disable TOTP with confirm: true
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+
+    await waitFor(() => {
+      expect(api.deleteTotp).toHaveBeenCalled();
+      expect(screen.getByTestId('alert-success').textContent).toContain('TOTP disabled.');
+    });
+  });
+
+  it('manages passkey deletion with confirmation', async () => {
+    vi.mocked(api.deletePasskey).mockResolvedValue(undefined);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-passkey-pk-1')).toBeDefined();
+    });
+
+    // Cancel deletion in confirm dialog
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    expect(api.deletePasskey).not.toHaveBeenCalled();
+
+    // Confirm deletion
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+
+    await waitFor(() => {
+      expect(api.deletePasskey).toHaveBeenCalledWith('pk-1');
+      expect(screen.getByTestId('alert-success').textContent).toContain('Passkey removed.');
+    });
+  });
+
+  it('cancels passkey rename modal when clicking cancel', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rename-passkey-pk-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
+    expect(screen.getByTestId('passkey-nickname-input')).toBeDefined();
+
+    // Click Cancel button in rename modal
+    const cancelButtons = screen.getAllByRole('button', { name: 'Cancel' });
+    const firstCancelBtn = cancelButtons[0];
+    if (firstCancelBtn) fireEvent.click(firstCancelBtn);
+    expect(screen.queryByTestId('passkey-nickname-input')).toBeNull();
+  });
+
+  it('renders empty passkey notice when passkeys list is empty', async () => {
+    vi.mocked(api.fetchPasskeys).mockResolvedValue([]);
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('No passkeys registered yet.')).toBeDefined();
+    });
+  });
+
+  it('enforces 14 character password minimum for server administrators', async () => {
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      is_server_admin: true,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-password-input')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'currentpass123' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'twelvechars!' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'twelvechars!' } });
+    fireEvent.click(screen.getByTestId('change-password-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Password must be at least 14 characters.');
+    });
+    expect(api.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('intercepts AAL2_REQUIRED error on password change and opens step-up dialog', async () => {
+    vi.mocked(api.changePassword).mockRejectedValue(
+      new ApiProblem(403, {
+        code: 'AAL2_REQUIRED',
+        challenge_id: 'stepup-chall-1',
+        methods: ['totp'],
+      }),
+    );
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-password-input')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'oldpassword123' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'newpassword12345' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'newpassword12345' } });
+    fireEvent.click(screen.getByTestId('change-password-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+    });
+
+    // Cancel step-up dialog
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+  });
+
+  it('rejects oversized avatar files and renders fallback initials when avatar and name are absent', async () => {
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: null,
+      display_name: undefined as unknown as string,
+      username: 'anonymous',
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('A')).toBeDefined();
+    });
+
+    // Upload oversized file (> 2MB)
+    const file = new File(['content'], 'avatar.png', { type: 'image/png' });
+    Object.defineProperty(file, 'size', { value: 3 * 1024 * 1024 });
+
+    const fileInput = screen.getByTestId('avatar-file-input');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Avatar file size exceeds 2 MiB limit.');
+    });
+  });
+
+  it('handles mutation errors for profile update, avatar deletion, and password visibility toggles', async () => {
+    vi.mocked(api.updateMyProfile).mockRejectedValue(new Error('Profile update error'));
+    vi.mocked(api.deleteAvatar).mockRejectedValue(new Error('Delete avatar error'));
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('save-profile-btn')).toBeDefined();
+    });
+
+    // Submit profile update failure
+    fireEvent.click(screen.getByTestId('save-profile-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Profile update error');
+    });
+
+    // Delete avatar failure
+    fireEvent.click(screen.getByTestId('remove-avatar-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Delete avatar error');
+    });
+
+    // Toggle new password show/hide
+    const togglePwBtns = screen.getAllByRole('button', { name: 'Show password' });
+    if (togglePwBtns[0]) {
+      fireEvent.click(togglePwBtns[0]);
+      expect(screen.getAllByRole('button', { name: 'Hide password' })[0]).toBeDefined();
+    }
+  });
+
+  it('handles mutation errors during TOTP confirmation, TOTP disable, and recovery codes regen', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 1,
+      recovery_codes_remaining: 10,
+    });
+    vi.mocked(api.enrollTotp).mockResolvedValue({
+      provisioning_uri: 'otpauth://totp/mock',
+      otpauth_url: 'otpauth://totp/mock',
+      secret: 'SECRETKEY',
+    });
+    vi.mocked(api.confirmTotp).mockRejectedValue(new Error('Invalid TOTP verification code'));
+    vi.mocked(api.deleteTotp).mockRejectedValue(new Error('Failed to disable TOTP'));
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValue(new Error('Regen error'));
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('enable-totp-btn')).toBeDefined();
+    });
+
+    // Enroll and confirm error
+    fireEvent.click(screen.getByTestId('enable-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-totp-btn')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('totp-verification-input'), { target: { value: '000000' } });
+    fireEvent.click(screen.getByTestId('confirm-totp-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Invalid TOTP verification code');
+    });
+
+    // Regenerate recovery codes error
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Regen error');
+    });
+  });
+
+  it('handles AAL2 required stepup challenge on sensitive actions', async () => {
+    const aal2Error = new ApiProblem(403, {
+      code: 'AAL2_REQUIRED',
+      challenge_id: 'chal-xyz',
+      methods: ['totp', 'webauthn'],
+    });
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error).mockResolvedValueOnce(undefined);
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-passkey-pk-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+
+    // Step-up modal appears
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+
+    // Test second factor callbacks
+    fireEvent.click(screen.getByTestId('mock-2fa-error'));
+    expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+
+    // Test success callback triggers retry of pending action
+    fireEvent.click(screen.getByTestId('mock-2fa-success'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+    });
+
+    // Trigger AAL2 again to test onSessionExpired and onCancel
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error);
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-2fa-expired'));
+    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+
+    // Trigger AAL2 again to test onCancel
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error);
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-2fa-cancel'));
+    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+  });
+
+  it('handles SVG avatar rejection and empty avatar file selection', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-file-input')).toBeDefined();
+    });
+
+    const fileInput = screen.getByTestId('avatar-file-input');
+
+    // Empty file selection
+    fireEvent.change(fileInput, { target: { files: [] } });
+
+    // SVG rejection by mime type
+    const svgFile = new File(['<svg></svg>'], 'avatar.svg', { type: 'image/svg+xml' });
+    fireEvent.change(fileInput, { target: { files: [svgFile] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected');
+    });
+
+    // SVG rejection by extension
+    const svgByName = new File(['binary'], 'malicious.SVG', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [svgByName] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected');
+    });
+  });
+
+  it('handles passkey rename and confirmation cancellations', async () => {
+    vi.mocked(api.fetchPasskeys).mockResolvedValue([
+      {
+        id: 'pk-unnamed',
+        nickname: '',
+        created_at: '2026-01-01T00:00:00Z',
+        last_used_at: null,
+        aaguid: '00000000-0000-0000-0000-000000000000',
+      },
+    ]);
+    vi.mocked(api.renamePasskey).mockResolvedValue({
+      id: 'pk-unnamed',
+      nickname: 'YubiKey 5',
+      created_at: '2026-01-01T00:00:00Z',
+      last_used_at: null,
+      aaguid: '00000000-0000-0000-0000-000000000000',
+    });
+
+    renderComponent();
+
+    // Check fallback label and Never date
+    await waitFor(() => {
+      expect(screen.getByText('Passkey')).toBeDefined();
+      expect(screen.getByText('Never')).toBeDefined();
+    });
+
+    // Rename passkey
+    fireEvent.click(screen.getByTestId('rename-passkey-pk-unnamed'));
+    expect(screen.getByTestId('passkey-nickname-input')).toBeDefined();
+
+    fireEvent.change(screen.getByTestId('passkey-nickname-input'), { target: { value: 'YubiKey 5' } });
+    fireEvent.click(screen.getByTestId('save-passkey-nickname-btn'));
+
+    await waitFor(() => {
+      expect(api.renamePasskey).toHaveBeenCalledWith('pk-unnamed', 'YubiKey 5');
+    });
+
+    // Window confirm cancel paths
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-unnamed'));
+    expect(api.deletePasskey).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+    expect(api.deleteTotp).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    expect(api.regenerateRecoveryCodes).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('handles non-Error string rejection in password update and passkey rename', async () => {
+    vi.mocked(api.changePassword).mockRejectedValue('Forbidden string reject');
+    vi.mocked(api.renamePasskey).mockRejectedValue('Rename string reject');
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-password-input')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'OldPassword123!' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'NewPassword12345!' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'NewPassword12345!' } });
+    fireEvent.click(screen.getByTestId('change-password-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to change password.');
+    });
+
+    // Rename passkey error
+    fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
+    fireEvent.click(screen.getByTestId('save-passkey-nickname-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
+    });
+  });
+
+  it('covers AAL2 intercept and non-Error fallback errors for delete passkey, TOTP enroll/delete, and recovery regen', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: true,
+      passkeys_count: 1,
+      recovery_codes_remaining: 10,
+    });
+
+    const aal2Error = new ApiProblem(403, {
+      code: 'AAL2_REQUIRED',
+      challenge_id: 'chal-sec-actions',
+      methods: ['totp'],
+    });
+
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error);
+    vi.mocked(api.deleteTotp).mockRejectedValueOnce(aal2Error);
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-passkey-pk-1')).toBeDefined();
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    // 1. Delete passkey triggers AAL2
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('BtnMockCancel'));
+
+    // Delete passkey string error fallback
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce('String delete passkey failure');
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete passkey.');
+    });
+
+    // 2. Disable TOTP triggers AAL2
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('BtnMockCancel'));
+
+    // Disable TOTP string error fallback
+    vi.mocked(api.deleteTotp).mockRejectedValueOnce('String delete totp failure');
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to disable TOTP.');
+    });
+
+    // 3. Regenerate recovery codes triggers AAL2
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('BtnMockCancel'));
+
+    // Regenerate recovery codes string error fallback
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce('String regen codes failure');
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to regenerate recovery codes.');
+    });
+  });
+
+  it('covers string error on enroll TOTP when totp is disabled', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 1,
+      recovery_codes_remaining: 10,
+    });
+
+    vi.mocked(api.enrollTotp).mockRejectedValue('String enroll totp failure');
+
+    renderComponent();
+
+    const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
+    fireEvent.click(enableTotpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to initiate TOTP setup.');
+    });
+  });
+
+  it('covers non-Error string rejection on avatar upload/delete and profile update', async () => {
+    vi.mocked(api.updateMyProfile).mockRejectedValue('String profile update reject');
+    vi.mocked(api.uploadAvatar).mockRejectedValue('String upload avatar reject');
+    vi.mocked(api.deleteAvatar).mockRejectedValue('String delete avatar reject');
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('save-profile-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('save-profile-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to update profile.');
+    });
+
+    fireEvent.click(screen.getByTestId('remove-avatar-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete avatar.');
+    });
+
+    const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to upload avatar.');
+    });
+  });
+
+  it('covers window.confirm cancellation on disable TOTP, regenerate recovery codes, and delete passkey', async () => {
+    const localClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <QueryClientProvider client={localClient}>
+        <PersonalSettingsPage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('disable-totp-btn')).toBeDefined();
+      expect(screen.getByTestId('delete-passkey-pk-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+    expect(api.deleteTotp).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    expect(api.regenerateRecoveryCodes).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    expect(api.deletePasskey).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('covers otpauth_url fallback and confirmTotp with empty recovery codes', async () => {
+    const localClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 1,
+      recovery_codes_remaining: 0,
+    });
+    vi.mocked(api.enrollTotp).mockResolvedValue({
+      otpauth_url: 'otpauth://totp/kanban:alice?secret=TESTSECRET',
+      secret: 'TESTSECRET',
+    });
+    vi.mocked(api.confirmTotp).mockResolvedValue({
+      ok: true,
+      recovery_codes: [],
+    });
+
+    render(
+      <QueryClientProvider client={localClient}>
+        <PersonalSettingsPage />
+      </QueryClientProvider>,
+    );
+
+    const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
+    fireEvent.click(enableTotpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('totp-secret-key').textContent).toContain('TESTSECRET');
+    });
+
+    const codeInput = screen.getByTestId('totp-verification-input');
+    fireEvent.change(codeInput, { target: { value: '123456' } });
+    fireEvent.click(screen.getByTestId('confirm-totp-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-success').textContent).toContain('Two-factor authentication enabled successfully.');
+    });
+  });
+
+  it('covers AAL2_REQUIRED with fallback challengeId and methods, plus rename and confirm string errors', async () => {
+    const localClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const aal2FallbackError = new ApiProblem(403, {
+      code: 'AAL2_REQUIRED',
+      challenge_id: 123,
+      methods: 'invalid-non-array',
+    });
+
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 1,
+      recovery_codes_remaining: 10,
+    });
+    vi.mocked(api.enrollTotp).mockRejectedValue(aal2FallbackError);
+    vi.mocked(api.confirmTotp).mockRejectedValue('String TOTP reject');
+    vi.mocked(api.renamePasskey).mockRejectedValue('String rename reject');
+
+    render(
+      <QueryClientProvider client={localClient}>
+        <PersonalSettingsPage />
+      </QueryClientProvider>,
+    );
+
+    const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
+    fireEvent.click(enableTotpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+    });
+
+    // Rename passkey string rejection
+    await waitFor(() => {
+      expect(screen.getByTestId('rename-passkey-pk-1')).toBeDefined();
+    });
+    const renameBtn = screen.getByTestId('rename-passkey-pk-1');
+    fireEvent.click(renameBtn);
+
+    const nicknameInput = screen.getByTestId('passkey-nickname-input');
+    fireEvent.change(nicknameInput, { target: { value: 'New Key Name' } });
+    fireEvent.click(screen.getByTestId('save-passkey-nickname-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
+    });
   });
 });

@@ -38,11 +38,24 @@ describe('ApiProblem', () => {
       errors: [
         { path: 'client_id', message: 'Field required' },
         { path: ['public_config', 'issuer'], message: 'Extra fields not permitted' },
+        { path: 42, message: 99 },
+        { path: ['items', 0, null, true], message: 'Invalid item' },
+        { path: '', message: 'blank path ignored' },
+        { path: 'empty_msg', message: '' },
+        null,
+        'string entry',
+        { other: 'prop' },
       ],
     });
     expect(p.message).toBe(
-      'Validation failed: client_id: Field required, public_config.issuer: Extra fields not permitted',
+      'Validation failed: client_id: Field required, public_config.issuer: Extra fields not permitted, 42: 99, items.0: Invalid item',
     );
+
+    const emptyErrorsProblem = new ApiProblem(422, {
+      detail: 'Failed',
+      errors: [null, {}],
+    });
+    expect(emptyErrorsProblem.message).toBe('Failed');
   });
 
   it('classifies 404 uniformly and 412 precondition failures', () => {

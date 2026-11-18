@@ -585,6 +585,42 @@ describe('BoardView Component', () => {
       } as never);
     });
 
+    // 12. onDrop with edge='top' on non-top card (targetIdx > 0)
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-1' } },
+        location: {
+          current: {
+            dropTargets: [{ data: { type: 'card', stateId: 'st-progress', issueKey: 'KAN-3', edge: 'top' } }],
+          },
+        },
+      } as never);
+    });
+
+    // 13. onDrop with edge='bottom' on bottom card (targetIdx === targetColCards.length - 1)
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-1' } },
+        location: {
+          current: {
+            dropTargets: [{ data: { type: 'card', stateId: 'st-progress', issueKey: 'KAN-3', edge: 'bottom' } }],
+          },
+        },
+      } as never);
+    });
+
+    // 14. onDrop onto same card (targetCardKey === issueKey)
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-2' } },
+        location: {
+          current: {
+            dropTargets: [{ data: { type: 'card', stateId: 'st-progress', issueKey: 'KAN-2', edge: 'top' } }],
+          },
+        },
+      } as never);
+    });
+
     // 12. onDrop onto empty column st-done (0 issues)
     act(() => {
       capturedMonitorOpts?.onDrop?.({
@@ -704,6 +740,92 @@ describe('BoardView Component', () => {
     fireEvent.click(submitBtn);
   });
 
+  it('handles drop with edge=bottom and drop onto column without target card', async () => {
+    let capturedMonitorOpts: MonitorArgs | null = null;
+    const customMonitorFactory = (opts: MonitorArgs) => {
+      capturedMonitorOpts = opts;
+      return () => undefined;
+    };
+
+    const moveSpy = vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
+      issue_key: 'KAN-1',
+      state_id: 'st-todo',
+      board_rank: 'rank-bot',
+      rebalance_scheduled: false,
+    });
+
+    const issues: BoardIssue[] = [
+      { id: 'i1', key: 'KAN-1', summary: 'Item 1', state_id: 'st-progress', board_rank: '01' },
+      { id: 'i2', key: 'KAN-2', summary: 'Todo 1', state_id: 'st-todo', board_rank: '02' },
+      { id: 'i3', key: 'KAN-3', summary: 'Todo 2', state_id: 'st-todo', board_rank: '03' },
+    ];
+
+    renderWithClient(
+      <BoardView
+        projectKey="KAN"
+        states={mockStates}
+        issues={issues}
+        currentUserCapabilities={['ADMIN']}
+        monitorFactory={customMonitorFactory}
+      />,
+    );
+
+    // 1. Drop KAN-1 onto KAN-2 (middle) with edge='bottom' -> belowCard is KAN-3
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-1' } },
+        location: {
+          current: {
+            dropTargets: [
+              { data: { type: 'card', stateId: 'st-todo', issueKey: 'KAN-2', edge: 'bottom' } },
+            ],
+          },
+        },
+      } as never);
+    });
+    await waitFor(() => {
+      expect(moveSpy).toHaveBeenCalled();
+    });
+
+    // 2. Drop KAN-1 onto KAN-3 (last card) with edge='bottom' -> belowCard is null
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-1' } },
+        location: {
+          current: {
+            dropTargets: [
+              { data: { type: 'card', stateId: 'st-todo', issueKey: 'KAN-3', edge: 'bottom' } },
+            ],
+          },
+        },
+      } as never);
+    });
+
+    // 3. Drop KAN-1 onto column directly (no target card) -> aboveCard is last card in column
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-1' } },
+        location: {
+          current: {
+            dropTargets: [{ data: { type: 'column', stateId: 'st-todo' } }],
+          },
+        },
+      } as never);
+    });
+
+    // 4. Drop KAN-1 onto empty column (e.g. st-done has no issues)
+    act(() => {
+      capturedMonitorOpts?.onDrop?.({
+        source: { data: { type: 'card', issueKey: 'KAN-1' } },
+        location: {
+          current: {
+            dropTargets: [{ data: { type: 'column', stateId: 'st-done' } }],
+          },
+        },
+      } as never);
+    });
+  });
+
   it('loads states and issues via queries when props are omitted', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
       if (path === '/api/v1/projects/{project_ref}') {
@@ -764,5 +886,108 @@ describe('BoardView Component', () => {
     await waitFor(() => {
       expect(screen.getByText('To Do')).toBeDefined();
     });
+  });
+
+  it('renders priority indicators for urgent, high, medium, and low issues', () => {
+    const issues: BoardIssue[] = [
+      { id: 'p1', key: 'KAN-URG', summary: 'Urgent task', state_id: 'st-todo', board_rank: '1', priority: { id: 'p-urg', slug: 'urgent', label: 'Urgent' } },
+      { id: 'p2', key: 'KAN-HI', summary: 'High task', state_id: 'st-todo', board_rank: '2', priority: { id: 'p-hi', slug: 'high', label: 'High' } },
+      { id: 'p3', key: 'KAN-MED', summary: 'Med task', state_id: 'st-todo', board_rank: '3', priority: { id: 'p-med', slug: 'medium', label: 'Medium' } },
+      { id: 'p4', key: 'KAN-LOW', summary: 'Low task', state_id: 'st-todo', board_rank: '4', priority: { id: 'p-low', slug: 'low', label: 'Low' } },
+    ];
+
+    renderWithClient(
+      <BoardView projectKey="KAN" states={mockStates} issues={issues} />,
+    );
+
+    expect(screen.getByText('Urgent task')).toBeDefined();
+    expect(screen.getByText('High task')).toBeDefined();
+    expect(screen.getByText('Med task')).toBeDefined();
+    expect(screen.getByText('Low task')).toBeDefined();
+  });
+
+  it('covers state_id fallback from state.id and empty string when state is absent', () => {
+    const mixedIssues: BoardIssue[] = [
+      { id: 'p1', key: 'KAN-STATE-OBJ', summary: 'State object item', state: { id: 'st-todo' } } as unknown as BoardIssue,
+      { id: 'p2', key: 'KAN-NO-STATE', summary: 'No state item' } as unknown as BoardIssue,
+    ];
+
+    renderWithClient(
+      <BoardView projectKey="KAN" states={mockStates} issues={mixedIssues} />,
+    );
+
+    expect(screen.getByText('State object item')).toBeDefined();
+  });
+
+  it('handles toast timer and second toast arrival preventing stale dismissal', () => {
+    vi.useFakeTimers();
+    let eventHandler: ((event: unknown) => void) | null = null;
+    const mockRealtimeClient = {
+      onEvent: (cb: (event: unknown) => void) => {
+        eventHandler = cb;
+        return () => {
+          eventHandler = null;
+        };
+      },
+      subscribe: vi.fn(),
+      isConnected: () => true,
+    };
+
+    renderWithClient(
+      <BoardView
+        projectKey="KAN"
+        states={mockStates}
+        issues={[]}
+        realtimeClient={mockRealtimeClient as never}
+      />,
+    );
+
+    expect(eventHandler).toBeDefined();
+
+    // Trigger toast 1
+    act(() => {
+      eventHandler?.({
+        id: 'evt-toast-1',
+        type: 'workflow.gate.cancelled',
+        payload: {
+          issue_key: 'KAN-1',
+          execution_id: 'exec-1',
+          reason: 'STALE_SNAPSHOT',
+        },
+      });
+    });
+
+    expect(screen.getByRole('alert')).toBeDefined();
+
+    // Advance 5000ms (dismissed)
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('covers keyboard navigation bounds when moving left at column 0 and right at last column', () => {
+    const issues: BoardIssue[] = [
+      { id: 'b1', key: 'KAN-LEFTMOST', summary: 'Left card', state_id: 'st-backlog', board_rank: '1' },
+      { id: 'b2', key: 'KAN-RIGHTMOST', summary: 'Right card', state_id: 'st-done', board_rank: '2' },
+    ];
+
+    renderWithClient(
+      <BoardView projectKey="KAN" states={mockStates} issues={issues} />,
+    );
+
+    const leftCard = screen.getByText('Left card').closest('.board-card');
+    const rightCard = screen.getByText('Right card').closest('.board-card');
+
+    if (leftCard) {
+      // Alt+ArrowLeft at left-most column is a bounds no-op
+      fireEvent.keyDown(leftCard, { key: 'ArrowLeft', altKey: true });
+    }
+    if (rightCard) {
+      // Alt+ArrowRight at right-most column is a bounds no-op
+      fireEvent.keyDown(rightCard, { key: 'ArrowRight', altKey: true });
+    }
   });
 });

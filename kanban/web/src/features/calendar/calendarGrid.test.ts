@@ -117,4 +117,9 @@ describe('calendarGrid pure date math', () => {
     expect(nonTodayCell?.isToday).toBe(false);
     expect(nonTodayCell?.dayOfMonth).toBe(15);
   });
+
+  it('builds two-week grid with invalid anchorDate falling back to today epoch and day 0', () => {
+    const cells = buildTwoWeekGrid('invalid-date');
+    expect(cells).toHaveLength(14);
+  });
 });

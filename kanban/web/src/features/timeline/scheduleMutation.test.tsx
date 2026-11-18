@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { patchIssueSchedule, useRescheduleIssue } from './scheduleMutation';
+import { ensureCsrfToken, patchIssueSchedule, useRescheduleIssue } from './scheduleMutation';
 
 describe('scheduleMutation', () => {
   const originalFetch = globalThis.fetch;
@@ -288,5 +288,117 @@ describe('scheduleMutation', () => {
         type: 'kb:issue-updated',
       }),
     );
+  });
+
+  it('ensureCsrfToken fetches session when cookie is absent and handles errors', async () => {
+    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ csrf_token: 'fetched-csrf-token' }),
+    });
+
+    const token = await ensureCsrfToken();
+    expect(token).toBe('fetched-csrf-token');
+    expect(document.cookie).toContain('kb_csrf=fetched-csrf-token');
+
+    // Subsequent call returns existing token without fetch
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+    const cachedToken = await ensureCsrfToken();
+    expect(cachedToken).toBe('fetched-csrf-token');
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // When cookie is missing and fetch rejects
+    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
+    globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
+    const fallbackToken = await ensureCsrfToken();
+    expect(fallbackToken).toBeNull();
+  });
+
+  it('reschedule handles target.originalDates and target.start_date fallback on rollback', async () => {
+    const onRollback = vi.fn();
+    const { result } = renderHook(() => useRescheduleIssue({ onRollback }));
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('Server Error'),
+    });
+
+    // Test with originalDates object
+    await act(async () => {
+      await result.current.reschedule({
+        issueRef: 'KAN-ROLL-1',
+        startDate: '2026-11-20',
+        originalDates: {
+          startDate: '2026-11-10',
+          dueDate: '2026-11-15',
+        },
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-ROLL-1', {
+      startDate: '2026-11-10',
+      dueDate: '2026-11-15',
+    });
+
+    // Test with start_date and due_date fallback
+    await act(async () => {
+      await result.current.reschedule({
+        issueRef: 'KAN-ROLL-2',
+        dueDate: '2026-11-25',
+        start_date: '2026-11-01',
+        due_date: '2026-11-08',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-ROLL-2', {
+      startDate: '2026-11-01',
+      dueDate: '2026-11-08',
+    });
+
+    // Test with originalStartDate & originalDueDate
+    await act(async () => {
+      await result.current.reschedule({
+        key: 'KAN-ROLL-3',
+        startDate: '2026-11-20',
+        originalStartDate: '2026-11-05',
+        originalDueDate: '2026-11-12',
+      });
+    });
+    expect(onRollback).toHaveBeenCalledWith('KAN-ROLL-3', {
+      startDate: '2026-11-05',
+      dueDate: '2026-11-12',
+    });
+
+    // Test with no original dates at all and empty issueRef (fallback to empty string and nulls)
+    await act(async () => {
+      await result.current.reschedule({ issueRef: '' });
+    });
+    expect(onRollback).toHaveBeenCalledWith('', {
+      startDate: null,
+      dueDate: null,
+    });
+  });
+
+  it('handles res.text() read failure in patchIssueSchedule and ensureCsrfToken missing token', async () => {
+    // res.text() throws
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.reject(new Error('Stream closed')),
+    });
+
+    await expect(
+      patchIssueSchedule('KAN-FAIL', { startDate: '2026-11-01' }),
+    ).rejects.toThrow('HTTP_500');
+
+    // ensureCsrfToken with empty response
+    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    const token = await ensureCsrfToken();
+    expect(token).toBeNull();
   });
 });

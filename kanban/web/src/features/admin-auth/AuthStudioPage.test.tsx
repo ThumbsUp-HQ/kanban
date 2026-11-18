@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { AuthStudioPage } from './AuthStudioPage';
 import * as client from '../../api/client';
@@ -1229,8 +1229,11 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       render(<AuthStudioPage />);
 
-      const usersTab = await screen.findByRole('tab', { name: /Users & Permissions/i });
-      fireEvent.click(usersTab);
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
 
       await waitFor(() => {
         expect(screen.getByText('LDAP Engineer')).toBeDefined();
@@ -1249,8 +1252,11 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       render(<AuthStudioPage />);
 
-      const usersTab = await screen.findByRole('tab', { name: /Users & Permissions/i });
-      fireEvent.click(usersTab);
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Local User')).toBeDefined();
@@ -1273,6 +1279,323 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       await waitFor(() => {
         expect(resetSpy).toHaveBeenCalledWith('u-1', 'NewPass12345!');
+      });
+    });
+
+    it('filters principals by kind and displays provider badges', async () => {
+      const customPrincipals = [
+        {
+          id: 'u-google',
+          principal: 'google.dev',
+          display_name: 'Google Dev',
+          email: 'dev@google.com',
+          provider: 'GOOGLE_WORKSPACE',
+          role: 'WORKSPACE_MEMBER',
+          created_at: '2026-11-14T00:00:00Z',
+        },
+        {
+          id: 'u-github',
+          principal: 'gh.octocat',
+          display_name: 'GitHub Octocat',
+          email: 'octo@github.com',
+          provider: 'GITHUB_ENTERPRISE',
+          role: 'WORKSPACE_MEMBER',
+          created_at: '2026-11-14T00:00:00Z',
+        },
+        {
+          id: 'u-ad',
+          principal: 'corp.user',
+          display_name: 'AD User',
+          email: 'user@corp.local',
+          provider: 'ACTIVE_DIRECTORY',
+          role: 'WORKSPACE_MEMBER',
+          created_at: '2026-11-14T00:00:00Z',
+        },
+        {
+          id: 'u-other',
+          principal: 'custom.user',
+          display_name: 'Custom User',
+          email: 'custom@idp.com',
+          provider: 'CUSTOM_IDP',
+          role: 'WORKSPACE_GUEST',
+          created_at: '2026-11-14T00:00:00Z',
+        },
+      ];
+
+      const fetchSpy = vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return customPrincipals;
+        return {};
+      });
+
+      const { container } = render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(within(container).getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(within(container).getByRole('tab', { name: /Users & Permissions/i }));
+
+      await waitFor(() => {
+        expect(within(container).getByText('Google Dev')).toBeDefined();
+      });
+
+      // Provider badges
+      expect(within(container).getByText('GOOGLE_WORKSPACE').className).toContain('auth-badge-provider--google');
+      expect(within(container).getByText('GITHUB_ENTERPRISE').className).toContain('auth-badge-provider--github');
+      expect(within(container).getByText('ACTIVE_DIRECTORY').className).toContain('auth-badge-provider--ad');
+      expect(within(container).getByText('CUSTOM_IDP').className).toContain('auth-badge-provider--oauth');
+
+      // Click filter buttons
+      fireEvent.click(within(container).getByTestId('filter-user'));
+      await waitFor(() => {
+        expect(within(container).getByTestId('filter-group')).toBeDefined();
+      });
+      expect(fetchSpy).toHaveBeenCalledWith('GET', expect.stringContaining('filter=USER'));
+
+      fireEvent.click(within(container).getByTestId('filter-group'));
+      await waitFor(() => {
+        expect(within(container).getByTestId('filter-agent')).toBeDefined();
+      });
+      expect(fetchSpy).toHaveBeenCalledWith('GET', expect.stringContaining('filter=GROUP'));
+
+      fireEvent.click(within(container).getByTestId('filter-agent'));
+      await waitFor(() => {
+        expect(within(container).getByTestId('filter-all')).toBeDefined();
+      });
+      expect(fetchSpy).toHaveBeenCalledWith('GET', expect.stringContaining('filter=AGENT'));
+
+      fireEvent.click(within(container).getByTestId('filter-all'));
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith('GET', expect.stringContaining('filter='));
+      });
+    });
+
+    it('renders empty message when no principals exist and dismisses error alert', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') throw new Error('Network failure');
+        if ((path as string).startsWith('/api/v1/admin/principals')) return [];
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      // General error alert appears
+      await waitFor(() => {
+        expect(screen.getByText('Network failure')).toBeDefined();
+      });
+
+      // Dismiss error
+      const dismissBtn = screen.getByRole('button', { name: 'Dismiss error' });
+      fireEvent.click(dismissBtn);
+      expect(screen.queryByText('Network failure')).toBeNull();
+
+      // Check empty principals
+      const usersTab = screen.getByRole('tab', { name: /Users & Permissions/i });
+      fireEvent.click(usersTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('No user principals found.')).toBeDefined();
+      });
+    });
+
+    it('covers user role update error handling for Error and string rejection', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          return [
+            {
+              id: 'u-role-test',
+              principal: 'role.user',
+              handle: 'role.user',
+              display_name: 'Role User',
+              email: 'role@example.com',
+              role: 'WORKSPACE_MEMBER',
+              provider: 'LOCAL',
+            },
+          ];
+        }
+        return {};
+      });
+
+      const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockRejectedValueOnce(new Error('Permission denied for role change'));
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Role User')).toBeDefined();
+      });
+
+      const roleSelect = screen.getByLabelText(/Role for role\.user/i);
+      fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('Permission denied for role change')).toBeDefined();
+      });
+
+      // Now reject with string to trigger fallback
+      roleSpy.mockRejectedValueOnce('Unknown failure');
+      fireEvent.change(roleSelect, { target: { value: 'SERVER_ADMIN' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to update user role.')).toBeDefined();
+      });
+    });
+
+    it('covers principal creation for AGENT type, handle validation, and creation errors', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return [];
+        return {};
+      });
+
+      const createSpy = vi.spyOn(adminAuthApi, 'createLocalUser');
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+
+      const addBtn = await screen.findByRole('button', { name: /\+ Add Local User/i });
+      fireEvent.click(addBtn);
+
+      // Select Principal Kind: AGENT
+      const kindSelect = screen.getByLabelText(/Principal Kind/i);
+      fireEvent.change(kindSelect, { target: { value: 'AGENT' } });
+
+      // Submit with empty handle
+      const dialog = screen.getByRole('dialog', { name: /\+ Add Local User/i });
+      const form = dialog.querySelector('form');
+      expect(form).toBeTruthy();
+      if (form) fireEvent.submit(form);
+
+      expect(screen.getByText('Handle is required.')).toBeDefined();
+      expect(createSpy).not.toHaveBeenCalled();
+
+      // Set handle and mock error with Error instance
+      fireEvent.change(screen.getByLabelText(/Username \/ Handle/i), {
+        target: { value: 'ci-bot' },
+      });
+      createSpy.mockRejectedValueOnce(new Error('Agent handle already reserved'));
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(screen.getByText('Agent handle already reserved')).toBeDefined();
+      });
+
+      // Submit again with string reject for fallback error
+      createSpy.mockRejectedValueOnce('Backend failure');
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to create principal.')).toBeDefined();
+      });
+
+      // Submit successfully
+      createSpy.mockResolvedValueOnce({
+        id: 'p-agent',
+        principal: 'ci-bot',
+        handle: 'ci-bot',
+        display_name: 'ci-bot',
+        type: 'AGENT',
+        status: 'active',
+        role: 'WORKSPACE_MEMBER',
+      });
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            handle: 'ci-bot',
+            type: 'AGENT',
+          }),
+        );
+        expect(screen.getByText('Principal (AGENT) @ci-bot created successfully.')).toBeDefined();
+      });
+    });
+
+    it('covers reset password error handling for mismatch, Error instance, and string rejection', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          return [
+            {
+              id: 'u-pwd-test',
+              principal: 'pwd.user',
+              handle: 'pwd.user',
+              display_name: 'Pwd User',
+              email: 'pwd@example.com',
+              role: 'WORKSPACE_MEMBER',
+              provider: 'LOCAL',
+            },
+          ];
+        }
+        return {};
+      });
+
+      const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword');
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Pwd User')).toBeDefined();
+      });
+
+      const resetBtn = screen.getByRole('button', { name: /^Reset Password$/i });
+      fireEvent.click(resetBtn);
+
+      const newPassInput = screen.getByLabelText(/^New Password/i);
+      const confirmPassInput = screen.getByLabelText(/Confirm New Password/i);
+      const updateBtn = screen.getByRole('button', { name: /^Update Password$/i });
+
+      // Passwords do not match
+      fireEvent.change(newPassInput, { target: { value: 'Password12345!' } });
+      fireEvent.change(confirmPassInput, { target: { value: 'Mismatch12345!' } });
+      fireEvent.click(updateBtn);
+
+      expect(screen.getByText('Passwords do not match or cannot be empty.')).toBeDefined();
+      expect(resetSpy).not.toHaveBeenCalled();
+
+      // Matching passwords but resetUserPassword throws Error
+      fireEvent.change(confirmPassInput, { target: { value: 'Password12345!' } });
+      resetSpy.mockRejectedValueOnce(new Error('Password policy check failed: too common'));
+      fireEvent.click(updateBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Password policy check failed: too common')).toBeDefined();
+      });
+
+      // Reset throws non-Error (string)
+      resetSpy.mockRejectedValueOnce('Network drop');
+      fireEvent.click(updateBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to reset password.')).toBeDefined();
       });
     });
   });

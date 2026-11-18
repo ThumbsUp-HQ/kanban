@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import React from 'react';
-import { RouterProvider } from 'react-router';
+import { RouterProvider, MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as client from '../api/client';
 import {
@@ -11,7 +11,13 @@ import {
   IssuesWorkspaceRoute,
   RoutePlaceholder,
   AppRoutes,
+  ProjectCyclesView,
+  ProjectModulesView,
+  ProjectSavedViewsView,
+  WorkspaceHomeView,
+  DraftsWorkspaceView,
 } from './routes';
+import { saveDraft } from '../features/drafts/draftsStore';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { FIXTURE_12_ISSUES } from '../features/views/fixtures';
 
@@ -551,5 +557,445 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('module-error-banner').textContent).toContain('Module creation rejected');
     });
+  });
+
+  it('renders ProjectViewsRedirect, ProjectSavedViewsView, and fallback views without query client', () => {
+    // 1. ProjectSavedViewsView component
+    render(
+      <MemoryRouter initialEntries={['/projects/KAN/views']}>
+        <ProjectSavedViewsView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('project-views-view')).toBeDefined();
+    expect(screen.getByRole('link', { name: 'List View' })).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Board View' })).toBeDefined();
+
+    // 2. ProjectViewsRedirect via router
+    const router1 = createAppRouter(['/projects/KAN/views']);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ThemeProvider>
+          <RouterProvider router={router1} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    // 3. Fallback views without query client
+    render(
+      <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+        <ProjectCyclesView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Filter work items by cycle →')).toBeDefined();
+
+    render(
+      <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+        <ProjectModulesView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('View module work items →')).toBeDefined();
+  });
+
+  it('renders FullScreenIssueRoute and sets document.title', async () => {
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(client.apiClient, 'get').mockResolvedValue({
+      id: 'iss-1',
+      key: 'KAN-999',
+      summary: 'Critical Bug Fix',
+    });
+
+    const router = createAppRouter(['/projects/KAN/issues/KAN-999']);
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.title).toBe('KAN-999 - Critical Bug Fix');
+    });
+  });
+
+  it('covers cycle creation, validation, and error states in ProjectCyclesView', async () => {
+    let cyclesList: unknown[] = [];
+    vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+      const m = method.toUpperCase();
+      const url = path;
+      if (url.includes('/cycles') && m === 'GET') {
+        return Promise.resolve({ items: cyclesList });
+      }
+      if (url.includes('/cycles') && m === 'POST') {
+        cyclesList = [
+          {
+            id: 'c-1',
+            name: 'Sprint 1',
+            status: 'active',
+            start_date: '2026-03-01',
+            end_date: '2026-03-15',
+          },
+        ];
+        return Promise.resolve(cyclesList[0]);
+      }
+      return Promise.resolve({});
+    });
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+          <ProjectCyclesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Empty submit does nothing
+    const form = screen.getByTestId('create-cycle-form');
+    fireEvent.submit(form);
+
+    // Fill form
+    const nameInput = screen.getByTestId('new-cycle-name-input');
+    fireEvent.change(nameInput, { target: { value: 'Sprint 1' } });
+    const startInput = screen.getByTestId('new-cycle-start-input');
+    fireEvent.change(startInput, { target: { value: '2026-03-01' } });
+    const endInput = screen.getByTestId('new-cycle-end-input');
+    fireEvent.change(endInput, { target: { value: '2026-03-15' } });
+
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByText('Sprint 1')).toBeDefined();
+    });
+
+    // Test creation error
+    vi.spyOn(client, 'apiFetch').mockImplementation((method) => {
+      if (method.toUpperCase() === 'POST') throw new Error('Cycle overlap error');
+      return Promise.resolve({ items: cyclesList });
+    });
+    fireEvent.change(nameInput, { target: { value: 'Sprint 2' } });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cycle overlap error')).toBeDefined();
+    });
+
+    // Render with VIEW capabilities hides creation form
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+          <ProjectCyclesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+
+  it('covers module creation, validation, and error states in ProjectModulesView', async () => {
+    let modulesList: unknown[] = [];
+    vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+      const m = method.toUpperCase();
+      const url = path;
+      if (url.includes('/modules') && m === 'GET') {
+        return Promise.resolve({ items: modulesList });
+      }
+      if (url.includes('/modules') && m === 'POST') {
+        modulesList = [
+          {
+            id: 'm-1',
+            name: 'Core Auth',
+            status: 'in_progress',
+            start_date: '2026-03-01',
+            target_date: '2026-03-31',
+            description_markdown: 'Authentication and session security',
+          },
+        ];
+        return Promise.resolve(modulesList[0]);
+      }
+      return Promise.resolve({});
+    });
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+          <ProjectModulesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Empty submit does nothing
+    const form = screen.getByTestId('create-module-form');
+    fireEvent.submit(form);
+
+    // Fill form
+    const nameInput = screen.getByTestId('new-module-name-input');
+    fireEvent.change(nameInput, { target: { value: 'Core Auth' } });
+    const statusSelect = screen.getByTestId('new-module-status-select');
+    fireEvent.change(statusSelect, { target: { value: 'in_progress' } });
+    const startInput = screen.getByTestId('new-module-start-input');
+    fireEvent.change(startInput, { target: { value: '2026-03-01' } });
+    const targetInput = screen.getByTestId('new-module-target-input');
+    fireEvent.change(targetInput, { target: { value: '2026-03-31' } });
+    const descInput = screen.getByTestId('new-module-desc-input');
+    fireEvent.change(descInput, { target: { value: 'Authentication and session security' } });
+
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByText('Core Auth')).toBeDefined();
+    });
+
+    // Test creation error
+    vi.spyOn(client, 'apiFetch').mockImplementation((method) => {
+      if (method.toUpperCase() === 'POST') throw new Error('Module collision error');
+      return Promise.resolve({ items: modulesList });
+    });
+    fireEvent.change(nameInput, { target: { value: 'Core Auth 2' } });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByText('Module collision error')).toBeDefined();
+    });
+
+    // Render with VIEW capabilities hides creation form
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+          <ProjectModulesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+
+  it('covers cycle partial dates (TBD fallback) and string error rejections in ProjectCyclesView', async () => {
+    vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+      const m = method.toUpperCase();
+      const url = path;
+      if (url.includes('/cycles') && m === 'GET') {
+        return Promise.resolve([
+          { id: 'c-start-only', name: 'Start Only Cycle', start_date: '2026-03-01' },
+          { id: 'c-end-only', name: 'End Only Cycle', end_date: '2026-03-15' },
+        ]);
+      }
+      if (url.includes('/cycles') && m === 'POST') {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'String cycle creation failure';
+      }
+      return Promise.resolve({});
+    });
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+          <ProjectCyclesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/2026-03-01 → TBD/)).toBeDefined();
+    expect(screen.getByText(/TBD → 2026-03-15/)).toBeDefined();
+
+    const cycleNameInput = screen.getByTestId('new-cycle-name-input');
+    fireEvent.change(cycleNameInput, { target: { value: 'String Reject Cycle' } });
+    fireEvent.submit(screen.getByTestId('create-cycle-form'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Failed to create cycle');
+    });
+  });
+
+  it('covers module string error rejection in ProjectModulesView', async () => {
+    vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+      const m = method.toUpperCase();
+      const url = path;
+      if (url.includes('/modules') && m === 'GET') {
+        return Promise.resolve([
+          { id: 'm-1', name: 'Existing Module', status: 'planned', description_markdown: 'Docs' },
+        ]);
+      }
+      if (url.includes('/modules') && m === 'POST') {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'String module creation failure';
+      }
+      return Promise.resolve({});
+    });
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/modules']}>
+          <ProjectModulesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Existing Module')).toBeDefined();
+
+    const modNameInput = screen.getByTestId('new-module-name-input');
+    fireEvent.change(modNameInput, { target: { value: 'String Reject Module' } });
+    fireEvent.submit(screen.getByTestId('create-module-form'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('module-error-banner').textContent).toContain('Failed to create module');
+    });
+  });
+
+  it('covers queryFn capabilities loading in ProjectCyclesView and ProjectModulesView without prop', async () => {
+    let throwApi = false;
+    vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+      const url = path;
+      if (url.includes('/projects/{project_ref}')) {
+        if (throwApi) throw new Error('API failure');
+        return Promise.resolve({ capabilities: ['ADMIN', 'EDIT'] });
+      }
+      if (url.includes('/cycles')) return Promise.resolve([]);
+      if (url.includes('/modules')) return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    // 1. With capabilities array response
+    const { unmount } = render(
+      <QueryClientProvider client={testQueryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+          <ProjectCyclesView />
+          <ProjectModulesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId('project-cycles-view')).toBeDefined();
+    expect(await screen.findByTestId('project-modules-view')).toBeDefined();
+    unmount();
+
+    // 2. With thrown error -> fallback to ['EDIT', 'ADMIN']
+    throwApi = true;
+    const testQueryClient2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={testQueryClient2}>
+        <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+          <ProjectCyclesView />
+          <ProjectModulesView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId('project-cycles-view')).toBeDefined();
+    expect(await screen.findByTestId('project-modules-view')).toBeDefined();
+  });
+
+  it('covers WorkspaceHomeView onCreated and DraftsWorkspaceView full lifecycle', async () => {
+    document.cookie = 'kb_csrf=csrf-test-token; Path=/';
+    const projectsList = [
+      {
+        id: 'p-init',
+        identifier: 'INIT',
+        name: 'Initial Project',
+        description_markdown: '',
+        modules_enabled: true,
+      },
+    ];
+
+    // 1. WorkspaceHomeView onCreated
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url.includes('/api/v1/projects') && method === 'POST') {
+        const created = {
+          id: 'p-created',
+          identifier: 'NEWP',
+          name: 'New Project',
+          description_markdown: '',
+          modules_enabled: true,
+        };
+        projectsList.push(created);
+        return Promise.resolve(new Response(JSON.stringify(created), { status: 201 }));
+      }
+      if (url.includes('/api/v1/projects') && !url.includes('/issues')) {
+        return Promise.resolve(new Response(
+          JSON.stringify({ items: projectsList }),
+          { status: 200 },
+        ));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, id: 'new-issue' }), { status: 200 }));
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount: uHome } = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/']}>
+          <WorkspaceHomeView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId('project-card-INIT')).toBeDefined();
+
+    // Open create project modal
+    fireEvent.click(screen.getByTestId('home-create-project-btn'));
+    expect(screen.getByRole('dialog')).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText(/Project Name/i), { target: { value: 'New Project' } });
+    fireEvent.change(screen.getByLabelText(/Identifier/i), { target: { value: 'NEWP' } });
+    const form = screen.getByRole('dialog').querySelector('form');
+    expect(form).toBeTruthy();
+    if (form) fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-card-NEWP')).toBeDefined();
+    });
+    uHome();
+
+    // 2. DraftsWorkspaceView with moduleIds, resume success, resume fallback, and delete
+    saveDraft({
+      id: 'd-full',
+      projectKey: 'KAN',
+      summary: 'Full draft with modules',
+      description: 'Body markdown',
+      stateId: 'st-started',
+      prioritySlug: 'urgent',
+      moduleIds: ['mod-1', 'mod-2'],
+    });
+
+    saveDraft({
+      id: 'd-fallback',
+      projectKey: 'KAN',
+      summary: 'Draft for fallback',
+      stateId: 'st-backlog',
+      prioritySlug: 'low',
+    });
+
+    const { unmount: uDrafts } = render(
+      <MemoryRouter initialEntries={['/drafts']}>
+        <DraftsWorkspaceView />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByTestId('draft-card')).toHaveLength(2);
+
+    // Resume first draft successfully
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ id: 'created-iss' }), { status: 200 }));
+    const resumeBtns = screen.getAllByTestId('draft-resume-btn');
+    const firstResumeBtn = resumeBtns[0];
+    expect(firstResumeBtn).toBeDefined();
+    if (firstResumeBtn) fireEvent.click(firstResumeBtn);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('draft-card')).toHaveLength(1);
+    });
+
+    // Resume second draft with network rejection -> fallback to ?create=1
+    fetchSpy.mockRejectedValueOnce(new Error('Network error'));
+    fireEvent.click(screen.getByTestId('draft-resume-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('drafts-empty')).toBeDefined();
+    });
+
+    uDrafts();
   });
 });

@@ -298,4 +298,42 @@ describe('SparkleCompletionPlugin Unit Tests', () => {
     expect(acceptSparkleSuggestion(v)).toBe(false); // cannot accept in IDLE
     expect(dismissSparkleSuggestion(v)).toBe(false); // cannot dismiss in IDLE
   });
+
+  it('covers full typing of suggestion to auto-accept, non-empty selection guard, and accept edge cases', () => {
+    const v = createTestView({ initialText: 'Hello' });
+    const currentPos = 5;
+
+    // 1. Ready blinking with exact suggestion ' world'
+    const tr = v.state.tr;
+    tr.setMeta(sparklePluginKey, {
+      type: 'SET_MACHINE_STATE',
+      machine: {
+        name: 'READY_BLINKING',
+        context: { typedCount: 5, suggestion: ' world', requestId: 'req-full', error: null },
+      },
+      activeSuggestion: ' world',
+      activePos: currentPos,
+      coords: { top: 10, left: 20 },
+    });
+    v.dispatch(tr);
+
+    // Typing the entire suggestion string at once
+    v.someProp('handleTextInput', (f) => f(v, currentPos, currentPos, ' world', () => v.state.tr));
+    const postTypeState = sparklePluginKey.getState(v.state);
+    expect(postTypeState?.machine.name).toBe('IDLE');
+
+    // 2. acceptSparkleSuggestion with null activePos / empty suggestion
+    const tr2 = v.state.tr;
+    tr2.setMeta(sparklePluginKey, {
+      type: 'SET_MACHINE_STATE',
+      machine: {
+        name: 'READY_BLINKING',
+        context: { typedCount: 5, suggestion: '', requestId: 'req-empty', error: null },
+      },
+      activeSuggestion: '',
+      activePos: null,
+    });
+    v.dispatch(tr2);
+    expect(acceptSparkleSuggestion(v)).toBe(false);
+  });
 });

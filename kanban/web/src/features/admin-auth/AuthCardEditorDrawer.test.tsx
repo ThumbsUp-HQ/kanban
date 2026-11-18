@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
-import { AuthCardEditorDrawer } from './AuthCardEditorDrawer';
-import type { AdminAuthCard } from './adminAuthApi';
+import { AuthCardEditorDrawer, type AuthCardEditorDrawerProps } from './AuthCardEditorDrawer';
+import type { AdminAuthCard, CreateAuthCardPayload } from './adminAuthApi';
 
 describe('AuthCardEditorDrawer (KB-P3-36)', () => {
   beforeEach(() => {
@@ -1045,6 +1045,602 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(screen.getByTestId('google-json-error').textContent).toContain(
         'exceeds maximum allowed size of 32,768 bytes',
       );
+    });
+
+    it('handles invalid Google JSON structures: missing web, missing client_id/secret, untrusted endpoints', async () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
+      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
+      const applyBtn = screen.getByTestId('google-json-apply-btn');
+
+      // 1. Missing web object
+      fireEvent.change(textarea, { target: { value: JSON.stringify({ other: true }) } });
+      fireEvent.click(applyBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error').textContent).toContain("must contain a top-level 'web'");
+      });
+
+      // 2. Missing client_id
+      fireEvent.change(textarea, { target: { value: JSON.stringify({ web: { client_secret: 'sec' } }) } });
+      fireEvent.click(applyBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error').textContent).toContain("'client_id' is missing or invalid");
+      });
+
+      // 3. Missing client_secret
+      fireEvent.change(textarea, { target: { value: JSON.stringify({ web: { client_id: 'cid' } }) } });
+      fireEvent.click(applyBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error').textContent).toContain("'client_secret' is missing or invalid");
+      });
+
+      // 4. Untrusted auth_uri
+      fireEvent.change(textarea, {
+        target: {
+          value: JSON.stringify({
+            web: { client_id: 'cid', client_secret: 'sec', auth_uri: 'https://evil.com/auth' },
+          }),
+        },
+      });
+      fireEvent.click(applyBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error').textContent).toContain("does not match allowed Google authorization endpoints");
+      });
+
+      // 5. Untrusted token_uri
+      fireEvent.change(textarea, {
+        target: {
+          value: JSON.stringify({
+            web: {
+              client_id: 'cid',
+              client_secret: 'sec',
+              auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+              token_uri: 'https://evil.com/token',
+            },
+          }),
+        },
+      });
+      fireEvent.click(applyBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('google-json-error').textContent).toContain("does not match allowed Google token endpoints");
+      });
+    });
+
+    it('supports drag/drop and file input for Google JSON client secrets', async () => {
+      const validJson = JSON.stringify({
+        web: {
+          client_id: 'file-client-id.apps.googleusercontent.com',
+          client_secret: 'file-secret-value',
+          auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+          token_uri: 'https://oauth2.googleapis.com/token',
+          redirect_uris: [`${window.location.origin}/api/v1/auth/oidc/google-oauth/callback`],
+        },
+      });
+
+      vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
+        Object.defineProperty(this, 'result', { value: validJson, configurable: true });
+        this.onload?.({ target: this } as ProgressEvent<FileReader>);
+      });
+
+      const { container } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
+
+      const dropzone = screen.getByTestId('google-json-dropzone');
+      // Drag over activates
+      fireEvent.dragOver(dropzone);
+      expect(dropzone.className).toContain('auth-google-json-dropzone--active');
+
+      // Drag leave deactivates
+      fireEvent.dragLeave(dropzone);
+      expect(dropzone.className).not.toContain('auth-google-json-dropzone--active');
+
+      // Drop file
+      const fakeFile = new File(['content'], 'client_secret.json', { type: 'application/json' });
+      fireEvent.drop(dropzone, {
+        dataTransfer: {
+          files: [fakeFile],
+        },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe(
+          'file-client-id.apps.googleusercontent.com',
+        );
+      });
+
+      // File input change
+      const fileInput = container.querySelector('input[type="file"]');
+      expect(fileInput).toBeTruthy();
+      if (fileInput) {
+        fireEvent.change(fileInput, { target: { files: [fakeFile] } });
+      }
+
+      await waitFor(() => {
+        expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i).value).toBe('file-secret-value');
+      });
+    });
+
+    it('copies expected callback URL on mismatch warning', async () => {
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      });
+
+      const mismatchJson = JSON.stringify({
+        web: {
+          client_id: 'mismatch-id',
+          client_secret: 'mismatch-sec',
+          auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+          token_uri: 'https://oauth2.googleapis.com/token',
+          redirect_uris: ['https://other-domain.com/callback'],
+        },
+      });
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('google-json-paste-toggle'));
+      const textarea = screen.getByLabelText(/Paste Google Cloud Console client JSON/i);
+      fireEvent.change(textarea, { target: { value: mismatchJson } });
+      fireEvent.click(screen.getByTestId('google-json-apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Copy Expected Callback URL/i })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Copy Expected Callback URL/i }));
+      expect(writeTextMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/oidc/google-oauth/callback'),
+      );
+    });
+
+    it('handles keyboard escape and tab key focus trap', () => {
+      const onClose = vi.fn();
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={onClose}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Escape key closes drawer
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalled();
+
+      // Tab key navigation wraps
+      fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+      fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    });
+
+    it('edits and saves LOCAL_ADMIN card preserving config', async () => {
+      const localAdminCard: AdminAuthCard = {
+        id: 'c-local',
+        provider_kind: 'LOCAL_ADMIN',
+        slug: 'local-admin',
+        display_name: 'Local Root Admin',
+        button_subtext: 'Break-glass access',
+        icon_preset: 'key',
+        is_enabled: true,
+        sort_rank: '0',
+        auto_provision_users: false,
+        allowed_email_domains: [],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'HEALTHY',
+        last_handshake_at: null,
+        check_summary: 'OK',
+        latency_ms: 0,
+        public_config: {
+          require_totp: true,
+        },
+      };
+
+      const onSave = vi.fn<AuthCardEditorDrawerProps['onSave']>().mockResolvedValue(undefined);
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={localAdminCard}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />,
+      );
+
+      expect(screen.getByText('Local Administrator Security Policy')).toBeDefined();
+
+      const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+      fireEvent.click(saveBtn);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalled();
+      });
+      const firstCall = onSave.mock.calls[0];
+      expect(firstCall).toBeDefined();
+      if (firstCall) {
+        const [savedCard, isSecretReplaced] = firstCall;
+        expect(savedCard.display_name).toBe('Local Root Admin');
+        const localConfig = savedCard.public_config as { require_totp?: boolean } | undefined;
+        expect(localConfig?.require_totp).toBe(true);
+        expect(isSecretReplaced).toBe(true);
+      }
+    });
+
+    it('creates LDAP card with ldap:// scheme, startTls, and restricted groups', async () => {
+      const onSave = vi.fn<AuthCardEditorDrawerProps['onSave']>().mockResolvedValue(undefined);
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />,
+      );
+
+      // Change provider to LDAP
+      fireEvent.change(screen.getByLabelText(/Provider Kind/i), { target: { value: 'LDAP' } });
+
+      fireEvent.change(screen.getByLabelText(/Slug Identifier/i), { target: { value: 'corp-ad' } });
+      fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: 'Active Directory' } });
+      fireEvent.change(screen.getByLabelText(/Server URL/i), { target: { value: 'ldap://ad.corp.example.com:389' } });
+      fireEvent.change(screen.getByLabelText(/^Bind DN$/i), { target: { value: 'cn=bind,dc=example,dc=com' } });
+      fireEvent.change(screen.getByLabelText(/^Base DN$/i), { target: { value: 'dc=example,dc=com' } });
+      fireEvent.change(screen.getByLabelText(/Bind DN Password/i), { target: { value: 'SuperSecretPass123!' } });
+
+      // Change access policy to restricted
+      fireEvent.change(screen.getByLabelText(/Access Policy/i), { target: { value: 'restricted' } });
+      fireEvent.change(screen.getByLabelText(/Admin Groups/i), { target: { value: 'Admins, SuperUsers' } });
+      fireEvent.change(screen.getByLabelText(/User Groups/i), { target: { value: 'Engineers, Product' } });
+
+      const saveBtn = screen.getByRole('button', { name: /Create Card/i });
+      fireEvent.click(saveBtn);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalled();
+      });
+      const ldapCall = onSave.mock.calls[0];
+      expect(ldapCall).toBeDefined();
+      if (ldapCall) {
+        const [savedLdap, isSecretReplaced] = ldapCall;
+        const ldapPayload = savedLdap as CreateAuthCardPayload;
+        expect(ldapPayload.provider_kind).toBe('LDAP');
+        expect(ldapPayload.slug).toBe('corp-ad');
+        expect(ldapPayload.secret).toBe('SuperSecretPass123!');
+        const ldapConfig = ldapPayload.public_config as {
+          kind?: string;
+          transport_mode?: string;
+          access_mode?: string;
+          admin_groups?: string[];
+          user_groups?: string[];
+        };
+        expect(ldapConfig.kind).toBe('LDAP');
+        expect(ldapConfig.transport_mode).toBe('starttls');
+        expect(ldapConfig.access_mode).toBe('group_restricted');
+        expect(ldapConfig.admin_groups).toEqual(['Admins', 'SuperUsers']);
+        expect(ldapConfig.user_groups).toEqual(['Engineers', 'Product']);
+        expect(isSecretReplaced).toBe(false);
+      }
+    });
+
+    it('initializes restricted mode and allowlists from existing card config', () => {
+      const restrictedCard: AdminAuthCard = {
+        id: 'c-restricted',
+        provider_kind: 'OIDC',
+        slug: 'restricted-oidc',
+        display_name: 'Restricted OIDC',
+        button_subtext: null,
+        icon_preset: 'shield',
+        is_enabled: true,
+        sort_rank: '2',
+        auto_provision_users: true,
+        allowed_email_domains: [],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'HEALTHY',
+        last_handshake_at: null,
+        check_summary: 'OK',
+        latency_ms: 10,
+        public_config: {
+          access_mode: 'group_restricted',
+          admin_allowlist: ['admin@example.com'],
+          user_allowlist: ['dev1@example.com', 'dev2@example.com'],
+          admin_groups: ['CorpAdmins'],
+          user_groups: ['CorpUsers'],
+        },
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={restrictedCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const accessPolicySelect = screen.getByLabelText<HTMLSelectElement>(/Access Policy/i);
+      expect(accessPolicySelect.value).toBe('restricted');
+      expect(screen.getByLabelText<HTMLInputElement>(/Admin Allowlist/i).value).toBe('admin@example.com');
+      expect(screen.getByLabelText<HTMLInputElement>(/User Allowlist/i).value).toBe('dev1@example.com, dev2@example.com');
+    });
+
+    it('traps Tab and Shift+Tab navigation between first and last focusable elements', () => {
+      const { container } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const focusable = container.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      expect(focusable.length).toBeGreaterThan(1);
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      // Shift+Tab from first element wraps to last
+      if (first) {
+        first.focus();
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(last);
+      }
+
+      // Tab from last element wraps to first
+      if (last) {
+        last.focus();
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+        expect(document.activeElement).toBe(first);
+      }
+    });
+
+    it('initializes fallback field names for OIDC issuer_url and LDAP server_url/bind_dn', () => {
+      const fallbackOidcCard: AdminAuthCard = {
+        id: 'c-fallback-oidc',
+        provider_kind: 'OIDC',
+        slug: 'fallback-oidc',
+        display_name: 'Fallback OIDC',
+        button_subtext: null,
+        icon_preset: 'key',
+        is_enabled: true,
+        sort_rank: '3',
+        auto_provision_users: true,
+        allowed_email_domains: [],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'UNVERIFIED',
+        last_handshake_at: null,
+        check_summary: '',
+        latency_ms: null,
+        public_config: {
+          issuer_url: 'https://fallback.auth.com',
+          client_id: 'cid-999',
+        },
+      };
+
+      const { unmount } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={fallbackOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('https://fallback.auth.com');
+      unmount();
+
+      const fallbackLdapCard: AdminAuthCard = {
+        id: 'c-fallback-ldap',
+        provider_kind: 'LDAP',
+        slug: 'fallback-ldap',
+        display_name: 'Fallback LDAP',
+        button_subtext: null,
+        icon_preset: 'directory',
+        is_enabled: true,
+        sort_rank: '4',
+        auto_provision_users: true,
+        allowed_email_domains: [],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'UNVERIFIED',
+        last_handshake_at: null,
+        check_summary: '',
+        latency_ms: null,
+        public_config: {
+          server_url: 'ldaps://corp.example.internal:636',
+          bind_dn: 'cn=svc,dc=corp,dc=internal',
+        },
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={fallbackLdapCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('ldaps://corp.example.internal:636');
+      expect(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i).value).toBe('cn=svc,dc=corp,dc=internal');
+    });
+
+    it('copies OAuth callback URL to clipboard and handles unchecking replace secret', () => {
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      });
+
+      const oidcCardWithSecret: AdminAuthCard = {
+        id: 'c-secret',
+        provider_kind: 'OIDC',
+        slug: 'corp-oidc',
+        display_name: 'Corp OIDC',
+        button_subtext: null,
+        icon_preset: 'shield',
+        is_enabled: true,
+        sort_rank: '1',
+        auto_provision_users: true,
+        allowed_email_domains: [],
+        has_secret: true,
+        dek_kid: null,
+        last_health_status: 'UNVERIFIED',
+        last_handshake_at: null,
+        check_summary: '',
+        latency_ms: null,
+        public_config: {
+          client_id: 'corp-client-1',
+          issuer: 'https://auth.corp.com',
+        },
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={oidcCardWithSecret}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const copyBtn = screen.getByTestId('copy-callback-url-btn');
+      fireEvent.click(copyBtn);
+      expect(writeTextMock).toHaveBeenCalledWith(
+        `${window.location.origin}/api/v1/auth/oidc/corp-oidc/callback`
+      );
+
+      // Uncheck replace secret clears secret input
+      const replaceSecretCheckbox = screen.getByLabelText(/Replace Stored Secret/i);
+      fireEvent.click(replaceSecretCheckbox);
+      expect(replaceSecretCheckbox.getAttribute('checked')).toBeNull();
+    });
+
+    it('covers restricted access policy mode and LDAP submission with custom attributes and CA PEM', async () => {
+      const saveMock = vi.fn().mockResolvedValue(undefined);
+      const restrictedLdapCard: AdminAuthCard = {
+        id: 'c-rest-ldap',
+        provider_kind: 'LDAP',
+        slug: 'rest-ldap',
+        display_name: 'Restricted LDAP',
+        button_subtext: 'Internal corp only',
+        icon_preset: 'directory',
+        is_enabled: true,
+        sort_rank: '2',
+        auto_provision_users: false,
+        allowed_email_domains: ['corp.internal'],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'UNVERIFIED',
+        last_handshake_at: null,
+        check_summary: '',
+        latency_ms: null,
+        public_config: {
+          access_mode: 'group_restricted',
+          admin_groups: ['Domain Admins'],
+          user_groups: ['Corp Users'],
+          url: 'ldap://ldap.corp.internal:389',
+          transport_mode: 'starttls',
+          service_bind_dn: 'cn=admin,dc=corp,dc=internal',
+          base_dn: 'dc=corp,dc=internal',
+          user_search_filter: '(sAMAccountName={username})',
+          subject_attribute: 'entryUUID',
+          email_attribute: 'userPrincipalName',
+          display_name_attribute: 'cn',
+          ca_cert_pem: '-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----',
+          spki_sha256_pins: ['a'.repeat(64)],
+        },
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={restrictedLdapCard}
+          onClose={vi.fn()}
+          onSave={saveMock}
+        />,
+      );
+
+      // Access policy mode is restricted
+      const policySelect = screen.getByLabelText<HTMLSelectElement>(/Access Policy/i);
+      expect(policySelect.value).toBe('restricted');
+
+      // Submit edit
+      const form = screen.getByRole('dialog').querySelector('form');
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(saveMock).toHaveBeenCalled();
+      });
+    });
+
+    it('covers editing LOCAL_ADMIN card policy view and save', async () => {
+      const saveMock = vi.fn().mockResolvedValue(undefined);
+      const localAdminCard: AdminAuthCard = {
+        id: 'c-local-admin',
+        provider_kind: 'LOCAL_ADMIN',
+        slug: 'local-admin',
+        display_name: 'Local Administrator',
+        button_subtext: 'Emergency Break-Glass',
+        icon_preset: 'key',
+        is_enabled: true,
+        sort_rank: '0',
+        auto_provision_users: false,
+        allowed_email_domains: [],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'UNVERIFIED',
+        last_handshake_at: null,
+        check_summary: '',
+        latency_ms: null,
+        public_config: {},
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={localAdminCard}
+          onClose={vi.fn()}
+          onSave={saveMock}
+        />,
+      );
+
+      expect(screen.getByText('Local Administrator Security Policy')).toBeDefined();
+      const form = screen.getByRole('dialog').querySelector('form');
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(saveMock).toHaveBeenCalled();
+      });
     });
   });
 });

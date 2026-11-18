@@ -1006,4 +1006,525 @@ describe('ComposeExportTab', () => {
     ).toBeDefined();
     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
   });
+
+  it('handles automated backup schedule editing and saving', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+      data_mount_point: '/var/lib/kanban/data',
+      data_mount_fstype: 'ext4',
+      tier_b_sandbox_available: true,
+    };
+
+    const mockSchedule = { enabled: false, interval_hours: 24, retention_count: 7 };
+    const mockSnapshots: unknown[] = [];
+
+    const mockFetch = vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
+      if (url === '/api/v1/admin/standalone/backup-schedule' && (!opts || opts.method === 'GET')) {
+        return Promise.resolve(new Response(JSON.stringify(mockSchedule), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backups' && (!opts || opts.method === 'GET')) {
+        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backup-schedule' && opts?.method === 'PUT') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ enabled: true, interval_hours: 12, retention_count: 14 }),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel onClose={() => undefined} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    // Switch to Backups & Restore tab
+    const backupsTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    act(() => {
+      fireEvent.click(backupsTab);
+    });
+
+    const enableCheckbox = screen.getByLabelText<HTMLInputElement>('Enable Automated Backups');
+    const intervalInput = screen.getByLabelText<HTMLInputElement>('Backup Interval (hours)');
+    const retentionInput = screen.getByLabelText<HTMLInputElement>('Keep Latest Snapshots');
+
+    act(() => {
+      fireEvent.click(enableCheckbox);
+      fireEvent.change(intervalInput, { target: { value: '12' } });
+      fireEvent.change(retentionInput, { target: { value: '14' } });
+    });
+
+    const saveScheduleBtn = screen.getByRole('button', { name: 'Save Schedule' });
+    await act(async () => {
+      fireEvent.click(saveScheduleBtn);
+      await Promise.resolve();
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/admin/standalone/backup-schedule',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ enabled: true, interval_hours: 12, retention_count: 14 }),
+      }),
+    );
+  });
+
+  it('triggers manual backup run and verifies snapshot restoration', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+      data_mount_point: '/var/lib/kanban/data',
+      data_mount_fstype: 'ext4',
+      tier_b_sandbox_available: true,
+    };
+
+    const mockSchedule = { enabled: true, interval_hours: 24, retention_count: 7 };
+    const mockSnapshots = [
+      {
+        filename: 'kanban-backup-test.kbbak',
+        size_bytes: 2048,
+        created_at: '2026-03-01T12:00:00Z',
+      },
+    ];
+
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/standalone/backup-schedule') {
+        return Promise.resolve(new Response(JSON.stringify(mockSchedule), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backups') {
+        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backups/run-now') {
+        return Promise.resolve(new Response('{"ok":true}', { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backup/verify') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              manifest: { pg_server_version: '16.2', alembic_revision: 'head_123' },
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url === '/api/v1/admin/standalone/restore') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, message: 'Restore complete' }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel onClose={() => undefined} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    // Switch to Backups & Storage tab
+    const backupsTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    act(() => {
+      fireEvent.click(backupsTab);
+    });
+
+    // Run Backup Now
+    const runBackupBtn = screen.getByRole('button', { name: 'Run Backup Now' });
+    await act(async () => {
+      fireEvent.click(runBackupBtn);
+      await Promise.resolve();
+    });
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/admin/standalone/backups/run-now',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    // Verify existing snapshot table
+    await waitFor(() => {
+      expect(screen.getByText('kanban-backup-test.kbbak')).toBeDefined();
+    });
+
+    // Select snapshot from dropdown
+    const snapshotSelect = screen.getByLabelText<HTMLSelectElement>('Select Server Snapshot');
+    act(() => {
+      fireEvent.change(snapshotSelect, { target: { value: 'kanban-backup-test.kbbak' } });
+    });
+
+    // Enter passphrase
+    const passphraseInput = screen.getByLabelText<HTMLInputElement>(
+      'Passphrase (if encrypted with passphrase)',
+    );
+    act(() => {
+      fireEvent.change(passphraseInput, { target: { value: 'secretpass' } });
+    });
+
+    // Step 1: Verify Backup Archive
+    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
+    await act(async () => {
+      fireEvent.click(verifyBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
+    });
+
+    // Step 2: Confirm Overwrite
+    const confirmInput = screen.getByLabelText<HTMLInputElement>(
+      'Type RESTORE to confirm overwriting current database:',
+    );
+    act(() => {
+      fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+    });
+
+    const restoreBtn = screen.getByRole('button', { name: 'Step 2: Restore Database' });
+    await act(async () => {
+      fireEvent.click(restoreBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Database restored successfully! Invariants, roles, and schema verified.',
+        ),
+      ).toBeDefined();
+    });
+  });
+
+  it('handles backup verification failure and invalid restore confirmation text', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+      data_mount_point: '/var/lib/kanban/data',
+      data_mount_fstype: 'ext4',
+      tier_b_sandbox_available: true,
+    };
+
+    const mockSchedule = { enabled: true, interval_hours: 24, retention_count: 7 };
+    const mockSnapshots = [
+      {
+        filename: 'corrupt-backup.kbbak',
+        size_bytes: 1024,
+        created_at: '2026-03-01T12:00:00Z',
+      },
+    ];
+
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/standalone/backup-schedule') {
+        return Promise.resolve(new Response(JSON.stringify(mockSchedule), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backups') {
+        return Promise.resolve(new Response(JSON.stringify(mockSnapshots), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backup/verify') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ detail: 'Corrupt archive header' }), { status: 400 }),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <StandaloneStatusPanel onClose={onClose} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    const backupsTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    fireEvent.click(backupsTab);
+
+    // Wait for snapshots query to resolve
+    await waitFor(() => {
+      expect(screen.getByText('corrupt-backup.kbbak')).toBeDefined();
+    });
+
+    // Select snapshot and trigger verification error
+    const snapshotSelect = screen.getByLabelText<HTMLSelectElement>('Select Server Snapshot');
+    fireEvent.change(snapshotSelect, { target: { value: 'corrupt-backup.kbbak' } });
+
+    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
+    fireEvent.click(verifyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Corrupt archive header')).toBeDefined();
+    });
+
+    // Now mock valid verify so destructive form renders
+    mockFetch.mockImplementationOnce((url: string) => {
+      if (url === '/api/v1/admin/standalone/backup/verify') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ manifest: { pg_server_version: '16.2' } }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    fireEvent.click(verifyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
+    });
+
+    // Submit restore form with incorrect confirmation text
+    const destructiveForm = document.querySelector('.standalone-panel__destructive-form');
+    if (destructiveForm) {
+      fireEvent.submit(destructiveForm);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('You must type RESTORE exactly to confirm destructive database overwrite')).toBeDefined();
+    });
+
+    // Backdrop click triggers onClose
+    const backdrop = document.querySelector('.standalone-panel__backdrop');
+    if (backdrop) {
+      fireEvent.click(backdrop);
+      expect(onClose).toHaveBeenCalled();
+    }
+  });
+
+  it('covers restore from uploaded file with passphrase and manifest fallback', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+      data_mount_point: '/var/lib/kanban/data',
+      data_mount_fstype: 'ext4',
+      tier_b_sandbox_available: true,
+    };
+
+    let verifyBody: BodyInit | null | undefined = null;
+    let restoreBody: BodyInit | null | undefined = null;
+
+    const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/admin/standalone/snapshots') {
+        return Promise.resolve(new Response(JSON.stringify({ snapshots: [] }), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backup/verify') {
+        verifyBody = init?.body;
+        // Return without manifest to exercise fallback
+        return Promise.resolve(new Response(JSON.stringify({ valid: true }), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/restore') {
+        restoreBody = init?.body;
+        return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    globalThis.fetch = mockFetch;
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <StandaloneStatusPanel onClose={vi.fn()} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    // Switch to Backups tab
+    const backupsTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    fireEvent.click(backupsTab);
+
+    // Upload backup file
+    const fileInput = screen.getByLabelText(/Upload Backup Archive/i);
+    const testFile = new File(['mock binary archive content'], 'my-backup.kbbak', { type: 'application/octet-stream' });
+    fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+    // Enter passphrase
+    const passInput = screen.getByLabelText(/Passphrase \(if encrypted/i);
+    fireEvent.change(passInput, { target: { value: 'SecretKey123!' } });
+
+    // Click verify
+    const verifyBtn = screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' });
+    fireEvent.click(verifyBtn);
+
+    await waitFor(() => {
+      expect(verifyBody).toBeInstanceOf(FormData);
+      expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
+    });
+
+    // Fill restore confirm
+    const confirmInput = screen.getByLabelText(/Type RESTORE to confirm/i);
+    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+
+    // Click restore
+    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/i });
+    fireEvent.click(restoreBtn);
+
+    await waitFor(() => {
+      expect(restoreBody).toBeInstanceOf(FormData);
+      expect(screen.getByText('Database restored successfully! Invariants, roles, and schema verified.')).toBeDefined();
+    });
+  });
+
+  it('handles restore failure with server error detail and string rejection', async () => {
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+      data_mount_point: '/var/lib/kanban/data',
+      data_mount_fstype: 'ext4',
+      tier_b_sandbox_available: true,
+    };
+
+    let restoreFailMode = 'json';
+
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/standalone/snapshots') {
+        return Promise.resolve(new Response(JSON.stringify({ snapshots: [] }), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/backup/verify') {
+        return Promise.resolve(new Response(JSON.stringify({ valid: true }), { status: 200 }));
+      }
+      if (url === '/api/v1/admin/standalone/restore') {
+        if (restoreFailMode === 'json') {
+          return Promise.resolve(new Response(JSON.stringify({ detail: 'Schema migration conflict' }), { status: 500 }));
+        }
+        if (restoreFailMode === 'html') {
+          return Promise.resolve(new Response('Gateway Timeout', { status: 504 }));
+        }
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('Connection drop');
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    globalThis.fetch = mockFetch;
+
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <StandaloneStatusPanel onClose={vi.fn()} initialStatus={adminStatus} />
+      </QueryClientProvider>,
+    );
+
+    const backupsTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    fireEvent.click(backupsTab);
+
+    const fileInput = screen.getByLabelText(/Upload Backup Archive/i);
+    const testFile = new File(['mock content'], 'test.kbbak', { type: 'application/octet-stream' });
+    fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
+    });
+
+    const confirmInput = screen.getByLabelText(/Type RESTORE to confirm/i);
+    fireEvent.change(confirmInput, { target: { value: 'RESTORE' } });
+
+    // 1. JSON error
+    const restoreBtn = screen.getByRole('button', { name: /Step 2: Restore Database/i });
+    fireEvent.click(restoreBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Schema migration conflict')).toBeDefined();
+    });
+
+    // 2. HTML 504 error
+    restoreFailMode = 'html';
+    fireEvent.click(restoreBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Restore failed (504)')).toBeDefined();
+    });
+
+    // 3. String rejection
+    restoreFailMode = 'string';
+    fireEvent.click(restoreBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Database restore failed')).toBeDefined();
+    });
+  });
+
+  it('covers tier_b_sandbox_available false, empty input schedule fallbacks, and verification status fallback', async () => {
+    const testQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    const mockAdminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: false,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+      tier_b_sandbox_available: false,
+    };
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      await Promise.resolve();
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (urlStr.includes('/backup-schedule')) {
+        return new Response(
+          JSON.stringify({ enabled: true, interval_hours: 12, retention_count: 5 }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes('/snapshots')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/backup/verify')) {
+        // Return 400 with empty JSON body
+        return new Response('{}', { status: 400 });
+      }
+      return new Response('{}', { status: 200 });
+    });
+
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <StandaloneStatusPanel
+          onClose={vi.fn()}
+          initialStatus={mockAdminStatus}
+        />
+      </QueryClientProvider>,
+    );
+
+    // Verify tier B sandbox false is reflected
+    expect(screen.getByText('Isolated Process & CLI Sandbox (Linux Namespaces)')).toBeDefined();
+    expect(screen.getByText(/Not enabled in single-container mode/i)).toBeDefined();
+
+    const backupsTab = screen.getByRole('tab', { name: 'Backup, Auto-Backup & Restore' });
+    fireEvent.click(backupsTab);
+
+    // Clear schedule input fields to trigger NaN fallback
+    const intervalInput = screen.getByLabelText(/Backup Interval/i);
+    fireEvent.change(intervalInput, { target: { value: '' } });
+
+    const retentionInput = screen.getByLabelText(/Keep Latest Snapshots/i);
+    fireEvent.change(retentionInput, { target: { value: '' } });
+
+    // Upload backup and trigger verify error with empty detail fallback
+    const fileInput = screen.getByLabelText(/Upload Backup Archive/i);
+    const testFile = new File(['mock content'], 'test.kbbak', { type: 'application/octet-stream' });
+    fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Step 1: Verify Backup Archive' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Verification failed (400)')).toBeDefined();
+    });
+  });
 });

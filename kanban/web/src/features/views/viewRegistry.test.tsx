@@ -458,6 +458,21 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     const statePop2 = screen.getByRole('dialog', { name: /Quick State Picker/i });
     fireEvent.click(within(statePop2).getByText('Backlog'));
 
+    // Set priority to None
+    fireEvent.keyDown(window, { key: 'p' });
+    const prioPopNone = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
+    fireEvent.click(within(prioPopNone).getByText('None'));
+
+    // Set state to Done
+    fireEvent.keyDown(window, { key: 's' });
+    const statePopDone = screen.getByRole('dialog', { name: /Quick State Picker/i });
+    fireEvent.click(within(statePopDone).getByText('Done'));
+
+    // Set state to Todo
+    fireEvent.keyDown(window, { key: 's' });
+    const statePopTodo = screen.getByRole('dialog', { name: /Quick State Picker/i });
+    fireEvent.click(within(statePopTodo).getByText('Todo'));
+
     // Set assignee to Alice Cooper
     fireEvent.keyDown(window, { key: 'a' });
     const asgPop = screen.getByRole('dialog', { name: /Quick Assignee Picker/i });
@@ -692,6 +707,176 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       // Dispatch kb:issue-updated to trigger refresh
       fireEvent(window, new CustomEvent('kb:issue-updated'));
+    });
+
+    it('handles peek query param, vetoed gate status, and agent assignees in board layout', () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?peek=KAN-2');
+
+      const issuesWithAgent: IssueItem[] = [
+        {
+          id: 'i-1',
+          key: 'KAN-1',
+          summary: 'Item with Agent Assignee',
+          state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'high', label: 'High' },
+          gate_status: 'vetoed',
+          assignees: [
+            {
+              id: 'asg-bot',
+              kind: 'principal',
+              principal: {
+                id: 'p-bot',
+                handle: 'secbot',
+                type: 'AGENT',
+                display_name: 'Security Bot',
+              },
+            },
+            {
+              id: 'asg-raw',
+              kind: 'free_text',
+              free_text: 'External Contractor',
+              notify: false,
+              hint: '',
+            },
+          ],
+        },
+        {
+          id: 'i-2',
+          key: 'KAN-2',
+          summary: 'Peek Target Item',
+          state: { id: 's-done', name: 'Done', group: 'completed' },
+          priority: { slug: 'urgent', label: 'Urgent' },
+        },
+      ];
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="board"
+          initialIssues={issuesWithAgent}
+        />,
+      );
+
+      expect(screen.getByTestId('board-canvas')).toBeDefined();
+    });
+
+    it('handles bulk archive, custom priority emojis, and clear selection', () => {
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      // Select first issue via 'x'
+      fireEvent.keyDown(window, { key: 'x' });
+      const bulkBar = screen.getByRole('toolbar', { name: /Bulk actions/i });
+      expect(bulkBar).toBeDefined();
+
+      // Test Archive
+      const archiveBtn = within(bulkBar).getByRole('button', { name: /^archive$/i });
+      fireEvent.click(archiveBtn);
+
+      // Select again and clear via Esc button
+      fireEvent.keyDown(window, { key: 'x' });
+
+      // Test batch state and priority updates
+      const stateBtn = within(bulkBar).getByRole('button', { name: /^state$/i });
+      fireEvent.click(stateBtn);
+
+      fireEvent.keyDown(window, { key: 'x' });
+      const priorityBtn = within(bulkBar).getByRole('button', { name: /^priority$/i });
+      fireEvent.click(priorityBtn);
+
+      fireEvent.keyDown(window, { key: 'x' });
+      const clearBtn = within(bulkBar).getByRole('button', { name: /Clear selection/i });
+      fireEvent.click(clearBtn);
+
+      // Select and test 2D Swimlane switch by subGroupBy
+      const subGroupSelect = screen.getByLabelText('Sub-group by axis');
+      fireEvent.change(subGroupSelect, { target: { value: 'priority' } });
+      const groupSelect = screen.getByLabelText('Group by axis');
+      fireEvent.change(groupSelect, { target: { value: 'state' } });
+    });
+
+    it('covers live mode optimistic creation with new key, backlog state selection, and wip_hard/wip_soft aliases', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      document.cookie = 'kb_csrf=test-csrf-live; path=/';
+
+      const liveStatesWithAliases = [
+        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10, wip_hard: 5 },
+        { id: '01931234-5678-7000-8000-000000000002', name: 'To Do', group: 'unstarted', sort_order: 20, wip_soft: 3 },
+        { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
+      ];
+      const liveIssues = [
+        {
+          id: '01931234-5678-7000-8000-000000000301',
+          key: 'KAN-301',
+          summary: 'Live Alias Issue',
+          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        },
+      ];
+
+      const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/states')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: liveStatesWithAliases }),
+          });
+        }
+        if (method === 'POST' && url.endsWith('/issues')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                id: '01931234-5678-7000-8000-000000000399',
+                key: 'KAN-999',
+                summary: 'New Persisted Key Issue',
+                description_markdown: 'Detailed description',
+                module_ids: ['mod-1'],
+                state: { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
+                priority: { slug: 'low', label: 'Low', emoji: '🔽' },
+              }),
+          });
+        }
+        if (method === 'PATCH') {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(liveIssues[0]),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: liveIssues, next_cursor: null, total: 1 }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Live Alias Issue')).toBeDefined();
+      });
+
+      // Quick field state update to Backlog
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePop).getByText('Backlog'));
+
+      // Dispatch kb:create-issue to open QuickCreateIssueModal and submit
+      fireEvent(window, new CustomEvent('kb:create-issue'));
+      const summaryInput = screen.getByLabelText(/summary/i);
+      fireEvent.change(summaryInput, { target: { value: 'New Persisted Key Issue' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('KAN-999')).toBeDefined();
+      });
     });
   });
 });

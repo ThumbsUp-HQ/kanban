@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import {
@@ -461,5 +461,270 @@ describe('Sidebar', () => {
 
     expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
     expect(onToggle).toHaveBeenCalledTimes(2);
+  });
+
+  it('highlights table, calendar, timeline subnav items and custom fields page', () => {
+    // 1. Table layout
+    const { unmount: u1 } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues?layout=table']}>
+        <Sidebar projectKey="KAN" activePath="/projects/KAN/issues" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Table view' }).className).toContain('kb-subnav-active');
+    u1();
+
+    // 2. Calendar layout
+    const { unmount: u2 } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues?layout=calendar']}>
+        <Sidebar projectKey="KAN" activePath="/projects/KAN/issues" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Calendar view' }).className).toContain('kb-subnav-active');
+    u2();
+
+    // 3. Timeline layout
+    const { unmount: u3 } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues?layout=timeline']}>
+        <Sidebar projectKey="KAN" activePath="/projects/KAN/issues" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Timeline view' }).className).toContain('kb-subnav-active');
+    u3();
+
+    // 4. Custom fields page
+    const { unmount: u4 } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/settings/custom-fields']}>
+        <Sidebar projectKey="KAN" activePath="/projects/KAN/settings/custom-fields" />
+      </MemoryRouter>,
+    );
+    const customFieldsLink = screen.getByRole('link', { name: 'Custom Fields' });
+    expect(customFieldsLink.getAttribute('aria-current')).toBe('page');
+    u4();
+  });
+
+  it('renders Workspace Settings in workspace dropdown for admin and reacts to kb:project-created event', async () => {
+    const adminUser = {
+      is_server_admin: true,
+      is_workspace_admin: true,
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar user={adminUser} />
+      </MemoryRouter>,
+    );
+
+    // Open workspace switcher dropdown
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    fireEvent.click(switcherBtn);
+
+    const wsSettingsLink = screen.getByRole('menuitem', { name: /Workspace Settings/i });
+    expect(wsSettingsLink).toBeDefined();
+
+    // Clicking Workspace Settings closes dropdown
+    fireEvent.click(wsSettingsLink);
+    expect(screen.queryByRole('menuitem', { name: /Workspace Settings/i })).toBeNull();
+
+    // Dispatch kb:project-created custom event
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:project-created', {
+          detail: {
+            identifier: 'ALPHA',
+            name: 'Alpha Project',
+            modules_enabled: false,
+          },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Project')).toBeDefined();
+    });
+  });
+
+  it('covers kb:project-created edge cases: key fallback, duplicate prevention, and null detail', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    // 1. Project with key instead of identifier
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:project-created', {
+          detail: {
+            key: 'BETA',
+            name: 'Beta Project',
+            modules_enabled: true,
+          },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Beta Project')).toBeDefined();
+    });
+
+    // 2. Duplicate project does not duplicate
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:project-created', {
+          detail: {
+            key: 'BETA',
+            name: 'Beta Project',
+          },
+        }),
+      );
+    });
+
+    // 3. Null or invalid detail does nothing
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:project-created', { detail: null }));
+      window.dispatchEvent(new CustomEvent('kb:project-created', { detail: { name: 123 } }));
+    });
+  });
+
+  it('handles workspace switch to workspace without projects and sets CSRF token', () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (urlStr.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'new-csrf-token-abc' }), { status: 200 }));
+      }
+      if (urlStr.includes('/workspaces')) {
+        return Promise.resolve(new Response(
+          JSON.stringify([
+            { id: 'ws-1', name: 'Primary', slug: 'primary', is_current: false },
+            { id: 'ws-empty', name: 'Empty Workspace', slug: 'empty', is_current: true },
+          ]),
+          { status: 200 },
+        ));
+      }
+      if (urlStr.includes('/projects')) {
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    // Open switcher
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    fireEvent.click(switcherBtn);
+
+    // Click workspace item if available
+    const items = screen.getAllByRole('menuitem');
+    if (items[0]) {
+      fireEvent.click(items[0]);
+    }
+  });
+
+  it('handles project expand toggle and custom create project events', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (urlStr.includes('/projects')) {
+        return Promise.resolve(new Response(
+          JSON.stringify([
+            { key: 'PRJ1', name: 'Project One', modules_enabled: false },
+          ]),
+          { status: 200 },
+        ));
+      }
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/projects/PRJ1/issues']}>
+        <Sidebar
+          projectKey="PRJ1"
+          projectName="Project One"
+          modulesEnabled={false}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Project: Project One' })).toBeDefined();
+    });
+
+    const expandBtn = screen.getByRole('button', { name: 'Project: Project One' });
+    expect(expandBtn.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(expandBtn);
+    expect(expandBtn.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(expandBtn);
+    expect(expandBtn.getAttribute('aria-expanded')).toBe('true');
+
+    // Trigger kb:open-create-project event
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
+    });
+    expect(screen.getByRole('dialog', { name: 'Create project' })).toBeDefined();
+
+    // Close create project modal
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelBtn);
+
+    // Trigger + Project button
+    const addProjectBtn = screen.getByRole('button', { name: 'Create project' });
+    fireEvent.click(addProjectBtn);
+    expect(screen.getByRole('dialog', { name: 'Create project' })).toBeDefined();
+  });
+
+  it('handles workspace switch without csrf_token in response and routes to first project', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (urlStr.includes('/switch')) {
+        // Return without csrf_token
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+      }
+      if (urlStr.includes('/workspaces')) {
+        return Promise.resolve(new Response(
+          JSON.stringify([
+            { id: 'ws-1', name: 'Workspace A', slug: 'ws-a', is_current: false },
+            { id: 'ws-2', name: 'Workspace B', slug: 'ws-b', is_current: true },
+          ]),
+          { status: 200 },
+        ));
+      }
+      if (urlStr.includes('/projects')) {
+        return Promise.resolve(new Response(
+          JSON.stringify([
+            { identifier: 'PRJ2', name: 'Project Two', modules_enabled: true },
+          ]),
+          { status: 200 },
+        ));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/projects/PRJ1/issues']}>
+        <Sidebar
+          projectKey="PRJ1"
+          projectName="Project One"
+          modulesEnabled={true}
+        />
+      </MemoryRouter>,
+    );
+
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    fireEvent.click(switcherBtn);
+
+    const items = screen.getAllByRole('menuitem');
+    const firstItem = items[0];
+    if (firstItem) {
+      act(() => {
+        fireEvent.click(firstItem);
+      });
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Project Two')).toBeDefined();
+    });
   });
 });

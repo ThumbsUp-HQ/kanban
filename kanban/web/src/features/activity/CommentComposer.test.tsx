@@ -391,5 +391,89 @@ describe('CommentComposer', () => {
       const alert = await screen.findByRole('alert');
       expect(alert.textContent).toBe('Failed to submit comment.');
     });
+
+    it('handles keyboard navigation and selection in mention autocomplete and shortcut submit', async () => {
+      mockFetchAssigneeSuggestions.mockResolvedValue({
+        items: [
+          { id: 'u1', handle: 'alice', display_name: 'Alice' },
+          { id: 'u2', handle: 'bob', display_name: 'Bob' },
+        ],
+      });
+      mockCreateComment.mockResolvedValueOnce({
+        id: 'c-sub',
+        issue_id: 'i-142',
+        body_markdown: '@alice test',
+        created_at: '2026-11-18T00:00:00Z',
+        deleted: false,
+        author: { id: 'u1', handle: 'me', display_name: 'Me' },
+        mentions: [],
+        reactions: [],
+      });
+
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+
+      // Trigger suggestions
+      fireEvent.change(textarea, {
+        target: { value: '@', selectionStart: 1, selectionEnd: 1 },
+      });
+
+      await screen.findByRole('option', { name: /@alice/ });
+
+      // Arrow down to bob
+      fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+      // Arrow up back to alice
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+
+      // Press Enter to choose alice
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(textarea.value).toBe('@alice ');
+
+      // Trigger again and dismiss with Escape
+      fireEvent.change(textarea, {
+        target: { value: '@alice @b', selectionStart: 9, selectionEnd: 9 },
+      });
+      await screen.findByRole('option', { name: /@bob/ });
+      fireEvent.keyDown(textarea, { key: 'Escape' });
+      expect(screen.queryByRole('listbox')).toBeNull();
+
+      // Submit via Ctrl+Enter
+      fireEvent.change(textarea, { target: { value: '@alice test' } });
+      fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+
+      await waitFor(() => {
+        expect(mockCreateComment).toHaveBeenCalledWith('KAN-142', expect.objectContaining({
+          body_markdown: '@alice test',
+        }));
+      });
+    });
+
+    it('inserts bold, italic, and mermaid markdown templates from toolbar buttons', () => {
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Bold text' }));
+      expect(textarea.value).toContain('**bold text**');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Italic text' }));
+      expect(textarea.value).toContain('*italic text*');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Insert Mermaid diagram' }));
+      expect(textarea.value).toContain('```mermaid\ngraph TD;\n  A-->B;\n```');
+    });
+
+    it('handles ApiProblem with empty message on submit', async () => {
+      mockCreateComment.mockRejectedValueOnce(new ApiProblem(500, { detail: '' }));
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+
+      const textarea = screen.getByRole('textbox', { name: 'Write a comment' });
+      fireEvent.change(textarea, { target: { value: 'Testing empty ApiProblem' } });
+
+      const submitBtn = screen.getByRole('button', { name: 'Comment' });
+      fireEvent.click(submitBtn);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toBe('Failed to submit comment.');
+    });
   });
 });

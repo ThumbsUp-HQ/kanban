@@ -369,6 +369,9 @@ describe('Phase 5 Branch Coverage Booster', () => {
       rerender(<CreateWorkspaceModal isOpen={true} onClose={onClose} onCreated={onCreated} />);
       expect(screen.getByRole('dialog')).toBeDefined();
 
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(onClose).not.toHaveBeenCalled();
+
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledTimes(1);
 
@@ -1314,6 +1317,18 @@ describe('Phase 5 Branch Coverage Booster', () => {
 
       rerender(<AppErrorModal error={404} />);
       expect(screen.getByTestId('error-trace').textContent).toBe('404');
+
+      rerender(<AppErrorModal error={true} />);
+      expect(screen.getByTestId('error-trace').textContent).toBe('true');
+
+      rerender(<AppErrorModal error={123n} />);
+      expect(screen.getByTestId('error-trace').textContent).toBe('123');
+
+      rerender(<AppErrorModal error={null} />);
+      expect(screen.getByTestId('error-trace').textContent).toBe('No stack trace available.');
+
+      rerender(<AppErrorModal error={undefined} />);
+      expect(screen.getByTestId('error-trace').textContent).toBe('No stack trace available.');
       unmount();
 
       const { unmount: u2 } = render(
@@ -1398,6 +1413,9 @@ describe('Phase 5 Branch Coverage Booster', () => {
       );
 
       // Escape key closes modal
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(onClose).not.toHaveBeenCalled();
+
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledTimes(1);
 
@@ -1534,6 +1552,9 @@ describe('Phase 5 Branch Coverage Booster', () => {
       );
 
       // Escape key triggers onClose
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(onClose).not.toHaveBeenCalled();
+
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledTimes(1);
 
