@@ -1,0 +1,22 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 12 tests using 10 workers
+
+      1 …: external cards above LocalAdminDisclosure, CSRF, and SecondFactorStep
+      2 …: cards order, write-only secret, 409 LOCKOUT_PREVENTED, users creation
+      3 …trips URL token via history.replaceState and blocks short invalid token
+      4 …: external cards above LocalAdminDisclosure, CSRF, and SecondFactorStep
+      5 …trips URL token via history.replaceState and blocks short invalid token
+      6 …trips URL token via history.replaceState and blocks short invalid token
+      7 …ippet: reveals raw_key in modal, purges from DOM on close, probe styles
+      8 …: cards order, write-only secret, 409 LOCKOUT_PREVENTED, users creation
+      9 …: external cards above LocalAdminDisclosure, CSRF, and SecondFactorStep
+     10 …ippet: reveals raw_key in modal, purges from DOM on close, probe styles
+  ✓   4 …nal cards above LocalAdminDisclosure, CSRF, and SecondFactorStep (1.2s)  ✓   1 …nal cards above LocalAdminDisclosure, CSRF, and SecondFactorStep (1.3s)  ✓   9 …nal cards above LocalAdminDisclosure, CSRF, and SecondFactorStep (1.1s)  ✓   3 …RL token via history.replaceState and blocks short invalid token (1.6s)  ✓   5 …RL token via history.replaceState and blocks short invalid token (1.6s)  ✓   6 …RL token via history.replaceState and blocks short invalid token (1.6s)  ✓   7 …reveals raw_key in modal, purges from DOM on close, probe styles (1.8s)  ✓   2 … order, write-only secret, 409 LOCKOUT_PREVENTED, users creation (2.2s)  ✓  10 …reveals raw_key in modal, purges from DOM on close, probe styles (2.1s)     11 …ippet: reveals raw_key in modal, purges from DOM on close, probe styles
+     12 …: cards order, write-only secret, 409 LOCKOUT_PREVENTED, users creation
+  ✓   8 … order, write-only secret, 409 LOCKOUT_PREVENTED, users creation (2.2s)  ✓  11 …eveals raw_key in modal, purges from DOM on close, probe styles (975ms)  ✓  12 … order, write-only secret, 409 LOCKOUT_PREVENTED, users creation (1.4s)
+  12 passed (20.9s)
