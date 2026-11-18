@@ -29,6 +29,7 @@ export interface BoardCycle {
 export interface BoardIssue {
   id: string;
   key: string;
+  project_key?: string | null | undefined;
   summary: string;
   state_id: string;
   priority?: BoardPriority | null;

@@ -12,6 +12,8 @@ import type { BoardAssignee, BoardIssue, BoardPriority, StateGroup } from './boa
 export interface BoardCardProps {
   issue: BoardIssue;
   stateGroup: StateGroup;
+  workspaceSlug?: string | undefined;
+  projectKey?: string | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   onKeyboardMove?: ((issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
   isDragging?: boolean | undefined;
@@ -85,6 +87,8 @@ function getUserHandle(a: BoardAssignee): string {
 export function BoardCard({
   issue,
   stateGroup,
+  workspaceSlug,
+  projectKey,
   onOpenPeek,
   onKeyboardMove,
   isDragging = false,
@@ -97,6 +101,23 @@ export function BoardCard({
 }: BoardCardProps): JSX.Element {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const isGatePending = issue.gate_status === 'pending' || Boolean(issue.pending_gate);
+
+  const resolvedProjectKey =
+    projectKey ?? issue.project_key ?? (issue.key ? issue.key.split('-')[0] : 'KAN') ?? 'KAN';
+  const resolvedWorkspaceSlug =
+    workspaceSlug ??
+    (/^\/w\/([^/]+)/.exec(typeof window !== 'undefined' ? window.location.pathname : '')?.[1] ??
+      'default');
+  const canonicalHref = `/w/${encodeURIComponent(resolvedWorkspaceSlug)}/p/${encodeURIComponent(resolvedProjectKey)}/issues/${encodeURIComponent(issue.key)}`;
+
+  const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+    // Normal left-click without modifier keys opens peek drawer in-page
+    if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleOpenPeek(e.currentTarget);
+    }
+  };
 
   useEffect(() => {
     const el = cardRef.current;
@@ -196,14 +217,10 @@ export function BoardCard({
     >
       <div className="board-card-top">
         <a
-          href={`?layout=board&peek=${encodeURIComponent(issue.key)}`}
+          href={canonicalHref}
           className="board-card-key mono"
           data-testid={`board-card-key-${issue.key}`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleOpenPeek(e.currentTarget);
-          }}
+          onClick={handleAnchorClick}
         >
           {issue.key}
         </a>
@@ -242,7 +259,14 @@ export function BoardCard({
         </div>
       </div>
 
-      <div className="board-card-summary">{issue.summary}</div>
+      <a
+        href={canonicalHref}
+        className="board-card-summary-link"
+        data-testid={`board-card-summary-${issue.key}`}
+        onClick={handleAnchorClick}
+      >
+        <div className="board-card-summary">{issue.summary}</div>
+      </a>
 
       <div className="board-card-meta">
         {priorityKind && (

@@ -247,6 +247,17 @@
   gap: var(--space-1, 4px);
 }
 
+.board-card-summary-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  cursor: pointer;
+}
+
+.board-card-summary-link:hover .board-card-summary {
+  color: var(--accent-primary);
+}
+
 .board-card-summary {
   font-size: var(--text-body, 0.9375rem);
   font-weight: 500;

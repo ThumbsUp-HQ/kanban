@@ -8,6 +8,7 @@ import { RealtimeStory } from './dev/RealtimeStory';
 import { createAppRouter, IssuesWorkspaceRoute } from './app/routes';
 import { FIXTURE_12_ISSUES } from './features/views/fixtures';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { RealtimeProvider } from './realtime';
 import { ShellPanelsProvider } from './app/shellPanels';
 import { GlobalErrorBoundary } from './components/error/AppErrorModal';
 import './App.css';
@@ -64,9 +65,11 @@ function AppContent(): JSX.Element {
       const router = createAppRouter([window.location.pathname + window.location.search]);
       return (
         <QueryClientProvider client={appQueryClient}>
-          <ShellPanelsProvider>
-            <RouterProvider router={router} />
-          </ShellPanelsProvider>
+          <RealtimeProvider>
+            <ShellPanelsProvider>
+              <RouterProvider router={router} />
+            </ShellPanelsProvider>
+          </RealtimeProvider>
         </QueryClientProvider>
       );
     }
@@ -88,9 +91,11 @@ function AppContent(): JSX.Element {
   const router = createAppRouter();
   return (
     <QueryClientProvider client={appQueryClient}>
-      <ShellPanelsProvider>
-        <RouterProvider router={router} />
-      </ShellPanelsProvider>
+      <RealtimeProvider>
+        <ShellPanelsProvider>
+          <RouterProvider router={router} />
+        </ShellPanelsProvider>
+      </RealtimeProvider>
     </QueryClientProvider>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from './stickiesApi';
 import type { StickyColorToken } from './stickyHeuristic';
 import { qk } from '../../api/queryKeys';
+import { useRealtimeSubscription } from '../../realtime';
 
 export const WORKSPACE_STICKIES_QUERY_KEY = ['stickies', 'workspace'] as const;
 
@@ -31,6 +32,7 @@ export function WorkspaceStickiesView({
   defaultProjectKey = 'KAN',
   readOnly: propReadOnly,
 }: WorkspaceStickiesViewProps = {}): JSX.Element {
+  useRealtimeSubscription('workspace:stickies');
   const queryClient = useQueryClient();
 
   const cachedUser = queryClient.getQueryData<{ workspace_role?: string }>(qk.me());

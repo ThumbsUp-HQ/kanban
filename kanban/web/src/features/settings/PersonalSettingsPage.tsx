@@ -27,6 +27,7 @@ import {
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import { ApiProblem } from '../../api/problem';
 import type { MfaMethod } from '../auth/authApi';
+import { copyToClipboard } from '../../utils/clipboard';
 import './PersonalSettingsPage.css';
 
 // IANA Timezones list
@@ -68,6 +69,7 @@ export function PersonalSettingsPage(): JSX.Element {
 
   // Modals state
   const [recoveryModalCodes, setRecoveryModalCodes] = useState<string[] | null>(null);
+  const [recoveryCodesCopied, setRecoveryCodesCopied] = useState(false);
   const [totpSetupStep, setTotpSetupStep] = useState<{
     provisioning_uri?: string | undefined;
     secret?: string | undefined;
@@ -869,6 +871,25 @@ export function PersonalSettingsPage(): JSX.Element {
               </div>
             </div>
             <div className="kb-personal-settings-modal-footer">
+              <button
+                type="button"
+                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                data-testid="copy-recovery-codes-btn"
+                onClick={() => {
+                  void (async () => {
+                    const codesText = recoveryModalCodes.join('\n');
+                    const ok = await copyToClipboard(codesText);
+                    if (ok) {
+                      setRecoveryCodesCopied(true);
+                      setTimeout(() => {
+                        setRecoveryCodesCopied(false);
+                      }, 2000);
+                    }
+                  })();
+                }}
+              >
+                {recoveryCodesCopied ? 'Copied!' : 'Copy Codes'}
+              </button>
               <button
                 type="button"
                 className="kb-personal-settings-btn kb-personal-settings-btn-primary"

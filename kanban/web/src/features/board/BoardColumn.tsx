@@ -9,6 +9,8 @@ import type { BoardIssue, BoardWorkflowState, StateGroup } from './boardApi.ts';
 export interface BoardColumnProps {
   state: BoardWorkflowState;
   issues: BoardIssue[];
+  workspaceSlug?: string | undefined;
+  projectKey?: string | undefined;
   draggingKey?: string | null | undefined;
   dropTargetKey?: string | null | undefined;
   dropEdge?: 'top' | 'bottom' | null | undefined;
@@ -80,6 +82,8 @@ function VirtualCardWrapper({
 export function BoardColumn({
   state,
   issues,
+  workspaceSlug,
+  projectKey: propProjectKey,
   draggingKey,
   dropTargetKey,
   dropEdge,
@@ -92,8 +96,8 @@ export function BoardColumn({
   onNewItem,
   dropTargetFactory = dropTargetForElements,
 }: BoardColumnProps): JSX.Element {
-  const pathMatch = typeof window !== 'undefined' ? /\/projects\/([^/]+)/.exec(window.location.pathname) : null;
-  const projectKey = pathMatch?.[1] ?? 'KAN';
+  const pathMatch = typeof window !== 'undefined' ? /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname) : null;
+  const projectKey = propProjectKey ?? pathMatch?.[1] ?? 'KAN';
   const colRef = useRef<HTMLDivElement | null>(null);
   const parentRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -244,6 +248,8 @@ export function BoardColumn({
                 <BoardCard
                   issue={issue}
                   stateGroup={state.group}
+                  workspaceSlug={workspaceSlug}
+                  projectKey={projectKey}
                   onOpenPeek={onOpenPeek}
                   onKeyboardMove={onKeyboardMove}
                   isDragging={draggingKey === issue.key}

@@ -21,9 +21,11 @@ import {
 } from './stickiesApi';
 import type { StickyColorToken } from './stickyHeuristic';
 import { useProjectRouteContext } from '../../app/ProjectRouteContext';
+import { useRealtimeSubscription } from '../../realtime';
 
 export function ProjectOverviewView(): JSX.Element {
   const { projectKey = 'KAN' } = useParams<{ projectKey: string }>();
+  useRealtimeSubscription(projectKey ? `project:${projectKey}` : null);
   const queryClient = useQueryClient();
   const ctx = useProjectRouteContext();
 

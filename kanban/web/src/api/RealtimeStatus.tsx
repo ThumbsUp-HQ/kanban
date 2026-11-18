@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useRealtimeLiveState } from '../realtime/context';
 import './RealtimeStatus.css';
 
 export type RealtimeState = 'connecting' | 'open' | 'reconnecting' | 'sse-fallback' | 'closed';
@@ -49,7 +50,9 @@ const STATIC_TEXT: Partial<Record<RealtimeState, string>> = {
   closed: 'Offline - changes will sync when reconnected',
 };
 
-export function RealtimeStatus({ state = 'open' }: RealtimeStatusProps) {
+export function RealtimeStatus({ state: propState }: RealtimeStatusProps = {}) {
+  const liveState = useRealtimeLiveState();
+  const state = propState ?? liveState;
   const [announcement, setAnnouncement] = useState('');
 
   useEffect(() => {

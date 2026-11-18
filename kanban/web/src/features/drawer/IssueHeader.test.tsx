@@ -131,4 +131,30 @@ describe('IssueHeader', () => {
       unmount();
     }
   });
+
+  it('handles issue key copy and issue link copy with visible feedback', () => {
+    /* eslint-disable @typescript-eslint/no-deprecated */
+    document.execCommand = vi.fn().mockReturnValue(true);
+    /* eslint-enable @typescript-eslint/no-deprecated */
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <IssueHeader
+          issue={baseIssue}
+          mode="drawer"
+          onClose={vi.fn()}
+          toggleFullScreen={vi.fn()}
+        />
+      </Wrapper>,
+    );
+
+    const copyKeyBtn = screen.getByTestId('copy-issue-key-btn');
+    expect(copyKeyBtn.getAttribute('title')).toBe('Copy issue key');
+    fireEvent.click(copyKeyBtn);
+
+    const copyLinkBtn = screen.getByTestId('copy-issue-link-btn');
+    expect(copyLinkBtn.getAttribute('title')).toBe('Copy issue link');
+    fireEvent.click(copyLinkBtn);
+  });
 });

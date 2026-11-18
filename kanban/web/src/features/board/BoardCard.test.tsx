@@ -272,4 +272,67 @@ describe('BoardCard Component', () => {
     rerender(<BoardCard issue={slugOnlyIssue} stateGroup="started" />);
     expect(screen.getByTestId('priority-KAN-SLUGONLY')).toBeDefined();
   });
+
+  it('renders semantic <a href> anchors and supports peek left-click vs new-tab modifier clicks (KANBA-227)', () => {
+    const onOpenPeek = vi.fn();
+    render(
+      <BoardCard
+        issue={baseIssue}
+        stateGroup="started"
+        workspaceSlug="acme"
+        projectKey="KAN"
+        onOpenPeek={onOpenPeek}
+      />,
+    );
+
+    const keyLink = screen.getByTestId('board-card-key-KAN-142');
+    const summaryLink = screen.getByTestId('board-card-summary-KAN-142');
+
+    // 1. Anchors point to canonical issue route
+    expect(keyLink.getAttribute('href')).toBe('/w/acme/p/KAN/issues/KAN-142');
+    expect(summaryLink.getAttribute('href')).toBe('/w/acme/p/KAN/issues/KAN-142');
+
+    // 2. Standard left-click (button 0 without modifiers) calls preventDefault and opens peek drawer
+    const leftClickEv = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+    const preventDefaultSpy = vi.spyOn(leftClickEv, 'preventDefault');
+    keyLink.dispatchEvent(leftClickEv);
+    expect(preventDefaultSpy).toHaveBeenCalled();
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
+
+    onOpenPeek.mockClear();
+
+    // 3. Modifier click (Ctrl+click) does NOT call preventDefault, allowing native new tab navigation
+    const ctrlClickEv = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      ctrlKey: true,
+    });
+    const ctrlPreventSpy = vi.spyOn(ctrlClickEv, 'preventDefault');
+    keyLink.dispatchEvent(ctrlClickEv);
+    expect(ctrlPreventSpy).not.toHaveBeenCalled();
+    expect(onOpenPeek).not.toHaveBeenCalled();
+
+    // 4. Middle-click (button 1) does NOT call preventDefault
+    const middleClickEv = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 1,
+    });
+    const middlePreventSpy = vi.spyOn(middleClickEv, 'preventDefault');
+    summaryLink.dispatchEvent(middleClickEv);
+    expect(middlePreventSpy).not.toHaveBeenCalled();
+    expect(onOpenPeek).not.toHaveBeenCalled();
+  });
+
+  it('navigates via window.history when onOpenPeek is omitted', () => {
+    const pushStateSpy = vi.spyOn(window.history, 'pushState');
+    render(<BoardCard issue={baseIssue} stateGroup="started" />);
+
+    const keyLink = screen.getByTestId('board-card-key-KAN-142');
+    fireEvent.click(keyLink);
+
+    expect(pushStateSpy).toHaveBeenCalled();
+    expect(pushStateSpy.mock.calls[0]?.[2]).toContain('peek=KAN-142');
+  });
 });

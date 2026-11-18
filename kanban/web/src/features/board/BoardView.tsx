@@ -6,6 +6,7 @@ import { apiFetch } from '../../api/client.ts';
 import type { RealtimeClient } from '../../api/realtime.ts';
 import { useOptimisticMutation } from '../../api/optimistic.ts';
 import { qk } from '../../api/queryKeys.ts';
+import { useRealtimeSubscription } from '../../realtime/index.ts';
 import { useGateRealtimeSync, cancelGateTransitionApi } from '../gates/index.ts';
 import { BoardColumn } from './BoardColumn.tsx';
 import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
@@ -22,6 +23,7 @@ import './board.css';
 
 export interface BoardViewProps {
   projectKey: string;
+  workspaceSlug?: string | undefined;
   states?: BoardWorkflowState[] | undefined;
   issues?: BoardIssue[] | undefined;
   currentUserCapabilities?: string[] | undefined;
@@ -51,6 +53,7 @@ const DEFAULT_STATES: BoardWorkflowState[] = [
  */
 export function BoardView({
   projectKey,
+  workspaceSlug,
   states: propStates,
   issues: propIssues,
   currentUserCapabilities: propCapabilities,
@@ -67,6 +70,8 @@ export function BoardView({
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pendingHardWipMove, setPendingHardWipMove] = useState<PendingHardWipMove | null>(null);
+
+  useRealtimeSubscription(projectKey ? `project:${projectKey}` : null);
 
   useGateRealtimeSync({
     client: realtimeClient,
@@ -438,6 +443,8 @@ export function BoardView({
               key={st.id}
               state={st}
               issues={colIssues}
+              workspaceSlug={workspaceSlug}
+              projectKey={projectKey}
               draggingKey={draggingKey}
               dropTargetKey={dropTargetKey}
               dropEdge={dropEdge}

@@ -15,6 +15,7 @@ import {
   serializeRegistrationCredential,
   isWebAuthnSupported,
 } from './webauthn';
+import { copyToClipboard } from '../../utils/clipboard';
 import './auth.css';
 
 const TOKEN_REGEX = /^kb_setup_[A-Za-z0-9_-]{43}$/;
@@ -387,12 +388,10 @@ export function SetupClaimPage({
   // Step 3: Copy all recovery codes
   const handleCopyCodes = async () => {
     const text = recoveryCodes.join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopiedCodes(true);
       setTimeout(() => { setCopiedCodes(false); }, 2000);
-    } catch {
-      // fallback
     }
   };
 

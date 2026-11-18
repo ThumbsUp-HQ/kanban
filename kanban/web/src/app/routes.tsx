@@ -1285,6 +1285,57 @@ export function RootShellLayout(): JSX.Element {
   return <AppShell projectKey={undefined} projectId={undefined} />;
 }
 
+const projectRouteChildren: RouteObject[] = [
+  {
+    path: 'issues',
+    element: <ProjectIssuesRoute />,
+  },
+  {
+    path: 'issues/:issueKey',
+    element: <ProjectIssueDetailRoute />,
+  },
+  {
+    path: 'cycles',
+    element: <ProjectCyclesView />,
+  },
+  {
+    path: 'modules',
+    element: <ProjectModulesView />,
+  },
+  {
+    path: 'views',
+    element: <ProjectViewsRedirect />,
+  },
+  {
+    path: 'overview',
+    element: <ProjectOverviewRoute />,
+  },
+  {
+    path: 'docs',
+    element: <ProjectDocsRoute />,
+  },
+  {
+    path: 'docs/:pageId',
+    element: <ProjectDocPageRoute />,
+  },
+  {
+    path: 'settings/mcp',
+    element: <McpAccessStudio tier="project" />,
+  },
+  {
+    path: 'settings/custom-fields',
+    element: <ProjectCustomFieldsSettingsRoute />,
+  },
+  {
+    path: 'settings/workflows',
+    element: <WorkflowStudioPage />,
+  },
+  {
+    path: 'settings',
+    element: <ProjectSettingsPage />,
+  },
+];
+
 export const appRoutes: RouteObject[] = [
   {
     path: '/',
@@ -1293,56 +1344,12 @@ export const appRoutes: RouteObject[] = [
       {
         path: 'projects/:projectKey',
         element: <ProjectRouteContainer />,
-        children: [
-          {
-            path: 'issues',
-            element: <ProjectIssuesRoute />,
-          },
-          {
-            path: 'issues/:issueKey',
-            element: <ProjectIssueDetailRoute />,
-          },
-          {
-            path: 'cycles',
-            element: <ProjectCyclesView />,
-          },
-          {
-            path: 'modules',
-            element: <ProjectModulesView />,
-          },
-          {
-            path: 'views',
-            element: <ProjectViewsRedirect />,
-          },
-          {
-            path: 'overview',
-            element: <ProjectOverviewRoute />,
-          },
-          {
-            path: 'docs',
-            element: <ProjectDocsRoute />,
-          },
-          {
-            path: 'docs/:pageId',
-            element: <ProjectDocPageRoute />,
-          },
-          {
-            path: 'settings/mcp',
-            element: <McpAccessStudio tier="project" />,
-          },
-          {
-            path: 'settings/custom-fields',
-            element: <ProjectCustomFieldsSettingsRoute />,
-          },
-          {
-            path: 'settings/workflows',
-            element: <WorkflowStudioPage />,
-          },
-          {
-            path: 'settings',
-            element: <ProjectSettingsPage />,
-          },
-        ],
+        children: projectRouteChildren,
+      },
+      {
+        path: 'w/:workspaceSlug/p/:projectKey',
+        element: <ProjectRouteContainer />,
+        children: projectRouteChildren,
       },
       {
         path: 'activate',

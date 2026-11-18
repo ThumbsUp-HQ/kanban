@@ -371,7 +371,8 @@ def create_app(
 
     app.include_router(api_router)
 
-    # Authenticated WebSocket realtime endpoint (/ws)
+    # Authenticated WebSocket realtime endpoint (/ws, /api/v1/ws)
+    @app.websocket("/api/v1/ws")
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:
         await handle_ws_connection(websocket)

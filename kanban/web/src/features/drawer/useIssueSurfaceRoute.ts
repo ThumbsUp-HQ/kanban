@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]{0,8}$/;
-export const FULL_SCREEN_PATH_REGEX = /^\/projects\/([^/]+)\/issues\/([^/?#]+)/;
-export const PROJECT_PATH_REGEX = /^\/projects\/([^/]+)/;
+export const FULL_SCREEN_PATH_REGEX = /^(?:\/projects|\/w\/[^/]+\/p)\/([^/]+)\/issues\/([^/?#]+)/;
+export const PROJECT_PATH_REGEX = /^(?:\/projects|\/w\/[^/]+\/p)\/([^/]+)/;
 
 export interface IssueSurfaceRouteState {
   readonly issueKey: string | null;
@@ -57,9 +57,11 @@ export function toPeekPath(
   const qs = params.toString();
 
   let basePath = location.pathname;
-  const fullMatch = /^\/projects\/([^/]+)\/issues\/[^/?#]+/.exec(basePath);
+  const fullMatch = /^(?:\/projects|\/w\/[^/]+\/p)\/([^/]+)\/issues\/[^/?#]+/.exec(basePath);
   if (fullMatch?.[1]) {
-    basePath = `/projects/${fullMatch[1]}/issues`;
+    basePath = basePath.includes('/w/')
+      ? basePath.replace(/\/issues\/[^/?#]+.*$/, '/issues')
+      : `/projects/${fullMatch[1]}/issues`;
   }
 
   return `${basePath}${qs ? `?${qs}` : ''}`;

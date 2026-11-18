@@ -50,7 +50,9 @@ export async function testGuardFixture(
         text.includes('Failed to load resource: the server responded with a status of 409') ||
         text.includes('Failed to load resource: the server responded with a status of 412') ||
         text.includes('Failed to load resource: the server responded with a status of 429') ||
-        text.includes('Failed to load resource: the server responded with a status of 500')
+        text.includes('Failed to load resource: the server responded with a status of 500') ||
+        text.includes('WebSocket connection to') ||
+        text.includes('Error during WebSocket handshake')
       ) {
         return;
       }

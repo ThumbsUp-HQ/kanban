@@ -48,9 +48,9 @@ const SSE_EVENT_NAMES: readonly string[] = [
   'gate.updated',
 ];
 
-function wsUrl(): string {
+function wsUrl(customPath = '/ws'): string {
   const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${scheme}//${window.location.host}/ws`;
+  return `${scheme}//${window.location.host}${customPath}`;
 }
 
 function sseUrl(channels: readonly string[]): string {
@@ -71,6 +71,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+export interface RealtimeClientOptions {
+  random?: () => number;
+  wsPath?: string;
+}
+
 export class RealtimeClient {
   state: RealtimeState = 'closed';
   droppedEvents = 0;
@@ -89,9 +94,11 @@ export class RealtimeClient {
   private readonly eventListeners = new Set<RealtimeEventHandler>();
   private readonly seen = new Set<string>();
   private readonly random: () => number;
+  readonly wsPath: string;
 
-  constructor(options: { random?: () => number } = {}) {
+  constructor(options: RealtimeClientOptions = {}) {
     this.random = options.random ?? Math.random;
+    this.wsPath = options.wsPath ?? '/ws';
   }
 
   onStateChange(cb: StateChangeHandler): () => void {
@@ -204,7 +211,7 @@ export class RealtimeClient {
   }
 
   private openWebSocket(): void {
-    const socket = new WebSocket(wsUrl());
+    const socket = new WebSocket(wsUrl(this.wsPath));
     this.ws = socket;
     this.attachSocket(socket);
     socket.onopen = () => {
@@ -256,7 +263,7 @@ export class RealtimeClient {
     if (this.state !== 'sse-fallback' || this.probe) {
       return;
     }
-    const socket = new WebSocket(wsUrl());
+    const socket = new WebSocket(wsUrl(this.wsPath));
     this.probe = socket;
     socket.onopen = () => {
       this.probe = null;
@@ -393,6 +400,37 @@ export class RealtimeClient {
       }
     }
   }
+
+  /** Testability hook: simulate a realtime event directly without network. */
+  simulateEvent(event: RealtimeEvent): void {
+    this.emit(event, true);
+  }
+
+  /** Testability hook: simulate receiving a raw WebSocket frame string. */
+  simulateFrame(raw: string, sseName?: string): void {
+    this.handleFrame(raw, sseName);
+  }
+
+  /** Testability hook: reset internal state, seen dedup set, and timers for tests. */
+  resetForTesting(): void {
+    this.close();
+    this.seen.clear();
+    this.droppedEvents = 0;
+    this.attempt = 0;
+    this.failures = 0;
+    this.lastEventId = undefined;
+  }
+}
+
+let defaultClient: RealtimeClient | null = null;
+
+export function getRealtimeClient(): RealtimeClient {
+  defaultClient ??= new RealtimeClient();
+  return defaultClient;
+}
+
+export function setRealtimeClient(client: RealtimeClient | null): void {
+  defaultClient = client;
 }
 
 /** Subscribes to `channel` for the component lifetime. */
@@ -419,24 +457,98 @@ function stringField(payload: Record<string, unknown>, ...keys: string[]): strin
   return undefined;
 }
 
-/** Maps `issue.updated` to issue/issues invalidation; `resync_required` invalidates everything. */
+/**
+ * Maps incoming realtime events to active TanStack Query cache invalidations.
+ * Handles issue, comment, sticky, gate, and resync events in < 1s.
+ */
 export function bindQueryInvalidation(client: RealtimeClient, queryClient: QueryClient): () => void {
   return client.onEvent((event) => {
     if (event.type === 'resync_required') {
       void queryClient.invalidateQueries();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kb:issue-updated', { detail: event }));
+      }
       return;
     }
-    if (event.type !== 'issue.updated') {
+
+    // 1. Issue lifecycle & mutation events
+    if (
+      event.type === 'issue.created' ||
+      event.type === 'issue.updated' ||
+      event.type === 'issue.moved' ||
+      event.type === 'issue.transitioned' ||
+      event.type === 'issue.deleted'
+    ) {
+      const issueKey = stringField(event.payload, 'key', 'issue_key', 'issueKey');
+      const projectKey = stringField(event.payload, 'project_key', 'projectKey');
+
+      if (issueKey !== undefined) {
+        void queryClient.invalidateQueries({ queryKey: qk.issue(issueKey) });
+      }
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'issues' && (projectKey === undefined || query.queryKey[1] === projectKey),
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kb:issue-updated', { detail: event }));
+      }
       return;
     }
-    const issueKey = stringField(event.payload, 'key', 'issue_key', 'issueKey');
-    const projectKey = stringField(event.payload, 'project_key', 'projectKey');
-    if (issueKey !== undefined) {
-      void queryClient.invalidateQueries({ queryKey: qk.issue(issueKey) });
+
+    // 2. Comment lifecycle events
+    if (
+      event.type === 'comment.created' ||
+      event.type === 'comment.updated' ||
+      event.type === 'comment.deleted'
+    ) {
+      const issueKey = stringField(event.payload, 'issue_key', 'issueKey', 'key');
+      if (issueKey !== undefined) {
+        void queryClient.invalidateQueries({ queryKey: qk.issue(issueKey) });
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === 'activity' && (query.queryKey[1] === issueKey || query.queryKey[1] === undefined),
+        });
+      }
+      return;
     }
-    void queryClient.invalidateQueries({
-      predicate: (query) =>
-        query.queryKey[0] === 'issues' && (projectKey === undefined || query.queryKey[1] === projectKey),
-    });
+
+    // 3. Project Stickies lifecycle events
+    if (
+      event.type === 'sticky.created' ||
+      event.type === 'sticky.updated' ||
+      event.type === 'sticky.promoted' ||
+      event.type === 'sticky.deleted'
+    ) {
+      const projectKey = stringField(event.payload, 'project_key', 'projectKey');
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'stickies' &&
+          (projectKey === undefined || query.queryKey[1] === projectKey || query.queryKey[1] === 'workspace'),
+      });
+      if (event.type === 'sticky.promoted') {
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === 'docs' && (projectKey === undefined || query.queryKey[2] === projectKey),
+        });
+      }
+      return;
+    }
+
+    // 4. Gate status events
+    if (event.type === 'gate.updated') {
+      const issueKey = stringField(event.payload, 'issue_key', 'issueKey', 'key');
+      const projectKey = stringField(event.payload, 'project_key', 'projectKey');
+      if (issueKey !== undefined) {
+        void queryClient.invalidateQueries({ queryKey: qk.issue(issueKey) });
+      }
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'issues' && (projectKey === undefined || query.queryKey[1] === projectKey),
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kb:issue-updated', { detail: event }));
+      }
+      return;
+    }
   });
 }

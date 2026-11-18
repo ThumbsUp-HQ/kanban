@@ -1,8 +1,9 @@
-import React, { type JSX } from 'react';
+import React, { useState, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import type { EmojiKey } from '../../components/emoji/emojiRegistry';
 import { AccessPill } from './AccessPill';
 import { useIssueSurfaceSlots, type IssueDetail } from './slots';
+import { copyToClipboard } from '../../utils/clipboard';
 import './IssueHeader.css';
 
 export interface IssueHeaderProps {
@@ -46,6 +47,31 @@ export function IssueHeader({
   const LinkSlot = slots.link;
   const OverflowSlot = slots.overflow;
 
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyKey = async (): Promise<void> => {
+    const ok = await copyToClipboard(issue.key);
+    if (ok) {
+      setCopiedKey(true);
+      setTimeout(() => {
+        setCopiedKey(false);
+      }, 2000);
+    }
+  };
+
+  const handleCopyLink = async (): Promise<void> => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const linkUrl = `${origin}/projects/${issue.project_key}/issues/${issue.key}`;
+    const ok = await copyToClipboard(linkUrl);
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => {
+        setCopiedLink(false);
+      }, 2000);
+    }
+  };
+
   return (
     <header className="surface__header">
       <button
@@ -78,7 +104,33 @@ export function IssueHeader({
         />
       )}
 
-      <span className="mono issue-header__key">{issue.key}</span>
+      <div className="issue-header__key-group">
+        <span className="mono issue-header__key">{issue.key}</span>
+        <button
+          type="button"
+          className="issue-header__copy-btn"
+          data-testid="copy-issue-key-btn"
+          aria-label={`Copy issue key ${issue.key}`}
+          title={copiedKey ? 'Copied!' : 'Copy issue key'}
+          onClick={() => {
+            void handleCopyKey();
+          }}
+        >
+          {copiedKey ? 'Copied!' : '📋'}
+        </button>
+        <button
+          type="button"
+          className="issue-header__copy-btn"
+          data-testid="copy-issue-link-btn"
+          aria-label={`Copy issue link for ${issue.key}`}
+          title={copiedLink ? 'Copied!' : 'Copy issue link'}
+          onClick={() => {
+            void handleCopyLink();
+          }}
+        >
+          {copiedLink ? 'Copied!' : '🔗'}
+        </button>
+      </div>
 
       <AccessPill issue={issue} />
 

@@ -221,7 +221,13 @@ describe('PersonalSettingsPage', () => {
       expect(api.regenerateRecoveryCodes).toHaveBeenCalled();
       expect(screen.getByTestId('recovery-codes-grid')).toBeDefined();
       expect(screen.getByText('1111-2222')).toBeDefined();
+      expect(screen.getByTestId('copy-recovery-codes-btn')).toBeDefined();
     });
+
+    /* eslint-disable @typescript-eslint/no-deprecated */
+    document.execCommand = vi.fn().mockReturnValue(true);
+    /* eslint-enable @typescript-eslint/no-deprecated */
+    fireEvent.click(screen.getByTestId('copy-recovery-codes-btn'));
 
     fireEvent.click(screen.getByTestId('close-recovery-modal-btn'));
     expect(screen.queryByTestId('recovery-codes-grid')).toBeNull();

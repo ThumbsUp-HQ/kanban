@@ -459,6 +459,44 @@ describe('bindQueryInvalidation', () => {
     expect(invalidate).not.toHaveBeenCalled();
   });
 
+  it('invalidates issue and activity on comment events when issueKey is present', () => {
+    const { invalidate, send } = setup();
+    send({ id: 'c1', channel: 'issue:KAN-5', type: 'comment.created', payload: { issue_key: 'KAN-5' } });
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-5'] });
+    const predicate = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predicate({ queryKey: ['activity', 'KAN-5'] })).toBe(true);
+    expect(predicate({ queryKey: ['activity', 'KAN-99'] })).toBe(false);
+  });
+
+  it('invalidates stickies and docs on sticky lifecycle events', () => {
+    const { invalidate, send } = setup();
+    send({ id: 's1', channel: 'project:KAN', type: 'sticky.created', payload: { project_key: 'KAN' } });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    const predicate1 = (invalidate.mock.calls[0]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predicate1({ queryKey: ['stickies', 'KAN'] })).toBe(true);
+    expect(predicate1({ queryKey: ['stickies', 'OTHER'] })).toBe(false);
+
+    invalidate.mockClear();
+    send({ id: 's2', channel: 'project:KAN', type: 'sticky.promoted', payload: { project_key: 'KAN' } });
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    const predicateDocs = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predicateDocs({ queryKey: ['docs', 'sub', 'KAN'] })).toBe(true);
+    expect(predicateDocs({ queryKey: ['docs', 'sub', 'OTHER'] })).toBe(false);
+  });
+
+  it('invalidates issue and issues list on gate.updated and issue lifecycle events', () => {
+    const { invalidate, send } = setup();
+    send({ id: 'g1', channel: 'project:KAN', type: 'gate.updated', payload: { key: 'KAN-10', project_key: 'KAN' } });
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-10'] });
+
+    invalidate.mockClear();
+    send({ id: 'i1', channel: 'project:KAN', type: 'issue.transitioned', payload: { key: 'KAN-10', project_key: 'KAN' } });
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-10'] });
+  });
+
   it('unbinds', () => {
     const { invalidate, off, send } = setup();
     off();

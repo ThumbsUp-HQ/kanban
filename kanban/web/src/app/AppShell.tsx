@@ -18,6 +18,7 @@ import { CommandPalette, type CachedIssue } from './CommandPalette';
 import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
 import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
+import { useRealtimeSubscription } from '../realtime';
 import { type AccessManifestData } from './HeaderPills';
 import { type SystemStatus } from './useSystemStatus';
 import { IssueSurface } from '../features/drawer/IssueSurface';
@@ -101,6 +102,7 @@ export function AppShell({
   const navigate = useNavigate();
   const match = /\/projects\/([^/]+)/.exec(location.pathname);
   const activeProjectKey = match?.[1] ?? projectKey;
+  useRealtimeSubscription(activeProjectKey ? `project:${activeProjectKey}` : null);
   const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
   const computedSection =
     currentSection && currentSection !== 'Work Items'

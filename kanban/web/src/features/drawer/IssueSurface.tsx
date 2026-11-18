@@ -35,6 +35,7 @@ import {
   type StateSummary,
 } from '../views/viewsApi';
 import { safeRandomUUID } from '../../utils/uuid';
+import { useRealtimeSubscription } from '../../realtime';
 import './IssueSurface.css';
 
 let moduleMountCounter = 0;
@@ -678,6 +679,7 @@ function IssueSurfaceWithoutRouter(props: IssueSurfaceRootProps): JSX.Element {
 }
 
 export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
+  useRealtimeSubscription(props.issueKey ? `issue:${props.issueKey}` : null);
   const inRouter = useInRouterContext();
   if (inRouter) {
     return <IssueSurfaceWithRouter {...props} />;
@@ -687,6 +689,7 @@ export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
 
 export function IssueSurface(): JSX.Element | null {
   const { mode, issueKey, projectKey } = useIssueSurfaceRoute();
+  useRealtimeSubscription(issueKey ? `issue:${issueKey}` : null);
 
   if (mode === null || issueKey === null) {
     return null;

@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useEffect, type JSX } from 'react';
+import { copyToClipboard } from '../../utils/clipboard';
 import './McpConfigSnippetModal.css';
 
 export interface McpConfigSnippetModalProps {
@@ -100,9 +101,9 @@ export function McpConfigSnippetModal({
     );
   }
 
-  const copyToClipboard = async (text: string, isKey: boolean): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(text);
+  const handleCopy = async (text: string, isKey: boolean): Promise<void> => {
+    const success = await copyToClipboard(text);
+    if (success) {
       if (isKey) {
         setKeyCopied(true);
         /* v8 ignore next 3 */
@@ -116,8 +117,6 @@ export function McpConfigSnippetModal({
           setSnippetCopied(false);
         }, 2000);
       }
-    } catch {
-      // Clipboard write fallback
     }
   };
 
@@ -165,7 +164,7 @@ export function McpConfigSnippetModal({
                 className="kb-snippet-copy-btn"
                 data-testid="copy-key-button"
                 onClick={() => {
-                  void copyToClipboard(rawKey, true);
+                  void handleCopy(rawKey, true);
                 }}
               >
                 {keyCopied ? 'Copied!' : 'Copy Key'}
@@ -245,7 +244,7 @@ export function McpConfigSnippetModal({
             className="kb-snippet-copy-btn"
             data-testid="copy-snippet-button"
             onClick={() => {
-              void copyToClipboard(snippet, false);
+              void handleCopy(snippet, false);
             }}
           >
             {snippetCopied ? 'Copied!' : 'Copy Snippet'}
