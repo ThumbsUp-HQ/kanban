@@ -441,7 +441,8 @@ export function BoardView({
               draggingKey={draggingKey}
               dropTargetKey={dropTargetKey}
               dropEdge={dropEdge}
-              canCancelGate={isAdmin || true}
+              canCancelGate={isAdmin}
+              canManageWorkflows={isAdmin}
               onCancelGate={async (execId) => {
                 await cancelGateTransitionApi(execId);
               }}

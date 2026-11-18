@@ -1,0 +1,328 @@
+/**
+ * Styles for Project Settings & Workspace Settings Pages (KANBA-202)
+ */
+
+.kb-settings-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.kb-settings-header {
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  padding-bottom: 1rem;
+}
+
+.kb-settings-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary, #0f172a);
+}
+
+.kb-settings-subtitle {
+  font-size: 0.95rem;
+  color: var(--text-secondary, #64748b);
+  margin: 0;
+}
+
+.kb-settings-alert {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.kb-settings-alert-error {
+  background-color: var(--bg-danger-subtle, #fef2f2);
+  color: var(--text-danger, #b91c1c);
+  border: 1px solid var(--border-danger, #fecaca);
+}
+
+.kb-settings-alert-success {
+  background-color: var(--bg-success-subtle, #f0fdf4);
+  color: var(--text-success, #15803d);
+  border: 1px solid var(--border-success, #bbf7d0);
+}
+
+.kb-settings-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  margin-bottom: 1.5rem;
+}
+
+.kb-settings-tab {
+  padding: 0.6rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-secondary, #64748b);
+  transition: all 0.2s ease;
+}
+
+.kb-settings-tab:hover {
+  color: var(--text-primary, #0f172a);
+}
+
+.kb-settings-tab-active {
+  color: var(--brand-primary, #2563eb);
+  border-bottom-color: var(--brand-primary, #2563eb);
+  font-weight: 600;
+}
+
+.kb-settings-panel {
+  background: var(--bg-surface, #ffffff);
+  border-radius: 8px;
+}
+
+.kb-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 640px;
+}
+
+.kb-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.kb-form-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+}
+
+.kb-form-group-checkbox {
+  margin: 0.5rem 0;
+}
+
+.kb-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-primary, #0f172a);
+}
+
+.kb-input, .kb-textarea, .kb-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: var(--text-primary, #0f172a);
+  background: var(--bg-input, #ffffff);
+}
+
+.kb-input:focus, .kb-textarea:focus, .kb-select:focus {
+  outline: none;
+  border-color: var(--brand-primary, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.kb-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.kb-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kb-btn-primary {
+  background: var(--brand-primary, #2563eb);
+  color: #ffffff;
+}
+
+.kb-btn-primary:hover:not(:disabled) {
+  background: var(--brand-primary-hover, #1d4ed8);
+}
+
+.kb-btn-secondary {
+  background: var(--bg-secondary, #f1f5f9);
+  color: var(--text-primary, #0f172a);
+  border-color: var(--border-color, #cbd5e1);
+}
+
+.kb-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-secondary-hover, #e2e8f0);
+}
+
+.kb-btn-danger {
+  background: var(--bg-danger, #dc2626);
+  color: #ffffff;
+}
+
+.kb-btn-danger:hover:not(:disabled) {
+  background: var(--bg-danger-hover, #b91c1c);
+}
+
+.kb-btn-danger-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  background: var(--bg-danger, #dc2626);
+  color: #ffffff;
+  border-radius: 4px;
+}
+
+.kb-members-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.kb-members-actions-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kb-add-member-form {
+  padding: 1rem;
+  background: var(--bg-secondary, #f8fafc);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+}
+
+.kb-add-member-form h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.kb-form-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.kb-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.kb-table th, .kb-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.kb-table th {
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  background: var(--bg-secondary, #f8fafc);
+}
+
+.kb-role-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.kb-role-server_admin, .kb-role-project_admin, .kb-role-workspace_admin {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.kb-role-member, .kb-role-workspace_member {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.kb-role-viewer, .kb-role-workspace_guest {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.kb-integrations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.kb-integration-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  background: var(--bg-surface, #ffffff);
+}
+
+.kb-integration-card:hover {
+  border-color: var(--brand-primary, #2563eb);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.kb-card-icon {
+  font-size: 1.75rem;
+}
+
+.kb-card-content h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.kb-card-content p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #64748b);
+}
+
+.kb-danger-zone {
+  border: 1px solid var(--border-danger, #fecaca);
+  border-radius: 8px;
+  padding: 1.5rem;
+  background: var(--bg-danger-subtle, #fef2f2);
+}
+
+.kb-danger-header h3 {
+  color: var(--text-danger, #b91c1c);
+  margin: 0 0 0.5rem 0;
+}
+
+.kb-danger-confirm-card {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #cbd5e1);
+}
+
+.kb-blast-radius-box {
+  background: #f8fafc;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.kb-blast-radius-box ul {
+  margin: 0.25rem 0 0 1.25rem;
+  padding: 0;
+}
+
+.kb-danger-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}

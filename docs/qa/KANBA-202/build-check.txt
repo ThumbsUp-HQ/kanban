@@ -1,0 +1,29 @@
+=== RUFF ===
+All checks passed!
+=== MYPY ===
+Success: no issues found in 8 source files
+=== WEB LINT & TYPECHECK & BUILD ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-rbac-settings-builder-1a414d48/kanban/web
+> eslint . --max-warnings 0
+
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-rbac-settings-builder-1a414d48/kanban/web
+> tsc -b --noEmit
+
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-rbac-settings-builder-1a414d48/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 646 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.39 kB │ gzip:   0.27 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-DC5rgEua.css            267.04 kB │ gzip:  39.43 kB
+dist/assets/index-ze8KR6yX.js           1,600.01 kB │ gzip: 450.05 kB
+
+✓ built in 1.01s
+=== CHECK NO DASHES ===

@@ -42,7 +42,9 @@ export interface WorkspaceNavData {
 export interface ProjectNavData {
   key: string;
   name: string;
-  modules_enabled?: boolean;
+  modules_enabled?: boolean | undefined;
+  is_project_admin?: boolean | undefined;
+  capabilities?: string[] | undefined;
 }
 
 export interface SidebarProps {
@@ -54,6 +56,12 @@ export interface SidebarProps {
   modulesEnabled?: boolean;
   activePath?: string;
   triggerButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  user?: {
+    is_server_admin?: boolean;
+    is_workspace_admin?: boolean;
+    workspace_role?: string | null;
+    workspace_capabilities?: string[] | null;
+  } | null | undefined;
 }
 
 export const SIDEBAR_STORAGE_KEY = 'kb.sidebar';
@@ -101,6 +109,8 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
             key?: string;
             name?: string;
             modules_enabled?: boolean;
+            is_project_admin?: boolean;
+            capabilities?: string[];
           }[];
         }
       | {
@@ -108,6 +118,8 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
           key?: string;
           name?: string;
           modules_enabled?: boolean;
+          is_project_admin?: boolean;
+          capabilities?: string[];
         }[];
     const rawItems = Array.isArray(data) ? data : (data.items ?? []);
     const parsed: ProjectNavData[] = [];
@@ -118,6 +130,8 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
           key,
           name: item.name,
           modules_enabled: item.modules_enabled ?? true,
+          is_project_admin: item.is_project_admin,
+          capabilities: item.capabilities,
         });
       }
     }
@@ -137,6 +151,7 @@ export function Sidebar({
   modulesEnabled = true,
   activePath: activePathProp,
   triggerButtonRef,
+  user,
 }: SidebarProps): JSX.Element {
   let locationPathname = '';
   let locationSearch = '';
@@ -544,6 +559,23 @@ export function Sidebar({
                   </button>
                 ))}
                 {workspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
+                {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
+                  <NavLink
+                    to="/workspaces/settings"
+                    role="menuitem"
+                    className="kb-workspace-dropdown-item"
+                    onClick={() => {
+                      setWorkspaceDropdownOpen(false);
+                    }}
+                  >
+                    <span className="kb-workspace-dropdown-name">
+                      <span className="kb-sidebar-icon" aria-hidden="true">
+                        ⚙️
+                      </span>
+                      <span>Workspace Settings</span>
+                    </span>
+                  </NavLink>
+                )}
                 <button
                   type="button"
                   role="menuitem"
@@ -816,22 +848,6 @@ export function Sidebar({
 
                       <li>
                         <NavLink
-                          to={`/projects/${proj.key}/views`}
-                          className="kb-sidebar-nav-item"
-                          aria-current={
-                            currentPath.startsWith(`/projects/${proj.key}/views`)
-                              ? 'page'
-                              : undefined
-                          }
-                        >
-                          <span className="kb-sidebar-icon" aria-hidden="true">
-                            🎛️
-                          </span>
-                          <span>Views</span>
-                        </NavLink>
-                      </li>
-                      <li>
-                        <NavLink
                           to={`/projects/${proj.key}/docs`}
                           className="kb-sidebar-nav-item"
                           aria-current={
@@ -846,42 +862,68 @@ export function Sidebar({
                           <span>Docs</span>
                         </NavLink>
                       </li>
-                      <li>
-                        <NavLink
-                          to={`/projects/${proj.key}/settings/workflows`}
-                          className="kb-sidebar-nav-item"
-                          aria-current={
-                            currentPath.startsWith(
-                              `/projects/${proj.key}/settings/workflows`,
-                            )
-                              ? 'page'
-                              : undefined
-                          }
-                        >
-                          <span className="kb-sidebar-icon" aria-hidden="true">
-                            🔀
-                          </span>
-                          <span>Workflows</span>
-                        </NavLink>
-                      </li>
-                      <li>
-                        <NavLink
-                          to={`/projects/${proj.key}/settings/custom-fields`}
-                          className="kb-sidebar-nav-item"
-                          aria-current={
-                            currentPath.startsWith(
-                              `/projects/${proj.key}/settings/custom-fields`,
-                            )
-                              ? 'page'
-                              : undefined
-                          }
-                        >
-                          <span className="kb-sidebar-icon" aria-hidden="true">
-                            ⚙️
-                          </span>
-                          <span>Custom Fields</span>
-                        </NavLink>
-                      </li>
+                      {(proj.is_project_admin ??
+                        proj.capabilities?.includes('ADMIN') ??
+                        proj.capabilities?.includes('PROJECT_ADMIN') ??
+                        user?.is_server_admin ??
+                        user?.is_workspace_admin ??
+                        (proj.capabilities ?? proj.is_project_admin) === undefined) && (
+                        <>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/settings/workflows`}
+                              className="kb-sidebar-nav-item"
+                              aria-current={
+                                currentPath.startsWith(
+                                  `/projects/${proj.key}/settings/workflows`,
+                                )
+                                  ? 'page'
+                                  : undefined
+                              }
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                🔀
+                              </span>
+                              <span>Workflows</span>
+                            </NavLink>
+                          </li>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/settings/custom-fields`}
+                              className="kb-sidebar-nav-item"
+                              aria-current={
+                                currentPath.startsWith(
+                                  `/projects/${proj.key}/settings/custom-fields`,
+                                )
+                                  ? 'page'
+                                  : undefined
+                              }
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                ⚙️
+                              </span>
+                              <span>Custom Fields</span>
+                            </NavLink>
+                          </li>
+                          <li>
+                            <NavLink
+                              to={`/projects/${proj.key}/settings`}
+                              className="kb-sidebar-nav-item"
+                              data-testid={`sidebar-project-settings-${proj.key}`}
+                              aria-current={
+                                currentPath === `/projects/${proj.key}/settings`
+                                  ? 'page'
+                                  : undefined
+                              }
+                            >
+                              <span className="kb-sidebar-icon" aria-hidden="true">
+                                ⚙️
+                              </span>
+                              <span>Project Settings</span>
+                            </NavLink>
+                          </li>
+                        </>
+                      )}
                     </ul>
                   )}
                 </div>

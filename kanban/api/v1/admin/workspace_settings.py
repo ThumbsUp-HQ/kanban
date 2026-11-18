@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid  # noqa: TC003
 from datetime import datetime  # noqa: TC003
 from typing import Annotated, Any, Final, Literal
@@ -32,6 +33,8 @@ class WorkspaceSettingsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
     workspace_id: uuid.UUID
+    name: str = "Workspace"
+    slug: str = "default"
     display_name: str
     default_project_visibility: Literal["private", "workspace"]
     session_idle_timeout_min: int
@@ -47,6 +50,8 @@ class WorkspaceSettingsUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    slug: str | None = Field(default=None, min_length=2, max_length=63)
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
     default_project_visibility: Literal["private", "workspace"] | None = None
     session_idle_timeout_min: int | None = Field(default=None, ge=5, le=720)
@@ -131,7 +136,21 @@ async def get_workspace_settings(
 ) -> WorkspaceSettingsResponse:
     """Retrieve security defaults, timeouts, and air-gap mode for active workspace."""
     settings = await _get_or_create_settings(session, caller.workspace_id)
-    return WorkspaceSettingsResponse.model_validate(settings)
+    ws_stmt = select(Workspace).where(Workspace.id == caller.workspace_id)
+    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+    return WorkspaceSettingsResponse(
+        workspace_id=settings.workspace_id,
+        name=ws.name if ws else settings.display_name,
+        slug=ws.slug if ws else "default",
+        display_name=settings.display_name,
+        default_project_visibility=settings.default_project_visibility,  # type: ignore[arg-type]
+        session_idle_timeout_min=settings.session_idle_timeout_min,
+        session_absolute_timeout_min=settings.session_absolute_timeout_min,
+        trash_retention_days=settings.trash_retention_days,
+        mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+        air_gap_mode=settings.air_gap_mode,
+        updated_at=settings.updated_at,
+    )
 
 
 @router.patch(
@@ -139,13 +158,15 @@ async def get_workspace_settings(
     response_model=WorkspaceSettingsResponse,
     summary="Update workspace settings",
 )
-async def update_workspace_settings(  # noqa: C901
+async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
     body: WorkspaceSettingsUpdate,
     caller: Caller,
     session: Session,
 ) -> WorkspaceSettingsResponse:
     """Update workspace settings, enforce timeout invariants, and record audit activity."""
     settings = await _get_or_create_settings(session, caller.workspace_id)
+    ws_stmt = select(Workspace).where(Workspace.id == caller.workspace_id)
+    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
 
     # Validate relative timeout constraint
     eff_idle = (
@@ -177,6 +198,8 @@ async def update_workspace_settings(  # noqa: C901
         )
 
     before: dict[str, Any] = {
+        "name": ws.name if ws else settings.display_name,
+        "slug": ws.slug if ws else "default",
         "display_name": settings.display_name,
         "default_project_visibility": settings.default_project_visibility,
         "session_idle_timeout_min": settings.session_idle_timeout_min,
@@ -187,6 +210,42 @@ async def update_workspace_settings(  # noqa: C901
     }
 
     diff: dict[str, Any] = {}
+
+    if body.name is not None and ws is not None:
+        cleaned_name = body.name.strip()
+        if cleaned_name != ws.name:
+            diff["name"] = cleaned_name
+            ws.name = cleaned_name
+            if body.display_name is None:
+                settings.display_name = cleaned_name[:80]
+                diff["display_name"] = settings.display_name
+
+    if body.slug is not None and ws is not None:
+        cleaned_slug = body.slug.strip().lower()
+        if not re.match(r"^[a-z0-9][a-z0-9-]{1,62}$", cleaned_slug):
+            raise ProblemException(
+                code="VALIDATION_FAILED",
+                status=422,
+                title="Validation Failed",
+                detail="slug must match ^[a-z0-9][a-z0-9-]{1,62}$",
+            )
+        if cleaned_slug != ws.slug:
+            existing_ws_id = (
+                await session.execute(
+                    text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
+                    {"ident": cleaned_slug},
+                )
+            ).scalar_one_or_none()
+            if existing_ws_id is not None and str(existing_ws_id) != str(caller.workspace_id):
+                raise ProblemException(
+                    code="WORKSPACE_SLUG_CONFLICT",
+                    status=409,
+                    title="Workspace Slug Conflict",
+                    detail=f"Workspace slug '{cleaned_slug}' is already taken.",
+                )
+            diff["slug"] = cleaned_slug
+            ws.slug = cleaned_slug
+
     if body.display_name is not None and body.display_name != settings.display_name:
         diff["display_name"] = body.display_name
         settings.display_name = body.display_name
@@ -219,8 +278,6 @@ async def update_workspace_settings(  # noqa: C901
         diff["trash_retention_days"] = body.trash_retention_days
         settings.trash_retention_days = body.trash_retention_days
         # Synchronize with workspaces.trash_retention_days
-        ws_stmt = select(Workspace).where(Workspace.id == caller.workspace_id)
-        ws = (await session.execute(ws_stmt)).scalar_one_or_none()
         if ws is not None:
             ws.trash_retention_days = body.trash_retention_days
 
@@ -241,6 +298,8 @@ async def update_workspace_settings(  # noqa: C901
         await session.refresh(settings)
 
         after: dict[str, Any] = {
+            "name": ws.name if ws else settings.display_name,
+            "slug": ws.slug if ws else "default",
             "display_name": settings.display_name,
             "default_project_visibility": settings.default_project_visibility,
             "session_idle_timeout_min": settings.session_idle_timeout_min,
@@ -267,4 +326,16 @@ async def update_workspace_settings(  # noqa: C901
                 payload={"air_gap_mode": settings.air_gap_mode, "previous": old_air_gap},
             )
 
-    return WorkspaceSettingsResponse.model_validate(settings)
+    return WorkspaceSettingsResponse(
+        workspace_id=settings.workspace_id,
+        name=ws.name if ws else settings.display_name,
+        slug=ws.slug if ws else "default",
+        display_name=settings.display_name,
+        default_project_visibility=settings.default_project_visibility,  # type: ignore[arg-type]
+        session_idle_timeout_min=settings.session_idle_timeout_min,
+        session_absolute_timeout_min=settings.session_absolute_timeout_min,
+        trash_retention_days=settings.trash_retention_days,
+        mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+        air_gap_mode=settings.air_gap_mode,
+        updated_at=settings.updated_at,
+    )

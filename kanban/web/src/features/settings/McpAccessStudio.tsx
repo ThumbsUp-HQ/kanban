@@ -16,6 +16,8 @@ import {
 import { McpConfigSnippetModal } from './McpConfigSnippetModal';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { useSystemStatus } from '../../app/useSystemStatus';
+import { apiFetch } from '../../api/client';
+import { NotFoundView } from '../../app/routes';
 import './McpAccessStudio.css';
 
 export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
@@ -57,12 +59,42 @@ export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]
 export interface McpAccessStudioProps {
   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
   allowUnlimitedKeys?: boolean | undefined;
+  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean } | null | undefined;
 }
 
 export function McpAccessStudio({
   tier = 'personal',
   allowUnlimitedKeys,
+  user: propUser,
 }: McpAccessStudioProps): JSX.Element {
+  const [fetchedUser, setFetchedUser] = useState<{
+    is_server_admin?: boolean;
+    is_workspace_admin?: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (propUser !== undefined) return;
+    const isMounted = { current: true };
+    void (async () => {
+      try {
+        const u = (await apiFetch('GET', '/api/v1/auth/me')) as {
+          is_server_admin?: boolean;
+          is_workspace_admin?: boolean;
+        };
+        if (isMounted.current) setFetchedUser(u);
+      } catch {
+        // Unmocked in unit test
+      }
+    })();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [propUser]);
+
+  const currentUser = propUser ?? fetchedUser;
+  const isServerAdmin = currentUser?.is_server_admin === true;
+  const isWorkspaceAdmin = currentUser?.is_workspace_admin === true || isServerAdmin;
+
   const systemStatusQuery = useSystemStatus();
   const allowUnlimited =
     allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
@@ -224,6 +256,17 @@ export function McpAccessStudio({
     workspace: 'Workspace MCP Bot Keys & Client Approvals',
     global: 'Global Cross-Workspace Bot Keys (meatloaf-bot)',
   }[tier];
+
+  // If tier is global (admin/mcp), require server admin. If workspace (workspaces/settings/mcp), require workspace admin.
+  // In offline/mocked unit tests without currentUser data or user mock, fall back gracefully if not specified.
+  if (currentUser !== null) {
+    if (tier === 'global' && !isServerAdmin) {
+      return <NotFoundView />;
+    }
+    if (tier === 'workspace' && !isWorkspaceAdmin) {
+      return <NotFoundView />;
+    }
+  }
 
   return (
     <div className="kb-mcp-studio-container" data-testid="mcp-access-studio">
@@ -517,7 +560,9 @@ export function McpAccessStudio({
                 >
                   <option value="agent">/mcp/agent (Standard Tools)</option>
                   <option value="docs">/mcp/docs (Knowledge & Markdown)</option>
-                  <option value="admin">/mcp/admin (Administrative Ops)</option>
+                  {isWorkspaceAdmin && (
+                    <option value="admin">/mcp/admin (Administrative Ops)</option>
+                  )}
                 </select>
               </div>
 

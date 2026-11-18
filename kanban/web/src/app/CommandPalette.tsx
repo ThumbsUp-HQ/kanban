@@ -37,6 +37,7 @@ export interface CommandPaletteProps {
   onToggleSidebar?: (() => void) | undefined;
   projectKey?: string | undefined;
   cachedIssues?: readonly CachedIssue[] | undefined;
+  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean } | null | undefined;
 }
 
 export const MAX_QUERY_LENGTH = 200;
@@ -80,6 +81,7 @@ export function CommandPalette({
   onToggleSidebar,
   projectKey = 'KAN',
   cachedIssues: cachedIssuesProp,
+  user,
 }: CommandPaletteProps): JSX.Element | null {
   const [query, setQuery] = useState('');
   const [rawSelectedIndex, setSelectedIndex] = useState(0);
@@ -238,15 +240,19 @@ export function CommandPalette({
           }
         },
       },
-      {
-        id: 'nav-auth-studio',
-        title: 'Go to Auth Studio',
-        icon: '🛡️',
-        category: 'navigation',
-        onSelect: () => {
-          void navigate('/admin/auth');
-        },
-      },
+      ...((user ? Boolean(user.is_server_admin) : true)
+        ? [
+            {
+              id: 'nav-auth-studio',
+              title: 'Go to Auth Studio',
+              icon: '🛡️',
+              category: 'navigation' as const,
+              onSelect: () => {
+                void navigate('/admin/auth');
+              },
+            },
+          ]
+        : []),
       {
         id: 'nav-mcp-keys',
         title: 'Go to Personal MCP Keys',
@@ -256,15 +262,19 @@ export function CommandPalette({
           void navigate('/settings/mcp');
         },
       },
-      {
-        id: 'nav-standalone-status',
-        title: 'Go to System Storage, Backups & Deployment',
-        icon: '💾',
-        category: 'navigation',
-        onSelect: () => {
-          void navigate('/admin/standalone');
-        },
-      },
+      ...((user ? Boolean(user.is_server_admin) : true)
+        ? [
+            {
+              id: 'nav-standalone-status',
+              title: 'Go to System Storage, Backups & Deployment',
+              icon: '💾',
+              category: 'navigation' as const,
+              onSelect: () => {
+                void navigate('/admin/standalone');
+              },
+            },
+          ]
+        : []),
       {
         id: 'act-toggle-sidebar',
         title: 'Toggle sidebar',
@@ -304,7 +314,7 @@ export function CommandPalette({
         },
       },
     ];
-  }, [navigate, onToggleSidebar, projectKey, themeContext]);
+  }, [navigate, onToggleSidebar, projectKey, themeContext, user]);
 
   // Issue command options capped at MAX_ISSUE_RESULTS (20)
   const issueCommands = useMemo<CommandOption[]>(() => {

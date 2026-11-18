@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-rbac-settings-builder-1a414d48
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 5 items
+
+kanban/tests/auth/test_standard_user_rbac_matrix.py .....                [100%]
+
+============================== 5 passed in 1.34s ===============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-rbac-settings-builder-1a414d48/kanban/web
+
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (2 tests) 241ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (2 tests) 267ms
+ ✓ src/app/Topbar.test.tsx (7 tests) 449ms
+ ✓ src/app/Sidebar.test.tsx (15 tests) 1209ms
+   ✓ Sidebar (15)
+     ✓ sets aria-current on active workspace and project subitem links 302ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (13 tests) 723ms
+
+ Test Files  5 passed (5)
+      Tests  39 passed (39)
+   Start at  00:25:18
+   Duration  2.45s (environment 46%, tests 35%, import 15%, transform 4%, worker 1%)
+

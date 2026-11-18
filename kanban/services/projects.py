@@ -19,6 +19,7 @@ import binascii
 import hashlib
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import delete, func, select, text
@@ -26,7 +27,12 @@ from sqlalchemy.exc import IntegrityError
 
 from database.models import Module, Project, ProjectModuleDefault
 from kanban.api.problems import ProblemException, not_found
-from kanban.api.v1.schemas.projects import ProjectList, ProjectResponse
+from kanban.api.v1.schemas.projects import (
+    ProjectList,
+    ProjectMemberAdd,
+    ProjectMemberResponse,
+    ProjectResponse,
+)
 from kanban.content import ContentNormalizeError, normalize_to_markdown
 from kanban.security.access_manifest import build_access_manifest
 from kanban.security.permissions import (
@@ -139,6 +145,29 @@ async def serialize_project(
     """Assemble the canonical response including access manifest and caller capabilities."""
     manifest = await build_access_manifest(session, caller, project.id)
     caps = await evaluate_capabilities(session, caller, project.id)
+    cap_names = capabilities_to_names(caps)
+    is_project_admin = "ADMIN" in cap_names
+
+    rb_res = await session.execute(
+        text(
+            "SELECT role::text FROM role_bindings "
+            "WHERE principal_id = :p_id AND project_id = :proj_id "
+            "LIMIT 1"
+        ),
+        {"p_id": caller.principal_id, "proj_id": project.id},
+    )
+    explicit_role = rb_res.scalar_one_or_none()
+    if explicit_role:
+        project_role = explicit_role
+    elif is_project_admin:
+        project_role = "PROJECT_ADMIN"
+    elif "EDIT" in cap_names:
+        project_role = "MEMBER"
+    elif "VIEW" in cap_names:
+        project_role = "VIEWER"
+    else:
+        project_role = None
+
     return ProjectResponse(
         id=project.id,
         identifier=project.identifier,
@@ -148,7 +177,9 @@ async def serialize_project(
         default_module_ids=await _default_module_ids(session, project.id),
         auto_archive_days=project.auto_archive_days,
         access_manifest=manifest,
-        capabilities=capabilities_to_names(caps),
+        capabilities=cap_names,
+        is_project_admin=is_project_admin,
+        project_role=project_role,
     )
 
 
@@ -370,3 +401,125 @@ async def replace_module_defaults(
         },
     )
     return await serialize_project(session, caller, project)
+
+
+async def list_project_members(
+    session: AsyncSession, caller: PrincipalContext, project_ref: str
+) -> list[ProjectMemberResponse]:
+    """List role bindings for principals on this project."""
+    project = await get_project_or_404(session, caller, project_ref)
+    await require_capability(session, caller, project.id, Capability.VIEW)
+
+    stmt = text(
+        "SELECT rb.id, rb.principal_id, rb.project_id, rb.role::text AS role, rb.created_at, "
+        "       p.display_name, o.canonical_key AS handle, u.email "
+        "FROM role_bindings rb "
+        "JOIN principals p ON p.id = rb.principal_id "
+        "LEFT JOIN users u ON u.id = rb.principal_id "
+        "LEFT JOIN objects o ON o.id = rb.principal_id "
+        "WHERE rb.project_id = :proj_id AND rb.scope_type = 'project' "
+        "ORDER BY rb.created_at ASC"
+    )
+    res = await session.execute(stmt, {"proj_id": project.id})
+    return [
+        ProjectMemberResponse(
+            id=row["id"],
+            principal_id=row["principal_id"],
+            project_id=row["project_id"],
+            role=row["role"],
+            display_name=row["display_name"],
+            handle=row["handle"],
+            email=row["email"],
+            created_at=row["created_at"],
+        )
+        for row in res.mappings()
+    ]
+
+
+async def add_project_member(
+    session: AsyncSession, caller: PrincipalContext, project_ref: str, body: ProjectMemberAdd
+) -> ProjectMemberResponse:
+    """Add or update a principal role binding on project scope (requires Capability.ADMIN)."""
+    project = await get_project_or_404(session, caller, project_ref)
+    await require_capability(session, caller, project.id, Capability.ADMIN)
+
+    # Check principal exists in this workspace
+    p_stmt = text(
+        "SELECT p.id, p.display_name, o.canonical_key AS handle, u.email "
+        "FROM principals p "
+        "LEFT JOIN users u ON u.id = p.id "
+        "LEFT JOIN objects o ON o.id = p.id "
+        "WHERE p.id = :p_id AND p.workspace_id = :ws_id"
+    )
+    p_res = (
+        await session.execute(p_stmt, {"p_id": body.principal_id, "ws_id": caller.workspace_id})
+    ).mappings().first()
+    if p_res is None:
+        not_found()
+
+    # Check existing binding
+    existing_stmt = text(
+        "SELECT id FROM role_bindings "
+        "WHERE project_id = :proj_id AND principal_id = :p_id AND scope_type = 'project'"
+    )
+    existing_id = (
+        await session.execute(
+            existing_stmt, {"proj_id": project.id, "p_id": body.principal_id}
+        )
+    ).scalar_one_or_none()
+
+    if existing_id is not None:
+        await session.execute(
+            text(
+                "UPDATE role_bindings SET role = CAST(:role AS rbac_role) "
+                "WHERE id = :binding_id"
+            ),
+            {"role": body.role, "binding_id": existing_id},
+        )
+        binding_id = existing_id
+    else:
+        new_id = uuid.uuid4()
+        await session.execute(
+            text(
+                "INSERT INTO role_bindings "
+                "(id, workspace_id, principal_id, role, scope_type, project_id) "
+                "VALUES (:id, :ws_id, :p_id, CAST(:role AS rbac_role), 'project', :proj_id)"
+            ),
+            {
+                "id": new_id,
+                "ws_id": caller.workspace_id,
+                "p_id": body.principal_id,
+                "role": body.role,
+                "proj_id": project.id,
+            },
+        )
+        binding_id = new_id
+
+    await session.flush()
+    return ProjectMemberResponse(
+        id=binding_id,
+        principal_id=body.principal_id,
+        project_id=project.id,
+        role=body.role,
+        display_name=p_res["display_name"],
+        handle=p_res["handle"],
+        email=p_res["email"],
+        created_at=datetime.now(UTC),
+    )
+
+
+async def delete_project_member(
+    session: AsyncSession, caller: PrincipalContext, project_ref: str, principal_id: uuid.UUID
+) -> None:
+    """Remove a principal role binding from project scope (requires Capability.ADMIN)."""
+    project = await get_project_or_404(session, caller, project_ref)
+    await require_capability(session, caller, project.id, Capability.ADMIN)
+
+    await session.execute(
+        text(
+            "DELETE FROM role_bindings "
+            "WHERE project_id = :proj_id AND principal_id = :p_id AND scope_type = 'project'"
+        ),
+        {"proj_id": project.id, "p_id": principal_id},
+    )
+    await session.flush()

@@ -170,6 +170,26 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
   });
 
+  it('renders NotFoundView when standard user navigates to workspace or admin mcp', () => {
+    const standardUser = { is_server_admin: false, is_workspace_admin: false };
+    const { unmount: u1 } = render(
+      <MemoryRouter initialEntries={['/admin/mcp']}>
+        <McpAccessStudio tier="global" user={standardUser} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('not-found-view')).toBeDefined();
+    expect(screen.getByText('Not found or no access')).toBeDefined();
+    u1();
+
+    render(
+      <MemoryRouter initialEntries={['/workspaces/settings/mcp']}>
+        <McpAccessStudio tier="workspace" user={standardUser} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('not-found-view')).toBeDefined();
+    expect(screen.getByText('Not found or no access')).toBeDefined();
+  });
+
   it('mints key, opens snippet modal with plaintext, copies, and wipes secret on close (Test Case 3)', async () => {
     vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);

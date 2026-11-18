@@ -11,7 +11,7 @@ import React, {
   type JSX,
   type ReactNode,
 } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
@@ -26,6 +26,10 @@ import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
 import { AccessInspectorHost } from '../features/access/useAccessInspector';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
+import { useQuery } from '@tanstack/react-query';
+import { qk } from '../api/queryKeys';
+import { apiFetch } from '../api/client';
+import type { TopbarUser } from './Topbar';
 import './AppShell.css';
 
 registerShellPanel('standalone', StandaloneStatusPanel);
@@ -94,6 +98,7 @@ export function AppShell({
 }: AppShellProps): JSX.Element {
   useSessionGuard();
   const location = useLocation();
+  const navigate = useNavigate();
   const match = /\/projects\/([^/]+)/.exec(location.pathname);
   const activeProjectKey = match?.[1] ?? projectKey;
   const isInsideProject = Boolean(match) || location.pathname.startsWith('/projects');
@@ -101,6 +106,42 @@ export function AppShell({
     currentSection && currentSection !== 'Work Items'
       ? currentSection
       : computeCurrentSection(location.pathname, currentSection);
+
+  const isPublicRoute =
+    location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/setup') ||
+    location.pathname.startsWith('/activate');
+
+  const meQuery = useQuery<TopbarUser | null>({
+    queryKey: qk.me(),
+    queryFn: async () => {
+      try {
+        return (await apiFetch('GET', '/api/v1/auth/me')) as TopbarUser;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !isPublicRoute,
+    staleTime: 60000,
+  });
+
+  const currentUser = meQuery.data ?? null;
+
+  useEffect(() => {
+    function handleManageAccess(e: Event): void {
+      const customEv = e as CustomEvent<{ objectId?: string; projectKey?: string }>;
+      const targetProjKey = customEv.detail.projectKey ?? activeProjectKey;
+      if (targetProjKey) {
+        void navigate(`/projects/${targetProjKey}/settings`);
+      } else {
+        void navigate('/workspaces/settings');
+      }
+    }
+    window.addEventListener('kb:open-manage-access', handleManageAccess);
+    return () => {
+      window.removeEventListener('kb:open-manage-access', handleManageAccess);
+    };
+  }, [activeProjectKey, navigate]);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -151,6 +192,7 @@ export function AppShell({
           projectName={projectName}
           modulesEnabled={modulesEnabled}
           triggerButtonRef={hamburgerButtonRef}
+          user={currentUser}
         />
 
         {/* 52px Uncluttered Topbar Header */}
@@ -167,6 +209,7 @@ export function AppShell({
           accessManifest={accessManifest}
           systemStatus={systemStatus}
           showLayoutSwitcher={false}
+          user={currentUser}
         />
 
         {/* Main Canvas Region */}
@@ -199,6 +242,7 @@ export function AppShell({
           onToggleSidebar={toggleMobileSidebar}
           projectKey={projectKey}
           cachedIssues={cachedIssues}
+          user={currentUser}
         />
       </div>
     </ShellPanelsProvider>

@@ -27,6 +27,9 @@ export interface TopbarUser {
   email?: string | null;
   avatar_url?: string | null;
   is_server_admin?: boolean;
+  is_workspace_admin?: boolean;
+  workspace_role?: string | null;
+  workspace_capabilities?: string[] | null;
 }
 
 export interface TopbarProps {
@@ -150,7 +153,8 @@ export function Topbar({
 
   // Determine avatar initials or custom image
   const userInitial = user?.display_name ? user.display_name.charAt(0).toUpperCase() : 'A';
-  const isServerAdmin = user?.is_server_admin ?? true; // Default true in self-hosted single-admin setups unless explicitly non-admin
+  const isServerAdmin = Boolean(user?.is_server_admin);
+  const isWorkspaceAdmin = Boolean(user?.is_workspace_admin ?? user?.is_server_admin);
 
   return (
     <header className="kb-topbar">
@@ -304,21 +308,42 @@ export function Topbar({
                   </span>
                 </Link>
 
-                <Link
-                  to="/workspaces/settings/mcp"
-                  role="menuitem"
-                  className="kb-theme-radio kb-avatar-menu-link"
-                  onClick={() => {
-                    setAvatarMenuOpen(false);
-                  }}
-                >
-                  <span>
-                    <span aria-hidden="true" className="kb-avatar-menu-icon">
-                      🏢
-                    </span>
-                    Workspace MCP Keys
-                  </span>
-                </Link>
+                {isWorkspaceAdmin && (
+                  <>
+                    <Link
+                      to="/workspaces/settings"
+                      role="menuitem"
+                      data-testid="topbar-workspace-settings-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🏢
+                        </span>
+                        Workspace Settings
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/workspaces/settings/mcp"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🔑
+                        </span>
+                        Workspace MCP Keys
+                      </span>
+                    </Link>
+                  </>
+                )}
 
                 {isServerAdmin && (
                   <>

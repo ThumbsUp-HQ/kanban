@@ -881,7 +881,7 @@ describe('Workflow Studio Coverage Booster', () => {
     });
 
     it('exercises projectQuery capabilities success, failure, and non-admin states', async () => {
-      // 1. Project query throws error -> catch returns null -> defaults to admin
+      // 1. Project query throws error -> catch returns null -> non-admin under fail-closed -> NotFoundView
       const fetchSpy = vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
         await Promise.resolve();
         if (typeof path === 'string' && path.includes('/projects/ERRQUERY')) {
@@ -899,7 +899,7 @@ describe('Workflow Studio Coverage Booster', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
+        expect(screen.getByText('Not found or no access')).toBeDefined();
       });
       unmount1();
 

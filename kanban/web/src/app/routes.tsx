@@ -23,6 +23,7 @@ import {
   createBrowserRouter,
   createMemoryRouter,
   Link,
+  Navigate,
   useLocation,
   useNavigate,
   useParams,
@@ -48,6 +49,8 @@ import ProjectCustomFieldsSettingsRoute from '../routes/projects/settings/custom
 import { apiClient, apiFetch } from '../api/client';
 import { RouteErrorBoundary } from '../components/error/AppErrorModal';
 import type { IssueDetail } from '../features/drawer/slots';
+import { ProjectSettingsPage } from '../features/settings/ProjectSettingsPage';
+import { WorkspaceSettingsPage } from '../features/settings/WorkspaceSettingsPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SetupClaimPage } from '../features/auth/SetupClaimPage';
 import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
@@ -778,6 +781,12 @@ export function ProjectModulesView(): JSX.Element {
   return <ProjectModulesViewInner projectKey={key} />;
 }
 
+export function ProjectViewsRedirect(): JSX.Element {
+  const { projectKey } = useParams<{ projectKey: string }>();
+  const key = projectKey ?? 'KAN';
+  return <Navigate to={`/projects/${key}/issues`} replace />;
+}
+
 export function ProjectSavedViewsView(): JSX.Element {
   const { projectKey } = useParams<{ projectKey: string }>();
   const key = projectKey ?? 'KAN';
@@ -954,7 +963,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'views',
-            element: <ProjectSavedViewsView />,
+            element: <ProjectViewsRedirect />,
           },
           {
             path: 'overview',
@@ -979,6 +988,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'settings/workflows',
             element: <WorkflowStudioPage />,
+          },
+          {
+            path: 'settings',
+            element: <ProjectSettingsPage />,
           },
         ],
       },
@@ -1020,6 +1033,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'settings/mcp',
             element: <McpAccessStudio tier="personal" />,
+          },
+          {
+            path: 'workspaces/settings',
+            element: <WorkspaceSettingsPage />,
           },
           {
             path: 'workspaces/settings/mcp',

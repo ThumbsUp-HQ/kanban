@@ -194,7 +194,7 @@ describe('Topbar', () => {
         <ThemeProvider>
           <ShellPanelsProvider>
             <MemoryRouter initialEntries={['/projects/KAN/issues']}>
-              <Topbar />
+              <Topbar user={{ is_server_admin: true, is_workspace_admin: true }} />
             </MemoryRouter>
           </ShellPanelsProvider>
         </ThemeProvider>
@@ -224,5 +224,40 @@ describe('Topbar', () => {
       '/api/v1/auth/logout',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('hides admin links in avatar menu when user is standard member', () => {
+    const memberUser = {
+      is_server_admin: false,
+      is_workspace_admin: false,
+      workspace_role: 'WORKSPACE_MEMBER',
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar user={memberUser} />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    act(() => {
+      avatarBtn.click();
+    });
+
+    expect(screen.getByRole('menuitem', { name: /Personal Settings/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
+    expect(screen.queryByRole('menuitem', { name: /Workspace Settings/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Admin Auth Studio/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Admin MCP Keys/ })).toBeNull();
+    expect(
+      screen.queryByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
+    ).toBeNull();
   });
 });
