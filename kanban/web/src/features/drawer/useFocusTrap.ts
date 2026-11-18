@@ -11,20 +11,20 @@ const FOCUSABLE_SELECTOR = [
 
 /**
  * Traps Tab and Shift+Tab navigation within containerRef when active.
- * Used exclusively on mobile viewports for modal sheet accessibility.
+ * Ensures cyclic keyboard navigation so focus cannot escape into background elements.
  */
 export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     if (!active) {
       return;
     }
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
 
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Tab') {
+        return;
+      }
+      const container = containerRef.current;
+      if (!container) {
         return;
       }
       const focusables = Array.from(
@@ -38,6 +38,7 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
 
       if (focusables.length === 0) {
         e.preventDefault();
+        container.focus();
         return;
       }
 

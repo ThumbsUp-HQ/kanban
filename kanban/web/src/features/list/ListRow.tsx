@@ -2,6 +2,7 @@ import React, { useRef, useLayoutEffect, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { StateBadge } from '../../components/state/StateBadge';
 import { PriorityIcon } from '../../components/icons/KanbanIcons';
+import { setOpenerElement } from '../drawer/IssueKeyLink';
 import type { IssueItem } from '../views/viewsApi';
 
 export interface ListRowProps {
@@ -38,7 +39,7 @@ export function ListRow({
   onOpenPeek,
   isActive = false,
 }: ListRowProps): JSX.Element {
-  const rowRef = useRef<HTMLLIElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   // Priority EmojiHint kind mapping
   let priorityKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
@@ -69,14 +70,16 @@ export function ListRow({
   const visibleLabels = labels.slice(0, 2);
   const overflowLabelCount = labels.length - visibleLabels.length;
 
-  const handleClick = (e: React.MouseEvent<HTMLLIElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     if (target.closest('input, button, a')) return;
+    setOpenerElement(rowRef.current);
     onOpenPeek?.(issue.key);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLLIElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter') {
+      setOpenerElement(rowRef.current);
       if (onOpenPeek) {
         onOpenPeek(issue.key);
       } else {
@@ -86,10 +89,11 @@ export function ListRow({
   };
 
   return (
-    <li
+    <div
       ref={rowRef}
       role="row"
       data-issue-key={issue.key}
+      data-testid={`list-row-${issue.key}`}
       tabIndex={isFocused ? 0 : -1}
       className={`list-row ${isSelected ? 'list-row--selected' : ''} ${
         isActive ? 'list-row--active' : ''
@@ -98,7 +102,7 @@ export function ListRow({
       onKeyDown={handleKeyDown}
       aria-selected={isSelected}
     >
-      <div className="list-row-left">
+      <div role="cell" className="list-row-left">
         {onToggleSelect && (
           <span className="list-row-checkbox-wrap">
             <input
@@ -137,6 +141,7 @@ export function ListRow({
           href={`?layout=list&peek=${encodeURIComponent(issue.key)}`}
           className="list-row-key mono"
           onClick={(e) => {
+            setOpenerElement(e.currentTarget);
             if (onOpenPeek) {
               e.preventDefault();
               onOpenPeek(issue.key);
@@ -149,7 +154,7 @@ export function ListRow({
         <span className="list-row-summary">{issue.summary}</span>
       </div>
 
-      <div className="list-row-right">
+      <div role="cell" className="list-row-right">
         {gateKind && <EmojiHint kind={gateKind} />}
 
         {Boolean(issue.has_explicit_acl) && <EmojiHint kind="access" testId="hint-access" />}
@@ -196,6 +201,6 @@ export function ListRow({
           );
         })}
       </div>
-    </li>
+    </div>
   );
 }

@@ -350,7 +350,7 @@ export function DocsTreeNav({
             onClick={() => {
               handleStartCreate(null);
             }}
-            aria-label="Create new root doc"
+            aria-label="+ New Doc"
             data-testid="create-root-doc-btn"
           >
             + New Doc

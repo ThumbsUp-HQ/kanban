@@ -6,6 +6,7 @@ import {
 import { EmojiHint } from '../../components/emoji/EmojiHint.tsx';
 import type { EmojiKey } from '../../components/emoji/emojiRegistry.ts';
 import { GateStatusPill } from '../gates/GateStatusPill.tsx';
+import { setOpenerElement } from '../drawer/IssueKeyLink.tsx';
 import type { BoardAssignee, BoardIssue, BoardPriority, StateGroup } from './boardApi.ts';
 
 export interface BoardCardProps {
@@ -121,7 +122,8 @@ export function BoardCard({
     };
   }, [issue, isGatePending, draggableFactory, dropTargetFactory]);
 
-  const handleOpenPeek = (): void => {
+  const handleOpenPeek = (targetEl?: HTMLElement | null): void => {
+    setOpenerElement(targetEl ?? cardRef.current);
     if (onOpenPeek) {
       onOpenPeek(issue.key);
     } else {
@@ -142,13 +144,13 @@ export function BoardCard({
     ) {
       return;
     }
-    handleOpenPeek();
+    handleOpenPeek(cardRef.current);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleOpenPeek();
+      handleOpenPeek(cardRef.current);
       return;
     }
 
@@ -190,7 +192,7 @@ export function BoardCard({
       data-drop-target={dropEdge ?? undefined}
       onKeyDown={handleKeyDown}
       onClick={handleCardClick}
-      aria-label={`${issue.key}: ${issue.summary}`}
+      aria-label={`${issue.key} ${issue.summary}`.trim()}
     >
       <div className="board-card-top">
         <a
@@ -200,7 +202,7 @@ export function BoardCard({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            handleOpenPeek();
+            handleOpenPeek(e.currentTarget);
           }}
         >
           {issue.key}

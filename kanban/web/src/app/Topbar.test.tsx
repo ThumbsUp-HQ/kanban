@@ -45,7 +45,7 @@ describe('Topbar', () => {
     expect(screen.getByText('(7)')).toBeDefined();
 
     // Search trigger
-    const searchBtn = screen.getByRole('button', { name: 'Search or run command' });
+    const searchBtn = screen.getByRole('button', { name: 'Search... (Cmd+K)' });
     expect(searchBtn).toBeDefined();
     act(() => {
       searchBtn.click();

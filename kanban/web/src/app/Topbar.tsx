@@ -228,13 +228,13 @@ export function Topbar({
         <button
           type="button"
           className="kb-search-trigger"
-          aria-label="Search or run command"
+          aria-label="Search... (Cmd+K)"
           aria-keyshortcuts="Meta+K Control+K"
           onClick={onOpenPalette}
         >
           <div className="kb-search-trigger-content">
             <span aria-hidden="true">🔍</span>
-            <span className="kb-search-trigger-text">Search / Cmd+K...</span>
+            <span className="kb-search-trigger-text">Search...</span>
           </div>
           <kbd className="kb-search-kbd">Cmd+K</kbd>
         </button>

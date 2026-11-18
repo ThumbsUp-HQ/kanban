@@ -249,7 +249,7 @@ describe('IssueSurface', () => {
   });
 
   describe('Required Test Case 8: Viewport aria-modal property', () => {
-    it('sets aria-modal="true" on mobile and aria-modal="false" on desktop', async () => {
+    it('sets aria-modal="true" and role="dialog" on drawer across desktop and mobile', async () => {
       vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
 
       // Desktop
@@ -258,7 +258,8 @@ describe('IssueSurface', () => {
       const { container: desktopContainer, unmount } = render(<DesktopHarness />);
 
       await waitFor(() => {
-        expect(desktopContainer.querySelector('section')?.getAttribute('aria-modal')).toBe('false');
+        expect(desktopContainer.querySelector('section')?.getAttribute('aria-modal')).toBe('true');
+        expect(desktopContainer.querySelector('section')?.getAttribute('role')).toBe('dialog');
       });
       unmount();
 
@@ -269,6 +270,7 @@ describe('IssueSurface', () => {
 
       await waitFor(() => {
         expect(mobileContainer.querySelector('section')?.getAttribute('aria-modal')).toBe('true');
+        expect(mobileContainer.querySelector('section')?.getAttribute('role')).toBe('dialog');
       });
     });
   });

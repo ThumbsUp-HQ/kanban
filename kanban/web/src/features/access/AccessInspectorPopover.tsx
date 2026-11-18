@@ -15,6 +15,7 @@ import { qk } from '../../api/queryKeys';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { positionHint } from '../../components/emoji/positionHint';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
+import { useFocusTrap } from '../drawer/useFocusTrap';
 import type {
   AccessManifest,
   ManifestAgent,
@@ -110,11 +111,29 @@ export function AccessInspectorPopover({
 
   // Restore focus to invoking element on unmount
   useEffect(() => {
-    const opener = openerRef.current;
+    if (!openerRef.current || openerRef.current === document.body) {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body && !dialogRef.current?.contains(active)) {
+        openerRef.current = active;
+      }
+    }
     return () => {
-      opener?.focus();
+      const opener = openerRef.current;
+      if (opener && document.contains(opener)) {
+        opener.focus();
+      }
     };
   }, []);
+
+  useFocusTrap(true, dialogRef);
+
+  const handleClose = (): void => {
+    const opener = openerRef.current;
+    onClose();
+    if (opener && document.contains(opener)) {
+      opener.focus();
+    }
+  };
 
   // Strict CSP CSSOM positioning with positionHint
   useLayoutEffect(() => {
@@ -168,40 +187,8 @@ export function AccessInspectorPopover({
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      onClose();
-      return;
-    }
-
-    if (e.key === 'Tab') {
-      const el = dialogRef.current;
-      /* v8 ignore next 3 */
-      if (!el) {
-        return;
-      }
-      const focusable = Array.from(
-        el.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      /* v8 ignore next 4 */
-      if (focusable.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey) {
-        if (first && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        }
-      } else {
-        if (last && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
+      e.preventDefault();
+      handleClose();
     }
   };
 
@@ -252,7 +239,7 @@ export function AccessInspectorPopover({
     <>
       <div
         className="access-inspector-backdrop"
-        onClick={onClose}
+        onClick={handleClose}
         aria-hidden="true"
       />
       <div
@@ -282,7 +269,7 @@ export function AccessInspectorPopover({
             <button
               type="button"
               className="access-inspector__close-btn"
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Close Access Inspector"
             >
               ✕

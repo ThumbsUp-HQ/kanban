@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, type JSX } from 'react';
+import React, { useState, useEffect, useRef, useCallback, type JSX } from 'react';
 import type { IssueItem } from './viewsApi';
 import { saveDraft } from '../drafts/draftsStore';
+import { useFocusTrap } from '../drawer/useFocusTrap';
 import './filterBulk.css';
 
 export interface QuickCreateIssueModalProps {
@@ -51,6 +52,51 @@ export function QuickCreateIssueModal({
   const [postCreateData, setPostCreateData] = useState<PostCreateState | null>(null);
 
   const summaryInputRef = useRef<HTMLInputElement>(null);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  // Capture triggering opener element upon open
+  useEffect(() => {
+    if (isOpen) {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body && !modalContainerRef.current?.contains(active)) {
+        openerRef.current = active;
+      }
+    }
+  }, [isOpen]);
+
+  // Enforce cyclic focus trap while open
+  useFocusTrap(isOpen, modalContainerRef);
+
+  const handleClose = useCallback((): void => {
+    const opener = openerRef.current;
+    onClose();
+    if (opener && document.contains(opener)) {
+      opener.focus();
+    }
+  }, [onClose]);
+
+  // Restore focus if unmounted while open
+  useEffect(() => {
+    return () => {
+      const opener = openerRef.current;
+      if (opener && document.contains(opener)) {
+        opener.focus();
+      }
+    };
+  }, []);
+
+  // Restore focus when transitioning from open to closed
+  const prevIsOpen = useRef(isOpen);
+  useEffect(() => {
+    if (prevIsOpen.current && !isOpen) {
+      const opener = openerRef.current;
+      if (opener && document.contains(opener)) {
+        opener.focus();
+      }
+    }
+    prevIsOpen.current = isOpen;
+  }, [isOpen]);
 
   // Focus input on open or when resetting to form
   useEffect(() => {
@@ -79,8 +125,9 @@ export function QuickCreateIssueModal({
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         e.stopPropagation();
+        e.preventDefault();
         setPostCreateData(null);
-        onClose();
+        handleClose();
       }
     };
 
@@ -88,7 +135,7 @@ export function QuickCreateIssueModal({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   if (!isOpen) {
     return null;
@@ -99,7 +146,7 @@ export function QuickCreateIssueModal({
     setDescription('');
     setIsDraft(false);
     setPostCreateData(null);
-    onClose();
+    handleClose();
   };
 
   const handleCreateAnother = (): void => {
@@ -207,6 +254,7 @@ export function QuickCreateIssueModal({
   if (postCreateData) {
     return (
       <div
+        ref={modalContainerRef}
         className="quick-create-modal-overlay"
         role="dialog"
         aria-modal="true"
@@ -276,6 +324,7 @@ export function QuickCreateIssueModal({
   // --------------------------------------------------------------------------
   return (
     <div
+      ref={modalContainerRef}
       className="quick-create-modal-overlay"
       role="dialog"
       aria-modal="true"
@@ -289,7 +338,7 @@ export function QuickCreateIssueModal({
           <button
             type="button"
             className="filter-chip-remove"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close modal"
           >
             ×
@@ -429,7 +478,7 @@ export function QuickCreateIssueModal({
             <button
               type="button"
               className="quick-create-btn-cancel"
-              onClick={onClose}
+              onClick={handleClose}
             >
               Cancel
             </button>

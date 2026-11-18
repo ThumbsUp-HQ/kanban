@@ -17,14 +17,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, type ApiFetchOptions } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { qk } from '../../api/queryKeys';
-import { useBreakpoint } from '../../styles/breakpoints';
 import { registerShortcut } from '../../app/shortcuts';
 import {
   useIssueSurfaceRoute,
   toFullScreenPath,
   toPeekPath,
 } from './useIssueSurfaceRoute';
-import { getOpenerElement } from './IssueKeyLink';
+import { getOpenerElement, setOpenerElement } from './IssueKeyLink';
 import { useIssueSurfaceSlots, type IssueDetail } from './slots';
 import { IssueHeader } from './IssueHeader';
 import { AccessPill } from './AccessPill';
@@ -122,8 +121,6 @@ function IssueSurfaceContent({
   const descRef = useRef<HTMLElement | null>(null);
 
   const slots = useIssueSurfaceSlots();
-  const bp = useBreakpoint();
-  const isMobile = bp === 'mobile';
 
   const [editingIssueKey, setEditingIssueKey] = useState<string | null>(null);
   const isEditingDescription = editingIssueKey === issueKey;
@@ -154,7 +151,19 @@ function IssueSurfaceContent({
     setIsNavHidden((prev) => !prev);
   }, []);
 
-  useFocusTrap(isMobile && mode === 'drawer', rootRef);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (mode === 'drawer') {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body && !rootRef.current?.contains(active)) {
+        openerRef.current = active;
+        setOpenerElement(active);
+      }
+    }
+  }, [mode, issueKey]);
+
+  useFocusTrap(mode === 'drawer', rootRef);
 
   useEffect(() => {
     rootRef.current?.focus();
@@ -203,14 +212,26 @@ function IssueSurfaceContent({
 
   const handleClose = useCallback((): void => {
     void navigate(toPeekPath(location, null));
-    const opener = getOpenerElement();
-    if (opener) {
+    const opener =
+      getOpenerElement() ??
+      openerRef.current ??
+      document.querySelector<HTMLElement>(
+        `[data-issue-key="${issueKey}"], [data-testid="board-card-${issueKey}"], [data-testid="list-row-${issueKey}"]`,
+      );
+    if (opener && document.contains(opener)) {
       opener.focus();
     } else {
-      const main = document.getElementById('kb-main') ?? document.getElementById('main');
-      main?.focus();
+      const fallback = document.querySelector<HTMLElement>(
+        `[data-issue-key="${issueKey}"], [data-testid="board-card-${issueKey}"]`,
+      );
+      if (fallback && document.contains(fallback)) {
+        fallback.focus();
+      } else {
+        const main = document.getElementById('kb-main') ?? document.getElementById('main');
+        main?.focus();
+      }
     }
-  }, [location, navigate]);
+  }, [location, navigate, issueKey]);
 
   const handleToggleFullScreen = useCallback((): void => {
     if (mode === 'drawer') {
@@ -622,7 +643,7 @@ function IssueSurfaceContent({
       ref={rootRef}
       className="surface--drawer"
       role="dialog"
-      aria-modal={isMobile ? 'true' : 'false'}
+      aria-modal="true"
       aria-labelledby={`issue-summary-${issueKey}`}
       tabIndex={-1}
       data-mount-id={mountId}

@@ -443,23 +443,29 @@ export function ListView({
             </div>
 
             {!isCollapsed && (
-              <ul className="list-rows" role="list">
-                {section.items.map((issue) => {
-                  const itemIndex = visibleIssues.indexOf(issue);
-                  return (
-                    <ListRow
-                      key={issue.id || issue.key}
-                      issue={issue}
-                      isSelected={selectedSet.has(issue.key)}
-                      onToggleSelect={onToggleSelect}
-                      modulesEnabled={modulesEnabled}
-                      isFocused={itemIndex === focusedIndex || focusedKey === issue.key}
-                      onOpenPeek={onOpenPeek}
-                      isActive={activeKey === issue.key}
-                    />
-                  );
-                })}
-              </ul>
+              <div
+                className="list-table"
+                role="table"
+                aria-label={`${section.name} work items`}
+              >
+                <div className="list-rows" role="rowgroup">
+                  {section.items.map((issue) => {
+                    const itemIndex = visibleIssues.indexOf(issue);
+                    return (
+                      <ListRow
+                        key={issue.id || issue.key}
+                        issue={issue}
+                        isSelected={selectedSet.has(issue.key)}
+                        onToggleSelect={onToggleSelect}
+                        modulesEnabled={modulesEnabled}
+                        isFocused={itemIndex === focusedIndex || focusedKey === issue.key}
+                        onOpenPeek={onOpenPeek}
+                        isActive={activeKey === issue.key}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </section>
         );
