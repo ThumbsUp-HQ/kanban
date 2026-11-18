@@ -168,6 +168,9 @@ async def get_current_principal(
     username: str | None = None
     email: str | None = None
     is_server_admin = False
+    timezone = "UTC"
+    avatar_url: str | None = None
+    has_local_password = False
 
     if session_factory is not None:
         rls_ctx = RLSContext(
@@ -196,6 +199,8 @@ async def get_current_principal(
             except Exception:  # noqa: BLE001
                 username = None
 
+            has_local_password = username is not None
+
             e_res = await async_session.execute(
                 text("SELECT email FROM users WHERE id = :p_id"),
                 {"p_id": principal.principal_id},
@@ -206,6 +211,24 @@ async def get_current_principal(
                 text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
             )
             is_server_admin = bool(admin_res.scalar_one())
+
+            try:
+                async with async_session.begin_nested():
+                    pref_res = await async_session.execute(
+                        text(
+                            "SELECT timezone, avatar_storage_key "
+                            "FROM user_preferences WHERE principal_id = :p_id"
+                        ),
+                        {"p_id": principal.principal_id},
+                    )
+                    pref_row = pref_res.mappings().first()
+                    if pref_row:
+                        if pref_row["timezone"]:
+                            timezone = pref_row["timezone"]
+                        if pref_row["avatar_storage_key"]:
+                            avatar_url = f"/api/v1/users/{principal.principal_id}/avatar"
+            except Exception:  # noqa: BLE001, S110
+                pass
 
     handle = username or display_name or str(principal.principal_id)
     return JSONResponse(
@@ -218,6 +241,9 @@ async def get_current_principal(
             "display_name": display_name or handle,
             "email": email,
             "is_server_admin": is_server_admin,
+            "timezone": timezone,
+            "avatar_url": avatar_url,
+            "has_local_password": has_local_password,
             "aal_level": principal.aal_level,
             "mfa_pending": getattr(principal, "mfa_pending", False),
         }

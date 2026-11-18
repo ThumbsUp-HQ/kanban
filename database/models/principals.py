@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     UniqueConstraint,
@@ -215,4 +216,24 @@ class EffectiveResourceAccess(Base):
     deny_mask: Mapped[int] = mapped_column(Integer, nullable=False)
     effective_mask: Mapped[int | None] = mapped_column(
         Computed("allow_mask & (~deny_mask)", persisted=True), nullable=True
+    )
+
+
+class UserPreference(Base):
+    """Per-user settings and preferences (timezone, avatar metadata)."""
+
+    __tablename__ = "user_preferences"
+
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    timezone: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'UTC'"))
+    avatar_storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    avatar_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    avatar_sha256: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )

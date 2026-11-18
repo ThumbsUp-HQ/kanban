@@ -64,6 +64,7 @@ from database.models.principals import (
     ResourceAclEntry,
     RoleBinding,
     User,
+    UserPreference,
 )
 from database.models.projects import (
     Cycle,
@@ -166,6 +167,7 @@ __all__ = [
     "TotpFactor",
     "User",
     "UserIdentity",
+    "UserPreference",
     "UserSession",
     "View",
     "ViewLayout",

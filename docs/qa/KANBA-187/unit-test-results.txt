@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-auth-settings-builder-d406043d
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 16 items
+
+kanban/tests/api/test_user_personal_settings.py ....                     [ 25%]
+database/tests/migrations/test_p4_20_user_personal_settings_migration.py . [ 31%]
+                                                                         [ 31%]
+database/tests/test_migration_consistency_static.py .....                [ 62%]
+database/tests/test_p1_17_models.py .....                                [ 93%]
+database/tests/test_p1_14_rls_catalog.py .                               [100%]
+
+============================== 16 passed in 2.27s ==============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-auth-settings-builder-d406043d/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 10ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (6 tests) 316ms
+
+ Test Files  2 passed (2)
+      Tests  10 passed (10)
+   Start at  19:21:27
+   Duration  1.33s (environment 70%, tests 18%, import 9%, transform 1%, worker 1%)
+

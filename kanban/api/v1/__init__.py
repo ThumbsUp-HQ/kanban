@@ -75,6 +75,7 @@ from kanban.api.v1.system_status import (
     system_router,
 )
 from kanban.api.v1.transitions import router as transitions_router
+from kanban.api.v1.user_settings import router as user_settings_router
 from kanban.api.v1.views import router as views_router
 from kanban.api.v1.workflow_hooks import router as workflow_hooks_router
 from kanban.api.v1.workspaces import router as workspaces_router
@@ -145,4 +146,5 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(workspaces_router)
     v1.include_router(system_router)
     v1.include_router(admin_standalone_router)
+    v1.include_router(user_settings_router)
     return v1

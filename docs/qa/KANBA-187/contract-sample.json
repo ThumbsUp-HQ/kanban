@@ -1,0 +1,127 @@
+{
+  "endpoints": {
+    "GET /api/v1/auth/me": {
+      "description": "Authenticated user personal profile with timezone and avatar info",
+      "response_200": {
+        "principal_id": "11111111-1111-4111-8111-111111111111",
+        "display_name": "Jane Doe",
+        "username": "janedoe",
+        "email": "jane@example.com",
+        "timezone": "America/New_York",
+        "avatar_url": "/api/v1/users/11111111-1111-4111-8111-111111111111/avatar",
+        "roles": ["user"],
+        "is_server_admin": false,
+        "has_local_password": true
+      }
+    },
+    "PATCH /api/v1/auth/me": {
+      "description": "Update own display name and IANA timezone with validation",
+      "request_sample": {
+        "display_name": "Jane Smith",
+        "timezone": "Europe/London"
+      },
+      "response_200": {
+        "principal_id": "11111111-1111-4111-8111-111111111111",
+        "display_name": "Jane Smith",
+        "username": "janedoe",
+        "email": "jane@example.com",
+        "timezone": "Europe/London",
+        "avatar_url": "/api/v1/users/11111111-1111-4111-8111-111111111111/avatar",
+        "roles": ["user"],
+        "is_server_admin": false,
+        "has_local_password": true
+      },
+      "error_422_invalid_tz": {
+        "code": "INVALID_TIMEZONE",
+        "status": 422,
+        "title": "Invalid Timezone",
+        "detail": "Unknown timezone 'Invalid/Timezone'. Must be a valid IANA timezone."
+      }
+    },
+    "PUT /api/v1/auth/me/avatar": {
+      "description": "Upload avatar (PNG/JPEG/WebP <= 2 MiB, reject SVG with 415)",
+      "request_headers": {
+        "Content-Type": "image/png"
+      },
+      "response_200": {
+        "avatar_url": "/api/v1/users/11111111-1111-4111-8111-111111111111/avatar"
+      },
+      "error_415_svg_rejected": {
+        "code": "UNSUPPORTED_MEDIA_TYPE",
+        "status": 415,
+        "title": "Unsupported Media Type",
+        "detail": "SVG avatars are not allowed. Please upload PNG, JPEG, or WebP."
+      }
+    },
+    "GET /api/v1/users/{principal_id}/avatar": {
+      "description": "Stream sanitized avatar blob with strict security headers",
+      "response_headers": {
+        "Content-Type": "image/png",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"
+      },
+      "response_body": "<binary PNG stream>"
+    },
+    "DELETE /api/v1/auth/me/avatar": {
+      "description": "Delete personal avatar and nullify preferences",
+      "response_200": {
+        "ok": true,
+        "avatar_url": null
+      }
+    },
+    "POST /api/v1/auth/me/password": {
+      "description": "Change password (min 14 for admins, min 12 for users, reject unchanged 422, revoke other sessions)",
+      "request_sample": {
+        "current_password": "OldValidPassword123!",
+        "new_password": "NewStrongPassword2026!"
+      },
+      "response_200": {
+        "ok": true,
+        "message": "Password updated successfully. Other active sessions have been revoked."
+      },
+      "error_422_unchanged": {
+        "code": "PASSWORD_UNCHANGED",
+        "status": 422,
+        "title": "Unchanged Password",
+        "detail": "New password cannot be identical to current password."
+      },
+      "error_422_too_short": {
+        "code": "PASSWORD_TOO_SHORT",
+        "status": 422,
+        "title": "Password Too Short",
+        "detail": "Password must be at least 14 characters for administrators."
+      }
+    },
+    "PATCH /api/v1/auth/webauthn/credentials/{credential_id}": {
+      "description": "Rename self-service passkey nickname",
+      "request_sample": {
+        "nickname": "Work YubiKey 5C NFC"
+      },
+      "response_200": {
+        "id": "passkey-uuid-1",
+        "nickname": "Work YubiKey 5C NFC",
+        "created_at": "2026-01-01T00:00:00Z",
+        "last_used_at": "2026-02-01T00:00:00Z",
+        "aaguid": "00000000-0000-0000-0000-000000000000"
+      }
+    },
+    "GET /api/v1/auth/mfa/status": {
+      "description": "Summary status of active MFA factors and recovery keys",
+      "response_200": {
+        "totp_enabled": true,
+        "passkeys_count": 2,
+        "recovery_codes_remaining": 10
+      }
+    },
+    "DELETE /api/v1/auth/mfa/totp": {
+      "description": "Disable TOTP factor (prevent lockout if admin has 0 passkeys remaining)",
+      "error_409_last_factor": {
+        "code": "LAST_FACTOR",
+        "status": 409,
+        "title": "Last Factor Protection",
+        "detail": "Administrators must maintain at least one active MFA factor (Passkey or TOTP)."
+      }
+    }
+  }
+}

@@ -52,6 +52,7 @@ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
 import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
 import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
 import { McpAccessStudio } from '../features/settings/McpAccessStudio';
+import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
 import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
@@ -998,6 +999,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'stickies',
             element: <WorkspaceStickiesView />,
+          },
+          {
+            path: 'settings/profile',
+            element: <PersonalSettingsPage />,
           },
           {
             path: 'settings/mcp',

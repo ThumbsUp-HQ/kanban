@@ -1,0 +1,3351 @@
+diff --git a/database/migrations/sql/p4_20_user_personal_settings.down.sql b/database/migrations/sql/p4_20_user_personal_settings.down.sql
+new file mode 100644
+index 0000000..0bb660a
+--- /dev/null
++++ b/database/migrations/sql/p4_20_user_personal_settings.down.sql
+@@ -0,0 +1,9 @@
++-- Migration p4_20_user_personal_settings (DOWN)
++-- Revert user preferences and profile update helper functions.
++
++DROP FUNCTION IF EXISTS kb_auth.user_get_avatar(UUID);
++DROP FUNCTION IF EXISTS kb_auth.session_revoke_all_except(UUID, UUID);
++DROP FUNCTION IF EXISTS kb_auth.webauthn_credential_update_nickname(UUID, UUID, TEXT);
++DROP FUNCTION IF EXISTS kb_auth.local_get_credential_by_principal(UUID);
++DROP FUNCTION IF EXISTS kb_auth.user_update_own_profile(UUID, TEXT, TEXT);
++DROP TABLE IF EXISTS public.user_preferences;
+diff --git a/database/migrations/sql/p4_20_user_personal_settings.up.sql b/database/migrations/sql/p4_20_user_personal_settings.up.sql
+new file mode 100644
+index 0000000..d5e9ae7
+--- /dev/null
++++ b/database/migrations/sql/p4_20_user_personal_settings.up.sql
+@@ -0,0 +1,221 @@
++-- Migration p4_20_user_personal_settings (UP)
++-- User preferences (timezone, avatar) and profile update helper functions.
++
++-- 1. user_preferences table
++CREATE TABLE IF NOT EXISTS public.user_preferences (
++    principal_id UUID PRIMARY KEY REFERENCES public.principals(id) ON DELETE CASCADE,
++    workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
++    timezone TEXT NOT NULL DEFAULT 'UTC',
++    avatar_storage_key TEXT,
++    avatar_content_type TEXT,
++    avatar_sha256 BYTEA,
++    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++ALTER TABLE public.user_preferences OWNER TO kanban_migrator;
++GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_preferences TO kb_auth_owner, kanban_app;
++
++-- Enable and Force RLS
++ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.user_preferences FORCE ROW LEVEL SECURITY;
++
++-- Allow kb_auth_owner full access for SECURITY DEFINER routines
++CREATE POLICY user_preferences_kb_auth_owner ON public.user_preferences
++    FOR ALL TO kb_auth_owner
++    USING (true)
++    WITH CHECK (true);
++
++-- RLS Policies on user_preferences:
++-- SELECT allowed within current workspace
++CREATE POLICY user_preferences_select_policy ON public.user_preferences
++    FOR SELECT TO kanban_app
++    USING (workspace_id = app_current_workspace_id());
++
++-- INSERT allowed for own principal_id within current workspace
++CREATE POLICY user_preferences_insert_policy ON public.user_preferences
++    FOR INSERT TO kanban_app
++    WITH CHECK (
++        principal_id = app_current_principal_id()
++        AND workspace_id = app_current_workspace_id()
++    );
++
++-- UPDATE allowed for own principal_id
++CREATE POLICY user_preferences_update_policy ON public.user_preferences
++    FOR UPDATE TO kanban_app
++    USING (
++        principal_id = app_current_principal_id()
++        AND workspace_id = app_current_workspace_id()
++    )
++    WITH CHECK (
++        principal_id = app_current_principal_id()
++        AND workspace_id = app_current_workspace_id()
++    );
++
++-- DELETE allowed for own principal_id
++CREATE POLICY user_preferences_delete_policy ON public.user_preferences
++    FOR DELETE TO kanban_app
++    USING (
++        principal_id = app_current_principal_id()
++        AND workspace_id = app_current_workspace_id()
++    );
++
++
++-- 2. SECURITY DEFINER helper to update own profile (display_name & timezone)
++CREATE OR REPLACE FUNCTION kb_auth.user_update_own_profile(
++    p_principal_id UUID,
++    p_display_name TEXT,
++    p_timezone TEXT
++)
++RETURNS VOID
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_caller_id UUID;
++    v_workspace_id UUID;
++BEGIN
++    v_caller_id := app_current_principal_id();
++    IF v_caller_id IS NULL OR v_caller_id <> p_principal_id THEN
++        RAISE EXCEPTION 'PERMISSION_DENIED: Cannot update profile for another user'
++            USING ERRCODE = '42501';
++    END IF;
++
++    IF p_display_name IS NULL OR length(trim(p_display_name)) = 0 OR length(p_display_name) > 120 THEN
++        RAISE EXCEPTION 'INVALID_DISPLAY_NAME: Display name must be between 1 and 120 characters'
++            USING ERRCODE = '22000';
++    END IF;
++
++    SELECT workspace_id INTO v_workspace_id
++    FROM public.principals
++    WHERE id = p_principal_id;
++
++    IF v_workspace_id IS NULL THEN
++        RAISE EXCEPTION 'USER_NOT_FOUND: Principal % does not exist', p_principal_id
++            USING ERRCODE = 'P0002';
++    END IF;
++
++    -- Update principals display_name
++    UPDATE public.principals
++    SET display_name = trim(p_display_name)
++    WHERE id = p_principal_id;
++
++    -- Upsert user_preferences
++    INSERT INTO public.user_preferences (principal_id, workspace_id, timezone, updated_at)
++    VALUES (p_principal_id, v_workspace_id, coalesce(trim(p_timezone), 'UTC'), clock_timestamp())
++    ON CONFLICT (principal_id) DO UPDATE
++    SET timezone = coalesce(trim(EXCLUDED.timezone), 'UTC'),
++        updated_at = clock_timestamp();
++END;
++$$;
++
++ALTER FUNCTION kb_auth.user_update_own_profile(UUID, TEXT, TEXT) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.user_update_own_profile(UUID, TEXT, TEXT) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.user_update_own_profile(UUID, TEXT, TEXT) TO kanban_app;
++
++
++-- 3. SECURITY DEFINER helper to look up local credential by principal_id
++CREATE OR REPLACE FUNCTION kb_auth.local_get_credential_by_principal(
++    p_principal_id UUID
++)
++RETURNS TABLE (
++    principal_id UUID,
++    username TEXT,
++    password_hash TEXT,
++    pepper_kid TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    RETURN QUERY
++    SELECT c.principal_id, c.username, c.password_hash, c.pepper_kid
++    FROM local_admin_credentials c
++    WHERE c.principal_id = p_principal_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.local_get_credential_by_principal(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.local_get_credential_by_principal(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.local_get_credential_by_principal(UUID) TO kanban_app;
++
++
++-- 4. SECURITY DEFINER helper to update webauthn credential nickname
++CREATE OR REPLACE FUNCTION kb_auth.webauthn_credential_update_nickname(
++    p_credential_id_uuid UUID,
++    p_principal_id UUID,
++    p_nickname TEXT
++)
++RETURNS BOOLEAN
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    UPDATE webauthn_credentials
++    SET nickname = nullif(trim(p_nickname), '')
++    WHERE id = p_credential_id_uuid
++      AND principal_id = p_principal_id;
++
++    RETURN FOUND;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.webauthn_credential_update_nickname(UUID, UUID, TEXT) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.webauthn_credential_update_nickname(UUID, UUID, TEXT) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.webauthn_credential_update_nickname(UUID, UUID, TEXT) TO kanban_app;
++
++
++-- 5. SECURITY DEFINER helper to revoke all sessions except current session
++CREATE OR REPLACE FUNCTION kb_auth.session_revoke_all_except(
++    p_principal_id UUID,
++    p_except_session_id UUID
++)
++RETURNS INTEGER
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_count INT;
++BEGIN
++    UPDATE sessions
++    SET revoked_at = clock_timestamp()
++    WHERE principal_id = p_principal_id
++      AND (p_except_session_id IS NULL OR id <> p_except_session_id)
++      AND revoked_at IS NULL;
++    GET DIAGNOSTICS v_count = ROW_COUNT;
++    RETURN v_count;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.session_revoke_all_except(UUID, UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.session_revoke_all_except(UUID, UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.session_revoke_all_except(UUID, UUID) TO kanban_app;
++
++
++-- 6. SECURITY DEFINER helper to retrieve user avatar metadata
++CREATE OR REPLACE FUNCTION kb_auth.user_get_avatar(p_principal_id UUID)
++RETURNS TABLE (
++    avatar_storage_key TEXT,
++    avatar_content_type TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    RETURN QUERY
++    SELECT u.avatar_storage_key, u.avatar_content_type
++    FROM public.user_preferences u
++    WHERE u.principal_id = p_principal_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.user_get_avatar(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.user_get_avatar(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.user_get_avatar(UUID) TO kanban_app;
++
++
++
+diff --git a/database/migrations/versions/p4_20_user_personal_settings.py b/database/migrations/versions/p4_20_user_personal_settings.py
+new file mode 100644
+index 0000000..1c73fa0
+--- /dev/null
++++ b/database/migrations/versions/p4_20_user_personal_settings.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""User personal settings preferences.
++
++Revision ID: p4_20_user_personal_settings
++Revises: p4_19_persistent_sessions
++Create Date: 2026-11-17 23:44:45.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_20_user_personal_settings"
++down_revision: str | None = "p4_19_persistent_sessions"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p4_20_user_personal_settings migration."""
++    execute_sql_file("p4_20_user_personal_settings.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p4_20_user_personal_settings migration."""
++    execute_sql_file("p4_20_user_personal_settings.down.sql")
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index b0d4509..6f02998 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -64,6 +64,7 @@ from database.models.principals import (
+     ResourceAclEntry,
+     RoleBinding,
+     User,
++    UserPreference,
+ )
+ from database.models.projects import (
+     Cycle,
+@@ -166,6 +167,7 @@ __all__ = [
+     "TotpFactor",
+     "User",
+     "UserIdentity",
++    "UserPreference",
+     "UserSession",
+     "View",
+     "ViewLayout",
+diff --git a/database/models/principals.py b/database/models/principals.py
+index 1afcb7a..c83d302 100644
+--- a/database/models/principals.py
++++ b/database/models/principals.py
+@@ -9,6 +9,7 @@ from sqlalchemy import (
+     ForeignKey,
+     ForeignKeyConstraint,
+     Integer,
++    LargeBinary,
+     SmallInteger,
+     String,
+     UniqueConstraint,
+@@ -216,3 +217,23 @@ class EffectiveResourceAccess(Base):
+     effective_mask: Mapped[int | None] = mapped_column(
+         Computed("allow_mask & (~deny_mask)", persisted=True), nullable=True
+     )
++
++
++class UserPreference(Base):
++    """Per-user settings and preferences (timezone, avatar metadata)."""
++
++    __tablename__ = "user_preferences"
++
++    principal_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    timezone: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'UTC'"))
++    avatar_storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
++    avatar_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
++    avatar_sha256: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
+diff --git a/database/tests/migrations/test_p4_20_user_personal_settings_migration.py b/database/tests/migrations/test_p4_20_user_personal_settings_migration.py
+new file mode 100644
+index 0000000..483dd8b
+--- /dev/null
++++ b/database/tests/migrations/test_p4_20_user_personal_settings_migration.py
+@@ -0,0 +1,24 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p4_20_user_personal_settings."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p4_20_user_personal_settings_migration_lifecycle() -> None:
++    """Verify p4_20_user_personal_settings upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p4_20_user_personal_settings")
++        assert prev_rev == "p4_19_persistent_sessions"
++
++        # 1. Upgrade to p4_20_user_personal_settings
++        await harness.upgrade("p4_20_user_personal_settings")
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p4_20_user_personal_settings")
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index e45b99b..50d926e 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -75,6 +75,7 @@ from kanban.api.v1.system_status import (
+     system_router,
+ )
+ from kanban.api.v1.transitions import router as transitions_router
++from kanban.api.v1.user_settings import router as user_settings_router
+ from kanban.api.v1.views import router as views_router
+ from kanban.api.v1.workflow_hooks import router as workflow_hooks_router
+ from kanban.api.v1.workspaces import router as workspaces_router
+@@ -145,4 +146,5 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(workspaces_router)
+     v1.include_router(system_router)
+     v1.include_router(admin_standalone_router)
++    v1.include_router(user_settings_router)
+     return v1
+diff --git a/kanban/api/v1/auth_mfa.py b/kanban/api/v1/auth_mfa.py
+index c4bac8f..d261db5 100644
+--- a/kanban/api/v1/auth_mfa.py
++++ b/kanban/api/v1/auth_mfa.py
+@@ -266,6 +266,40 @@ async def confirm_totp(
+ confirm_totp.allow_mfa_pending = True  # type: ignore[attr-defined]
+ 
+ 
++@router.get("/status")
++async def get_mfa_status(
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Return active MFA status for authenticated principal."""
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    rls_ctx = RLSContext(
++        principal_id=principal.principal_id,
++        workspace_id=principal.workspace_id,
++        token_scopes=principal.token_scopes,
++        aal_level=cast("Literal[1, 2]", principal.aal_level),
++    )
++
++    async with session_factory.session(rls_ctx) as session:
++        res = await session.execute(
++            text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
++            {"p_id": principal.principal_id},
++        )
++        row = res.mappings().first()
++
++    return JSONResponse(
++        content={
++            "totp_enabled": bool(row["has_active_totp"]) if row else False,
++            "passkeys_count": int(row["webauthn_credential_count"]) if row else 0,
++            "recovery_codes_remaining": int(row["unused_recovery_codes"]) if row else 0,
++        }
++    )
++
++
+ @router.delete("/totp")
+ async def delete_totp(
+     request: Request,
+@@ -288,6 +322,32 @@ async def delete_totp(
+     )
+ 
+     async with session_factory.session(rls_ctx) as session:
++        admin_res = await session.execute(
++            text(
++                "SELECT 1 FROM role_bindings "
++                "WHERE principal_id = :p_id "
++                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
++            ),
++            {"p_id": principal.principal_id},
++        )
++        is_admin = admin_res.scalar_one_or_none() is not None
++        if is_admin:
++            status_res = await session.execute(
++                text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
++                {"p_id": principal.principal_id},
++            )
++            status_row = status_res.mappings().first()
++            webauthn_count = int(status_row["webauthn_credential_count"]) if status_row else 0
++            if webauthn_count == 0:
++                raise ProblemException(
++                    code="LAST_FACTOR",
++                    status=409,
++                    title="Cannot Delete Last Factor",
++                    detail=(
++                        "Administrators must retain at least one active AAL2 authentication factor."
++                    ),
++                )
++
+         await service.delete(session, principal.principal_id)
+ 
+     return JSONResponse(content={"revoked": True})
+diff --git a/kanban/api/v1/auth_session.py b/kanban/api/v1/auth_session.py
+index 29e55d0..7a93ec4 100644
+--- a/kanban/api/v1/auth_session.py
++++ b/kanban/api/v1/auth_session.py
+@@ -168,6 +168,9 @@ async def get_current_principal(
+     username: str | None = None
+     email: str | None = None
+     is_server_admin = False
++    timezone = "UTC"
++    avatar_url: str | None = None
++    has_local_password = False
+ 
+     if session_factory is not None:
+         rls_ctx = RLSContext(
+@@ -196,6 +199,8 @@ async def get_current_principal(
+             except Exception:  # noqa: BLE001
+                 username = None
+ 
++            has_local_password = username is not None
++
+             e_res = await async_session.execute(
+                 text("SELECT email FROM users WHERE id = :p_id"),
+                 {"p_id": principal.principal_id},
+@@ -207,6 +212,24 @@ async def get_current_principal(
+             )
+             is_server_admin = bool(admin_res.scalar_one())
+ 
++            try:
++                async with async_session.begin_nested():
++                    pref_res = await async_session.execute(
++                        text(
++                            "SELECT timezone, avatar_storage_key "
++                            "FROM user_preferences WHERE principal_id = :p_id"
++                        ),
++                        {"p_id": principal.principal_id},
++                    )
++                    pref_row = pref_res.mappings().first()
++                    if pref_row:
++                        if pref_row["timezone"]:
++                            timezone = pref_row["timezone"]
++                        if pref_row["avatar_storage_key"]:
++                            avatar_url = f"/api/v1/users/{principal.principal_id}/avatar"
++            except Exception:  # noqa: BLE001, S110
++                pass
++
+     handle = username or display_name or str(principal.principal_id)
+     return JSONResponse(
+         content={
+@@ -218,6 +241,9 @@ async def get_current_principal(
+             "display_name": display_name or handle,
+             "email": email,
+             "is_server_admin": is_server_admin,
++            "timezone": timezone,
++            "avatar_url": avatar_url,
++            "has_local_password": has_local_password,
+             "aal_level": principal.aal_level,
+             "mfa_pending": getattr(principal, "mfa_pending", False),
+         }
+diff --git a/kanban/api/v1/auth_webauthn.py b/kanban/api/v1/auth_webauthn.py
+index 2e3f42a..a13adef 100644
+--- a/kanban/api/v1/auth_webauthn.py
++++ b/kanban/api/v1/auth_webauthn.py
+@@ -51,6 +51,12 @@ class WebauthnRegisterVerifyRequest(BaseModel):
+     credential: dict[str, Any] = Field(description="PublicKeyCredential creation response")
+ 
+ 
++class WebauthnRenameRequest(BaseModel):
++    """Payload for renaming a WebAuthn passkey credential."""
++
++    nickname: str = Field(min_length=1, max_length=64, description="Friendly nickname")
++
++
+ class WebauthnAuthenticateVerifyRequest(BaseModel):
+     """Payload for verifying WebAuthn authentication/assertion."""
+ 
+@@ -535,6 +541,52 @@ async def list_credentials(
+     )
+ 
+ 
++@router.patch("/credentials/{credential_id}")
++async def rename_credential(
++    credential_id: uuid.UUID,
++    body: WebauthnRenameRequest,
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Rename a registered WebAuthn passkey credential."""
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    rls_ctx = RLSContext(
++        principal_id=principal.principal_id,
++        workspace_id=principal.workspace_id,
++        token_scopes=principal.token_scopes,
++        aal_level=cast("Literal[1, 2]", principal.aal_level),
++    )
++
++    async with session_factory.session(rls_ctx) as session:
++        res = await session.execute(
++            text("SELECT kb_auth.webauthn_credential_update_nickname(:cred_id, :p_id, :nickname)"),
++            {
++                "cred_id": credential_id,
++                "p_id": principal.principal_id,
++                "nickname": body.nickname.strip(),
++            },
++        )
++        updated = bool(res.scalar_one())
++        if not updated:
++            raise ProblemException(
++                code="NOT_FOUND",
++                status=404,
++                title="Credential Not Found",
++                detail="WebAuthn credential was not found or not owned by principal.",
++            )
++
++    return JSONResponse(
++        content={
++            "id": str(credential_id),
++            "nickname": body.nickname.strip(),
++        }
++    )
++
++
+ @router.delete("/credentials/{credential_id}")
+ async def delete_credential(
+     credential_id: uuid.UUID,
+diff --git a/kanban/api/v1/user_settings.py b/kanban/api/v1/user_settings.py
+new file mode 100644
+index 0000000..8e1bb99
+--- /dev/null
++++ b/kanban/api/v1/user_settings.py
+@@ -0,0 +1,535 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""User personal settings studio API endpoints (KB-USER-SETTINGS / KANBA-187)."""
++
++from __future__ import annotations
++
++import email
++import email.message
++import logging
++import os
++import uuid
++import zoneinfo
++from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
++
++from fastapi import APIRouter, Depends, Response
++from pydantic import BaseModel, Field
++from sqlalchemy import text
++from starlette.requests import Request  # noqa: TC002  # Required at runtime by FastAPI
++from starlette.responses import JSONResponse
++
++from database.session import RLSContext
++from kanban.api.deps import PrincipalContext, get_principal
++from kanban.api.problems import ProblemException
++from kanban.attachments.raster import sanitize_and_reencode_raster
++from kanban.attachments.sniff import sniff_media_type
++from kanban.attachments.storage import LocalFilesystemBlobStore
++from kanban.auth.local.hashing import get_auth_pepper, hash_password, verify_password
++from kanban.services.activity import ActivityEventType, record_activity
++
++if TYPE_CHECKING:
++    from database.session import RLSSessionFactory
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter(tags=["user-settings"])
++
++MAX_AVATAR_BYTES: Final[int] = 2 * 1024 * 1024  # 2 MiB exact
++MAX_DISPLAY_NAME_LENGTH: Final[int] = 120
++AAL2_REQUIRED_LEVEL: Final[int] = 2
++ADMIN_MIN_PASSWORD_LENGTH: Final[int] = 14
++USER_MIN_PASSWORD_LENGTH: Final[int] = 12
++ALLOWED_AVATAR_TYPES: Final[frozenset[str]] = frozenset({"image/png", "image/jpeg", "image/webp"})
++
++
++class UpdateProfileRequest(BaseModel):
++    """Payload for updating personal profile display name and timezone."""
++
++    display_name: str = Field(
++        min_length=1, max_length=120, description="Display name (1..120 characters)"
++    )
++    timezone: str = Field(default="UTC", description="Valid IANA timezone identifier")
++
++
++class ChangePasswordRequest(BaseModel):
++    """Payload for updating personal local login password."""
++
++    current_password: str | None = Field(
++        default=None, description="Current local password (if one exists)"
++    )
++    new_password: str = Field(
++        min_length=1, description="New local password (>=14 for admins, >=12 for standard)"
++    )
++
++
++def _get_blob_store(request: Request) -> LocalFilesystemBlobStore:
++    """Resolve or construct LocalFilesystemBlobStore from application state."""
++    blob_store: LocalFilesystemBlobStore | None = getattr(
++        request.app.state, "attachment_blob_store", None
++    )
++    if blob_store is None:
++        root_dir = os.environ.get("KANBAN_ATTACHMENT_DIR", "/tmp/kanban-attachments")  # noqa: S108
++        blob_store = LocalFilesystemBlobStore(root_dir)
++        request.app.state.attachment_blob_store = blob_store
++    return blob_store
++
++
++def _resolve_auth_pepper(request: Request) -> bytes:
++    """Resolve auth pepper from app key material or runtime environment."""
++    km = getattr(request.app.state, "key_material", None)
++    if km is not None and getattr(km, "auth_pepper", None):
++        auth_pepper: bytes = km.auth_pepper
++        return auth_pepper
++    return get_auth_pepper()
++
++
++@router.patch("/auth/me")
++async def update_profile(
++    body: UpdateProfileRequest,
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Update own profile display name and timezone."""
++    cleaned_name = body.display_name.strip()
++    if not (1 <= len(cleaned_name) <= MAX_DISPLAY_NAME_LENGTH):
++        raise ProblemException(
++            code="INVALID_DISPLAY_NAME",
++            status=422,
++            title="Invalid Display Name",
++            detail=f"Display name must be between 1 and {MAX_DISPLAY_NAME_LENGTH} characters.",
++        )
++
++    cleaned_tz = body.timezone.strip()
++    if cleaned_tz not in zoneinfo.available_timezones():
++        raise ProblemException(
++            code="INVALID_TIMEZONE",
++            status=422,
++            title="Invalid Timezone",
++            detail=f"Timezone '{cleaned_tz}' is not a valid IANA timezone identifier.",
++        )
++
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    rls_ctx = RLSContext(
++        principal_id=principal.principal_id,
++        workspace_id=principal.workspace_id,
++        token_scopes=principal.token_scopes,
++        aal_level=cast("Literal[1, 2]", principal.aal_level),
++    )
++
++    async with session_factory.session(rls_ctx) as session:
++        await session.execute(
++            text("SELECT kb_auth.user_update_own_profile(:p_id, :name, :tz)"),
++            {
++                "p_id": principal.principal_id,
++                "name": cleaned_name,
++                "tz": cleaned_tz,
++            },
++        )
++
++    return JSONResponse(
++        content={
++            "id": str(principal.principal_id),
++            "display_name": cleaned_name,
++            "timezone": cleaned_tz,
++        }
++    )
++
++
++def _parse_avatar_upload(request: Request, body_bytes: bytes) -> tuple[str, str | None, bytes]:
++    """Parse multipart form-data or raw binary payload."""
++    content_type_header = request.headers.get("content-type", "")
++    if "multipart/form-data" in content_type_header.lower():
++        msg_bytes = (
++            b"Content-Type: " + content_type_header.encode("latin-1") + b"\r\n\r\n" + body_bytes
++        )
++        parsed_msg = email.message_from_bytes(msg_bytes)
++        if parsed_msg.is_multipart():
++            parts = parsed_msg.get_payload()
++            if isinstance(parts, list):
++                for part in parts:
++                    if not isinstance(part, email.message.Message):
++                        continue
++                    payload_raw = part.get_payload(decode=True)
++                    if isinstance(payload_raw, bytes):
++                        part_fn = part.get_filename() or "avatar.png"
++                        part_ct = part.get_content_type()
++                        return part_fn, part_ct, payload_raw
++
++    fn = request.headers.get("x-filename") or "avatar.png"
++    ct: str | None = content_type_header.split(";")[0].strip() or None
++    return fn, ct, body_bytes
++
++
++@router.put("/auth/me/avatar")
++async def upload_avatar(
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Upload, sanitize, re-encode and set a personal avatar."""
++    chunks: list[bytes] = []
++    total_bytes = 0
++    async for chunk in request.stream():
++        total_bytes += len(chunk)
++        if total_bytes > MAX_AVATAR_BYTES + 65536:
++            raise ProblemException(
++                code="PAYLOAD_TOO_LARGE",
++                status=413,
++                title="Payload Too Large",
++                detail="Avatar image exceeds maximum 2 MiB limit.",
++            )
++        chunks.append(chunk)
++
++    body_bytes = b"".join(chunks)
++    if not body_bytes:
++        raise ProblemException(
++            code="EMPTY_PAYLOAD",
++            status=400,
++            title="Empty Payload",
++            detail="Uploaded avatar image file is empty.",
++        )
++
++    filename, declared_ct, raw_bytes = _parse_avatar_upload(request, body_bytes)
++    return await _process_and_store_avatar(
++        request=request,
++        principal=principal,
++        filename=filename,
++        declared_ct=declared_ct,
++        raw_bytes=raw_bytes,
++    )
++
++
++async def _process_and_store_avatar(
++    request: Request,
++    principal: PrincipalContext,
++    filename: str,
++    declared_ct: str | None,
++    raw_bytes: bytes,
++) -> JSONResponse:
++    if len(raw_bytes) > MAX_AVATAR_BYTES:
++        raise ProblemException(
++            code="PAYLOAD_TOO_LARGE",
++            status=413,
++            title="Payload Too Large",
++            detail="Avatar image exceeds maximum 2 MiB limit.",
++        )
++    if not raw_bytes:
++        raise ProblemException(
++            code="EMPTY_PAYLOAD",
++            status=400,
++            title="Empty Payload",
++            detail="Uploaded avatar image file is empty.",
++        )
++
++    try:
++        detected = sniff_media_type(raw_bytes[:1024], declared_ct, filename)
++    except ProblemException:
++        raise
++    except Exception as exc:
++        raise ProblemException(
++            code="UNSUPPORTED_MEDIA_TYPE",
++            status=415,
++            title="Unsupported Media Type",
++            detail=f"Failed to identify image format: {exc}",
++        ) from exc
++
++    if detected == "image/svg+xml":
++        raise ProblemException(
++            code="UNSUPPORTED_MEDIA_TYPE",
++            status=415,
++            title="Unsupported Media Type",
++            detail="SVG avatars are not allowed. Please upload PNG, JPEG, or WebP.",
++        )
++
++    if detected not in ALLOWED_AVATAR_TYPES:
++        raise ProblemException(
++            code="UNSUPPORTED_MEDIA_TYPE",
++            status=415,
++            title="Unsupported Media Type",
++            detail="Only PNG, JPEG, and WebP raster avatars are supported.",
++        )
++
++    processed = await sanitize_and_reencode_raster(raw_bytes, detected)
++    blob_store = _get_blob_store(request)
++    storage_key, raw_sha = blob_store.store(processed.clean_bytes)
++
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    rls_ctx = RLSContext(
++        principal_id=principal.principal_id,
++        workspace_id=principal.workspace_id,
++        token_scopes=principal.token_scopes,
++        aal_level=cast("Literal[1, 2]", principal.aal_level),
++    )
++
++    async with session_factory.session(rls_ctx) as session:
++        await session.execute(
++            text(
++                "INSERT INTO public.user_preferences "
++                "(principal_id, workspace_id, avatar_storage_key, avatar_content_type, "
++                "avatar_sha256, updated_at) "
++                "VALUES (:p_id, :w_id, :s_key, :c_type, :sha, clock_timestamp()) "
++                "ON CONFLICT (principal_id) DO UPDATE "
++                "SET avatar_storage_key = EXCLUDED.avatar_storage_key, "
++                "    avatar_content_type = EXCLUDED.avatar_content_type, "
++                "    avatar_sha256 = EXCLUDED.avatar_sha256, "
++                "    updated_at = clock_timestamp()"
++            ),
++            {
++                "p_id": principal.principal_id,
++                "w_id": principal.workspace_id,
++                "s_key": storage_key,
++                "c_type": processed.content_type,
++                "sha": raw_sha,
++            },
++        )
++
++    return JSONResponse(
++        content={
++            "avatar_url": f"/api/v1/users/{principal.principal_id}/avatar",
++        }
++    )
++
++
++@router.delete("/auth/me/avatar")
++async def delete_avatar(
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Remove personal avatar."""
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    rls_ctx = RLSContext(
++        principal_id=principal.principal_id,
++        workspace_id=principal.workspace_id,
++        token_scopes=principal.token_scopes,
++        aal_level=cast("Literal[1, 2]", principal.aal_level),
++    )
++
++    async with session_factory.session(rls_ctx) as session:
++        await session.execute(
++            text(
++                "UPDATE public.user_preferences "
++                "SET avatar_storage_key = NULL, avatar_content_type = NULL, "
++                "    avatar_sha256 = NULL, updated_at = clock_timestamp() "
++                "WHERE principal_id = :p_id"
++            ),
++            {"p_id": principal.principal_id},
++        )
++
++    return JSONResponse(content={"avatar_url": None})
++
++
++@router.get("/users/{principal_id}/avatar")
++async def get_user_avatar(
++    principal_id: uuid.UUID,
++    request: Request,
++) -> Response:
++    """Retrieve and serve user avatar image bytes."""
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    anon_ctx = RLSContext(
++        principal_id=uuid.UUID(int=0),
++        workspace_id=uuid.UUID(int=0),
++        token_scopes=("session",),
++        aal_level=1,
++    )
++
++    storage_key: str | None = None
++    content_type: str = "image/png"
++
++    async with session_factory.session(anon_ctx) as session:
++        res = await session.execute(
++            text("SELECT * FROM kb_auth.user_get_avatar(:p_id)"),
++            {"p_id": principal_id},
++        )
++        row = res.mappings().first()
++        if row and row["avatar_storage_key"]:
++            storage_key = row["avatar_storage_key"]
++            if row["avatar_content_type"]:
++                content_type = row["avatar_content_type"]
++
++    if not storage_key:
++        raise ProblemException(
++            code="AVATAR_NOT_FOUND",
++            status=404,
++            title="Avatar Not Found",
++            detail="User does not have an avatar set.",
++        )
++
++    blob_store = _get_blob_store(request)
++    try:
++        data = blob_store.read(storage_key)
++    except Exception as exc:
++        raise ProblemException(
++            code="AVATAR_NOT_FOUND",
++            status=404,
++            title="Avatar Not Found",
++            detail="Avatar storage file could not be read.",
++        ) from exc
++
++    return Response(
++        content=data,
++        media_type=content_type,
++        headers={
++            "Cache-Control": "public, max-age=3600",
++            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
++        },
++    )
++
++
++@router.post("/auth/me/password")
++async def change_password(
++    body: ChangePasswordRequest,
++    request: Request,
++    principal: Annotated[PrincipalContext, Depends(get_principal)],
++) -> JSONResponse:
++    """Change own local password with length validation, AAL2 check, and session revocation."""
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    if session_factory is None:
++        msg = "Session factory is not configured on app.state.session_factory"
++        raise RuntimeError(msg)
++
++    rls_ctx = RLSContext(
++        principal_id=principal.principal_id,
++        workspace_id=principal.workspace_id,
++        token_scopes=principal.token_scopes,
++        aal_level=cast("Literal[1, 2]", principal.aal_level),
++    )
++
++    async with session_factory.session(rls_ctx) as session:
++        admin_res = await session.execute(
++            text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++        )
++        is_server_admin = bool(admin_res.scalar_one())
++
++        proj_admin_res = await session.execute(
++            text(
++                "SELECT 1 FROM role_bindings "
++                "WHERE principal_id = :p_id "
++                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
++            ),
++            {"p_id": principal.principal_id},
++        )
++        is_admin = is_server_admin or (proj_admin_res.scalar_one_or_none() is not None)
++
++        min_len = ADMIN_MIN_PASSWORD_LENGTH if is_admin else USER_MIN_PASSWORD_LENGTH
++        if len(body.new_password) < min_len:
++            raise ProblemException(
++                code="PASSWORD_TOO_SHORT",
++                status=422,
++                title="Password Too Short",
++                detail=f"Password must be at least {min_len} characters.",
++            )
++
++        if body.current_password is not None and body.new_password == body.current_password:
++            raise ProblemException(
++                code="PASSWORD_UNCHANGED",
++                status=422,
++                title="Password Unchanged",
++                detail="New password cannot be identical to current password.",
++            )
++
++        cred_res = await session.execute(
++            text("SELECT * FROM kb_auth.local_get_credential_by_principal(:p_id)"),
++            {"p_id": principal.principal_id},
++        )
++        cred = cred_res.mappings().first()
++
++        pepper = _resolve_auth_pepper(request)
++
++        if cred is not None and cred["password_hash"]:
++            if not body.current_password:
++                raise ProblemException(
++                    code="CURRENT_PASSWORD_REQUIRED",
++                    status=422,
++                    title="Current Password Required",
++                    detail="Current password is required to change password.",
++                )
++            is_valid = await verify_password(
++                cred["password_hash"], body.current_password, pepper=pepper
++            )
++            if not is_valid:
++                raise ProblemException(
++                    code="INVALID_CREDENTIALS",
++                    status=401,
++                    title="Invalid Current Password",
++                    detail="Current password is incorrect.",
++                )
++
++        status_res = await session.execute(
++            text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
++            {"p_id": principal.principal_id},
++        )
++        mfa_row = status_res.mappings().first()
++        has_active_totp = bool(mfa_row and mfa_row["has_active_totp"])
++        webauthn_count = int(mfa_row["webauthn_credential_count"]) if mfa_row else 0
++        has_mfa = has_active_totp or (webauthn_count > 0)
++
++        if (is_admin or has_mfa) and principal.aal_level < AAL2_REQUIRED_LEVEL:
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Authentication Required",
++                detail="Second-factor authentication is required to change password.",
++            )
++
++        new_hash = await hash_password(body.new_password, pepper=pepper)
++
++        if cred is not None:
++            await session.execute(
++                text("SELECT kb_auth.local_set_password_hash(:p_id, :hash)"),
++                {"p_id": principal.principal_id, "hash": new_hash},
++            )
++        else:
++            p_res = await session.execute(
++                text("SELECT display_name FROM principals WHERE id = :p_id"),
++                {"p_id": principal.principal_id},
++            )
++            dname = p_res.scalar_one_or_none() or f"user-{principal.principal_id.hex[:8]}"
++            await session.execute(
++                text("SELECT kb_auth.local_admin_create(:p_id, :username, :hash)"),
++                {
++                    "p_id": principal.principal_id,
++                    "username": dname,
++                    "hash": new_hash,
++                },
++            )
++
++        await session.execute(
++            text("SELECT kb_auth.session_revoke_all_except(:p_id, :s_id)"),
++            {
++                "p_id": principal.principal_id,
++                "s_id": principal.session_id,
++            },
++        )
++
++        try:
++            await record_activity(
++                session,
++                workspace_id=principal.workspace_id,
++                actor_principal_id=principal.principal_id,
++                event_type=ActivityEventType.USER_PASSWORD_CHANGED,
++                payload={"principal_id": str(principal.principal_id)},
++            )
++        except Exception:
++            logger.debug("Failed to record USER_PASSWORD_CHANGED activity", exc_info=True)
++
++    return JSONResponse(
++        content={
++            "success": True,
++            "message": "Password changed successfully.",
++        }
++    )
+diff --git a/kanban/auth/local/hashing.py b/kanban/auth/local/hashing.py
+index aea51fa..85e5a5e 100644
+--- a/kanban/auth/local/hashing.py
++++ b/kanban/auth/local/hashing.py
+@@ -20,7 +20,7 @@ if TYPE_CHECKING:
+ 
+ import anyio
+ from argon2 import PasswordHasher, Type
+-from argon2.exceptions import VerificationError, VerifyMismatchError
++from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+ 
+ from kanban.api.problems import ProblemException
+ from kanban.security.keys import KeyMaterialError, _decode_b64url_key, load_key_material
+@@ -190,7 +190,7 @@ def verify_password_sync(
+         mac = hmac.new(active_pepper, pw_bytes, hashlib.sha256).digest()
+         b64_mac = base64.b64encode(mac).decode("ascii")
+         return bool(ph.verify(stored_hash, b64_mac))
+-    except (VerifyMismatchError, VerificationError):
++    except (VerifyMismatchError, VerificationError, InvalidHashError):
+         return False
+ 
+ 
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 0665c75..76d05af 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -97,6 +97,7 @@ class ActivityEventType(StrEnum):
+     ISSUE_MODULE_REMOVED = "ISSUE_MODULE_REMOVED"
+     LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
+     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
++    USER_PASSWORD_CHANGED = "USER_PASSWORD_CHANGED"  # noqa: S105
+     ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
+     ASSIGNEE_REMOVED = "ASSIGNEE_REMOVED"
+     COMMENT_CREATED = "COMMENT_CREATED"
+@@ -247,6 +248,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
+         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
++        ActivityEventType.USER_PASSWORD_CHANGED: ActivityCategory.SYSTEM,
+         ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
+         ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
+         ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
+diff --git a/kanban/tests/api/test_user_personal_settings.py b/kanban/tests/api/test_user_personal_settings.py
+new file mode 100644
+index 0000000..cb34ddf
+--- /dev/null
++++ b/kanban/tests/api/test_user_personal_settings.py
+@@ -0,0 +1,317 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for user personal settings studio, avatar, and password change.
++
++Part of KB-USER-SETTINGS / KANBA-187.
++"""
++
++from __future__ import annotations
++
++import base64
++import dataclasses
++import io
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from PIL import Image
++from sqlalchemy import text
++
++from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
++from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _create_sample_png_bytes(width: int = 64, height: int = 64) -> bytes:
++    """Generate minimal valid PNG bytes."""
++    im = Image.new("RGBA", (width, height), (33, 150, 243, 255))
++    bio = io.BytesIO()
++    im.save(bio, format="PNG")
++    return bio.getvalue()
++
++
++async def test_user_personal_settings_profile_and_avatar_lifecycle(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test full profile update, timezone validation, avatar upload, and removal."""
++    user = await make_user("alice")
++    client = as_principal(user)
++
++    # 1. Initial GET /api/v1/auth/me
++    me_res = await client.get("/api/v1/auth/me")
++    assert me_res.status_code == 200
++    me_data = me_res.json()
++    assert me_data["display_name"] == "Alice"
++    assert me_data["timezone"] == "UTC"
++    assert me_data["avatar_url"] is None
++    assert me_data["has_local_password"] is False
++
++    # 2. PATCH /api/v1/auth/me: Invalid Timezone
++    bad_tz = await client.patch(
++        "/api/v1/auth/me",
++        json={"display_name": "Alice Updated", "timezone": "NonExistent/Zone"},
++    )
++    assert bad_tz.status_code == 422
++    assert bad_tz.json()["code"] == "INVALID_TIMEZONE"
++
++    # 3. PATCH /api/v1/auth/me: Valid update
++    good_update = await client.patch(
++        "/api/v1/auth/me",
++        json={"display_name": "Alice Developer", "timezone": "America/New_York"},
++    )
++    assert good_update.status_code == 200
++    assert good_update.json()["display_name"] == "Alice Developer"
++    assert good_update.json()["timezone"] == "America/New_York"
++
++    # Verify persisted in GET /api/v1/auth/me
++    me_res2 = await client.get("/api/v1/auth/me")
++    assert me_res2.status_code == 200
++    assert me_res2.json()["display_name"] == "Alice Developer"
++    assert me_res2.json()["timezone"] == "America/New_York"
++
++    # 4. Avatar Upload: SVG rejected with 415
++    svg_content = (
++        b"<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>"
++        b"<circle cx='5' cy='5' r='5'/></svg>"
++    )
++    svg_res = await client.put(
++        "/api/v1/auth/me/avatar",
++        files={"file": ("avatar.svg", svg_content, "image/svg+xml")},
++    )
++    assert svg_res.status_code == 415
++    assert svg_res.json()["code"] == "UNSUPPORTED_MEDIA_TYPE"
++
++    # 5. Avatar Upload: Valid PNG
++    png_bytes = _create_sample_png_bytes()
++    png_res = await client.put(
++        "/api/v1/auth/me/avatar",
++        files={"file": ("avatar.png", png_bytes, "image/png")},
++    )
++    assert png_res.status_code == 200
++    expected_url = f"/api/v1/users/{user.id}/avatar"
++    assert png_res.json()["avatar_url"] == expected_url
++
++    # Check me returns avatar_url
++    me_res3 = await client.get("/api/v1/auth/me")
++    assert me_res3.json()["avatar_url"] == expected_url
++
++    # 6. Retrieve avatar bytes
++    avatar_get = await client.get(expected_url)
++    assert avatar_get.status_code == 200
++    assert avatar_get.headers["content-type"] == "image/png"
++    assert "default-src 'none'" in avatar_get.headers["content-security-policy"]
++    assert len(avatar_get.content) > 0
++
++    # 7. Avatar Removal: DELETE /api/v1/auth/me/avatar
++    del_res = await client.delete("/api/v1/auth/me/avatar")
++    assert del_res.status_code == 200
++    assert del_res.json()["avatar_url"] is None
++
++    # Verify avatar is now 404
++    avatar_get2 = await client.get(expected_url)
++    assert avatar_get2.status_code == 404
++    assert avatar_get2.json()["code"] == "AVATAR_NOT_FOUND"
++
++
++async def test_password_change_policy_and_session_revocation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test password policy (admin vs user), unchanged rejection, and session revocation."""
++    pepper_bytes = b"p" * 32
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
++    admin = await make_user("admin", workspace_role="SERVER_ADMIN")
++    current_session_id = uuid.uuid4()
++    client = as_principal(admin, aal_level=2)
++    assert api_env.resolver.principal is not None
++    api_env.resolver.principal = dataclasses.replace(
++        api_env.resolver.principal, session_id=current_session_id
++    )
++
++    # Seed an existing local credential
++    current_pw = "CurrentSecret1234!"
++    pepper = get_auth_pepper()
++    pw_hash = hash_password_sync(current_pw, pepper)
++
++    await api_env.seed.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
++    await api_env.seed.execute(
++        text("SELECT kb_auth.local_admin_create(:p_id, 'admin-user', :hash)"),
++        {"p_id": admin.id, "hash": pw_hash},
++    )
++
++    # Seed 2 active sessions
++    other_session_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO sessions (id, token_sha256, principal_id, workspace_id, aal_level, "
++            "idle_expires_at, absolute_expires_at, is_persistent) "
++            "VALUES (:s1, :t1, :p_id, :w_id, 2, clock_timestamp() + interval '1 hour', "
++            "clock_timestamp() + interval '1 day', true), "
++            "(:s2, :t2, :p_id, :w_id, 2, clock_timestamp() + interval '1 hour', "
++            "clock_timestamp() + interval '1 day', true)"
++        ),
++        {
++            "s1": current_session_id,
++            "s2": other_session_id,
++            "p_id": admin.id,
++            "w_id": admin.workspace_id,
++            "t1": b"\x01" * 32,
++            "t2": b"\x02" * 32,
++        },
++    )
++    await api_env.seed.commit()
++
++    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
++    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
++    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
++
++    # 1. Admin min length < 14 rejected with 422
++    short_res = await client.post(
++        "/api/v1/auth/me/password",
++        json={"current_password": current_pw, "new_password": "Short12345!"},
++        headers=auth_headers,
++    )
++    assert short_res.status_code == 422
++    assert short_res.json()["code"] == "PASSWORD_TOO_SHORT"
++
++    # 2. Unchanged password rejected with 422
++    same_res = await client.post(
++        "/api/v1/auth/me/password",
++        json={"current_password": current_pw, "new_password": current_pw},
++        headers=auth_headers,
++    )
++    assert same_res.status_code == 422
++    assert same_res.json()["code"] == "PASSWORD_UNCHANGED"
++
++    # 3. Wrong current password rejected with 401
++    wrong_res = await client.post(
++        "/api/v1/auth/me/password",
++        json={"current_password": "WrongPassword123!", "new_password": "BrandNewSecret1234!"},
++        headers=auth_headers,
++    )
++    assert wrong_res.status_code == 401
++    assert wrong_res.json()["code"] == "INVALID_CREDENTIALS"
++
++    # 4. Successful password change
++    new_pw = "BrandNewSecret1234!"
++    success_res = await client.post(
++        "/api/v1/auth/me/password",
++        json={"current_password": current_pw, "new_password": new_pw},
++        headers=auth_headers,
++    )
++    assert success_res.status_code == 200
++    assert success_res.json()["success"] is True
++
++    # Verify other session was revoked, but current session is retained
++    res = await api_env.seed.execute(
++        text("SELECT id, revoked_at FROM sessions WHERE principal_id = :p_id ORDER BY id"),
++        {"p_id": admin.id},
++    )
++    rows = res.mappings().all()
++    for r in rows:
++        if r["id"] == current_session_id:
++            assert r["revoked_at"] is None, "Current session must remain active"
++        else:
++            assert r["revoked_at"] is not None, "Other session must be revoked"
++
++
++async def test_passkey_rename_and_mfa_status(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test passkey nickname rename endpoint and MFA status reporting."""
++    user = await make_user("bob")
++    client = as_principal(user)
++
++    # Seed a webauthn credential
++    cred_uuid = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO webauthn_credentials "
++            "(id, principal_id, credential_id, public_key, sign_count, nickname) "
++            "VALUES (:id, :p_id, :cid, :pk, 0, 'Original YubiKey')"
++        ),
++        {
++            "id": cred_uuid,
++            "p_id": user.id,
++            "cid": b"\x10" * 32,
++            "pk": b"\x20" * 64,
++        },
++    )
++    await api_env.seed.commit()
++
++    # Check GET /api/v1/auth/mfa/status
++    status_res = await client.get("/api/v1/auth/mfa/status")
++    assert status_res.status_code == 200
++    st = status_res.json()
++    assert st["totp_enabled"] is False
++    assert st["passkeys_count"] == 1
++    assert st["recovery_codes_remaining"] == 0
++
++    # Rename passkey
++    rename_res = await client.patch(
++        f"/api/v1/auth/webauthn/credentials/{cred_uuid}",
++        json={"nickname": "Hardware Key Office"},
++    )
++    assert rename_res.status_code == 200
++    assert rename_res.json()["nickname"] == "Hardware Key Office"
++
++    # Verify DB updated
++    nick_res = await api_env.seed.execute(
++        text("SELECT nickname FROM webauthn_credentials WHERE id = :id"),
++        {"id": cred_uuid},
++    )
++    assert nick_res.scalar_one() == "Hardware Key Office"
++
++
++async def test_admin_totp_last_factor_guard(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test admin cannot delete active TOTP factor if zero WebAuthn factors remain."""
++    admin = await make_user("superadmin", workspace_role="SERVER_ADMIN")
++    current_session_id = uuid.uuid4()
++    client = as_principal(admin, aal_level=2)
++    assert api_env.resolver.principal is not None
++    api_env.resolver.principal = dataclasses.replace(
++        api_env.resolver.principal, session_id=current_session_id
++    )
++
++    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
++    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
++    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
++
++    # Seed active TOTP factor
++    totp_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO totp_factors "
++            "(id, principal_id, encrypted_secret_blob, wrapped_dek, status) "
++            "VALUES (:id, :p_id, :sec, :dek, 'ACTIVE')"
++        ),
++        {
++            "id": totp_id,
++            "p_id": admin.id,
++            "sec": b"\x01" * 32,
++            "dek": b"\x02" * 32,
++        },
++    )
++    await api_env.seed.commit()
++
++    # Attempt to delete TOTP as admin with 0 passkeys -> 409 LAST_FACTOR
++    del_res = await client.delete("/api/v1/auth/mfa/totp", headers=auth_headers)
++    assert del_res.status_code == 409
++    assert del_res.json()["code"] == "LAST_FACTOR"
+diff --git a/kanban/web/e2e/auth/personal-settings.spec.ts b/kanban/web/e2e/auth/personal-settings.spec.ts
+new file mode 100644
+index 0000000..f01a16c
+--- /dev/null
++++ b/kanban/web/e2e/auth/personal-settings.spec.ts
+@@ -0,0 +1,217 @@
++/**
++ * KANBA-187 Playwright E2E & Screenshot Verification Suite.
++ * Generates authentic annotated screenshots across Desktop, Tablet, and Mobile in docs/qa/KANBA-187/screenshots/.
++ */
++
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++const mockProfile = {
++  principal_id: '22222222-2222-4222-8222-222222222222',
++  display_name: 'Alex Rivera',
++  username: 'arivera',
++  email: 'arivera@example.com',
++  timezone: 'America/New_York',
++  avatar_url: null,
++  roles: ['user'],
++  is_server_admin: false,
++};
++
++const mockMfaStatus = {
++  totp_enabled: false,
++  passkeys_count: 1,
++  recovery_codes_remaining: 10,
++};
++
++const mockPasskeys = [
++  {
++    id: 'passkey-fedcba98',
++    nickname: 'MacBook Air Touch ID',
++    created_at: '2026-02-15T12:00:00Z',
++    last_used_at: '2026-03-01T09:30:00Z',
++    aaguid: '00000000-0000-0000-0000-000000000000',
++  },
++];
++
++const defaultMocks = {
++  'GET /api/v1/setup/status': { json: { initialized: true } },
++  'GET /api/v1/auth/session': {
++    json: {
++      authenticated: true,
++      principal_id: '22222222-2222-4222-8222-222222222222',
++      workspace_id: '22222222-2222-2222-2222-222222222222',
++      aal_level: 2,
++      mfa_pending: false,
++      csrf_token: 'test-csrf-token-187',
++      remember_me: true,
++      idle_expires_at: '2026-11-24T23:00:00Z',
++      absolute_expires_at: '2026-12-17T23:00:00Z',
++    },
++  },
++  'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++  'GET /api/v1/workspaces': {
++    json: [{ id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' }],
++  },
++  'GET /api/v1/workspaces/current': {
++    json: { id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' },
++  },
++  'GET /api/v1/projects': {
++    json: [{ id: '33333333-3333-3333-3333-333333333333', key: 'KAN', name: 'kanban' }],
++  },
++  'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
++  'GET /api/v1/projects/KAN/views': { json: [] },
++  'GET /api/v1/projects/KAN/issues': { json: [] },
++  'GET /api/v1/projects/KAN/cycles': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/modules': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/states': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/priorities': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/labels': { json: { items: [] } },
++  'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++  'GET /api/v1/users/me': { json: loadFixture('me-adam') },
++  'GET /api/v1/auth/me': { json: mockProfile },
++  'GET /api/v1/auth/mfa/status': { json: mockMfaStatus },
++  'GET /api/v1/auth/webauthn/credentials': { json: mockPasskeys },
++};
++
++test.describe('KANBA-187 Personal Settings Studio', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-187',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01-personal-settings-studio: renders profile, timezone, and avatar upload section', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, defaultMocks);
++
++    await page.goto('/settings/profile');
++    await expect(page.locator('[data-testid="personal-settings-page"]')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-personal-settings-studio',
++      annotations: [
++        {
++          selector: '[aria-labelledby="section-profile-title"]',
++          label: 'Profile & Timezone',
++          note: 'Allows updating display name, IANA timezone, and avatar picture with strict validation.',
++        },
++        {
++          selector: '[data-testid="avatar-preview"]',
++          label: 'Sanitized Avatar Preview',
++          note: 'Rejects SVG payloads; supports PNG, JPEG, and WebP up to 2 MiB.',
++        },
++      ],
++    });
++  });
++
++  test('02-password-change: validates password policy with Show/Hide toggle and session revocation', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, defaultMocks);
++
++    await page.goto('/settings/profile');
++    await expect(page.locator('[data-testid="personal-settings-page"]')).toBeVisible();
++
++    const currentPw = page.locator('[data-testid="current-password-input"]');
++    const newPw = page.locator('[data-testid="new-password-input"]');
++    const confirmPw = page.locator('[data-testid="confirm-password-input"]');
++
++    await currentPw.fill('CurrentMasterPass123!');
++    await newPw.fill('BrandNewSecurePassword2026!');
++    await confirmPw.fill('BrandNewSecurePassword2026!');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-password-change',
++      annotations: [
++        {
++          selector: '[aria-labelledby="section-password-title"]',
++          label: 'Password Management',
++          note: 'Enforces min 12 chars (min 14 for admins) and revokes other sessions on change.',
++        },
++        {
++          selector: '[data-testid="change-password-btn"]',
++          label: 'Session Revocation Action',
++          note: 'Atomic password rotation and session termination.',
++        },
++      ],
++    });
++  });
++
++  test('03-passkeys-mfa: displays enrolled passkeys with rename/remove and 2FA status', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, defaultMocks);
++
++    await page.goto('/settings/profile');
++    await expect(page.locator('[data-testid="personal-settings-page"]')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-passkeys-mfa',
++      annotations: [
++        {
++          selector: '[aria-labelledby="section-passkeys-title"]',
++          label: 'Passkeys Self-Service',
++          note: 'Self-service WebAuthn management with nickname renaming and removal.',
++        },
++        {
++          selector: '[aria-labelledby="section-mfa-title"]',
++          label: 'Two-Factor Status Box',
++          note: 'Real-time factor summary showing TOTP status and remaining recovery codes.',
++        },
++      ],
++    });
++  });
++
++  test('04-recovery-keys-modal: displays 10 one-time emergency recovery codes in modal', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, {
++      ...defaultMocks,
++      'POST /api/v1/auth/mfa/recovery/regenerate': {
++        json: {
++          recovery_codes: [
++            'a1b2-c3d4',
++            'e5f6-g7h8',
++            'i9j0-k1l2',
++            'm3n4-o5p6',
++            'q7r8-s9t0',
++            'u1v2-w3x4',
++            'y5z6-a7b8',
++            'c9d0-e1f2',
++            'g3h4-i5j6',
++            'k7l8-m9n0',
++          ],
++        },
++      },
++    });
++
++    page.on('dialog', async (dialog) => {
++      await dialog.accept();
++    });
++
++    await page.goto('/settings/profile');
++    await expect(page.locator('[data-testid="personal-settings-page"]')).toBeVisible();
++
++    const regenBtn = page.locator('[data-testid="regenerate-recovery-codes-btn"]');
++    await regenBtn.click();
++    await expect(page.locator('[data-testid="recovery-codes-grid"]')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-recovery-keys-modal',
++      annotations: [
++        {
++          selector: '[data-testid="recovery-codes-grid"]',
++          label: 'One-Time Recovery Codes Grid',
++          note: '10 single-use emergency recovery keys with one-click selection and secure display.',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index f6d4dc7..ec1e4f4 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -52,6 +52,7 @@ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
++import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
+ import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+@@ -999,6 +1000,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'stickies',
+             element: <WorkspaceStickiesView />,
+           },
++          {
++            path: 'settings/profile',
++            element: <PersonalSettingsPage />,
++          },
+           {
+             path: 'settings/mcp',
+             element: <McpAccessStudio tier="personal" />,
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
+new file mode 100644
+index 0000000..ebe7ef2
+--- /dev/null
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
+@@ -0,0 +1,340 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++.kb-personal-settings-container {
++  padding: var(--prose-pad);
++  max-width: 900px;
++  margin: 0 auto;
++  color: var(--fg-primary);
++  font-family: var(--font-sans);
++}
++
++.kb-personal-settings-header {
++  margin-bottom: var(--section-gap);
++}
++
++.kb-personal-settings-title {
++  font-size: 1.75rem;
++  font-weight: 600;
++  margin: 0 0 8px;
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-subtitle {
++  font-size: var(--text-body);
++  line-height: var(--leading-prose);
++  color: var(--fg-secondary);
++  margin: 0;
++}
++
++.kb-personal-settings-alert {
++  padding: 12px 16px;
++  border-radius: var(--radius-md);
++  margin-bottom: var(--space-4);
++  font-size: var(--text-sm);
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.kb-personal-settings-alert-success {
++  background-color: var(--bg-hover);
++  border: 1px solid var(--ok-fg);
++  color: var(--ok-fg);
++}
++
++.kb-personal-settings-alert-error {
++  background-color: var(--danger-bg);
++  border: 1px solid var(--danger-fg);
++  color: var(--danger-fg);
++}
++
++.kb-personal-settings-section {
++  margin-bottom: var(--section-gap);
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  padding: 24px 32px;
++}
++
++.kb-personal-settings-section-title {
++  font-size: var(--text-lg);
++  font-weight: 600;
++  margin: 0 0 8px;
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-section-desc {
++  font-size: var(--text-sm);
++  color: var(--fg-secondary);
++  margin: 0 0 20px;
++}
++
++.kb-personal-settings-form {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4);
++}
++
++.kb-personal-settings-field {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1);
++}
++
++.kb-personal-settings-label {
++  font-size: var(--text-sm);
++  font-weight: 500;
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-input,
++.kb-personal-settings-select {
++  height: var(--prop-row-h);
++  padding: 0 12px;
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  color: var(--fg-primary);
++  font-size: var(--text-sm);
++  outline: none;
++}
++
++.kb-personal-settings-input:focus,
++.kb-personal-settings-select:focus {
++  border-color: var(--focus-ring);
++  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
++}
++
++.kb-personal-settings-avatar-row {
++  display: flex;
++  align-items: center;
++  gap: var(--space-4);
++  margin-bottom: var(--space-4);
++  flex-wrap: wrap;
++}
++
++.kb-personal-settings-avatar-preview {
++  width: 72px;
++  height: 72px;
++  border-radius: var(--radius-full);
++  object-fit: cover;
++  border: 2px solid var(--border-subtle);
++  background-color: var(--bg-canvas);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  font-size: var(--text-2xl);
++  font-weight: 600;
++  color: var(--fg-secondary);
++  overflow: hidden;
++}
++
++.kb-personal-settings-avatar-actions {
++  display: flex;
++  gap: var(--space-2);
++  align-items: center;
++  flex-wrap: wrap;
++}
++
++.kb-personal-settings-btn {
++  height: var(--prop-row-h);
++  padding: 0 16px;
++  border-radius: var(--radius-md);
++  font-size: var(--text-sm);
++  font-weight: 500;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: var(--space-2);
++  border: 1px solid transparent;
++  text-decoration: none;
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-btn-primary {
++  background-color: var(--accent-primary);
++  color: var(--accent-primary-fg);
++}
++
++.kb-personal-settings-btn-primary:hover:not(:disabled) {
++  opacity: 0.9;
++}
++
++.kb-personal-settings-btn-secondary {
++  border-color: var(--border-subtle);
++  background-color: transparent;
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-btn-secondary:hover:not(:disabled) {
++  background-color: var(--bg-hover);
++}
++
++.kb-personal-settings-btn-danger {
++  border-color: var(--danger-fg);
++  color: var(--danger-fg);
++  background-color: transparent;
++}
++
++.kb-personal-settings-btn-danger:hover:not(:disabled) {
++  background-color: var(--danger-bg);
++}
++
++.kb-personal-settings-btn:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++.kb-personal-settings-password-wrapper {
++  position: relative;
++  display: flex;
++  align-items: center;
++}
++
++.kb-personal-settings-password-input {
++  width: 100%;
++  padding-right: 48px;
++}
++
++.kb-personal-settings-toggle-pw {
++  position: absolute;
++  right: 8px;
++  background: transparent;
++  border: none;
++  color: var(--fg-secondary);
++  cursor: pointer;
++  padding: 4px 8px;
++  font-size: var(--text-xs);
++  border-radius: var(--radius-sm);
++}
++
++.kb-personal-settings-toggle-pw:hover {
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-status-box {
++  display: flex;
++  gap: var(--space-4);
++  flex-wrap: wrap;
++  margin-bottom: var(--space-4);
++}
++
++.kb-personal-settings-stat-card {
++  flex: 1;
++  min-width: 180px;
++  padding: 16px;
++  background-color: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++}
++
++.kb-personal-settings-stat-num {
++  font-size: var(--text-2xl);
++  font-weight: 700;
++  color: var(--fg-primary);
++  margin-bottom: 4px;
++}
++
++.kb-personal-settings-stat-label {
++  font-size: var(--text-xs);
++  color: var(--fg-secondary);
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++}
++
++.kb-personal-settings-table {
++  width: 100%;
++  border-collapse: collapse;
++  text-align: left;
++  margin-top: var(--space-3);
++}
++
++.kb-personal-settings-th {
++  padding: 10px 12px;
++  border-bottom: 1px solid var(--border-subtle);
++  color: var(--fg-secondary);
++  font-size: var(--text-xs);
++  font-weight: 600;
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++}
++
++.kb-personal-settings-td {
++  padding: 12px;
++  border-bottom: 1px solid var(--border-subtle);
++  font-size: var(--text-sm);
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-modal-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: var(--scrim-bg);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++  padding: var(--space-4);
++}
++
++.kb-personal-settings-modal {
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  width: 100%;
++  max-width: 520px;
++  box-shadow: var(--shadow-xl);
++  overflow: hidden;
++  display: flex;
++  flex-direction: column;
++}
++
++.kb-personal-settings-modal-header {
++  padding: 16px 20px;
++  border-bottom: 1px solid var(--border-subtle);
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.kb-personal-settings-modal-title {
++  margin: 0;
++  font-size: var(--text-lg);
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.kb-personal-settings-modal-body {
++  padding: 20px;
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3);
++}
++
++.kb-personal-settings-modal-footer {
++  padding: 16px 20px;
++  border-top: 1px solid var(--border-subtle);
++  display: flex;
++  justify-content: flex-end;
++  gap: var(--space-2);
++}
++
++.kb-personal-settings-recovery-grid {
++  display: grid;
++  grid-template-columns: repeat(2, 1fr);
++  gap: 8px;
++  background-color: var(--bg-canvas);
++  padding: 12px;
++  border-radius: var(--radius-md);
++  font-family: var(--font-mono);
++  font-size: var(--text-sm);
++  margin-top: var(--space-2);
++}
++
++.kb-personal-settings-recovery-item {
++  color: var(--fg-primary);
++  user-select: all;
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+new file mode 100644
+index 0000000..a6e1bf0
+--- /dev/null
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -0,0 +1,909 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
++import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
++import {
++  fetchMyProfile,
++  updateMyProfile,
++  uploadAvatar,
++  deleteAvatar,
++  changePassword,
++  fetchMfaStatus,
++  fetchPasskeys,
++  renamePasskey,
++  deletePasskey,
++  enrollTotp,
++  confirmTotp,
++  deleteTotp,
++  regenerateRecoveryCodes,
++  type UserProfileResponse,
++  type WebauthnCredentialItem,
++  type MfaStatusResponse,
++} from './personalSettingsApi';
++import { SecondFactorStep } from '../auth/SecondFactorStep';
++import { ApiProblem } from '../../api/problem';
++import type { MfaMethod } from '../auth/authApi';
++import './PersonalSettingsPage.css';
++
++// IANA Timezones list
++const TIMEZONES = [
++  'UTC',
++  'America/New_York',
++  'America/Chicago',
++  'America/Denver',
++  'America/Los_Angeles',
++  'America/Anchorage',
++  'America/Honolulu',
++  'Europe/London',
++  'Europe/Paris',
++  'Europe/Berlin',
++  'Asia/Tokyo',
++  'Asia/Shanghai',
++  'Asia/Kolkata',
++  'Asia/Dubai',
++  'Australia/Sydney',
++];
++
++export function PersonalSettingsPage(): JSX.Element {
++  const queryClient = useQueryClient();
++
++  // Notification state
++  const [successMsg, setSuccessMsg] = useState<string | null>(null);
++  const [errorMsg, setErrorMsg] = useState<string | null>(null);
++
++  // Form states (controlled with fallback to profile)
++  const [displayNameInput, setDisplayNameInput] = useState<string | null>(null);
++  const [timezoneInput, setTimezoneInput] = useState<string | null>(null);
++
++  // Password state
++  const [currentPassword, setCurrentPassword] = useState('');
++  const [newPassword, setNewPassword] = useState('');
++  const [confirmPassword, setConfirmPassword] = useState('');
++  const [showCurrentPw, setShowCurrentPw] = useState(false);
++  const [showNewPw, setShowNewPw] = useState(false);
++
++  // Modals state
++  const [recoveryModalCodes, setRecoveryModalCodes] = useState<string[] | null>(null);
++  const [totpSetupStep, setTotpSetupStep] = useState<{
++    provisioning_uri?: string | undefined;
++    secret?: string | undefined;
++  } | null>(null);
++  const [totpVerificationCode, setTotpVerificationCode] = useState('');
++  const [editingPasskey, setEditingPasskey] = useState<WebauthnCredentialItem | null>(null);
++  const [passkeyNickname, setPasskeyNickname] = useState('');
++
++  // AAL2 Step-Up state
++  const [aal2Challenge, setAal2Challenge] = useState<{
++    challengeId: string;
++    methods: MfaMethod[];
++  } | null>(null);
++  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
++
++  const fileInputRef = useRef<HTMLInputElement>(null);
++
++  // Data fetching
++  const { data: profile, isLoading: isProfileLoading } = useQuery<UserProfileResponse>({
++    queryKey: ['myProfile'],
++    queryFn: fetchMyProfile,
++  });
++
++  const { data: mfaStatus } = useQuery<MfaStatusResponse>({
++    queryKey: ['myMfaStatus'],
++    queryFn: fetchMfaStatus,
++  });
++
++  const { data: passkeys } = useQuery<WebauthnCredentialItem[]>({
++    queryKey: ['myPasskeys'],
++    queryFn: fetchPasskeys,
++  });
++
++  const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
++  const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
++
++  const handleInterceptAal2 = (err: unknown, retryAction: () => Promise<void>): boolean => {
++    if (err instanceof ApiProblem && err.code === 'AAL2_REQUIRED') {
++      const data = err.data as { challenge_id?: string; methods?: MfaMethod[] };
++      const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'stepup-challenge';
++      const methods = Array.isArray(data.methods) ? data.methods : (['webauthn', 'totp'] as MfaMethod[]);
++      setAal2Challenge({ challengeId, methods });
++      setPendingAction(() => retryAction);
++      return true;
++    }
++    return false;
++  };
++
++  // Mutations
++  const updateProfileMutation = useMutation({
++    mutationFn: updateMyProfile,
++    onSuccess: (updated) => {
++      queryClient.setQueryData(['myProfile'], updated);
++      setSuccessMsg('Profile updated successfully.');
++      setErrorMsg(null);
++    },
++    onError: (err) => {
++      setErrorMsg(err instanceof Error ? err.message : 'Failed to update profile.');
++    },
++  });
++
++  const uploadAvatarMutation = useMutation({
++    mutationFn: uploadAvatar,
++    onSuccess: (updated) => {
++      queryClient.setQueryData(['myProfile'], updated);
++      setSuccessMsg('Avatar uploaded successfully.');
++      setErrorMsg(null);
++    },
++    onError: (err) => {
++      setErrorMsg(err instanceof Error ? err.message : 'Failed to upload avatar.');
++    },
++  });
++
++  const deleteAvatarMutation = useMutation({
++    mutationFn: deleteAvatar,
++    onSuccess: (updated) => {
++      queryClient.setQueryData(['myProfile'], updated);
++      setSuccessMsg('Avatar removed.');
++      setErrorMsg(null);
++    },
++    onError: (err) => {
++      setErrorMsg(err instanceof Error ? err.message : 'Failed to delete avatar.');
++    },
++  });
++
++  const handleProfileSubmit = (e: SyntheticEvent): void => {
++    e.preventDefault();
++    updateProfileMutation.mutate({ display_name: currentDisplayName, timezone: currentTimezone });
++  };
++
++  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
++    const file = e.target.files?.[0];
++    if (!file) return;
++
++    if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
++      setErrorMsg('SVG avatars are rejected for security. Please upload PNG, JPEG, or WebP.');
++      return;
++    }
++
++    if (file.size > 2 * 1024 * 1024) {
++      setErrorMsg('Avatar file size exceeds 2 MiB limit.');
++      return;
++    }
++
++    uploadAvatarMutation.mutate(file);
++    if (fileInputRef.current) {
++      fileInputRef.current.value = '';
++    }
++  };
++
++  const handlePasswordSubmit = async (e: SyntheticEvent): Promise<void> => {
++    e.preventDefault();
++    if (newPassword !== confirmPassword) {
++      setErrorMsg('New passwords do not match.');
++      return;
++    }
++
++    const minLength = profile?.is_server_admin ? 14 : 12;
++    if (newPassword.length < minLength) {
++      setErrorMsg(`Password must be at least ${String(minLength)} characters.`);
++      return;
++    }
++
++    const action = async (): Promise<void> => {
++      try {
++        await changePassword({ current_password: currentPassword, new_password: newPassword });
++        setSuccessMsg('Password updated successfully. Other active sessions revoked.');
++        setErrorMsg(null);
++        setCurrentPassword('');
++        setNewPassword('');
++        setConfirmPassword('');
++      } catch (err) {
++        if (!handleInterceptAal2(err, action)) {
++          setErrorMsg(err instanceof Error ? err.message : 'Failed to change password.');
++        }
++      }
++    };
++
++    await action();
++  };
++
++  const handleStartTotpEnroll = async (): Promise<void> => {
++    const action = async (): Promise<void> => {
++      try {
++        const res = await enrollTotp();
++        setTotpSetupStep({
++          provisioning_uri: res.provisioning_uri ?? res.otpauth_url,
++          secret: res.secret,
++        });
++      } catch (err) {
++        if (!handleInterceptAal2(err, action)) {
++          setErrorMsg(err instanceof Error ? err.message : 'Failed to initiate TOTP setup.');
++        }
++      }
++    };
++    await action();
++  };
++
++  const handleConfirmTotp = async (e: SyntheticEvent): Promise<void> => {
++    e.preventDefault();
++    try {
++      const res = await confirmTotp(totpVerificationCode);
++      setTotpSetupStep(null);
++      setTotpVerificationCode('');
++      setSuccessMsg('Two-factor authentication enabled successfully.');
++      setErrorMsg(null);
++      void queryClient.invalidateQueries({ queryKey: ['myMfaStatus'] });
++      if (res.recovery_codes.length > 0) {
++        setRecoveryModalCodes(res.recovery_codes);
++      }
++    } catch (err) {
++      setErrorMsg(err instanceof Error ? err.message : 'Invalid TOTP code.');
++    }
++  };
++
++  const handleDisableTotp = async (): Promise<void> => {
++    if (!window.confirm('Are you sure you want to disable Authenticator App (TOTP)?')) return;
++    const action = async (): Promise<void> => {
++      try {
++        await deleteTotp();
++        setSuccessMsg('TOTP disabled.');
++        setErrorMsg(null);
++        void queryClient.invalidateQueries({ queryKey: ['myMfaStatus'] });
++      } catch (err) {
++        if (!handleInterceptAal2(err, action)) {
++          setErrorMsg(err instanceof Error ? err.message : 'Failed to disable TOTP.');
++        }
++      }
++    };
++    await action();
++  };
++
++  const handleRegenerateRecoveryCodes = async (): Promise<void> => {
++    if (!window.confirm('Regenerating codes will invalidate any existing recovery codes. Continue?')) return;
++    const action = async (): Promise<void> => {
++      try {
++        const res = await regenerateRecoveryCodes();
++        setRecoveryModalCodes(res.recovery_codes);
++        setSuccessMsg('Generated 10 new one-time recovery codes.');
++        setErrorMsg(null);
++        void queryClient.invalidateQueries({ queryKey: ['myMfaStatus'] });
++      } catch (err) {
++        if (!handleInterceptAal2(err, action)) {
++          setErrorMsg(err instanceof Error ? err.message : 'Failed to regenerate recovery codes.');
++        }
++      }
++    };
++    await action();
++  };
++
++  const handleRenamePasskey = async (e: SyntheticEvent): Promise<void> => {
++    e.preventDefault();
++    if (!editingPasskey) return;
++    try {
++      await renamePasskey(editingPasskey.id, passkeyNickname);
++      setEditingPasskey(null);
++      setPasskeyNickname('');
++      setSuccessMsg('Passkey renamed.');
++      setErrorMsg(null);
++      void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
++    } catch (err) {
++      setErrorMsg(err instanceof Error ? err.message : 'Failed to rename passkey.');
++    }
++  };
++
++  const handleDeletePasskey = async (credentialId: string): Promise<void> => {
++    if (!window.confirm('Are you sure you want to delete this passkey?')) return;
++    const action = async (): Promise<void> => {
++      try {
++        await deletePasskey(credentialId);
++        setSuccessMsg('Passkey removed.');
++        setErrorMsg(null);
++        void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
++        void queryClient.invalidateQueries({ queryKey: ['myMfaStatus'] });
++      } catch (err) {
++        if (!handleInterceptAal2(err, action)) {
++          setErrorMsg(err instanceof Error ? err.message : 'Failed to delete passkey.');
++        }
++      }
++    };
++    await action();
++  };
++
++  if (isProfileLoading) {
++    return (
++      <div className="kb-personal-settings-container" data-testid="personal-settings-loading">
++        <p>Loading personal settings...</p>
++      </div>
++    );
++  }
++
++  return (
++    <div className="kb-personal-settings-container" data-testid="personal-settings-page">
++      <header className="kb-personal-settings-header">
++        <h1 className="kb-personal-settings-title">Personal Settings</h1>
++        <p className="kb-personal-settings-subtitle">
++          Manage your user profile, timezone, avatar, authentication credentials, and security keys.
++        </p>
++      </header>
++
++      {successMsg && (
++        <div className="kb-personal-settings-alert kb-personal-settings-alert-success" role="alert" data-testid="alert-success">
++          <span>{successMsg}</span>
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            onClick={() => { setSuccessMsg(null); }}
++          >
++            Dismiss
++          </button>
++        </div>
++      )}
++
++      {errorMsg && (
++        <div className="kb-personal-settings-alert kb-personal-settings-alert-error" role="alert" data-testid="alert-error">
++          <span>{errorMsg}</span>
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            onClick={() => { setErrorMsg(null); }}
++          >
++            Dismiss
++          </button>
++        </div>
++      )}
++
++      {/* Section 1: Profile & Timezone */}
++      <section className="kb-personal-settings-section" aria-labelledby="section-profile-title">
++        <h2 id="section-profile-title" className="kb-personal-settings-section-title">
++          Profile & Timezone
++        </h2>
++        <p className="kb-personal-settings-section-desc">
++          Your display name, time zone for timestamps, and public profile picture.
++        </p>
++
++        <div className="kb-personal-settings-avatar-row">
++          <div className="kb-personal-settings-avatar-preview" data-testid="avatar-preview">
++            {profile?.avatar_url ? (
++              <img
++                src={profile.avatar_url}
++                alt={`${profile.display_name}'s avatar`}
++                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
++              />
++            ) : (
++              <span>{(profile?.display_name ?? profile?.username ?? 'U')[0]?.toUpperCase()}</span>
++            )}
++          </div>
++          <div className="kb-personal-settings-avatar-actions">
++            <input
++              ref={fileInputRef}
++              type="file"
++              id="avatar-file-input"
++              data-testid="avatar-file-input"
++              accept="image/png,image/jpeg,image/webp"
++              style={{ display: 'none' }}
++              onChange={handleAvatarFileChange}
++            />
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++              data-testid="upload-avatar-btn"
++              onClick={() => { fileInputRef.current?.click(); }}
++              disabled={uploadAvatarMutation.isPending}
++            >
++              Upload Picture
++            </button>
++            {profile?.avatar_url && (
++              <button
++                type="button"
++                className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++                data-testid="remove-avatar-btn"
++                onClick={() => { deleteAvatarMutation.mutate(); }}
++                disabled={deleteAvatarMutation.isPending}
++              >
++                Remove
++              </button>
++            )}
++          </div>
++        </div>
++
++        <form onSubmit={handleProfileSubmit} className="kb-personal-settings-form">
++          <div className="kb-personal-settings-field">
++            <label htmlFor="display-name" className="kb-personal-settings-label">
++              Display Name
++            </label>
++            <input
++              id="display-name"
++              data-testid="display-name-input"
++              type="text"
++              className="kb-personal-settings-input"
++              value={currentDisplayName}
++              onChange={(e) => { setDisplayNameInput(e.target.value); }}
++              required
++            />
++          </div>
++
++          <div className="kb-personal-settings-field">
++            <label htmlFor="timezone-select" className="kb-personal-settings-label">
++              Timezone
++            </label>
++            <select
++              id="timezone-select"
++              data-testid="timezone-select"
++              className="kb-personal-settings-select"
++              value={currentTimezone}
++              onChange={(e) => { setTimezoneInput(e.target.value); }}
++            >
++              {TIMEZONES.map((tz) => (
++                <option key={tz} value={tz}>
++                  {tz}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          <div>
++            <button
++              type="submit"
++              className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++              data-testid="save-profile-btn"
++              disabled={updateProfileMutation.isPending}
++            >
++              Save Profile
++            </button>
++          </div>
++        </form>
++      </section>
++
++      {/* Section 2: Password Change */}
++      <section className="kb-personal-settings-section" aria-labelledby="section-password-title">
++        <h2 id="section-password-title" className="kb-personal-settings-section-title">
++          Change Password
++        </h2>
++        <p className="kb-personal-settings-section-desc">
++          Update your local authentication password. Requires min {profile?.is_server_admin ? 14 : 12} characters.
++          Updating your password will revoke all other active sessions across devices.
++        </p>
++
++        <form onSubmit={(e) => { void handlePasswordSubmit(e); }} className="kb-personal-settings-form">
++          <div className="kb-personal-settings-field">
++            <label htmlFor="current-password" className="kb-personal-settings-label">
++              Current Password
++            </label>
++            <div className="kb-personal-settings-password-wrapper">
++              <input
++                id="current-password"
++                data-testid="current-password-input"
++                type={showCurrentPw ? 'text' : 'password'}
++                className="kb-personal-settings-input kb-personal-settings-password-input"
++                value={currentPassword}
++                onChange={(e) => { setCurrentPassword(e.target.value); }}
++                autoComplete="current-password"
++                required
++              />
++              <button
++                type="button"
++                className="kb-personal-settings-toggle-pw"
++                onClick={() => { setShowCurrentPw(!showCurrentPw); }}
++                aria-label={showCurrentPw ? 'Hide password' : 'Show password'}
++              >
++                {showCurrentPw ? 'Hide' : 'Show'}
++              </button>
++            </div>
++          </div>
++
++          <div className="kb-personal-settings-field">
++            <label htmlFor="new-password" className="kb-personal-settings-label">
++              New Password
++            </label>
++            <div className="kb-personal-settings-password-wrapper">
++              <input
++                id="new-password"
++                data-testid="new-password-input"
++                type={showNewPw ? 'text' : 'password'}
++                className="kb-personal-settings-input kb-personal-settings-password-input"
++                value={newPassword}
++                onChange={(e) => { setNewPassword(e.target.value); }}
++                autoComplete="new-password"
++                required
++              />
++              <button
++                type="button"
++                className="kb-personal-settings-toggle-pw"
++                onClick={() => { setShowNewPw(!showNewPw); }}
++                aria-label={showNewPw ? 'Hide password' : 'Show password'}
++              >
++                {showNewPw ? 'Hide' : 'Show'}
++              </button>
++            </div>
++          </div>
++
++          <div className="kb-personal-settings-field">
++            <label htmlFor="confirm-password" className="kb-personal-settings-label">
++              Confirm New Password
++            </label>
++            <input
++              id="confirm-password"
++              data-testid="confirm-password-input"
++              type="password"
++              className="kb-personal-settings-input"
++              value={confirmPassword}
++              onChange={(e) => { setConfirmPassword(e.target.value); }}
++              autoComplete="new-password"
++              required
++            />
++          </div>
++
++          <div>
++            <button
++              type="submit"
++              className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++              data-testid="change-password-btn"
++            >
++              Update Password
++            </button>
++          </div>
++        </form>
++      </section>
++
++      {/* Section 3: Passkeys (WebAuthn) */}
++      <section className="kb-personal-settings-section" aria-labelledby="section-passkeys-title">
++        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++          <div>
++            <h2 id="section-passkeys-title" className="kb-personal-settings-section-title">
++              Passkeys & Security Keys
++            </h2>
++            <p className="kb-personal-settings-section-desc">
++              Fast, phishing-resistant authentication with WebAuthn / FIDO2 security keys or biometrics.
++            </p>
++          </div>
++        </div>
++
++        {passkeys && passkeys.length > 0 ? (
++          <table className="kb-personal-settings-table" data-testid="passkeys-table">
++            <thead>
++              <tr>
++                <th className="kb-personal-settings-th">Name</th>
++                <th className="kb-personal-settings-th">Created</th>
++                <th className="kb-personal-settings-th">Last Used</th>
++                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
++              </tr>
++            </thead>
++            <tbody>
++              {passkeys.map((pk) => (
++                <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
++                  <td className="kb-personal-settings-td">
++                    <strong>{pk.nickname || 'Passkey'}</strong>
++                  </td>
++                  <td className="kb-personal-settings-td">
++                    {new Date(pk.created_at).toLocaleDateString()}
++                  </td>
++                  <td className="kb-personal-settings-td">
++                    {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
++                  </td>
++                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
++                    <button
++                      type="button"
++                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                      data-testid={`rename-passkey-${pk.id}`}
++                      style={{ marginRight: 8 }}
++                      onClick={() => {
++                        setEditingPasskey(pk);
++                        setPasskeyNickname(pk.nickname || '');
++                      }}
++                    >
++                      Rename
++                    </button>
++                    <button
++                      type="button"
++                      className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++                      data-testid={`delete-passkey-${pk.id}`}
++                      onClick={() => { void handleDeletePasskey(pk.id); }}
++                    >
++                      Remove
++                    </button>
++                  </td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        ) : (
++          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
++            No passkeys registered yet.
++          </p>
++        )}
++      </section>
++
++      {/* Section 4: Two-Factor Authentication & Recovery Codes */}
++      <section className="kb-personal-settings-section" aria-labelledby="section-mfa-title">
++        <h2 id="section-mfa-title" className="kb-personal-settings-section-title">
++          Two-Factor Authentication (2FA)
++        </h2>
++        <p className="kb-personal-settings-section-desc">
++          Add an extra layer of protection to your account using TOTP and emergency recovery codes.
++        </p>
++
++        <div className="kb-personal-settings-status-box">
++          <div className="kb-personal-settings-stat-card">
++            <div className="kb-personal-settings-stat-num" data-testid="mfa-status-totp">
++              {mfaStatus?.totp_enabled ? 'Active' : 'Disabled'}
++            </div>
++            <div className="kb-personal-settings-stat-label">Authenticator App (TOTP)</div>
++          </div>
++          <div className="kb-personal-settings-stat-card">
++            <div className="kb-personal-settings-stat-num" data-testid="mfa-status-recovery-count">
++              {mfaStatus?.recovery_codes_remaining ?? 0}
++            </div>
++            <div className="kb-personal-settings-stat-label">Remaining Recovery Codes</div>
++          </div>
++        </div>
++
++        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
++          {!mfaStatus?.totp_enabled ? (
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++              data-testid="enable-totp-btn"
++              onClick={() => { void handleStartTotpEnroll(); }}
++            >
++              Configure Authenticator App
++            </button>
++          ) : (
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++              data-testid="disable-totp-btn"
++              onClick={() => { void handleDisableTotp(); }}
++            >
++              Disable Authenticator App
++            </button>
++          )}
++
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            data-testid="regenerate-recovery-codes-btn"
++            onClick={() => { void handleRegenerateRecoveryCodes(); }}
++          >
++            Regenerate Recovery Codes
++          </button>
++        </div>
++      </section>
++
++      {/* TOTP Setup Modal */}
++      {totpSetupStep && (
++        <div className="kb-personal-settings-modal-backdrop" role="presentation">
++          <div
++            className="kb-personal-settings-modal"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="totp-modal-title"
++          >
++            <div className="kb-personal-settings-modal-header">
++              <h3 id="totp-modal-title" className="kb-personal-settings-modal-title">
++                Configure Authenticator App
++              </h3>
++              <button
++                type="button"
++                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                onClick={() => { setTotpSetupStep(null); }}
++              >
++                Cancel
++              </button>
++            </div>
++            <form onSubmit={(e) => { void handleConfirmTotp(e); }}>
++              <div className="kb-personal-settings-modal-body">
++                <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
++                  Scan the QR code or enter the secret code into your authenticator app (Google
++                  Authenticator, 1Password, Bitwarden, etc.):
++                </p>
++                {totpSetupStep.secret && (
++                  <div
++                    style={{
++                      padding: 12,
++                      background: 'var(--bg-canvas)',
++                      borderRadius: 'var(--radius-md)',
++                      fontFamily: 'var(--font-mono)',
++                      fontSize: 'var(--text-sm)',
++                      wordBreak: 'break-all',
++                    }}
++                    data-testid="totp-secret-key"
++                  >
++                    {totpSetupStep.secret}
++                  </div>
++                )}
++                <div className="kb-personal-settings-field">
++                  <label htmlFor="totp-verify-code" className="kb-personal-settings-label">
++                    Enter 6-digit Verification Code
++                  </label>
++                  <input
++                    id="totp-verify-code"
++                    data-testid="totp-verification-input"
++                    type="text"
++                    maxLength={6}
++                    className="kb-personal-settings-input"
++                    value={totpVerificationCode}
++                    onChange={(e) => { setTotpVerificationCode(e.target.value); }}
++                    placeholder="123456"
++                    required
++                  />
++                </div>
++              </div>
++              <div className="kb-personal-settings-modal-footer">
++                <button
++                  type="button"
++                  className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                  onClick={() => { setTotpSetupStep(null); }}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++                  data-testid="confirm-totp-btn"
++                >
++                  Verify & Activate
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      )}
++
++      {/* Recovery Codes Modal */}
++      {recoveryModalCodes && (
++        <div className="kb-personal-settings-modal-backdrop" role="presentation">
++          <div
++            className="kb-personal-settings-modal"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="recovery-modal-title"
++          >
++            <div className="kb-personal-settings-modal-header">
++              <h3 id="recovery-modal-title" className="kb-personal-settings-modal-title">
++                One-Time Recovery Codes
++              </h3>
++            </div>
++            <div className="kb-personal-settings-modal-body">
++              <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
++                Store these recovery codes in a secure location. Each code can only be used once to access
++                your account if you lose your 2FA device.
++              </p>
++              <div className="kb-personal-settings-recovery-grid" data-testid="recovery-codes-grid">
++                {recoveryModalCodes.map((code, idx) => (
++                  <div key={idx} className="kb-personal-settings-recovery-item">
++                    {code}
++                  </div>
++                ))}
++              </div>
++            </div>
++            <div className="kb-personal-settings-modal-footer">
++              <button
++                type="button"
++                className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++                data-testid="close-recovery-modal-btn"
++                onClick={() => { setRecoveryModalCodes(null); }}
++              >
++                I Have Saved These Codes
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++
++      {/* Rename Passkey Modal */}
++      {editingPasskey && (
++        <div className="kb-personal-settings-modal-backdrop" role="presentation">
++          <div
++            className="kb-personal-settings-modal"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="rename-passkey-title"
++          >
++            <div className="kb-personal-settings-modal-header">
++              <h3 id="rename-passkey-title" className="kb-personal-settings-modal-title">
++                Rename Passkey
++              </h3>
++              <button
++                type="button"
++                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                onClick={() => { setEditingPasskey(null); }}
++              >
++                Cancel
++              </button>
++            </div>
++            <form onSubmit={(e) => { void handleRenamePasskey(e); }}>
++              <div className="kb-personal-settings-modal-body">
++                <div className="kb-personal-settings-field">
++                  <label htmlFor="passkey-nickname" className="kb-personal-settings-label">
++                    Passkey Label / Nickname
++                  </label>
++                  <input
++                    id="passkey-nickname"
++                    data-testid="passkey-nickname-input"
++                    type="text"
++                    className="kb-personal-settings-input"
++                    value={passkeyNickname}
++                    onChange={(e) => { setPasskeyNickname(e.target.value); }}
++                    required
++                  />
++                </div>
++              </div>
++              <div className="kb-personal-settings-modal-footer">
++                <button
++                  type="button"
++                  className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                  onClick={() => { setEditingPasskey(null); }}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++                  data-testid="save-passkey-nickname-btn"
++                >
++                  Save
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      )}
++
++      {/* AAL2 Step-Up Dialog */}
++      {aal2Challenge && (
++        <div className="kb-personal-settings-modal-backdrop" role="presentation">
++          <div
++            className="kb-personal-settings-modal"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="aal2-stepup-title"
++            data-testid="aal2-stepup-dialog"
++          >
++            <div className="kb-personal-settings-modal-header">
++              <h3 id="aal2-stepup-title" className="kb-personal-settings-modal-title">
++                Security Verification Required (AAL2)
++              </h3>
++              <button
++                type="button"
++                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                onClick={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              >
++                Cancel
++              </button>
++            </div>
++            <div className="kb-personal-settings-modal-body">
++              <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
++                This operation requires fresh second-factor verification. Please confirm with your passkey or TOTP authenticator.
++              </p>
++              <SecondFactorStep
++                challengeId={aal2Challenge.challengeId}
++                methods={aal2Challenge.methods}
++                onSuccess={() => {
++                  setAal2Challenge(null);
++                  if (pendingAction) {
++                    const action = pendingAction;
++                    setPendingAction(null);
++                    void action();
++                  }
++                }}
++                onError={() => {
++                  // handled inside SecondFactorStep
++                }}
++                onSessionExpired={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++                onCancel={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              />
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+new file mode 100644
+index 0000000..7d03bb2
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -0,0 +1,198 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { PersonalSettingsPage } from '../PersonalSettingsPage';
++import * as api from '../personalSettingsApi';
++
++vi.mock('../personalSettingsApi');
++
++const mockProfile: api.UserProfileResponse = {
++  principal_id: '11111111-1111-4111-8111-111111111111',
++  display_name: 'Jane Doe',
++  username: 'janedoe',
++  email: 'jane@example.com',
++  timezone: 'America/New_York',
++  avatar_url: '/api/v1/users/11111111-1111-4111-8111-111111111111/avatar',
++  roles: ['user'],
++  is_server_admin: false,
++};
++
++const mockMfaStatus: api.MfaStatusResponse = {
++  totp_enabled: true,
++  passkeys_count: 1,
++  recovery_codes_remaining: 10,
++};
++
++const mockPasskeys: api.WebauthnCredentialItem[] = [
++  {
++    id: 'pk-1',
++    nickname: 'MacBook TouchID',
++    created_at: '2026-01-01T00:00:00Z',
++    last_used_at: '2026-02-01T00:00:00Z',
++    aaguid: '00000000-0000-0000-0000-000000000000',
++  },
++];
++
++describe('PersonalSettingsPage', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false },
++      },
++    });
++    vi.clearAllMocks();
++
++    vi.mocked(api.fetchMyProfile).mockResolvedValue(mockProfile);
++    vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
++    vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
++  });
++
++  const renderComponent = () =>
++    render(
++      <QueryClientProvider client={queryClient}>
++        <PersonalSettingsPage />
++      </QueryClientProvider>,
++    );
++
++  it('renders personal settings sections with loaded profile data', async () => {
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('personal-settings-page')).toBeDefined();
++    });
++
++    const displayNameInput = screen.getByTestId<HTMLInputElement>('display-name-input');
++    expect(displayNameInput.value).toBe('Jane Doe');
++
++    const tzSelect = screen.getByTestId<HTMLSelectElement>('timezone-select');
++    expect(tzSelect.value).toBe('America/New_York');
++
++    expect(screen.getByText('MacBook TouchID')).toBeDefined();
++    expect(screen.getByTestId('mfa-status-totp').textContent).toBe('Active');
++    expect(screen.getByTestId('mfa-status-recovery-count').textContent).toBe('10');
++  });
++
++  it('updates display name and timezone', async () => {
++    vi.mocked(api.updateMyProfile).mockResolvedValue({
++      ...mockProfile,
++      display_name: 'Jane Smith',
++      timezone: 'Europe/London',
++    });
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('display-name-input')).toBeDefined();
++    });
++
++    fireEvent.change(screen.getByTestId('display-name-input'), { target: { value: 'Jane Smith' } });
++    fireEvent.change(screen.getByTestId('timezone-select'), { target: { value: 'Europe/London' } });
++    fireEvent.click(screen.getByTestId('save-profile-btn'));
++
++    await waitFor(() => {
++      expect(api.updateMyProfile).toHaveBeenCalledWith({
++        display_name: 'Jane Smith',
++        timezone: 'Europe/London',
++      });
++      expect(screen.getByTestId('alert-success').textContent).toContain('Profile updated successfully.');
++    });
++  });
++
++  it('rejects SVG avatar upload client-side', async () => {
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-file-input')).toBeDefined();
++    });
++
++    const file = new File(['<svg></svg>'], 'bad.svg', { type: 'image/svg+xml' });
++    const input = screen.getByTestId('avatar-file-input');
++    fireEvent.change(input, { target: { files: [file] } });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security');
++    });
++    expect(api.uploadAvatar).not.toHaveBeenCalled();
++  });
++
++  it('validates password length and matching confirmation', async () => {
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('current-password-input')).toBeDefined();
++    });
++
++    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'oldpassword123' } });
++    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'short' } });
++    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'mismatch' } });
++    fireEvent.click(screen.getByTestId('change-password-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('New passwords do not match');
++    });
++
++    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'short' } });
++    fireEvent.click(screen.getByTestId('change-password-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Password must be at least 12 characters');
++    });
++    expect(api.changePassword).not.toHaveBeenCalled();
++  });
++
++  it('renames passkey and displays updated list', async () => {
++    vi.mocked(api.renamePasskey).mockResolvedValue({
++      id: 'pk-1',
++      nickname: 'Work YubiKey',
++      created_at: '2026-01-01T00:00:00Z',
++      last_used_at: null,
++      aaguid: null,
++    });
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('rename-passkey-pk-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
++    expect(screen.getByTestId('passkey-nickname-input')).toBeDefined();
++
++    fireEvent.change(screen.getByTestId('passkey-nickname-input'), { target: { value: 'Work YubiKey' } });
++    fireEvent.click(screen.getByTestId('save-passkey-nickname-btn'));
++
++    await waitFor(() => {
++      expect(api.renamePasskey).toHaveBeenCalledWith('pk-1', 'Work YubiKey');
++      expect(screen.getByTestId('alert-success').textContent).toContain('Passkey renamed.');
++    });
++  });
++
++  it('regenerates recovery codes and displays modal', async () => {
++    const newCodes = ['1111-2222', '3333-4444', '5555-6666'];
++    vi.mocked(api.regenerateRecoveryCodes).mockResolvedValue({ recovery_codes: newCodes });
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('regenerate-recovery-codes-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
++
++    await waitFor(() => {
++      expect(api.regenerateRecoveryCodes).toHaveBeenCalled();
++      expect(screen.getByTestId('recovery-codes-grid')).toBeDefined();
++      expect(screen.getByText('1111-2222')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('close-recovery-modal-btn'));
++    expect(screen.queryByTestId('recovery-codes-grid')).toBeNull();
++  });
++});
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
+new file mode 100644
+index 0000000..8a1a8a0
+--- /dev/null
++++ b/kanban/web/src/features/settings/personalSettingsApi.ts
+@@ -0,0 +1,142 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { apiFetch } from '../../api/client';
++
++export interface UserProfileResponse {
++  principal_id: string;
++  display_name: string;
++  username: string;
++  email: string | null;
++  timezone: string;
++  avatar_url: string | null;
++  roles: string[];
++  is_server_admin: boolean;
++  has_local_password?: boolean;
++}
++
++export interface UpdateProfileRequest {
++  display_name?: string;
++  timezone?: string;
++}
++
++export interface ChangePasswordRequest {
++  current_password: string;
++  new_password: string;
++}
++
++export interface WebauthnCredentialItem {
++  id: string;
++  nickname: string;
++  created_at: string;
++  last_used_at: string | null;
++  aaguid: string | null;
++}
++
++export interface MfaStatusResponse {
++  totp_enabled: boolean;
++  passkeys_count: number;
++  recovery_codes_remaining: number;
++}
++
++export interface TotpEnrollResponse {
++  secret?: string;
++  otpauth_url?: string;
++  provisioning_uri?: string;
++  recovery_codes?: string[];
++  challenge_id?: string;
++}
++
++export interface RecoveryCodesResponse {
++  recovery_codes: string[];
++}
++
++export async function fetchMyProfile(): Promise<UserProfileResponse> {
++  return (await apiFetch('GET', '/api/v1/auth/me' as never)) as UserProfileResponse;
++}
++
++export async function updateMyProfile(
++  payload: UpdateProfileRequest,
++): Promise<UserProfileResponse> {
++  return (await apiFetch('PATCH', '/api/v1/auth/me' as never, {
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  })) as UserProfileResponse;
++}
++
++export async function uploadAvatar(file: File): Promise<UserProfileResponse> {
++  const formData = new FormData();
++  formData.append('file', file);
++  return (await apiFetch('PUT', '/api/v1/auth/me/avatar' as never, {
++    body: formData,
++  })) as UserProfileResponse;
++}
++
++export async function deleteAvatar(): Promise<UserProfileResponse> {
++  return (await apiFetch('DELETE', '/api/v1/auth/me/avatar' as never)) as UserProfileResponse;
++}
++
++export async function changePassword(
++  payload: ChangePasswordRequest,
++): Promise<{ ok: boolean; message: string }> {
++  return (await apiFetch('POST', '/api/v1/auth/me/password' as never, {
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  })) as { ok: boolean; message: string };
++}
++
++export async function fetchMfaStatus(): Promise<MfaStatusResponse> {
++  return (await apiFetch('GET', '/api/v1/auth/mfa/status' as never)) as MfaStatusResponse;
++}
++
++export async function fetchPasskeys(): Promise<WebauthnCredentialItem[]> {
++  const res = (await apiFetch('GET', '/api/v1/auth/webauthn/credentials' as never)) as
++    | WebauthnCredentialItem[]
++    | { credentials: WebauthnCredentialItem[] };
++  return Array.isArray(res) ? res : res.credentials;
++}
++
++export async function renamePasskey(
++  credentialId: string,
++  nickname: string,
++): Promise<WebauthnCredentialItem> {
++  return (await apiFetch(
++    'PATCH',
++    '/api/v1/auth/webauthn/credentials/{credential_id}' as never,
++    {
++      params: { credential_id: credentialId },
++      body: JSON.stringify({ nickname }),
++      headers: { 'Content-Type': 'application/json' },
++    },
++  )) as WebauthnCredentialItem;
++}
++
++export async function deletePasskey(credentialId: string): Promise<void> {
++  await apiFetch('DELETE', '/api/v1/auth/webauthn/credentials/{credential_id}' as never, {
++    params: { credential_id: credentialId },
++  });
++}
++
++export async function enrollTotp(): Promise<TotpEnrollResponse> {
++  return (await apiFetch('POST', '/api/v1/auth/mfa/totp/enroll' as never)) as TotpEnrollResponse;
++}
++
++export async function confirmTotp(
++  code: string,
++): Promise<{ ok: boolean; recovery_codes: string[] }> {
++  return (await apiFetch('POST', '/api/v1/auth/mfa/totp/verify' as never, {
++    body: JSON.stringify({ code }),
++    headers: { 'Content-Type': 'application/json' },
++  })) as { ok: boolean; recovery_codes: string[] };
++}
++
++export async function deleteTotp(): Promise<void> {
++  await apiFetch('DELETE', '/api/v1/auth/mfa/totp' as never);
++}
++
++export async function regenerateRecoveryCodes(): Promise<RecoveryCodesResponse> {
++  return (await apiFetch(
++    'POST',
++    '/api/v1/auth/mfa/recovery/regenerate' as never,
++  )) as RecoveryCodesResponse;
++}

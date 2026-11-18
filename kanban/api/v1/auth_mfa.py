@@ -266,6 +266,40 @@ async def confirm_totp(
 confirm_totp.allow_mfa_pending = True  # type: ignore[attr-defined]
 
 
+@router.get("/status")
+async def get_mfa_status(
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Return active MFA status for authenticated principal."""
+    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        msg = "Session factory is not configured on app.state.session_factory"
+        raise RuntimeError(msg)
+
+    rls_ctx = RLSContext(
+        principal_id=principal.principal_id,
+        workspace_id=principal.workspace_id,
+        token_scopes=principal.token_scopes,
+        aal_level=cast("Literal[1, 2]", principal.aal_level),
+    )
+
+    async with session_factory.session(rls_ctx) as session:
+        res = await session.execute(
+            text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
+            {"p_id": principal.principal_id},
+        )
+        row = res.mappings().first()
+
+    return JSONResponse(
+        content={
+            "totp_enabled": bool(row["has_active_totp"]) if row else False,
+            "passkeys_count": int(row["webauthn_credential_count"]) if row else 0,
+            "recovery_codes_remaining": int(row["unused_recovery_codes"]) if row else 0,
+        }
+    )
+
+
 @router.delete("/totp")
 async def delete_totp(
     request: Request,
@@ -288,6 +322,32 @@ async def delete_totp(
     )
 
     async with session_factory.session(rls_ctx) as session:
+        admin_res = await session.execute(
+            text(
+                "SELECT 1 FROM role_bindings "
+                "WHERE principal_id = :p_id "
+                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
+            ),
+            {"p_id": principal.principal_id},
+        )
+        is_admin = admin_res.scalar_one_or_none() is not None
+        if is_admin:
+            status_res = await session.execute(
+                text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
+                {"p_id": principal.principal_id},
+            )
+            status_row = status_res.mappings().first()
+            webauthn_count = int(status_row["webauthn_credential_count"]) if status_row else 0
+            if webauthn_count == 0:
+                raise ProblemException(
+                    code="LAST_FACTOR",
+                    status=409,
+                    title="Cannot Delete Last Factor",
+                    detail=(
+                        "Administrators must retain at least one active AAL2 authentication factor."
+                    ),
+                )
+
         await service.delete(session, principal.principal_id)
 
     return JSONResponse(content={"revoked": True})

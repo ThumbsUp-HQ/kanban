@@ -51,6 +51,12 @@ class WebauthnRegisterVerifyRequest(BaseModel):
     credential: dict[str, Any] = Field(description="PublicKeyCredential creation response")
 
 
+class WebauthnRenameRequest(BaseModel):
+    """Payload for renaming a WebAuthn passkey credential."""
+
+    nickname: str = Field(min_length=1, max_length=64, description="Friendly nickname")
+
+
 class WebauthnAuthenticateVerifyRequest(BaseModel):
     """Payload for verifying WebAuthn authentication/assertion."""
 
@@ -532,6 +538,52 @@ async def list_credentials(
             }
             for r in records
         ]
+    )
+
+
+@router.patch("/credentials/{credential_id}")
+async def rename_credential(
+    credential_id: uuid.UUID,
+    body: WebauthnRenameRequest,
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Rename a registered WebAuthn passkey credential."""
+    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        msg = "Session factory is not configured on app.state.session_factory"
+        raise RuntimeError(msg)
+
+    rls_ctx = RLSContext(
+        principal_id=principal.principal_id,
+        workspace_id=principal.workspace_id,
+        token_scopes=principal.token_scopes,
+        aal_level=cast("Literal[1, 2]", principal.aal_level),
+    )
+
+    async with session_factory.session(rls_ctx) as session:
+        res = await session.execute(
+            text("SELECT kb_auth.webauthn_credential_update_nickname(:cred_id, :p_id, :nickname)"),
+            {
+                "cred_id": credential_id,
+                "p_id": principal.principal_id,
+                "nickname": body.nickname.strip(),
+            },
+        )
+        updated = bool(res.scalar_one())
+        if not updated:
+            raise ProblemException(
+                code="NOT_FOUND",
+                status=404,
+                title="Credential Not Found",
+                detail="WebAuthn credential was not found or not owned by principal.",
+            )
+
+    return JSONResponse(
+        content={
+            "id": str(credential_id),
+            "nickname": body.nickname.strip(),
+        }
     )
 
 

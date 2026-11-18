@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 import anyio
 from argon2 import PasswordHasher, Type
-from argon2.exceptions import VerificationError, VerifyMismatchError
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from kanban.api.problems import ProblemException
 from kanban.security.keys import KeyMaterialError, _decode_b64url_key, load_key_material
@@ -190,7 +190,7 @@ def verify_password_sync(
         mac = hmac.new(active_pepper, pw_bytes, hashlib.sha256).digest()
         b64_mac = base64.b64encode(mac).decode("ascii")
         return bool(ph.verify(stored_hash, b64_mac))
-    except (VerifyMismatchError, VerificationError):
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
 
 

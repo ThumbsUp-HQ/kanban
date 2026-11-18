@@ -97,6 +97,7 @@ class ActivityEventType(StrEnum):
     ISSUE_MODULE_REMOVED = "ISSUE_MODULE_REMOVED"
     LOCAL_ADMIN_LOGIN_SUCCEEDED = "LOCAL_ADMIN_LOGIN_SUCCEEDED"
     LOCAL_ADMIN_LOGIN_FAILED = "LOCAL_ADMIN_LOGIN_FAILED"
+    USER_PASSWORD_CHANGED = "USER_PASSWORD_CHANGED"  # noqa: S105
     ASSIGNEE_ADDED = "ASSIGNEE_ADDED"
     ASSIGNEE_REMOVED = "ASSIGNEE_REMOVED"
     COMMENT_CREATED = "COMMENT_CREATED"
@@ -247,6 +248,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ISSUE_MODULE_REMOVED: ActivityCategory.HISTORY,
         ActivityEventType.LOCAL_ADMIN_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.LOCAL_ADMIN_LOGIN_FAILED: ActivityCategory.SYSTEM,
+        ActivityEventType.USER_PASSWORD_CHANGED: ActivityCategory.SYSTEM,
         ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
         ActivityEventType.EXTERNAL_LOGIN_SUCCEEDED: ActivityCategory.SYSTEM,
         ActivityEventType.EXTERNAL_LOGIN_UNPROVISIONED: ActivityCategory.SYSTEM,
