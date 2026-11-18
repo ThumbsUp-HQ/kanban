@@ -346,12 +346,14 @@ export function WorkspaceHomeView(): JSX.Element {
               >
                 Docs
               </Link>
-              <Link
-                to={`/projects/${proj.identifier}/settings/custom-fields`}
-                className="kb-project-card-secondary-link"
-              >
-                Custom Fields
-              </Link>
+              {(proj.is_project_admin ?? proj.capabilities?.includes('ADMIN')) && (
+                <Link
+                  to={`/projects/${proj.identifier}/settings/custom-fields`}
+                  className="kb-project-card-secondary-link"
+                >
+                  Custom Fields
+                </Link>
+              )}
             </div>
           </div>
         ))}

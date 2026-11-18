@@ -557,14 +557,26 @@ export function IssuesWorkspaceRoute({
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
   const boardStates: BoardWorkflowState[] = useMemo(() => {
     if (projectStates.length > 0) {
-      return projectStates.map((s, idx) => ({
-        id: s.id,
-        name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
-        group: (['backlog', 'unstarted', 'started', 'completed', 'cancelled'].includes(s.group)
-          ? s.group
-          : 'unstarted') as BoardWorkflowState['group'],
-        sort_order: s.sort_order ?? idx + 1,
-      }));
+      return projectStates.map((s, idx) => {
+        const sAny = s as {
+          wip_hard_limit?: number | null;
+          wip_hard?: number | null;
+          wip_soft_limit?: number | null;
+          wip_soft?: number | null;
+        };
+        const wipHard = sAny.wip_hard_limit ?? sAny.wip_hard ?? (s.id === 'state-in-review' ? 3 : undefined);
+        const wipSoft = sAny.wip_soft_limit ?? sAny.wip_soft ?? (s.id === 'state-in-progress' ? 3 : undefined);
+        return {
+          id: s.id,
+          name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
+          group: (['backlog', 'unstarted', 'started', 'completed', 'cancelled'].includes(s.group)
+            ? s.group
+            : 'unstarted') as BoardWorkflowState['group'],
+          sort_order: s.sort_order ?? idx + 1,
+          ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
+          ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
+        };
+      });
     }
     return [
       { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
@@ -579,7 +591,8 @@ export function IssuesWorkspaceRoute({
   const boardIssues: BoardIssue[] = useMemo(() => {
     const fallbackStateId = boardStates[0]?.id ?? 'state-todo';
     return filteredIssues.map((issue, idx) => {
-      const exactMatch = boardStates.find((s) => s.id === issue.state.id);
+      const explicitStateId = (issue as { state_id?: string }).state_id ?? issue.state.id;
+      const exactMatch = boardStates.find((s) => s.id === explicitStateId);
       const nameMatch = boardStates.find(
         (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name)
       );

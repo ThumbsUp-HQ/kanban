@@ -17,6 +17,8 @@ export interface CreatedProject {
   readonly name: string;
   readonly description_markdown?: string;
   readonly modules_enabled?: boolean;
+  readonly is_project_admin?: boolean;
+  readonly capabilities?: readonly string[];
 }
 
 export interface CreateProjectModalProps {

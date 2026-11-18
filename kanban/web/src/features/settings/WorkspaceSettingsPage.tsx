@@ -226,8 +226,9 @@ export function WorkspaceSettingsPage(): JSX.Element {
   if (currentUser && !currentUser.is_server_admin && !currentUser.is_workspace_admin) {
     return (
       <div data-testid="workspace-settings-page" className="kb-settings-container">
-        <div data-testid="access-denied-message" className="kb-settings-alert kb-settings-alert-error">
-          You do not have administrative privileges to manage this workspace.
+        <div data-testid="access-denied-message" className="kb-settings-alert kb-settings-alert-error" role="alert">
+          <h2>Not found or no access</h2>
+          <p>You do not have administrative privileges to manage this workspace.</p>
         </div>
       </div>
     );

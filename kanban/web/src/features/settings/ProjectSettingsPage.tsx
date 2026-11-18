@@ -293,7 +293,7 @@ export function ProjectSettingsPage(): JSX.Element {
     return (
       <div data-testid="project-settings-page" className="kb-settings-container">
         <div className="kb-settings-error" role="alert">
-          <h2>Access Denied</h2>
+          <h2>Not found or no access</h2>
           <p>You do not have project administrator permissions for {projectKey}.</p>
         </div>
       </div>
