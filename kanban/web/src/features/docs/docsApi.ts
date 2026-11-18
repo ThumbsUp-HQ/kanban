@@ -270,6 +270,35 @@ export interface CreatedIssue {
   title?: string;
 }
 
+export interface IssueSummaryItem {
+  id: string;
+  key: string;
+  title: string;
+}
+
+export async function fetchProjectIssues(
+  projectKey: string,
+  limit = 50,
+): Promise<IssueSummaryItem[]> {
+  try {
+    const res = await typedFetch<{ items: { id: string; key: string; summary?: string; title?: string }[] }>(
+      'GET',
+      '/api/v1/projects/{projectKey}/issues',
+      {
+        params: { projectKey },
+        query: { limit },
+      },
+    );
+    return res.items.map((i) => ({
+      id: i.id,
+      key: i.key,
+      title: i.title ?? i.summary ?? i.key,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function createIssue(
   projectKey: string,
   payload: { title: string; description?: string },

@@ -162,7 +162,12 @@ describe('StickiesGrid', () => {
       fireEvent.click(convertItem);
     });
 
-    expect(onPromote).toHaveBeenCalledWith('s-1');
+    const confirmBtn = await screen.findByTestId('confirm-promote-btn');
+    act(() => {
+      fireEvent.click(confirmBtn);
+    });
+
+    expect(onPromote).toHaveBeenCalledWith('s-1', expect.anything());
     await waitFor(() => {
       expect(announcement.textContent).toContain('Promoted sticky to Doc');
     });

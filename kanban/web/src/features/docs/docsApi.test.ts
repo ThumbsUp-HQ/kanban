@@ -10,6 +10,7 @@ import {
   restorePageVersion,
   createIssue,
   createLink,
+  fetchProjectIssues,
 } from './docsApi';
 
 describe('docsApi', () => {
@@ -117,5 +118,28 @@ describe('docsApi', () => {
     expect(spy).toHaveBeenCalledWith('POST', '/api/v1/links', {
       body: { source_id: 's1', target_id: 't1', link_type: 'RELATES_TO' },
     });
+  });
+
+  it('fetchProjectIssues calls GET /api/v1/projects/{projectKey}/issues and formats items', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+      items: [
+        { id: 'i1', key: 'KAN-1', title: 'Issue 1' },
+        { id: 'i2', key: 'KAN-2', summary: 'Issue 2 without title' },
+      ],
+    });
+    const res = await fetchProjectIssues('KAN');
+    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/projects/{projectKey}/issues', {
+      params: { projectKey: 'KAN' },
+      query: { limit: 50 },
+    });
+    expect(res).toEqual([
+      { id: 'i1', key: 'KAN-1', title: 'Issue 1' },
+      { id: 'i2', key: 'KAN-2', title: 'Issue 2 without title' },
+    ]);
+
+    // Error fallback branch
+    spy.mockRejectedValueOnce(new Error('Network error'));
+    const fallbackRes = await fetchProjectIssues('KAN');
+    expect(fallbackRes).toEqual([]);
   });
 });

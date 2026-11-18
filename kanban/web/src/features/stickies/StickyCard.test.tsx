@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { StickyCard } from './StickyCard';
 import type { StickyItem } from './stickiesApi';
 
@@ -179,7 +179,8 @@ describe('StickyCard', () => {
     expect(screen.queryByTestId('sticky-promotion-banner')).toBeNull();
   });
 
-  it('clicking Promote to Doc invokes onPromote callback', () => {
+  it('clicking Promote to Doc invokes onPromote callback', async () => {
+    vi.useRealTimers();
     const onPromote = vi.fn().mockResolvedValue(undefined);
     const longSticky: StickyItem = {
       ...baseSticky,
@@ -196,14 +197,16 @@ describe('StickyCard', () => {
     );
 
     const promoteBtn = screen.getByRole('button', { name: 'Promote to Doc' });
-    act(() => {
-      fireEvent.click(promoteBtn);
-    });
+    fireEvent.click(promoteBtn);
 
-    expect(onPromote).toHaveBeenCalledWith('sticky-1');
+    const confirmBtn = await screen.findByTestId('confirm-promote-btn');
+    fireEvent.click(confirmBtn);
+
+    expect(onPromote).toHaveBeenCalledWith('sticky-1', expect.anything());
   });
 
-  it('⋯ menu allows Convert to Doc and Delete Sticky actions', () => {
+  it('⋯ menu allows Convert to Doc and Delete Sticky actions', async () => {
+    vi.useRealTimers();
     const onDelete = vi.fn();
     const onPromote = vi.fn().mockResolvedValue(undefined);
 
@@ -227,11 +230,12 @@ describe('StickyCard', () => {
     // Re-open and convert to doc
     fireEvent.click(menuTrigger);
     const convertItem = screen.getByRole('menuitem', { name: 'Convert to Doc' });
-    act(() => {
-      fireEvent.click(convertItem);
-    });
+    fireEvent.click(convertItem);
 
-    expect(onPromote).toHaveBeenCalledWith('sticky-1');
+    const confirmBtn = await screen.findByTestId('confirm-promote-btn');
+    fireEvent.click(confirmBtn);
+
+    expect(onPromote).toHaveBeenCalledWith('sticky-1', expect.anything());
   });
 
   it('access inspector button dispatches custom event', () => {
@@ -365,5 +369,97 @@ describe('StickyCard', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: 'Sticky actions' })).toBeNull();
+  });
+
+  it('renders inline error when onUpdate fails during color selection or snooze', async () => {
+    vi.useRealTimers();
+    try {
+      const onUpdate = vi.fn().mockRejectedValueOnce(new Error('Recolor network failure'));
+
+      render(
+        <StickyCard
+          sticky={baseSticky}
+          onUpdate={onUpdate}
+          onDelete={vi.fn()}
+          onPromote={vi.fn()}
+        />,
+      );
+
+      const swatches = screen.getAllByRole('radio');
+      const targetSwatch = swatches[1];
+      if (targetSwatch) {
+        fireEvent.click(targetSwatch);
+      }
+
+      await waitFor(() => {
+        expect(screen.getByText('Recolor network failure')).toBeDefined();
+      });
+
+      // Test non-Error branch on snooze
+      const longSticky: StickyItem = {
+        ...baseSticky,
+        body_markdown: 'y'.repeat(650),
+        promotion_recommended: true,
+      };
+      const onUpdateSnooze = vi.fn().mockRejectedValueOnce('raw snooze fail');
+
+      const { container } = render(
+        <StickyCard
+          sticky={longSticky}
+          onUpdate={onUpdateSnooze}
+          onDelete={vi.fn()}
+          onPromote={vi.fn()}
+        />,
+      );
+
+      const snoozeBtn = screen.getByRole('button', { name: 'Snooze promotion' });
+      fireEvent.click(snoozeBtn);
+
+      await waitFor(() => {
+        expect(container.querySelector('.sticky-card__inline-error')?.textContent).toBe('Failed to snooze promotion');
+      });
+    } finally {
+      vi.useFakeTimers();
+    }
+  });
+
+  it('handles promote button, confirm promote error, and access click event', () => {
+    vi.useRealTimers();
+    try {
+      const accessSpy = vi.fn();
+      window.addEventListener('kb:open-access-inspector', accessSpy);
+
+      const longSticky: StickyItem = {
+        ...baseSticky,
+        body_markdown: 'y'.repeat(650),
+        promotion_recommended: true,
+      };
+      const onPromote = vi.fn().mockRejectedValueOnce(new Error('Promotion rejection'));
+
+      render(
+        <StickyCard
+          sticky={longSticky}
+          onUpdate={vi.fn()}
+          onDelete={vi.fn()}
+          onPromote={onPromote}
+        />,
+      );
+
+      // Open promote modal
+      const promoteBtn = screen.getByRole('button', { name: 'Promote to Doc' });
+      fireEvent.click(promoteBtn);
+
+      // Modal should be mounted
+      expect(screen.getByTestId('sticky-promote-preview-modal')).toBeDefined();
+
+      // Access badge click
+      const accessBtn = screen.getByRole('button', { name: /access/i });
+      fireEvent.click(accessBtn);
+      expect(accessSpy).toHaveBeenCalled();
+
+      window.removeEventListener('kb:open-access-inspector', accessSpy);
+    } finally {
+      vi.useFakeTimers();
+    }
   });
 });

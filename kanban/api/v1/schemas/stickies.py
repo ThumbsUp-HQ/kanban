@@ -55,6 +55,9 @@ class StickyUpdate(BaseModel):
         default=None, description="Updated 6-color palette token"
     )
     sort_rank: str | None = Field(default=None, description="Updated sort rank")
+    promotion_snoozed_at_length: int | None = Field(
+        default=None, description="Length at which promotion was snoozed"
+    )
 
 
 class StickyPromoteRequest(BaseModel):
@@ -117,6 +120,12 @@ class PromotedDocSummary(BaseModel):
     title: str | None = Field(default=None, description="Target document title")
     restricted: bool = Field(
         default=False, description="True if target doc is hidden from the caller by RLS/ACLs"
+    )
+    root_page_id: uuid.UUID | None = Field(
+        default=None, description="Target document root page UUID for direct navigation"
+    )
+    root_page_canonical_key: str | None = Field(
+        default=None, description="Target document root page canonical key"
     )
 
 

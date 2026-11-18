@@ -92,6 +92,26 @@ async def get_project_docs_tree(
 
 
 @router.post(
+    "/projects/{project_ref}/docs/pages",
+    status_code=201,
+    response_model=PageResponse,
+    summary="Create page in a project",
+)
+async def create_project_page(
+    project_ref: str,
+    body: PageCreate,
+    caller: Caller,
+    session: Session,
+    response: Response,
+) -> PageResponse:
+    """Create a hierarchical page within a project, auto-creating a parent doc if needed."""
+    result, etag = await svc.create_page(session, caller, project_ref, body)
+    response.headers["ETag"] = etag
+    response.headers["Location"] = f"/api/v1/pages/{result.canonical_key}"
+    return result
+
+
+@router.post(
     "/docs/{doc_ref:path}/pages",
     status_code=201,
     response_model=PageResponse,

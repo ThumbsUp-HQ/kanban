@@ -170,6 +170,17 @@ describe('Stickies Views', () => {
           ok: true,
           json: () => Promise.resolve({ deleted: true }),
         })
+        // 4b. Promote preview
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              proposal: { title: 'Project Spec Doc' },
+              rendered_markdown: 'Preview body',
+              original_sha256: 'sha-preview',
+              acl_preview: { direct_entries_count: 2 },
+            }),
+        })
         // 5. Promote sticky s-proj-2
         .mockResolvedValueOnce({
           ok: true,
@@ -245,6 +256,8 @@ describe('Stickies Views', () => {
       fireEvent.click(menuTrigger2);
       const convertItem = screen.getByTestId('convert-to-doc-menuitem');
       fireEvent.click(convertItem);
+      const confirmBtn1 = await screen.findByTestId('confirm-promote-btn');
+      fireEvent.click(confirmBtn1);
       await waitFor(() => {
         expect(globalThis.fetch).toHaveBeenCalledWith(
           '/api/v1/stickies/s-proj-2/promote-to-doc',
@@ -367,6 +380,17 @@ describe('Stickies Views', () => {
           ok: true,
           json: () => Promise.resolve({ deleted: true }),
         })
+        // 3b. Promote preview
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              proposal: { title: 'Workspace Spec Doc' },
+              rendered_markdown: 'Preview body',
+              original_sha256: 'sha-ws-preview',
+              acl_preview: { direct_entries_count: 1 },
+            }),
+        })
         // 4. Promote sticky s-ws-2
         .mockResolvedValueOnce({
           ok: true,
@@ -432,6 +456,8 @@ describe('Stickies Views', () => {
       fireEvent.click(menuTrigger2);
       const convertItem = screen.getByTestId('convert-to-doc-menuitem');
       fireEvent.click(convertItem);
+      const confirmBtn2 = await screen.findByTestId('confirm-promote-btn');
+      fireEvent.click(confirmBtn2);
       await waitFor(() => {
         expect(globalThis.fetch).toHaveBeenCalledWith(
           '/api/v1/stickies/s-ws-2/promote-to-doc',

@@ -30,6 +30,31 @@ class LinkCreateRequest(BaseModel):
     )
 
 
+class DirectLinkCreateRequest(BaseModel):
+    """Payload for creating a directed typed link specifying both source and target."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Source object reference (UUID, canonical key, or project identifier)",
+    )
+    target_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Target object reference (UUID, canonical key, or project identifier)",
+    )
+    link_type: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="User-creatable link kind (e.g. BLOCKS, RELATES_TO, VERIFIED_BY_DOC)",
+    )
+
+
 class UnrestrictedEndpointOut(BaseModel):
     """Visible far endpoint details when readable by the caller."""
 

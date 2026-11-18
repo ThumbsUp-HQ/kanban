@@ -1,0 +1,271 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w4-docs-ee250303
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 42 items
+
+kanban/tests/api/test_docs_pages.py .........                            [ 21%]
+kanban/tests/api/test_links.py ............                              [ 50%]
+kanban/tests/api/test_stickies.py ........                               [ 69%]
+kanban/tests/services/test_sticky_heuristic.py .......                   [ 85%]
+kanban/tests/stickies/test_sticky_promo_ai_api.py ......                 [100%]
+
+============================= 42 passed in 16.73s ==============================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w4-docs-ee250303/kanban/web
+> vitest run src/features/docs src/features/stickies
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w4-docs-ee250303/kanban/web
+
+ ✓ src/features/stickies/stickyHeuristic.test.ts (25 tests) 32ms
+ ✓ src/features/stickies/stickiesApi.test.ts (9 tests) 47ms
+ ✓ src/features/docs/docsApi.test.ts (10 tests) 69ms
+stderr | src/features/docs/PageEditorPaneIsolated.test.tsx > PageEditorPaneIsolated > handles markdown change, shortcut save with active debounce, and blur save
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/docs/OutlineAndVersionsRail.test.tsx > OutlineAndVersionsRail > scrolls into view when an outline heading is clicked and handles observer callback
+An update to OutlineAndVersionsRail inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/stickies/PromotedStickyStub.test.tsx (5 tests) 468ms
+   ✓ PromotedStickyStub (5)
+     ✓ renders promoted badge, title, stripped preview, and open link 330ms
+stderr | src/features/docs/PageEditorPaneIsolated.test.tsx > PageEditorPaneIsolated > handles copy draft timeout and clipboard rejection fallback
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/stickies/StickyPromotionBanner.test.tsx (3 tests) 318ms
+ ✓ src/features/docs/SelectionToIssueToolbar.test.tsx (4 tests) 365ms
+ ✓ src/features/docs/OutlineAndVersionsRail.test.tsx (11 tests) 496ms
+ ✓ src/features/docs/DocsTreeNav.test.tsx (9 tests) 683ms
+ ✓ src/features/stickies/StickiesGrid.test.tsx (6 tests) 434ms
+stderr | src/features/stickies/StickyCard.test.tsx > StickyCard > clicking Promote to Doc invokes onPromote callback
+An update to StickyCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/stickies/StickyCard.test.tsx > StickyCard > clicking Promote to Doc invokes onPromote callback
+An update to StickyCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to StickyPromotePreviewModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/stickies/StickyCard.test.tsx > StickyCard > ⋯ menu allows Convert to Doc and Delete Sticky actions
+An update to StickyCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/stickies/StickyCard.test.tsx > StickyCard > ⋯ menu allows Convert to Doc and Delete Sticky actions
+An update to StickyCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to StickyPromotePreviewModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/docs/docsCoverageBooster.test.tsx > Docs Coverage Boosters > PageEditorPane handles control characters in title and title typing validation
+An update to SparkleOverlayPortal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/docs/PageEditorPane.test.tsx (10 tests) 554ms
+ ✓ src/features/stickies/StickyCard.test.tsx (11 tests) 588ms
+ ✓ src/features/stickies/StickiesViews.test.tsx (6 tests) 709ms
+   ✓ Stickies Views (6)
+     ✓ ProjectOverviewView (2)
+       ✓ handles query, creation, update, deletion, promote, and unarchive 500ms
+ ✓ src/features/docs/DocsWorkspaceView.test.tsx (8 tests) 414ms
+stderr | src/features/docs/docsCoverageBooster.test.tsx > Docs Coverage Boosters > PageEditorPane handles control characters in title and title typing validation
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/docs/docsCoverageBooster.test.tsx > Docs Coverage Boosters > PageEditorPane handles control characters in title and title typing validation
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/docs/docsCoverageBooster.test.tsx > Docs Coverage Boosters > PageEditorPane handles control characters in title and title typing validation
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/docs/PageEditorPaneIsolated.test.tsx > PageEditorPaneIsolated > handles copy draft timeout and clipboard rejection fallback
+An update to InnerEditorForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/docs/docsCoverageBooster.test.tsx (20 tests) 1941ms
+   ✓ Docs Coverage Boosters (20)
+     ✓ PageEditorPane handles control characters in title and title typing validation 948ms
+ ✓ src/features/docs/PageEditorPaneIsolated.test.tsx (3 tests) 2513ms
+   ✓ PageEditorPaneIsolated (3)
+     ✓ handles copy draft timeout and clipboard rejection fallback 2344ms
+stderr | src/features/docs/DocsWorkspaceViewIsolated.test.tsx > DocsWorkspaceViewIsolated > executes own tree and page queryFn and handles announcement timeout
+An update to DocsWorkspaceView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/docs/DocsWorkspaceViewIsolated.test.tsx (1 test) 4229ms
+   ✓ DocsWorkspaceViewIsolated (1)
+     ✓ executes own tree and page queryFn and handles announcement timeout 4222ms
+
+ Test Files  16 passed (16)
+      Tests  141 passed (141)
+   Start at  17:44:44
+   Duration  6.58s (environment 53%, tests 29%, import 14%, transform 2%, worker 1%)
+

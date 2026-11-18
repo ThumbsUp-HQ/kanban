@@ -28,7 +28,16 @@ export interface StickiesGridProps {
     etag?: string,
   ) => Promise<void> | void;
   onDeleteSticky: (stickyId: string) => Promise<void> | void;
-  onPromoteSticky: (stickyId: string) => Promise<void> | void;
+  onPromoteSticky: (
+    stickyId: string,
+    payload?: {
+      title?: string;
+      parent_doc_id?: string;
+      parent_page_id?: string;
+      structured_body_markdown?: string;
+      expected_sticky_sha256?: string;
+    },
+  ) => Promise<void> | void;
   onUnarchiveCopy: (stickyId: string) => Promise<void> | void;
 }
 
@@ -46,8 +55,17 @@ export function StickiesGrid({
 }: StickiesGridProps): JSX.Element {
   const [announcement, setAnnouncement] = useState<string | null>(null);
 
-  const handlePromote = async (stickyId: string): Promise<void> => {
-    await onPromoteSticky(stickyId);
+  const handlePromote = async (
+    stickyId: string,
+    payload?: {
+      title?: string;
+      parent_doc_id?: string;
+      parent_page_id?: string;
+      structured_body_markdown?: string;
+      expected_sticky_sha256?: string;
+    },
+  ): Promise<void> => {
+    await onPromoteSticky(stickyId, payload);
     setAnnouncement('Promoted sticky to Doc - exact ACLs and object links preserved.');
   };
 

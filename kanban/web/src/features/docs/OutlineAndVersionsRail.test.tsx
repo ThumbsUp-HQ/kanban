@@ -6,6 +6,7 @@ import {
   OutlineAndVersionsRail,
   extractHeadings,
   stripInlineMarkdown,
+  computeLineDiff,
 } from './OutlineAndVersionsRail';
 import * as docsApi from './docsApi';
 
@@ -268,6 +269,143 @@ def foo(): pass
 
     await waitFor(() => {
       expect(onAnnounce).toHaveBeenCalledWith('Restore error: Precondition error');
+    });
+  });
+
+  describe('computeLineDiff', () => {
+    it('returns 0 changes for identical texts', () => {
+      const res = computeLineDiff('Line 1\nLine 2', 'Line 1\nLine 2');
+      expect(res.addedCount).toBe(0);
+      expect(res.removedCount).toBe(0);
+      expect(res.lines).toHaveLength(2);
+      expect(res.lines.every((l) => l.type === 'unchanged')).toBe(true);
+    });
+
+    it('identifies added and removed lines', () => {
+      const oldText = 'Line 1\nLine 2';
+      const newText = 'Line 1\nLine 2 updated\nLine 3';
+      const res = computeLineDiff(oldText, newText);
+      expect(res.addedCount).toBe(2);
+      expect(res.removedCount).toBe(1);
+    });
+  });
+
+  it('toggles between Diff vs Current and Raw Content views in history preview', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OutlineAndVersionsRail
+          pageId="page-auth-studio"
+          projectKey="KAN"
+          page={mockPageData}
+          markdownContent="# Overview\n\nModified current content."
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('rail-tab-history'));
+    await waitFor(() => {
+      expect(screen.getByTestId('version-item-v5')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('version-item-v5'));
+
+    // Check diff mode is active by default
+    await waitFor(() => {
+      expect(screen.getByTestId('version-diff-container')).toBeDefined();
+      expect(screen.getByTestId('version-diff-stats')).toBeDefined();
+    });
+
+    // Toggle to raw content
+    fireEvent.click(screen.getByTestId('version-view-raw-tab'));
+    expect(screen.queryByTestId('version-diff-container')).toBeNull();
+    expect(screen.getByTestId('version-preview-body')).toBeDefined();
+
+    // Toggle back to diff
+    fireEvent.click(screen.getByTestId('version-view-diff-tab'));
+    expect(screen.getByTestId('version-diff-container')).toBeDefined();
+  });
+
+  it('opens searchable link picker, searches issues, and links selected issue', async () => {
+    vi.spyOn(docsApi, 'fetchProjectIssues').mockResolvedValue([
+      { id: 'issue-1', key: 'KAN-1', title: 'First Issue' },
+      { id: 'issue-2', key: 'KAN-2', title: 'Second Target' },
+    ]);
+    const linkSpy = vi.spyOn(docsApi, 'createLink').mockResolvedValue({ ok: true });
+    const onAnnounce = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OutlineAndVersionsRail
+          pageId="page-auth-studio"
+          projectKey="KAN"
+          page={mockPageData}
+          onAnnounce={onAnnounce}
+        />
+      </QueryClientProvider>,
+    );
+
+    // Click + Link Issue
+    fireEvent.click(screen.getByTestId('open-link-issue-picker-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('doc-issue-link-picker')).toBeDefined();
+      expect(screen.getByTestId('link-issue-result-KAN-1')).toBeDefined();
+    });
+
+    // Search filter
+    fireEvent.change(screen.getByTestId('link-issue-search-input'), {
+      target: { value: 'Second' },
+    });
+    expect(screen.queryByTestId('link-issue-result-KAN-1')).toBeNull();
+    expect(screen.getByTestId('link-issue-result-KAN-2')).toBeDefined();
+
+    // Select issue KAN-2
+    fireEvent.click(screen.getByTestId('link-issue-result-KAN-2'));
+
+    // Select relationship type
+    fireEvent.change(screen.getByTestId('link-issue-type-select'), {
+      target: { value: 'RELATES_TO' },
+    });
+
+    // Confirm link
+    fireEvent.click(screen.getByTestId('confirm-link-issue-btn'));
+
+    await waitFor(() => {
+      expect(linkSpy).toHaveBeenCalledWith({
+        source_id: 'issue-2',
+        target_id: 'page-auth-studio',
+        link_type: 'RELATES_TO',
+      });
+      expect(onAnnounce).toHaveBeenCalledWith('Linked issue successfully');
+    });
+  });
+
+  it('handles link issue error gracefully in link picker', async () => {
+    vi.spyOn(docsApi, 'fetchProjectIssues').mockResolvedValue([
+      { id: 'issue-1', key: 'KAN-1', title: 'Problem Issue' },
+    ]);
+    vi.spyOn(docsApi, 'createLink').mockRejectedValue(new Error('Link collision'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OutlineAndVersionsRail
+          pageId="page-auth-studio"
+          projectKey="KAN"
+          page={mockPageData}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('open-link-issue-picker-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('link-issue-result-KAN-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('link-issue-result-KAN-1'));
+    fireEvent.click(screen.getByTestId('confirm-link-issue-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('link-issue-error').textContent).toContain('Link collision');
     });
   });
 });

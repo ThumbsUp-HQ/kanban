@@ -75,6 +75,7 @@ export function MarkdownEditor({
   const originalSourceRef = useRef<string>(value);
   const lastSerializedRef = useRef<string>(value);
   const valueRef = useRef<string>(value);
+  const prevExternalValueRef = useRef<string>(value);
   const onChangeRef = useRef(onChange);
   const onBlurRef = useRef(onBlur);
   const onAnnounceRef = useRef(onAnnounce);
@@ -104,8 +105,10 @@ export function MarkdownEditor({
     setIsRawMode((prev) => {
       if (prev) {
         // Raw -> WYSIWYG: notify parent with current raw text and transition to WYSIWYG
-        lastSerializedRef.current = rawTextRef.current;
-        onChangeRef.current(rawTextRef.current);
+        const currentRaw = rawTextRef.current;
+        lastSerializedRef.current = currentRaw;
+        valueRef.current = currentRaw;
+        onChangeRef.current(currentRaw);
         return false;
       } else {
         // WYSIWYG -> Raw: serialize current ProseMirror doc
@@ -116,6 +119,8 @@ export function MarkdownEditor({
         setRawText(currentMarkdown);
         rawTextRef.current = currentMarkdown;
         lastSerializedRef.current = currentMarkdown;
+        valueRef.current = currentMarkdown;
+        onChangeRef.current(currentMarkdown);
         return true;
       }
     });
@@ -205,10 +210,12 @@ export function MarkdownEditor({
   // Synchronize external value changes with ProseMirror state when in WYSIWYG mode
   useEffect(() => {
     if (isRawMode) {
+      prevExternalValueRef.current = value;
       return;
     }
 
-    if (value !== lastSerializedRef.current && viewRef.current) {
+    if (value !== prevExternalValueRef.current && value !== lastSerializedRef.current && viewRef.current) {
+      prevExternalValueRef.current = value;
       const { doc, originalSource } = parseMarkdown(value);
       originalSourceRef.current = originalSource;
       lastSerializedRef.current = value;
@@ -221,6 +228,8 @@ export function MarkdownEditor({
 
       const tr = newState.tr.setMeta('skipSourceSliceDirty', true);
       viewRef.current.updateState(newState.apply(tr));
+    } else {
+      prevExternalValueRef.current = value;
     }
   }, [value, isRawMode, getPlugins]);
 

@@ -630,3 +630,36 @@ async def test_build_canonical_url_direct_service_coverage() -> None:
     )
     res_view = build_canonical_url(settings, view_obj)
     assert res_view.url == "https://kb.test/views/view-triage"
+
+
+async def test_direct_link_creation_endpoint(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test POST /api/v1/links direct body-based link creation."""
+    admin = await make_user("link_direct_admin", workspace_role="WORKSPACE_ADMIN")
+    await make_project("KAN", created_by=admin)
+    client = as_principal(admin)
+
+    i1 = await client.post(
+        "/api/v1/projects/KAN/issues",
+        json={"summary": "Direct Link Issue 1", "description_markdown": "Desc 1"},
+    )
+    assert i1.status_code == 201, i1.text
+    k1 = i1.json()["key"]
+
+    i2 = await client.post(
+        "/api/v1/projects/KAN/issues",
+        json={"summary": "Direct Link Issue 2", "description_markdown": "Desc 2"},
+    )
+    assert i2.status_code == 201, i2.text
+    k2 = i2.json()["key"]
+
+    # Call POST /api/v1/links directly
+    r_direct = await client.post(
+        "/api/v1/links",
+        json={"source_id": k1, "target_id": k2, "link_type": "RELATES_TO"},
+    )
+    assert r_direct.status_code == 201, r_direct.text
+    assert r_direct.json()["link_type"] == "RELATES_TO"

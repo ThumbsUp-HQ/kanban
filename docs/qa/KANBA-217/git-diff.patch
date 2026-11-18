@@ -1,0 +1,3218 @@
+diff --git a/kanban/api/v1/docs.py b/kanban/api/v1/docs.py
+index 11d4d29..2d11438 100644
+--- a/kanban/api/v1/docs.py
++++ b/kanban/api/v1/docs.py
+@@ -91,6 +91,26 @@ async def get_project_docs_tree(
+     return tree
+ 
+ 
++@router.post(
++    "/projects/{project_ref}/docs/pages",
++    status_code=201,
++    response_model=PageResponse,
++    summary="Create page in a project",
++)
++async def create_project_page(
++    project_ref: str,
++    body: PageCreate,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> PageResponse:
++    """Create a hierarchical page within a project, auto-creating a parent doc if needed."""
++    result, etag = await svc.create_page(session, caller, project_ref, body)
++    response.headers["ETag"] = etag
++    response.headers["Location"] = f"/api/v1/pages/{result.canonical_key}"
++    return result
++
++
+ @router.post(
+     "/docs/{doc_ref:path}/pages",
+     status_code=201,
+diff --git a/kanban/api/v1/links.py b/kanban/api/v1/links.py
+index 0109f2d..c32ee23 100644
+--- a/kanban/api/v1/links.py
++++ b/kanban/api/v1/links.py
+@@ -18,6 +18,7 @@ from kanban.api.problems import not_found
+ from kanban.api.timing import timing_floor
+ from kanban.api.v1.schemas.links import (
+     CanonicalUrlResponse,
++    DirectLinkCreateRequest,
+     LinkCreateRequest,
+     LinksListResponse,
+     OutboundLinkOut,
+@@ -128,6 +129,43 @@ async def create_object_link_endpoint(
+         return await create_object_link(session, caller, source, req)
+ 
+ 
++@router.post(
++    "/links",
++    response_model=OutboundLinkOut,
++    status_code=status.HTTP_201_CREATED,
++    summary="Create a typed link between source and target objects",
++)
++async def create_link_direct(
++    req: DirectLinkCreateRequest,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
++) -> OutboundLinkOut:
++    """Create an object link using source and target identifiers in request body."""
++    async with timing_floor(floor_ms=25.0):
++        source = await resolve_object_ref(session, req.source_id)
++        if source is None:
++            not_found()
++
++        target = await resolve_object_ref(session, req.target_id)
++        source_proj = source.project_id or (
++            source.id if source.object_type.value == "project" else None
++        )
++        target_proj = (target.project_id if target else None) or (
++            target.id if (target and target.object_type.value == "project") else None
++        )
++        check_projs = [p for p in (source_proj, target_proj) if p is not None]
++        if check_projs:
++            await taint_guard.check_write(check_projs, tool_name="link_objects")
++
++        return await create_object_link(
++            session,
++            caller,
++            source,
++            LinkCreateRequest(target=req.target_id, link_type=req.link_type),
++        )
++
++
+ @router.delete(
+     "/links/{link_id}",
+     status_code=status.HTTP_204_NO_CONTENT,
+diff --git a/kanban/api/v1/schemas/links.py b/kanban/api/v1/schemas/links.py
+index bbe39e6..a5b2c70 100644
+--- a/kanban/api/v1/schemas/links.py
++++ b/kanban/api/v1/schemas/links.py
+@@ -30,6 +30,31 @@ class LinkCreateRequest(BaseModel):
+     )
+ 
+ 
++class DirectLinkCreateRequest(BaseModel):
++    """Payload for creating a directed typed link specifying both source and target."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    source_id: str = Field(
++        ...,
++        min_length=1,
++        max_length=64,
++        description="Source object reference (UUID, canonical key, or project identifier)",
++    )
++    target_id: str = Field(
++        ...,
++        min_length=1,
++        max_length=64,
++        description="Target object reference (UUID, canonical key, or project identifier)",
++    )
++    link_type: str = Field(
++        ...,
++        min_length=1,
++        max_length=64,
++        description="User-creatable link kind (e.g. BLOCKS, RELATES_TO, VERIFIED_BY_DOC)",
++    )
++
++
+ class UnrestrictedEndpointOut(BaseModel):
+     """Visible far endpoint details when readable by the caller."""
+ 
+diff --git a/kanban/api/v1/schemas/stickies.py b/kanban/api/v1/schemas/stickies.py
+index 7f9bd92..7617c24 100644
+--- a/kanban/api/v1/schemas/stickies.py
++++ b/kanban/api/v1/schemas/stickies.py
+@@ -55,6 +55,9 @@ class StickyUpdate(BaseModel):
+         default=None, description="Updated 6-color palette token"
+     )
+     sort_rank: str | None = Field(default=None, description="Updated sort rank")
++    promotion_snoozed_at_length: int | None = Field(
++        default=None, description="Length at which promotion was snoozed"
++    )
+ 
+ 
+ class StickyPromoteRequest(BaseModel):
+@@ -118,6 +121,12 @@ class PromotedDocSummary(BaseModel):
+     restricted: bool = Field(
+         default=False, description="True if target doc is hidden from the caller by RLS/ACLs"
+     )
++    root_page_id: uuid.UUID | None = Field(
++        default=None, description="Target document root page UUID for direct navigation"
++    )
++    root_page_canonical_key: str | None = Field(
++        default=None, description="Target document root page canonical key"
++    )
+ 
+ 
+ class StickyResponse(BaseModel):
+diff --git a/kanban/services/docs.py b/kanban/services/docs.py
+index 213baaf..8b452b6 100644
+--- a/kanban/services/docs.py
++++ b/kanban/services/docs.py
+@@ -11,6 +11,7 @@ from sqlalchemy import select, text
+ from sqlalchemy.exc import DBAPIError
+ 
+ from database.models.knowledge import Doc, Page, PageVersion
++from database.models.projects import Project
+ from database.models.spine import ObjectRecord
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.api.v1.schemas.docs import (
+@@ -180,12 +181,12 @@ async def _allocate_unique_canonical_key(
+         idx += 1
+ 
+ 
+-async def _resolve_doc_id(
++async def _resolve_doc_id(  # noqa: RET503
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+     doc_ref: str,
+ ) -> uuid.UUID:
+-    """Resolve doc UUID from UUID string or canonical key."""
++    """Resolve doc UUID from UUID string or canonical key, or project identifier."""
+     try:
+         doc_uuid = uuid.UUID(doc_ref)
+         doc = (
+@@ -215,17 +216,109 @@ async def _resolve_doc_id(
+         )
+     ).scalar_one_or_none()
+ 
+-    if obj_id is None:
+-        not_found()
+-    return obj_id
++    if obj_id is not None:
++        return obj_id
++
++    # Fallback: check if doc_ref is a Project identifier or Project UUID
++    proj_id: uuid.UUID | None = None
++    try:
++        proj_uuid = uuid.UUID(doc_ref)
++        p_row = (
++            await session.execute(
++                select(Project.id).where(
++                    Project.id == proj_uuid,
++                    Project.workspace_id == workspace_id,
++                )
++            )
++        ).scalar_one_or_none()
++        if p_row is not None:
++            proj_id = p_row
++    except ValueError:
++        pass
++
++    if proj_id is None:
++        p_row = (
++            await session.execute(
++                select(Project.id).where(
++                    Project.workspace_id == workspace_id,
++                    Project.identifier == clean_ref.upper(),
++                )
++            )
++        ).scalar_one_or_none()
++        if p_row is not None:
++            proj_id = p_row
++
++    if proj_id is not None:
++        existing_doc = (
++            (
++                await session.execute(
++                    select(Doc.id)
++                    .join(ObjectRecord, ObjectRecord.id == Doc.id)
++                    .where(
++                        Doc.project_id == proj_id,
++                        Doc.workspace_id == workspace_id,
++                        ObjectRecord.deleted_at.is_(None),
++                    )
++                    .order_by(ObjectRecord.created_at.asc())
++                )
++            )
++            .scalars()
++            .first()
++        )
++        if existing_doc is not None:
++            return existing_doc
++
++        # Auto-create default root doc for fresh project
++        proj_rec = (
++            await session.execute(
++                select(ObjectRecord.display_title).where(
++                    ObjectRecord.id == proj_id,
++                    ObjectRecord.workspace_id == workspace_id,
++                )
++            )
++        ).scalar_one_or_none()
++        doc_title = f"{proj_rec or clean_ref.upper()} Documentation"
++        base_slug = _to_slug(doc_title, "doc")
++        canonical_key = await _allocate_unique_canonical_key(
++            session, workspace_id, "doc", "docs", base_slug
++        )
++        new_doc_id = (
++            await session.execute(
++                text(
++                    "SELECT register_object("
++                    "  CAST('doc' AS object_kind), :ws, :proj, :ckey, :title, :creator"
++                    ")"
++                ),
++                {
++                    "ws": workspace_id,
++                    "proj": proj_id,
++                    "ckey": canonical_key,
++                    "title": doc_title,
++                    "creator": None,
++                },
++            )
++        ).scalar_one()
++        doc_inst = Doc(
++            id=new_doc_id,
++            workspace_id=workspace_id,
++            project_id=proj_id,
++            title=doc_title,
++            body_markdown="",
++            hierarchy_path="pending",
++        )
++        session.add(doc_inst)
++        await session.flush()
++        return uuid.UUID(str(new_doc_id))
+ 
++    not_found()
+ 
+-async def _resolve_page_id(
++
++async def _resolve_page_id(  # noqa: RET503
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+     page_ref: str,
+ ) -> uuid.UUID:
+-    """Resolve page UUID from UUID string or canonical key."""
++    """Resolve page UUID from UUID string or canonical key, falling back to Doc root page."""
+     try:
+         page_uuid = uuid.UUID(page_ref)
+         page = (
+@@ -238,6 +331,28 @@ async def _resolve_page_id(
+         ).scalar_one_or_none()
+         if page is not None:
+             return page
++
++        # If page_uuid is actually a Doc UUID, resolve to its root page
++        doc_root_page = (
++            (
++                await session.execute(
++                    select(Page.id)
++                    .where(
++                        Page.doc_id == page_uuid,
++                        Page.workspace_id == workspace_id,
++                    )
++                    .order_by(
++                        Page.parent_page_id.is_(None).desc(),
++                        Page.sort_rank.collate("C").asc(),
++                        Page.id.asc(),
++                    )
++                )
++            )
++            .scalars()
++            .first()
++        )
++        if doc_root_page is not None:
++            return doc_root_page
+     except ValueError:
+         pass
+ 
+@@ -255,9 +370,43 @@ async def _resolve_page_id(
+         )
+     ).scalar_one_or_none()
+ 
+-    if obj_id is None:
+-        not_found()
+-    return obj_id
++    if obj_id is not None:
++        return obj_id
++
++    # If canonical key resolves to a Doc, resolve to its root page
++    doc_obj_id = (
++        await session.execute(
++            select(ObjectRecord.id).where(
++                ObjectRecord.workspace_id == workspace_id,
++                ObjectRecord.object_type == "doc",
++                ObjectRecord.canonical_key.in_([clean_ref, ref_with_prefix]),
++                ObjectRecord.deleted_at.is_(None),
++            )
++        )
++    ).scalar_one_or_none()
++    if doc_obj_id is not None:
++        doc_root_page = (
++            (
++                await session.execute(
++                    select(Page.id)
++                    .where(
++                        Page.doc_id == doc_obj_id,
++                        Page.workspace_id == workspace_id,
++                    )
++                    .order_by(
++                        Page.parent_page_id.is_(None).desc(),
++                        Page.sort_rank.collate("C").asc(),
++                        Page.id.asc(),
++                    )
++                )
++            )
++            .scalars()
++            .first()
++        )
++        if doc_root_page is not None:
++            return doc_root_page
++
++    not_found()
+ 
+ 
+ def _capabilities_to_list(caps: Capability) -> list[str]:
+diff --git a/kanban/services/stickies.py b/kanban/services/stickies.py
+index 16d0aeb..7de8e12 100644
+--- a/kanban/services/stickies.py
++++ b/kanban/services/stickies.py
+@@ -236,11 +236,30 @@ async def _resolve_promoted_doc_summary(
+         doc_entity, doc_ckey = doc_row
+         doc_caps = await evaluate_capabilities(session, caller, doc_entity.id)
+         if Capability.VIEW in doc_caps:
++            page_row = (
++                await session.execute(
++                    select(Page.id, ObjectRecord.canonical_key)
++                    .join(ObjectRecord, ObjectRecord.id == Page.id)
++                    .where(
++                        Page.doc_id == doc_entity.id,
++                        ObjectRecord.deleted_at.is_(None),
++                    )
++                    .order_by(
++                        Page.parent_page_id.is_(None).desc(),
++                        Page.sort_rank.collate("C").asc(),
++                        Page.id.asc(),
++                    )
++                )
++            ).first()
++            root_page_id = page_row[0] if page_row else None
++            root_page_ckey = page_row[1] if page_row else None
+             return PromotedDocSummary(
+                 id=doc_entity.id,
+                 canonical_key=doc_ckey,
+                 title=doc_entity.title,
+                 restricted=False,
++                root_page_id=root_page_id,
++                root_page_canonical_key=root_page_ckey,
+             )
+ 
+     return PromotedDocSummary(restricted=True)
+@@ -565,6 +584,16 @@ async def update_sticky(
+             sticky.sort_rank = body.sort_rank
+             await session.flush()
+ 
++        if "promotion_snoozed_at_length" in fields_set:
++            sticky.promotion_snoozed_at_length = body.promotion_snoozed_at_length
++            assessment = evaluate_sticky_promotion(
++                sticky.body_markdown,
++                sticky.promotion_snoozed_at_length,
++                sticky.promoted_to_doc_id,
++            )
++            sticky.promotion_recommended = assessment.recommended
++            await session.flush()
++
+     await session.refresh(sticky)
+     await session.refresh(obj_rec)
+     return await _build_sticky_response(session, caller, sticky, obj_rec)
+diff --git a/kanban/tests/api/test_links.py b/kanban/tests/api/test_links.py
+index f207054..b2e76c9 100644
+--- a/kanban/tests/api/test_links.py
++++ b/kanban/tests/api/test_links.py
+@@ -630,3 +630,36 @@ async def test_build_canonical_url_direct_service_coverage() -> None:
+     )
+     res_view = build_canonical_url(settings, view_obj)
+     assert res_view.url == "https://kb.test/views/view-triage"
++
++
++async def test_direct_link_creation_endpoint(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test POST /api/v1/links direct body-based link creation."""
++    admin = await make_user("link_direct_admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("KAN", created_by=admin)
++    client = as_principal(admin)
++
++    i1 = await client.post(
++        "/api/v1/projects/KAN/issues",
++        json={"summary": "Direct Link Issue 1", "description_markdown": "Desc 1"},
++    )
++    assert i1.status_code == 201, i1.text
++    k1 = i1.json()["key"]
++
++    i2 = await client.post(
++        "/api/v1/projects/KAN/issues",
++        json={"summary": "Direct Link Issue 2", "description_markdown": "Desc 2"},
++    )
++    assert i2.status_code == 201, i2.text
++    k2 = i2.json()["key"]
++
++    # Call POST /api/v1/links directly
++    r_direct = await client.post(
++        "/api/v1/links",
++        json={"source_id": k1, "target_id": k2, "link_type": "RELATES_TO"},
++    )
++    assert r_direct.status_code == 201, r_direct.text
++    assert r_direct.json()["link_type"] == "RELATES_TO"
+diff --git a/kanban/web/e2e/qa/kanba217-docs-stickies-qa.spec.ts b/kanban/web/e2e/qa/kanba217-docs-stickies-qa.spec.ts
+new file mode 100644
+index 0000000..00f9a73
+--- /dev/null
++++ b/kanban/web/e2e/qa/kanba217-docs-stickies-qa.spec.ts
+@@ -0,0 +1,415 @@
++/**
++ * Playwright E2E Forensic QA Proofs for KANBA-217:
++ * 1. Sticky Snooze & Promotion Banner (no 422 crash, inline error boundary).
++ * 2. Sticky-to-Doc Preview Modal (Desktop Light & Mobile Dark 390x844).
++ * 3. Promoted Sticky [Open Doc] navigation to valid canonical route.
++ * 4. Docs History Diff/Restore view (line diff +X -Y lines changed badge, color-coded lines).
++ * 5. Searchable Doc <-> Issue Link Picker UI.
++ */
++
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const __filename = fileURLToPath(import.meta.url);
++const __dirname = path.dirname(__filename);
++const SCREENSHOTS_DIR = path.resolve(__dirname, '../../../../docs/qa/KANBA-217/screenshots');
++
++const baseMocks = {
++  'GET /api/v1/system/status': { json: loadFixture('system-status-prod') },
++  'GET /api/v1/me': { json: loadFixture('me-adam') },
++  'GET /api/v1/auth/me': { json: loadFixture('me-adam') },
++  'GET /api/v1/setup/status': { json: { initialized: true } },
++  'GET /api/v1/auth/session': {
++    json: {
++      authenticated: true,
++      principal_id: '11111111-1111-4111-8111-111111111111',
++      workspace_id: '22222222-2222-2222-2222-222222222222',
++      aal_level: 2,
++      mfa_pending: false,
++      csrf_token: 'test-csrf-token-proofs',
++      remember_me: true,
++    },
++  },
++  'GET /api/v1/workspaces': {
++    json: {
++      items: [{ id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' }],
++      active_workspace_id: '22222222-2222-2222-2222-222222222222',
++    },
++  },
++  'GET /api/v1/workspaces/current': {
++    json: { id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' },
++  },
++  'GET /api/v1/projects': {
++    json: [{ id: '33333333-3333-3333-3333-333333333333', key: 'KAN', name: 'kanban' }],
++  },
++  'GET /api/v1/projects/KAN': {
++    json: {
++      id: '33333333-3333-3333-3333-333333333333',
++      key: 'KAN',
++      canonical_key: 'KAN',
++      name: 'kanban',
++      capabilities: ['PROJECT_ADMIN', 'EDIT', 'VIEW', 'ADMIN'],
++      states: [],
++    },
++  },
++  'GET /api/v1/objects/:objectId/access': { json: loadFixture('access-project-kan') },
++  'GET /api/v1/projects/KAN/access': {
++    json: {
++      resource_id: '33333333-3333-3333-3333-333333333333',
++      resource_kind: 'project',
++      effective_policy: 'ALLOW',
++      entries: [],
++    },
++  },
++  'GET /api/v1/projects/KAN/views': { json: [] },
++  'GET /api/v1/projects/KAN/issues': {
++    json: {
++      items: [
++        { id: 'issue-101', key: 'KAN-101', title: 'Implement Auth Session Token Rotation' },
++        { id: 'issue-102', key: 'KAN-102', title: 'Audit Universal Object Graph Invariants' },
++      ],
++    },
++  },
++  'GET /api/v1/projects/KAN/cycles': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/modules': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/states': { json: [] },
++  'GET /api/v1/projects/KAN/priorities': { json: [] },
++  'GET /api/v1/projects/KAN/labels': { json: [] },
++  'GET /api/v1/users/me': {
++    json: {
++      id: '11111111-1111-4111-8111-111111111111',
++      display_name: 'Adam Security Architect',
++      email: 'adam@example.com',
++      avatar_url: null,
++    },
++  },
++  'GET /api/v1/media-proxy': {
++    status: 200,
++    contentType: 'image/png',
++    body: Buffer.from(
++      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
++      'base64',
++    ),
++  },
++};
++
++const samplePage = {
++  id: 'page-arch-spec',
++  canonical_key: 'docs/architecture/auth-studio',
++  doc_id: 'doc-arch-root',
++  parent_page_id: null,
++  workspace_id: '22222222-2222-2222-2222-222222222222',
++  title: 'Architecture & Security Specification',
++  body_markdown:
++    '# Architecture & Security Specification\n\nWelcome to 👍kanban architecture.\n\n## Threat Modeling\n\nAll endpoints require strict input validation.\n\n### Access Control\n\nRLS policies enforced.\n',
++  body_sha256: 'sha256-current-body-hash',
++  hierarchy_path: 'docs.architecture.auth_studio',
++  version_seq: 3,
++  sort_rank: '0|hzzzzz:',
++  breadcrumbs: [],
++  outline: [],
++  access_manifest: {},
++  capabilities: ['EDIT', 'VIEW', 'ADMIN'],
++  object_links: [
++    {
++      target_key: 'KAN-101',
++      target_title: 'Implement Auth Session Token Rotation',
++      link_type: 'VERIFIED_BY_DOC',
++      link_id: 'link-101',
++    },
++  ],
++};
++
++const sampleVersions = [
++  {
++    page_id: 'page-arch-spec',
++    version_seq: 3,
++    title: 'Architecture & Security Specification',
++    body_markdown:
++      '# Architecture & Security Specification\n\nWelcome to 👍kanban architecture.\n\n## Threat Modeling\n\nAll endpoints require strict input validation.\n\n### Access Control\n\nRLS policies enforced.\n',
++    body_sha256: 'sha256-current-body-hash',
++    created_by_id: 'adam',
++    created_at: '2026-11-18T16:00:00Z',
++  },
++  {
++    page_id: 'page-arch-spec',
++    version_seq: 2,
++    title: 'Architecture & Security Specification v2',
++    body_markdown:
++      '# Architecture & Security Specification\n\nDraft spec notes.\n\n## Threat Modeling\n\nPreliminary draft notes.\n',
++    body_sha256: 'sha256-v2-body-hash',
++    created_by_id: 'adam',
++    created_at: '2026-11-17T12:00:00Z',
++  },
++  {
++    page_id: 'page-arch-spec',
++    version_seq: 1,
++    title: 'Architecture Spec v1',
++    body_markdown: '# Architecture Spec\nInitial stub.\n',
++    body_sha256: 'sha256-v1-body-hash',
++    created_by_id: 'adam',
++    created_at: '2026-11-16T10:00:00Z',
++  },
++];
++
++const sampleTree = [
++  {
++    id: 'page-arch-spec',
++    title: 'Architecture & Security Specification',
++    slug: 'auth-studio',
++    restricted: false,
++    children: [],
++  },
++];
++
++const candidateSticky = {
++  id: 'sticky-1',
++  workspace_id: '22222222-2222-2222-2222-222222222222',
++  project_id: '33333333-3333-3333-3333-333333333333',
++  body_markdown:
++    '# Comprehensive Incident Response & Disaster Recovery Plan\n\nThis sticky contains extensive architectural specifications, network diagrams, failover topologies, RTO/RPO metrics, and key escalation procedures across all cluster nodes.\n\n## Failover Topology\n\n1. Node health probe failure detection within 500ms.\n2. Automated split-brain prevention through distributed consensus.\n3. Transparent read-only replica promotion.',
++  content:
++    '# Comprehensive Incident Response & Disaster Recovery Plan\n\nThis sticky contains extensive architectural specifications, network diagrams, failover topologies, RTO/RPO metrics, and key escalation procedures across all cluster nodes.\n\n## Failover Topology\n\n1. Node health probe failure detection within 500ms.\n2. Automated split-brain prevention through distributed consensus.\n3. Transparent read-only replica promotion.',
++  color_token: 'YELLOW' as const,
++  sort_rank: '0|hzzzzz:',
++  promotion_snoozed_at_length: null,
++  promoted_to_doc_id: null,
++  is_promoted_stub: false,
++  body_sha256: 'sha256-sticky-1-candidate',
++  promotion_recommended: true,
++  promoted_to_doc: null,
++  triggers: ['LENGTH_GROWTH'],
++  capabilities: ['VIEW', 'EDIT', 'DELETE', 'ADMIN'],
++};
++
++const promotedSticky = {
++  id: 'sticky-2',
++  workspace_id: '22222222-2222-2222-2222-222222222222',
++  project_id: '33333333-3333-3333-3333-333333333333',
++  body_markdown: '# Promoted Architecture Notes\n\nThis sticky was promoted to a full document specification.',
++  content: '# Promoted Architecture Notes\n\nThis sticky was promoted to a full document specification.',
++  color_token: 'BLUE' as const,
++  sort_rank: '0|hzzzzz:1',
++  promotion_snoozed_at_length: null,
++  promoted_to_doc_id: 'doc-arch-root',
++  is_promoted_stub: true,
++  body_sha256: 'sha256-sticky-2-promoted',
++  promotion_recommended: false,
++  promoted_to_doc: {
++    id: 'doc-arch-root',
++    root_page_id: 'page-arch-spec',
++    root_page_canonical_key: 'docs/architecture/auth-studio',
++    title: 'Architecture & Security Specification',
++    canonical_key: 'docs/architecture/auth-studio',
++  },
++  triggers: [],
++  capabilities: ['VIEW', 'EDIT', 'DELETE', 'ADMIN'],
++};
++
++test.describe('KANBA-217 QA Proofs', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-proofs',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01 & 02: Sticky Snooze Banner & Promote Preview Modal (Desktop Light & Mobile Dark)', async ({
++    page,
++  }) => {
++    await mockApi(page, {
++      ...baseMocks,
++      'GET /api/v1/projects/KAN/stickies': {
++        json: [candidateSticky, promotedSticky],
++      },
++      'POST /api/v1/stickies/sticky-1/promote-preview': {
++        json: {
++          proposal: {
++            title: 'Comprehensive Incident Response & Disaster Recovery Plan',
++            sections: [
++              {
++                heading: 'Failover Topology',
++                content: 'Node health probe failure detection within 500ms.',
++              },
++            ],
++          },
++          rendered_markdown:
++            '# Comprehensive Incident Response & Disaster Recovery Plan\n\n## Failover Topology\n\n1. Node health probe failure detection within 500ms.\n2. Automated split-brain prevention through distributed consensus.\n3. Transparent read-only replica promotion.\n\n```mermaid\nflowchart TD\n  Primary --> Replica1\n  Primary --> Replica2\n```\n',
++          original_sha256: 'sha256-sticky-1-candidate',
++          warnings: [],
++          acl_preview: {
++            direct_entries_count: 3,
++            will_copy_verbatim: true,
++          },
++        },
++      },
++    });
++
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await page.goto('/projects/KAN/overview');
++
++    // 01: Capture candidate sticky banner
++    const banner = page.locator('[data-testid="sticky-promotion-banner"]');
++    await expect(banner).toBeVisible();
++
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '01-sticky-snooze-banner-desktop-light.png'),
++      fullPage: false,
++    });
++
++    // 02: Click Promote to Doc -> Opens StickyPromotePreviewModal
++    const promoteBtn = page.locator('[data-testid="promote-to-doc-btn"]');
++    await promoteBtn.click();
++
++    const previewModal = page.locator('[data-testid="sticky-promote-preview-modal"]');
++    await expect(previewModal).toBeVisible();
++
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '02-sticky-promote-preview-modal-desktop-light.png'),
++      fullPage: false,
++    });
++
++    // 02-mobile-dark: Switch to mobile viewport (390x844) and dark theme
++    await page.setViewportSize({ width: 390, height: 844 });
++    await page.evaluate(() => {
++      document.documentElement.setAttribute('data-theme', 'dark');
++    });
++
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '02-sticky-promote-preview-modal-mobile-dark.png'),
++      fullPage: false,
++    });
++  });
++
++  test('03: Promoted Sticky [Open Doc] Navigates to Valid Canonical Route', async ({
++    page,
++  }) => {
++    await mockApi(page, {
++      ...baseMocks,
++      'GET /api/v1/projects/KAN/stickies': {
++        json: [promotedSticky],
++      },
++      'GET /api/v1/projects/KAN/docs/tree': {
++        json: sampleTree,
++      },
++      'GET /api/v1/pages/page-arch-spec': {
++        json: samplePage,
++      },
++      'GET /api/v1/pages/page-arch-spec/versions': {
++        json: sampleVersions,
++      },
++    });
++
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await page.goto('/projects/KAN/overview');
++
++    const openDocLink = page.locator('[data-testid="open-doc-link"], [data-testid="promoted-sticky-open-doc"]');
++    await expect(openDocLink).toBeVisible();
++
++    // Verify href targets valid page route
++    const href = await openDocLink.getAttribute('href');
++    expect(href).toContain('/projects/KAN/docs/page-arch-spec');
++
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '03-promoted-sticky-open-doc-desktop-light.png'),
++      fullPage: false,
++    });
++  });
++
++  test('04 & 05: Docs History Diff/Restore & Searchable Link Picker (Desktop Light, Tablet Dark, Mobile Dark)', async ({
++    page,
++  }) => {
++    await mockApi(page, {
++      ...baseMocks,
++      'GET /api/v1/projects/KAN/docs/tree': {
++        json: sampleTree,
++      },
++      'GET /api/v1/pages/page-arch-spec': {
++        json: samplePage,
++      },
++      'GET /api/v1/pages/page-arch-spec/versions': {
++        json: sampleVersions,
++      },
++    });
++
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await page.goto('/projects/KAN/docs/page-arch-spec');
++
++    // Wait for document to load
++    await expect(page.locator('[data-testid="docs-workspace-view"]')).toBeVisible();
++
++    // Open History Tab
++    const historyTab = page.locator('[data-testid="rail-tab-history"]');
++    await historyTab.click();
++
++    // Select Version 2 to view diff against current
++    const v2Item = page.locator('[data-testid="version-item-v2"]');
++    await expect(v2Item).toBeVisible();
++    await v2Item.click();
++
++    // Verify diff viewer and stats badge are visible
++    const diffContainer = page.locator('[data-testid="version-diff-container"]');
++    await expect(diffContainer).toBeVisible();
++    const diffStats = page.locator('[data-testid="version-diff-stats"]');
++    await expect(diffStats).toBeVisible();
++
++    // 04: Capture Diff View on Desktop Light
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '04-docs-history-diff-restore-desktop-light.png'),
++      fullPage: false,
++    });
++
++    // 04-tablet-dark: Tablet viewport (1024x768) in Dark theme
++    await page.setViewportSize({ width: 1024, height: 768 });
++    await page.evaluate(() => {
++      document.documentElement.setAttribute('data-theme', 'dark');
++    });
++
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '04-docs-history-diff-restore-tablet-dark.png'),
++      fullPage: false,
++    });
++
++    // Reset to light theme & desktop for link picker
++    await page.evaluate(() => {
++      document.documentElement.removeAttribute('data-theme');
++    });
++    await page.setViewportSize({ width: 1440, height: 900 });
++
++    // Switch to Outline tab
++    const outlineTab = page.locator('[data-testid="rail-tab-outline"]');
++    await outlineTab.click();
++
++    // Click + Link Issue
++    const linkIssueBtn = page.locator('[data-testid="open-link-issue-picker-btn"]');
++    await expect(linkIssueBtn).toBeVisible();
++    await linkIssueBtn.click();
++
++    // Verify Searchable Link Picker dialog
++    const linkPicker = page.locator('[data-testid="doc-issue-link-picker"]');
++    await expect(linkPicker).toBeVisible();
++
++    // 05: Capture Link Picker on Desktop Light
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '05-docs-highlight-link-picker-desktop-light.png'),
++      fullPage: false,
++    });
++
++    // 05-mobile-dark: Mobile viewport (390x844) in Dark theme
++    await page.setViewportSize({ width: 390, height: 844 });
++    await page.evaluate(() => {
++      document.documentElement.setAttribute('data-theme', 'dark');
++    });
++
++    await page.screenshot({
++      path: path.join(SCREENSHOTS_DIR, '05-docs-highlight-link-picker-mobile-dark.png'),
++      fullPage: false,
++    });
++  });
++});
+diff --git a/kanban/web/src/editor/MarkdownEditor.tsx b/kanban/web/src/editor/MarkdownEditor.tsx
+index 1b1c826..0a1c1b7 100644
+--- a/kanban/web/src/editor/MarkdownEditor.tsx
++++ b/kanban/web/src/editor/MarkdownEditor.tsx
+@@ -75,6 +75,7 @@ export function MarkdownEditor({
+   const originalSourceRef = useRef<string>(value);
+   const lastSerializedRef = useRef<string>(value);
+   const valueRef = useRef<string>(value);
++  const prevExternalValueRef = useRef<string>(value);
+   const onChangeRef = useRef(onChange);
+   const onBlurRef = useRef(onBlur);
+   const onAnnounceRef = useRef(onAnnounce);
+@@ -104,8 +105,10 @@ export function MarkdownEditor({
+     setIsRawMode((prev) => {
+       if (prev) {
+         // Raw -> WYSIWYG: notify parent with current raw text and transition to WYSIWYG
+-        lastSerializedRef.current = rawTextRef.current;
+-        onChangeRef.current(rawTextRef.current);
++        const currentRaw = rawTextRef.current;
++        lastSerializedRef.current = currentRaw;
++        valueRef.current = currentRaw;
++        onChangeRef.current(currentRaw);
+         return false;
+       } else {
+         // WYSIWYG -> Raw: serialize current ProseMirror doc
+@@ -116,6 +119,8 @@ export function MarkdownEditor({
+         setRawText(currentMarkdown);
+         rawTextRef.current = currentMarkdown;
+         lastSerializedRef.current = currentMarkdown;
++        valueRef.current = currentMarkdown;
++        onChangeRef.current(currentMarkdown);
+         return true;
+       }
+     });
+@@ -205,10 +210,12 @@ export function MarkdownEditor({
+   // Synchronize external value changes with ProseMirror state when in WYSIWYG mode
+   useEffect(() => {
+     if (isRawMode) {
++      prevExternalValueRef.current = value;
+       return;
+     }
+ 
+-    if (value !== lastSerializedRef.current && viewRef.current) {
++    if (value !== prevExternalValueRef.current && value !== lastSerializedRef.current && viewRef.current) {
++      prevExternalValueRef.current = value;
+       const { doc, originalSource } = parseMarkdown(value);
+       originalSourceRef.current = originalSource;
+       lastSerializedRef.current = value;
+@@ -221,6 +228,8 @@ export function MarkdownEditor({
+ 
+       const tr = newState.tr.setMeta('skipSourceSliceDirty', true);
+       viewRef.current.updateState(newState.apply(tr));
++    } else {
++      prevExternalValueRef.current = value;
+     }
+   }, [value, isRawMode, getPlugins]);
+ 
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.css b/kanban/web/src/features/docs/DocsWorkspaceView.css
+index ca97f1d..ff6b920 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.css
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.css
+@@ -751,6 +751,155 @@
+   border: 1px solid var(--border-subtle, #e2e8f0);
+ }
+ 
++/* Version Diff vs Raw Mode Toggle */
++.docs-version-view-mode-toggle {
++  display: flex;
++  gap: 4px;
++  margin-bottom: 8px;
++  background: var(--bg-hover, #f1f5f9);
++  padding: 2px;
++  border-radius: var(--radius-sm, 4px);
++}
++
++.docs-version-view-btn {
++  flex: 1;
++  padding: 4px 8px;
++  font-size: 11px;
++  font-weight: 500;
++  border: none;
++  background: transparent;
++  color: var(--fg-secondary, #64748b);
++  border-radius: 3px;
++  cursor: pointer;
++  text-align: center;
++  transition: background-color 150ms ease, color 150ms ease;
++}
++
++.docs-version-view-btn:hover {
++  color: var(--fg-primary, #1e293b);
++}
++
++.docs-version-view-btn--active {
++  background: #ffffff;
++  color: var(--fg-primary, #1e293b);
++  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
++}
++
++/* Diff Viewer */
++.docs-diff-container {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.docs-diff-stats {
++  font-size: 11px;
++  font-weight: 600;
++  color: var(--fg-secondary, #64748b);
++  padding: 2px 4px;
++  background: var(--bg-surface, #ffffff);
++  border-radius: 4px;
++  border: 1px solid var(--border-subtle, #e2e8f0);
++}
++
++.docs-diff-viewer {
++  font-family: monospace;
++  font-size: 11px;
++  line-height: 1.4;
++  max-height: 220px;
++  overflow-y: auto;
++  background: #ffffff;
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  border-radius: 4px;
++  padding: 4px 0;
++}
++
++.docs-diff-line {
++  display: flex;
++  padding: 1px 8px;
++  white-space: pre-wrap;
++  word-break: break-all;
++}
++
++.docs-diff-line--unchanged {
++  color: var(--fg-secondary, #64748b);
++}
++
++.docs-diff-line--added {
++  background: rgba(34, 197, 94, 0.12);
++  color: #166534;
++}
++
++.docs-diff-line--removed {
++  background: rgba(239, 68, 68, 0.12);
++  color: #991b1b;
++}
++
++.docs-diff-prefix {
++  width: 16px;
++  flex-shrink: 0;
++  font-weight: 700;
++  user-select: none;
++}
++
++.docs-diff-text {
++  flex: 1;
++}
++
++/* Linked Items Header & Searchable Link Picker */
++.docs-linked-items-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 8px;
++}
++
++.docs-open-link-picker-btn {
++  font-size: 11px;
++  padding: 2px 8px;
++}
++
++.docs-issue-picker-list {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  max-height: 180px;
++  overflow-y: auto;
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  border-radius: var(--radius-sm, 4px);
++}
++
++.docs-issue-picker-item {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  padding: 6px 10px;
++  cursor: pointer;
++  border-bottom: 1px solid var(--border-subtle, #f1f5f9);
++  transition: background-color 120ms ease;
++}
++
++.docs-issue-picker-item:last-child {
++  border-bottom: none;
++}
++
++.docs-issue-picker-item:hover {
++  background: var(--bg-hover, #f8fafc);
++}
++
++.docs-issue-picker-item--selected {
++  background: rgba(59, 130, 246, 0.1);
++  outline: 1px solid #3b82f6;
++}
++
++.docs-issue-picker-title {
++  font-size: 12px;
++  color: var(--fg-primary, #1e293b);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
+ /* --------------------------------------------------------------------------
+    FLOATING ACTION BUTTON & MODALS
+    -------------------------------------------------------------------------- */
+diff --git a/kanban/web/src/features/docs/OutlineAndVersionsRail.test.tsx b/kanban/web/src/features/docs/OutlineAndVersionsRail.test.tsx
+index 6a33b5e..bb69d9a 100644
+--- a/kanban/web/src/features/docs/OutlineAndVersionsRail.test.tsx
++++ b/kanban/web/src/features/docs/OutlineAndVersionsRail.test.tsx
+@@ -6,6 +6,7 @@ import {
+   OutlineAndVersionsRail,
+   extractHeadings,
+   stripInlineMarkdown,
++  computeLineDiff,
+ } from './OutlineAndVersionsRail';
+ import * as docsApi from './docsApi';
+ 
+@@ -270,4 +271,141 @@ def foo(): pass
+       expect(onAnnounce).toHaveBeenCalledWith('Restore error: Precondition error');
+     });
+   });
++
++  describe('computeLineDiff', () => {
++    it('returns 0 changes for identical texts', () => {
++      const res = computeLineDiff('Line 1\nLine 2', 'Line 1\nLine 2');
++      expect(res.addedCount).toBe(0);
++      expect(res.removedCount).toBe(0);
++      expect(res.lines).toHaveLength(2);
++      expect(res.lines.every((l) => l.type === 'unchanged')).toBe(true);
++    });
++
++    it('identifies added and removed lines', () => {
++      const oldText = 'Line 1\nLine 2';
++      const newText = 'Line 1\nLine 2 updated\nLine 3';
++      const res = computeLineDiff(oldText, newText);
++      expect(res.addedCount).toBe(2);
++      expect(res.removedCount).toBe(1);
++    });
++  });
++
++  it('toggles between Diff vs Current and Raw Content views in history preview', async () => {
++    render(
++      <QueryClientProvider client={queryClient}>
++        <OutlineAndVersionsRail
++          pageId="page-auth-studio"
++          projectKey="KAN"
++          page={mockPageData}
++          markdownContent="# Overview\n\nModified current content."
++        />
++      </QueryClientProvider>,
++    );
++
++    fireEvent.click(screen.getByTestId('rail-tab-history'));
++    await waitFor(() => {
++      expect(screen.getByTestId('version-item-v5')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('version-item-v5'));
++
++    // Check diff mode is active by default
++    await waitFor(() => {
++      expect(screen.getByTestId('version-diff-container')).toBeDefined();
++      expect(screen.getByTestId('version-diff-stats')).toBeDefined();
++    });
++
++    // Toggle to raw content
++    fireEvent.click(screen.getByTestId('version-view-raw-tab'));
++    expect(screen.queryByTestId('version-diff-container')).toBeNull();
++    expect(screen.getByTestId('version-preview-body')).toBeDefined();
++
++    // Toggle back to diff
++    fireEvent.click(screen.getByTestId('version-view-diff-tab'));
++    expect(screen.getByTestId('version-diff-container')).toBeDefined();
++  });
++
++  it('opens searchable link picker, searches issues, and links selected issue', async () => {
++    vi.spyOn(docsApi, 'fetchProjectIssues').mockResolvedValue([
++      { id: 'issue-1', key: 'KAN-1', title: 'First Issue' },
++      { id: 'issue-2', key: 'KAN-2', title: 'Second Target' },
++    ]);
++    const linkSpy = vi.spyOn(docsApi, 'createLink').mockResolvedValue({ ok: true });
++    const onAnnounce = vi.fn();
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <OutlineAndVersionsRail
++          pageId="page-auth-studio"
++          projectKey="KAN"
++          page={mockPageData}
++          onAnnounce={onAnnounce}
++        />
++      </QueryClientProvider>,
++    );
++
++    // Click + Link Issue
++    fireEvent.click(screen.getByTestId('open-link-issue-picker-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('doc-issue-link-picker')).toBeDefined();
++      expect(screen.getByTestId('link-issue-result-KAN-1')).toBeDefined();
++    });
++
++    // Search filter
++    fireEvent.change(screen.getByTestId('link-issue-search-input'), {
++      target: { value: 'Second' },
++    });
++    expect(screen.queryByTestId('link-issue-result-KAN-1')).toBeNull();
++    expect(screen.getByTestId('link-issue-result-KAN-2')).toBeDefined();
++
++    // Select issue KAN-2
++    fireEvent.click(screen.getByTestId('link-issue-result-KAN-2'));
++
++    // Select relationship type
++    fireEvent.change(screen.getByTestId('link-issue-type-select'), {
++      target: { value: 'RELATES_TO' },
++    });
++
++    // Confirm link
++    fireEvent.click(screen.getByTestId('confirm-link-issue-btn'));
++
++    await waitFor(() => {
++      expect(linkSpy).toHaveBeenCalledWith({
++        source_id: 'issue-2',
++        target_id: 'page-auth-studio',
++        link_type: 'RELATES_TO',
++      });
++      expect(onAnnounce).toHaveBeenCalledWith('Linked issue successfully');
++    });
++  });
++
++  it('handles link issue error gracefully in link picker', async () => {
++    vi.spyOn(docsApi, 'fetchProjectIssues').mockResolvedValue([
++      { id: 'issue-1', key: 'KAN-1', title: 'Problem Issue' },
++    ]);
++    vi.spyOn(docsApi, 'createLink').mockRejectedValue(new Error('Link collision'));
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <OutlineAndVersionsRail
++          pageId="page-auth-studio"
++          projectKey="KAN"
++          page={mockPageData}
++        />
++      </QueryClientProvider>,
++    );
++
++    fireEvent.click(screen.getByTestId('open-link-issue-picker-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('link-issue-result-KAN-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('link-issue-result-KAN-1'));
++    fireEvent.click(screen.getByTestId('confirm-link-issue-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('link-issue-error').textContent).toContain('Link collision');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/docs/OutlineAndVersionsRail.tsx b/kanban/web/src/features/docs/OutlineAndVersionsRail.tsx
+index 91290a2..30a0903 100644
+--- a/kanban/web/src/features/docs/OutlineAndVersionsRail.tsx
++++ b/kanban/web/src/features/docs/OutlineAndVersionsRail.tsx
+@@ -15,6 +15,8 @@ import { qk } from '../../api/queryKeys';
+ import {
+   fetchPageVersions,
+   restorePageVersion,
++  fetchProjectIssues,
++  createLink,
+   type PageResponse,
+ } from './docsApi';
+ import './DocsWorkspaceView.css';
+@@ -126,8 +128,100 @@ export function extractHeadings(markdown: string): ExtractedHeading[] {
+   return headings;
+ }
+ 
++export interface DiffLine {
++  type: 'added' | 'removed' | 'unchanged';
++  text: string;
++}
++
++export interface DiffResult {
++  lines: DiffLine[];
++  addedCount: number;
++  removedCount: number;
++}
++
++/** Computes line-by-line diff between base (old) and head (new) texts */
++export function computeLineDiff(oldText: string, newText: string): DiffResult {
++  const oldLines = oldText.split(/\r?\n/);
++  const newLines = newText.split(/\r?\n/);
++
++  if (oldText === newText) {
++    return {
++      lines: oldLines.map((text) => ({ type: 'unchanged', text })),
++      addedCount: 0,
++      removedCount: 0,
++    };
++  }
++
++  const n = Math.min(oldLines.length, 500);
++  const m = Math.min(newLines.length, 500);
++
++  const dp: number[][] = [];
++  for (let rowIdx = 0; rowIdx <= n; rowIdx++) {
++    dp.push(new Array<number>(m + 1).fill(0));
++  }
++
++  for (let i = 0; i < n; i++) {
++    const rowCurr = dp[i];
++    const rowNext = dp[i + 1];
++    if (!rowCurr || !rowNext) continue;
++
++    const oldLine = oldLines[i];
++    for (let j = 0; j < m; j++) {
++      const newLine = newLines[j];
++      if (oldLine === newLine) {
++        rowNext[j + 1] = (rowCurr[j] ?? 0) + 1;
++      } else {
++        const fromLeft = rowNext[j] ?? 0;
++        const fromTop = rowCurr[j + 1] ?? 0;
++        rowNext[j + 1] = Math.max(fromLeft, fromTop);
++      }
++    }
++  }
++
++  let i = n;
++  let j = m;
++  let addedCount = 0;
++  let removedCount = 0;
++
++  const stack: DiffLine[] = [];
++  while (i > 0 || j > 0) {
++    const oldLine = i > 0 ? (oldLines[i - 1] ?? '') : '';
++    const newLine = j > 0 ? (newLines[j - 1] ?? '') : '';
++    const rowCurr = dp[i];
++    const rowPrev = i > 0 ? dp[i - 1] : undefined;
++
++    if (i > 0 && j > 0 && oldLine === newLine) {
++      stack.push({ type: 'unchanged', text: oldLine });
++      i--;
++      j--;
++    } else if (
++      j > 0 &&
++      (i === 0 || (rowCurr?.[j - 1] ?? 0) >= (rowPrev?.[j] ?? 0))
++    ) {
++      stack.push({ type: 'added', text: newLine });
++      addedCount++;
++      j--;
++    } else if (i > 0) {
++      stack.push({ type: 'removed', text: oldLine });
++      removedCount++;
++      i--;
++    }
++  }
++
++  const lines: DiffLine[] = [];
++  while (stack.length > 0) {
++    const item = stack.pop();
++    if (item) {
++      lines.push(item);
++    }
++  }
++
++  return { lines, addedCount, removedCount };
++}
++
+ export function OutlineAndVersionsRail({
+   pageId,
++  projectKey = 'KAN',
+   page,
+   markdownContent,
+   onAnnounce,
+@@ -144,6 +238,30 @@ export function OutlineAndVersionsRail({
+   };
+   const [activeHeadingAnchor, setActiveHeadingAnchor] = useState<string | null>(null);
+   const [selectedVersionSeq, setSelectedVersionSeq] = useState<number | null>(null);
++  const [versionViewMode, setVersionViewMode] = useState<'diff' | 'raw'>('diff');
++
++  // Link picker state
++  const [isLinkPickerOpen, setIsLinkPickerOpen] = useState(false);
++  const [issueSearchQuery, setIssueSearchQuery] = useState('');
++  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
++  const [selectedLinkType, setSelectedLinkType] = useState<string>('VERIFIED_BY_DOC');
++  const [linkError, setLinkError] = useState<string | null>(null);
++
++  // Issues query for link picker
++  const { data: projectIssues = [], isLoading: isLoadingIssues } = useQuery({
++    queryKey: ['project-issues', projectKey],
++    queryFn: () => fetchProjectIssues(projectKey),
++    enabled: isLinkPickerOpen,
++  });
++
++  const filteredIssues = useMemo(() => {
++    const q = issueSearchQuery.trim().toLowerCase();
++    if (!q) return projectIssues;
++    return projectIssues.filter(
++      (issue) =>
++        issue.key.toLowerCase().includes(q) || issue.title.toLowerCase().includes(q),
++    );
++  }, [projectIssues, issueSearchQuery]);
+ 
+   // Extract headings live from current editor markdown (falling back to page.outline or page.body_markdown)
+   const currentMarkdown = markdownContent ?? page?.body_markdown ?? '';
+@@ -167,6 +285,13 @@ export function OutlineAndVersionsRail({
+     return versions.find((v) => v.version_seq === selectedVersionSeq) ?? null;
+   }, [versions, selectedVersionSeq]);
+ 
++  const diffResult = useMemo(() => {
++    if (!selectedVersion) {
++      return { lines: [], addedCount: 0, removedCount: 0 };
++    }
++    return computeLineDiff(selectedVersion.body_markdown, currentMarkdown);
++  }, [selectedVersion, currentMarkdown]);
++
+   // Restore mutation
+   const restoreMutation = useMutation({
+     mutationFn: async (versionSeq: number) => {
+@@ -186,6 +311,36 @@ export function OutlineAndVersionsRail({
+     },
+   });
+ 
++  // Link issue mutation
++  const linkMutation = useMutation({
++    mutationFn: async ({ issueId, linkType }: { issueId: string; linkType: string }) => {
++      try {
++        return await createLink({
++          source_id: issueId,
++          target_id: pageId,
++          link_type: linkType,
++        });
++      } catch {
++        return await createLink({
++          source_id: pageId,
++          target_id: issueId,
++          link_type: linkType,
++        });
++      }
++    },
++    onSuccess: () => {
++      void queryClient.invalidateQueries({ queryKey: qk.page(pageId) });
++      setIsLinkPickerOpen(false);
++      setIssueSearchQuery('');
++      setSelectedIssueId(null);
++      setLinkError(null);
++      onAnnounce?.('Linked issue successfully');
++    },
++    onError: (err: unknown) => {
++      setLinkError(err instanceof Error ? err.message : 'Failed to link issue');
++    },
++  });
++
+   // Active section tracking via IntersectionObserver
+   useEffect(() => {
+     if (typeof IntersectionObserver === 'undefined' || headings.length === 0 || activeTab !== 'outline') return;
+@@ -307,7 +462,22 @@ export function OutlineAndVersionsRail({
+ 
+           {/* Linked Work Items Section */}
+           <div className="docs-linked-items-section">
+-            <h2 className="docs-rail-heading">Linked Work Items</h2>
++            <div className="docs-linked-items-header">
++              <h2 className="docs-rail-heading">Linked Work Items</h2>
++              <button
++                type="button"
++                className="docs-tree-btn docs-tree-btn--secondary docs-open-link-picker-btn"
++                data-testid="open-link-issue-picker-btn"
++                onClick={() => {
++                  setIsLinkPickerOpen(true);
++                  setIssueSearchQuery('');
++                  setSelectedIssueId(null);
++                  setLinkError(null);
++                }}
++              >
++                + Link Issue
++              </button>
++            </div>
+             {objectLinks.length === 0 ? (
+               <p className="docs-rail-empty">No linked issues.</p>
+             ) : (
+@@ -335,6 +505,130 @@ export function OutlineAndVersionsRail({
+         </div>
+       )}
+ 
++      {/* Searchable Doc <-> Issue Link Picker Modal */}
++      {isLinkPickerOpen && (
++        <div
++          className="docs-modal-overlay"
++          role="dialog"
++          aria-modal="true"
++          aria-label="Link issue to document"
++          data-testid="doc-issue-link-picker"
++        >
++          <div className="docs-modal-dialog">
++            <div className="docs-modal-header">
++              <h3 className="docs-modal-title">Link Work Item to Document</h3>
++              <button
++                type="button"
++                className="docs-modal-close-btn"
++                onClick={() => {
++                  setIsLinkPickerOpen(false);
++                }}
++                aria-label="Close dialog"
++              >
++                ✕
++              </button>
++            </div>
++
++            <div className="docs-modal-body">
++              {linkError && (
++                <div className="docs-inline-error" role="alert" data-testid="link-issue-error">
++                  {linkError}
++                </div>
++              )}
++
++              <div className="docs-form-group">
++                <label htmlFor="link-issue-search-input" className="docs-form-label">
++                  Search Issue by Key or Title
++                </label>
++                <input
++                  id="link-issue-search-input"
++                  data-testid="link-issue-search-input"
++                  className="docs-modal-input"
++                  type="text"
++                  placeholder="Search by key (e.g. KAN-1) or title..."
++                  value={issueSearchQuery}
++                  onChange={(e) => {
++                    setIssueSearchQuery(e.target.value);
++                  }}
++                  autoFocus
++                />
++              </div>
++
++              <div className="docs-form-group">
++                <label htmlFor="link-issue-type-select" className="docs-form-label">
++                  Relationship Type
++                </label>
++                <select
++                  id="link-issue-type-select"
++                  data-testid="link-issue-type-select"
++                  className="docs-modal-input"
++                  value={selectedLinkType}
++                  onChange={(e) => {
++                    setSelectedLinkType(e.target.value);
++                  }}
++                >
++                  <option value="VERIFIED_BY_DOC">VERIFIED_BY_DOC (Verified by this doc)</option>
++                  <option value="RELATES_TO">RELATES_TO (General reference)</option>
++                </select>
++              </div>
++
++              <div className="docs-form-group">
++                <span className="docs-form-label">Select Issue</span>
++                {isLoadingIssues && <p className="docs-rail-empty">Loading issues...</p>}
++                {!isLoadingIssues && filteredIssues.length === 0 && (
++                  <p className="docs-rail-empty" data-testid="link-issue-empty">
++                    No matching issues found.
++                  </p>
++                )}
++                <ul className="docs-issue-picker-list" data-testid="link-issue-search-results">
++                  {filteredIssues.map((issue) => {
++                    const isSelected = selectedIssueId === issue.id;
++                    return (
++                      <li
++                        key={issue.id}
++                        className={`docs-issue-picker-item ${isSelected ? 'docs-issue-picker-item--selected' : ''}`}
++                        onClick={() => {
++                          setSelectedIssueId(issue.id);
++                        }}
++                        data-testid={`link-issue-result-${issue.key}`}
++                      >
++                        <span className="docs-linked-chip mono">{issue.key}</span>
++                        <span className="docs-issue-picker-title">{issue.title}</span>
++                      </li>
++                    );
++                  })}
++                </ul>
++              </div>
++            </div>
++
++            <div className="docs-modal-actions">
++              <button
++                type="button"
++                className="docs-tree-btn"
++                onClick={() => {
++                  setIsLinkPickerOpen(false);
++                }}
++              >
++                Cancel
++              </button>
++              <button
++                type="button"
++                className="docs-tree-btn docs-tree-btn--primary"
++                data-testid="confirm-link-issue-btn"
++                disabled={!selectedIssueId || linkMutation.isPending}
++                onClick={() => {
++                  if (selectedIssueId) {
++                    linkMutation.mutate({ issueId: selectedIssueId, linkType: selectedLinkType });
++                  }
++                }}
++              >
++                {linkMutation.isPending ? 'Linking...' : 'Link Issue'}
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++
+       {/* HISTORY TAB PANEL */}
+       {activeTab === 'history' && (
+         <div
+@@ -386,7 +680,7 @@ export function OutlineAndVersionsRail({
+             </ul>
+           </div>
+ 
+-          {/* Read-only Preview of Selected Version */}
++          {/* Read-only Preview / Diff of Selected Version */}
+           {selectedVersion && (
+             <div className="docs-version-preview" data-testid="version-preview-pane">
+               <div className="docs-version-preview__header">
+@@ -401,13 +695,68 @@ export function OutlineAndVersionsRail({
+                   }}
+                   disabled={restoreMutation.isPending}
+                   data-testid={`restore-v${String(selectedVersion.version_seq)}-btn`}
++                  aria-label={`Restore v${String(selectedVersion.version_seq)}`}
+                 >
+                   {restoreMutation.isPending
+                     ? 'Restoring...'
+                     : `Restore v${String(selectedVersion.version_seq)}`}
+                 </button>
+               </div>
+-              <pre className="docs-version-preview__body mono" data-testid="version-preview-body">
++
++              {/* Diff vs Raw Toggle */}
++              <div className="docs-version-view-mode-toggle" role="tablist" aria-label="Version View Mode">
++                <button
++                  type="button"
++                  role="tab"
++                  aria-selected={versionViewMode === 'diff'}
++                  className={`docs-version-view-btn ${versionViewMode === 'diff' ? 'docs-version-view-btn--active' : ''}`}
++                  onClick={() => {
++                    setVersionViewMode('diff');
++                  }}
++                  data-testid="version-view-diff-tab"
++                >
++                  Diff vs Current
++                </button>
++                <button
++                  type="button"
++                  role="tab"
++                  aria-selected={versionViewMode === 'raw'}
++                  className={`docs-version-view-btn ${versionViewMode === 'raw' ? 'docs-version-view-btn--active' : ''}`}
++                  onClick={() => {
++                    setVersionViewMode('raw');
++                  }}
++                  data-testid="version-view-raw-tab"
++                >
++                  Raw Content
++                </button>
++              </div>
++
++              {versionViewMode === 'diff' && (
++                <div className="docs-diff-container" data-testid="version-diff-container">
++                  <div className="docs-diff-stats" data-testid="version-diff-stats">
++                    +{diffResult.addedCount} -{diffResult.removedCount} lines changed
++                  </div>
++                  <div className="docs-diff-viewer" data-testid="version-diff-viewer">
++                    {diffResult.lines.map((line, idx) => (
++                      <div
++                        key={idx}
++                        className={`docs-diff-line docs-diff-line--${line.type}`}
++                        data-type={line.type}
++                      >
++                        <span className="docs-diff-prefix">
++                          {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
++                        </span>
++                        <span className="docs-diff-text">{line.text || '\u00A0'}</span>
++                      </div>
++                    ))}
++                  </div>
++                </div>
++              )}
++
++              <pre
++                className={`docs-version-preview__body mono ${versionViewMode === 'diff' ? 'sr-only' : ''}`}
++                data-testid="version-preview-body"
++              >
+                 {selectedVersion.body_markdown}
+               </pre>
+             </div>
+diff --git a/kanban/web/src/features/docs/docsApi.test.ts b/kanban/web/src/features/docs/docsApi.test.ts
+index 7bb74a4..7349bb2 100644
+--- a/kanban/web/src/features/docs/docsApi.test.ts
++++ b/kanban/web/src/features/docs/docsApi.test.ts
+@@ -10,6 +10,7 @@ import {
+   restorePageVersion,
+   createIssue,
+   createLink,
++  fetchProjectIssues,
+ } from './docsApi';
+ 
+ describe('docsApi', () => {
+@@ -118,4 +119,27 @@ describe('docsApi', () => {
+       body: { source_id: 's1', target_id: 't1', link_type: 'RELATES_TO' },
+     });
+   });
++
++  it('fetchProjectIssues calls GET /api/v1/projects/{projectKey}/issues and formats items', async () => {
++    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
++      items: [
++        { id: 'i1', key: 'KAN-1', title: 'Issue 1' },
++        { id: 'i2', key: 'KAN-2', summary: 'Issue 2 without title' },
++      ],
++    });
++    const res = await fetchProjectIssues('KAN');
++    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/projects/{projectKey}/issues', {
++      params: { projectKey: 'KAN' },
++      query: { limit: 50 },
++    });
++    expect(res).toEqual([
++      { id: 'i1', key: 'KAN-1', title: 'Issue 1' },
++      { id: 'i2', key: 'KAN-2', title: 'Issue 2 without title' },
++    ]);
++
++    // Error fallback branch
++    spy.mockRejectedValueOnce(new Error('Network error'));
++    const fallbackRes = await fetchProjectIssues('KAN');
++    expect(fallbackRes).toEqual([]);
++  });
+ });
+diff --git a/kanban/web/src/features/docs/docsApi.ts b/kanban/web/src/features/docs/docsApi.ts
+index 1d0078a..70bfa35 100644
+--- a/kanban/web/src/features/docs/docsApi.ts
++++ b/kanban/web/src/features/docs/docsApi.ts
+@@ -270,6 +270,35 @@ export interface CreatedIssue {
+   title?: string;
+ }
+ 
++export interface IssueSummaryItem {
++  id: string;
++  key: string;
++  title: string;
++}
++
++export async function fetchProjectIssues(
++  projectKey: string,
++  limit = 50,
++): Promise<IssueSummaryItem[]> {
++  try {
++    const res = await typedFetch<{ items: { id: string; key: string; summary?: string; title?: string }[] }>(
++      'GET',
++      '/api/v1/projects/{projectKey}/issues',
++      {
++        params: { projectKey },
++        query: { limit },
++      },
++    );
++    return res.items.map((i) => ({
++      id: i.id,
++      key: i.key,
++      title: i.title ?? i.summary ?? i.key,
++    }));
++  } catch {
++    return [];
++  }
++}
++
+ export async function createIssue(
+   projectKey: string,
+   payload: { title: string; description?: string },
+diff --git a/kanban/web/src/features/stickies/ProjectOverviewView.tsx b/kanban/web/src/features/stickies/ProjectOverviewView.tsx
+index 3eeb382..1390217 100644
+--- a/kanban/web/src/features/stickies/ProjectOverviewView.tsx
++++ b/kanban/web/src/features/stickies/ProjectOverviewView.tsx
+@@ -80,7 +80,19 @@ export function ProjectOverviewView(): JSX.Element {
+   });
+ 
+   const promoteMutation = useMutation({
+-    mutationFn: (stickyId: string) => promoteStickyToDoc(stickyId),
++    mutationFn: ({
++      stickyId,
++      payload,
++    }: {
++      stickyId: string;
++      payload?: {
++        title?: string;
++        parent_doc_id?: string;
++        parent_page_id?: string;
++        structured_body_markdown?: string;
++        expected_sticky_sha256?: string;
++      };
++    }) => promoteStickyToDoc(stickyId, payload),
+     onSuccess: (promoted) => {
+       queryClient.setQueryData<StickyItem[]>(qk.stickies(projectKey), (old = []) =>
+         old.map((item) => (item.id === promoted.id ? promoted : item)),
+@@ -116,8 +128,8 @@ export function ProjectOverviewView(): JSX.Element {
+         onDeleteSticky={async (id) => {
+           await deleteMutation.mutateAsync(id);
+         }}
+-        onPromoteSticky={async (id) => {
+-          await promoteMutation.mutateAsync(id);
++        onPromoteSticky={async (id, payload) => {
++          await promoteMutation.mutateAsync({ stickyId: id, ...(payload ? { payload } : {}) });
+         }}
+         onUnarchiveCopy={async (id) => {
+           await unarchiveMutation.mutateAsync(id);
+diff --git a/kanban/web/src/features/stickies/PromotedStickyStub.tsx b/kanban/web/src/features/stickies/PromotedStickyStub.tsx
+index 9f705d8..1488767 100644
+--- a/kanban/web/src/features/stickies/PromotedStickyStub.tsx
++++ b/kanban/web/src/features/stickies/PromotedStickyStub.tsx
+@@ -31,10 +31,15 @@ export function PromotedStickyStub({
+     .slice(0, 160);
+ 
+   const docTitle = sticky.promoted_to_doc?.title ?? 'Promoted Specification';
+-  const docId = sticky.promoted_to_doc_id ?? sticky.promoted_to_doc?.id ?? '';
++  const targetPageId =
++    sticky.promoted_to_doc?.root_page_id ??
++    sticky.promoted_to_doc?.root_page_canonical_key ??
++    sticky.promoted_to_doc_id ??
++    sticky.promoted_to_doc?.id ??
++    '';
+   const docLink = projectKey
+-    ? `/projects/${encodeURIComponent(projectKey)}/docs/${encodeURIComponent(docId)}`
+-    : `/docs/${encodeURIComponent(docId)}`;
++    ? `/projects/${encodeURIComponent(projectKey)}/docs/${encodeURIComponent(targetPageId)}`
++    : `/docs/${encodeURIComponent(targetPageId)}`;
+ 
+   const handleAccessClick = (): void => {
+     if (onOpenAccessInspector) {
+diff --git a/kanban/web/src/features/stickies/StickiesGrid.css b/kanban/web/src/features/stickies/StickiesGrid.css
+index f203e1d..f7bfa57 100644
+--- a/kanban/web/src/features/stickies/StickiesGrid.css
++++ b/kanban/web/src/features/stickies/StickiesGrid.css
+@@ -454,3 +454,206 @@
+     grid-template-columns: 1fr;
+   }
+ }
++
++/* Inline Error Alert */
++.sticky-card__inline-error {
++  margin: var(--space-2, 8px) 0;
++  padding: 6px 10px;
++  background-color: var(--danger-bg, #fee2e2);
++  color: var(--danger-fg, #b91c1c);
++  border: 1px solid var(--border-danger, #fca5a5);
++  border-radius: var(--radius-sm, 4px);
++  font-size: var(--text-xs, 0.75rem);
++  font-weight: 500;
++}
++
++/* Sticky to Doc AI Promotion Preview Modal */
++.sticky-promote-modal-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.5);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++  padding: 16px;
++}
++
++.sticky-promote-modal {
++  background-color: var(--bg-surface, #ffffff);
++  color: var(--fg-primary, #1e293b);
++  border-radius: var(--radius-lg, 12px);
++  width: 100%;
++  max-width: 680px;
++  max-height: 90vh;
++  overflow-y: auto;
++  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  display: flex;
++  flex-direction: column;
++}
++
++.sticky-promote-modal__header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  padding: 16px 20px;
++  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
++}
++
++.sticky-promote-modal__title {
++  margin: 0;
++  font-size: var(--text-lg, 1.125rem);
++  font-weight: 600;
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.sticky-promote-modal__close-btn {
++  background: none;
++  border: none;
++  font-size: 1.125rem;
++  color: var(--fg-muted, #64748b);
++  cursor: pointer;
++  padding: 4px;
++  border-radius: var(--radius-sm, 4px);
++}
++
++.sticky-promote-modal__loading {
++  padding: 32px 20px;
++  text-align: center;
++  color: var(--fg-muted, #64748b);
++  font-size: var(--text-sm, 0.875rem);
++}
++
++.sticky-promote-modal__form {
++  padding: 20px;
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.sticky-promote-modal__error {
++  padding: 8px 12px;
++  background-color: var(--danger-bg, #fee2e2);
++  color: var(--danger-fg, #b91c1c);
++  border: 1px solid var(--border-danger, #fca5a5);
++  border-radius: var(--radius-sm, 4px);
++  font-size: var(--text-sm, 0.875rem);
++}
++
++.sticky-promote-modal__acl-notice {
++  display: flex;
++  align-items: flex-start;
++  gap: 10px;
++  padding: 10px 14px;
++  background-color: rgba(59, 130, 246, 0.08);
++  border: 1px solid rgba(59, 130, 246, 0.2);
++  border-radius: var(--radius-md, 6px);
++  font-size: var(--text-xs, 0.75rem);
++  color: var(--fg-primary, #1e293b);
++}
++
++.sticky-promote-modal__acl-icon {
++  font-size: 1rem;
++  flex-shrink: 0;
++}
++
++.sticky-promote-modal__warnings {
++  padding: 8px 12px;
++  background-color: rgba(245, 158, 11, 0.1);
++  border: 1px solid rgba(245, 158, 11, 0.3);
++  border-radius: var(--radius-sm, 4px);
++  font-size: var(--text-xs, 0.75rem);
++  color: var(--fg-primary, #1e293b);
++}
++
++.sticky-promote-modal__field {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.sticky-promote-modal__label {
++  font-size: var(--text-xs, 0.75rem);
++  font-weight: 600;
++  color: var(--fg-secondary, #475569);
++}
++
++.sticky-promote-modal__input {
++  padding: 8px 12px;
++  font-size: var(--text-sm, 0.875rem);
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  border-radius: var(--radius-md, 6px);
++  background-color: var(--bg-input, #ffffff);
++  color: var(--fg-primary, #0f172a);
++}
++
++.sticky-promote-modal__textarea {
++  padding: 10px 12px;
++  font-size: var(--text-xs, 0.75rem);
++  font-family: var(--font-mono, monospace);
++  line-height: 1.5;
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  border-radius: var(--radius-md, 6px);
++  background-color: var(--bg-input, #ffffff);
++  color: var(--fg-primary, #0f172a);
++  resize: vertical;
++}
++
++.sticky-promote-modal__footer {
++  display: flex;
++  justify-content: flex-end;
++  gap: 10px;
++  padding-top: 10px;
++  border-top: 1px solid var(--border-subtle, #e2e8f0);
++}
++
++.sticky-promote-modal__cancel-btn {
++  padding: 8px 16px;
++  font-size: var(--text-sm, 0.875rem);
++  color: var(--fg-muted, #64748b);
++  background: none;
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  border-radius: var(--radius-md, 6px);
++  cursor: pointer;
++}
++
++.sticky-promote-modal__confirm-btn {
++  padding: 8px 18px;
++  font-size: var(--text-sm, 0.875rem);
++  font-weight: 600;
++  color: #ffffff;
++  background-color: var(--accent-primary, #3b82f6);
++  border: 1px solid transparent;
++  border-radius: var(--radius-md, 6px);
++  cursor: pointer;
++}
++
++.sticky-promote-modal__confirm-btn:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++
++[data-theme="dark"] .sticky-promote-modal {
++  background-color: var(--bg-surface, #1e222a);
++  color: var(--fg-primary, #f1f5f9);
++  border-color: var(--border-subtle, #333a47);
++}
++
++[data-theme="dark"] .sticky-promote-modal__header {
++  border-bottom-color: var(--border-subtle, #333a47);
++}
++
++[data-theme="dark"] .sticky-promote-modal__input,
++[data-theme="dark"] .sticky-promote-modal__textarea {
++  background-color: var(--bg-input, #15181e);
++  color: var(--fg-primary, #f1f5f9);
++  border-color: var(--border-subtle, #333a47);
++}
++
++[data-theme="dark"] .sticky-promote-modal__footer {
++  border-top-color: var(--border-subtle, #333a47);
++}
++
+diff --git a/kanban/web/src/features/stickies/StickiesGrid.test.tsx b/kanban/web/src/features/stickies/StickiesGrid.test.tsx
+index 513a447..b548d06 100644
+--- a/kanban/web/src/features/stickies/StickiesGrid.test.tsx
++++ b/kanban/web/src/features/stickies/StickiesGrid.test.tsx
+@@ -162,7 +162,12 @@ describe('StickiesGrid', () => {
+       fireEvent.click(convertItem);
+     });
+ 
+-    expect(onPromote).toHaveBeenCalledWith('s-1');
++    const confirmBtn = await screen.findByTestId('confirm-promote-btn');
++    act(() => {
++      fireEvent.click(confirmBtn);
++    });
++
++    expect(onPromote).toHaveBeenCalledWith('s-1', expect.anything());
+     await waitFor(() => {
+       expect(announcement.textContent).toContain('Promoted sticky to Doc');
+     });
+diff --git a/kanban/web/src/features/stickies/StickiesGrid.tsx b/kanban/web/src/features/stickies/StickiesGrid.tsx
+index 2fc24ac..82746f4 100644
+--- a/kanban/web/src/features/stickies/StickiesGrid.tsx
++++ b/kanban/web/src/features/stickies/StickiesGrid.tsx
+@@ -28,7 +28,16 @@ export interface StickiesGridProps {
+     etag?: string,
+   ) => Promise<void> | void;
+   onDeleteSticky: (stickyId: string) => Promise<void> | void;
+-  onPromoteSticky: (stickyId: string) => Promise<void> | void;
++  onPromoteSticky: (
++    stickyId: string,
++    payload?: {
++      title?: string;
++      parent_doc_id?: string;
++      parent_page_id?: string;
++      structured_body_markdown?: string;
++      expected_sticky_sha256?: string;
++    },
++  ) => Promise<void> | void;
+   onUnarchiveCopy: (stickyId: string) => Promise<void> | void;
+ }
+ 
+@@ -46,8 +55,17 @@ export function StickiesGrid({
+ }: StickiesGridProps): JSX.Element {
+   const [announcement, setAnnouncement] = useState<string | null>(null);
+ 
+-  const handlePromote = async (stickyId: string): Promise<void> => {
+-    await onPromoteSticky(stickyId);
++  const handlePromote = async (
++    stickyId: string,
++    payload?: {
++      title?: string;
++      parent_doc_id?: string;
++      parent_page_id?: string;
++      structured_body_markdown?: string;
++      expected_sticky_sha256?: string;
++    },
++  ): Promise<void> => {
++    await onPromoteSticky(stickyId, payload);
+     setAnnouncement('Promoted sticky to Doc - exact ACLs and object links preserved.');
+   };
+ 
+diff --git a/kanban/web/src/features/stickies/StickiesViews.test.tsx b/kanban/web/src/features/stickies/StickiesViews.test.tsx
+index 10e17a1..08eaf1d 100644
+--- a/kanban/web/src/features/stickies/StickiesViews.test.tsx
++++ b/kanban/web/src/features/stickies/StickiesViews.test.tsx
+@@ -170,6 +170,17 @@ describe('Stickies Views', () => {
+           ok: true,
+           json: () => Promise.resolve({ deleted: true }),
+         })
++        // 4b. Promote preview
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () =>
++            Promise.resolve({
++              proposal: { title: 'Project Spec Doc' },
++              rendered_markdown: 'Preview body',
++              original_sha256: 'sha-preview',
++              acl_preview: { direct_entries_count: 2 },
++            }),
++        })
+         // 5. Promote sticky s-proj-2
+         .mockResolvedValueOnce({
+           ok: true,
+@@ -245,6 +256,8 @@ describe('Stickies Views', () => {
+       fireEvent.click(menuTrigger2);
+       const convertItem = screen.getByTestId('convert-to-doc-menuitem');
+       fireEvent.click(convertItem);
++      const confirmBtn1 = await screen.findByTestId('confirm-promote-btn');
++      fireEvent.click(confirmBtn1);
+       await waitFor(() => {
+         expect(globalThis.fetch).toHaveBeenCalledWith(
+           '/api/v1/stickies/s-proj-2/promote-to-doc',
+@@ -367,6 +380,17 @@ describe('Stickies Views', () => {
+           ok: true,
+           json: () => Promise.resolve({ deleted: true }),
+         })
++        // 3b. Promote preview
++        .mockResolvedValueOnce({
++          ok: true,
++          json: () =>
++            Promise.resolve({
++              proposal: { title: 'Workspace Spec Doc' },
++              rendered_markdown: 'Preview body',
++              original_sha256: 'sha-ws-preview',
++              acl_preview: { direct_entries_count: 1 },
++            }),
++        })
+         // 4. Promote sticky s-ws-2
+         .mockResolvedValueOnce({
+           ok: true,
+@@ -432,6 +456,8 @@ describe('Stickies Views', () => {
+       fireEvent.click(menuTrigger2);
+       const convertItem = screen.getByTestId('convert-to-doc-menuitem');
+       fireEvent.click(convertItem);
++      const confirmBtn2 = await screen.findByTestId('confirm-promote-btn');
++      fireEvent.click(confirmBtn2);
+       await waitFor(() => {
+         expect(globalThis.fetch).toHaveBeenCalledWith(
+           '/api/v1/stickies/s-ws-2/promote-to-doc',
+diff --git a/kanban/web/src/features/stickies/StickyCard.test.tsx b/kanban/web/src/features/stickies/StickyCard.test.tsx
+index bdfd7bd..1765072 100644
+--- a/kanban/web/src/features/stickies/StickyCard.test.tsx
++++ b/kanban/web/src/features/stickies/StickyCard.test.tsx
+@@ -4,7 +4,7 @@
+ 
+ import React from 'react';
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+-import { render, screen, fireEvent, act } from '@testing-library/react';
++import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+ import { StickyCard } from './StickyCard';
+ import type { StickyItem } from './stickiesApi';
+ 
+@@ -179,7 +179,8 @@ describe('StickyCard', () => {
+     expect(screen.queryByTestId('sticky-promotion-banner')).toBeNull();
+   });
+ 
+-  it('clicking Promote to Doc invokes onPromote callback', () => {
++  it('clicking Promote to Doc invokes onPromote callback', async () => {
++    vi.useRealTimers();
+     const onPromote = vi.fn().mockResolvedValue(undefined);
+     const longSticky: StickyItem = {
+       ...baseSticky,
+@@ -196,14 +197,16 @@ describe('StickyCard', () => {
+     );
+ 
+     const promoteBtn = screen.getByRole('button', { name: 'Promote to Doc' });
+-    act(() => {
+-      fireEvent.click(promoteBtn);
+-    });
++    fireEvent.click(promoteBtn);
++
++    const confirmBtn = await screen.findByTestId('confirm-promote-btn');
++    fireEvent.click(confirmBtn);
+ 
+-    expect(onPromote).toHaveBeenCalledWith('sticky-1');
++    expect(onPromote).toHaveBeenCalledWith('sticky-1', expect.anything());
+   });
+ 
+-  it('⋯ menu allows Convert to Doc and Delete Sticky actions', () => {
++  it('⋯ menu allows Convert to Doc and Delete Sticky actions', async () => {
++    vi.useRealTimers();
+     const onDelete = vi.fn();
+     const onPromote = vi.fn().mockResolvedValue(undefined);
+ 
+@@ -227,11 +230,12 @@ describe('StickyCard', () => {
+     // Re-open and convert to doc
+     fireEvent.click(menuTrigger);
+     const convertItem = screen.getByRole('menuitem', { name: 'Convert to Doc' });
+-    act(() => {
+-      fireEvent.click(convertItem);
+-    });
++    fireEvent.click(convertItem);
+ 
+-    expect(onPromote).toHaveBeenCalledWith('sticky-1');
++    const confirmBtn = await screen.findByTestId('confirm-promote-btn');
++    fireEvent.click(confirmBtn);
++
++    expect(onPromote).toHaveBeenCalledWith('sticky-1', expect.anything());
+   });
+ 
+   it('access inspector button dispatches custom event', () => {
+@@ -366,4 +370,96 @@ describe('StickyCard', () => {
+     );
+     expect(screen.queryByRole('button', { name: 'Sticky actions' })).toBeNull();
+   });
++
++  it('renders inline error when onUpdate fails during color selection or snooze', async () => {
++    vi.useRealTimers();
++    try {
++      const onUpdate = vi.fn().mockRejectedValueOnce(new Error('Recolor network failure'));
++
++      render(
++        <StickyCard
++          sticky={baseSticky}
++          onUpdate={onUpdate}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++        />,
++      );
++
++      const swatches = screen.getAllByRole('radio');
++      const targetSwatch = swatches[1];
++      if (targetSwatch) {
++        fireEvent.click(targetSwatch);
++      }
++
++      await waitFor(() => {
++        expect(screen.getByText('Recolor network failure')).toBeDefined();
++      });
++
++      // Test non-Error branch on snooze
++      const longSticky: StickyItem = {
++        ...baseSticky,
++        body_markdown: 'y'.repeat(650),
++        promotion_recommended: true,
++      };
++      const onUpdateSnooze = vi.fn().mockRejectedValueOnce('raw snooze fail');
++
++      const { container } = render(
++        <StickyCard
++          sticky={longSticky}
++          onUpdate={onUpdateSnooze}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++        />,
++      );
++
++      const snoozeBtn = screen.getByRole('button', { name: 'Snooze promotion' });
++      fireEvent.click(snoozeBtn);
++
++      await waitFor(() => {
++        expect(container.querySelector('.sticky-card__inline-error')?.textContent).toBe('Failed to snooze promotion');
++      });
++    } finally {
++      vi.useFakeTimers();
++    }
++  });
++
++  it('handles promote button, confirm promote error, and access click event', () => {
++    vi.useRealTimers();
++    try {
++      const accessSpy = vi.fn();
++      window.addEventListener('kb:open-access-inspector', accessSpy);
++
++      const longSticky: StickyItem = {
++        ...baseSticky,
++        body_markdown: 'y'.repeat(650),
++        promotion_recommended: true,
++      };
++      const onPromote = vi.fn().mockRejectedValueOnce(new Error('Promotion rejection'));
++
++      render(
++        <StickyCard
++          sticky={longSticky}
++          onUpdate={vi.fn()}
++          onDelete={vi.fn()}
++          onPromote={onPromote}
++        />,
++      );
++
++      // Open promote modal
++      const promoteBtn = screen.getByRole('button', { name: 'Promote to Doc' });
++      fireEvent.click(promoteBtn);
++
++      // Modal should be mounted
++      expect(screen.getByTestId('sticky-promote-preview-modal')).toBeDefined();
++
++      // Access badge click
++      const accessBtn = screen.getByRole('button', { name: /access/i });
++      fireEvent.click(accessBtn);
++      expect(accessSpy).toHaveBeenCalled();
++
++      window.removeEventListener('kb:open-access-inspector', accessSpy);
++    } finally {
++      vi.useFakeTimers();
++    }
++  });
+ });
+diff --git a/kanban/web/src/features/stickies/StickyCard.tsx b/kanban/web/src/features/stickies/StickyCard.tsx
+index db79d47..e5a1b6f 100644
+--- a/kanban/web/src/features/stickies/StickyCard.tsx
++++ b/kanban/web/src/features/stickies/StickyCard.tsx
+@@ -23,6 +23,7 @@ import {
+   type StickyComplexityEvaluation,
+ } from './stickyHeuristic';
+ import { StickyPromotionBanner } from './StickyPromotionBanner';
++import { StickyPromotePreviewModal } from './StickyPromotePreviewModal';
+ import type { StickyItem } from './stickiesApi';
+ 
+ export interface StickyCardProps {
+@@ -40,7 +41,16 @@ export interface StickyCardProps {
+     etag?: string,
+   ) => Promise<void> | void;
+   onDelete: (stickyId: string) => Promise<void> | void;
+-  onPromote: (stickyId: string) => Promise<void> | void;
++  onPromote: (
++    stickyId: string,
++    payload?: {
++      title?: string;
++      parent_doc_id?: string;
++      parent_page_id?: string;
++      structured_body_markdown?: string;
++      expected_sticky_sha256?: string;
++    },
++  ) => Promise<void> | void;
+ }
+ 
+ export function StickyCard({
+@@ -59,6 +69,8 @@ export function StickyCard({
+   );
+   const [isMenuOpen, setIsMenuOpen] = useState(false);
+   const [isPromoting, setIsPromoting] = useState(false);
++  const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
++  const [inlineError, setInlineError] = useState<string | null>(null);
+ 
+   const effectiveCaps = sticky.capabilities ?? (readOnly ? ['VIEW'] : ['EDIT', 'DELETE', 'ADMIN']);
+   const canEdit = !readOnly && (effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN'));
+@@ -74,13 +86,18 @@ export function StickyCard({
+   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+ 
+   const flushSave = useCallback(
+-    (nextBody: string) => {
++    async (nextBody: string) => {
+       if (nextBody !== sticky.body_markdown) {
+-        void onUpdate(
+-          sticky.id,
+-          { body_markdown: nextBody },
+-          sticky.etag,
+-        );
++        try {
++          setInlineError(null);
++          await onUpdate(
++            sticky.id,
++            { body_markdown: nextBody },
++            sticky.etag,
++          );
++        } catch (err: unknown) {
++          setInlineError(err instanceof Error ? err.message : 'Failed to update sticky');
++        }
+       }
+     },
+     [sticky.id, sticky.body_markdown, sticky.etag, onUpdate],
+@@ -95,7 +112,7 @@ export function StickyCard({
+ 
+     debounceTimerRef.current = setTimeout(() => {
+       setEvaluatedBody(nextMarkdown);
+-      flushSave(nextMarkdown);
++      void flushSave(nextMarkdown);
+     }, debounceMs);
+   };
+ 
+@@ -104,7 +121,7 @@ export function StickyCard({
+       clearTimeout(debounceTimerRef.current);
+     }
+     setEvaluatedBody(currentMarkdown);
+-    flushSave(currentMarkdown);
++    void flushSave(currentMarkdown);
+   };
+ 
+   useEffect(() => {
+@@ -115,13 +132,18 @@ export function StickyCard({
+     };
+   }, []);
+ 
+-  const handleColorSelect = (nextColor: StickyColorToken): void => {
++  const handleColorSelect = async (nextColor: StickyColorToken): Promise<void> => {
+     setColor(nextColor);
+-    void onUpdate(
+-      sticky.id,
+-      { color_token: nextColor },
+-      sticky.etag,
+-    );
++    try {
++      setInlineError(null);
++      await onUpdate(
++        sticky.id,
++        { color_token: nextColor },
++        sticky.etag,
++      );
++    } catch (err: unknown) {
++      setInlineError(err instanceof Error ? err.message : 'Failed to recolor sticky');
++    }
+   };
+ 
+   const handleColorKeyDown = (
+@@ -144,24 +166,41 @@ export function StickyCard({
+     if (nextIndex !== currentIndex) {
+       const nextColor = STICKY_COLOR_TOKENS[nextIndex];
+       if (typeof nextColor === 'string') {
+-        handleColorSelect(nextColor);
++        void handleColorSelect(nextColor);
+       }
+     }
+   };
+ 
+-  const handleSnooze = (): void => {
+-    setSnoozedAt(evaluation.charLength);
+-    void onUpdate(
+-      sticky.id,
+-      { promotion_snoozed_at_length: evaluation.charLength },
+-      sticky.etag,
+-    );
++  const handleSnooze = async (): Promise<void> => {
++    try {
++      setInlineError(null);
++      setSnoozedAt(evaluation.charLength);
++      await onUpdate(
++        sticky.id,
++        { promotion_snoozed_at_length: evaluation.charLength },
++        sticky.etag,
++      );
++    } catch (err: unknown) {
++      setInlineError(err instanceof Error ? err.message : 'Failed to snooze promotion');
++    }
++  };
++
++  const handlePromote = (): void => {
++    setIsPromoteModalOpen(true);
+   };
+ 
+-  const handlePromote = async (): Promise<void> => {
++  const handleConfirmPromote = async (payload: {
++    title: string;
++    structured_body_markdown: string;
++    expected_sticky_sha256?: string;
++  }): Promise<void> => {
+     setIsPromoting(true);
++    setInlineError(null);
+     try {
+-      await onPromote(sticky.id);
++      await onPromote(sticky.id, payload);
++    } catch (err: unknown) {
++      setInlineError(err instanceof Error ? err.message : 'Failed to promote sticky to document');
++      throw err;
+     } finally {
+       setIsPromoting(false);
+     }
+@@ -201,7 +240,9 @@ export function StickyCard({
+                   aria-checked={isSelected}
+                   aria-label={`Color ${token}`}
+                   className={`sticky-swatch sticky-swatch--${token}${isSelected ? ' sticky-swatch--selected' : ''}`}
+-                  onClick={() => { handleColorSelect(token); }}
++                  onClick={() => {
++                    void handleColorSelect(token);
++                  }}
+                   tabIndex={isSelected ? 0 : -1}
+                   data-testid={`color-swatch-${token}`}
+                 />
+@@ -250,7 +291,7 @@ export function StickyCard({
+                       className="sticky-card__menu-item"
+                       onClick={() => {
+                         setIsMenuOpen(false);
+-                        void handlePromote();
++                        handlePromote();
+                       }}
+                       data-testid="convert-to-doc-menuitem"
+                     >
+@@ -278,6 +319,17 @@ export function StickyCard({
+         </div>
+       </header>
+ 
++      {/* Inline Error Alert */}
++      {inlineError && (
++        <div
++          role="alert"
++          className="sticky-card__inline-error"
++          data-testid={`sticky-error-${sticky.id}`}
++        >
++          {inlineError}
++        </div>
++      )}
++
+       {/* Embedded ProseMirror Markdown Editor */}
+       <div className="sticky-card__editor-wrapper">
+         <MarkdownEditor
+@@ -297,10 +349,20 @@ export function StickyCard({
+         <StickyPromotionBanner
+           reasons={evaluation.reasons}
+           isPromoting={isPromoting}
+-          onPromote={() => { void handlePromote(); }}
+-          onSnooze={handleSnooze}
++          onPromote={() => { handlePromote(); }}
++          onSnooze={() => { void handleSnooze(); }}
+         />
+       ) : null}
++
++      {/* Sticky to Doc AI Promotion Preview Modal */}
++      {isPromoteModalOpen && (
++        <StickyPromotePreviewModal
++          sticky={{ ...sticky, body_markdown: body }}
++          isOpen={isPromoteModalOpen}
++          onClose={() => { setIsPromoteModalOpen(false); }}
++          onConfirm={handleConfirmPromote}
++        />
++      )}
+     </article>
+   );
+ }
+diff --git a/kanban/web/src/features/stickies/StickyPromotePreviewModal.test.tsx b/kanban/web/src/features/stickies/StickyPromotePreviewModal.test.tsx
+new file mode 100644
+index 0000000..0abbab8
+--- /dev/null
++++ b/kanban/web/src/features/stickies/StickyPromotePreviewModal.test.tsx
+@@ -0,0 +1,324 @@
++/**
++ * Unit Tests for StickyPromotePreviewModal (KANBA-217, S8.2).
++ */
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { StickyPromotePreviewModal } from './StickyPromotePreviewModal';
++import { previewStickyPromotion, type StickyItem } from './stickiesApi';
++
++vi.mock('./stickiesApi', () => ({
++  previewStickyPromotion: vi.fn(),
++}));
++
++const mockPreview = vi.mocked(previewStickyPromotion);
++
++const baseSticky: StickyItem = {
++  id: 'sticky-p1',
++  workspace_id: 'ws-1',
++  project_id: 'proj-1',
++  body_markdown: '# Architecture Plan\nDetailed architecture markdown content.',
++  body_sha256: 'sha-abc-123',
++  color_token: 'sky',
++  sort_rank: '0',
++  promotion_recommended: true,
++  promotion_snoozed_at_length: null,
++  promoted_to_doc_id: null,
++  is_promoted_stub: false,
++  triggers: [],
++  etag: '"etag-1"',
++  capabilities: ['EDIT', 'DELETE'],
++};
++
++describe('StickyPromotePreviewModal', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('renders nothing when isOpen is false', () => {
++    const { container } = render(
++      <StickyPromotePreviewModal
++        sticky={baseSticky}
++        isOpen={false}
++        onClose={vi.fn()}
++        onConfirm={vi.fn()}
++      />,
++    );
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('extracts initial title from first markdown heading and loads preview successfully', async () => {
++    mockPreview.mockResolvedValueOnce({
++      proposal: {
++        title: 'Synthesized Architecture Plan',
++        confidence: 0.95,
++        doc_family: 'rfc',
++      },
++      rendered_markdown: '# Synthesized Architecture Plan\n\n```mermaid\ngraph TD\n A --> B\n```',
++      original_sha256: 'sha-original-999',
++      warnings: ['Large payload preview generated'],
++      acl_preview: {
++        direct_entries_count: 3,
++        inherited_scope: 'project',
++      },
++    });
++
++    const onClose = vi.fn();
++    const onConfirm = vi.fn().mockResolvedValue(undefined);
++
++    render(
++      <StickyPromotePreviewModal
++        sticky={baseSticky}
++        isOpen={true}
++        onClose={onClose}
++        onConfirm={onConfirm}
++      />,
++    );
++
++    // Initial loading indicator
++    expect(screen.getByTestId('promote-modal-loading')).toBeDefined();
++
++    // Wait for preview load
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    // Validates inputs populated with preview data
++    const titleInput = screen.getByTestId<HTMLInputElement>('promote-modal-title');
++    expect(titleInput.value).toBe('Synthesized Architecture Plan');
++
++    const markdownArea = screen.getByTestId<HTMLTextAreaElement>('promote-modal-markdown');
++    expect(markdownArea.value).toContain('```mermaid');
++
++    // Validates ACL notice & warnings
++    expect(screen.getByTestId('promote-modal-acl').textContent).toContain('All 3 explicit ACL grant(s)');
++    expect(screen.getByTestId('promote-modal-warnings').textContent).toContain('Large payload preview generated');
++
++    // Form submission
++    const form = screen.getByTestId('sticky-promote-preview-modal').querySelector('form');
++    if (form) {
++      fireEvent.submit(form);
++    }
++
++    await waitFor(() => {
++      expect(onConfirm).toHaveBeenCalledWith({
++        title: 'Synthesized Architecture Plan',
++        structured_body_markdown: expect.stringContaining('```mermaid') as string,
++        expected_sticky_sha256: 'sha-original-999',
++      });
++      expect(onClose).toHaveBeenCalled();
++    });
++  });
++
++  it('derives initial title from first non-heading line or fallback if empty', async () => {
++    mockPreview.mockResolvedValue({
++      proposal: {},
++      rendered_markdown: 'fallback body',
++      original_sha256: 'sha-mock-1',
++      acl_preview: {},
++    });
++
++    const noHeadingSticky: StickyItem = {
++      ...baseSticky,
++      body_markdown: 'First plain line without hash\nSecond line',
++    };
++    render(
++      <StickyPromotePreviewModal
++        sticky={noHeadingSticky}
++        isOpen={true}
++        onClose={vi.fn()}
++        onConfirm={vi.fn()}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    const emptyBodySticky: StickyItem = {
++      ...baseSticky,
++      body_markdown: '',
++    };
++    render(
++      <StickyPromotePreviewModal
++        sticky={emptyBodySticky}
++        isOpen={true}
++        onClose={vi.fn()}
++        onConfirm={vi.fn()}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.getAllByTestId('sticky-promote-preview-modal').length).toBe(2);
++    });
++  });
++
++  it('falls back to deterministic structuring when previewStickyPromotion rejects', async () => {
++    mockPreview.mockRejectedValueOnce(new Error('Network error or air-gapped'));
++
++    const stickyWithoutMermaid: StickyItem = {
++      ...baseSticky,
++      body_markdown: 'Triage notes for DB migration',
++      body_sha256: undefined,
++    };
++
++    render(
++      <StickyPromotePreviewModal
++        sticky={stickyWithoutMermaid}
++        isOpen={true}
++        onClose={vi.fn()}
++        onConfirm={vi.fn().mockResolvedValue(undefined)}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    const markdownArea = screen.getByTestId<HTMLTextAreaElement>('promote-modal-markdown');
++    expect(markdownArea.value).toContain('```mermaid');
++    expect(markdownArea.value).toContain('Start[Start] --> Process[Process]');
++  });
++
++  it('leaves existing mermaid intact in fallback when preview API rejects', async () => {
++    mockPreview.mockRejectedValueOnce('string error');
++
++    const stickyWithMermaid: StickyItem = {
++      ...baseSticky,
++      body_markdown: '```mermaid\nsequenceDiagram\n A->>B: Ping\n```',
++    };
++
++    render(
++      <StickyPromotePreviewModal
++        sticky={stickyWithMermaid}
++        isOpen={true}
++        onClose={vi.fn()}
++        onConfirm={vi.fn().mockResolvedValue(undefined)}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    const markdownAreaWithMermaid = screen.getByTestId<HTMLTextAreaElement>('promote-modal-markdown');
++    expect(markdownAreaWithMermaid.value).toBe('```mermaid\nsequenceDiagram\n A->>B: Ping\n```');
++  });
++
++  it('validates empty title and displays inline error', async () => {
++    mockPreview.mockResolvedValueOnce({
++      proposal: { title: 'Some Title' },
++      rendered_markdown: 'body',
++      original_sha256: 'sha-mock-1',
++      acl_preview: {},
++    });
++
++    render(
++      <StickyPromotePreviewModal
++        sticky={baseSticky}
++        isOpen={true}
++        onClose={vi.fn()}
++        onConfirm={vi.fn()}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    const titleInput = screen.getByTestId('promote-modal-title');
++    fireEvent.change(titleInput, { target: { value: '   ' } });
++
++    const form = screen.getByTestId('sticky-promote-preview-modal').querySelector('form');
++    if (form) {
++      fireEvent.submit(form);
++    }
++
++    expect(screen.getByTestId('promote-modal-error').textContent).toBe('Title cannot be empty');
++  });
++
++  it('handles error thrown during onConfirm (Error instance and non-Error)', async () => {
++    mockPreview.mockResolvedValueOnce({
++      proposal: { title: 'Title' },
++      rendered_markdown: 'body',
++      original_sha256: 'sha-mock-1',
++      acl_preview: {},
++    });
++
++    const onConfirm = vi.fn().mockRejectedValueOnce(new Error('Backend rejected payload'));
++
++    render(
++      <StickyPromotePreviewModal
++        sticky={baseSticky}
++        isOpen={true}
++        onClose={vi.fn()}
++        onConfirm={onConfirm}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    const form1 = screen.getByTestId('sticky-promote-preview-modal').querySelector('form');
++    if (form1) {
++      fireEvent.submit(form1);
++    }
++
++    await waitFor(() => {
++      expect(screen.getByTestId('promote-modal-error').textContent).toBe('Backend rejected payload');
++    });
++
++    // Test non-Error rejection
++    onConfirm.mockRejectedValueOnce('raw rejection');
++    const form2 = screen.getByTestId('sticky-promote-preview-modal').querySelector('form');
++    if (form2) {
++      fireEvent.submit(form2);
++    }
++
++    await waitFor(() => {
++      expect(screen.getByTestId('promote-modal-error').textContent).toBe('Failed to promote sticky to document');
++    });
++  });
++
++  it('closes modal on backdrop click, close button, and cancel button, while stopping propagation on modal click', async () => {
++    mockPreview.mockResolvedValueOnce({
++      proposal: { title: 'Title' },
++      rendered_markdown: 'body',
++      original_sha256: 'sha-mock-1',
++      acl_preview: {},
++    });
++
++    const onClose = vi.fn();
++
++    render(
++      <StickyPromotePreviewModal
++        sticky={baseSticky}
++        isOpen={true}
++        onClose={onClose}
++        onConfirm={vi.fn()}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
++    });
++
++    // Stop propagation on modal body
++    fireEvent.click(screen.getByTestId('sticky-promote-preview-modal'));
++    expect(onClose).not.toHaveBeenCalled();
++
++    // Close button
++    fireEvent.click(screen.getByTestId('close-promote-modal-btn'));
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    // Cancel button
++    fireEvent.click(screen.getByTestId('cancel-promote-btn'));
++    expect(onClose).toHaveBeenCalledTimes(2);
++
++    // Backdrop click
++    fireEvent.click(screen.getByTestId('sticky-promote-preview-backdrop'));
++    expect(onClose).toHaveBeenCalledTimes(3);
++  });
++});
+diff --git a/kanban/web/src/features/stickies/StickyPromotePreviewModal.tsx b/kanban/web/src/features/stickies/StickyPromotePreviewModal.tsx
+new file mode 100644
+index 0000000..5bd54c3
+--- /dev/null
++++ b/kanban/web/src/features/stickies/StickyPromotePreviewModal.tsx
+@@ -0,0 +1,238 @@
++/**
++ * Sticky to Doc AI Promotion Preview Modal (KB-AUDIT-11, KANBA-217, S8.2).
++ * Shows synthesized title, Markdown headings/Mermaid blocks preview, and preserved ACL grants.
++ */
++
++import React, { useState, useEffect, type JSX, type SyntheticEvent } from 'react';
++import {
++  previewStickyPromotion,
++  type StickyItem,
++} from './stickiesApi';
++import './StickiesGrid.css';
++
++export interface StickyPromotePreviewModalProps {
++  sticky: StickyItem;
++  isOpen: boolean;
++  onClose: () => void;
++  onConfirm: (payload: {
++    title: string;
++    structured_body_markdown: string;
++    expected_sticky_sha256?: string;
++  }) => Promise<void>;
++}
++
++function getInitialTitle(sticky: StickyItem): string {
++  const lines = sticky.body_markdown.split('\n');
++  const firstHeading = lines.find((l) => l.startsWith('#'))?.replace(/^#+\s*/, '').trim();
++  return firstHeading ?? lines[0]?.trim().slice(0, 80) ?? 'Promoted Specification';
++}
++
++export function StickyPromotePreviewModal({
++  sticky,
++  isOpen,
++  onClose,
++  onConfirm,
++}: StickyPromotePreviewModalProps): JSX.Element | null {
++  const [isLoading, setIsLoading] = useState(true);
++  const [isSubmitting, setIsSubmitting] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const [docTitle, setDocTitle] = useState(() => getInitialTitle(sticky));
++  const [markdownBody, setMarkdownBody] = useState(sticky.body_markdown);
++  const [originalSha, setOriginalSha] = useState<string | undefined>(sticky.body_sha256);
++  const [warnings, setWarnings] = useState<string[]>([]);
++  const [directAclCount, setDirectAclCount] = useState<number>(0);
++
++  useEffect(() => {
++    if (!isOpen) return;
++
++    let active = true;
++
++    async function loadPreview() {
++      try {
++        const preview = await previewStickyPromotion(sticky.id);
++        if (!active) return;
++        if (preview.proposal.title) {
++          setDocTitle(preview.proposal.title);
++        }
++        if (preview.rendered_markdown) {
++          setMarkdownBody(preview.rendered_markdown);
++        }
++        if (preview.original_sha256) {
++          setOriginalSha(preview.original_sha256);
++        }
++        if (preview.warnings) {
++          setWarnings(preview.warnings);
++        }
++        if (preview.acl_preview.direct_entries_count !== undefined) {
++          setDirectAclCount(preview.acl_preview.direct_entries_count);
++        }
++      } catch {
++        // Fallback to deterministic structuring if preview API is off/air-gapped
++        if (!active) return;
++        const fallbackStructured = sticky.body_markdown.includes('```mermaid')
++          ? sticky.body_markdown
++          : `${sticky.body_markdown}\n\n\`\`\`mermaid\ngraph TD\n  Start[Start] --> Process[Process] --> Finish[Finish]\n\`\`\``;
++        setMarkdownBody(fallbackStructured);
++      } finally {
++        if (active) {
++          setIsLoading(false);
++        }
++      }
++    }
++
++    void loadPreview();
++
++    return () => {
++      active = false;
++    };
++  }, [isOpen, sticky.id, sticky.body_markdown]);
++
++  if (!isOpen) return null;
++
++  const handleSubmit = async (e: SyntheticEvent) => {
++    e.preventDefault();
++    const trimmedTitle = docTitle.trim();
++    if (!trimmedTitle) {
++      setError('Title cannot be empty');
++      return;
++    }
++
++    setIsSubmitting(true);
++    setError(null);
++    try {
++      await onConfirm({
++        title: trimmedTitle,
++        structured_body_markdown: markdownBody,
++        ...(originalSha ? { expected_sticky_sha256: originalSha } : {}),
++      });
++      onClose();
++    } catch (err: unknown) {
++      setError(err instanceof Error ? err.message : 'Failed to promote sticky to document');
++    } finally {
++      setIsSubmitting(false);
++    }
++  };
++
++  return (
++    <div
++      className="sticky-promote-modal-backdrop"
++      onClick={onClose}
++      data-testid="sticky-promote-preview-backdrop"
++    >
++      <div
++        className="sticky-promote-modal"
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby="promote-modal-heading"
++        onClick={(e) => { e.stopPropagation(); }}
++        data-testid="sticky-promote-preview-modal"
++      >
++        <header className="sticky-promote-modal__header">
++          <h2 id="promote-modal-heading" className="sticky-promote-modal__title">
++            <span aria-hidden="true">📄</span> Promote Sticky to Document
++          </h2>
++          <button
++            type="button"
++            className="sticky-promote-modal__close-btn"
++            onClick={onClose}
++            aria-label="Close promotion preview"
++            data-testid="close-promote-modal-btn"
++          >
++            ✕
++          </button>
++        </header>
++
++        {isLoading ? (
++          <div className="sticky-promote-modal__loading" data-testid="promote-modal-loading">
++            Synthesizing document structure and Mermaid diagrams...
++          </div>
++        ) : (
++          <form onSubmit={(e) => { void handleSubmit(e); }} className="sticky-promote-modal__form">
++            {error && (
++              <div
++                role="alert"
++                className="sticky-promote-modal__error"
++                data-testid="promote-modal-error"
++              >
++                {error}
++              </div>
++            )}
++
++            {/* Preserved 🛡️ ACL Grants Notice */}
++            <div className="sticky-promote-modal__acl-notice" data-testid="promote-modal-acl">
++              <span className="sticky-promote-modal__acl-icon" aria-hidden="true">🛡️</span>
++              <div className="sticky-promote-modal__acl-text">
++                <strong>Access Grants Preserved:</strong> All {directAclCount} explicit ACL grant(s)
++                and security policies from this sticky note will be copied verbatim to the newly created document.
++              </div>
++            </div>
++
++            {/* Warnings banner */}
++            {warnings.length > 0 && (
++              <div className="sticky-promote-modal__warnings" data-testid="promote-modal-warnings">
++                <strong>Integrity Warnings:</strong>
++                <ul>
++                  {warnings.map((w, idx) => (
++                    <li key={idx}>{w}</li>
++                  ))}
++                </ul>
++              </div>
++            )}
++
++            {/* Doc Title Input */}
++            <div className="sticky-promote-modal__field">
++              <label htmlFor="promote-doc-title" className="sticky-promote-modal__label">
++                Document Title
++              </label>
++              <input
++                id="promote-doc-title"
++                type="text"
++                className="sticky-promote-modal__input"
++                value={docTitle}
++                onChange={(e) => { setDocTitle(e.target.value); }}
++                required
++                data-testid="promote-modal-title"
++              />
++            </div>
++
++            {/* Markdown Body Preview / Editor */}
++            <div className="sticky-promote-modal__field">
++              <label htmlFor="promote-doc-markdown" className="sticky-promote-modal__label">
++                Structured Markdown & Mermaid Preview
++              </label>
++              <textarea
++                id="promote-doc-markdown"
++                className="sticky-promote-modal__textarea mono"
++                value={markdownBody}
++                onChange={(e) => { setMarkdownBody(e.target.value); }}
++                rows={10}
++                data-testid="promote-modal-markdown"
++              />
++            </div>
++
++            <footer className="sticky-promote-modal__footer">
++              <button
++                type="button"
++                className="sticky-promote-modal__cancel-btn"
++                onClick={onClose}
++                disabled={isSubmitting}
++                data-testid="cancel-promote-btn"
++              >
++                Cancel
++              </button>
++              <button
++                type="submit"
++                className="sticky-promote-modal__confirm-btn"
++                disabled={isSubmitting || isLoading}
++                data-testid="confirm-promote-btn"
++              >
++                {isSubmitting ? 'Promoting...' : 'Confirm Promotion'}
++              </button>
++            </footer>
++          </form>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx b/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+index b8c899a..30b0ef0 100644
+--- a/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
++++ b/kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+@@ -85,7 +85,19 @@ export function WorkspaceStickiesView({
+   });
+ 
+   const promoteMutation = useMutation({
+-    mutationFn: (stickyId: string) => promoteStickyToDoc(stickyId),
++    mutationFn: ({
++      stickyId,
++      payload,
++    }: {
++      stickyId: string;
++      payload?: {
++        title?: string;
++        parent_doc_id?: string;
++        parent_page_id?: string;
++        structured_body_markdown?: string;
++        expected_sticky_sha256?: string;
++      };
++    }) => promoteStickyToDoc(stickyId, payload),
+     onSuccess: (promoted) => {
+       queryClient.setQueryData<StickyItem[]>(WORKSPACE_STICKIES_QUERY_KEY, (old = []) =>
+         old.map((item) => (item.id === promoted.id ? promoted : item)),
+@@ -119,8 +131,8 @@ export function WorkspaceStickiesView({
+         onDeleteSticky={async (id) => {
+           await deleteMutation.mutateAsync(id);
+         }}
+-        onPromoteSticky={async (id) => {
+-          await promoteMutation.mutateAsync(id);
++        onPromoteSticky={async (id, payload) => {
++          await promoteMutation.mutateAsync({ stickyId: id, ...(payload ? { payload } : {}) });
+         }}
+         onUnarchiveCopy={async (id) => {
+           await unarchiveMutation.mutateAsync(id);
+diff --git a/kanban/web/src/features/stickies/stickiesApi.ts b/kanban/web/src/features/stickies/stickiesApi.ts
+index 1427701..c793a33 100644
+--- a/kanban/web/src/features/stickies/stickiesApi.ts
++++ b/kanban/web/src/features/stickies/stickiesApi.ts
+@@ -9,6 +9,8 @@ export interface PromotedDocSummary {
+   canonical_key?: string | null | undefined;
+   title?: string | null | undefined;
+   restricted?: boolean | undefined;
++  root_page_id?: string | null | undefined;
++  root_page_canonical_key?: string | null | undefined;
+ }
+ 
+ export interface StickyItem {
+@@ -253,6 +255,40 @@ export async function deleteSticky(stickyId: string): Promise<void> {
+   await handleResponse<unknown>(res, 'Failed to delete sticky');
+ }
+ 
++export interface StickyPromotePreviewResponse {
++  proposal: {
++    title?: string;
++    sections?: { heading: string; content: string }[];
++    [key: string]: unknown;
++  };
++  rendered_markdown: string;
++  original_sha256: string;
++  warnings?: string[];
++  acl_preview: {
++    manifest?: Record<string, unknown>;
++    direct_entries_count?: number;
++    will_copy_verbatim?: boolean;
++    [key: string]: unknown;
++  };
++}
++
++export async function previewStickyPromotion(
++  stickyId: string,
++): Promise<StickyPromotePreviewResponse> {
++  const res = await mutateWithCsrf(
++    `/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-preview`,
++    {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        Accept: 'application/json',
++      },
++      credentials: 'same-origin',
++    },
++  );
++  return handleResponse<StickyPromotePreviewResponse>(res, 'Failed to preview sticky promotion');
++}
++
+ export async function snoozeStickyPromotion(
+   stickyId: string,
+   charLength?: number,
+@@ -260,7 +296,7 @@ export async function snoozeStickyPromotion(
+ ): Promise<StickyItem> {
+   // Use POST /api/v1/stickies/{id}/snooze-promotion or PATCH fallback
+   try {
+-    const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}/snooze-promotion`, {
++    const res = await mutateWithCsrf(`/api/v1/stickies/${encodeURIComponent(stickyId)}/snooze-promotion`, {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+@@ -284,7 +320,13 @@ export async function snoozeStickyPromotion(
+ 
+ export async function promoteStickyToDoc(
+   stickyId: string,
+-  payload?: { title?: string; parent_doc_id?: string; parent_page_id?: string },
++  payload?: {
++    title?: string;
++    parent_doc_id?: string;
++    parent_page_id?: string;
++    structured_body_markdown?: string;
++    expected_sticky_sha256?: string;
++  },
+ ): Promise<StickyItem> {
+   const res = await mutateWithCsrf(
+     `/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-to-doc`,

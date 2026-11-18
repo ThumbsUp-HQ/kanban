@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from database.models.knowledge import Doc, Page, PageVersion
+from database.models.projects import Project
 from database.models.spine import ObjectRecord
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.docs import (
@@ -180,12 +181,12 @@ async def _allocate_unique_canonical_key(
         idx += 1
 
 
-async def _resolve_doc_id(
+async def _resolve_doc_id(  # noqa: RET503
     session: AsyncSession,
     workspace_id: uuid.UUID,
     doc_ref: str,
 ) -> uuid.UUID:
-    """Resolve doc UUID from UUID string or canonical key."""
+    """Resolve doc UUID from UUID string or canonical key, or project identifier."""
     try:
         doc_uuid = uuid.UUID(doc_ref)
         doc = (
@@ -215,17 +216,109 @@ async def _resolve_doc_id(
         )
     ).scalar_one_or_none()
 
-    if obj_id is None:
-        not_found()
-    return obj_id
+    if obj_id is not None:
+        return obj_id
+
+    # Fallback: check if doc_ref is a Project identifier or Project UUID
+    proj_id: uuid.UUID | None = None
+    try:
+        proj_uuid = uuid.UUID(doc_ref)
+        p_row = (
+            await session.execute(
+                select(Project.id).where(
+                    Project.id == proj_uuid,
+                    Project.workspace_id == workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if p_row is not None:
+            proj_id = p_row
+    except ValueError:
+        pass
+
+    if proj_id is None:
+        p_row = (
+            await session.execute(
+                select(Project.id).where(
+                    Project.workspace_id == workspace_id,
+                    Project.identifier == clean_ref.upper(),
+                )
+            )
+        ).scalar_one_or_none()
+        if p_row is not None:
+            proj_id = p_row
+
+    if proj_id is not None:
+        existing_doc = (
+            (
+                await session.execute(
+                    select(Doc.id)
+                    .join(ObjectRecord, ObjectRecord.id == Doc.id)
+                    .where(
+                        Doc.project_id == proj_id,
+                        Doc.workspace_id == workspace_id,
+                        ObjectRecord.deleted_at.is_(None),
+                    )
+                    .order_by(ObjectRecord.created_at.asc())
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if existing_doc is not None:
+            return existing_doc
+
+        # Auto-create default root doc for fresh project
+        proj_rec = (
+            await session.execute(
+                select(ObjectRecord.display_title).where(
+                    ObjectRecord.id == proj_id,
+                    ObjectRecord.workspace_id == workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
+        doc_title = f"{proj_rec or clean_ref.upper()} Documentation"
+        base_slug = _to_slug(doc_title, "doc")
+        canonical_key = await _allocate_unique_canonical_key(
+            session, workspace_id, "doc", "docs", base_slug
+        )
+        new_doc_id = (
+            await session.execute(
+                text(
+                    "SELECT register_object("
+                    "  CAST('doc' AS object_kind), :ws, :proj, :ckey, :title, :creator"
+                    ")"
+                ),
+                {
+                    "ws": workspace_id,
+                    "proj": proj_id,
+                    "ckey": canonical_key,
+                    "title": doc_title,
+                    "creator": None,
+                },
+            )
+        ).scalar_one()
+        doc_inst = Doc(
+            id=new_doc_id,
+            workspace_id=workspace_id,
+            project_id=proj_id,
+            title=doc_title,
+            body_markdown="",
+            hierarchy_path="pending",
+        )
+        session.add(doc_inst)
+        await session.flush()
+        return uuid.UUID(str(new_doc_id))
+
+    not_found()
 
 
-async def _resolve_page_id(
+async def _resolve_page_id(  # noqa: RET503
     session: AsyncSession,
     workspace_id: uuid.UUID,
     page_ref: str,
 ) -> uuid.UUID:
-    """Resolve page UUID from UUID string or canonical key."""
+    """Resolve page UUID from UUID string or canonical key, falling back to Doc root page."""
     try:
         page_uuid = uuid.UUID(page_ref)
         page = (
@@ -238,6 +331,28 @@ async def _resolve_page_id(
         ).scalar_one_or_none()
         if page is not None:
             return page
+
+        # If page_uuid is actually a Doc UUID, resolve to its root page
+        doc_root_page = (
+            (
+                await session.execute(
+                    select(Page.id)
+                    .where(
+                        Page.doc_id == page_uuid,
+                        Page.workspace_id == workspace_id,
+                    )
+                    .order_by(
+                        Page.parent_page_id.is_(None).desc(),
+                        Page.sort_rank.collate("C").asc(),
+                        Page.id.asc(),
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if doc_root_page is not None:
+            return doc_root_page
     except ValueError:
         pass
 
@@ -255,9 +370,43 @@ async def _resolve_page_id(
         )
     ).scalar_one_or_none()
 
-    if obj_id is None:
-        not_found()
-    return obj_id
+    if obj_id is not None:
+        return obj_id
+
+    # If canonical key resolves to a Doc, resolve to its root page
+    doc_obj_id = (
+        await session.execute(
+            select(ObjectRecord.id).where(
+                ObjectRecord.workspace_id == workspace_id,
+                ObjectRecord.object_type == "doc",
+                ObjectRecord.canonical_key.in_([clean_ref, ref_with_prefix]),
+                ObjectRecord.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if doc_obj_id is not None:
+        doc_root_page = (
+            (
+                await session.execute(
+                    select(Page.id)
+                    .where(
+                        Page.doc_id == doc_obj_id,
+                        Page.workspace_id == workspace_id,
+                    )
+                    .order_by(
+                        Page.parent_page_id.is_(None).desc(),
+                        Page.sort_rank.collate("C").asc(),
+                        Page.id.asc(),
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if doc_root_page is not None:
+            return doc_root_page
+
+    not_found()
 
 
 def _capabilities_to_list(caps: Capability) -> list[str]:

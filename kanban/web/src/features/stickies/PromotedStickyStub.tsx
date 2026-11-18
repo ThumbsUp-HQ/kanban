@@ -31,10 +31,15 @@ export function PromotedStickyStub({
     .slice(0, 160);
 
   const docTitle = sticky.promoted_to_doc?.title ?? 'Promoted Specification';
-  const docId = sticky.promoted_to_doc_id ?? sticky.promoted_to_doc?.id ?? '';
+  const targetPageId =
+    sticky.promoted_to_doc?.root_page_id ??
+    sticky.promoted_to_doc?.root_page_canonical_key ??
+    sticky.promoted_to_doc_id ??
+    sticky.promoted_to_doc?.id ??
+    '';
   const docLink = projectKey
-    ? `/projects/${encodeURIComponent(projectKey)}/docs/${encodeURIComponent(docId)}`
-    : `/docs/${encodeURIComponent(docId)}`;
+    ? `/projects/${encodeURIComponent(projectKey)}/docs/${encodeURIComponent(targetPageId)}`
+    : `/docs/${encodeURIComponent(targetPageId)}`;
 
   const handleAccessClick = (): void => {
     if (onOpenAccessInspector) {

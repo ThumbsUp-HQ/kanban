@@ -9,6 +9,8 @@ export interface PromotedDocSummary {
   canonical_key?: string | null | undefined;
   title?: string | null | undefined;
   restricted?: boolean | undefined;
+  root_page_id?: string | null | undefined;
+  root_page_canonical_key?: string | null | undefined;
 }
 
 export interface StickyItem {
@@ -253,6 +255,40 @@ export async function deleteSticky(stickyId: string): Promise<void> {
   await handleResponse<unknown>(res, 'Failed to delete sticky');
 }
 
+export interface StickyPromotePreviewResponse {
+  proposal: {
+    title?: string;
+    sections?: { heading: string; content: string }[];
+    [key: string]: unknown;
+  };
+  rendered_markdown: string;
+  original_sha256: string;
+  warnings?: string[];
+  acl_preview: {
+    manifest?: Record<string, unknown>;
+    direct_entries_count?: number;
+    will_copy_verbatim?: boolean;
+    [key: string]: unknown;
+  };
+}
+
+export async function previewStickyPromotion(
+  stickyId: string,
+): Promise<StickyPromotePreviewResponse> {
+  const res = await mutateWithCsrf(
+    `/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-preview`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'same-origin',
+    },
+  );
+  return handleResponse<StickyPromotePreviewResponse>(res, 'Failed to preview sticky promotion');
+}
+
 export async function snoozeStickyPromotion(
   stickyId: string,
   charLength?: number,
@@ -260,7 +296,7 @@ export async function snoozeStickyPromotion(
 ): Promise<StickyItem> {
   // Use POST /api/v1/stickies/{id}/snooze-promotion or PATCH fallback
   try {
-    const res = await fetch(`/api/v1/stickies/${encodeURIComponent(stickyId)}/snooze-promotion`, {
+    const res = await mutateWithCsrf(`/api/v1/stickies/${encodeURIComponent(stickyId)}/snooze-promotion`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -284,7 +320,13 @@ export async function snoozeStickyPromotion(
 
 export async function promoteStickyToDoc(
   stickyId: string,
-  payload?: { title?: string; parent_doc_id?: string; parent_page_id?: string },
+  payload?: {
+    title?: string;
+    parent_doc_id?: string;
+    parent_page_id?: string;
+    structured_body_markdown?: string;
+    expected_sticky_sha256?: string;
+  },
 ): Promise<StickyItem> {
   const res = await mutateWithCsrf(
     `/api/v1/stickies/${encodeURIComponent(stickyId)}/promote-to-doc`,

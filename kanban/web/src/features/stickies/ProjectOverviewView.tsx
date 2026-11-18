@@ -80,7 +80,19 @@ export function ProjectOverviewView(): JSX.Element {
   });
 
   const promoteMutation = useMutation({
-    mutationFn: (stickyId: string) => promoteStickyToDoc(stickyId),
+    mutationFn: ({
+      stickyId,
+      payload,
+    }: {
+      stickyId: string;
+      payload?: {
+        title?: string;
+        parent_doc_id?: string;
+        parent_page_id?: string;
+        structured_body_markdown?: string;
+        expected_sticky_sha256?: string;
+      };
+    }) => promoteStickyToDoc(stickyId, payload),
     onSuccess: (promoted) => {
       queryClient.setQueryData<StickyItem[]>(qk.stickies(projectKey), (old = []) =>
         old.map((item) => (item.id === promoted.id ? promoted : item)),
@@ -116,8 +128,8 @@ export function ProjectOverviewView(): JSX.Element {
         onDeleteSticky={async (id) => {
           await deleteMutation.mutateAsync(id);
         }}
-        onPromoteSticky={async (id) => {
-          await promoteMutation.mutateAsync(id);
+        onPromoteSticky={async (id, payload) => {
+          await promoteMutation.mutateAsync({ stickyId: id, ...(payload ? { payload } : {}) });
         }}
         onUnarchiveCopy={async (id) => {
           await unarchiveMutation.mutateAsync(id);

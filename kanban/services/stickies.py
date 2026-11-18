@@ -236,11 +236,30 @@ async def _resolve_promoted_doc_summary(
         doc_entity, doc_ckey = doc_row
         doc_caps = await evaluate_capabilities(session, caller, doc_entity.id)
         if Capability.VIEW in doc_caps:
+            page_row = (
+                await session.execute(
+                    select(Page.id, ObjectRecord.canonical_key)
+                    .join(ObjectRecord, ObjectRecord.id == Page.id)
+                    .where(
+                        Page.doc_id == doc_entity.id,
+                        ObjectRecord.deleted_at.is_(None),
+                    )
+                    .order_by(
+                        Page.parent_page_id.is_(None).desc(),
+                        Page.sort_rank.collate("C").asc(),
+                        Page.id.asc(),
+                    )
+                )
+            ).first()
+            root_page_id = page_row[0] if page_row else None
+            root_page_ckey = page_row[1] if page_row else None
             return PromotedDocSummary(
                 id=doc_entity.id,
                 canonical_key=doc_ckey,
                 title=doc_entity.title,
                 restricted=False,
+                root_page_id=root_page_id,
+                root_page_canonical_key=root_page_ckey,
             )
 
     return PromotedDocSummary(restricted=True)
@@ -563,6 +582,16 @@ async def update_sticky(
 
         if "sort_rank" in fields_set and body.sort_rank is not None:
             sticky.sort_rank = body.sort_rank
+            await session.flush()
+
+        if "promotion_snoozed_at_length" in fields_set:
+            sticky.promotion_snoozed_at_length = body.promotion_snoozed_at_length
+            assessment = evaluate_sticky_promotion(
+                sticky.body_markdown,
+                sticky.promotion_snoozed_at_length,
+                sticky.promoted_to_doc_id,
+            )
+            sticky.promotion_recommended = assessment.recommended
             await session.flush()
 
     await session.refresh(sticky)

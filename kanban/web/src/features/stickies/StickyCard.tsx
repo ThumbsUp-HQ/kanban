@@ -23,6 +23,7 @@ import {
   type StickyComplexityEvaluation,
 } from './stickyHeuristic';
 import { StickyPromotionBanner } from './StickyPromotionBanner';
+import { StickyPromotePreviewModal } from './StickyPromotePreviewModal';
 import type { StickyItem } from './stickiesApi';
 
 export interface StickyCardProps {
@@ -40,7 +41,16 @@ export interface StickyCardProps {
     etag?: string,
   ) => Promise<void> | void;
   onDelete: (stickyId: string) => Promise<void> | void;
-  onPromote: (stickyId: string) => Promise<void> | void;
+  onPromote: (
+    stickyId: string,
+    payload?: {
+      title?: string;
+      parent_doc_id?: string;
+      parent_page_id?: string;
+      structured_body_markdown?: string;
+      expected_sticky_sha256?: string;
+    },
+  ) => Promise<void> | void;
 }
 
 export function StickyCard({
@@ -59,6 +69,8 @@ export function StickyCard({
   );
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPromoting, setIsPromoting] = useState(false);
+  const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
+  const [inlineError, setInlineError] = useState<string | null>(null);
 
   const effectiveCaps = sticky.capabilities ?? (readOnly ? ['VIEW'] : ['EDIT', 'DELETE', 'ADMIN']);
   const canEdit = !readOnly && (effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN'));
@@ -74,13 +86,18 @@ export function StickyCard({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flushSave = useCallback(
-    (nextBody: string) => {
+    async (nextBody: string) => {
       if (nextBody !== sticky.body_markdown) {
-        void onUpdate(
-          sticky.id,
-          { body_markdown: nextBody },
-          sticky.etag,
-        );
+        try {
+          setInlineError(null);
+          await onUpdate(
+            sticky.id,
+            { body_markdown: nextBody },
+            sticky.etag,
+          );
+        } catch (err: unknown) {
+          setInlineError(err instanceof Error ? err.message : 'Failed to update sticky');
+        }
       }
     },
     [sticky.id, sticky.body_markdown, sticky.etag, onUpdate],
@@ -95,7 +112,7 @@ export function StickyCard({
 
     debounceTimerRef.current = setTimeout(() => {
       setEvaluatedBody(nextMarkdown);
-      flushSave(nextMarkdown);
+      void flushSave(nextMarkdown);
     }, debounceMs);
   };
 
@@ -104,7 +121,7 @@ export function StickyCard({
       clearTimeout(debounceTimerRef.current);
     }
     setEvaluatedBody(currentMarkdown);
-    flushSave(currentMarkdown);
+    void flushSave(currentMarkdown);
   };
 
   useEffect(() => {
@@ -115,13 +132,18 @@ export function StickyCard({
     };
   }, []);
 
-  const handleColorSelect = (nextColor: StickyColorToken): void => {
+  const handleColorSelect = async (nextColor: StickyColorToken): Promise<void> => {
     setColor(nextColor);
-    void onUpdate(
-      sticky.id,
-      { color_token: nextColor },
-      sticky.etag,
-    );
+    try {
+      setInlineError(null);
+      await onUpdate(
+        sticky.id,
+        { color_token: nextColor },
+        sticky.etag,
+      );
+    } catch (err: unknown) {
+      setInlineError(err instanceof Error ? err.message : 'Failed to recolor sticky');
+    }
   };
 
   const handleColorKeyDown = (
@@ -144,24 +166,41 @@ export function StickyCard({
     if (nextIndex !== currentIndex) {
       const nextColor = STICKY_COLOR_TOKENS[nextIndex];
       if (typeof nextColor === 'string') {
-        handleColorSelect(nextColor);
+        void handleColorSelect(nextColor);
       }
     }
   };
 
-  const handleSnooze = (): void => {
-    setSnoozedAt(evaluation.charLength);
-    void onUpdate(
-      sticky.id,
-      { promotion_snoozed_at_length: evaluation.charLength },
-      sticky.etag,
-    );
+  const handleSnooze = async (): Promise<void> => {
+    try {
+      setInlineError(null);
+      setSnoozedAt(evaluation.charLength);
+      await onUpdate(
+        sticky.id,
+        { promotion_snoozed_at_length: evaluation.charLength },
+        sticky.etag,
+      );
+    } catch (err: unknown) {
+      setInlineError(err instanceof Error ? err.message : 'Failed to snooze promotion');
+    }
   };
 
-  const handlePromote = async (): Promise<void> => {
+  const handlePromote = (): void => {
+    setIsPromoteModalOpen(true);
+  };
+
+  const handleConfirmPromote = async (payload: {
+    title: string;
+    structured_body_markdown: string;
+    expected_sticky_sha256?: string;
+  }): Promise<void> => {
     setIsPromoting(true);
+    setInlineError(null);
     try {
-      await onPromote(sticky.id);
+      await onPromote(sticky.id, payload);
+    } catch (err: unknown) {
+      setInlineError(err instanceof Error ? err.message : 'Failed to promote sticky to document');
+      throw err;
     } finally {
       setIsPromoting(false);
     }
@@ -201,7 +240,9 @@ export function StickyCard({
                   aria-checked={isSelected}
                   aria-label={`Color ${token}`}
                   className={`sticky-swatch sticky-swatch--${token}${isSelected ? ' sticky-swatch--selected' : ''}`}
-                  onClick={() => { handleColorSelect(token); }}
+                  onClick={() => {
+                    void handleColorSelect(token);
+                  }}
                   tabIndex={isSelected ? 0 : -1}
                   data-testid={`color-swatch-${token}`}
                 />
@@ -250,7 +291,7 @@ export function StickyCard({
                       className="sticky-card__menu-item"
                       onClick={() => {
                         setIsMenuOpen(false);
-                        void handlePromote();
+                        handlePromote();
                       }}
                       data-testid="convert-to-doc-menuitem"
                     >
@@ -278,6 +319,17 @@ export function StickyCard({
         </div>
       </header>
 
+      {/* Inline Error Alert */}
+      {inlineError && (
+        <div
+          role="alert"
+          className="sticky-card__inline-error"
+          data-testid={`sticky-error-${sticky.id}`}
+        >
+          {inlineError}
+        </div>
+      )}
+
       {/* Embedded ProseMirror Markdown Editor */}
       <div className="sticky-card__editor-wrapper">
         <MarkdownEditor
@@ -297,10 +349,20 @@ export function StickyCard({
         <StickyPromotionBanner
           reasons={evaluation.reasons}
           isPromoting={isPromoting}
-          onPromote={() => { void handlePromote(); }}
-          onSnooze={handleSnooze}
+          onPromote={() => { handlePromote(); }}
+          onSnooze={() => { void handleSnooze(); }}
         />
       ) : null}
+
+      {/* Sticky to Doc AI Promotion Preview Modal */}
+      {isPromoteModalOpen && (
+        <StickyPromotePreviewModal
+          sticky={{ ...sticky, body_markdown: body }}
+          isOpen={isPromoteModalOpen}
+          onClose={() => { setIsPromoteModalOpen(false); }}
+          onConfirm={handleConfirmPromote}
+        />
+      )}
     </article>
   );
 }
