@@ -56,6 +56,7 @@ async def test_25b_webauthn_credentials_migration_lifecycle() -> None:
             "webauthn_mark_clone",
             "webauthn_credential_delete",
             "webauthn_count",
+            "webauthn_credential_update_nickname",
         }
         for f in funcs:
             assert f["prosecdef"] is True

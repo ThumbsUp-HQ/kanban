@@ -35,6 +35,8 @@ async def test_21_sessions_migration_lifecycle() -> None:
             "session_revoke",
             "session_rotate",
             "session_revoke_all_for_principal",
+            "session_revoke_all_except",
+            "session_get_metadata",
         }
         for f in funcs:
             assert f["prosecdef"] is True

@@ -450,6 +450,11 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
         )
     )
     for tbl in tables_to_check:
+        has_priv = await db_session.scalar(
+            text(f"SELECT has_table_privilege('app_rls_reader', '{tbl}', 'SELECT')")
+        )
+        if not has_priv:
+            continue
         cnt = await db_session.scalar(text(f"SELECT count(*) FROM {tbl}"))  # noqa: S608
         assert cnt == 0, (
             f"Expected 0 rows for app_rls_reader on {tbl} with unset context, got {cnt}"
@@ -468,6 +473,9 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
         "webauthn_credentials",
         "webauthn_challenges",
         "oidc_auth_requests",
+        "setup_claim_tokens",
+        "user_identities",
+        "identity_link_intents",
     ]
     for auth_tbl in auth_isolated_tables:
         for priv in ("SELECT", "INSERT", "UPDATE", "DELETE"):
@@ -483,6 +491,13 @@ async def test_01_zero_context_fail_closed(db_session: AsyncSession) -> None:
             assert reader_priv is False, (
                 f"Security breach: app_rls_reader has {priv} on security-definer table {auth_tbl}"
             )
+
+    reader_pref_priv = await db_session.scalar(
+        text("SELECT has_table_privilege('app_rls_reader', 'user_preferences', 'SELECT')")
+    )
+    assert reader_pref_priv is False, (
+        "Security breach: app_rls_reader has SELECT on isolated table user_preferences"
+    )
 
 
 # ==============================================================================
