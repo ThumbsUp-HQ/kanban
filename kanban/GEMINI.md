@@ -40,6 +40,7 @@ Core web application, static asset server, and API service layer for the Kanban 
 - HTTP/1.1, HTTP/2, WebSocket, and SSE connections from clients and reverse proxy (Caddy).
 - Standalone cleartext HTTP requests are permitted by default (`KB_BLOCK_CLEARTEXT_HTTP=false`) and restricted to loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) or `KB_STANDALONE_CLEARTEXT_HOSTS` when `KB_BLOCK_CLEARTEXT_HTTP=true` is enabled.
 - Authenticated requests must resolve identity via server-side `PrincipalResolver`; client headers (`X-Principal-Id`, `X-Workspace-Id`) are strictly ignored.
+- **Protected Pre-Production Instance Boundary (`test kanban` / `inferrence1` / `192.168.1.101` / `k.hackedyour.info`):** The live `👍kanban` instance hosted at `k.hackedyour.info` / `192.168.1.101` on `inferrence1` is used by the user via human interfaces to track progression and will eventually become the production `👍kanban` instance. It MUST NOT be treated as a test bed or subjected to destructive modifications, config/auth mutations, or automated test teardowns. Only non-destructive validation (e.g., creating an isolated test workspace, project, ticket, list, view, cycle, module, doc, or sticky) or actions explicitly requested by the user (e.g., catastrophic database problems, login troubleshooting, or issue examples) are permitted against it. All automated and destructive tests must target local hermetic ASGI/Playwright/PostgreSQL fixtures.
 
 ## Outbound Contracts
 - Hardened HTTP response headers on 100% of responses, including error responses and static files.

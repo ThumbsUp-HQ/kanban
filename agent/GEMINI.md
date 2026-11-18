@@ -12,6 +12,7 @@ Top-level platform orchestration and workflow triggers (highest layer in workspa
 ## Inbound Contracts
 - Workflow transition events, inline completion requests, and autonomous agent task triggers.
 - Pluggable deterministic AI Response Fixtures (FixtureLLMProvider, FixtureCLIRunner) for fast offline test isolation.
+- **Protected Pre-Production Instance Boundary (`test kanban` / `inferrence1` / `192.168.1.101` / `k.hackedyour.info`):** Do not treat the live `👍kanban` instance at `k.hackedyour.info` / `192.168.1.101` / `inferrence1` ("test kanban") as a destructive test bed for agent runs or CLI validations. It is actively used by the user via human interfaces to validate progression and will become our production `👍kanban` instance. Only non-destructive validation (e.g., creating an isolated test workspace, project, ticket, list, view, cycle, module, doc, or sticky) or explicitly requested operator actions (e.g., catastrophic database problems, login troubleshooting, or live issue examples) are permitted against it.
 
 ## Outbound Contracts
 - Structured prompts and tool calls dispatched to configured LLM backends and CLI harnesses.

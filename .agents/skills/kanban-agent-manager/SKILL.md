@@ -45,6 +45,12 @@ All tickets managed under this workflow should conform to the companion [`kanban
    - Once a feature ticket is implemented (or completed), assign a fast testing sub-agent to bring unit test coverage for the module/project up to **>=95%** (keeping clean-DB test execution fast via `SAVEPOINT` rollback + `FixtureLLMProvider` AI fixtures).
 10. **Continuous Gap Detection & Ticket Creation**:
     - If any gap is exposed during ticket creation, sub-agent implementation, or `reality-checker` review - such as a missing feature, unhandled edge case, security weakness, or testing gap - first check `search_tickets` for an existing backlog item to update, or create a new Kanban ticket using the [`kanban-ticket`](../kanban-ticket/SKILL.md) skill.
+11. **Protected Pre-Production `👍kanban` Instance (`test kanban` / `inferrence1` / `192.168.1.101` / `k.hackedyour.info`)**:
+    - Do **NOT** modify or treat the live `👍kanban` instance known as **test kanban**, **`inferrence1`**, **`192.168.1.101`**, or **`k.hackedyour.info`** (or its `thumbsUpKanban*` MCP servers) as a destructive test bed.
+    - The user maintains this instance up to date to track project status via the human interfaces, and it will transition into our **production `👍kanban` instance**.
+    - Only interact with it when:
+      1. **Explicitly asked by the user** (e.g., catastrophic database problems, login troubleshooting, or inspecting live examples of issues).
+      2. **Performing strictly non-destructive validation** (e.g., creating an isolated test workspace, project, ticket, list, view, cycle, module, doc, or sticky, or read-only checks) without altering existing user data, system/auth settings, or database state. All destructive or automated test suites MUST run against local hermetic fixtures.
 
 ---
 

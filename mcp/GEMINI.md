@@ -37,6 +37,7 @@ Three-surface Model Context Protocol server exposing isolated mounts `/mcp/agent
 - **Surface Isolation:** Each surface mount has its own distinct `ToolRegistry`. Tools registered on `/mcp/admin` cannot be discovered or executed on `/mcp/agent` or `/mcp/docs`.
 - **DNS Rebinding Protection:** Validates incoming `Origin` against `allowed_origins` when configured (HTTP 403 on mismatch).
 - **Session Isolation:** MCP sessions are tied to a specific surface; session lookup rejects cross-surface usage.
+- **Protected Pre-Production Instance Boundary (`test kanban` / `inferrence1` / `192.168.1.101` / `k.hackedyour.info`):** The `👍kanban` instance at `k.hackedyour.info` / `192.168.1.101` / `inferrence1` (exposed via `thumbsUpKanban*` MCP mounts) is maintained by the user to track project progression via human interfaces and will become the production `👍kanban` server. Do not treat it as a test bed or modify existing workspaces, projects, tickets, or admin settings unprompted. You may use it for non-destructive validation (e.g., creating an isolated test workspace, project, ticket, list, view, cycle, module, doc, or sticky) or when the user explicitly requests troubleshooting (e.g., catastrophic database problems, login issues, or live issue examples). Day-to-day ticket tracking remains on `https://kanban.hackedyour.info/kanban/` (`kanban` / `thekanban` MCP) until cutover.
 
 ## Performance Budgets
 - MCP JSON-RPC protocol overhead < 5ms excluding downstream API calls.

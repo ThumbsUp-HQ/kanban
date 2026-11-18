@@ -34,6 +34,7 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
 4. **Passive Forensic Verification Proof (`docs/qa/<TICKET_ID>/`)**:
    - `reality-checker` does **not** run shell commands or visit URLs.
    - Therefore, the **Verification Proof** section of every ticket must mandate a self-contained forensic proof directory at `docs/qa/<TICKET_ID>/` containing raw, unedited outputs (diffs, source snapshots, full test runner stdout/stderr, static analysis outputs, and screenshots for UI tickets) that `reality-checker` can inspect directly by reading the files.
+   - **Protected Pre-Production Instance Rule (`test kanban` / `inferrence1` / `192.168.1.101` / `k.hackedyour.info`)**: Tickets and QA scripts must **never** treat the live `👍kanban` instance at `k.hackedyour.info` / `192.168.1.101` / `inferrence1` ("test kanban") as a destructive test bed. That instance is maintained by the user to track project progression via human interfaces and will become the production `👍kanban`. Any live verification against it must be strictly non-destructive (read-only probes or creating an isolated test workspace/project/ticket/list/view/cycle/module/doc/sticky), unless the user explicitly asks for a targeted action (such as troubleshooting database or login issues).
 
 ---
 
