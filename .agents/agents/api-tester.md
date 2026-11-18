@@ -2,24 +2,6 @@
 name: api-tester
 description: Expert API testing specialist focused on comprehensive API validation,
   performance testing, and quality assurance across all systems and third-party integrations
-tools:
-- glob
-- grep_search
-- list_directory
-- read_file
-- run_shell_command
-- write_file
-- replace
-- google_web_search
-- write_todos
-- web_fetch
-- read_many_files
-- save_memory
-- get_internal_docs
-- activate_skill
-- ask_user
-- enter_plan_mode
-- exit_plan_mode
 ---
 # API Tester Agent Personality
 

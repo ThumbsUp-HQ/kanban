@@ -1,7 +1,7 @@
 # Agent Runtime Module Manifest (`kanban-agent`)
 
 ## Responsibility
-Multi-provider LLM and autonomous agent runtime supporting OpenAI, Ollama, and Gemini providers, as well as zero-shell CLI pipe harnesses (agy -p, codex -p) and outbound mTLS remote repository runners. Powers ScriptRunner-style workflow transition interceptors, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
+Multi-provider LLM and autonomous agent runtime supporting OpenAI, Ollama, and Gemini providers, as well as zero-shell CLI pipe harnesses (agy -p, codex exec -s read-only -) and outbound mTLS remote repository runners. Powers ScriptRunner-style workflow transition interceptors, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
 
 ## Depends On
 - `mcp` (`kanban-mcp` package for invoking platform MCP tools and resources).
@@ -350,7 +350,7 @@ The `kanban-agent validate-transition` subcommand provides an end-to-end, multi-
 
 ### Supported Harnesses & Modes
 - `in_app_sdk`: Sandboxed in-process LLM loop execution with bare-Git read tools and ephemeral MCP tools. Supported offline via `--cassette` (replayed via `ExplicitFixtureLLMProvider`) and `--mcp-fixture`.
-- `cli_pipe`: Subprocess pipe harness (`context | agy -p` / `codex -p`) with zero-shell execve and read-only working tree snapshot. Supported offline via `--cassette` (replayed via `ExplicitFixtureCLIRunner`).
+- `cli_pipe`: Subprocess pipe harness (`context | agy -p` / `codex exec -s read-only -`) with zero-shell execve and read-only working tree snapshot. Supported offline via `--cassette` (replayed via `ExplicitFixtureCLIRunner`).
 - `remote_runner`: Remote outbound runner execution over WebSocket control hub. Supported offline via `--remote-loopback` which starts an ephemeral in-process TLS 1.3 mTLS server (`websockets.serve`) with freshly generated X.509 EC certificates, spins up a local `RunnerDaemon` with `LoopbackJobExecutor`, and dispatches the transition job through `RemoteRunnerHarness`.
 
 ### CLI Arguments & Options

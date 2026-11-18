@@ -242,7 +242,7 @@ def test_fault_malformed_stdout() -> None:
         runner = FixtureCLIRunner(cassette_path)
 
         req = CLIRunRequest(
-            argv=("/usr/local/bin/codex", "-p"),
+            argv=("/usr/local/bin/codex", "exec", "-s", "read-only", "-"),
             stdin_bytes=b"simulate_malformed task",
         )
 

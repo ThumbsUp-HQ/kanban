@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 _ALLOWED_TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
-    {"action", "project", "blueprint", "plan_sha256", "lod"}
+    {"action", "project", "project_key", "blueprint", "plan_sha256", "lod"}
 )
 
 ARCHITECT_PROJECT_SCHEMA: Final[dict[str, Any]] = {
@@ -33,6 +33,10 @@ ARCHITECT_PROJECT_SCHEMA: Final[dict[str, Any]] = {
         "project": {
             "type": "string",
             "description": "Project identifier or UUID (required for get)",
+        },
+        "project_key": {
+            "type": "string",
+            "description": "Alias for project identifier or UUID",
         },
         "blueprint": {
             "type": "object",
@@ -118,7 +122,7 @@ async def architect_project(arguments: dict[str, Any]) -> str:  # noqa: C901, PL
     lod = arguments.get("lod", "summary")
 
     if action == "get":
-        project_ref = arguments.get("project")
+        project_ref = arguments.get("project") or arguments.get("project_key")
         if not project_ref or not isinstance(project_ref, str) or not project_ref.strip():
             msg = "project parameter is required for action 'get'"
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)

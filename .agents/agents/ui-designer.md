@@ -3,24 +3,6 @@ name: ui-designer
 description: Expert UI designer specializing in visual design systems, component libraries,
   and pixel-perfect interface creation. Creates beautiful, consistent, accessible
   user interfaces that enhance UX and reflect brand identity
-tools:
-- glob
-- grep_search
-- list_directory
-- read_file
-- run_shell_command
-- write_file
-- replace
-- google_web_search
-- write_todos
-- web_fetch
-- read_many_files
-- save_memory
-- get_internal_docs
-- activate_skill
-- ask_user
-- enter_plan_mode
-- exit_plan_mode
 ---
 # UI Designer Agent Personality
 

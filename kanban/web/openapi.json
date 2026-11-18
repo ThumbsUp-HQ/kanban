@@ -1238,6 +1238,18 @@
             "title": "Display Name",
             "type": "string"
           },
+          "google_oauth_json": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Oauth Json"
+          },
           "icon_preset": {
             "default": "key",
             "maxLength": 50,
@@ -1455,6 +1467,18 @@
             ],
             "title": "Display Name"
           },
+          "google_oauth_json": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Oauth Json"
+          },
           "icon_preset": {
             "anyOf": [
               {
@@ -1532,6 +1556,105 @@
           "display_name"
         ],
         "title": "AuthorSummary",
+        "type": "object"
+      },
+      "BackupFileItem": {
+        "additionalProperties": false,
+        "description": "Descriptor of an existing backup snapshot file.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filename",
+          "size_bytes",
+          "created_at"
+        ],
+        "title": "BackupFileItem",
+        "type": "object"
+      },
+      "BackupScheduleResponse": {
+        "additionalProperties": false,
+        "description": "Automated backup schedule and snapshot retention settings.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_hours": {
+            "title": "Interval Hours",
+            "type": "integer"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "retention_count": {
+            "title": "Retention Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "interval_hours",
+          "retention_count"
+        ],
+        "title": "BackupScheduleResponse",
+        "type": "object"
+      },
+      "BackupScheduleUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Update payload for automated backup schedule.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_hours": {
+            "default": 24,
+            "minimum": 1.0,
+            "title": "Interval Hours",
+            "type": "integer"
+          },
+          "retention_count": {
+            "default": 7,
+            "minimum": 1.0,
+            "title": "Retention Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "BackupScheduleUpdateRequest",
         "type": "object"
       },
       "BeginWorkRequest": {
@@ -2157,6 +2280,34 @@
         "title": "CanonicalUrlResponse",
         "type": "object"
       },
+      "ChangePasswordRequest": {
+        "description": "Payload for updating personal local login password.",
+        "properties": {
+          "current_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current local password (if one exists)",
+            "title": "Current Password"
+          },
+          "new_password": {
+            "description": "New local password (>=14 for admins, >=12 for standard)",
+            "minLength": 1,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest",
+        "type": "object"
+      },
       "CommentCreate": {
         "additionalProperties": false,
         "description": "Payload for POST /api/v1/issues/{issue_ref}/comments.",
@@ -2454,6 +2605,17 @@
           "migration_steps_markdown": {
             "title": "Migration Steps Markdown",
             "type": "string"
+          },
+          "single_container_compose_yaml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Single Container Compose Yaml"
           }
         },
         "required": [
@@ -2888,8 +3050,15 @@
             "type": "string"
           },
           "credential_mode": {
-            "title": "Credential Mode",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Mode"
           },
           "egress_allowlist": {
             "items": {
@@ -2967,12 +3136,26 @@
             "type": "string"
           },
           "target_scope": {
-            "title": "Target Scope",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Scope"
           },
           "tier": {
-            "title": "Tier",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
           },
           "updated_at": {
             "format": "date-time",
@@ -3002,12 +3185,9 @@
           "project_id",
           "slug",
           "name",
-          "tier",
           "output_format",
           "output_format_metadata",
           "script_version",
-          "target_scope",
-          "credential_mode",
           "egress_allowlist",
           "is_enabled",
           "created_by_id",
@@ -4230,6 +4410,105 @@
         ],
         "description": "Link endpoint representation (unrestricted or masked restricted placeholder)"
       },
+      "EnrollRunnerRequest": {
+        "additionalProperties": false,
+        "description": "Payload for runner CSR exchange.",
+        "properties": {
+          "capabilities": {
+            "additionalProperties": true,
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "csr_pem": {
+            "title": "Csr Pem",
+            "type": "string"
+          },
+          "enrollment_token": {
+            "title": "Enrollment Token",
+            "type": "string"
+          },
+          "hostname": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Hostname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrollment_token",
+          "csr_pem",
+          "hostname"
+        ],
+        "title": "EnrollRunnerRequest",
+        "type": "object"
+      },
+      "EnrollRunnerResponse": {
+        "description": "Issued client certificates and WSS connection URL for runner.",
+        "properties": {
+          "ca_cert_pem": {
+            "title": "Ca Cert Pem",
+            "type": "string"
+          },
+          "client_cert_pem": {
+            "title": "Client Cert Pem",
+            "type": "string"
+          },
+          "runner_id": {
+            "format": "uuid",
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "wss_url": {
+            "title": "Wss Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "client_cert_pem",
+          "ca_cert_pem",
+          "wss_url"
+        ],
+        "title": "EnrollRunnerResponse",
+        "type": "object"
+      },
+      "EnrollmentTokenResponse": {
+        "description": "Single-use enrollment token response returned only once at creation.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "enrollment_token": {
+            "title": "Enrollment Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "pool_slug": {
+            "title": "Pool Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "pool_slug",
+          "enrollment_token",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "EnrollmentTokenResponse",
+        "type": "object"
+      },
       "FilterSpec": {
         "additionalProperties": false,
         "description": "Typed filter DSL for saved views and issue queries.",
@@ -4460,6 +4739,112 @@
         ],
         "title": "GateStatus",
         "type": "string"
+      },
+      "GoogleOAuthJsonPreviewRequest": {
+        "additionalProperties": false,
+        "description": "Request payload for Google OAuth client JSON preview.",
+        "properties": {
+          "expected_redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Redirect Uri"
+          },
+          "google_oauth_json": {
+            "maxLength": 32768,
+            "minLength": 1,
+            "title": "Google Oauth Json",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 48,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "google_oauth_json"
+        ],
+        "title": "GoogleOAuthJsonPreviewRequest",
+        "type": "object"
+      },
+      "GoogleOAuthJsonPreviewResponse": {
+        "additionalProperties": false,
+        "description": "Preview response returned from parsing Google OAuth client JSON without exposing secrets.",
+        "properties": {
+          "callback_uri_matched": {
+            "default": false,
+            "title": "Callback Uri Matched",
+            "type": "boolean"
+          },
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "expected_callback_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Callback Uri"
+          },
+          "has_client_secret": {
+            "default": true,
+            "title": "Has Client Secret",
+            "type": "boolean"
+          },
+          "issuer": {
+            "default": "https://accounts.google.com",
+            "title": "Issuer",
+            "type": "string"
+          },
+          "javascript_origins": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Javascript Origins",
+            "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Redirect Uris",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_id"
+        ],
+        "title": "GoogleOAuthJsonPreviewResponse",
+        "type": "object"
       },
       "GrantAclEntryRequest": {
         "additionalProperties": false,
@@ -6686,6 +7071,12 @@
             "title": "Password",
             "type": "string"
           },
+          "remember_me": {
+            "default": true,
+            "description": "Keep signed in on this device",
+            "title": "Remember Me",
+            "type": "boolean"
+          },
           "username": {
             "maxLength": 256,
             "minLength": 1,
@@ -6996,6 +7387,12 @@
             "title": "Password",
             "type": "string"
           },
+          "remember_me": {
+            "default": true,
+            "description": "Keep signed in on this device",
+            "title": "Remember Me",
+            "type": "boolean"
+          },
           "username": {
             "description": "Normalized administrator handle",
             "title": "Username",
@@ -7296,6 +7693,20 @@
             ],
             "title": "Allowed Project Ids"
           },
+          "allowed_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Projects"
+          },
           "allowed_tools": {
             "anyOf": [
               {
@@ -7368,6 +7779,18 @@
               }
             ],
             "title": "Expires In Days"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           },
           "owner_kind": {
             "default": "service_bot",
@@ -7474,6 +7897,20 @@
             ],
             "title": "Allowed Project Ids"
           },
+          "allowed_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Projects"
+          },
           "allowed_tools": {
             "anyOf": [
               {
@@ -7544,6 +7981,17 @@
           "key_prefix": {
             "title": "Key Prefix",
             "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           },
           "last_used_at": {
             "anyOf": [
@@ -7669,6 +8117,20 @@
             ],
             "title": "Allowed Project Ids"
           },
+          "allowed_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Projects"
+          },
           "allowed_tools": {
             "anyOf": [
               {
@@ -7744,6 +8206,17 @@
           "key_prefix": {
             "title": "Key Prefix",
             "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           },
           "last_used_at": {
             "anyOf": [
@@ -7921,6 +8394,20 @@
               }
             ],
             "title": "Allowed Project Ids"
+          },
+          "allowed_project_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Project Keys"
           },
           "allowed_projects": {
             "anyOf": [
@@ -8140,6 +8627,17 @@
               }
             ],
             "title": "Workspace Id"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Slug"
           }
         },
         "required": [
@@ -8200,6 +8698,30 @@
           "code"
         ],
         "title": "MfaVerifyRequest",
+        "type": "object"
+      },
+      "MintEnrollmentTokenRequest": {
+        "additionalProperties": false,
+        "description": "Payload to mint a new runner enrollment token.",
+        "properties": {
+          "pool_slug": {
+            "maxLength": 63,
+            "minLength": 2,
+            "title": "Pool Slug",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "default": 900,
+            "maximum": 900.0,
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pool_slug"
+        ],
+        "title": "MintEnrollmentTokenRequest",
         "type": "object"
       },
       "MintEphemeralTokenRequest": {
@@ -8829,20 +9351,97 @@
         "type": "object"
       },
       "OAuthClientRegisterRequest": {
-        "additionalProperties": false,
         "description": "Payload for RFC 7591 dynamic client registration.",
         "properties": {
           "client_name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Client Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
           },
           "client_type": {
             "const": "public",
             "default": "public",
             "title": "Client Type",
             "type": "string"
+          },
+          "client_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Uri"
+          },
+          "contacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacts"
+          },
+          "grant_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Types"
+          },
+          "jwks_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jwks Uri"
+          },
+          "logo_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Uri"
+          },
+          "policy_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Uri"
           },
           "redirect_uris": {
             "items": {
@@ -8851,10 +9450,80 @@
             "minItems": 1,
             "title": "Redirect Uris",
             "type": "array"
+          },
+          "response_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Types"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "software_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Software Id"
+          },
+          "software_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Software Version"
+          },
+          "token_endpoint_auth_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Endpoint Auth Method"
+          },
+          "tos_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tos Uri"
           }
         },
         "required": [
-          "client_name",
           "redirect_uris"
         ],
         "title": "OAuthClientRegisterRequest",
@@ -9450,6 +10119,559 @@
           "deadline_at"
         ],
         "title": "PendingGateSummary",
+        "type": "object"
+      },
+      "PersonalMcpKeyItem": {
+        "description": "Metadata for an existing personal MCP API key.",
+        "properties": {
+          "allowed_cidrs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Cidrs"
+          },
+          "allowed_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Projects"
+          },
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
+          "capability_mask": {
+            "default": 7,
+            "title": "Capability Mask",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "disabled_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disabled Tools",
+            "type": "array"
+          },
+          "display_hint": {
+            "title": "Display Hint",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "owner_kind": {
+            "default": "personal_user",
+            "title": "Owner Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scope_tier": {
+            "default": "workspace",
+            "title": "Scope Tier",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "id",
+          "surface",
+          "key_prefix",
+          "display_hint",
+          "scopes",
+          "created_at"
+        ],
+        "title": "PersonalMcpKeyItem",
+        "type": "object"
+      },
+      "PersonalMcpKeyListResponse": {
+        "description": "Listing response of personal MCP keys for current caller.",
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalMcpKeyItem"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "title": "PersonalMcpKeyListResponse",
+        "type": "object"
+      },
+      "PersonalMcpKeyMintRequest": {
+        "additionalProperties": false,
+        "description": "Payload for minting a self-service personal MCP API key.",
+        "properties": {
+          "allowed_cidrs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Cidrs"
+          },
+          "allowed_project_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Project Ids"
+          },
+          "allowed_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Projects"
+          },
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
+          "allowed_workspace_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Workspace Ids"
+          },
+          "capability_mask": {
+            "default": 7,
+            "maximum": 255.0,
+            "minimum": 1.0,
+            "title": "Capability Mask",
+            "type": "integer"
+          },
+          "confirm_unlimited": {
+            "default": false,
+            "title": "Confirm Unlimited",
+            "type": "boolean"
+          },
+          "disabled_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disabled Tools",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 30,
+            "title": "Expires In Days"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "scope_tier": {
+            "default": "workspace",
+            "enum": [
+              "global",
+              "workspace",
+              "project"
+            ],
+            "title": "Scope Tier",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
+          },
+          "surface": {
+            "enum": [
+              "agent",
+              "docs",
+              "admin"
+            ],
+            "title": "Surface",
+            "type": "string"
+          },
+          "unlimited": {
+            "default": false,
+            "title": "Unlimited",
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "surface",
+          "scopes"
+        ],
+        "title": "PersonalMcpKeyMintRequest",
+        "type": "object"
+      },
+      "PersonalMcpKeyMintResponse": {
+        "description": "One-time mint response carrying raw plaintext key.",
+        "properties": {
+          "allowed_cidrs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Cidrs"
+          },
+          "allowed_projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Projects"
+          },
+          "allowed_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tools"
+          },
+          "capability_mask": {
+            "default": 7,
+            "title": "Capability Mask",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "disabled_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disabled Tools",
+            "type": "array"
+          },
+          "display_hint": {
+            "title": "Display Hint",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "owner_kind": {
+            "default": "personal_user",
+            "title": "Owner Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "raw_key": {
+            "title": "Raw Key",
+            "type": "string"
+          },
+          "scope_tier": {
+            "default": "workspace",
+            "title": "Scope Tier",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "id",
+          "raw_key",
+          "surface",
+          "key_prefix",
+          "display_hint",
+          "scopes",
+          "created_at"
+        ],
+        "title": "PersonalMcpKeyMintResponse",
         "type": "object"
       },
       "PrincipalAssigneeResponse": {
@@ -10564,6 +11786,236 @@
           }
         },
         "title": "RedactedCreatorSummary",
+        "type": "object"
+      },
+      "RemoteRunnerResponse": {
+        "description": "Public representation of registered remote runner.",
+        "properties": {
+          "capabilities": {
+            "additionalProperties": true,
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "cert_expires_at": {
+            "format": "date-time",
+            "title": "Cert Expires At",
+            "type": "string"
+          },
+          "client_cert_sha256_hex": {
+            "title": "Client Cert Sha256 Hex",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "hostname": {
+            "title": "Hostname",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
+          },
+          "pool_slug": {
+            "title": "Pool Slug",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "pool_slug",
+          "hostname",
+          "client_cert_sha256_hex",
+          "cert_expires_at",
+          "capabilities",
+          "status",
+          "last_heartbeat_at",
+          "revoked_at",
+          "created_at"
+        ],
+        "title": "RemoteRunnerResponse",
+        "type": "object"
+      },
+      "RepoBindingCreateRequest": {
+        "additionalProperties": false,
+        "description": "Payload for creating a project repository binding.",
+        "properties": {
+          "access_mode": {
+            "description": "Agent repository mount and access mode",
+            "enum": [
+              "bare_git_tools",
+              "ro_vfs_mount"
+            ],
+            "title": "Access Mode",
+            "type": "string"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional deploy key or access token (write-only)",
+            "title": "Credential"
+          },
+          "default_ref": {
+            "default": "main",
+            "description": "Default branch or commit ref",
+            "title": "Default Ref",
+            "type": "string"
+          },
+          "remote_url": {
+            "description": "Remote Git URL (https or ssh)",
+            "maxLength": 2048,
+            "title": "Remote Url",
+            "type": "string"
+          },
+          "slug": {
+            "description": "URL-safe binding slug matching ^[a-z0-9][a-z0-9-]{1,62}$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "remote_url",
+          "access_mode"
+        ],
+        "title": "RepoBindingCreateRequest",
+        "type": "object"
+      },
+      "RepoBindingResponse": {
+        "additionalProperties": false,
+        "description": "Public representation of a project repository binding (credentials omitted).",
+        "properties": {
+          "access_mode": {
+            "title": "Access Mode",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "default_ref": {
+            "title": "Default Ref",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_fetch_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetch Error"
+          },
+          "last_fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched At"
+          },
+          "last_fetched_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fetched Commit"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "remote_url": {
+            "title": "Remote Url",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "project_id",
+          "slug",
+          "remote_url",
+          "default_ref",
+          "access_mode",
+          "created_by",
+          "created_at"
+        ],
+        "title": "RepoBindingResponse",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -12364,6 +13816,29 @@
         "title": "UpdatePrincipalRequest",
         "type": "object"
       },
+      "UpdateProfileRequest": {
+        "description": "Payload for updating personal profile display name and timezone.",
+        "properties": {
+          "display_name": {
+            "description": "Display name (1..120 characters)",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "UTC",
+            "description": "Valid IANA timezone identifier",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "UpdateProfileRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -12881,6 +14356,23 @@
           "wasm_base64"
         ],
         "title": "WasmModuleUploadRequest",
+        "type": "object"
+      },
+      "WebauthnRenameRequest": {
+        "description": "Payload for renaming a WebAuthn passkey credential.",
+        "properties": {
+          "nickname": {
+            "description": "Friendly nickname",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Nickname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nickname"
+        ],
+        "title": "WebauthnRenameRequest",
         "type": "object"
       },
       "WipLimit": {
@@ -13682,6 +15174,24 @@
       "get": {
         "description": "Return RFC 8414 authorization server discovery metadata.",
         "operationId": "oauth_as_metadata__well_known_oauth_authorization_server_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "subpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subpath"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13690,9 +15200,67 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "OAuth 2.1 Authorization Server Metadata (RFC 8414)",
+        "tags": [
+          "oauth-server"
+        ]
+      }
+    },
+    "/.well-known/openid-configuration": {
+      "get": {
+        "description": "Return RFC 8414 authorization server discovery metadata.",
+        "operationId": "oauth_as_metadata__well_known_openid_configuration_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "subpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subpath"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "OpenID Connect Discovery Metadata",
         "tags": [
           "oauth-server"
         ]
@@ -14023,6 +15591,167 @@
         "tags": [
           "agent-definitions",
           "admin-agent-definitions"
+        ]
+      }
+    },
+    "/api/v1/admin/agent-runners": {
+      "get": {
+        "description": "List registered runners with optional pool_slug and status filtering.",
+        "operationId": "list_remote_runners_api_v1_admin_agent_runners_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pool_slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pool Slug"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RemoteRunnerResponse"
+                  },
+                  "title": "Response List Remote Runners Api V1 Admin Agent Runners Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List registered remote runners in workspace",
+        "tags": [
+          "remote-runners",
+          "admin-agent-runners"
+        ]
+      }
+    },
+    "/api/v1/admin/agent-runners/enrollment-tokens": {
+      "post": {
+        "description": "Mint single-use runner enrollment token valid for 60..900s.",
+        "operationId": "mint_enrollment_token_api_v1_admin_agent_runners_enrollment_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintEnrollmentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint a single-use mTLS runner enrollment token",
+        "tags": [
+          "remote-runners",
+          "admin-agent-runners"
+        ]
+      }
+    },
+    "/api/v1/admin/agent-runners/{runner_id}:revoke": {
+      "post": {
+        "description": "Revoke runner credentials, disconnect active WebSocket, and cancel in-flight jobs.",
+        "operationId": "revoke_remote_runner_api_v1_admin_agent_runners__runner_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Revoke Remote Runner Api V1 Admin Agent Runners  Runner Id  Revoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke remote runner certificate and disconnect active session",
+        "tags": [
+          "remote-runners",
+          "admin-agent-runners"
         ]
       }
     },
@@ -14406,6 +16135,48 @@
           }
         },
         "summary": "Create authentication card",
+        "tags": [
+          "admin-auth-cards"
+        ]
+      }
+    },
+    "/api/v1/admin/auth-cards/parse-google-json": {
+      "post": {
+        "description": "Parse Google Cloud Console client_secret_*.json and return preview without secrets.",
+        "operationId": "parse_google_json_api_v1_admin_auth_cards_parse_google_json_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleOAuthJsonPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleOAuthJsonPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse and preview Google OAuth client JSON",
         "tags": [
           "admin-auth-cards"
         ]
@@ -15969,6 +17740,183 @@
         ]
       }
     },
+    "/api/v1/admin/standalone/backup-schedule": {
+      "get": {
+        "description": "Retrieve automated backup schedule and snapshot retention settings.",
+        "operationId": "get_backup_schedule_endpoint_api_v1_admin_standalone_backup_schedule_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupScheduleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get automated backup schedule configuration",
+        "tags": [
+          "admin-standalone"
+        ]
+      },
+      "put": {
+        "description": "Update automated backup interval and snapshot retention limit.",
+        "operationId": "update_backup_schedule_endpoint_api_v1_admin_standalone_backup_schedule_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupScheduleUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupScheduleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update automated backup schedule configuration",
+        "tags": [
+          "admin-standalone"
+        ]
+      }
+    },
+    "/api/v1/admin/standalone/backup/verify": {
+      "post": {
+        "description": "Verify cryptographic integrity and manifest of a backup archive.",
+        "operationId": "verify_backup_endpoint_api_v1_admin_standalone_backup_verify_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Verify Backup Endpoint Api V1 Admin Standalone Backup Verify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Verify an encrypted backup archive",
+        "tags": [
+          "admin-standalone"
+        ]
+      }
+    },
+    "/api/v1/admin/standalone/backups": {
+      "get": {
+        "description": "Enumerate backup snapshots on disk sorted by creation time descending.",
+        "operationId": "list_backups_endpoint_api_v1_admin_standalone_backups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BackupFileItem"
+                  },
+                  "title": "Response List Backups Endpoint Api V1 Admin Standalone Backups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List existing backup snapshot files",
+        "tags": [
+          "admin-standalone"
+        ]
+      }
+    },
+    "/api/v1/admin/standalone/backups/run-now": {
+      "post": {
+        "description": "Execute an automated backup pass immediately on demand.",
+        "operationId": "run_backup_now_endpoint_api_v1_admin_standalone_backups_run_now_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Backup Now Endpoint Api V1 Admin Standalone Backups Run Now Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trigger immediate backup snapshot",
+        "tags": [
+          "admin-standalone"
+        ]
+      }
+    },
+    "/api/v1/admin/standalone/backups/{filename}": {
+      "get": {
+        "description": "Safely stream requested backup file with traversal protections.",
+        "operationId": "download_backup_file_endpoint_api_v1_admin_standalone_backups__filename__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download backup snapshot file",
+        "tags": [
+          "admin-standalone"
+        ]
+      }
+    },
     "/api/v1/admin/standalone/compose-export": {
       "get": {
         "description": "Generate secret-free production docker-compose.yml and promotion checklist.",
@@ -15986,6 +17934,30 @@
           }
         },
         "summary": "Export production Docker Compose and migration runbook",
+        "tags": [
+          "admin-standalone"
+        ]
+      }
+    },
+    "/api/v1/admin/standalone/restore": {
+      "post": {
+        "description": "Restore database from a backup archive with mandatory 'RESTORE' confirmation.",
+        "operationId": "restore_backup_endpoint_api_v1_admin_standalone_restore_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Restore Backup Endpoint Api V1 Admin Standalone Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Restore database from an encrypted backup archive",
         "tags": [
           "admin-standalone"
         ]
@@ -16203,6 +18175,48 @@
         ]
       }
     },
+    "/api/v1/agent-runners/enroll": {
+      "post": {
+        "description": "Consume single-use token, validate CSR, sign leaf cert, and register runner.",
+        "operationId": "enroll_remote_runner_endpoint_api_v1_agent_runners_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRunnerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollRunnerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exchange enrollment token and CSR for mTLS leaf certificate",
+        "tags": [
+          "remote-runners"
+        ]
+      }
+    },
     "/api/v1/attachments/{attachment_id}/content": {
       "get": {
         "description": "Retrieve attachment content blob enforcing signature, live RLS, and .svg sandbox shield.",
@@ -16416,7 +18430,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 512,
+                  "maxLength": 2048,
                   "type": "string"
                 },
                 {
@@ -16433,7 +18447,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 512,
+                  "maxLength": 2048,
                   "type": "string"
                 },
                 {
@@ -16458,6 +18472,16 @@
                 }
               ],
               "title": "Link Intent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remember_me",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Remember Me",
+              "type": "boolean"
             }
           }
         ],
@@ -16744,6 +18768,105 @@
         ]
       }
     },
+    "/api/v1/auth/mcp-keys": {
+      "get": {
+        "description": "List all personal MCP API keys owned by the calling principal.",
+        "operationId": "list_personal_keys_api_v1_auth_mcp_keys_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMcpKeyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List personal MCP API keys",
+        "tags": [
+          "auth-mcp-keys"
+        ]
+      },
+      "post": {
+        "description": "Mint a self-service personal MCP API key locked to the caller's principal.",
+        "operationId": "mint_personal_key_api_v1_auth_mcp_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalMcpKeyMintRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMcpKeyMintResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint personal MCP API key",
+        "tags": [
+          "auth-mcp-keys"
+        ]
+      }
+    },
+    "/api/v1/auth/mcp-keys/{key_id}": {
+      "delete": {
+        "description": "Revoke a personal MCP API key owned by the caller.",
+        "operationId": "revoke_personal_key_api_v1_auth_mcp_keys__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke personal MCP API key",
+        "tags": [
+          "auth-mcp-keys"
+        ]
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "description": "Return profile and role summary for the currently authenticated principal.",
@@ -16762,6 +18885,122 @@
         "tags": [
           "auth"
         ]
+      },
+      "patch": {
+        "description": "Update own profile display name and timezone.",
+        "operationId": "update_profile_api_v1_auth_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Profile",
+        "tags": [
+          "user-settings"
+        ]
+      }
+    },
+    "/api/v1/auth/me/avatar": {
+      "delete": {
+        "description": "Remove personal avatar.",
+        "operationId": "delete_avatar_api_v1_auth_me_avatar_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Avatar",
+        "tags": [
+          "user-settings"
+        ]
+      },
+      "put": {
+        "description": "Upload, sanitize, re-encode and set a personal avatar.",
+        "operationId": "upload_avatar_api_v1_auth_me_avatar_put",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Upload Avatar",
+        "tags": [
+          "user-settings"
+        ]
+      }
+    },
+    "/api/v1/auth/me/password": {
+      "post": {
+        "description": "Change own local password with length validation, AAL2 check, and session revocation.",
+        "operationId": "change_password_api_v1_auth_me_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Password",
+        "tags": [
+          "user-settings"
+        ]
       }
     },
     "/api/v1/auth/mfa/recovery/regenerate": {
@@ -16779,6 +19018,27 @@
           }
         },
         "summary": "Regenerate Recovery Codes",
+        "tags": [
+          "auth",
+          "mfa"
+        ]
+      }
+    },
+    "/api/v1/auth/mfa/status": {
+      "get": {
+        "description": "Return active MFA status for authenticated principal.",
+        "operationId": "get_mfa_status_api_v1_auth_mfa_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Mfa Status",
         "tags": [
           "auth",
           "mfa"
@@ -17115,7 +19375,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 512,
+                  "maxLength": 2048,
                   "type": "string"
                 },
                 {
@@ -17140,6 +19400,16 @@
                 }
               ],
               "title": "Link Intent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remember_me",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Remember Me",
+              "type": "boolean"
             }
           }
         ],
@@ -17289,6 +19559,57 @@
           }
         },
         "summary": "Delete Credential",
+        "tags": [
+          "auth",
+          "webauthn"
+        ]
+      },
+      "patch": {
+        "description": "Rename a registered WebAuthn passkey credential.",
+        "operationId": "rename_credential_api_v1_auth_webauthn_credentials__credential_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Credential Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebauthnRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Credential",
         "tags": [
           "auth",
           "webauthn"
@@ -20751,7 +23072,6 @@
             "name": "object_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Object Id",
               "type": "string"
             }
@@ -20795,7 +23115,6 @@
             "name": "object_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Object Id",
               "type": "string"
             }
@@ -23491,6 +25810,104 @@
         ]
       }
     },
+    "/api/v1/projects/{project}/repo-bindings": {
+      "get": {
+        "description": "List repository bindings for project. S3.4: returns 404 for non-admins.",
+        "operationId": "list_repo_bindings_api_v1_projects__project__repo_bindings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RepoBindingResponse"
+                  },
+                  "title": "Response List Repo Bindings Api V1 Projects  Project  Repo Bindings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List repository bindings for a project",
+        "tags": [
+          "repo-bindings"
+        ]
+      },
+      "post": {
+        "description": "Create project repository binding and initialize mirror.",
+        "operationId": "create_repo_binding_api_v1_projects__project__repo_bindings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepoBindingCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a repository binding for a project",
+        "tags": [
+          "repo-bindings"
+        ]
+      }
+    },
     "/api/v1/projects/{project}/wasm-modules": {
       "post": {
         "description": "Upload, validate, and register a compiled WebAssembly module.\n\nAdmin role and AAL2 required.",
@@ -23749,6 +26166,87 @@
         "summary": "Atomically reorder workflow hooks for a transition",
         "tags": [
           "workflow-hooks"
+        ]
+      }
+    },
+    "/api/v1/repo-bindings/{binding_id}": {
+      "delete": {
+        "description": "Delete repository binding and prune bare mirror from filesystem.",
+        "operationId": "delete_repo_binding_api_v1_repo_bindings__binding_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete a repository binding",
+        "tags": [
+          "repo-bindings"
+        ]
+      }
+    },
+    "/api/v1/repo-bindings/{binding_id}/refresh": {
+      "post": {
+        "description": "Fetch latest updates for bare Git mirror.",
+        "operationId": "refresh_repo_binding_api_v1_repo_bindings__binding_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh repository mirror",
+        "tags": [
+          "repo-bindings"
         ]
       }
     },
@@ -24590,6 +27088,48 @@
         "summary": "Cancel a pending asynchronous workflow transition",
         "tags": [
           "transitions"
+        ]
+      }
+    },
+    "/api/v1/users/{principal_id}/avatar": {
+      "get": {
+        "description": "Retrieve and serve user avatar image bytes.",
+        "operationId": "get_user_avatar_api_v1_users__principal_id__avatar_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "principal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Principal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get User Avatar",
+        "tags": [
+          "user-settings"
         ]
       }
     },
@@ -25509,10 +28049,17 @@
           {
             "in": "query",
             "name": "resource",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Resource",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource"
             }
           },
           {

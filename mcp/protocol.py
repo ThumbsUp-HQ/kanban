@@ -23,6 +23,7 @@ from mcp.context import (
 )
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
+from mcp.registry import Surface
 from mcp.yaml_out import dump_yaml
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
     from mcp.internal_client import KanbanApiClient
-    from mcp.registry import Surface, ToolRegistry
+    from mcp.registry import ToolRegistry
     from mcp.scoping import ConnectionScope
     from mcp.settings import McpSettings
 
@@ -796,7 +797,13 @@ class McpProtocolHandler:
         elif (
             caller_scopes is not None
             and req_scopes is not None
-            and not req_scopes.issubset(caller_scopes)
+            and not (
+                req_scopes.issubset(caller_scopes)
+                or bool(
+                    {"admin:write", "admin:destructive"}.intersection(caller_scopes)
+                    and "admin:read" in req_scopes
+                )
+            )
         ):
             msg = f"Caller lacks required scope(s) {sorted(req_scopes)} for tool '{tool_name}'"
             scope_err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
@@ -810,6 +817,85 @@ class McpProtocolHandler:
                     },
                 }
             )
+
+        # Action-aware administrative scope checks (admin:read vs admin:write vs admin:destructive)
+        if self.surface == Surface.ADMIN and caller_scopes is not None:
+            action = str(arguments.get("action", "")).strip()
+            if action and action != "help":
+                required_admin_scope: str | None = None
+                write_prefixes = (
+                    "create_",
+                    "update_",
+                    "set_",
+                    "upsert_",
+                    "provision_",
+                    "bind_",
+                    "unbind_",
+                    "add_",
+                    "remove_",
+                    "attach",
+                    "apply",
+                    "plan",
+                    "mint_",
+                    "rotate_",
+                )
+                write_actions = {
+                    "override_creator",
+                    "override_hard_wip_move",
+                    "unarchive_issue",
+                    "run_audit",
+                    "refresh_repo_binding",
+                    "request_delete",
+                    "restore",
+                    "deactivate",
+                    "reactivate",
+                }
+                if (
+                    action.startswith(("delete_", "purge_", "revoke_"))
+                    or action in ("execute_delete", "detach")
+                ):
+                    required_admin_scope = "admin:destructive"
+                elif action.startswith(write_prefixes) or action in write_actions:
+                    required_admin_scope = "admin:write"
+
+                if (
+                    required_admin_scope == "admin:destructive"
+                    and "admin:destructive" not in caller_scopes
+                ):
+                    msg = (
+                        f"Action '{action}' on admin tool '{tool_name}' "
+                        f"requires 'admin:destructive' scope"
+                    )
+                    scope_err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": scope_err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
+                if required_admin_scope == "admin:write" and not {
+                    "admin:write",
+                    "admin:destructive",
+                }.intersection(caller_scopes):
+                    msg = (
+                        f"Action '{action}' on admin tool '{tool_name}' "
+                        f"requires 'admin:write' scope"
+                    )
+                    scope_err = KbMcpError(code=McpErrorCode.INSUFFICIENT_SCOPE, message=msg)
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": scope_err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
 
         # Progressive disclosure: JIT help
         if arguments.get("identifier") == "help" or arguments.get("action") == "help":

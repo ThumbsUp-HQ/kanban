@@ -272,7 +272,8 @@ export async function fetchAdminPrincipals(filter = 'USER'): Promise<AdminUserPr
 export async function createLocalUser(payload: {
   handle: string;
   display_name: string;
-  email: string;
+  email?: string;
+  type?: 'USER' | 'GROUP' | 'AGENT';
   password?: string;
   role?: string;
 }): Promise<AdminUserPrincipal> {
@@ -281,10 +282,10 @@ export async function createLocalUser(payload: {
     '/api/v1/admin/principals' as never,
     {
       body: {
-        type: 'USER',
+        type: payload.type ?? 'USER',
         handle: payload.handle,
         display_name: payload.display_name,
-        email: payload.email,
+        ...(payload.email ? { email: payload.email } : {}),
         ...(payload.password ? { password: payload.password } : {}),
         ...(payload.role ? { role: payload.role } : {}),
       },

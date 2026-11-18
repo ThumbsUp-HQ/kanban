@@ -56,17 +56,17 @@ def test_stride_row3_banned_flags_and_codex_read_only_enforced() -> None:
 
     # 2. Test codex enforces -s read-only
     rec_codex_bad = MockAgentRecord(
-        cli_binary_allowlist_id="codex", cli_args_json=["-p", "--write"]
+        cli_binary_allowlist_id="codex", cli_args_json=["exec", "-s", "read-write", "-"]
     )
     with pytest.raises(CliPolicyError) as exc_codex:
         assert_runtime_argv(rec_codex_bad)
     assert exc_codex.value.code == "CODEX_SANDBOX_OVERRIDE"
 
     rec_codex_good = MockAgentRecord(
-        cli_binary_allowlist_id="codex", cli_args_json=["-p", "-s", "read-only"]
+        cli_binary_allowlist_id="codex", cli_args_json=["exec", "-s", "read-only", "-"]
     )
     valid_codex = assert_runtime_argv(rec_codex_good)
-    assert valid_codex.argv == ("/usr/local/bin/codex", "-p", "-s", "read-only")
+    assert valid_codex.argv == ("/usr/local/bin/codex", "exec", "-s", "read-only", "-")
 
     # 3. Test binary allowlist check
     rec_shell = MockAgentRecord(cli_binary_allowlist_id="sh", cli_args_json=["-c", "id"])

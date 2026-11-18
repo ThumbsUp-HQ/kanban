@@ -97,7 +97,7 @@ async def test_case_1_positive_create_cli_pipe_and_codex(
         "display_name": "Codex Gate Evaluator",
         "harness_kind": "cli_pipe",
         "cli_binary_allowlist_id": "codex",
-        "cli_args": ["-p", "-s", "read-only", "--model", "o3-mini"],
+        "cli_args": ["exec", "-s", "read-only", "-", "--model", "o3-mini"],
         "timeout_ms": 120000,
     }
     resp_codex = await client.post(
@@ -107,7 +107,7 @@ async def test_case_1_positive_create_cli_pipe_and_codex(
     assert resp_codex.status_code == 201, resp_codex.text
     body_codex = resp_codex.json()
     assert body_codex["slug"] == "codex-gate"
-    assert body_codex["cli_args"] == ["-p", "-s", "read-only", "--model", "o3-mini"]
+    assert body_codex["cli_args"] == ["exec", "-s", "read-only", "-", "--model", "o3-mini"]
 
     # Verify codex activity record has full argv
     act_codex = (
@@ -126,9 +126,10 @@ async def test_case_1_positive_create_cli_pipe_and_codex(
     )
     assert act_codex["payload"]["argv"] == [
         "/usr/local/bin/codex",
-        "-p",
+        "exec",
         "-s",
         "read-only",
+        "-",
         "--model",
         "o3-mini",
     ]
@@ -179,9 +180,10 @@ async def test_case_2_security_banned_flags_table_driven(
 @pytest.mark.parametrize(
     "codex_args",
     [
-        ["-p", "-s", "danger-full-access"],
-        ["-p", "-s", "read-only", "-s", "workspace-write"],
-        ["-p", "-s", "read-only", "-c", "sandbox_mode=danger-full-access"],
+        ["exec", "-s", "danger-full-access", "-"],
+        ["exec", "-s", "read-only", "-", "-s", "workspace-write"],
+        ["exec", "-s", "read-only", "-", "-c", "sandbox_mode=danger-full-access"],
+        ["-p", "-s", "read-only"],
     ],
 )
 async def test_case_3_security_codex_sandbox_override(

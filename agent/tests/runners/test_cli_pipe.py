@@ -131,7 +131,7 @@ def _sample_mcp_urls() -> dict[str, str]:
 
 
 async def test_case_1_positive_agy_and_codex_with_gate_worker() -> None:
-    """Test Case 1: CliPipeHarness runs agy -p and codex -p, GateWorker approves/rejects."""
+    """Test Case 1: CliPipeHarness runs agy -p and codex exec, GateWorker approves/rejects."""
     cas_agy = Path("tests/fixtures/ai/cli_agy_approve.yaml")
     cas_codex = Path("tests/fixtures/ai/cli_codex_readonly_veto.yaml")
     runner_agy = FixtureCLIRunner(cas_agy)
@@ -177,7 +177,7 @@ async def test_case_1_positive_agy_and_codex_with_gate_worker() -> None:
     assert coord_agy.decisions[0]["decision"].decision == "approve"
     assert list(coord_agy.decisions[0]["decision"].add_labels) == ["security-reviewed"]
 
-    # 2. Test codex -p -s read-only (rejection veto)
+    # 2. Test codex exec -s read-only - (rejection veto)
     harness_codex = CliPipeHarness(runner=runner_codex)
     registry_codex = HarnessRegistry(register_defaults=False)
     registry_codex.register("cli_pipe", harness_codex)
@@ -186,7 +186,7 @@ async def test_case_1_positive_agy_and_codex_with_gate_worker() -> None:
         "slug": "codex-gate",
         "harness_kind": "cli_pipe",
         "cli_binary_allowlist_id": "codex",
-        "cli_args_json": ["-p", "-s", "read-only"],
+        "cli_args_json": ["exec", "-s", "read-only", "-"],
         "timeout_ms": 15_000,
         "repo_access_mode": "none",
     }
@@ -202,7 +202,7 @@ async def test_case_1_positive_agy_and_codex_with_gate_worker() -> None:
     }
     await worker_codex.handle_dispatch(event_codex)
 
-    assert runner_codex.received_argv == ("/usr/local/bin/codex", "-p", "-s", "read-only")
+    assert runner_codex.received_argv == ("/usr/local/bin/codex", "exec", "-s", "read-only", "-")
     assert len(coord_codex.decisions) == 1
     assert coord_codex.decisions[0]["decision"].decision == "reject"
     assert list(coord_codex.decisions[0]["decision"].add_labels) == ["vetoed"]
@@ -283,7 +283,7 @@ async def test_case_3_security_runtime_tampered_db_row() -> None:
     tampered_codex = {
         "slug": "tampered-codex",
         "cli_binary_allowlist_id": "codex",
-        "cli_args_json": ["-p", "-s", "workspace-write"],
+        "cli_args_json": ["exec", "-s", "workspace-write", "-"],
     }
     with pytest.raises(CliPolicyError) as exc_info_codex:
         await harness.run(ctx, tampered_codex)

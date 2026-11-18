@@ -355,6 +355,7 @@ class GateCoordinator:
                 "decision": "reject",
                 "reason": decision.reason_markdown,
                 "verdict_sha256": verdict_hex,
+                "cited_files": list(decision.cited_files),
             }
 
             execution.status = "rejected"
@@ -364,6 +365,7 @@ class GateCoordinator:
                 "reason": decision.reason_markdown,
                 "verdict_sha256": verdict_hex,
                 "latency_ms": decision.latency_ms,
+                "cited_files": list(decision.cited_files),
             }
             execution.completed_at = now
 
@@ -622,6 +624,7 @@ class GateCoordinator:
             "hook_name": hook.name,
             "verdict_sha256": verdict_hex,
             "latency_ms": decision.latency_ms,
+            "cited_files": list(decision.cited_files),
         }
         execution.completed_at = now
 

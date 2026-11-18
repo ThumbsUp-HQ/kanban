@@ -9,9 +9,9 @@ from __future__ import annotations
 import importlib
 import logging
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
-from fastapi import APIRouter, FastAPI, Request, WebSocket
+from fastapi import APIRouter, FastAPI, Request, Response, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -56,10 +56,14 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from sqlalchemy.ext.asyncio import AsyncEngine
-    from starlette.responses import Response
     from starlette.types import ASGIApp, Receive, Scope, Send
 
     from mcp.settings import McpSettings
+
+_FAVICON_SVG: Final[str] = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    '<text y=".9em" font-size="90">👍</text></svg>'
+)
 
 
 def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
@@ -291,6 +295,15 @@ def create_app(
         mcp_meta = importlib.import_module("mcp.metadata")
         resp: Response = await mcp_meta.protected_resource_metadata_endpoint(request)
         return resp
+
+    # Serve favicon.ico with 200 OK and Cache-Control
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon_endpoint() -> Response:
+        return Response(
+            content=_FAVICON_SVG.encode("utf-8"),
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
 
     # Mount live MCP surfaces and RFC 9728 metadata endpoints
     _mount_mcp_surfaces(app, mcp_settings)

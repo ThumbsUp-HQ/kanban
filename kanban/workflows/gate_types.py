@@ -40,5 +40,6 @@ class GateDecision:
     field_updates: Mapping[str, Any] = field(default_factory=dict)
     add_labels: tuple[str, ...] = ()
     add_links: tuple[LinkSpec, ...] = ()
+    cited_files: tuple[str, ...] = ()
     verdict_sha256: bytes = b""
     latency_ms: int = 0

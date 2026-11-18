@@ -76,6 +76,7 @@ export function AuthStudioPage(): JSX.Element {
 
   // Users state
   const [users, setUsers] = useState<AdminUserPrincipal[]>([]);
+  const [principalKindFilter, setPrincipalKindFilter] = useState<'ALL' | 'USER' | 'GROUP' | 'AGENT'>('ALL');
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userActionError, setUserActionError] = useState<string | null>(null);
   const [userActionSuccess, setUserActionSuccess] = useState<string | null>(null);
@@ -84,7 +85,8 @@ export function AuthStudioPage(): JSX.Element {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [resetTargetUser, setResetTargetUser] = useState<AdminUserPrincipal | null>(null);
 
-  // New local user form state
+  // New local user/principal form state
+  const [newPrincipalType, setNewPrincipalType] = useState<'USER' | 'GROUP' | 'AGENT'>('USER');
   const [newUserHandle, setNewUserHandle] = useState('');
   const [newUserDisplayName, setNewUserDisplayName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -168,11 +170,12 @@ export function AuthStudioPage(): JSX.Element {
   }, []);
 
   // 3. Fetch principals if admin access confirmed
-  const loadUsers = useCallback(async () => {
+  const loadUsers = useCallback(async (filter?: string) => {
     setIsLoadingUsers(true);
     setUserActionError(null);
     try {
-      const principals = await fetchAdminPrincipals('USER');
+      const activeFilter = filter ?? (principalKindFilter === 'ALL' ? '' : principalKindFilter);
+      const principals = await fetchAdminPrincipals(activeFilter);
       setUsers(principals);
     } catch (err: unknown) {
       if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
@@ -185,7 +188,7 @@ export function AuthStudioPage(): JSX.Element {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, []);
+  }, [principalKindFilter]);
 
   useEffect(() => {
     if (!accessDenied && currentUser?.is_server_admin) {
@@ -485,11 +488,15 @@ export function AuthStudioPage(): JSX.Element {
     }
   };
 
-  // Handle Add Local User
+  // Handle Add Local User / Principal
   const handleCreateLocalUserSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-    if (!newUserHandle || !newUserEmail || !newUserPassword) {
+    if (newPrincipalType === 'USER' && (!newUserHandle || !newUserEmail || !newUserPassword)) {
       setUserActionError('Handle, email, and password are required.');
+      return;
+    }
+    if (!newUserHandle) {
+      setUserActionError('Handle is required.');
       return;
     }
     setIsSubmittingUser(true);
@@ -497,15 +504,28 @@ export function AuthStudioPage(): JSX.Element {
     setUserActionSuccess(null);
 
     try {
-      await createLocalUser({
+      const payload: Parameters<typeof createLocalUser>[0] = {
         handle: newUserHandle.trim(),
         display_name: (newUserDisplayName || newUserHandle).trim(),
-        email: newUserEmail.trim(),
-        password: newUserPassword,
         role: newUserRole,
-      });
-      setUserActionSuccess(`Local user @${newUserHandle} created successfully.`);
+      };
+      if (newUserEmail.trim()) {
+        payload.email = newUserEmail.trim();
+      }
+      if (newUserPassword) {
+        payload.password = newUserPassword;
+      }
+      if (newPrincipalType !== 'USER') {
+        payload.type = newPrincipalType;
+      }
+      await createLocalUser(payload);
+      const successMsg =
+        newPrincipalType === 'USER'
+          ? `Local user @${newUserHandle} created successfully.`
+          : `Principal (${newPrincipalType}) @${newUserHandle} created successfully.`;
+      setUserActionSuccess(successMsg);
       setIsAddUserOpen(false);
+      setNewPrincipalType('USER');
       setNewUserHandle('');
       setNewUserDisplayName('');
       setNewUserEmail('');
@@ -513,7 +533,7 @@ export function AuthStudioPage(): JSX.Element {
       setNewUserRole('WORKSPACE_MEMBER');
       await loadUsers();
     } catch (err: unknown) {
-      setUserActionError(err instanceof Error ? err.message : 'Failed to create local user.');
+      setUserActionError(err instanceof Error ? err.message : 'Failed to create principal.');
     } finally {
       setIsSubmittingUser(false);
     }
@@ -629,6 +649,25 @@ export function AuthStudioPage(): JSX.Element {
           Users &amp; Permissions
         </button>
       </div>
+
+      {activeTab === 'users' && (
+        <div className="auth-principal-filters" style={{ display: 'flex', gap: '8px', margin: '12px 0' }} data-testid="principal-filters">
+          {(['ALL', 'USER', 'GROUP', 'AGENT'] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className={`auth-btn-secondary ${principalKindFilter === kind ? 'auth-btn-primary' : ''}`}
+              onClick={() => {
+                setPrincipalKindFilter(kind);
+                void loadUsers(kind === 'ALL' ? '' : kind);
+              }}
+              data-testid={`filter-${kind.toLowerCase()}`}
+            >
+              {kind === 'ALL' ? 'All Principals' : kind === 'USER' ? 'Users' : kind === 'GROUP' ? 'Groups' : 'Agents'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* LOCKOUT_PREVENTED Alert Banner */}
       {lockoutError ? (
@@ -850,6 +889,22 @@ export function AuthStudioPage(): JSX.Element {
             <form onSubmit={(e) => { void handleCreateLocalUserSubmit(e); }}>
               <div className="auth-modal-body">
                 <div className="auth-editor-field">
+                  <label htmlFor="new-principal-type" className="auth-editor-label">
+                    Principal Kind
+                  </label>
+                  <select
+                    id="new-principal-type"
+                    className="auth-editor-input"
+                    value={newPrincipalType}
+                    onChange={(e) => { setNewPrincipalType(e.target.value as 'USER' | 'GROUP' | 'AGENT'); }}
+                  >
+                    <option value="USER">User (Local)</option>
+                    <option value="GROUP">Group</option>
+                    <option value="AGENT">Agent</option>
+                  </select>
+                </div>
+
+                <div className="auth-editor-field">
                   <label htmlFor="new-user-handle" className="auth-editor-label">
                     Username / Handle <span className="auth-editor-required">*</span>
                   </label>
@@ -878,36 +933,40 @@ export function AuthStudioPage(): JSX.Element {
                   />
                 </div>
 
-                <div className="auth-editor-field">
-                  <label htmlFor="new-user-email" className="auth-editor-label">
-                    Email Address <span className="auth-editor-required">*</span>
-                  </label>
-                  <input
-                    id="new-user-email"
-                    type="email"
-                    className="auth-editor-input"
-                    value={newUserEmail}
-                    onChange={(e) => { setNewUserEmail(e.target.value); }}
-                    placeholder="jdoe@example.com"
-                    required
-                  />
-                </div>
+                {newPrincipalType === 'USER' && (
+                  <>
+                    <div className="auth-editor-field">
+                      <label htmlFor="new-user-email" className="auth-editor-label">
+                        Email Address <span className="auth-editor-required">*</span>
+                      </label>
+                      <input
+                        id="new-user-email"
+                        type="email"
+                        className="auth-editor-input"
+                        value={newUserEmail}
+                        onChange={(e) => { setNewUserEmail(e.target.value); }}
+                        placeholder="jdoe@example.com"
+                        required
+                      />
+                    </div>
 
-                <div className="auth-editor-field">
-                  <label htmlFor="new-user-pwd" className="auth-editor-label">
-                    Password <span className="auth-editor-required">*</span>
-                  </label>
-                  <input
-                    id="new-user-pwd"
-                    type="password"
-                    className="auth-editor-input"
-                    value={newUserPassword}
-                    onChange={(e) => { setNewUserPassword(e.target.value); }}
-                    placeholder="Minimum 8 characters"
-                    required
-                    minLength={8}
-                  />
-                </div>
+                    <div className="auth-editor-field">
+                      <label htmlFor="new-user-pwd" className="auth-editor-label">
+                        Password <span className="auth-editor-required">*</span>
+                      </label>
+                      <input
+                        id="new-user-pwd"
+                        type="password"
+                        className="auth-editor-input"
+                        value={newUserPassword}
+                        onChange={(e) => { setNewUserPassword(e.target.value); }}
+                        placeholder="Minimum 8 characters"
+                        required
+                        minLength={8}
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="auth-editor-field">
                   <label htmlFor="new-user-role" className="auth-editor-label">

@@ -21,13 +21,14 @@ def test_positive_cli_args_validation() -> None:
     assert res_agy.argv == ("/usr/local/bin/agy", "-p")
 
     # codex with pinned prefix and additional flags
-    codex_args = ["-p", "-s", "read-only", "--model", "o3-mini"]
+    codex_args = ["exec", "-s", "read-only", "-", "--model", "o3-mini"]
     res_codex = validate_cli_args("codex", codex_args)
     assert res_codex.argv == (
         "/usr/local/bin/codex",
-        "-p",
+        "exec",
         "-s",
         "read-only",
+        "-",
         "--model",
         "o3-mini",
     )
@@ -68,16 +69,20 @@ def test_banned_flags_rejection(flag: str) -> None:
 @pytest.mark.parametrize(
     "args",
     [
-        ["-p", "-s", "danger-full-access"],
-        ["-p", "-s", "read-only", "-s", "workspace-write"],
-        ["-p", "-s", "read-only", "-c", "sandbox_mode=danger-full-access"],
-        ["-p", "-s", "read-only", "--sandbox=danger-full-access"],
-        ["-p", "-s", "read-only", "--config=mode=yolo"],
-        ["-p", "-s", "read-only", "--SANDBOX", "none"],
-        ["-p", "-s", "read-only", "--CONFIG", "foo"],
-        ["-p"],
-        ["-p", "-s"],
-        ["-s", "read-only", "-p"],
+        ["exec", "-s", "danger-full-access", "-"],
+        ["exec", "-s", "read-only", "-", "-s", "workspace-write"],
+        ["exec", "-s", "read-only", "-", "-c", "sandbox_mode=danger-full-access"],
+        ["exec", "-s", "read-only", "-", "--sandbox=danger-full-access"],
+        ["exec", "-s", "read-only", "-", "--config=mode=yolo"],
+        ["exec", "-s", "read-only", "-", "--SANDBOX", "none"],
+        ["exec", "-s", "read-only", "-", "--CONFIG", "foo"],
+        ["exec", "-s", "read-only", "-", "-p", "default"],
+        ["exec", "-s", "read-only", "-", "--profile=custom"],
+        ["-p", "-s", "read-only"],
+        ["exec"],
+        ["exec", "-s"],
+        ["exec", "-s", "read-only"],
+        ["-s", "read-only", "exec", "-"],
         [],
     ],
 )
@@ -157,14 +162,15 @@ def test_assert_runtime_argv_validation() -> None:
     # Valid object
     valid_record = SimpleNamespace(
         cli_binary_allowlist_id="codex",
-        cli_args_json=["-p", "-s", "read-only", "--model", "gpt-4o"],
+        cli_args_json=["exec", "-s", "read-only", "-", "--model", "gpt-4o"],
     )
     argv = assert_runtime_argv(valid_record)
     assert argv.argv == (
         "/usr/local/bin/codex",
-        "-p",
+        "exec",
         "-s",
         "read-only",
+        "-",
         "--model",
         "gpt-4o",
     )

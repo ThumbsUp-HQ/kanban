@@ -3,9 +3,10 @@ display_name: "OpenAI Codex CLI Transition Gate"
 harness_kind: cli_pipe
 cli_binary_allowlist_id: codex
 cli_args:
-  - "-p"
+  - "exec"
   - "-s"
   - "read-only"
+  - "-"
 repo_access_mode: ro_vfs_mount
 mcp_allowed_tools:
   - search_tickets

@@ -1,6 +1,6 @@
 cassette_version: 1
 matcher:
-  argv_prefix: ["/usr/local/bin/codex", "-p", "-s", "read-only"]
+  argv_prefix: ["/usr/local/bin/codex", "exec", "-s", "read-only", "-"]
   stdin_contains: ["schema: kb-transition-context/v1"]
 simulated_ttft_ms: 12.0
 cli_result:

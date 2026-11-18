@@ -31,7 +31,7 @@ BINARY_ALLOWLIST: Final[Mapping[str, str]] = MappingProxyType(
     }
 )
 
-CODEX_PINNED_PREFIX: Final[tuple[str, ...]] = ("-p", "-s", "read-only")
+CODEX_PINNED_PREFIX: Final[tuple[str, ...]] = ("exec", "-s", "read-only", "-")
 
 _MAX_CLI_ARGS: Final[int] = 32
 _MIN_ARG_BYTES: Final[int] = 1
@@ -102,12 +102,13 @@ def _validate_codex_sandbox(args: list[str]) -> None:
 
     for sub_index, sub_arg in enumerate(args[pinned_len:], start=pinned_len):
         sub_folded = sub_arg.casefold()
-        if sub_folded in ("-s", "--sandbox", "-c", "--config") or sub_folded.startswith(
-            ("--sandbox=", "--config=")
+        if (
+            sub_folded in ("-s", "--sandbox", "-c", "--config", "-p", "--profile")
+            or sub_folded.startswith(("--sandbox=", "--config=", "--profile="))
         ):
             msg = (
                 f"codex argument at index {sub_index} ({sub_arg!r}) attempts "
-                "to override sandbox mode"
+                "to override sandbox mode or profile"
             )
             raise CliPolicyError(code="CODEX_SANDBOX_OVERRIDE", detail=msg)
 
@@ -119,8 +120,8 @@ def validate_cli_args(binary_id: str, args: Sequence[str]) -> ValidatedArgv:
     - Binary allowlist membership (CLI_BINARY_NOT_ALLOWLISTED).
     - Max 32 arguments, each 1..256 UTF-8 bytes, no NUL/CR/LF (CLI_ARGS_INVALID).
     - Casefolded banned flag matching, <banned>=, and --dangerously (BANNED_CLI_FLAG).
-    - Pinned ('-p', '-s', 'read-only') prefix for codex, with no subsequent -s,
-      --sandbox, -c, or --config overrides (CODEX_SANDBOX_OVERRIDE).
+    - Pinned ('exec', '-s', 'read-only', '-') prefix for codex, with no subsequent -s,
+      --sandbox, -c, --config, -p, or --profile overrides (CODEX_SANDBOX_OVERRIDE).
 
     Returns ValidatedArgv containing an immutable tuple: (binary_path, *args).
     """

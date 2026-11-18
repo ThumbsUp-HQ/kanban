@@ -4,9 +4,10 @@ harness_kind: remote_runner
 remote_runner_pool_slug: default-runners
 cli_binary_allowlist_id: codex
 cli_args:
-  - "-p"
+  - "exec"
   - "-s"
   - "read-only"
+  - "-"
 repo_access_mode: ro_vfs_mount
 mcp_allowed_tools:
   - search_tickets

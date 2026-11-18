@@ -32,7 +32,7 @@ When evaluating an MCP ticketing server, standard assumptions often anticipate c
 | **Docs** | `convert_sticky_to_issue` | `promote_sticky_to_doc` | Atomic lossless promotion of complex scratchpads into permanent Docs with ACL preservation. |
 | **Admin** | `admin_principals`, `admin_groups` | `manage_principals_and_groups` | Consolidates user, group, agent service-principal provisioning and role binding with cycle detection. |
 | **Admin** | `admin_workflows` | `manage_workflow_interceptors` | Configures ScriptRunner Tier A Wasm validators/mutators and Tier B async agent gates on state transitions. |
-| **Admin** | `admin_ai_providers` | `manage_ai_and_agent_runners` | Manages LLM endpoints, token caps, and CLI pipe (`agy -p` / `codex -p`) execution profiles. |
+| **Admin** | `admin_ai_providers` | `manage_ai_and_agent_runners` | Manages LLM endpoints, token caps, and CLI pipe (`agy -p` / `codex exec -s read-only -`) execution profiles. |
 | **Admin** | `admin_destructive` | `destructive_lifecycle` | Mandatory 2-stage blast-radius preview (`request_delete`) and tokenized execution (`execute_delete`). |
 
 ### High-Level Verdict

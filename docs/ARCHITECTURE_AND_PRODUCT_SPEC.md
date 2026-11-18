@@ -29,7 +29,7 @@
 11. [Three-Surface Intent-Driven MCP Server (`#12`: `mcp/` - Agent, Docs, Admin)](#11-three-surface-intent-driven-mcp-server-12-mcp---agent-docs-admin)
 12. [Universal Object Graph Canonical Markdown DDL & Invalid Link Auditor (`#13a` - `#13j`)](#12-universal-object-graph-canonical-markdown-ddl--invalid-link-auditor-13a---13j)
 13. [Admin-Only Custom Scripted Fields & Tiered Privilege Escalation (`#14`)](#13-admin-only-custom-scripted-fields--tiered-privilege-escalation-14)
-14. [ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex -p`, Gemini, Ollama)](#14-scriptrunner-workflows--remotecli-agent-transition-interceptors-agy--p-codex--p-gemini-ollama)
+14. [ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)](#14-scriptrunner-workflows--remotecli-agent-transition-interceptors-agy--p-codex--p-gemini-ollama)
 15. [`>=95%` Clean-DB Testing, Pluggable AI Fixtures, Local Agent CLI & Governance Gates](#15-95-clean-db-testing-pluggable-ai-fixtures-local-agent-cli--governance-gates)
 
 ---
@@ -40,7 +40,7 @@
 | :--- | :--- | :--- |
 | **`Apache-2.0` Open-Source License** | Section 1.2, Section 2.5, Section 15.4 | Permissive `Apache-2.0` repo license; CI license gate strictly blocks `GPL`/`AGPL`/`SSPL` transitive dependencies across Python (`uv.lock`) and Web (`pnpm-lock.yaml`). |
 | **1. Clear security features (`shared_with` visible)** | Section 3.1 - 3.5 | Unified `principals` + Postgres `FORCE ROW LEVEL SECURITY` + `effective_resource_access` closure + anti-enumeration `access_manifest` + `🛡️` Header Emoji Pill & Effective Access Inspector. |
-| **2. OpenAI / Ollama / Gemini + CLI/Remote Agent support** | Section 10, Section 14 | Vendor-neutral `LLMProvider` (`openai` ZDR, `ollama` LAN/air-gap, `gemini` `google-genai`) + `AgentDefinition` registry (`in_app_sdk`, zero-shell `cli_pipe` for `agy -p`/`codex -p`, and outbound WSS `remote_runner`). |
+| **2. OpenAI / Ollama / Gemini + CLI/Remote Agent support** | Section 10, Section 14 | Vendor-neutral `LLMProvider` (`openai` ZDR, `ollama` LAN/air-gap, `gemini` `google-genai`) + `AgentDefinition` registry (`in_app_sdk`, zero-shell `cli_pipe` for `agy -p`/`codex exec -s read-only -`, and outbound WSS `remote_runner`). |
 | **3. Project structure `[kanban, database, mcp, agent]` + Containers & Web Server** | Section 2.1 - 2.5 | `uv` workspace with `import-linter` walls; Caddy 2.8+ edge + Uvicorn ASGI + pre-compressed `.br`/`.gz` SPA; supports both hardened multi-container `docker-compose.yml` AND zero-config `docker run -p 8080:8080` standalone with embedded Unix-socket PG16. |
 | **4. Initial Kanban `https://kanban.hackedyour.info/kanban/`** | Section 1.3, Section 15.5 | External bootstrap tracking board during initial build, followed by deterministic lossless import (`KANBA-*` key continuity, comments, and QA proof bundles) into self-hosted dogfooding. |
 | **5 & 10. Auto-select mode, auto-convert HTML/Rich -> Markdown; Markdown-only DB; Mermaid, Pictures & SVG** | Section 5.1 - 5.4, Section 12.2 | Zero mode-dropdown clutter; auto-detects & converts pasted HTML/Rich Text/Markdown/Plain Text into **100% canonical UTF-8 Markdown in PostgreSQL**; renders `beautiful-mermaid` Worker diagrams, RLS Pictures, and scrubbed SVGs safely via `<img>`/`blob:` under strict CSP. |
@@ -52,7 +52,7 @@
 | **12. MCP (`agent`, `docs`, `admin`; 100% admin tasks via refined intent tools)** | Section 11.1 - 11.4 | `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 orthogonal intent tools covering 100% of admin, workflow-interceptor, and runner tasks + 2-stage `request_delete` -> `execute_delete`). |
 | **13. Universal Object Graph (`a` - `i`) + Invalid Link Audit & Delete (`13j`)** | Section 12.1 - 12.3 | Shared-PK UUIDv7 `objects` spine + composite type-pinned FKs (`ON DELETE RESTRICT`) + `object_links` snapshots + `audit_object_links()` 6-reason detector + `invalid_object_link_audits` ledger + `purge_invalid_object_links()`. |
 | **14. Admin-only Custom Scripts + Output Format + Tiered Escalation** | Section 13.1 - 13.3 | Admin-only `custom_field_definitions`, strict `output_format_metadata`, `manifest_sha256` AAL2 cryptographic escalation (`PROJECT` -> `WORKSPACE` -> `SERVER`; `INVOKING_USER` vs Admin SP), Wasmtime + `nsjail` + Token-Injecting Egress Proxy. |
-| **ScriptRunner Workflows & Remote/CLI Agent Interceptors** | Section 14.1 - 14.4 | Sync Wasm validators/mutators (`<25ms`) + Two-Phase Async Agent Transition Gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) supporting `gemini`, `ollama`, `${context} \| agy -p`, and `${context} \| codex -p` via zero-shell `execve` `stdin` pipes, `:ro` repo mounts, and scoped MCP ticket lookup. |
+| **ScriptRunner Workflows & Remote/CLI Agent Interceptors** | Section 14.1 - 14.4 | Sync Wasm validators/mutators (`<25ms`) + Two-Phase Async Agent Transition Gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) supporting `gemini`, `ollama`, `${context} \| agy -p`, and `${context} \| codex exec -s read-only -` via zero-shell `execve` `stdin` pipes, `:ro` repo mounts, and scoped MCP ticket lookup. |
 | **`>=95%` Unit Coverage, Fast Clean DB, Pluggable AI Fixtures & Manual CLI Validation** | Section 15.1 - 15.4 | `>=95%` coverage gate; `tmpfs` PG16 template DB + `0.3ms` `SAVEPOINT` per-test clean rollback; `FixtureLLMProvider`/`FixtureCLIRunner` deterministic cassettes; `kanban-agent validate-*` local CLI testbench. |
 
 ---
@@ -79,8 +79,8 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
 | **Authentication & Identity** | Basic email/password & single OAuth; no LDAP/AD | **Pro:** OIDC<br>**Bus/Ent:** SAML, LDAP/AD, Group Sync | **Multi-Card Auth Studio:** Simultaneous OIDC, OAuth2, LDAPS/StartTLS, WebAuthn/Passkeys, & Local Break-Glass Admin with enable/disable/reordering. |
 | **RBAC & Sharing Transparency** | Coarse roles; opaque permission inheritance | **Bus/Ent:** Custom RBAC, permission schemes | **Hybrid RBAC + Resource ACLs + Postgres `FORCE RLS`:** Ubiquitous **`🛡️` Shared-With Emoji Pill** + Effective Access Inspector on every object. |
 | **Audit Logs & Provenance** | Mutable/basic issue activity | **Enterprise:** Workspace Audit Logs | **Immutable SHA-256 Hash-Chained Ledger:** Monthly-partitioned `activity_records` covering human edits, `🔄` creator overrides, ACL diffs, and agent/script runs. |
-| **AI & Agent Capabilities** | Severely restricted / cloud-locked | **Paid:** Metered AI credits (`1,000/seat`), cloud lock-in | **Native `agent/` + 3-Surface `mcp/`:** `openai`, air-gapped `ollama`, `gemini`, plus CLI harnesses (`agy -p`, `codex -p`); `<150ms` `✨` cursor completion. |
-| **Workflows & ScriptRunner** | Basic state groups + simple auto-archive | **Bus/Ent:** Basic approval rules & triggers | **Full ScriptRunner + Agent Transition Interceptors:** Sync Wasm validators/mutators + async `gemini`/`ollama`/`agy -p`/`codex -p` gates with `:ro` repo access. |
+| **AI & Agent Capabilities** | Severely restricted / cloud-locked | **Paid:** Metered AI credits (`1,000/seat`), cloud lock-in | **Native `agent/` + 3-Surface `mcp/`:** `openai`, air-gapped `ollama`, `gemini`, plus CLI harnesses (`agy -p`, `codex exec -s read-only -`); `<150ms` `✨` cursor completion. |
+| **Workflows & ScriptRunner** | Basic state groups + simple auto-archive | **Bus/Ent:** Basic approval rules & triggers | **Full ScriptRunner + Agent Transition Interceptors:** Sync Wasm validators/mutators + async `gemini`/`ollama`/`agy -p`/`codex exec -s read-only -` gates with `:ro` repo access. |
 | **Markdown, Diagrams & Graph** | HTML/JSON storage drift; basic relations | **Pro/Bus:** Custom properties, Wiki spaces, Gantt | **100% Canonical Markdown DB + Universal Object Graph:** Auto-converts HTML/Rich -> Markdown; safe Mermaid, Pictures & SVGs; proactive `💡📄` Sticky-to-Doc promotion; Invalid Link Auditor. |
 
 ---
@@ -88,7 +88,7 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
 ### 1.3 Research Synthesis: Modern Kanban & Ticketing Expectations (`9.i`, `9.j`)
 
 1. **Superior Spatial Muscle Memory with Generous Whitespace:** Surpasses Jira and Vibe Kanban with a clean navigation rail, breathable `324px` board lanes, `960px` right-docked Ticket Drawer (`640px` spacious prose + `320px` properties rail), and zero-remount Full Screen expansion - replacing verbose text clutter with crisp semantic emojis (`🛡️`, `🔥`, `🤖`, `⏳🤖`, `✨`) backed by rich hover/focus elaboration tooltips.
-2. **Sub-16ms Optimistic Interactions + Non-Blocking Gate States:** Drag-and-drop (`@atlaskit/pragmatic-drag-and-drop` + Base-62 `COLLATE "C"` fractional ranks) updates locally in `<12ms`. Transitions intercepted by an async agent gate (`agy -p`, `codex -p`, `gemini`, `ollama`) enter a non-blocking provisional `⏳🤖` state rather than freezing the UI with a spinner, snapping back smoothly (`240ms`) with a `🛑🤖` veto badge and comment if rejected.
+2. **Sub-16ms Optimistic Interactions + Non-Blocking Gate States:** Drag-and-drop (`@atlaskit/pragmatic-drag-and-drop` + Base-62 `COLLATE "C"` fractional ranks) updates locally in `<12ms`. Transitions intercepted by an async agent gate (`agy -p`, `codex exec -s read-only -`, `gemini`, `ollama`) enter a non-blocking provisional `⏳🤖` state rather than freezing the UI with a spinner, snapping back smoothly (`240ms`) with a `🛑🤖` veto badge and comment if rejected.
 3. **Five Native Views, 2D Swimlanes, WIP Limits & Full Keyboard Parity:** Native `List`, `Board`, `Table`, `Calendar`, and `Timeline (Gantt)` layouts; orthogonal `Group By` x `Sub-Group By` swimlanes; Soft/Hard column WIP limits; and complete single-key shortcuts (`Cmd/Ctrl+K`, `C`, `J/K/H/L`, `S`, `P`, `A`, `I`, `L`, `M`, `D`, `X`).
 4. **Bootstrap Cutover (`https://kanban.hackedyour.info/kanban/`):** Initial build tickets will be tracked on the bootstrap board (after spec approval) and migrated losslessly (`kanban-ctl import ...`) with `100%` `KANBA-*` key, comment, and QA proof preservation once self-hosting cutover is reached.
 
@@ -101,7 +101,7 @@ Addressing **GitHub Issue #1** ("World-Class Kanban Platform: Security-First, Ag
 #### Pillar 1: Native Agent-First Architecture
 - **Three Intent-Driven MCP Surfaces:** Replaces monolithic, context-collapsing CRUD-wrapper tools with `/mcp/agent` (8 orthogonal execution tools), `/mcp/docs` (6 knowledge management tools), and `/mcp/admin` (12 administrative tools with two-stage deletion confirmation). Total schema payload is slashed from 45,000+ tokens to <= 1,800 tokens.
 - **Level of Detail (LOD) Token Budgets:** Every entity supports `summary`, `standard`, and `full` LOD projections. Summary responses stay strictly under 1,000 tokens (< 4,000 characters) to prevent context exhaustion in autonomous coding agents.
-- **Agent Ecosystem Support:** Native out-of-the-box integration for Claude Code, OpenAI Codex, and Gemini CLI / Antigravity via zero-shell stdin CLI pipes (`agy -p`, `codex -p`), vendor-neutral LLM engines (`openai`, `ollama`, `gemini`), and outbound mTLS remote runners (`:ro` repository mounts).
+- **Agent Ecosystem Support:** Native out-of-the-box integration for Claude Code, OpenAI Codex, and Gemini CLI / Antigravity via zero-shell stdin CLI pipes (`agy -p`, `codex exec -s read-only -`), vendor-neutral LLM engines (`openai`, `ollama`, `gemini`), and outbound mTLS remote runners (`:ro` repository mounts).
 
 #### Pillar 2: Priority #0 Hardened Security
 - **PostgreSQL 16 FORCE ROW LEVEL SECURITY:** Hardware-enforced `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`) across 100% of public tenant tables. Unauthenticated and zero-context queries fail closed returning zero rows.
@@ -213,11 +213,11 @@ A single root `Dockerfile` produces **both** the lean production image (`--targe
 | **`kanban-api`** | `thumbs-up-kanban:runtime-slim` | `app_net`, `data_net` | Core domain state machines, Multi-Card AuthN, RBAC/ACL manifest resolver, Rust `nh3` + Markdown converter, REST, and WS/SSE hubs. |
 | **`mcp-server`** | `thumbs-up-kanban:runtime-slim` | `app_net` **ONLY (zero `data_net` route!)** | Mounts `/mcp/agent`, `/mcp/docs`, `/mcp/admin`; holds **zero** Postgres write credentials; calls `kanban-api` over internal mTLS HTTP/2. |
 | **`agent-runtime`** | `thumbs-up-kanban:runtime-slim` | `app_net`, `egress_llm_net` (+ `:ro` `git-mirrors`) | Multi-provider `LLMProvider` router, `<150ms` Sparkle FIM (`app_rls_reader` `READ ONLY` 18ms cap), and workflow interceptor coordinator. |
-| **`script-sandbox`** | `thumbs-up-kanban:sandbox` (`nsjail`) | `sandbox_net` (`internal: true`, **zero internet!**) | Runs Tier B polyglot custom field scripts & local `cli_pipe` (`agy -p` / `codex -p`) behind `sandbox-egress-proxy` (ephemeral token injector). |
+| **`script-sandbox`** | `thumbs-up-kanban:sandbox` (`nsjail`) | `sandbox_net` (`internal: true`, **zero internet!**) | Runs Tier B polyglot custom field scripts & local `cli_pipe` (`agy -p` / `codex exec -s read-only -`) behind `sandbox-egress-proxy` (ephemeral token injector). |
 | **`outbox-relay`** | `thumbs-up-kanban:runtime-slim` | `data_net` **ONLY** | `LISTEN outbox_wakeup` + `FOR UPDATE SKIP LOCKED` -> Valkey 8 Streams & PubSub. |
 | **`postgres`** | `pgvector/pgvector:pg16` | `data_net` (`internal: true`) | Authoritative Universal Object Graph, `FORCE RLS`, `ltree`, `pgvector` HNSW, and partitioned SHA-256 `activity_records`. |
 | **`valkey`** | `valkey/valkey:8.0-alpine` | `data_net` (`internal: true`) | Multi-replica WebSocket fanout, consumer groups, and sliding-window rate buckets (`BSD-3` licensed). |
-| **`kanban-agent-runner`** *(Optional Remote Host)* | `thumbs-up-kanban:agent-runner` | Outbound TLS 1.3 `WSS` to `reverse-proxy` | Runs on remote dev/CI/GPU hosts mounting local Git repos `:ro` to execute `ollama`, `gemini`, `agy -p`, or `codex -p` transition gates with zero inbound firewall ports. |
+| **`kanban-agent-runner`** *(Optional Remote Host)* | `thumbs-up-kanban:agent-runner` | Outbound TLS 1.3 `WSS` to `reverse-proxy` | Runs on remote dev/CI/GPU hosts mounting local Git repos `:ro` to execute `ollama`, `gemini`, `agy -p`, or `codex exec -s read-only -` transition gates with zero inbound firewall ports. |
 
 ---
 
@@ -251,7 +251,7 @@ $$\text{EffectivePerms}(p, r) = \Big(\text{InheritedRBAC}(p, r) \cup \text{Direc
 
 - **Delegated User Agent (`OBO`, e.g., MCP client or `INVOKING_USER` workflow/field script):**
   $$\text{EffectivePerms}(a_{\text{obo}(u)}, r) = \text{EffectivePerms}(u, r) \cap \text{AgentGrant}(a, r) \cap \text{TokenScope}(t)$$
-  An agent or CLI tool (`agy -p`, `codex -p`) acting on behalf of a user can **never** read or mutate a resource that the invoking human cannot access.
+  An agent or CLI tool (`agy -p`, `codex exec -s read-only -`) acting on behalf of a user can **never** read or mutate a resource that the invoking human cannot access.
 - **Autonomous Service Agent (`AGENT` / `SERVICE_PRINCIPAL`):** Computed strictly from explicit project/object grants assigned to that agent principal and displayed distinctly under `🤖 Agents` in the Access Inspector.
 
 ---
@@ -506,7 +506,7 @@ Verbose inline status text (`"Shared with 14 users (Inherited from Project)"`, `
 | `📴` | Air-Gap Local-Only Mode | Confirms external LLM/media egress is disabled at socket level; displays active local `ollama` endpoint. |
 | `🔥` / `⚡` / `🔹` / `💤` | Priority (`Urgent`/`High`/`Med`/`Low`) | Displays project-customizable priority name, SLA target window, and sort weight (`P` to change). |
 | `🤖` | Autonomous / OBO Agent | Agent name, harness/model (`ollama/qwen2.5-coder`, `cli: agy -p`), OBO human delegator, and effective permission intersection. |
-| `⏳🤖` | Transition Gate Pending | Live elapsed timer, active workflow hook name, harness (`codex -p` / `gemini`), and read-only repo mount status. |
+| `⏳🤖` | Transition Gate Pending | Live elapsed timer, active workflow hook name, harness (`codex exec -s read-only -` / `gemini`), and read-only repo mount status. |
 | `🛑🤖` | Transition Gate Vetoed | Vetoing hook/agent name, timestamp, 2-line markdown reason preview, and 1-click jump to full Activity audit comment. |
 | `✅🤖` | Transition Gate Approved | Approving hook/agent name, execution latency (`ms`), and cryptographic verdict hash. |
 | `🏷️` | External Free-Text Assignee | Explains that this assignee is a non-member external label (`Zero workspace permissions granted; zero notifications sent`). |
@@ -782,7 +782,7 @@ Covers **100% of administrative tasks** (including v2 ScriptRunner workflow inte
 | **6** | `manage_cycles_and_modules` | Create/update/rollover `Cycles` (`upcoming`/`active`/`completed`), configure `Modules`, and manage saved `Views` + `bind_project_repo` (`:ro` Git mirror / VFS bindings for workflow gates). |
 | **7** | `manage_custom_fields_and_scripts` | Define Admin-only custom fields (`output_format_metadata`, script source) and execute cryptographic `AAL2` scope/credential approvals (`PROJECT` -> `WORKSPACE` -> `SERVER`). |
 | **8** | `manage_workflow_interceptors` | **ScriptRunner + Agent Gates:** Attach, order, enable/disable, or dry-run `sync_validator`, `sync_mutator` (Tier A Wasm), and `agent_interceptor` hooks on `(from_state -> to_state)` transitions. |
-| **9** | `manage_ai_and_agent_runners` | Configure `openai`/`ollama`/`gemini` providers, token budgets, `agent_definitions` (`in_app_sdk`, `cli_pipe` for `agy -p`/`codex -p`, `remote_runner`), and `kanban-agent-runner` mTLS enrollment tokens. |
+| **9** | `manage_ai_and_agent_runners` | Configure `openai`/`ollama`/`gemini` providers, token budgets, `agent_definitions` (`in_app_sdk`, `cli_pipe` for `agy -p`/`codex exec -s read-only -`, `remote_runner`), and `kanban-agent-runner` mTLS enrollment tokens. |
 | **10** | `override_ticket_provenance` | Project/Server Admin tool to modify `Created by` (`#8d`), unlock Hard WIP overrides, or unarchive items with mandatory `reason`. |
 | **11** | `audit_and_purge_object_links` | Run the Universal Object Graph Auditor (`#13j`), inspect broken/unauthorized links, and purge audited entries. |
 | **12** | `destructive_lifecycle` | **Mandatory Two-Stage Gate (`request_delete` -> `execute_delete`):** Stage 1 computes recursive blast radius and mints a 5-minute single-use `confirmation_token` bound to `(caller_id, target_uuid, blast_hash)`; Stage 2 executes soft-trash or permanent purge only when `confirm_phrase` and token match. |
@@ -950,7 +950,7 @@ Every scripted field defaults to **zero-privilege (`PROJECT` scope + `INVOKING_U
 
 ---
 
-## 14. ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex -p`, Gemini, Ollama)
+## 14. ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)
 
 ### 14.1 How ScriptRunner + Agent Transition Interceptors Fit into `[kanban, database, mcp, agent]`
 
@@ -962,7 +962,7 @@ sequenceDiagram
     actor User as Human / MCP Caller
     participant API as kanban/ Workflow Engine
     participant Wasm as Tier A Wasmtime (<25ms)
-    participant Agent as agent/ (Gemini | Ollama | agy -p | codex -p)
+    participant Agent as agent/ (Gemini | Ollama | agy -p | codex exec -s read-only -)
     participant Repo as :ro Git Mirror / Remote WSS Runner
     participant MCP as /mcp/agent + /mcp/docs (kb_agt_eph_*)
 
@@ -991,7 +991,7 @@ sequenceDiagram
 
 Every agent in `agent/` is registered in `agent_definitions` and supports **three execution harnesses** under one uniform contract:
 1. **`in_app_sdk`**: Native in-process `GeminiProvider`, `OllamaProvider`, or `OpenAIProvider` tool-calling loop with 5 read-only repo tools (`repo_tree`, `repo_read_file`, `repo_grep`, `repo_git_log`, `repo_git_diff`) + in-process MCP ticket/doc tools.
-2. **`cli_pipe`**: Local sandboxed CLI harness (`agy -p`, `codex -p -s read-only`, `claude -p`, `gemini -p`) receiving `${context}` YAML over `FD 0 (stdin)` inside a `:ro`-mounted `nsjail` workspace.
+2. **`cli_pipe`**: Local sandboxed CLI harness (`agy -p`, `codex exec -s read-only -`, `claude -p`, `gemini -p`) receiving `${context}` YAML over `FD 0 (stdin)` inside a `:ro`-mounted `nsjail` workspace.
 3. **`remote_runner`**: Remote `kanban-agent-runner` daemon connected outbound over mTLS TLS 1.3 `WSS` (e.g., an air-gapped GPU `ollama` box or CI server with local `:ro` source checkouts).
 
 ```sql
@@ -1051,9 +1051,9 @@ CREATE TABLE workflow_transition_executions (
 
 ---
 
-### 14.3 Zero-Shell CLI Execution (`${context} | agy -p` / `codex -p`) & Strict `:ro` Repo Confinement
+### 14.3 Zero-Shell CLI Execution (`${context} | agy -p` / `codex exec -s read-only -`) & Strict `:ro` Repo Confinement
 
-Conceptual `${context} | agy -p` or `${context} | codex -p` pipelines are executed with **zero shell interpolation** (`agent/runners/cli_pipe.py`):
+Conceptual `${context} | agy -p` or `${context} | codex exec -s read-only -` pipelines are executed with **zero shell interpolation** (`agent/runners/cli_pipe.py`):
 
 1. **Direct `execve` + Banned Unsandboxed Flags:** Never invokes `/bin/sh -c`. Spawns an explicit `argv` tuple against Admin-allowlisted root-owned binaries (`/usr/local/bin/agy`, `/usr/local/bin/codex`) and **rejects at save & runtime** any privilege-bypass flag (`--yolo`, `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-skip-permissions`, `--full-auto`, `--allow-all-tools`). `codex` is pinned to `["/usr/local/bin/codex", "-p", "-s", "read-only", ...]`.
 2. **Spotlighted `kb-transition-context/v1` YAML over `FD 0 (stdin)`:** Untrusted ticket prose is never interpolated into `argv` or raw prompt instructions; it is streamed over `stdin` inside randomized cryptographic boundary markers (`<<<UNTRUSTED_TICKET_DATA_9f8a...>>>`) alongside ephemeral MCP credentials:
@@ -1149,17 +1149,17 @@ final_verdict:
   add_labels: ["qa-needs-work"]
 ```
 
-- **Multi-Turn Tool & Stream Replay:** Replays exact token-by-token SSE chunks (for `<150ms` `✨` Sparkle tests), multi-step MCP/repo tool calls, and simulated `agy -p` / `codex -p` `stdout`/`stderr`/exit-code streams.
+- **Multi-Turn Tool & Stream Replay:** Replays exact token-by-token SSE chunks (for `<150ms` `✨` Sparkle tests), multi-step MCP/repo tool calls, and simulated `agy -p` / `codex exec -s read-only -` `stdout`/`stderr`/exit-code streams.
 - **Chaos & Fault Injection Modes:** Built-in fault fixtures test `HTTP 429` rate-limit backoff, TTFT SLA timeout (`>150ms` Sparkle abort), circuit-breaker trip (`CLOSED -> OPEN`), malformed non-JSON CLI `stdout`, and prompt-injection canary strings (asserting the outbound secret scrubber and read-taint guard block exfiltration).
 
 ---
 
 ### 15.3 Local Manual CLI Agent Validation Workbench (`uv run kanban-agent validate-*`)
 
-Every AI agent and workflow interceptor can be invoked, inspected, and tuned **manually and locally from the terminal** with explicit input parameters - against **either** live local/cloud providers (`ollama`, `gemini`, `openai`, local `agy -p`, `codex -p`) **or** deterministic YAML cassettes (`--provider fixture`) - without clicking through the browser UI:
+Every AI agent and workflow interceptor can be invoked, inspected, and tuned **manually and locally from the terminal** with explicit input parameters - against **either** live local/cloud providers (`ollama`, `gemini`, `openai`, local `agy -p`, `codex exec -s read-only -`) **or** deterministic YAML cassettes (`--provider fixture`) - without clicking through the browser UI:
 
 ```bash
-# 1. Manually validate a Transition Interceptor (`agy -p`, `codex -p`, `ollama`, or `gemini`) against a local repo & sample ticket:
+# 1. Manually validate a Transition Interceptor (`agy -p`, `codex exec -s read-only -`, `ollama`, or `gemini`) against a local repo & sample ticket:
 uv run kanban-agent validate-transition \
   --agent-config ./examples/agents/agy-gate.yaml \
   --ticket-file  ./examples/tickets/kan-142.yaml \
@@ -1209,5 +1209,5 @@ Every ticket executed on this repository enforces five non-bypassable gates:
 3. **Phase 2 - Multi-Card Auth Studio & Sanitization/Media Shield (`kanban/`):** Envelope-encrypted `OIDC`/`OAuth2`/`LDAPS`/`Local Admin` cards, `LOCKOUT_PREVENTED`, Rust `nh3` + hidden-DOM pruner, SVG scrubber, and `/api/v1/media-proxy`.
 4. **Phase 3 - Breathable Whitespace UI, `<EmojiHint>`, Enterprise Board/Ticket & Safe Mermaid/Pictures/SVG (`kanban/web`):** Spatial tokens, 21-emoji `<EmojiHint>` system, 5 board views, `960px` Drawer + Full Screen (`8a`-`8q`), `beautiful-mermaid` Worker, `<MediaViewport>`, and `Docs` + `Stickies` (`💡📄`).
 5. **Phase 4 - Three-Surface Intent MCP Server (`mcp/`):** `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 tools + 2-stage `destructive_lifecycle`), OAuth 2.1 + PKCE, `EntityResolver`, and `InlineSafeDumper` YAML.
-6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & ScriptRunner/CLI Transition Interceptors (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex -p` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
+6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & ScriptRunner/CLI Transition Interceptors (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex exec -s read-only -` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
 7. **Phase 6 - Cutover Import from `https://kanban.hackedyour.info/kanban/`:** Lossless `KANBA-*` migration, Link Auditor zero-invalid check, and full self-hosted dogfooding.
