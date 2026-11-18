@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import tempfile
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -16,10 +17,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime dependency for FastAPI
 
 from database.models.workspace_settings import WorkspaceSettings
-
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.auth.mfa.policy import require_admin_aal2
@@ -169,14 +170,14 @@ async def get_system_status_endpoint(
     )
 
     ws_air_gap = False
-    if caller.workspace_id:
+    if caller.workspace_id != uuid.UUID(int=0):
         try:
             ws_stmt = select(WorkspaceSettings.air_gap_mode).where(
                 WorkspaceSettings.workspace_id == caller.workspace_id
             )
             ws_res = (await session.execute(ws_stmt)).scalar_one_or_none()
             ws_air_gap = bool(ws_res)
-        except Exception:
+        except (SQLAlchemyError, ValueError, KeyError):
             ws_air_gap = False
     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
 
@@ -218,14 +219,14 @@ async def get_admin_standalone_status_endpoint(
     )
 
     ws_air_gap = False
-    if caller.workspace_id:
+    if caller.workspace_id != uuid.UUID(int=0):
         try:
             ws_stmt = select(WorkspaceSettings.air_gap_mode).where(
                 WorkspaceSettings.workspace_id == caller.workspace_id
             )
             ws_res = (await session.execute(ws_stmt)).scalar_one_or_none()
             ws_air_gap = bool(ws_res)
-        except Exception:
+        except (SQLAlchemyError, ValueError, KeyError):
             ws_air_gap = False
     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
 

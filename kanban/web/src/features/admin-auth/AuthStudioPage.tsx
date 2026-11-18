@@ -814,9 +814,16 @@ export function AuthStudioPage(): JSX.Element {
                           <span className="auth-user-email">{u.email ?? '-'}</span>
                         </td>
                         <td className="auth-users-td">
-                          <span className={`kb-type-pill kb-type-pill--${(u.type ?? 'USER').toLowerCase()}`} data-testid={`type-pill-${u.id}`}>
-                            {u.type === 'USER' ? 'User' : u.type === 'GROUP' ? 'Group' : u.type === 'AGENT' ? 'Agent' : (u.type ?? 'User')}
-                          </span>
+                          {(() => {
+                            const rawType = (u.type ?? 'USER').toUpperCase();
+                            const pillClass = rawType === 'GROUP' ? 'group' : rawType === 'AGENT' ? 'agent' : 'user';
+                            const pillLabel = rawType === 'GROUP' ? 'Group' : rawType === 'AGENT' ? 'Agent' : 'User';
+                            return (
+                              <span className={`kb-type-pill kb-type-pill--${pillClass}`} data-testid={`type-pill-${u.id}`}>
+                                {pillLabel}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="auth-users-td">
                           <span

@@ -116,11 +116,7 @@ export function AuthCardRow({
       <div className="auth-card-right">
         {/* Health Status Chip */}
         {(() => {
-          const statusStr = (
-            card.last_health_status ??
-            (card as { status?: string }).status ??
-            'UNVERIFIED'
-          ).toUpperCase();
+          const statusStr = card.last_health_status.toUpperCase();
           const statusLower = statusStr.toLowerCase();
           return (
             <div

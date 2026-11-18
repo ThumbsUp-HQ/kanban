@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     import httpx
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from database.models.auth import AuthProviderCard
     from kanban.auth.cards.schemas import (
         AuthCardAdmin,
         AuthCardCreate,
@@ -682,8 +681,8 @@ class AuthCardAdminService:
                 web_or_installed = parsed.get("web") or parsed.get("installed") or {}
                 if "client_secret" in web_or_installed:
                     secret_val = str(web_or_installed["client_secret"])
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, KeyError):
+                logger.debug("Failed parsing google_oauth_json client secret")
 
         if secret_val and self._kek_provider is not None:
             secret_buf = bytearray(secret_val.encode("utf-8"))

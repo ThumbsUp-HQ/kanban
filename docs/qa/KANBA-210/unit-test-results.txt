@@ -1,39 +1,87 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-ws-2a9755ab
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 49 items
+collecting ... collected 48 items
 
-kanban/tests/api/test_admin_principals.py ...........                    [ 22%]
-kanban/tests/api/test_workspaces_api.py .........                        [ 40%]
-kanban/tests/api/test_system_status.py ...........                       [ 63%]
-kanban/tests/auth/test_auth_cards_admin_api.py ........                  [ 79%]
-kanban/tests/api/test_workspace_settings.py ..........                   [100%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_2_security_zero_secret_leakage PASSED [  2%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_3_fractional_rank_collate_c PASSED [  4%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_4_handshake_probe_diagnostics PASSED [  6%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_5_lockout_enforcement_over_http PASSED [  8%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_6_delete_confirmation PASSED [ 10%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_7_authz_and_aal2_wall PASSED [ 12%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_8_validation_boundaries PASSED [ 14%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_9_google_oauth_json_preview_and_card_creation PASSED [ 16%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_lockout_helpers PASSED [ 18%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_assert_local_admin_disable_allowed_branches PASSED [ 20%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_schemas_validation PASSED [ 22%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_fractional_rank_edge_cases PASSED [ 25%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_to_admin_schema_none_timestamps PASSED [ 27%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_get_auth_card_service_initialization PASSED [ 29%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_admin_service_crud_extended PASSED [ 31%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_service_reorder_auto_rebalance PASSED [ 33%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_service_create_and_update_edge_branches PASSED [ 35%]
+kanban/tests/auth/test_auth_cards_service_unit.py::test_admin_api_enable_and_lockout_handlers PASSED [ 37%]
+kanban/tests/api/test_workspaces_api.py::test_case_1_list_workspaces_server_admin_and_member PASSED [ 39%]
+kanban/tests/api/test_workspaces_api.py::test_case_2_create_workspace_and_role_bindings PASSED [ 41%]
+kanban/tests/api/test_workspaces_api.py::test_case_3_switch_workspace_lifecycle_and_cookies PASSED [ 43%]
+kanban/tests/api/test_workspaces_api.py::test_case_4_member_cross_workspace_matching_email_and_switching PASSED [ 45%]
+kanban/tests/api/test_workspaces_api.py::test_case_5_workspace_edge_cases_and_error_branches PASSED [ 47%]
+kanban/tests/api/test_workspaces_api.py::test_case_6_coverage_direct_switch_and_fallback_cookies PASSED [ 50%]
+kanban/tests/api/test_workspaces_api.py::test_case_7_unit_coverage_direct_invocations PASSED [ 52%]
+kanban/tests/api/test_workspaces_api.py::test_case_8_workspaces_under_kanban_app_force_rls PASSED [ 54%]
+kanban/tests/api/test_workspaces_api.py::test_case_9_multi_workspace_switch_roundtrip_project_creation PASSED [ 56%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_get_default PASSED [ 58%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_patch_and_activity PASSED [ 60%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_air_gap_toggle_and_aal2 PASSED [ 62%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_validation_boundaries PASSED [ 64%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_authz_and_admin_protection PASSED [ 66%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_rls_isolation PASSED [ 68%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_project_admin_rejected PASSED [ 70%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_fallback_creation PASSED [ 72%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_direct_aal2_enforcement PASSED [ 75%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_trash_retention_sync PASSED [ 77%]
+kanban/tests/api/test_system_status.py::test_case_1_system_status_admin_full_fields_and_member_redaction PASSED [ 79%]
+kanban/tests/api/test_system_status.py::test_case_1b_missing_status_file_defaults_to_production_multi_container PASSED [ 81%]
+kanban/tests/api/test_system_status.py::test_case_2_standalone_encrypted_backup_and_zero_shell PASSED [ 83%]
+kanban/tests/api/test_system_status.py::test_case_3_compose_export_secret_audit_and_network_topology PASSED [ 85%]
+kanban/tests/api/test_system_status.py::test_case_4_backup_encryption_and_decryption_edge_cases PASSED [ 87%]
+kanban/tests/api/test_system_status.py::test_case_5_run_pg_dump_execution_and_errors PASSED [ 89%]
+kanban/tests/api/test_system_status.py::test_case_6_standalone_status_edge_cases PASSED [ 91%]
+kanban/tests/api/test_system_status.py::test_case_7_api_backup_error_branches PASSED [ 93%]
+kanban/tests/api/test_system_status.py::test_case_8_backup_schedule_and_snapshots_api PASSED [ 95%]
+kanban/tests/api/test_system_status.py::test_case_9_backup_verify_and_restore_api PASSED [ 97%]
+kanban/tests/api/test_system_status.py::test_assert_admin_routes_protected_compliance PASSED [100%]
 
-============================= 49 passed in 18.08s ==============================
+============================= 48 passed in 15.24s ==============================
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w2-ws-2a9755ab/kanban/web
 
- ✓ src/features/admin-auth/cardRank.test.ts (11 tests) 24ms
- ✓ src/features/admin-auth/adminAuthApi.test.ts (9 tests) 23ms
- ✓ src/features/admin-auth/LockoutPreventedBanner.test.tsx (5 tests) 257ms
- ✓ src/features/admin-auth/AuthCardRow.test.tsx (7 tests) 327ms
- ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (11 tests) 744ms
+> @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
+> vitest run src/app/Topbar.test.tsx src/features/admin-auth/ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+
+ ✓ src/features/admin-auth/adminAuthApi.test.ts (9 tests) 28ms
+ ✓ src/features/admin-auth/cardRank.test.ts (11 tests) 30ms
+ ✓ src/features/admin-auth/LockoutPreventedBanner.test.tsx (5 tests) 285ms
+ ✓ src/features/admin-auth/AuthCardRow.test.tsx (7 tests) 398ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (11 tests) 800ms
    ✓ WorkspaceSettingsPage (KANBA-202) (11)
-     ✓ renders workspace settings page and updates workspace name and slug 314ms
- ✓ src/app/Topbar.test.tsx (14 tests) 773ms
- ✓ src/features/admin-auth/AuthStudioPage.test.tsx (35 tests) 2598ms
+     ✓ renders workspace settings page and updates workspace name and slug 346ms
+ ✓ src/app/Topbar.test.tsx (14 tests) 788ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (35 tests) 2733ms
    ✓ AuthStudioPage (KB-P3-36) (35)
-     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 307ms
-     ✓ opens drawer to add a new auth card and appends created card 324ms
- ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (37 tests) 2902ms
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 346ms
+     ✓ opens drawer to add a new auth card and appends created card 361ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (37 tests) 3038ms
    ✓ AuthCardEditorDrawer (KB-P3-36) (37)
-     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 309ms
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 408ms
 
  Test Files  8 passed (8)
       Tests  129 passed (129)
-   Start at  14:00:21
-   Duration  4.14s (tests 48%, environment 43%, import 6%, transform 1%, worker 1%)
+   Start at  14:19:16
+   Duration  4.34s (tests 48%, environment 43%, import 6%, transform 1%, worker 1%)
 

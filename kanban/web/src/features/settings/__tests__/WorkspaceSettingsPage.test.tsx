@@ -568,7 +568,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     // Verify initial values
     const displayNameInput = await screen.findByTestId('workspace-display-name-input');
     const ttlInput = screen.getByTestId('workspace-mcp-key-max-ttl-input');
-    const airGapToggle = screen.getByTestId('workspace-air-gap-toggle') as HTMLInputElement;
+    const airGapToggle = screen.getByTestId<HTMLInputElement>('workspace-air-gap-toggle');
 
     expect(displayNameInput).toBeDefined();
     expect((displayNameInput as HTMLInputElement).value).toBe('Acme Corp');

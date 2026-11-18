@@ -571,7 +571,7 @@ export function AuthCardEditorDrawer({
       const isHealthy = res.last_health_status === 'HEALTHY' || res.status === 'OK' || res.ok;
       setHandshakeResult({
         status: isHealthy ? 'healthy' : 'failed',
-        message: res.check_summary || (isHealthy ? 'Handshake healthy' : 'Handshake probe failed'),
+        message: res.check_summary ?? (isHealthy ? 'Handshake healthy' : 'Handshake probe failed'),
       });
     } catch (err: unknown) {
       setHandshakeResult({
@@ -1541,7 +1541,7 @@ export function AuthCardEditorDrawer({
             <button
               type="button"
               className="auth-btn-secondary"
-              onClick={handleTestHandshake}
+              onClick={() => { void handleTestHandshake(); }}
               disabled={isSubmitting || isTestingHandshake}
               data-testid="drawer-test-handshake-btn"
             >

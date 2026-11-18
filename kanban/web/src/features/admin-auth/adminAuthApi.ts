@@ -131,7 +131,7 @@ export interface AdminUserPrincipal {
   principal: string;
   handle?: string;
   display_name: string;
-  type: 'USER' | 'GROUP' | 'AGENT';
+  type?: 'USER' | 'GROUP' | 'AGENT' | string | null;
   status: 'active' | 'deactivated' | 'disabled';
   email?: string | null;
   role?: string;
@@ -279,7 +279,7 @@ export async function deleteAdminAuthCard(cardId: string, confirmSlug?: string):
 // User & Permission Management APIs (KB-UX-06)
 
 export async function fetchAdminPrincipals(filter?: string): Promise<AdminUserPrincipal[]> {
-  const query = filter && filter.trim() && filter.toUpperCase() !== 'ALL'
+  const query = filter?.trim() && filter.toUpperCase() !== 'ALL'
     ? `?filter=${encodeURIComponent(filter.trim())}&limit=100`
     : `?limit=100`;
   const result = (await apiFetch(

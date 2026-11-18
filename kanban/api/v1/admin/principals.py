@@ -357,12 +357,21 @@ async def bind_role_endpoint(
     session: Session,
 ) -> dict[str, object]:
     """Bind an RBAC role to a principal at server, workspace, or project scope."""
+    target_role = body.role or body.role_name
+    if not target_role:
+        raise ProblemException(
+            code="VALIDATION_FAILED",
+            status=422,
+            title="Validation Failed",
+            detail="Role is required",
+            errors=[FieldError(path="role", message="Role is required")],
+        )
     return await principal_service.bind_role(
         session,
         caller.workspace_id,
         caller.principal_id,
         principal_id=body.principal_id,
-        role_name=body.role,
+        role_name=target_role,
         scope_type=body.scope_type,
         project_id=body.scope_id,
     )
@@ -378,12 +387,21 @@ async def unbind_role_endpoint(
     session: Session,
 ) -> dict[str, object]:
     """Unbind an RBAC role from a principal at server, workspace, or project scope."""
+    target_role = body.role or body.role_name
+    if not target_role:
+        raise ProblemException(
+            code="VALIDATION_FAILED",
+            status=422,
+            title="Validation Failed",
+            detail="Role is required",
+            errors=[FieldError(path="role", message="Role is required")],
+        )
     return await principal_service.unbind_role(
         session,
         caller.workspace_id,
         caller.principal_id,
         principal_id=body.principal_id,
-        role_name=body.role,
+        role_name=target_role,
         scope_type=body.scope_type,
         project_id=body.scope_id,
     )

@@ -280,6 +280,59 @@ async def _enrich_user_principal(
     return handle, email, role, provider
 
 
+def _validate_principal_filter(filter_type: str | None) -> str | None:
+    if filter_type is None:
+        return None
+    ft = filter_type.strip().upper()
+    if not ft or ft == "ALL":
+        return None
+    if ft not in ("USER", "GROUP", "AGENT", "SERVICE_PRINCIPAL"):
+        msg = f"Invalid filter '{filter_type}'. Must be USER, GROUP, AGENT, or SERVICE_PRINCIPAL"
+        raise ProblemException(
+            code="VALIDATION_FAILED",
+            status=422,
+            title="Validation Failed",
+            detail=msg,
+            errors=[FieldError(path="filter", message=msg)],
+        )
+    return ft
+
+
+async def _format_principal_entry(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    p: Principal,
+) -> dict[str, Any]:
+    handle = p.display_name
+    email: str | None = None
+    role: str = "WORKSPACE_MEMBER"
+    provider: str = "LOCAL"
+
+    if p.principal_type == "USER":
+        handle, email, role, provider = await _enrich_user_principal(session, workspace_id, p)
+    elif p.principal_type == "AGENT":
+        a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
+        slug = (await session.execute(a_stmt)).scalar_one_or_none()
+        if slug:
+            handle = f"@{slug}"
+    elif p.principal_type == "GROUP":
+        g_stmt = select(Group.name).where(Group.id == p.id)
+        g_name = (await session.execute(g_stmt)).scalar_one_or_none()
+        if g_name:
+            handle = g_name
+
+    return {
+        "id": str(p.id),
+        "principal": handle,
+        "display_name": p.display_name,
+        "type": p.principal_type,
+        "status": "active" if p.status == "ACTIVE" else "deactivated",
+        "email": email,
+        "role": role,
+        "provider": provider,
+    }
+
+
 async def list_principals(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -308,57 +361,12 @@ async def list_principals(
         .limit(limit)
     )
 
-    if filter_type is not None:
-        ft = filter_type.strip().upper()
-        if ft and ft != "ALL":
-            if ft not in ("USER", "GROUP", "AGENT", "SERVICE_PRINCIPAL"):
-                msg = (
-                    f"Invalid filter '{filter_type}'. Must be USER, GROUP, AGENT, or SERVICE_PRINCIPAL"
-                )
-                raise ProblemException(
-                    code="VALIDATION_FAILED",
-                    status=422,
-                    title="Validation Failed",
-                    detail=msg,
-                    errors=[FieldError(path="filter", message=msg)],
-                )
-            stmt = stmt.where(Principal.principal_type == ft)
+    ft = _validate_principal_filter(filter_type)
+    if ft is not None:
+        stmt = stmt.where(Principal.principal_type == ft)
 
     principals = list((await session.execute(stmt)).scalars().all())
-    result: list[dict[str, Any]] = []
-
-    for p in principals:
-        handle = p.display_name
-        email: str | None = None
-        role: str = "WORKSPACE_MEMBER"
-        provider: str = "LOCAL"
-
-        if p.principal_type == "USER":
-            handle, email, role, provider = await _enrich_user_principal(session, workspace_id, p)
-        elif p.principal_type == "AGENT":
-            a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
-            slug = (await session.execute(a_stmt)).scalar_one_or_none()
-            if slug:
-                handle = f"@{slug}"
-        elif p.principal_type == "GROUP":
-            g_stmt = select(Group.name).where(Group.id == p.id)
-            g_name = (await session.execute(g_stmt)).scalar_one_or_none()
-            if g_name:
-                handle = g_name
-
-        result.append(
-            {
-                "id": str(p.id),
-                "principal": handle,
-                "display_name": p.display_name,
-                "type": p.principal_type,
-                "status": "active" if p.status == "ACTIVE" else "deactivated",
-                "email": email,
-                "role": role,
-                "provider": provider,
-            }
-        )
-    return result
+    return [await _format_principal_entry(session, workspace_id, p) for p in principals]
 
 
 async def provision_user(  # noqa: PLR0913, PLR0917

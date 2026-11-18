@@ -20,13 +20,13 @@ import './ProjectSettingsPage.css';
 interface WorkspaceSettingsData {
   workspace_id?: string;
   id?: string;
-  name: string;
-  slug: string;
+  name?: string;
+  slug?: string;
   display_name?: string | null;
-  default_project_visibility: 'private' | 'workspace';
-  session_idle_timeout_min: number;
-  session_absolute_timeout_min: number;
-  trash_retention_days: number;
+  default_project_visibility?: 'private' | 'workspace';
+  session_idle_timeout_min?: number;
+  session_absolute_timeout_min?: number;
+  trash_retention_days?: number;
   mcp_key_max_ttl_days?: number;
   air_gap_mode?: boolean;
   updated_at?: string;
@@ -111,11 +111,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
       const res = (await apiFetch('GET', `/api/v1/admin/groups/${groupId}/members` as never)) as
         | WorkspacePrincipal[]
         | { items?: WorkspacePrincipal[] };
-      const raw = Array.isArray(res) ? res : ((res as { items?: WorkspacePrincipal[] }).items ?? []);
+      const raw = Array.isArray(res) ? res : ((res).items ?? []);
       setGroupMembers(raw);
     } catch (err: unknown) {
       const errObj = err as { message?: string; detail?: string };
-      setGroupActionError(errObj.detail || errObj.message || 'Failed to load group members.');
+      setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to load group members.');
     } finally {
       setIsLoadingGroupMembers(false);
     }
@@ -165,7 +165,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
           const raw = Array.isArray(pRes) ? pRes : (pRes.items ?? []);
           if (active) {
             setPrincipals(raw);
-            const firstGroup = raw.find((p) => (p.principal_type || p.type) === 'GROUP');
+            const firstGroup = raw.find((p) => (p.principal_type ?? p.type) === 'GROUP');
             if (firstGroup) {
               setSelectedGroupId(firstGroup.id);
             }
@@ -176,7 +176,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       } catch (err: unknown) {
         if (active) {
           const errObj = err as { message?: string; detail?: string };
-          setErrorMessage(errObj.detail || errObj.message || 'Failed to load workspace settings.');
+          setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to load workspace settings.');
         }
       } finally {
         if (active) setIsLoading(false);
@@ -190,6 +190,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
   useEffect(() => {
     if (selectedGroupId && activeTab === 'groups') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadGroupMembers(selectedGroupId);
     }
   }, [selectedGroupId, activeTab]);
@@ -228,7 +229,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         window.dispatchEvent(new Event('kb:system-status-changed'));
       } catch (err: unknown) {
         const errObj = err as { message?: string; detail?: string };
-        setErrorMessage(errObj.detail || errObj.message || 'Failed to update workspace settings.');
+        setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update workspace settings.');
       } finally {
         setIsSaving(false);
       }
@@ -280,7 +281,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         await refreshPrincipals();
       } catch (err: unknown) {
         const errObj = err as { message?: string; detail?: string };
-        setErrorMessage(errObj.detail || errObj.message || 'Failed to create workspace user.');
+        setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create workspace user.');
       } finally {
         setIsCreatingUser(false);
       }
@@ -310,7 +311,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       );
     } catch (err: unknown) {
       const errObj = err as { message?: string; detail?: string };
-      setErrorMessage(errObj.detail || errObj.message || 'Failed to update member role.');
+      setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update member role.');
     }
   };
 
@@ -333,7 +334,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setPrincipals((prev) => prev.filter((p) => p.id !== principalId));
     } catch (err: unknown) {
       const errObj = err as { message?: string; detail?: string };
-      setErrorMessage(errObj.detail || errObj.message || 'Failed to remove workspace member.');
+      setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to remove workspace member.');
     }
   };
 
@@ -365,13 +366,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
         setNewGroupName('');
         setNewGroupHandle('');
         setSuccessMessage('Group created successfully.');
-        if (created?.id) {
+        if (created.id) {
           setSelectedGroupId(created.id);
         }
         await refreshPrincipals();
       } catch (err: unknown) {
         const errObj = err as { message?: string; detail?: string };
-        setErrorMessage(errObj.detail || errObj.message || 'Failed to create group.');
+        setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create group.');
       } finally {
         setIsCreatingGroup(false);
       }
@@ -395,8 +396,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
     } catch (err: unknown) {
       const errObj = err as { message?: string; detail?: string; code?: string };
       const msg =
-        errObj.detail ||
-        errObj.message ||
+        errObj.detail ??
+        errObj.message ??
         'Cannot nest group: would introduce a cyclic dependency.';
       setGroupActionError(msg);
     }
@@ -416,7 +417,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       void loadGroupMembers(groupId);
     } catch (err: unknown) {
       const errObj = err as { message?: string; detail?: string };
-      setGroupActionError(errObj.detail || errObj.message || 'Failed to remove group member.');
+      setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to remove group member.');
     }
   };
 
@@ -440,9 +441,9 @@ export function WorkspaceSettingsPage(): JSX.Element {
   }
 
   const groupsList = principals.filter(
-    (p) => (p.principal_type || p.type || '').toUpperCase() === 'GROUP',
+    (p) => (p.principal_type ?? p.type ?? '').toUpperCase() === 'GROUP',
   );
-  const selectedGroup = groupsList.find((g) => g.id === selectedGroupId) || groupsList[0] || null;
+  const selectedGroup = groupsList.find((g) => g.id === selectedGroupId) ?? groupsList[0] ?? null;
 
   return (
     <div data-testid="workspace-settings-page" className="kb-settings-container">
@@ -736,7 +737,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     </tr>
                   ) : (
                     principals.map((p) => {
-                      const pType = (p.principal_type || p.type || 'USER').toUpperCase();
+                      const pType = (p.principal_type ?? p.type ?? 'USER').toUpperCase();
                       const typeClass = pType.toLowerCase();
                       return (
                         <tr key={p.id} data-testid={`principal-row-${p.id}`}>
@@ -754,7 +755,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           </td>
                           <td>
                             <span className="kb-member-email" data-testid={`member-email-${p.id}`}>
-                              {p.email || '-'}
+                              {p.email ?? '-'}
                             </span>
                           </td>
                           <td>
@@ -770,7 +771,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               data-testid={`role-select-${p.id}`}
                               aria-label={`Role for ${p.display_name ?? p.handle ?? p.id}`}
                               className="kb-select kb-member-role-select"
-                              value={p.role || p.role_name || 'WORKSPACE_MEMBER'}
+                              value={p.role ?? p.role_name ?? 'WORKSPACE_MEMBER'}
                               onChange={(e) => {
                                 void handleUpdateRole(p.id, e.target.value);
                               }}
@@ -904,7 +905,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           {principals
                             .filter((p) => p.id !== selectedGroup.id)
                             .map((p) => {
-                              const pType = (p.principal_type || p.type || 'USER').toUpperCase();
+                              const pType = (p.principal_type ?? p.type ?? 'USER').toUpperCase();
                               return (
                                 <option key={p.id} value={p.id}>
                                   [{pType}] {p.display_name ?? p.handle ?? p.id} ({formatHandle(p.handle ?? p.id)})
@@ -946,7 +947,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           </thead>
                           <tbody>
                             {groupMembers.map((m) => {
-                              const mType = (m.principal_type || m.type || 'USER').toUpperCase();
+                              const mType = (m.principal_type ?? m.type ?? 'USER').toUpperCase();
                               const isNestedGroup = mType === 'GROUP';
                               return (
                                 <tr key={m.id} data-testid={`group-member-row-${m.id}`}>

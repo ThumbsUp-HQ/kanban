@@ -184,12 +184,16 @@ export function Topbar({
   const activeTheme = themeContext.theme;
 
   // Determine avatar initials or custom image
-  const userInitial = (
-    user?.display_name?.trim() ||
-    (user?.handle && !/^[0-9a-f]{8}/i.test(user.handle.replace(/^@+/, ''))
+  const trimmedDisplayName = user?.display_name?.trim();
+  const trimmedEmail = user?.email?.trim();
+  const validHandle =
+    user?.handle && !/^[0-9a-f]{8}/i.test(user.handle.replace(/^@+/, ''))
       ? user.handle.replace(/^@+/, '')
-      : null) ||
-    user?.email?.trim() ||
+      : null;
+  const userInitial = (
+    (trimmedDisplayName && trimmedDisplayName.length > 0 ? trimmedDisplayName : null) ??
+    validHandle ??
+    (trimmedEmail && trimmedEmail.length > 0 ? trimmedEmail : null) ??
     'A'
   )
     .charAt(0)
@@ -295,7 +299,7 @@ export function Topbar({
                     </div>
                     <div className="kb-avatar-user-card-info">
                       <div className="kb-avatar-user-card-name" data-testid="topbar-user-name">
-                        {user.display_name || user.email || 'User'}
+                        {user.display_name ?? user.email ?? 'User'}
                       </div>
                       <div className="kb-avatar-user-card-handle" data-testid="topbar-user-handle">
                         {resolveDisplayHandle(user)}
