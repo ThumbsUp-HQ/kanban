@@ -1,6 +1,3 @@
-pending_async -> APPROVE -> approved
 pending_async -> CANCEL -> cancelled
-pending_async -> REJECT -> rejected
 pending_async -> TIMEOUT -> timed_out
 pending_async -> TOCTOU_MISMATCH -> cancelled
-running_sync -> DISPATCH -> pending_async

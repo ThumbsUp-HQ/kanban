@@ -1,0 +1,1946 @@
+diff --git a/kanban/security/permissions.py b/kanban/security/permissions.py
+index 8955307..dbdb9c8 100644
+--- a/kanban/security/permissions.py
++++ b/kanban/security/permissions.py
+@@ -203,11 +203,32 @@ async def require_capability(
+         not_found()
+ 
+     if (caps & required) != required:
++        missing_mask = required & ~caps
++        missing_caps = [name for cap, name in _ORDERED_CAPABILITIES if cap in missing_mask]
++        cap_names = ", ".join(missing_caps) if missing_caps else str(required)
++
++        if missing_mask & (Capability.ADMIN | Capability.DELETE | Capability.SHARE):
++            role_hint = "requires Project Admin, Workspace Admin, or Server Admin role"
++        elif missing_mask & (
++            Capability.EDIT | Capability.COMMENT | Capability.TRANSITION | Capability.LINK
++        ):
++            role_hint = (
++                "requires Project Member, Project Admin, Workspace Admin, or Server Admin role"
++            )
++        elif missing_mask & Capability.VIEW:
++            role_hint = (
++                "requires Project Viewer, Project Member, Project Admin, "
++                "Workspace Admin, or Server Admin role"
++            )
++        else:
++            role_hint = "requires Project Admin, Workspace Admin, or Server Admin role"
++
++        detail = f"Missing required capability: {cap_names} ({role_hint})."
+         raise ProblemException(
+             code="INSUFFICIENT_CAPABILITY",
+             status=403,
+             title="Insufficient Capability",
+-            detail=None,
++            detail=detail,
+         )
+ 
+     return caps
+diff --git a/kanban/services/cycles.py b/kanban/services/cycles.py
+index fc55a2c..c9961b3 100644
+--- a/kanban/services/cycles.py
++++ b/kanban/services/cycles.py
+@@ -164,7 +164,7 @@ async def create_cycle(
+     body: CycleCreate,
+ ) -> CycleResponse:
+     """Create a new cycle in upcoming status."""
+-    project = await _resolve_project(session, caller, project_ref, Capability.ADMIN)
++    project = await _resolve_project(session, caller, project_ref, Capability.EDIT)
+     _validate_dates(body.start_date, body.end_date)
+ 
+     cycle_id = uuid.uuid4()
+@@ -248,7 +248,7 @@ async def patch_cycle(
+     if cycle is None:
+         not_found()
+ 
+-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
++    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
+     project = await session.get(Project, cycle.project_id)
+     if project is not None:
+         _check_cycles_enabled(project)
+@@ -318,7 +318,7 @@ async def start_cycle(
+     if cycle is None:
+         not_found()
+ 
+-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
++    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
+     project = await session.get(Project, cycle.project_id)
+     if project is not None:
+         _check_cycles_enabled(project)
+@@ -382,7 +382,7 @@ async def complete_cycle(
+     if cycle is None:
+         not_found()
+ 
+-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
++    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
+     project = await session.get(Project, cycle.project_id)
+     if project is not None:
+         _check_cycles_enabled(project)
+@@ -509,7 +509,7 @@ async def rollover_cycle(
+     if cycle is None:
+         not_found()
+ 
+-    await require_capability(session, caller, cycle.project_id, Capability.ADMIN)
++    await require_capability(session, caller, cycle.project_id, Capability.EDIT)
+     project = await session.get(Project, cycle.project_id)
+     if project is not None:
+         _check_cycles_enabled(project)
+diff --git a/kanban/services/modules.py b/kanban/services/modules.py
+index 785355f..3f99973 100644
+--- a/kanban/services/modules.py
++++ b/kanban/services/modules.py
+@@ -197,10 +197,10 @@ async def create_module(
+     project_ref: str,
+     body: ModuleCreate,
+ ) -> ModuleResponse:
+-    """Create a new module within a project (project ADMIN required)."""
++    """Create a new module within a project (project EDIT required)."""
+     project = await get_project_or_404(session, caller, project_ref)
+     require_modules_enabled(project)
+-    await require_capability(session, caller, project.id, Capability.ADMIN)
++    await require_capability(session, caller, project.id, Capability.EDIT)
+ 
+     # Check case-insensitive name uniqueness within project
+     existing = (
+@@ -307,9 +307,9 @@ async def patch_module(  # noqa: C901
+     module_id: uuid.UUID,
+     body: ModulePatch,
+ ) -> ModuleResponse:
+-    """Update a module partially (project ADMIN required)."""
++    """Update a module partially (project EDIT required)."""
+     mod, project = await get_module_or_404(session, caller, module_id)
+-    await require_capability(session, caller, project.id, Capability.ADMIN)
++    await require_capability(session, caller, project.id, Capability.EDIT)
+ 
+     changes: dict[str, Any] = {}
+ 
+diff --git a/kanban/tests/api/test_cycles.py b/kanban/tests/api/test_cycles.py
+index 29e6cfc..3da3507 100644
+--- a/kanban/tests/api/test_cycles.py
++++ b/kanban/tests/api/test_cycles.py
+@@ -529,11 +529,12 @@ async def test_case_7_security_permissions(
+     """Case 7: Project-level role enforcement: member write (403), non-viewer read (404)."""
+     admin = await make_user("admin7", workspace_role="WORKSPACE_ADMIN")
+     member = await make_user("member7")
++    viewer = await make_user("viewer7")
+     outsider = await make_user("outsider7")
+     _ = await make_project(
+         "SEC1",
+         created_by=admin,
+-        roles={admin: "PROJECT_ADMIN", member: "MEMBER"},
++        roles={admin: "PROJECT_ADMIN", member: "MEMBER", viewer: "VIEWER"},
+     )
+ 
+     admin_client = as_principal(admin)
+@@ -541,30 +542,61 @@ async def test_case_7_security_permissions(
+         await admin_client.post("/api/v1/projects/SEC1/cycles", json={"name": "Sec Sprint"})
+     ).json()
+ 
+-    # Member (EDIT capability, but not ADMIN) attempts write operations -> 403
+-    member_client = as_principal(member)
+-    post_403 = await member_client.post(
++    # Viewer (VIEW only, lacks EDIT) attempts write operations -> 403 with descriptive detail
++    viewer_client = as_principal(viewer)
++    post_403 = await viewer_client.post(
+         "/api/v1/projects/SEC1/cycles",
+-        json={"name": "Member Sprint"},
++        json={"name": "Viewer Sprint"},
+     )
+     contract_recorder.record("forbidden_403", post_403.request, post_403)
+     assert post_403.status_code == 403, post_403.text
++    assert post_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
++    assert (
++        "Missing required capability: EDIT (requires Project Member, Project Admin, "
++        "Workspace Admin, or Server Admin role)."
++        in post_403.json()["detail"]
++    )
+ 
+-    patch_403 = await member_client.patch(
++    patch_403 = await viewer_client.patch(
+         f"/api/v1/cycles/{c1['id']}",
+         json={"name": "Hacked"},
+     )
+     assert patch_403.status_code == 403
++    assert patch_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
+ 
+-    start_403 = await member_client.post(f"/api/v1/cycles/{c1['id']}/start")
++    start_403 = await viewer_client.post(f"/api/v1/cycles/{c1['id']}/start")
+     assert start_403.status_code == 403
+ 
+-    comp_403 = await member_client.post(f"/api/v1/cycles/{c1['id']}/complete", json={})
++    comp_403 = await viewer_client.post(f"/api/v1/cycles/{c1['id']}/complete", json={})
+     assert comp_403.status_code == 403
+ 
+-    del_403 = await member_client.delete(f"/api/v1/cycles/{c1['id']}")
++    del_403 = await viewer_client.delete(f"/api/v1/cycles/{c1['id']}")
+     assert del_403.status_code == 403
+ 
++    # Member (EDIT capability) can create and update cycles
++    member_client = as_principal(member)
++    post_member = await member_client.post(
++        "/api/v1/projects/SEC1/cycles",
++        json={"name": "Member Sprint"},
++    )
++    assert post_member.status_code == 201, post_member.text
++
++    patch_member = await member_client.patch(
++        f"/api/v1/cycles/{c1['id']}",
++        json={"name": "Sec Sprint Updated"},
++    )
++    assert patch_member.status_code == 200, patch_member.text
++
++    # But member cannot delete (requires ADMIN) -> 403 with ADMIN detail
++    del_member_403 = await member_client.delete(f"/api/v1/cycles/{c1['id']}")
++    assert del_member_403.status_code == 403
++    assert del_member_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
++    assert (
++        "Missing required capability: ADMIN (requires Project Admin, "
++        "Workspace Admin, or Server Admin role)."
++        in del_member_403.json()["detail"]
++    )
++
+     # Outsider (no project access) attempts GET -> 404
+     outsider_client = as_principal(outsider)
+     get_404 = await outsider_client.get(f"/api/v1/cycles/{c1['id']}")
+diff --git a/kanban/tests/api/test_modules.py b/kanban/tests/api/test_modules.py
+index 47ab2e8..fa42c3e 100644
+--- a/kanban/tests/api/test_modules.py
++++ b/kanban/tests/api/test_modules.py
+@@ -266,13 +266,14 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
+     """Case 3: Non-viewer receives plain 404 NOT_FOUND; member create 403; lead 422."""
+     admin = await make_user("admin3", workspace_role="WORKSPACE_ADMIN")
+     member = await make_user("member3")
++    viewer = await make_user("viewer3")
+     outsider = await make_user("outsider3")
+     inactive_user = await make_user("inactive3")
+ 
+     proj_id = await make_project(
+         "SEC1",
+         created_by=admin,
+-        roles={admin: "PROJECT_ADMIN", member: "MEMBER"},
++        roles={admin: "PROJECT_ADMIN", member: "MEMBER", viewer: "VIEWER"},
+         modules_enabled=True,
+     )
+     mod_id = await make_module(proj_id, "Security Mod", created_by=admin)
+@@ -309,25 +310,55 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
+     b_mod_nonexistent.pop("request_id", None)
+     assert b_mod_unreadable == b_mod_nonexistent
+ 
+-    # 2. Member with PROJECT_MEMBER (VIEW + EDIT on issues, but NOT ADMIN on project)
+-    client_member = as_principal(member)
+-    r_create_denied = await client_member.post(
++    # 2. Viewer with PROJECT_VIEWER (lacks EDIT) -> 403 with descriptive detail
++    client_viewer = as_principal(viewer)
++    r_create_denied = await client_viewer.post(
+         "/api/v1/projects/SEC1/modules",
+         json={"name": "Unauthorized Module"},
+     )
+     assert r_create_denied.status_code == 403, r_create_denied.text
+     assert r_create_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
++    assert (
++        "Missing required capability: EDIT (requires Project Member, Project Admin, "
++        "Workspace Admin, or Server Admin role)."
++        in r_create_denied.json()["detail"]
++    )
+ 
+-    r_patch_denied = await client_member.patch(
++    r_patch_denied = await client_viewer.patch(
+         f"/api/v1/modules/{mod_id}",
+         json={"name": "Hacked Module"},
+     )
+     assert r_patch_denied.status_code == 403
+     assert r_patch_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
++    assert (
++        "Missing required capability: EDIT (requires Project Member, Project Admin, "
++        "Workspace Admin, or Server Admin role)."
++        in r_patch_denied.json()["detail"]
++    )
++
++    # Member with PROJECT_MEMBER (holds EDIT) can create and patch modules
++    client_member = as_principal(member)
++    r_member_create = await client_member.post(
++        "/api/v1/projects/SEC1/modules",
++        json={"name": "Member Module"},
++    )
++    assert r_member_create.status_code == 201, r_member_create.text
++
++    r_member_patch = await client_member.patch(
++        f"/api/v1/modules/{mod_id}",
++        json={"name": "Member Updated Mod"},
++    )
++    assert r_member_patch.status_code == 200, r_member_patch.text
+ 
++    # But member cannot delete (requires ADMIN) -> 403 with ADMIN detail
+     r_del_denied = await client_member.delete(f"/api/v1/modules/{mod_id}")
+     assert r_del_denied.status_code == 403
+     assert r_del_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
++    assert (
++        "Missing required capability: ADMIN (requires Project Admin, "
++        "Workspace Admin, or Server Admin role)."
++        in r_del_denied.json()["detail"]
++    )
+ 
+     # 3. Lead principal eligibility
+     client_admin = as_principal(admin)
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index d5a130b..9966b84 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -202,8 +202,8 @@
+ 
+ .kb-cycles-create-form,
+ .kb-modules-create-form {
+-  background: var(--bg-surface, #1e232b);
+-  border: 1px solid var(--border-subtle, #30363d);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-md, 6px);
+   padding: 16px;
+   margin-bottom: 24px;
+@@ -213,15 +213,15 @@
+ .kb-modules-create-form h3 {
+   margin: 0 0 12px 0;
+   font-size: 14px;
+-  color: var(--fg-primary, #ffffff);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-cycles-error,
+ .kb-modules-error {
+-  background: rgba(248, 81, 73, 0.15);
+-  border: 1px solid rgba(248, 81, 73, 0.4);
+-  color: #f85149;
+-  border-radius: 4px;
++  background: var(--danger-bg);
++  border: 1px solid var(--danger-fg);
++  color: var(--danger-fg);
++  border-radius: var(--radius-sm, 4px);
+   padding: 8px 12px;
+   font-size: 13px;
+   margin-bottom: 12px;
+@@ -229,27 +229,46 @@
+ 
+ .kb-form-row {
+   display: flex;
+-  gap: 8px;
+-  align-items: center;
++  gap: 12px;
++  align-items: flex-end;
+   flex-wrap: wrap;
+ }
+ 
++.kb-form-field {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.kb-form-label {
++  font-size: 12px;
++  font-weight: 500;
++  color: var(--fg-muted);
++}
++
+ .kb-form-input {
+-  height: 32px;
+-  padding: 0 10px;
+-  background: var(--bg-surface-raised);
++  background: var(--bg-canvas);
++  color: var(--fg-primary);
+   border: 1px solid var(--border-strong);
+-  border-radius: var(--radius-sm, 4px);
+-  color: var(--fg-primary, #ffffff);
++  min-height: var(--prop-row-h, 38px);
++  padding: 6px 12px;
++  border-radius: var(--radius-md, 6px);
+   font-size: 13px;
++  box-sizing: border-box;
++}
++
++.kb-form-input:focus-visible {
++  border-color: var(--focus-ring);
++  outline: 2px solid var(--focus-ring);
+ }
+ 
+ .kb-btn-primary {
+-  height: 32px;
++  height: var(--prop-row-h, 38px);
++  min-height: var(--prop-row-h, 38px);
+   padding: 0 14px;
+   background: var(--accent-primary);
+   border: 1px solid rgba(240, 246, 252, 0.1);
+-  border-radius: var(--radius-sm, 4px);
++  border-radius: var(--radius-md, 6px);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 500;
+@@ -281,8 +300,8 @@
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+-  background: var(--bg-surface, #1e232b);
+-  border: 1px solid var(--border-subtle, #30363d);
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-md, 6px);
+   padding: 12px 16px;
+ }
+@@ -299,23 +318,23 @@
+   font-size: 11px;
+   padding: 2px 6px;
+   border-radius: 9999px;
+-  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+-  color: var(--fg-secondary, #94a3b8);
++  background: var(--bg-hover);
++  color: var(--fg-secondary);
+   text-transform: uppercase;
+ }
+ 
+ .kb-cycle-dates {
+   font-size: 12px;
+-  color: var(--fg-muted, #64748b);
++  color: var(--fg-muted);
+ }
+ 
+ .kb-module-desc {
+   margin: 0;
+   font-size: 13px;
+-  color: var(--fg-secondary, #94a3b8);
++  color: var(--fg-secondary);
+ }
+ 
+ .kb-empty-text {
+-  color: var(--fg-muted, #64748b);
++  color: var(--fg-muted);
+   font-size: 14px;
+ }
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 4191453..5919616 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -500,7 +500,13 @@ export interface ProjectCycleItem {
+   end_date?: string | null;
+ }
+ 
+-function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Element {
++function ProjectCyclesViewInner({
++  projectKey,
++  capabilities: propCapabilities,
++}: {
++  projectKey: string;
++  capabilities?: string[];
++}): JSX.Element {
+   const key = projectKey;
+   const queryClient = useQueryClient();
+ 
+@@ -509,6 +515,32 @@ function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Ele
+   const [endDate, setEndDate] = useState('');
+   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+ 
++  const { data: projectData } = useQuery<{ capabilities?: string[] }>({
++    queryKey: ['projects', key, 'detail'],
++    queryFn: async () => {
++      try {
++        const res = await apiFetch('GET', '/api/v1/projects/{project_ref}' as never, {
++          params: { project_ref: key },
++        });
++        if (
++          res &&
++          typeof res === 'object' &&
++          'capabilities' in res &&
++          Array.isArray(res.capabilities)
++        ) {
++          return res as { capabilities: string[] };
++        }
++      } catch {
++        // fallback
++      }
++      return { capabilities: ['EDIT', 'ADMIN'] };
++    },
++    enabled: propCapabilities === undefined,
++  });
++
++  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
++  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
++
+   const { data: cycles = [], isLoading } = useQuery<ProjectCycleItem[]>({
+     queryKey: ['projects', key, 'cycles'],
+     queryFn: async () => {
+@@ -556,49 +588,60 @@ function ProjectCyclesViewInner({ projectKey }: { projectKey: string }): JSX.Ele
+         <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
+       </div>
+ 
+-      <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
+-        <h3>Create New Cycle</h3>
+-        {errorMsg && (
+-          <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
+-            {errorMsg}
++      {canCreate && (
++        <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
++          <h3>Create New Cycle</h3>
++          {errorMsg && (
++            <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
++              {errorMsg}
++            </div>
++          )}
++          <div className="kb-form-row">
++            <label className="kb-form-field">
++              <span className="kb-form-label">Cycle Name</span>
++              <input
++                type="text"
++                className="kb-form-input"
++                data-testid="new-cycle-name-input"
++                placeholder="Sprint / Cycle name..."
++                value={newName}
++                onChange={(e) => { setNewName(e.target.value); }}
++                required
++              />
++            </label>
++            <label className="kb-form-field">
++              <span className="kb-form-label">Start Date</span>
++              <input
++                type="date"
++                className="kb-form-input"
++                data-testid="new-cycle-start-input"
++                value={startDate}
++                onChange={(e) => { setStartDate(e.target.value); }}
++                title="Start date"
++              />
++            </label>
++            <label className="kb-form-field">
++              <span className="kb-form-label">End Date</span>
++              <input
++                type="date"
++                className="kb-form-input"
++                data-testid="new-cycle-end-input"
++                value={endDate}
++                onChange={(e) => { setEndDate(e.target.value); }}
++                title="End date"
++              />
++            </label>
++            <button
++              type="submit"
++              className="kb-btn-primary"
++              data-testid="create-cycle-btn"
++              disabled={createMutation.isPending || !newName.trim()}
++            >
++              {createMutation.isPending ? 'Creating...' : '+ Create Cycle'}
++            </button>
+           </div>
+-        )}
+-        <div className="kb-form-row">
+-          <input
+-            type="text"
+-            className="kb-form-input"
+-            data-testid="new-cycle-name-input"
+-            placeholder="Sprint / Cycle name..."
+-            value={newName}
+-            onChange={(e) => { setNewName(e.target.value); }}
+-            required
+-          />
+-          <input
+-            type="date"
+-            className="kb-form-input"
+-            data-testid="new-cycle-start-input"
+-            value={startDate}
+-            onChange={(e) => { setStartDate(e.target.value); }}
+-            title="Start date"
+-          />
+-          <input
+-            type="date"
+-            className="kb-form-input"
+-            data-testid="new-cycle-end-input"
+-            value={endDate}
+-            onChange={(e) => { setEndDate(e.target.value); }}
+-            title="End date"
+-          />
+-          <button
+-            type="submit"
+-            className="kb-btn-primary"
+-            data-testid="create-cycle-btn"
+-            disabled={createMutation.isPending || !newName.trim()}
+-          >
+-            {createMutation.isPending ? 'Creating...' : '+ Create Cycle'}
+-          </button>
+-        </div>
+-      </form>
++        </form>
++      )}
+ 
+       <div className="kb-cycles-list-wrapper">
+         {isLoading && <p>Loading cycles...</p>}
+@@ -649,14 +692,49 @@ export interface ProjectModuleItem {
+   description_markdown?: string;
+ }
+ 
+-function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.Element {
++function ProjectModulesViewInner({
++  projectKey,
++  capabilities: propCapabilities,
++}: {
++  projectKey: string;
++  capabilities?: string[];
++}): JSX.Element {
+   const key = projectKey;
+   const queryClient = useQueryClient();
+ 
+   const [newName, setNewName] = useState('');
++  const [status, setStatus] = useState('planned');
++  const [startDate, setStartDate] = useState('');
++  const [targetDate, setTargetDate] = useState('');
+   const [description, setDescription] = useState('');
+   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+ 
++  const { data: projectData } = useQuery<{ capabilities?: string[] }>({
++    queryKey: ['projects', key, 'detail'],
++    queryFn: async () => {
++      try {
++        const res = await apiFetch('GET', '/api/v1/projects/{project_ref}' as never, {
++          params: { project_ref: key },
++        });
++        if (
++          res &&
++          typeof res === 'object' &&
++          'capabilities' in res &&
++          Array.isArray(res.capabilities)
++        ) {
++          return res as { capabilities: string[] };
++        }
++      } catch {
++        // fallback
++      }
++      return { capabilities: ['EDIT', 'ADMIN'] };
++    },
++    enabled: propCapabilities === undefined,
++  });
++
++  const capabilities = propCapabilities ?? projectData?.capabilities ?? ['EDIT', 'ADMIN'];
++  const canCreate = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
++
+   const { data: modules = [], isLoading } = useQuery<ProjectModuleItem[]>({
+     queryKey: ['projects', key, 'modules'],
+     queryFn: async () => {
+@@ -675,12 +753,18 @@ function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.El
+         params: { project_ref: key },
+         body: {
+           name: newName.trim(),
++          status,
++          ...(startDate ? { start_date: startDate } : {}),
++          ...(targetDate ? { target_date: targetDate } : {}),
+           ...(description.trim() ? { description_markdown: description.trim() } : {}),
+         },
+       });
+     },
+     onSuccess: () => {
+       setNewName('');
++      setStatus('planned');
++      setStartDate('');
++      setTargetDate('');
+       setDescription('');
+       void queryClient.invalidateQueries({ queryKey: ['projects', key, 'modules'] });
+     },
+@@ -702,41 +786,87 @@ function ProjectModulesViewInner({ projectKey }: { projectKey: string }): JSX.El
+         <p>Feature modules and sub-project groupings for {key}.</p>
+       </div>
+ 
+-      <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
+-        <h3>Create New Module</h3>
+-        {errorMsg && (
+-          <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
+-            {errorMsg}
++      {canCreate && (
++        <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
++          <h3>Create New Module</h3>
++          {errorMsg && (
++            <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
++              {errorMsg}
++            </div>
++          )}
++          <div className="kb-form-row">
++            <label className="kb-form-field">
++              <span className="kb-form-label">Module Name</span>
++              <input
++                type="text"
++                className="kb-form-input"
++                data-testid="new-module-name-input"
++                placeholder="Module name..."
++                value={newName}
++                onChange={(e) => { setNewName(e.target.value); }}
++                required
++              />
++            </label>
++            <label className="kb-form-field">
++              <span className="kb-form-label">Status</span>
++              <select
++                className="kb-form-input"
++                data-testid="new-module-status-select"
++                value={status}
++                onChange={(e) => { setStatus(e.target.value); }}
++              >
++                <option value="planned">Planned</option>
++                <option value="backlog">Backlog</option>
++                <option value="in_progress">In Progress</option>
++                <option value="paused">Paused</option>
++                <option value="completed">Completed</option>
++                <option value="cancelled">Cancelled</option>
++              </select>
++            </label>
++            <label className="kb-form-field">
++              <span className="kb-form-label">Start Date</span>
++              <input
++                type="date"
++                className="kb-form-input"
++                data-testid="new-module-start-input"
++                value={startDate}
++                onChange={(e) => { setStartDate(e.target.value); }}
++                title="Start date"
++              />
++            </label>
++            <label className="kb-form-field">
++              <span className="kb-form-label">Target Date</span>
++              <input
++                type="date"
++                className="kb-form-input"
++                data-testid="new-module-target-input"
++                value={targetDate}
++                onChange={(e) => { setTargetDate(e.target.value); }}
++                title="Target date"
++              />
++            </label>
++            <label className="kb-form-field">
++              <span className="kb-form-label">Description</span>
++              <input
++                type="text"
++                className="kb-form-input"
++                data-testid="new-module-desc-input"
++                placeholder="Description (optional)..."
++                value={description}
++                onChange={(e) => { setDescription(e.target.value); }}
++              />
++            </label>
++            <button
++              type="submit"
++              className="kb-btn-primary"
++              data-testid="create-module-btn"
++              disabled={createMutation.isPending || !newName.trim()}
++            >
++              {createMutation.isPending ? 'Creating...' : '+ Create Module'}
++            </button>
+           </div>
+-        )}
+-        <div className="kb-form-row">
+-          <input
+-            type="text"
+-            className="kb-form-input"
+-            data-testid="new-module-name-input"
+-            placeholder="Module name..."
+-            value={newName}
+-            onChange={(e) => { setNewName(e.target.value); }}
+-            required
+-          />
+-          <input
+-            type="text"
+-            className="kb-form-input"
+-            data-testid="new-module-desc-input"
+-            placeholder="Description (optional)..."
+-            value={description}
+-            onChange={(e) => { setDescription(e.target.value); }}
+-          />
+-          <button
+-            type="submit"
+-            className="kb-btn-primary"
+-            data-testid="create-module-btn"
+-            disabled={createMutation.isPending || !newName.trim()}
+-          >
+-            {createMutation.isPending ? 'Creating...' : '+ Create Module'}
+-          </button>
+-        </div>
+-      </form>
++        </form>
++      )}
+ 
+       <div className="kb-modules-list-wrapper">
+         {isLoading && <p>Loading modules...</p>}
+diff --git a/kanban/web/src/features/calendar/CalendarView.test.tsx b/kanban/web/src/features/calendar/CalendarView.test.tsx
+index 9b3d4ec..0b1fb14 100644
+--- a/kanban/web/src/features/calendar/CalendarView.test.tsx
++++ b/kanban/web/src/features/calendar/CalendarView.test.tsx
+@@ -47,13 +47,15 @@ describe('CalendarView', () => {
+ 
+   beforeEach(() => {
+     vi.restoreAllMocks();
++    document.cookie = 'kb_csrf=test-csrf-token-123; Path=/';
+   });
+ 
+   afterEach(() => {
+     globalThis.fetch = originalFetch;
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/';
+   });
+ 
+-  it('renders month grid for November 2026 and places KAN-142 in cell 2026-11-18', () => {
++  it('renders 2-week grid for November 2026 and places KAN-142 in cell 2026-11-18', () => {
+     const { container } = render(
+       <CalendarView
+         issues={TEST_ISSUES}
+@@ -64,11 +66,11 @@ describe('CalendarView', () => {
+       />
+     );
+ 
+-    expect(screen.getByText('November 2026')).toBeDefined();
++    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
+ 
+-    // Check that 42 day cells are rendered
++    // Check that 14 day cells are rendered
+     const dayCells = container.querySelectorAll('.calendar-day-cell');
+-    expect(dayCells.length).toBe(42);
++    expect(dayCells.length).toBe(14);
+ 
+     // KAN-142 is in cell 2026-11-18
+     const cell18 = container.querySelector('[data-date="2026-11-18"]');
+@@ -85,9 +87,10 @@ describe('CalendarView', () => {
+     }
+   });
+ 
+-  it('infers initial year and month from first issue due date when initialYear is omitted', () => {
++  it('infers initial anchor date from first issue due date when initialYear is omitted', () => {
+     render(<CalendarView issues={TEST_ISSUES} projectKey="KAN" />);
+-    expect(screen.getByText('November 2026')).toBeDefined();
++    // First issue with due_date is KAN-100 (2026-11-10). Week starts Sunday 2026-11-08.
++    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
+   });
+ 
+   it('navigates Prev, Next, and Today in toolbar', () => {
+@@ -101,26 +104,20 @@ describe('CalendarView', () => {
+       />
+     );
+ 
+-    expect(screen.getByText('November 2026')).toBeDefined();
++    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
+ 
+-    // Click Next
+-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+-    expect(screen.getByText('December 2026')).toBeDefined();
++    // Click Next (advances 14 days)
++    fireEvent.click(screen.getByRole('button', { name: 'Next 2 weeks' }));
++    expect(screen.getByText('2026-11-22 - 2026-12-05')).toBeDefined();
+ 
+-    // Click Prev twice -> October 2026
+-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+-    expect(screen.getByText('October 2026')).toBeDefined();
++    // Click Prev twice -> 2026-10-25 - 2026-11-07
++    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
++    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
++    expect(screen.getByText('2026-10-25 - 2026-11-07')).toBeDefined();
+ 
+-    // Click Today
++    // Click Today -> returns to 2026-11-08 - 2026-11-21
+     fireEvent.click(screen.getByRole('button', { name: 'Jump to today' }));
+-    const now = new Date();
+-    const expectedMonthYear = now.toLocaleDateString('en-US', {
+-      month: 'long',
+-      year: 'numeric',
+-      timeZone: 'UTC',
+-    });
+-    expect(screen.getByText(expectedMonthYear)).toBeDefined();
++    expect(screen.getByText('2026-11-08 - 2026-11-21')).toBeDefined();
+   });
+ 
+   it('opens and closes Unscheduled tray listing issues lacking due_date', () => {
+@@ -308,6 +305,8 @@ describe('CalendarView', () => {
+     expect(pill142?.classList.contains('calendar-issue-pill--overdue')).toBe(false);
+ 
+     // KAN-143 is due 2026-11-05 (before today) but state.group is 'completed' -> NOT overdue
++    // In 2-week view anchored at 2026-11-08 - 2026-11-21, navigate Prev to see 2026-11-05
++    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
+     const pill143 = container.querySelector('[data-issue-key="KAN-143"]');
+     expect(pill143?.classList.contains('calendar-issue-pill--overdue')).toBe(false);
+   });
+@@ -360,7 +359,9 @@ describe('CalendarView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ due_date: '2026-11-20' }),
+     });
+   });
+@@ -402,7 +403,9 @@ describe('CalendarView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-12', due_date: '2026-11-19' }),
+     });
+   });
+@@ -464,7 +467,7 @@ describe('CalendarView', () => {
+     }
+   });
+ 
+-  it('navigates year boundaries (January to December, December to January)', () => {
++  it('navigates 2-week windows across year boundaries', () => {
+     // Start in January 2026
+     const { unmount } = render(
+       <CalendarView
+@@ -472,15 +475,16 @@ describe('CalendarView', () => {
+         projectKey="KAN"
+         initialYear={2026}
+         initialMonth={1}
+-        today="2026-01-15"
++        today="2026-01-05"
+       />
+     );
+ 
+-    expect(screen.getByText('January 2026')).toBeDefined();
++    // Week starts Sunday 2026-01-04 to 2026-01-17
++    expect(screen.getByText('2026-01-04 - 2026-01-17')).toBeDefined();
+ 
+     // Click Prev -> December 2025
+-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+-    expect(screen.getByText('December 2025')).toBeDefined();
++    fireEvent.click(screen.getByRole('button', { name: 'Previous 2 weeks' }));
++    expect(screen.getByText('2025-12-21 - 2026-01-03')).toBeDefined();
+ 
+     unmount();
+ 
+@@ -491,15 +495,16 @@ describe('CalendarView', () => {
+         projectKey="KAN"
+         initialYear={2026}
+         initialMonth={12}
+-        today="2026-12-15"
++        today="2026-12-28"
+       />
+     );
+ 
+-    expect(screen.getByText('December 2026')).toBeDefined();
++    // Week starts Sunday 2026-12-27 to 2027-01-09
++    expect(screen.getByText('2026-12-27 - 2027-01-09')).toBeDefined();
+ 
+     // Click Next -> January 2027
+-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+-    expect(screen.getByText('January 2027')).toBeDefined();
++    fireEvent.click(screen.getByRole('button', { name: 'Next 2 weeks' }));
++    expect(screen.getByText('2027-01-10 - 2027-01-23')).toBeDefined();
+   });
+ 
+   it('handles keyboard Alt+ArrowLeft, Alt+ArrowUp, Alt+ArrowDown, and ignores non-alt keys', async () => {
+diff --git a/kanban/web/src/features/calendar/CalendarView.tsx b/kanban/web/src/features/calendar/CalendarView.tsx
+index e1ad09b..e1067b3 100644
+--- a/kanban/web/src/features/calendar/CalendarView.tsx
++++ b/kanban/web/src/features/calendar/CalendarView.tsx
+@@ -9,12 +9,12 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import type { ViewComponentProps } from '../views/viewRegistry';
+ import type { IssueItem } from '../views/viewsApi';
+ import {
+-  buildMonthGrid,
++  buildTwoWeekGrid,
+   addDays,
+   diffDays,
+   dateToEpochDays,
+   epochDaysToDate,
+-  type CalendarCell,
++  type CalendarDayCell,
+ } from './calendarGrid';
+ import { useRescheduleIssue } from '../timeline/scheduleMutation';
+ import '../timeline/calendarTimeline.css';
+@@ -25,21 +25,6 @@ export interface CalendarViewProps extends ViewComponentProps {
+   today?: string;
+ }
+ 
+-const MONTH_NAMES = [
+-  'January',
+-  'February',
+-  'March',
+-  'April',
+-  'May',
+-  'June',
+-  'July',
+-  'August',
+-  'September',
+-  'October',
+-  'November',
+-  'December',
+-];
+-
+ const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+ 
+ export function CalendarView({
+@@ -53,27 +38,19 @@ export function CalendarView({
+     return today ?? new Date().toISOString().slice(0, 10);
+   }, [today]);
+ 
+-  // Determine initial year and month
+-  const defaultYearMonth = useMemo(() => {
++  // Determine initial anchor date for the 2-week view
++  const defaultAnchorDate = useMemo(() => {
++    if (today) return today;
+     if (initialYear && initialMonth) {
+-      return { year: initialYear, month: initialMonth };
++      return `${String(initialYear)}-${String(initialMonth).padStart(2, '0')}-01`;
+     }
+     const firstDue = issues.find((i: IssueItem) => Boolean(i.due_date))?.due_date;
+-    if (firstDue) {
+-      return {
+-        year: parseInt(firstDue.slice(0, 4), 10),
+-        month: parseInt(firstDue.slice(5, 7), 10),
+-      };
+-    }
+-    const now = new Date();
+-    return {
+-      year: now.getUTCFullYear(),
+-      month: now.getUTCMonth() + 1,
+-    };
+-  }, [initialYear, initialMonth, issues]);
+-
+-  const [year, setYear] = useState<number>(defaultYearMonth.year);
+-  const [month, setMonth] = useState<number>(defaultYearMonth.month);
++    if (firstDue) return firstDue;
++    return new Date().toISOString().slice(0, 10);
++  }, [initialYear, initialMonth, issues, today]);
++
++  const [anchorDate, setAnchorDate] = useState<string>(defaultAnchorDate);
++  const [scheduleError, setScheduleError] = useState<string | null>(null);
+   const [isUnscheduledOpen, setIsUnscheduledOpen] = useState<boolean>(false);
+   const [popoverDate, setPopoverDate] = useState<string | null>(null);
+   const [draggedKey, setDraggedKey] = useState<string | null>(null);
+@@ -85,6 +62,7 @@ export function CalendarView({
+ 
+   const { reschedule, announcement } = useRescheduleIssue({
+     onOptimisticUpdate: (key, patch) => {
++      setScheduleError(null);
+       setScheduleOverrides((prev) => ({
+         ...prev,
+         [key]: {
+@@ -102,6 +80,12 @@ export function CalendarView({
+         },
+       }));
+     },
++    onError: (_key, err) => {
++      setScheduleError(err.message || 'Failed to reschedule issue');
++    },
++    onSuccess: () => {
++      setScheduleError(null);
++    },
+   });
+ 
+   const effIssues = useMemo(() => {
+@@ -134,9 +118,13 @@ export function CalendarView({
+     return { issuesByDate: byDate, unscheduledIssues: unscheduled };
+   }, [effIssues]);
+ 
+-  const monthGrid = useMemo(() => {
+-    return buildMonthGrid(year, month, todayDate);
+-  }, [year, month, todayDate]);
++  const twoWeekGrid = useMemo(() => {
++    return buildTwoWeekGrid(anchorDate, todayDate);
++  }, [anchorDate, todayDate]);
++
++  const rangeStart = twoWeekGrid[0]?.date ?? anchorDate;
++  const rangeEnd = twoWeekGrid[13]?.date ?? anchorDate;
++  const rangeLabel = `${rangeStart} - ${rangeEnd}`;
+ 
+   // Mobile week strip: compute 7 days around mobileSelectedDate
+   const mobileWeekDays = useMemo(() => {
+@@ -159,33 +147,19 @@ export function CalendarView({
+     return days;
+   }, [mobileSelectedDate]);
+ 
+-  // Month navigation handlers
+-  const handlePrevMonth = () => {
+-    setMonth((m) => {
+-      if (m === 1) {
+-        setYear((y) => y - 1);
+-        return 12;
+-      }
+-      return m - 1;
+-    });
++  // 2-week navigation handlers
++  const handlePrev = () => {
++    setAnchorDate(addDays(rangeStart, -14));
+     setPopoverDate(null);
+   };
+ 
+-  const handleNextMonth = () => {
+-    setMonth((m) => {
+-      if (m === 12) {
+-        setYear((y) => y + 1);
+-        return 1;
+-      }
+-      return m + 1;
+-    });
++  const handleNext = () => {
++    setAnchorDate(addDays(rangeStart, 14));
+     setPopoverDate(null);
+   };
+ 
+   const handleToday = () => {
+-    const now = new Date();
+-    setYear(now.getUTCFullYear());
+-    setMonth(now.getUTCMonth() + 1);
++    setAnchorDate(todayDate);
+     setMobileSelectedDate(todayDate);
+     setPopoverDate(null);
+   };
+@@ -211,6 +185,8 @@ export function CalendarView({
+       issueRef: issue.key,
+       dueDate: targetDate,
+       startDate: newStartDate,
++      originalStartDate: issue.start_date ?? null,
++      originalDueDate: issue.due_date ?? null,
+     });
+   };
+ 
+@@ -278,9 +254,6 @@ export function CalendarView({
+     return 'priorityMedium';
+   };
+ 
+-  const monthName = String(MONTH_NAMES[(month - 1) % 12]);
+-  const monthLabel = `${monthName} ${String(year)}`;
+-
+   return (
+     <div className="calendar-view" data-testid="calendar-view">
+       {/* Calendar Toolbar */}
+@@ -289,8 +262,8 @@ export function CalendarView({
+           <button
+             type="button"
+             className="calendar-toolbar-btn"
+-            onClick={handlePrevMonth}
+-            aria-label="Previous month"
++            onClick={handlePrev}
++            aria-label="Previous 2 weeks"
+           >
+             Prev
+           </button>
+@@ -305,13 +278,13 @@ export function CalendarView({
+           <button
+             type="button"
+             className="calendar-toolbar-btn"
+-            onClick={handleNextMonth}
+-            aria-label="Next month"
++            onClick={handleNext}
++            aria-label="Next 2 weeks"
+           >
+             Next
+           </button>
+           <span className="calendar-month-heading" aria-live="polite">
+-            {monthLabel}
++            {rangeLabel}
+           </span>
+         </div>
+ 
+@@ -328,14 +301,20 @@ export function CalendarView({
+         </div>
+       </div>
+ 
++      {scheduleError && (
++        <div className="calendar-error-banner" role="alert" data-testid="calendar-error-banner">
++          {scheduleError}
++        </div>
++      )}
++
+       {announcement && (
+         <div className="calendar-live-announcement sr-only" role="status" aria-live="polite">
+           {announcement}
+         </div>
+       )}
+ 
+-      {/* 7-column Month Grid (Desktop & Tablet) */}
+-      <div className="calendar-month-grid" role="grid" aria-label={`Month grid for ${monthLabel}`}>
++      {/* 7-column 2-Week Grid (14 Day Cells, Desktop & Tablet) */}
++      <div className="calendar-month-grid" role="grid" aria-label={`2-week grid for ${rangeLabel}`}>
+         {/* Weekday headers */}
+         {WEEKDAY_NAMES.map((name) => (
+           <div key={name} className="calendar-weekday-header" role="columnheader">
+@@ -343,8 +322,8 @@ export function CalendarView({
+           </div>
+         ))}
+ 
+-        {/* 42 Day cells */}
+-        {monthGrid.weeks.flat().map((cell: CalendarCell) => {
++        {/* 14 Day cells */}
++        {twoWeekGrid.map((cell: CalendarDayCell) => {
+           const cellIssues = issuesByDate[cell.date] ?? [];
+           const visibleIssues = cellIssues.slice(0, 3);
+           const hiddenCount = cellIssues.length - 3;
+diff --git a/kanban/web/src/features/calendar/calendarGrid.test.ts b/kanban/web/src/features/calendar/calendarGrid.test.ts
+index 4ba11c1..05a17f9 100644
+--- a/kanban/web/src/features/calendar/calendarGrid.test.ts
++++ b/kanban/web/src/features/calendar/calendarGrid.test.ts
+@@ -7,6 +7,7 @@ import {
+   formatMonthYear,
+   getUtcTodayDate,
+   buildMonthGrid,
++  buildTwoWeekGrid,
+ } from './calendarGrid';
+ 
+ describe('calendarGrid pure date math', () => {
+@@ -100,4 +101,20 @@ describe('calendarGrid pure date math', () => {
+     expect(cell03?.date).toBe('2026-07-01');
+     expect(cell03?.isCurrentMonth).toBe(true);
+   });
++
++  it('builds two-week grid returning 14 continuous days starting on Sunday', () => {
++    // 2026-11-18 is Wednesday. Preceding Sunday is 2026-11-15.
++    const cells = buildTwoWeekGrid('2026-11-18', '2026-11-18');
++    expect(cells).toHaveLength(14);
++    expect(cells[0]?.date).toBe('2026-11-15');
++    expect(cells[13]?.date).toBe('2026-11-28');
++
++    const todayCell = cells.find((c) => c.date === '2026-11-18');
++    expect(todayCell?.isToday).toBe(true);
++    expect(todayCell?.dayOfMonth).toBe(18);
++
++    const nonTodayCell = cells.find((c) => c.date === '2026-11-15');
++    expect(nonTodayCell?.isToday).toBe(false);
++    expect(nonTodayCell?.dayOfMonth).toBe(15);
++  });
+ });
+diff --git a/kanban/web/src/features/calendar/calendarGrid.ts b/kanban/web/src/features/calendar/calendarGrid.ts
+index 89d0695..5b1b5c2 100644
+--- a/kanban/web/src/features/calendar/calendarGrid.ts
++++ b/kanban/web/src/features/calendar/calendarGrid.ts
+@@ -79,6 +79,39 @@ export function getUtcTodayDate(): string {
+   return `${String(y)}-${m}-${d}`;
+ }
+ 
++/**
++ * Builds an exact 14-day (2 weeks x 7 columns) grid starting on Sunday of anchorDate's week.
++ */
++export function buildTwoWeekGrid(
++  anchorDate: string,
++  todayDate: string = getUtcTodayDate(),
++): CalendarDayCell[] {
++  const dt = new Date(anchorDate + 'T00:00:00Z');
++  const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
++  const anchorEpoch = isNaN(dt.getTime())
++    ? Math.floor(Date.now() / MS_PER_DAY)
++    : Math.floor(dt.getTime() / MS_PER_DAY);
++  const startEpoch = anchorEpoch - dayOfWeek;
++
++  const cells: CalendarDayCell[] = [];
++  for (let i = 0; i < 14; i += 1) {
++    const cellDt = new Date((startEpoch + i) * MS_PER_DAY);
++    const cellYear = cellDt.getUTCFullYear();
++    const cellMonth = cellDt.getUTCMonth() + 1;
++    const cellDay = cellDt.getUTCDate();
++    const dateStr = `${String(cellYear)}-${String(cellMonth).padStart(2, '0')}-${String(cellDay).padStart(2, '0')}`;
++
++    cells.push({
++      date: dateStr,
++      dayOfMonth: cellDay,
++      isCurrentMonth: true,
++      isToday: dateStr === todayDate,
++    });
++  }
++
++  return cells;
++}
++
+ /**
+  * Builds an exact 42-day (6 weeks x 7 columns) month grid starting on Sunday.
+  */
+diff --git a/kanban/web/src/features/timeline/TimelineView.test.tsx b/kanban/web/src/features/timeline/TimelineView.test.tsx
+index a667a55..d8a6212 100644
+--- a/kanban/web/src/features/timeline/TimelineView.test.tsx
++++ b/kanban/web/src/features/timeline/TimelineView.test.tsx
+@@ -74,10 +74,12 @@ describe('TimelineView', () => {
+ 
+   beforeEach(() => {
+     vi.restoreAllMocks();
++    document.cookie = 'kb_csrf=test-csrf-token-123; Path=/';
+   });
+ 
+   afterEach(() => {
+     globalThis.fetch = originalFetch;
++    document.cookie = 'kb_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/';
+   });
+ 
+   it('renders left sticky pane with work items and links to peek', () => {
+@@ -164,9 +166,9 @@ describe('TimelineView', () => {
+       toJSON: () => ({}),
+     });
+ 
+-    // Click at 64px (4 days offset at 16px/day: 2026-11-01 + 4 = 2026-11-05)
++    // Click at 72px (2 days offset at 36px/day: 2026-11-01 + 2 = 2026-11-03)
+     await act(async () => {
+-      fireEvent.click(trackRow999, { clientX: 64 });
++      fireEvent.click(trackRow999, { clientX: 72 });
+       await Promise.resolve();
+     });
+ 
+@@ -175,8 +177,10 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
+-      body: JSON.stringify({ start_date: '2026-11-05', due_date: '2026-11-05' }),
++      credentials: 'same-origin',
++      body: JSON.stringify({ start_date: '2026-11-03', due_date: '2026-11-03' }),
+     });
+   });
+ 
+@@ -315,7 +319,9 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-13' }),
+     });
+ 
+@@ -330,7 +336,9 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-14' }),
+     });
+   });
+@@ -384,10 +392,10 @@ describe('TimelineView', () => {
+ 
+     const bar100 = screen.getByTestId('timeline-bar-KAN-100');
+ 
+-    // Pointer down at 100px, pointer up at 132px (+32px = +2 days at 16px/day)
++    // Pointer down at 100px, pointer up at 172px (+72px = +2 days at 36px/day)
+     fireEvent.pointerDown(bar100, { clientX: 100 });
+     await act(async () => {
+-      fireEvent.pointerUp(window, { clientX: 132 });
++      fireEvent.pointerUp(window, { clientX: 172 });
+       await Promise.resolve();
+     });
+ 
+@@ -396,7 +404,9 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-07', due_date: '2026-11-14' }),
+     });
+   });
+@@ -419,11 +429,11 @@ describe('TimelineView', () => {
+       />
+     );
+ 
+-    // Left handle resize: start_date shifts +1 day (16px)
++    // Left handle resize: start_date shifts +1 day (36px at week zoom)
+     const handleLeft = screen.getByTestId('handle-left-KAN-100');
+     fireEvent.pointerDown(handleLeft, { clientX: 50 });
+     await act(async () => {
+-      fireEvent.pointerUp(window, { clientX: 66 });
++      fireEvent.pointerUp(window, { clientX: 86 });
+       await Promise.resolve();
+     });
+ 
+@@ -432,15 +442,17 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-12' }),
+     });
+ 
+-    // Right handle resize: due_date shifts +2 days (32px)
++    // Right handle resize: due_date shifts +2 days (72px at week zoom)
+     const handleRight = screen.getByTestId('handle-right-KAN-100');
+     fireEvent.pointerDown(handleRight, { clientX: 200 });
+     await act(async () => {
+-      fireEvent.pointerUp(window, { clientX: 232 });
++      fireEvent.pointerUp(window, { clientX: 272 });
+       await Promise.resolve();
+     });
+ 
+@@ -449,7 +461,9 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-06', due_date: '2026-11-14' }),
+     });
+   });
+@@ -489,7 +503,9 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-04', due_date: '2026-11-11' }),
+     });
+ 
+@@ -504,7 +520,9 @@ describe('TimelineView', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-04', due_date: '2026-11-10' }),
+     });
+   });
+diff --git a/kanban/web/src/features/timeline/TimelineView.tsx b/kanban/web/src/features/timeline/TimelineView.tsx
+index 3e29229..464e5e1 100644
+--- a/kanban/web/src/features/timeline/TimelineView.tsx
++++ b/kanban/web/src/features/timeline/TimelineView.tsx
+@@ -147,6 +147,7 @@ interface TimelineMilestoneProps {
+   issue: TimelineIssueItem;
+   geom: BarGeometry;
+   isOverdue: boolean;
++  onPointerDownMove?: (e: PointerEvent<HTMLDivElement>, issue: TimelineIssueItem) => void;
+   onKeyDown: (e: KeyboardEvent<HTMLDivElement>, issue: TimelineIssueItem) => void;
+ }
+ 
+@@ -154,6 +155,7 @@ function TimelineMilestone({
+   issue,
+   geom,
+   isOverdue,
++  onPointerDownMove,
+   onKeyDown,
+ }: TimelineMilestoneProps): JSX.Element {
+   const milestoneRef = useRef<HTMLDivElement>(null);
+@@ -174,6 +176,7 @@ function TimelineMilestone({
+       tabIndex={0}
+       role="button"
+       aria-label={`Milestone for ${issue.key} on ${geom.dueDate}`}
++      onPointerDown={(e) => { onPointerDownMove?.(e, issue); }}
+       onKeyDown={(e) => { onKeyDown(e, issue); }}
+       title={`${issue.key} milestone: ${geom.dueDate}`}
+       data-issue-key={issue.key}
+@@ -202,9 +205,11 @@ export function TimelineView({
+   const [scheduleOverrides, setScheduleOverrides] = useState<
+     Record<string, { start_date: string | null; due_date: string | null }>
+   >({});
++  const [scheduleError, setScheduleError] = useState<string | null>(null);
+ 
+   const { reschedule, announcement } = useRescheduleIssue({
+     onOptimisticUpdate: (key, patch) => {
++      setScheduleError(null);
+       setScheduleOverrides((prev) => ({
+         ...prev,
+         [key]: {
+@@ -222,6 +227,12 @@ export function TimelineView({
+         },
+       }));
+     },
++    onError: (_key, err) => {
++      setScheduleError(err.message || 'Failed to reschedule issue');
++    },
++    onSuccess: () => {
++      setScheduleError(null);
++    },
+   });
+ 
+   const effIssues = useMemo(() => {
+@@ -238,28 +249,17 @@ export function TimelineView({
+ 
+   const pxPerDay = ZOOM_PX_PER_DAY[zoomScale];
+ 
+-  // Determine timeline start date
+-  const timelineStartDate = useMemo(() => {
++  // Start of current 2-week window: Sunday of todayDate (or initialStartDate if provided)
++  const defaultAnchorStart = useMemo(() => {
+     if (initialStartDate) return initialStartDate;
+-    let earliest = todayDate;
+-    for (const issue of effIssues) {
+-      if (issue.start_date && issue.start_date < earliest) earliest = issue.start_date;
+-      if (issue.due_date && issue.due_date < earliest) earliest = issue.due_date;
+-    }
+-    // Start 7 days prior to earliest scheduled item
+-    return addDays(earliest, -7);
+-  }, [initialStartDate, todayDate, effIssues]);
++    const dt = new Date(todayDate + 'T00:00:00Z');
++    const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
++    return addDays(todayDate, -dayOfWeek);
++  }, [initialStartDate, todayDate]);
+ 
+-  // Determine number of days to render (minimum 60 days or latest date + 14 days)
+-  const daysCount = useMemo(() => {
+-    let latest = todayDate;
+-    for (const issue of effIssues) {
+-      if (issue.due_date && issue.due_date > latest) latest = issue.due_date;
+-      if (issue.start_date && issue.start_date > latest) latest = issue.start_date;
+-    }
+-    const span = diffDays(latest, timelineStartDate) + 21;
+-    return Math.max(60, span);
+-  }, [todayDate, timelineStartDate, effIssues]);
++  const [anchorStart, setAnchorStart] = useState<string>(defaultAnchorStart);
++  const timelineStartDate = anchorStart;
++  const daysCount = 14;
+ 
+   const canvasWidth = daysCount * pxPerDay;
+   const canvasHeight = Math.max(effIssues.length * LIST_ROW_HEIGHT_PX, 400);
+@@ -444,6 +444,8 @@ export function TimelineView({
+           issueRef: issue.key,
+           startDate: shifted.startDate,
+           dueDate: shifted.dueDate,
++          originalStartDate: initialStart,
++          originalDueDate: initialDue,
+         });
+       } else if (mode === 'resize-start') {
+         const newStart = resizeStartDate(initialStart, initialDue, deltaDays);
+@@ -451,6 +453,8 @@ export function TimelineView({
+           issueRef: issue.key,
+           startDate: newStart,
+           dueDate: initialDue,
++          originalStartDate: initialStart,
++          originalDueDate: initialDue,
+         });
+       } else {
+         const newDue = resizeDueDate(initialStart, initialDue, deltaDays);
+@@ -458,6 +462,8 @@ export function TimelineView({
+           issueRef: issue.key,
+           startDate: initialStart,
+           dueDate: newDue,
++          originalStartDate: initialStart,
++          originalDueDate: initialDue,
+         });
+       }
+     };
+@@ -484,6 +490,8 @@ export function TimelineView({
+           issueRef: issue.key,
+           startDate: currentStart,
+           dueDate: newDue,
++          originalStartDate: currentStart,
++          originalDueDate: currentDue,
+         });
+       }
+     } else {
+@@ -499,6 +507,8 @@ export function TimelineView({
+           issueRef: issue.key,
+           startDate: shifted.startDate,
+           dueDate: shifted.dueDate,
++          originalStartDate: currentStart,
++          originalDueDate: currentDue,
+         });
+       }
+     }
+@@ -519,6 +529,8 @@ export function TimelineView({
+       issueRef: issue.key,
+       startDate: clickedDate,
+       dueDate: clickedDate,
++      originalStartDate: null,
++      originalDueDate: null,
+     });
+   };
+ 
+@@ -547,6 +559,50 @@ export function TimelineView({
+       {/* Timeline Toolbar */}
+       <div className="timeline-toolbar" role="toolbar" aria-label="Timeline navigation">
+         <div className="timeline-toolbar-left">
++          <button
++            type="button"
++            className="calendar-toolbar-btn"
++            onClick={() => {
++              setAnchorStart((prev) => addDays(prev, -14));
++            }}
++            aria-label="Previous 2 weeks"
++          >
++            Prev
++          </button>
++          <button
++            type="button"
++            className="calendar-toolbar-btn"
++            onClick={() => {
++              const dt = new Date(todayDate + 'T00:00:00Z');
++              const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
++              setAnchorStart(addDays(todayDate, -dayOfWeek));
++            }}
++            aria-label="Jump to today"
++          >
++            Today
++          </button>
++          <button
++            type="button"
++            className="calendar-toolbar-btn"
++            onClick={() => {
++              setAnchorStart((prev) => addDays(prev, 14));
++            }}
++            aria-label="Next 2 weeks"
++          >
++            Next
++          </button>
++          <button
++            type="button"
++            className="calendar-toolbar-btn"
++            onClick={handleScrollToToday}
++            aria-label="Scroll to today"
++          >
++            Scroll to today
++          </button>
++          <span className="timeline-range-heading" aria-live="polite">
++            {`${anchorStart} - ${addDays(anchorStart, 13)}`}
++          </span>
++
+           <div
+             className="timeline-zoom-group"
+             role="radiogroup"
+@@ -580,15 +636,6 @@ export function TimelineView({
+               Quarter
+             </button>
+           </div>
+-
+-          <button
+-            type="button"
+-            className="calendar-toolbar-btn"
+-            onClick={handleScrollToToday}
+-            aria-label="Scroll to today"
+-          >
+-            Today
+-          </button>
+         </div>
+ 
+         <div className="timeline-toolbar-right">
+@@ -603,6 +650,12 @@ export function TimelineView({
+         </div>
+       </div>
+ 
++      {scheduleError && (
++        <div className="timeline-error-banner" role="alert" data-testid="timeline-error-banner">
++          {scheduleError}
++        </div>
++      )}
++
+       {/* Split Grid: Left sticky rail + Right canvas */}
+       <div className="timeline-split-container">
+         {/* Left Sticky Issue Pane (280px desktop, 132px mobile) */}
+@@ -717,6 +770,7 @@ export function TimelineView({
+                         issue={issue}
+                         geom={geom}
+                         isOverdue={isOverdue}
++                        onPointerDownMove={(e, iss) => { handlePointerDown(e, 'move', iss); }}
+                         onKeyDown={handleBarKeyDown}
+                       />
+                     )}
+diff --git a/kanban/web/src/features/timeline/calendarTimeline.css b/kanban/web/src/features/timeline/calendarTimeline.css
+index c223796..56f26d9 100644
+--- a/kanban/web/src/features/timeline/calendarTimeline.css
++++ b/kanban/web/src/features/timeline/calendarTimeline.css
+@@ -792,6 +792,25 @@
+   stroke-dasharray: 4 4;
+ }
+ 
++.calendar-error-banner,
++.timeline-error-banner {
++  background: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--danger-fg);
++  border-radius: var(--radius-md, 6px);
++  padding: 8px 12px;
++  font-size: 13px;
++  margin: 8px 0;
++}
++
++.timeline-range-heading {
++  font-family: var(--font-sans);
++  font-weight: 600;
++  font-size: 0.9375rem;
++  color: var(--fg-primary);
++  margin-left: 8px;
++}
++
+ /* Mobile Timeline (< 767px): shrink left pane to 132px key rail */
+ @media (max-width: 767px) {
+   .timeline-left-pane {
+diff --git a/kanban/web/src/features/timeline/scheduleMutation.test.tsx b/kanban/web/src/features/timeline/scheduleMutation.test.tsx
+index 7dc8f60..f0f2ebf 100644
+--- a/kanban/web/src/features/timeline/scheduleMutation.test.tsx
++++ b/kanban/web/src/features/timeline/scheduleMutation.test.tsx
+@@ -7,13 +7,15 @@ describe('scheduleMutation', () => {
+ 
+   beforeEach(() => {
+     vi.restoreAllMocks();
++    document.cookie = 'kb_csrf=test-csrf-token-123; Path=/';
+   });
+ 
+   afterEach(() => {
+     globalThis.fetch = originalFetch;
++    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
+   });
+ 
+-  it('patchIssueSchedule sends PATCH request with JSON body and If-Match header', async () => {
++  it('patchIssueSchedule sends PATCH request with JSON body, X-CSRF-Token, credentials, and If-Match header', async () => {
+     const mockResponse = {
+       id: 'issue-142',
+       key: 'KAN-142',
+@@ -42,8 +44,10 @@ describe('scheduleMutation', () => {
+       headers: {
+         'Content-Type': 'application/json',
+         Accept: 'application/json',
++        'X-CSRF-Token': 'test-csrf-token-123',
+         'If-Match': '"etag-abc"',
+       },
++      credentials: 'same-origin',
+       body: JSON.stringify({ start_date: '2026-11-12', due_date: '2026-11-20' }),
+     });
+     expect(result.due_date).toBe('2026-11-20');
+@@ -218,7 +222,7 @@ describe('scheduleMutation', () => {
+       });
+     });
+ 
+-    // 5. Non-Error throw in fetch to test String(err) fallback
++    // 5. Non-Error throw in fetch to test String(err) fallback and genuine rollback to null
+     globalThis.fetch = vi.fn().mockRejectedValueOnce('raw network failure string');
+     let failResult = true;
+     await act(async () => {
+@@ -230,7 +234,59 @@ describe('scheduleMutation', () => {
+ 
+     expect(failResult).toBe(false);
+     expect(onError).toHaveBeenCalledWith('KAN-ERR', expect.any(Error));
+-    expect(onRollback).toHaveBeenCalledWith('KAN-ERR', { startDate: null, dueDate: '2026-11-25' });
++    expect(onRollback).toHaveBeenCalledWith('KAN-ERR', { startDate: null, dueDate: null });
+     expect(result.current.announcement).toContain('rolled back');
++
++    // 6. Genuine rollback to explicitly provided pre-mutation dates
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: false,
++      status: 403,
++      text: () => Promise.resolve(JSON.stringify({ code: 'CSRF_REJECTED' })),
++    });
++    let failOriginal = true;
++    await act(async () => {
++      failOriginal = await result.current.reschedule({
++        issueRef: 'KAN-ERR-2',
++        startDate: '2026-11-20',
++        dueDate: '2026-11-25',
++        originalStartDate: '2026-11-05',
++        originalDueDate: '2026-11-12',
++      });
++    });
++    expect(failOriginal).toBe(false);
++    expect(onRollback).toHaveBeenCalledWith('KAN-ERR-2', {
++      startDate: '2026-11-05',
++      dueDate: '2026-11-12',
++    });
++  });
++
++  it('dispatches kb:issue-updated CustomEvent on window on successful reschedule', async () => {
++    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
++    const mockResponse = {
++      id: 'issue-142',
++      key: 'KAN-142',
++      start_date: '2026-11-12',
++      due_date: '2026-11-20',
++    };
++    globalThis.fetch = vi.fn().mockResolvedValue({
++      ok: true,
++      status: 200,
++      json: () => Promise.resolve(mockResponse),
++    });
++
++    const { result } = renderHook(() => useRescheduleIssue());
++    await act(async () => {
++      await result.current.reschedule({
++        issueRef: 'KAN-142',
++        startDate: '2026-11-12',
++        dueDate: '2026-11-20',
++      });
++    });
++
++    expect(dispatchSpy).toHaveBeenCalledWith(
++      expect.objectContaining({
++        type: 'kb:issue-updated',
++      }),
++    );
+   });
+ });
+diff --git a/kanban/web/src/features/timeline/scheduleMutation.ts b/kanban/web/src/features/timeline/scheduleMutation.ts
+index a12f57e..4802186 100644
+--- a/kanban/web/src/features/timeline/scheduleMutation.ts
++++ b/kanban/web/src/features/timeline/scheduleMutation.ts
+@@ -4,6 +4,7 @@
+  */
+ 
+ import { useCallback, useState } from 'react';
++import { getCsrfToken } from '../../api/client';
+ import type { IssueItem } from '../views/viewsApi';
+ 
+ export interface SchedulePatch {
+@@ -18,6 +19,43 @@ export interface UseRescheduleIssueOptions {
+   onError?: (key: string, error: Error) => void;
+ }
+ 
++export interface RescheduleTarget {
++  issueRef: string;
++  dueDate?: string | null;
++  startDate?: string | null;
++  originalStartDate?: string | null;
++  originalDueDate?: string | null;
++  originalDates?: { startDate: string | null; dueDate: string | null };
++  etag?: string;
++}
++
++/**
++ * Ensures a valid CSRF token is available in document cookie or session bootstrap cache.
++ */
++export async function ensureCsrfToken(): Promise<string | null> {
++  const existing = getCsrfToken();
++  if (existing) {
++    return existing;
++  }
++  try {
++    const res = await fetch('/api/v1/auth/session', {
++      method: 'GET',
++      headers: { Accept: 'application/json' },
++      credentials: 'same-origin',
++    });
++    const data = (await res.json()) as { csrf_token?: string };
++    if (data.csrf_token) {
++      if (typeof document !== 'undefined') {
++        document.cookie = `kb_csrf=${encodeURIComponent(data.csrf_token)}; Path=/; SameSite=Lax`;
++      }
++      return data.csrf_token;
++    }
++  } catch {
++    // Ignore bootstrap failures in offline unit tests
++  }
++  return getCsrfToken();
++}
++
+ /**
+  * Direct PATCH API call to update an issue's schedule dates.
+  */
+@@ -34,10 +72,15 @@ export async function patchIssueSchedule(
+     body.due_date = patch.dueDate;
+   }
+ 
++  const csrfToken = (await ensureCsrfToken()) ?? getCsrfToken();
++
+   const headers: Record<string, string> = {
+     'Content-Type': 'application/json',
+     Accept: 'application/json',
+   };
++  if (csrfToken) {
++    headers['X-CSRF-Token'] = csrfToken;
++  }
+   if (etag) {
+     headers['If-Match'] = etag;
+   }
+@@ -45,6 +88,7 @@ export async function patchIssueSchedule(
+   const res = await fetch(`/api/v1/issues/${encodeURIComponent(issueKey)}`, {
+     method: 'PATCH',
+     headers,
++    credentials: 'same-origin',
+     body: JSON.stringify(body),
+   });
+ 
+@@ -84,6 +128,7 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
+     async (
+       issueOrTarget:
+         | (Pick<IssueItem, 'key' | 'start_date' | 'due_date'> & { etag?: string })
++        | RescheduleTarget
+         | {
+             issueRef: string;
+             dueDate?: string | null | undefined;
+@@ -110,12 +155,18 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
+         etag = iss.etag;
+       } else {
+         const target = issueOrTarget as {
+-          issueRef: string;
+-          dueDate?: string | null;
++          issueRef?: string;
++          key?: string;
+           startDate?: string | null;
++          dueDate?: string | null;
++          start_date?: string | null;
++          due_date?: string | null;
++          originalStartDate?: string | null;
++          originalDueDate?: string | null;
++          originalDates?: { startDate: string | null; dueDate: string | null };
+           etag?: string;
+         };
+-        key = target.issueRef;
++        key = target.issueRef ?? target.key ?? '';
+         patch = {};
+         if (target.startDate !== undefined) {
+           patch.startDate = target.startDate;
+@@ -123,10 +174,28 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
+         if (target.dueDate !== undefined) {
+           patch.dueDate = target.dueDate;
+         }
+-        originalDates = {
+-          startDate: target.startDate ?? null,
+-          dueDate: target.dueDate ?? null,
+-        };
++
++        if (target.originalDates) {
++          originalDates = {
++            startDate: target.originalDates.startDate,
++            dueDate: target.originalDates.dueDate,
++          };
++        } else if (target.originalStartDate !== undefined || target.originalDueDate !== undefined) {
++          originalDates = {
++            startDate: target.originalStartDate ?? null,
++            dueDate: target.originalDueDate ?? null,
++          };
++        } else if (target.start_date !== undefined || target.due_date !== undefined) {
++          originalDates = {
++            startDate: target.start_date ?? null,
++            dueDate: target.due_date ?? null,
++          };
++        } else {
++          originalDates = {
++            startDate: null,
++            dueDate: null,
++          };
++        }
+         etag = target.etag;
+       }
+ 
+@@ -137,6 +206,11 @@ export function useRescheduleIssue(options: UseRescheduleIssueOptions = {}) {
+       try {
+         const updated = await patchIssueSchedule(key, patch, etag);
+         setAnnouncement(`Rescheduled ${key} successfully.`);
++        if (typeof window !== 'undefined') {
++          window.dispatchEvent(
++            new CustomEvent('kb:issue-updated', { detail: { key, updated } }),
++          );
++        }
+         options.onSuccess?.(key, updated);
+         return true;
+       } catch (err) {
+diff --git a/kanban/web/src/features/timeline/timelineGeometry.test.ts b/kanban/web/src/features/timeline/timelineGeometry.test.ts
+index 710346e..bbd0ced 100644
+--- a/kanban/web/src/features/timeline/timelineGeometry.test.ts
++++ b/kanban/web/src/features/timeline/timelineGeometry.test.ts
+@@ -45,9 +45,9 @@ describe('timelineGeometry', () => {
+   });
+ 
+   it('snaps pointer delta to integer days across zoom scales', () => {
+-    expect(snapPointerDeltaToDays(32, ZOOM_PX_PER_DAY.week)).toBe(2);
+-    expect(snapPointerDeltaToDays(-16, ZOOM_PX_PER_DAY.week)).toBe(-1);
+-    expect(snapPointerDeltaToDays(36, ZOOM_PX_PER_DAY.day)).toBe(1);
++    expect(snapPointerDeltaToDays(72, ZOOM_PX_PER_DAY.week)).toBe(2);
++    expect(snapPointerDeltaToDays(-36, ZOOM_PX_PER_DAY.week)).toBe(-1);
++    expect(snapPointerDeltaToDays(64, ZOOM_PX_PER_DAY.day)).toBe(1);
+   });
+ 
+   it('shifts both dates together on range shift', () => {
+diff --git a/kanban/web/src/features/timeline/timelineGeometry.ts b/kanban/web/src/features/timeline/timelineGeometry.ts
+index f38d52a..7867418 100644
+--- a/kanban/web/src/features/timeline/timelineGeometry.ts
++++ b/kanban/web/src/features/timeline/timelineGeometry.ts
+@@ -7,9 +7,9 @@ import { addDays, diffDays } from '../calendar/calendarGrid';
+ export type ZoomScale = 'day' | 'week' | 'quarter';
+ 
+ export const ZOOM_PX_PER_DAY: Record<ZoomScale, number> = {
+-  day: 36,
+-  week: 16,
+-  quarter: 6,
++  day: 64,
++  week: 36,
++  quarter: 16,
+ };
+ 
+ export const LIST_ROW_HEIGHT_PX = 46;
