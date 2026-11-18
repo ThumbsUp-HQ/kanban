@@ -181,12 +181,26 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     const prioPopover = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
     fireEvent.click(within(prioPopover).getByText('Urgent'));
 
+    // Select High, Low, None, Medium priorities
+    fireEvent.keyDown(window, { key: 'p' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Quick Priority Picker/i })).getByText('High'));
+    fireEvent.keyDown(window, { key: 'p' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Quick Priority Picker/i })).getByText('Low'));
+    fireEvent.keyDown(window, { key: 'p' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Quick Priority Picker/i })).getByText('None'));
+    fireEvent.keyDown(window, { key: 'p' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Quick Priority Picker/i })).getByText('Medium'));
+
     // Press 'S' to open State popover and select Done
     fireEvent.keyDown(window, { key: 's' });
     const statePopover1 = screen.getByRole('dialog', { name: /Quick State Picker/i });
     fireEvent.click(within(statePopover1).getByText('Done'));
 
-    // Press 'S' again and select Todo
+    // Press 'S' again and select In Progress, Backlog, Todo
+    fireEvent.keyDown(window, { key: 's' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Quick State Picker/i })).getByText('In Progress'));
+    fireEvent.keyDown(window, { key: 's' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Quick State Picker/i })).getByText('Backlog'));
     fireEvent.keyDown(window, { key: 's' });
     const statePopover2 = screen.getByRole('dialog', { name: /Quick State Picker/i });
     fireEvent.click(within(statePopover2).getByText('Todo'));

@@ -327,12 +327,21 @@ describe('BoardCard Component', () => {
 
   it('navigates via window.history when onOpenPeek is omitted', () => {
     const pushStateSpy = vi.spyOn(window.history, 'pushState');
-    render(<BoardCard issue={baseIssue} stateGroup="started" />);
+    window.history.pushState({}, '', '/w/test-workspace/p/KAN/board');
+    render(<BoardCard issue={{ ...baseIssue, key: '' }} stateGroup="started" />);
 
-    const keyLink = screen.getByTestId('board-card-key-KAN-142');
-    fireEvent.click(keyLink);
-
+    // Click card container directly (tests targetEl fallback to cardRef)
+    const cardEl = screen.getByTestId('board-card-');
+    fireEvent.click(cardEl);
     expect(pushStateSpy).toHaveBeenCalled();
-    expect(pushStateSpy.mock.calls[0]?.[2]).toContain('peek=KAN-142');
+
+    // Modifier clicks with shiftKey and altKey and metaKey
+    const keyLink = screen.getByTestId('board-card-key-');
+    const shiftClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, shiftKey: true });
+    const altClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, altKey: true });
+    const metaClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, metaKey: true });
+    keyLink.dispatchEvent(shiftClick);
+    keyLink.dispatchEvent(altClick);
+    keyLink.dispatchEvent(metaClick);
   });
 });

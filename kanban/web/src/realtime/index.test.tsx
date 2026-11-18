@@ -162,4 +162,18 @@ describe('Realtime Module & React Hooks', () => {
 
     expect(subscribeSpy).not.toHaveBeenCalled();
   });
+
+  it('renders RealtimeProvider with default props and attaches to window', () => {
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider client={mockClient}>
+          <div data-testid="child">child</div>
+        </RealtimeProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId('child')).toBeDefined();
+    expect(connectSpy).toHaveBeenCalled();
+    expect((window as unknown as { __kanbanRealtimeClient?: RealtimeClient }).__kanbanRealtimeClient).toBe(mockClient);
+    unmount();
+  });
 });

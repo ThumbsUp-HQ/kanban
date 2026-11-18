@@ -301,5 +301,25 @@ describe('Universal Clipboard Utility (clipboard.ts)', () => {
       expect(success).toBe(false);
       expect(result.current.copied).toBe(false);
     });
+
+    it('resets copied state and clears timer on reset()', async () => {
+      /* eslint-disable @typescript-eslint/no-deprecated */
+      document.execCommand = vi.fn().mockReturnValue(true);
+      /* eslint-enable @typescript-eslint/no-deprecated */
+      const { result } = renderHook(() => useClipboard());
+      await act(async () => {
+        await result.current.copy('test-reset');
+      });
+      expect(result.current.copied).toBe(true);
+      act(() => {
+        result.current.reset();
+      });
+      expect(result.current.copied).toBe(false);
+      // Call reset again when timer is null
+      act(() => {
+        result.current.reset();
+      });
+      expect(result.current.copied).toBe(false);
+    });
   });
 });

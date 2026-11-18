@@ -100,30 +100,6 @@ export function SetupClaimPage({
     }
   };
 
-  const copyToClipboard = async (text: string): Promise<boolean> => {
-    if (typeof navigator !== 'undefined') {
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch {
-        // Fall back to textarea
-      }
-    }
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
-      const success = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      return success;
-    } catch {
-      return false;
-    }
-  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

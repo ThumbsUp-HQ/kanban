@@ -495,6 +495,35 @@ describe('bindQueryInvalidation', () => {
     send({ id: 'i1', channel: 'project:KAN', type: 'issue.transitioned', payload: { key: 'KAN-10', project_key: 'KAN' } });
     expect(invalidate).toHaveBeenCalledTimes(2);
     expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-10'] });
+
+    // Test predicate branches for gate.updated with and without project_key
+    const predicateGate = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predicateGate({ queryKey: ['issues', 'KAN'] })).toBe(true);
+    expect(predicateGate({ queryKey: ['issues', 'OTHER'] })).toBe(false);
+    expect(predicateGate({ queryKey: ['docs'] })).toBe(false);
+
+    invalidate.mockClear();
+    send({ id: 'g2', channel: 'project:KAN', type: 'gate.updated', payload: {} });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    const predicateGateAll = (invalidate.mock.calls[0]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predicateGateAll({ queryKey: ['issues', 'ANY'] })).toBe(true);
+  });
+
+  it('evicts oldest seen event ID when capacity exceeded', () => {
+    const client = new RealtimeClient();
+    for (let i = 0; i <= 1025; i++) {
+      (client as unknown as { remember: (id: string) => boolean }).remember('evt-' + String(i));
+    }
+    expect((client as unknown as { seen: Set<string> }).seen.size).toBe(1000);
+  });
+
+  it('does not trigger onWsFailure when socket closes while state is closed', () => {
+    const client = new RealtimeClient();
+    client.connect();
+    const ws = (client as unknown as { ws: WebSocket | null }).ws;
+    client.close();
+    ws?.onclose?.(new CloseEvent('close'));
+    expect(client.state).toBe('closed');
   });
 
   it('unbinds', () => {

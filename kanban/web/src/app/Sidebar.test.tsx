@@ -727,4 +727,54 @@ describe('Sidebar', () => {
       expect(screen.getByText('Project Two')).toBeDefined();
     });
   });
+
+  it('covers workspace dedup branches, items envelope, and switch csrf token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/v1/workspaces') && !url.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify([
+          { id: 'w1', name: 'Default Workspace' },
+          { id: 'w1', name: 'Default Workspace' }, // duplicate id
+          { id: 'w2', name: 'Default Workspace' }, // duplicate default workspace name
+          { id: '', name: '' },
+          { id: 'w3', name: 'Other', slug: 'other' },
+        ]), { status: 200 }));
+      }
+      if (url.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'new-csrf-123' }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { identifier: 'ENV1', name: 'Envelope Project' }, // tests identifier & modules_enabled fallback
+          ],
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/projects/ENV1/issues']}>
+        <Sidebar projectKey="ENV1" projectName="Envelope Project" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Envelope Project')).toBeDefined();
+    });
+
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    fireEvent.click(switcherBtn);
+    const items = screen.getAllByRole('menuitem');
+    const firstMenuItem = items[0];
+    if (firstMenuItem) {
+      act(() => {
+        fireEvent.click(firstMenuItem);
+      });
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Envelope Project')).toBeDefined();
+    });
+  });
 });

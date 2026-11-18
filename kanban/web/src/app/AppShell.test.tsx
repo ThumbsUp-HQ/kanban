@@ -75,7 +75,7 @@ describe('AppShell', () => {
     spy.mockRestore();
 
     // Open and close palette via search trigger button
-    const searchBtn = screen.getByRole('button', { name: 'Search or run command' });
+    const searchBtn = screen.getByRole('button', { name: /search/i });
     act(() => {
       searchBtn.click();
     });

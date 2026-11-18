@@ -18,7 +18,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     typeof navigator !== 'undefined' &&
     'clipboard' in navigator &&
     typeof navigator.clipboard.writeText === 'function' &&
-    (typeof window === 'undefined' || window.isSecureContext)
+    (typeof window === 'undefined' || (window as unknown as { isSecureContext?: boolean }).isSecureContext !== false)
   ) {
     try {
       await navigator.clipboard.writeText(text);

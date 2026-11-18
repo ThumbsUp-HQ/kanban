@@ -60,9 +60,7 @@ export function RealtimeProvider({
   }, [client, queryClient, bindInvalidation]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as unknown as { __kanbanRealtimeClient?: RealtimeClient }).__kanbanRealtimeClient = client;
-    }
+    (window as unknown as { __kanbanRealtimeClient?: RealtimeClient }).__kanbanRealtimeClient = client;
   }, [client]);
 
   useEffect(() => {

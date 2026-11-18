@@ -111,6 +111,33 @@ describe('useOptimisticMutation', () => {
     );
   });
 
+  it('handles error when onMutate throws and context is undefined', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<RealtimeStatus />);
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation<{ id: string; state: string }, string, Issue[]>({
+          mutationFn: () => Promise.resolve('ok'),
+          queryKey: KEY,
+          apply: () => {
+            throw new Error('sync apply error');
+          },
+        }),
+      { wrapper: makeWrapper(client) },
+    );
+    await act(async () => {
+      try {
+        result.current.mutate({ id: 'a', state: 'b' });
+      } catch {
+        // ignore
+      }
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+  });
+
   it('500-issue synchronous apply median is under 12ms (20 runs)', () => {
     const cache = board(500);
     const samples: number[] = [];

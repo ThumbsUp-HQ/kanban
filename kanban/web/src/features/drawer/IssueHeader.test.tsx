@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { IssueHeader } from './IssueHeader';
 import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
+import * as clipboardUtils from '../../utils/clipboard';
 
 const baseIssue: IssueDetail = {
   key: 'KAN-142',
@@ -132,13 +133,13 @@ describe('IssueHeader', () => {
     }
   });
 
-  it('handles issue key copy and issue link copy with visible feedback', () => {
+  it('handles issue key copy and issue link copy with visible feedback', async () => {
     /* eslint-disable @typescript-eslint/no-deprecated */
     document.execCommand = vi.fn().mockReturnValue(true);
     /* eslint-enable @typescript-eslint/no-deprecated */
     const { Wrapper } = createWrapper();
 
-    render(
+    const { unmount } = render(
       <Wrapper>
         <IssueHeader
           issue={baseIssue}
@@ -153,8 +154,34 @@ describe('IssueHeader', () => {
     expect(copyKeyBtn.getAttribute('title')).toBe('Copy issue key');
     fireEvent.click(copyKeyBtn);
 
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('Copied!');
+      expect(screen.getByTestId('copy-issue-key-btn').getAttribute('title')).toBe('Copied!');
+    });
+
     const copyLinkBtn = screen.getByTestId('copy-issue-link-btn');
     expect(copyLinkBtn.getAttribute('title')).toBe('Copy issue link');
     fireEvent.click(copyLinkBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('Copied!');
+      expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copied!');
+    });
+    unmount();
+
+    // False branch when copyToClipboard returns false
+    vi.spyOn(clipboardUtils, 'copyToClipboard').mockResolvedValue(false);
+    render(
+      <Wrapper>
+        <IssueHeader
+          issue={baseIssue}
+          mode="drawer"
+          onClose={vi.fn()}
+          toggleFullScreen={vi.fn()}
+        />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByTestId('copy-issue-key-btn'));
+    fireEvent.click(screen.getByTestId('copy-issue-link-btn'));
   });
 });

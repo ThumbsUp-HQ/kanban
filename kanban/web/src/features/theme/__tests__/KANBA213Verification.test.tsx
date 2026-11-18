@@ -130,7 +130,7 @@ describe('KANBA-213 Verification: Theme Contrast, Mobile Layout, CLS & SPA 404',
         defaultOptions: { queries: { retry: false } },
       });
 
-      render(
+      const { rerender } = render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <CustomFieldsStudio projectKey="TEST" readOnly={false} />
@@ -139,6 +139,14 @@ describe('KANBA-213 Verification: Theme Contrast, Mobile Layout, CLS & SPA 404',
       );
 
       expect(screen.getByTestId('custom-fields-studio')).toBeDefined();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <CustomFieldsStudio isAdmin={true} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
     });
 
     it('renders IssuePeekDrawer component wrapper with and without issueKey', () => {
@@ -158,6 +166,14 @@ describe('KANBA-213 Verification: Theme Contrast, Mobile Layout, CLS & SPA 404',
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <IssuePeekDrawer issueKey="KAN-10" projectKey="KAN" mode="drawer" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <IssuePeekDrawer issueKey="KAN-10" />
           </MemoryRouter>
         </QueryClientProvider>,
       );
