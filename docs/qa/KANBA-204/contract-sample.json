@@ -1,0 +1,233 @@
+{
+  "ticket_id": "KANBA-204",
+  "generated_at": "2026-11-18T05:40:00Z",
+  "standard_user_contracts": {
+    "auth_session_unauthenticated": {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/session"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "authenticated": false,
+          "principal_id": null,
+          "workspace_id": null,
+          "aal_level": 0,
+          "mfa_pending": false,
+          "csrf_token": "csrf-session-token-standard"
+        }
+      }
+    },
+    "auth_me_member": {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/me",
+        "headers": {
+          "Cookie": "kb_session=[SESSION_COOKIE]"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "usr-member-qa",
+          "email": "user@example.com",
+          "display_name": "Standard User",
+          "is_server_admin": false,
+          "is_workspace_admin": false,
+          "workspace_role": "WORKSPACE_MEMBER",
+          "workspace_capabilities": [
+            "CREATE_PROJECT",
+            "READ_WORKSPACE",
+            "VIEW_PROJECTS"
+          ]
+        }
+      }
+    },
+    "project_create_self_service": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token-standard"
+        },
+        "body": {
+          "identifier": "QAUSR1",
+          "name": "User QA Project",
+          "description_markdown": "Self-service project created by standard workspace member."
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "proj-qausr1",
+          "identifier": "QAUSR1",
+          "name": "User QA Project",
+          "description_markdown": "Self-service project created by standard workspace member.",
+          "is_project_admin": true,
+          "project_role": "PROJECT_ADMIN",
+          "capabilities": [
+            "ADMIN",
+            "READ",
+            "WRITE",
+            "CREATE_ISSUE"
+          ],
+          "modules_enabled": true,
+          "created_at": "2026-11-18T05:35:00Z"
+        }
+      }
+    },
+    "issue_transition_gate_pending": {
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/issues/QAUSR1-1",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token-standard"
+        },
+        "body": {
+          "state_id": "state-in-review"
+        }
+      },
+      "response": {
+        "status": 202,
+        "body": {
+          "id": "issue-qausr1-1",
+          "key": "QAUSR1-1",
+          "title": "Member Feature Spec",
+          "status": "pending_gate",
+          "gate_status": {
+            "name": "reality-checker-qa",
+            "status": "pending",
+            "detail": "Transition interceptor evaluating forensic proof packet."
+          },
+          "target_state": {
+            "id": "state-in-review",
+            "name": "In Review",
+            "group": "completed"
+          }
+        }
+      }
+    },
+    "sticky_promote_to_doc": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stickies/stk-991/promote-to-doc",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token-standard"
+        },
+        "body": {
+          "title": "Promoted Design Architecture Doc",
+          "project_identifier": "QAUSR1"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "doc-promoted-991",
+          "title": "Promoted Design Architecture Doc",
+          "project_identifier": "QAUSR1",
+          "provenance_sticky_id": "stk-991",
+          "created_at": "2026-11-18T05:36:00Z"
+        }
+      }
+    },
+    "mcp_key_mint": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/mcp/keys",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token-standard"
+        },
+        "body": {
+          "name": "Standard CLI Runner",
+          "surface": "agent",
+          "scopes": [
+            "read",
+            "write"
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "key-usr-cli-101",
+          "name": "Standard CLI Runner",
+          "surface": "agent",
+          "token_prefix": "kb_mcp_std_",
+          "plaintext_token": "kb_mcp_std_EXAMPLE_TOKEN_SHOWN_ONCE",
+          "scopes": [
+            "read",
+            "write"
+          ],
+          "created_at": "2026-11-18T05:37:00Z"
+        }
+      }
+    },
+    "oauth_device_narrowed_scopes": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/mcp/activate",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token-standard"
+        },
+        "body": {
+          "user_code": "USER-CODE-1234",
+          "approved_scopes": [
+            "read"
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "status": "approved",
+          "client_name": "Antigravity Assistant Device",
+          "scopes": [
+            "read"
+          ]
+        }
+      }
+    },
+    "negative_rbac_denial_admin_auth": {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/admin/auth/cards"
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "type": "about:blank",
+          "title": "Not Found",
+          "status": 404
+        }
+      }
+    },
+    "negative_rbac_denial_viewer_create_cycle": {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects/QAVIEW/cycles",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token-standard"
+        },
+        "body": {
+          "name": "Unauthorized Sprint"
+        }
+      },
+      "response": {
+        "status": 403,
+        "body": {
+          "type": "https://errors.hackedyour.info/INSUFFICIENT_CAPABILITY",
+          "title": "Insufficient Capability",
+          "status": 403,
+          "detail": "Principal does not have CREATE_CYCLE capability on project QAVIEW."
+        }
+      }
+    }
+  }
+}

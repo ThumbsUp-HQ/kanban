@@ -1,0 +1,22 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 12 tests using 10 workers
+
+  ✓   1 [desktop] › e2e/qa/standard-user-browser-qa.spec.ts:310:3 › Standard User Browser QA Suite (KANBA-204) › 02: Hard WIP member block on Board (0 move requests, toast shown, zero override dialog) (1.5s)
+  ✓   9 [mobile] › e2e/qa/standard-user-browser-qa.spec.ts:310:3 › Standard User Browser QA Suite (KANBA-204) › 02: Hard WIP member block on Board (0 move requests, toast shown, zero override dialog) (1.6s)
+  ✓  10 [tablet] › e2e/qa/standard-user-browser-qa.spec.ts:310:3 › Standard User Browser QA Suite (KANBA-204) › 02: Hard WIP member block on Board (0 move requests, toast shown, zero override dialog) (1.6s)
+  ✓   3 [desktop] › e2e/qa/standard-user-browser-qa.spec.ts:612:3 › Standard User Browser QA Suite (KANBA-204) › 04: Personal MCP key lifecycle & /activate scope narrowing (2.9s)
+  ✓   6 [tablet] › e2e/qa/standard-user-browser-qa.spec.ts:612:3 › Standard User Browser QA Suite (KANBA-204) › 04: Personal MCP key lifecycle & /activate scope narrowing (3.0s)
+  ✓   4 [tablet] › e2e/qa/standard-user-browser-qa.spec.ts:376:3 › Standard User Browser QA Suite (KANBA-204) › 03: Positive self-service workflow (project creation, drafts, workflow transitions, XSS escaping, stickies-to-doc) (3.8s)
+  ✓  11 [mobile] › e2e/qa/standard-user-browser-qa.spec.ts:612:3 › Standard User Browser QA Suite (KANBA-204) › 04: Personal MCP key lifecycle & /activate scope narrowing (2.1s)
+  ✓   5 [desktop] › e2e/qa/standard-user-browser-qa.spec.ts:376:3 › Standard User Browser QA Suite (KANBA-204) › 03: Positive self-service workflow (project creation, drafts, workflow transitions, XSS escaping, stickies-to-doc) (4.0s)
+  ✓   2 [tablet] › e2e/qa/standard-user-browser-qa.spec.ts:179:3 › Standard User Browser QA Suite (KANBA-204) › 01: Standard member negative RBAC hiding across 19 surfaces & direct route denial (5.2s)
+  ✓   7 [mobile] › e2e/qa/standard-user-browser-qa.spec.ts:179:3 › Standard User Browser QA Suite (KANBA-204) › 01: Standard member negative RBAC hiding across 19 surfaces & direct route denial (5.2s)
+  ✓  12 [mobile] › e2e/qa/standard-user-browser-qa.spec.ts:376:3 › Standard User Browser QA Suite (KANBA-204) › 03: Positive self-service workflow (project creation, drafts, workflow transitions, XSS escaping, stickies-to-doc) (2.2s)
+  ✓   8 [desktop] › e2e/qa/standard-user-browser-qa.spec.ts:179:3 › Standard User Browser QA Suite (KANBA-204) › 01: Standard member negative RBAC hiding across 19 surfaces & direct route denial (5.2s)
+
+  12 passed (22.5s)
