@@ -12,9 +12,9 @@ def test_all_12_admin_tools_in_scope_requirements() -> None:
     """Verify all 12 official /mcp/admin tools exist in SCOPE_REQUIREMENTS."""
     assert len(ADMIN_TOOL_NAMES) == 12
     for tool_name in ADMIN_TOOL_NAMES:
-        assert (
-            tool_name in SCOPE_REQUIREMENTS
-        ), f"Tool '{tool_name}' missing from SCOPE_REQUIREMENTS"
+        assert tool_name in SCOPE_REQUIREMENTS, (
+            f"Tool '{tool_name}' missing from SCOPE_REQUIREMENTS"
+        )
         scopes = SCOPE_REQUIREMENTS[tool_name]
         assert isinstance(scopes, frozenset)
         assert any(s.startswith("admin:") for s in scopes)

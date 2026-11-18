@@ -553,8 +553,7 @@ async def test_case_7_security_permissions(
     assert post_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
     assert (
         "Missing required capability: EDIT (requires Project Member, Project Admin, "
-        "Workspace Admin, or Server Admin role)."
-        in post_403.json()["detail"]
+        "Workspace Admin, or Server Admin role)." in post_403.json()["detail"]
     )
 
     patch_403 = await viewer_client.patch(
@@ -593,8 +592,7 @@ async def test_case_7_security_permissions(
     assert del_member_403.json()["code"] == "INSUFFICIENT_CAPABILITY"
     assert (
         "Missing required capability: ADMIN (requires Project Admin, "
-        "Workspace Admin, or Server Admin role)."
-        in del_member_403.json()["detail"]
+        "Workspace Admin, or Server Admin role)." in del_member_403.json()["detail"]
     )
 
     # Outsider (no project access) attempts GET -> 404

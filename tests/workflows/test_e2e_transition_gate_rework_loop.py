@@ -81,10 +81,12 @@ class RepoVerifierHarness(Harness):
 
             # Check for defect: compute() must return non-negative value
             is_buggy = "-1" in code_text or "return -1" in code_text
-            self.invocations.append({
-                "head_commit": repo_ctx.head_commit,
-                "is_buggy": is_buggy,
-            })
+            self.invocations.append(
+                {
+                    "head_commit": repo_ctx.head_commit,
+                    "is_buggy": is_buggy,
+                }
+            )
 
             if is_buggy:
                 verdict = {
@@ -281,9 +283,7 @@ async def test_e2e_transition_gate_reject_rework_accept_loop(
                 decision,  # type: ignore[arg-type]
             )
 
-        async def record_failure(
-            self, execution_id: object, hook_id: object, code: str
-        ) -> object:
+        async def record_failure(self, execution_id: object, hook_id: object, code: str) -> object:
             return await GateCoordinator.record_failure(
                 self.session,
                 uuid.UUID(str(execution_id)),
@@ -312,7 +312,9 @@ async def test_e2e_transition_gate_reject_rework_accept_loop(
 
     # Verify hold is active in DB
     await api_env.seed.rollback()
-    issue_row_1 = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
+    issue_row_1 = (
+        await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
+    ).scalar_one()
     assert issue_row_1.pending_transition_exec_id == exec1_id
     assert issue_row_1.state_id == in_prog_id
 
@@ -380,7 +382,9 @@ async def test_e2e_transition_gate_reject_rework_accept_loop(
     assert inv1_db.output_json["cited_files"] == ["src/calc.py"]
 
     # Assert issue rolled back to source state (In Progress) and hold was cleared
-    issue_post_1 = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
+    issue_post_1 = (
+        await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
+    ).scalar_one()
     assert issue_post_1.state_id == in_prog_id
     assert issue_post_1.pending_transition_exec_id is None
 
@@ -429,7 +433,9 @@ async def test_e2e_transition_gate_reject_rework_accept_loop(
 
     # Verify hold is active in DB for execution 2
     await api_env.seed.rollback()
-    issue_row_2 = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
+    issue_row_2 = (
+        await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
+    ).scalar_one()
     assert issue_row_2.pending_transition_exec_id == exec2_id
     assert issue_row_2.state_id == in_prog_id
 
@@ -485,7 +491,9 @@ async def test_e2e_transition_gate_reject_rework_accept_loop(
     assert exec2_db.verdict_json["cited_files"] == ["src/calc.py"]
 
     # Assert issue advanced to Done (✅🤖) and hold was cleared
-    issue_post_2 = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
+    issue_post_2 = (
+        await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
+    ).scalar_one()
     assert issue_post_2.state_id == done_id
     assert issue_post_2.pending_transition_exec_id is None
 
@@ -511,17 +519,21 @@ async def test_e2e_transition_gate_reject_rework_accept_loop(
     # Verify cryptographic hash chain integrity across all records
     for i in range(1, len(records)):
         assert records[i].prev_hash == records[i - 1].row_hash, (
-            f"Hash chain broken between seq {records[i-1].chain_seq} and {records[i].chain_seq}"
+            f"Hash chain broken between seq {records[i - 1].chain_seq} and {records[i].chain_seq}"
         )
 
     # Verify outbox events emitted for both rejection and approval
     outbox_approved = (
-        await api_env.seed.execute(
-            select(OutboxEvent).where(
-                OutboxEvent.object_id == issue_id,
-                OutboxEvent.topic == "workflow.gate.approved",
+        (
+            await api_env.seed.execute(
+                select(OutboxEvent).where(
+                    OutboxEvent.object_id == issue_id,
+                    OutboxEvent.topic == "workflow.gate.approved",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(outbox_approved) >= 1
     assert outbox_approved[0].payload["execution_id"] == str(exec2_id)

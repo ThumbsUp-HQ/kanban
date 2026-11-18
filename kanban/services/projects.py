@@ -452,8 +452,10 @@ async def add_project_member(
         "WHERE p.id = :p_id AND p.workspace_id = :ws_id"
     )
     p_res = (
-        await session.execute(p_stmt, {"p_id": body.principal_id, "ws_id": caller.workspace_id})
-    ).mappings().first()
+        (await session.execute(p_stmt, {"p_id": body.principal_id, "ws_id": caller.workspace_id}))
+        .mappings()
+        .first()
+    )
     if p_res is None:
         not_found()
 
@@ -463,17 +465,12 @@ async def add_project_member(
         "WHERE project_id = :proj_id AND principal_id = :p_id AND scope_type = 'project'"
     )
     existing_id = (
-        await session.execute(
-            existing_stmt, {"proj_id": project.id, "p_id": body.principal_id}
-        )
+        await session.execute(existing_stmt, {"proj_id": project.id, "p_id": body.principal_id})
     ).scalar_one_or_none()
 
     if existing_id is not None:
         await session.execute(
-            text(
-                "UPDATE role_bindings SET role = CAST(:role AS rbac_role) "
-                "WHERE id = :binding_id"
-            ),
+            text("UPDATE role_bindings SET role = CAST(:role AS rbac_role) WHERE id = :binding_id"),
             {"role": body.role, "binding_id": existing_id},
         )
         binding_id = existing_id

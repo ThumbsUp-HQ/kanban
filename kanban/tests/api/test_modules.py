@@ -320,8 +320,7 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
     assert r_create_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
     assert (
         "Missing required capability: EDIT (requires Project Member, Project Admin, "
-        "Workspace Admin, or Server Admin role)."
-        in r_create_denied.json()["detail"]
+        "Workspace Admin, or Server Admin role)." in r_create_denied.json()["detail"]
     )
 
     r_patch_denied = await client_viewer.patch(
@@ -332,8 +331,7 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
     assert r_patch_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
     assert (
         "Missing required capability: EDIT (requires Project Member, Project Admin, "
-        "Workspace Admin, or Server Admin role)."
-        in r_patch_denied.json()["detail"]
+        "Workspace Admin, or Server Admin role)." in r_patch_denied.json()["detail"]
     )
 
     # Member with PROJECT_MEMBER (holds EDIT) can create and patch modules
@@ -356,8 +354,7 @@ async def test_case_3_security_anti_enumeration_and_rbac(  # noqa: PLR0913, PLR0
     assert r_del_denied.json()["code"] == "INSUFFICIENT_CAPABILITY"
     assert (
         "Missing required capability: ADMIN (requires Project Admin, "
-        "Workspace Admin, or Server Admin role)."
-        in r_del_denied.json()["detail"]
+        "Workspace Admin, or Server Admin role)." in r_del_denied.json()["detail"]
     )
 
     # 3. Lead principal eligibility

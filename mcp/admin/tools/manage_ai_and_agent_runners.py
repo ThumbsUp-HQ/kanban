@@ -423,9 +423,7 @@ async def manage_ai_and_agent_runners(arguments: dict[str, Any]) -> str:  # noqa
 
     # Normalize project / project_key / project_id alias
     resolved_proj = (
-        arguments.get("project_id")
-        or arguments.get("project")
-        or arguments.get("project_key")
+        arguments.get("project_id") or arguments.get("project") or arguments.get("project_key")
     )
     if resolved_proj:
         arguments["project_id"] = str(resolved_proj).strip()

@@ -850,9 +850,9 @@ class McpProtocolHandler:
                     "deactivate",
                     "reactivate",
                 }
-                if (
-                    action.startswith(("delete_", "purge_", "revoke_"))
-                    or action in ("execute_delete", "detach")
+                if action.startswith(("delete_", "purge_", "revoke_")) or action in (
+                    "execute_delete",
+                    "detach",
                 ):
                     required_admin_scope = "admin:destructive"
                 elif action.startswith(write_prefixes) or action in write_actions:

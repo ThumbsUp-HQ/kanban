@@ -102,10 +102,14 @@ def _validate_codex_sandbox(args: list[str]) -> None:
 
     for sub_index, sub_arg in enumerate(args[pinned_len:], start=pinned_len):
         sub_folded = sub_arg.casefold()
-        if (
-            sub_folded in ("-s", "--sandbox", "-c", "--config", "-p", "--profile")
-            or sub_folded.startswith(("--sandbox=", "--config=", "--profile="))
-        ):
+        if sub_folded in (
+            "-s",
+            "--sandbox",
+            "-c",
+            "--config",
+            "-p",
+            "--profile",
+        ) or sub_folded.startswith(("--sandbox=", "--config=", "--profile=")):
             msg = (
                 f"codex argument at index {sub_index} ({sub_arg!r}) attempts "
                 "to override sandbox mode or profile"
