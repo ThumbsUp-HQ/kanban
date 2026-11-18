@@ -64,7 +64,7 @@ async def _count(env: ApiEnv, sql: str, **params: Any) -> int:  # noqa: ANN401
     return int((await env.seed.execute(text(sql), params)).scalar_one())
 
 
-async def test_case_1_positive_create_get_etag_304_and_activity(
+async def test_case_1_positive_create_get_etag_304_and_activity(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -80,7 +80,6 @@ async def test_case_1_positive_create_get_etag_304_and_activity(
 
     desc = "# Description\n\nThis is a standard issue."
     expected_sha256 = hashlib.sha256(desc.encode("utf-8")).hexdigest()
-    expected_etag = f'"{expected_sha256}"'
 
     # Create issue
     resp = await client.post(
@@ -96,7 +95,9 @@ async def test_case_1_positive_create_get_etag_304_and_activity(
     contract_recorder.record("create_issue_201", resp.request, resp)
     assert resp.status_code == 201, resp.text
     assert resp.headers["Location"] == "/api/v1/issues/POS-1"
-    assert resp.headers["ETag"] == expected_etag
+    expected_etag = resp.headers["ETag"]
+    assert expected_etag.startswith('"')
+    assert expected_etag.endswith('"')
 
     body = resp.json()
     assert body["key"] == "POS-1"
@@ -154,6 +155,31 @@ async def test_case_1_positive_create_get_etag_304_and_activity(
         "/api/v1/issues/POS-1", headers={"If-None-Match": '"some-other-etag"'}
     )
     assert mismatch_resp.status_code == 200
+
+    # Non-description property edit (priority) MUST change ETag and invalidate 304 cache
+    patch_resp = await client.patch(
+        "/api/v1/issues/POS-1",
+        json={"priority": "urgent"},
+    )
+    assert patch_resp.status_code == 200
+    patched_body = patch_resp.json()
+    assert patched_body["priority"]["slug"] == "urgent"
+    updated_etag = patch_resp.headers["ETag"]
+    assert updated_etag != expected_etag
+
+    # GET with old ETag returns 200 OK (NOT 304 stale cache) and reflects updated DB state
+    stale_check_resp = await client.get(
+        "/api/v1/issues/POS-1", headers={"If-None-Match": expected_etag}
+    )
+    assert stale_check_resp.status_code == 200
+    assert stale_check_resp.json()["priority"]["slug"] == "urgent"
+    assert stale_check_resp.headers["ETag"] == updated_etag
+
+    # GET with updated ETag returns 304 Not Modified
+    fresh_304_resp = await client.get(
+        "/api/v1/issues/POS-1", headers={"If-None-Match": updated_etag}
+    )
+    assert fresh_304_resp.status_code == 304
 
 
 async def test_case_2_concurrency_if_match_428_412_and_race(

@@ -34,6 +34,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
         onCreate={handleCreate}
         projectKey="KAN"
         modulesEnabled={true}
+        modules={[{ id: 'mod-1', name: 'Core' }, { id: 'mod-2', name: 'UI' }]}
       />
     );
 
@@ -80,6 +81,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
         onCreate={handleCreate}
         projectKey="KAN"
         modulesEnabled={true}
+        modules={[{ id: 'mod-1', name: 'Core' }, { id: 'mod-2', name: 'UI' }]}
       />
     );
 
@@ -199,6 +201,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
         onCreate={handleCreate}
         projectKey="KAN"
         modulesEnabled={true}
+        modules={[{ id: 'mod-1', name: 'Core' }, { id: 'mod-2', name: 'UI' }]}
       />
     );
 
@@ -239,6 +242,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
         onCreate={handleCreate}
         projectKey="KAN"
         modulesEnabled={true}
+        modules={[{ id: 'mod-1', name: 'Core' }, { id: 'mod-2', name: 'UI' }]}
       />
     );
 
@@ -406,5 +410,69 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
 
     expect(handleCreate).not.toHaveBeenCalled();
     expect(handleClose).not.toHaveBeenCalled();
+  });
+
+  it('locks create button while submission is in-flight (disabled and aria-busy)', async () => {
+    let resolveCreate!: (res: unknown) => void;
+    const pendingPromise = new Promise((resolve) => {
+      resolveCreate = resolve;
+    });
+    const handleCreate = vi.fn().mockReturnValue(pendingPromise);
+
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText(/summary/i), {
+      target: { value: 'In-flight locking test' },
+    });
+    const createBtn = screen.getByRole('button', { name: /^create$/i }) as HTMLButtonElement;
+    expect(createBtn.disabled).toBe(false);
+
+    fireEvent.click(createBtn);
+
+    // In flight: button is locked
+    expect(createBtn.disabled).toBe(true);
+    expect(createBtn.getAttribute('aria-busy')).toBe('true');
+    expect(createBtn.textContent).toBe('Creating...');
+
+    // Resolve create
+    resolveCreate({ key: 'KAN-55', summary: 'In-flight locking test' });
+    await pendingPromise;
+
+    expect(await screen.findByText('KAN-55')).toBeDefined();
+  });
+
+  it('keeps modal open with draft preserved and shows inline alert when submission fails offline', async () => {
+    const handleCreate = vi.fn().mockRejectedValue(new Error('Slow 4G network timeout'));
+
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+
+    const summaryInput = screen.getByLabelText(/summary/i);
+    const descInput = screen.getByLabelText(/description/i);
+    fireEvent.change(summaryInput, { target: { value: 'Offline task draft' } });
+    fireEvent.change(descInput, { target: { value: 'Important draft details to preserve' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    const errorAlert = await screen.findByTestId('quick-create-error');
+    expect(errorAlert.textContent).toContain('Slow 4G network timeout');
+
+    // Dialog stays open and typed values are preserved
+    expect(screen.getByRole('dialog')).toBeDefined();
+    expect((screen.getByLabelText(/summary/i) as HTMLInputElement).value).toBe('Offline task draft');
+    expect((screen.getByLabelText(/description/i) as HTMLTextAreaElement).value).toBe('Important draft details to preserve');
   });
 });

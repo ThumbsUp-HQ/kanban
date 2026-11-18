@@ -126,6 +126,10 @@ function IssueSurfaceContent({
   const [editingIssueKey, setEditingIssueKey] = useState<string | null>(null);
   const isEditingDescription = editingIssueKey === issueKey;
   const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [conflictError, setConflictError] = useState<{
+    status: 412 | 428;
+    message: string;
+  } | null>(null);
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
 
   const [isNavHidden, setIsNavHidden] = useState<boolean>(() => {
@@ -444,12 +448,28 @@ function IssueSurfaceContent({
           '/api/v1/issues/{issue_key}',
           opts,
         )) as unknown as IssueDetail;
+        setConflictError(null);
         queryClient.setQueryData<IssueDetail>(
           qk.issue(currentIssue.key),
           normalizeIssueDetail(saved, projectKey),
         );
         window.dispatchEvent(new CustomEvent('kb:issue-updated'));
-      } catch {
+      } catch (err: unknown) {
+        if (
+          err instanceof ApiProblem &&
+          (err.status === 412 || err.status === 428)
+        ) {
+          setConflictError({
+            status: err.status as 412 | 428,
+            message:
+              err.status === 412
+                ? 'This work item was updated in another session (412 Precondition Failed). Your draft has been preserved.'
+                : 'Precondition required (428). Please reload the latest version before saving.',
+          });
+          setEditingIssueKey(issueKey);
+          queryClient.setQueryData<IssueDetail>(qk.issue(currentIssue.key), currentIssue);
+          return;
+        }
         // Preserve optimistic update in offline/test mode
       }
     };
@@ -469,6 +489,71 @@ function IssueSurfaceContent({
 
     const proseBody = (
       <>
+        {conflictError && (
+          <div
+            className="surface__conflict-banner"
+            role="alert"
+            data-testid="conflict-banner"
+          >
+            <div className="conflict-banner__message">
+              <span className="conflict-banner__icon">⚠️</span>
+              <span>{conflictError.message}</span>
+            </div>
+            <div className="conflict-banner__actions">
+              <button
+                type="button"
+                className="conflict-banner__reload-btn"
+                onClick={() => {
+                  void refetch().then((result) => {
+                    if (result.data) {
+                      setConflictError(null);
+                    }
+                  });
+                }}
+              >
+                Reload Latest
+              </button>
+              <button
+                type="button"
+                className="conflict-banner__overwrite-btn"
+                onClick={async () => {
+                  const fresh = await refetch();
+                  if (fresh.data?.etag) {
+                    try {
+                      const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
+                        params: { issue_key: currentIssue.key },
+                        body: { description_markdown: descriptionDraft },
+                        ifMatch: fresh.data.etag,
+                      })) as unknown as IssueDetail;
+                      setConflictError(null);
+                      setEditingIssueKey(null);
+                      queryClient.setQueryData<IssueDetail>(
+                        qk.issue(currentIssue.key),
+                        normalizeIssueDetail(saved, projectKey),
+                      );
+                      window.dispatchEvent(new CustomEvent('kb:issue-updated'));
+                    } catch {
+                      // Stay in conflict state if overwrite fails
+                    }
+                  }
+                }}
+              >
+                Overwrite
+              </button>
+              <button
+                type="button"
+                className="conflict-banner__discard-btn"
+                onClick={() => {
+                  setConflictError(null);
+                  setEditingIssueKey(null);
+                  void refetch();
+                }}
+              >
+                Discard Draft
+              </button>
+            </div>
+          </div>
+        )}
         <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
         {DescriptionSlot ? (
           <DescriptionSlot issue={currentIssue} focusRef={descRef} />

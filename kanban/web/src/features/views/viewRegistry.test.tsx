@@ -724,8 +724,11 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('KAN-202')).toBeDefined();
+        expect(screen.getAllByText('KAN-202').length).toBeGreaterThan(0);
       });
+
+      const doneBtn = screen.queryByRole('button', { name: /^done$/i });
+      if (doneBtn) fireEvent.click(doneBtn);
 
       // Quick field update in live mode
       fireEvent.keyDown(window, { key: 'j' });
@@ -917,7 +920,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('KAN-999')).toBeDefined();
+        expect(screen.getAllByText('KAN-999').length).toBeGreaterThan(0);
       });
 
       // Trigger error in refreshLive on kb:issue-updated event

@@ -242,6 +242,12 @@ class IssueResponse(BaseModel):
     description_sha256: str = Field(
         description="Hex-encoded SHA-256 digest of description_markdown for ETag concurrency"
     )
+    etag: str | None = Field(
+        default=None,
+        description=(
+            "Quoted strong ETag digest covering description and serialized attributes (KANBA-212)"
+        ),
+    )
     state: StateSummary = Field(description="Workflow state metadata")
     priority: PrioritySummary = Field(description="Priority metadata")
     start_date: date | None = Field(default=None, description="Scheduled start date (YYYY-MM-DD)")

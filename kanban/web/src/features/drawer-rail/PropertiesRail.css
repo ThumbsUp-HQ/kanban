@@ -577,3 +577,36 @@
   min-width: 24px;
   min-height: 24px;
 }
+
+.labels-dropdown__create-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.labels-dropdown__color-palette {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.labels-dropdown__color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease;
+}
+
+.labels-dropdown__color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.labels-dropdown__color-swatch--selected {
+  outline: 2px solid var(--accent-primary, #3b82f6);
+  outline-offset: 1px;
+}

@@ -81,6 +81,9 @@ export interface ProjectMetadata {
 }
 
 export async function fetchProjectMetadata(projectKey: string): Promise<ProjectMetadata> {
+  if (!projectKey || projectKey === 'undefined') {
+    return { key: projectKey || '', name: projectKey || '' };
+  }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}' as never, {
     params: { project_ref: projectKey },
   });
@@ -104,6 +107,9 @@ export async function patchIssue(
 }
 
 export async function fetchProjectPriorities(projectKey: string): Promise<ProjectPriority[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/priorities' as never, {
     params: { project_ref: projectKey },
   });
@@ -119,6 +125,9 @@ export async function fetchAssigneeSuggestions(
   query: string,
   limit = 10,
 ): Promise<AssigneeSuggestionItem[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/assignee-suggestions' as never, {
     params: { project_ref: projectKey },
     query: { q: query, limit },
@@ -155,6 +164,9 @@ export async function overrideCreator(
 }
 
 export async function fetchProjectModules(projectKey: string): Promise<ProjectModule[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/modules' as never, {
     params: { project_ref: projectKey },
   });
@@ -173,6 +185,9 @@ export async function updateIssueModules(key: string, moduleIds: string[]): Prom
 }
 
 export async function fetchProjectCycles(projectKey: string): Promise<ProjectCycle[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/cycles' as never, {
     params: { project_ref: projectKey },
   });
@@ -184,6 +199,9 @@ export async function fetchProjectCycles(projectKey: string): Promise<ProjectCyc
 }
 
 export async function fetchProjectLabels(projectKey: string): Promise<ProjectLabel[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/labels' as never, {
     params: { project_ref: projectKey },
   });
@@ -196,11 +214,24 @@ export async function fetchProjectLabels(projectKey: string): Promise<ProjectLab
 
 export async function createProjectLabel(
   projectKey: string,
-  payload: { name: string; color?: string; exclusive_group?: string | null },
+  payload: { name: string; color?: string; color_hex?: string; exclusive_group?: string | null },
 ): Promise<ProjectLabel> {
+  if (!projectKey || projectKey === 'undefined') {
+    throw new Error('Project key is required to create a label');
+  }
+  const body: Record<string, unknown> = {
+    name: payload.name,
+  };
+  const colorHex = payload.color_hex || payload.color;
+  if (colorHex) {
+    body.color_hex = colorHex;
+  }
+  if (payload.exclusive_group !== undefined) {
+    body.exclusive_group = payload.exclusive_group;
+  }
   const res = await apiFetch('POST', '/api/v1/projects/{project_ref}/labels' as never, {
     params: { project_ref: projectKey },
-    body: payload,
+    body,
   });
   return res as ProjectLabel;
 }

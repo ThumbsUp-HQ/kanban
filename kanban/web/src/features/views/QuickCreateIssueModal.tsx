@@ -13,6 +13,7 @@ export interface QuickCreateIssueModalProps {
   defaultStateId?: string;
   defaultPrioritySlug?: string;
   defaultModuleIds?: string[];
+  states?: { id: string; name: string; group?: string }[];
   modules?: { id: string; name: string; emoji?: string }[];
   onOpenPeek?: (issueKey: string) => void;
 }
@@ -24,11 +25,6 @@ interface PostCreateState {
   draftId?: string;
 }
 
-const DEFAULT_QUICK_MODULES: { id: string; name: string; emoji?: string }[] = [
-  { id: 'mod-1', name: 'Auth Core', emoji: '🔒' },
-  { id: 'mod-2', name: 'Kanban Board', emoji: '📋' },
-];
-
 export function QuickCreateIssueModal({
   isOpen,
   onClose,
@@ -37,7 +33,8 @@ export function QuickCreateIssueModal({
   modulesEnabled = true,
   defaultStateId = 'state-todo',
   defaultPrioritySlug = 'medium',
-  defaultModuleIds = ['mod-1'],
+  defaultModuleIds = [],
+  states,
   modules,
   onOpenPeek,
 }: QuickCreateIssueModalProps): JSX.Element | null {
@@ -49,6 +46,8 @@ export function QuickCreateIssueModal({
     modulesEnabled ? defaultModuleIds : [],
   );
   const [isDraft, setIsDraft] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [postCreateData, setPostCreateData] = useState<PostCreateState | null>(null);
 
   const summaryInputRef = useRef<HTMLInputElement>(null);
@@ -174,9 +173,9 @@ export function QuickCreateIssueModal({
     handleDone();
   };
 
-  const handleSubmit = (e: React.SyntheticEvent): void => {
+  const handleSubmit = async (e: React.SyntheticEvent): Promise<void> => {
     e.preventDefault();
-    if (!summary.trim()) return;
+    if (!summary.trim() || isSubmitting) return;
 
     if (isDraft) {
       const draft = saveDraft({
@@ -201,16 +200,27 @@ export function QuickCreateIssueModal({
       summary: summary.trim(),
       state: {
         id: stateId,
-        name: stateId.includes('progress')
-          ? 'In Progress'
-          : stateId.includes('todo')
-            ? 'Todo'
-            : 'Backlog',
-        group: stateId.includes('progress')
-          ? 'started'
-          : stateId.includes('todo')
-            ? 'unstarted'
-            : 'backlog',
+        name: stateId.includes('review')
+          ? 'In Review'
+          : stateId.includes('progress')
+            ? 'In Progress'
+            : stateId.includes('done')
+              ? 'Done'
+              : stateId.includes('cancel')
+                ? 'Cancelled'
+                : stateId.includes('todo')
+                  ? 'Todo'
+                  : 'Backlog',
+        group:
+          stateId.includes('review') || stateId.includes('progress')
+            ? 'started'
+            : stateId.includes('done')
+              ? 'completed'
+              : stateId.includes('cancel')
+                ? 'cancelled'
+                : stateId.includes('todo')
+                  ? 'unstarted'
+                  : 'backlog',
       },
       priority: {
         slug: prioritySlug,
@@ -235,17 +245,44 @@ export function QuickCreateIssueModal({
       payload.module_ids = selectedModuleIds;
     }
 
-    const res = onCreate(payload) as Partial<IssueItem> | undefined;
-    const resolvedKey =
-      res && typeof res === 'object' && typeof res.key === 'string'
-        ? res.key
-        : `${projectKey}-NEW`;
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const maybePromise = onCreate(payload);
+      if (maybePromise && typeof (maybePromise as Promise<unknown>).then === 'function') {
+        const res = (await maybePromise) as Partial<IssueItem> | undefined;
+        const resolvedKey =
+          res && typeof res === 'object' && typeof res.key === 'string'
+            ? res.key
+            : `${projectKey}-NEW`;
 
-    setPostCreateData({
-      key: resolvedKey,
-      summary: summary.trim(),
-      isDraft: false,
-    });
+        setPostCreateData({
+          key: resolvedKey,
+          summary: summary.trim(),
+          isDraft: false,
+        });
+      } else {
+        const res = maybePromise as Partial<IssueItem> | undefined;
+        const resolvedKey =
+          res && typeof res === 'object' && typeof res.key === 'string'
+            ? res.key
+            : `${projectKey}-NEW`;
+
+        setPostCreateData({
+          key: resolvedKey,
+          summary: summary.trim(),
+          isDraft: false,
+        });
+      }
+    } catch (err: unknown) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : 'Network error: Failed to create issue. Your draft has been preserved.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // --------------------------------------------------------------------------
@@ -329,6 +366,7 @@ export function QuickCreateIssueModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="quick-create-title"
+      data-testid="quick-create-modal"
     >
       <div className="quick-create-modal">
         <div className="quick-create-header">
@@ -395,10 +433,22 @@ export function QuickCreateIssueModal({
                   setStateId(e.target.value);
                 }}
               >
-                <option value="state-backlog">Backlog</option>
-                <option value="state-todo">Todo</option>
-                <option value="state-in-progress">In Progress</option>
-                <option value="state-done">Done</option>
+                {states && states.length > 0 ? (
+                  states.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="state-backlog">Backlog</option>
+                    <option value="state-todo">Todo</option>
+                    <option value="state-in-progress">In Progress</option>
+                    <option value="state-in-review">In Review</option>
+                    <option value="state-done">Done</option>
+                    <option value="state-canceled">Cancelled</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -443,7 +493,7 @@ export function QuickCreateIssueModal({
                   }}
                 >
                   <option value="">No Module</option>
-                  {(modules ?? DEFAULT_QUICK_MODULES).map((mod) => (
+                  {(modules ?? []).map((mod) => (
                     <option key={mod.id} value={mod.id}>
                       {`${mod.emoji ?? '🧩'} ${mod.name}`}
                     </option>
@@ -452,6 +502,16 @@ export function QuickCreateIssueModal({
               </div>
             )}
           </div>
+
+          {submitError && (
+            <div
+              className="quick-create-alert quick-create-alert--error"
+              role="alert"
+              data-testid="quick-create-error"
+            >
+              <span>⚠️ {submitError}</span>
+            </div>
+          )}
 
           {/* ✍️ Keep work-in-progress Draft Checkbox */}
           <div className="quick-create-draft-row">
@@ -479,15 +539,18 @@ export function QuickCreateIssueModal({
               type="button"
               className="quick-create-btn-cancel"
               onClick={handleClose}
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="quick-create-btn-submit"
-              disabled={!summary.trim()}
+              data-testid="quick-create-submit-btn"
+              disabled={!summary.trim() || isSubmitting}
+              aria-busy={isSubmitting}
             >
-              {isDraft ? 'Save Draft' : 'Create'}
+              {isSubmitting ? 'Creating...' : isDraft ? 'Save Draft' : 'Create'}
             </button>
           </div>
         </form>

@@ -1,5 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback, type JSX } from 'react';
-import type { GroupAxis } from './viewsApi';
+import React, { useState, useRef, useEffect, useCallback, useMemo, type JSX } from 'react';
+import type { GroupAxis, IssueItem } from './viewsApi';
+import {
+  fetchAssigneeSuggestions,
+  fetchProjectLabels,
+  fetchProjectCycles,
+  fetchProjectModules,
+} from '../drawer-rail/railApi';
 import './filterBulk.css';
 
 export interface ActiveFilters {
@@ -26,6 +32,8 @@ export interface FilterDisplayBarProps {
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
   isFilterOpen?: boolean;
   onToggleFilterOpen?: (open: boolean) => void;
+  projectKey?: string;
+  issues?: IssueItem[];
 }
 
 interface FacetOption {
@@ -47,10 +55,16 @@ export function FilterDisplayBar({
   searchInputRef: externalSearchRef,
   isFilterOpen: externalFilterOpen,
   onToggleFilterOpen: externalToggleFilterOpen,
+  projectKey,
+  issues,
 }: FilterDisplayBarProps): JSX.Element {
   const [internalFilterOpen, setInternalFilterOpen] = useState(false);
   const [isDisplayTuneOpen, setIsDisplayTuneOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveAssignees, setLiveAssignees] = useState<FacetOption[]>([]);
+  const [liveLabels, setLiveLabels] = useState<FacetOption[]>([]);
+  const [liveCycles, setLiveCycles] = useState<FacetOption[]>([]);
+  const [liveModules, setLiveModules] = useState<FacetOption[]>([]);
   const internalSearchRef = useRef<HTMLInputElement>(null);
   const searchRef = externalSearchRef ?? internalSearchRef;
 
@@ -62,6 +76,114 @@ export function FilterDisplayBar({
       setInternalFilterOpen(open);
     }
   }, [externalToggleFilterOpen]);
+
+  // Hydrate dynamic facets from live project endpoints when projectKey is present
+  useEffect(() => {
+    if (!projectKey || projectKey === 'undefined') return;
+    let active = true;
+
+    void Promise.allSettled([
+      fetchAssigneeSuggestions(projectKey, '').then((res) => {
+        if (!active) return;
+        setLiveAssignees(
+          res.map((s) => ({
+            key: s.handle.replace(/^@/, '').toLowerCase(),
+            label: s.display_name || s.handle,
+            category: 'assignee',
+          }))
+        );
+      }),
+      fetchProjectLabels(projectKey).then((res) => {
+        if (!active) return;
+        setLiveLabels(
+          res.map((l) => ({
+            key: l.name.toLowerCase(),
+            label: l.name,
+            category: 'label',
+          }))
+        );
+      }),
+      fetchProjectCycles(projectKey).then((res) => {
+        if (!active) return;
+        setLiveCycles(
+          res.map((c) => ({
+            key: c.id,
+            label: c.name,
+            category: 'cycle',
+          }))
+        );
+      }),
+      fetchProjectModules(projectKey).then((res) => {
+        if (!active) return;
+        setLiveModules(
+          res.map((m) => ({
+            key: m.id,
+            label: m.name,
+            category: 'module',
+          }))
+        );
+      }),
+    ]);
+
+    return () => {
+      active = false;
+    };
+  }, [projectKey]);
+
+  // Derive dynamic facets from issues collection
+  const derivedFacets = useMemo(() => {
+    const assigneeMap = new Map<string, string>();
+    const labelMap = new Map<string, string>();
+    const cycleMap = new Map<string, string>();
+    const moduleMap = new Map<string, string>();
+
+    for (const issue of issues ?? []) {
+      for (const asg of issue.assignees ?? []) {
+        if (asg.kind === 'principal') {
+          const key = asg.principal.handle.replace(/^@/, '').toLowerCase();
+          const label = asg.principal.display_name || asg.principal.handle;
+          assigneeMap.set(key, label);
+        }
+      }
+      for (const lbl of issue.labels ?? []) {
+        labelMap.set(lbl.name.toLowerCase(), lbl.name);
+      }
+      if (issue.cycle_id) {
+        cycleMap.set(issue.cycle_id, issue.cycle_id === 'cycle-1' ? 'Cycle 1' : issue.cycle_id);
+      }
+      for (const mId of issue.module_ids ?? []) {
+        moduleMap.set(mId, mId === 'mod-1' ? 'Auth Core' : (mId === 'mod-2' ? 'Kanban Board' : mId));
+      }
+    }
+
+    return {
+      assignees: Array.from(assigneeMap.entries()).map(([key, label]) => ({
+        key,
+        label,
+        category: 'assignee',
+      })),
+      labels: Array.from(labelMap.entries()).map(([key, label]) => ({
+        key,
+        label,
+        category: 'label',
+      })),
+      cycles: Array.from(cycleMap.entries()).map(([key, label]) => ({
+        key,
+        label,
+        category: 'cycle',
+      })),
+      modules: Array.from(moduleMap.entries()).map(([key, label]) => ({
+        key,
+        label,
+        category: 'module',
+      })),
+    };
+  }, [issues]);
+
+  const effectiveAssignees = liveAssignees.length > 0 ? liveAssignees : derivedFacets.assignees;
+  const effectiveLabels = liveLabels.length > 0 ? liveLabels : derivedFacets.labels;
+  const effectiveCycles = liveCycles.length > 0 ? liveCycles : derivedFacets.cycles;
+  const effectiveModules = liveModules.length > 0 ? liveModules : derivedFacets.modules;
 
   // Keyboard shortcut '/' opens filter search input and prevents character typing
   useEffect(() => {
@@ -105,7 +227,7 @@ export function FilterDisplayBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const facetDefinitions: FacetOption[] = [
+  const facetDefinitions: FacetOption[] = useMemo(() => [
     { key: 'active', label: 'Active', category: 'state' },
     { key: 'backlog', label: 'Backlog', emoji: '🗂️', category: 'state' },
     { key: 'unstarted', label: 'Todo', emoji: '📋', category: 'state' },
@@ -120,22 +242,13 @@ export function FilterDisplayBar({
     { key: 'none', label: 'None', category: 'priority' },
 
     { key: 'unassigned', label: 'Unassigned', category: 'assignee' },
-    { key: 'alice', label: 'Alice Cooper', category: 'assignee' },
-    { key: 'adam', label: 'Adam Outler', category: 'assignee' },
+    ...effectiveAssignees,
 
-    { key: 'database', label: 'Database', category: 'label' },
-    { key: 'security', label: 'Security', category: 'label' },
-    { key: 'auth', label: 'Auth', category: 'label' },
+    ...effectiveLabels,
 
-    { key: 'cycle-1', label: 'Cycle 1', category: 'cycle' },
+    ...effectiveCycles,
 
-    // Modules facet: conditionally included ONLY if modulesEnabled is true
-    ...(modulesEnabled
-      ? [
-          { key: 'auth-core', label: 'Auth Core', category: 'module' },
-          { key: 'kanban-board', label: 'Kanban Board', category: 'module' },
-        ]
-      : []),
+    ...(modulesEnabled ? effectiveModules : []),
 
     { key: 'overdue', label: 'Overdue', category: 'due_date' },
     { key: 'this_week', label: 'Due this week', category: 'due_date' },
@@ -144,7 +257,7 @@ export function FilterDisplayBar({
     { key: 'pending', label: '⏳🤖 Pending', category: 'gate_status' },
     { key: 'vetoed', label: '🛑🤖 Vetoed', category: 'gate_status' },
     { key: 'approved', label: '✅🤖 Approved', category: 'gate_status' },
-  ];
+  ], [effectiveAssignees, effectiveLabels, effectiveCycles, effectiveModules, modulesEnabled]);
 
   const handleToggleFacet = (category: string, value: string) => {
     const current = activeFilters[category] ?? [];

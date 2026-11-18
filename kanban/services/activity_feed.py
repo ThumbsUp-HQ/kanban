@@ -289,6 +289,34 @@ async def _resolve_actors(  # noqa: C901
     return actors
 
 
+async def _enrich_creator_override_payload(
+    session: AsyncSession,
+    caller: PrincipalContext,
+    payload: dict[str, Any],
+    actors_map: dict[uuid.UUID, NormalActorSummary | RedactedActorSummary],
+    project_id: uuid.UUID | None = None,
+) -> None:
+    """Resolve human-readable handles for CREATOR_OVERRIDDEN activity diffs."""
+    for id_key, target_field in (
+        ("old_created_by_id", "old_created_by"),
+        ("new_created_by_id", "new_created_by"),
+    ):
+        val = payload.get(id_key)
+        if val is None or not isinstance(val, str):
+            continue
+        with contextlib.suppress(ValueError, TypeError):
+            ref_u = uuid.UUID(val)
+            actor_summary = actors_map.get(ref_u)
+            if actor_summary is None:
+                sub_map = await _resolve_actors(session, caller, {ref_u}, project_id)
+                actor_summary = sub_map.get(ref_u)
+            if isinstance(actor_summary, NormalActorSummary):
+                actor_name = actor_summary.handle or actor_summary.display_name or "Unknown"
+                payload[target_field] = actor_name
+            elif isinstance(actor_summary, RedactedActorSummary):
+                payload[target_field] = actor_summary.label
+
+
 async def _sanitize_payload(
     session: AsyncSession,
     caller: PrincipalContext,
@@ -320,6 +348,14 @@ async def _sanitize_payload(
                     actor_summary = sub_map.get(ref_uuid)
                 if isinstance(actor_summary, RedactedActorSummary):
                     payload[key] = {"redacted": True, "label": "1 External Collaborator"}
+
+    # Resolve human-readable handles for CREATOR_OVERRIDDEN events
+    if record.event_type in (
+        "CREATOR_OVERRIDDEN",
+        ActivityEventType.CREATOR_OVERRIDDEN.value,
+        ActivityEventType.CREATOR_OVERRIDDEN,
+    ):
+        await _enrich_creator_override_payload(session, caller, payload, actors_map, project_id)
 
     # 2. Mask unreadable linked objects in LINK_CREATED / LINK_DELETED
     if record.event_type in (

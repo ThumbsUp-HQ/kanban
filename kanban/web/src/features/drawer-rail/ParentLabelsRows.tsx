@@ -9,8 +9,10 @@ export interface ParentLabelsRowsProps {
   canEdit: boolean;
   onUpdateParent: (parentKey: string | null) => Promise<void>;
   onUpdateLabels: (labelIds: string[]) => Promise<void>;
-  onCreateLabel?: ((name: string) => Promise<ProjectLabel>) | undefined;
+  onCreateLabel?: ((name: string, colorHex?: string) => Promise<ProjectLabel>) | undefined;
 }
+
+const LABEL_PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];
 
 export function ParentLabelsRows({
   issue,
@@ -25,6 +27,7 @@ export function ParentLabelsRows({
   const [parentError, setParentError] = useState<string | null>(null);
 
   const [labelQuery, setLabelQuery] = useState('');
+  const [labelColor, setLabelColor] = useState('#3b82f6');
   const [isLabelMenuOpen, setIsLabelMenuOpen] = useState(false);
   const [exclusiveAnnouncement, setExclusiveAnnouncement] = useState<string | null>(null);
 
@@ -130,10 +133,10 @@ export function ParentLabelsRows({
     await onUpdateLabels(updatedIds);
   };
 
-  const handleCreateLabel = async (name: string): Promise<void> => {
+  const handleCreateLabel = async (name: string, colorHex = '#3b82f6'): Promise<void> => {
     if (!onCreateLabel || !name.trim()) return;
     try {
-      const created = await onCreateLabel(name.trim());
+      const created = await onCreateLabel(name.trim(), colorHex);
       await handleToggleLabel(created);
       setLabelQuery('');
       setIsLabelMenuOpen(false);
@@ -332,13 +335,29 @@ export function ParentLabelsRows({
                   {labelQuery.trim() &&
                   onCreateLabel &&
                   !projectLabels.some((l) => l.name.toLowerCase() === labelQuery.trim().toLowerCase()) ? (
-                    <button
-                      type="button"
-                      className="labels-dropdown__clear-btn"
-                      onClick={() => void handleCreateLabel(labelQuery)}
-                    >
-                      + Create label &ldquo;{labelQuery.trim()}&rdquo;
-                    </button>
+                    <div className="labels-dropdown__create-wrap">
+                      <div className="labels-dropdown__color-palette" role="radiogroup" aria-label="Label color">
+                        {LABEL_PALETTE.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            className={`labels-dropdown__color-swatch ${labelColor === c ? 'labels-dropdown__color-swatch--selected' : ''}`}
+                            style={{ backgroundColor: c }}
+                            aria-label={`Select color ${c}`}
+                            aria-checked={labelColor === c}
+                            role="radio"
+                            onClick={() => { setLabelColor(c); }}
+                          />
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="labels-dropdown__clear-btn"
+                        onClick={() => void handleCreateLabel(labelQuery, labelColor)}
+                      >
+                        + Create label &ldquo;{labelQuery.trim()}&rdquo;
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               ) : null}

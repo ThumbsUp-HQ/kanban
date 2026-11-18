@@ -52,7 +52,11 @@ export function PropertiesRail({
   const [cycles, setCycles] = useState<ProjectCycle[]>([]);
   const [labels, setLabels] = useState<ProjectLabel[]>(initialMetadata?.labels ?? []);
 
-  const projectKey = currentIssue.project_key;
+  const rawProject = currentIssue.project_key;
+  const projectKey: string =
+    rawProject && rawProject !== 'undefined'
+      ? rawProject
+      : (currentIssue.key && currentIssue.key.includes('-') ? (currentIssue.key.split('-')[0] ?? '') : '');
   const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
   const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
   const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');
@@ -64,6 +68,9 @@ export function PropertiesRail({
   useEffect(() => {
     let isMounted = true;
     async function loadAux(): Promise<void> {
+      if (!projectKey || projectKey === 'undefined') {
+        return;
+      }
       try {
         if (!initialMetadata) {
           const meta = await fetchProjectMetadata(projectKey);
@@ -227,8 +234,8 @@ export function PropertiesRail({
     await patchIssue(currentIssue.key, { label_ids: labelIds }, currentIssue.etag);
   };
 
-  const handleCreateLabel = async (name: string): Promise<ProjectLabel> => {
-    const created = await createProjectLabel(projectKey, { name });
+  const handleCreateLabel = async (name: string, colorHex = '#3b82f6'): Promise<ProjectLabel> => {
+    const created = await createProjectLabel(projectKey, { name, color_hex: colorHex });
     setLabels((prev) => [...prev, created]);
     return created;
   };

@@ -191,11 +191,24 @@ export function SwimlaneBoardGrid({
       ];
     }
     if (subGroupBy === 'assignee') {
-      return [
-        { id: 'alice', title: 'Alice Cooper', sortOrder: 10 },
-        { id: 'adam', title: 'Adam Outler', sortOrder: 20 },
-        { id: 'unassigned', title: 'Unassigned', sortOrder: 99 },
-      ];
+      const assigneeMap = new Map<string, string>();
+      for (const issue of issues) {
+        for (const asg of issue.assignees ?? []) {
+          if (asg.kind === 'principal') {
+            const key = asg.principal.handle.replace(/^@/, '').toLowerCase();
+            const label = asg.principal.display_name || asg.principal.handle;
+            assigneeMap.set(key, label);
+          }
+        }
+      }
+      const lanes: SwimlaneDef[] = [];
+      let sortOrder = 10;
+      for (const [id, title] of assigneeMap.entries()) {
+        lanes.push({ id, title, sortOrder });
+        sortOrder += 10;
+      }
+      lanes.push({ id: 'unassigned', title: 'Unassigned', sortOrder: 99 });
+      return lanes;
     }
     if (subGroupBy === 'cycle') {
       const cycleLanes: SwimlaneDef[] = allCycles.map((c, idx) => ({
@@ -217,7 +230,7 @@ export function SwimlaneBoardGrid({
     }
     // Fallback single swimlane if none or unknown
     return [{ id: 'all', title: 'All Work Items', sortOrder: 10 }];
-  }, [subGroupBy, modulesEnabled, allCycles, allModules]);
+  }, [subGroupBy, modulesEnabled, allCycles, allModules, issues]);
 
   // 3. Partition issues into 2D grid [laneId][colId]
   const partitionedGrid = useMemo(() => {

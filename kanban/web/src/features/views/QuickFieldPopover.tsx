@@ -18,6 +18,7 @@ export interface QuickFieldPopoverProps {
   onClose: () => void;
   onSelect: (field: QuickFieldType, value: unknown) => void;
   modulesEnabled?: boolean;
+  states?: { id: string; name: string }[];
 }
 
 interface OptionItem {
@@ -35,6 +36,7 @@ export function QuickFieldPopover({
   onClose,
   onSelect,
   modulesEnabled = true,
+  states,
 }: QuickFieldPopoverProps): JSX.Element | null {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -62,13 +64,22 @@ export function QuickFieldPopover({
       ];
     } else if (field === 'state') {
       t = 'State';
-      opts = [
-        { id: 'backlog', label: 'Backlog', value: 'state-backlog' },
-        { id: 'todo', label: 'Todo', value: 'state-todo' },
-        { id: 'in-progress', label: 'In Progress', value: 'state-in-progress' },
-        { id: 'done', label: 'Done', value: 'state-done' },
-        { id: 'cancelled', label: 'Cancelled', value: 'state-cancelled' },
-      ];
+      if (states && states.length > 0) {
+        opts = states.map((s) => ({
+          id: s.id,
+          label: s.name,
+          value: s.id,
+        }));
+      } else {
+        opts = [
+          { id: 'backlog', label: 'Backlog', value: 'state-backlog' },
+          { id: 'todo', label: 'Todo', value: 'state-todo' },
+          { id: 'in-progress', label: 'In Progress', value: 'state-in-progress' },
+          { id: 'in-review', label: 'In Review', value: 'state-in-review' },
+          { id: 'done', label: 'Done', value: 'state-done' },
+          { id: 'cancelled', label: 'Cancelled', value: 'state-cancelled' },
+        ];
+      }
     } else if (field === 'assignee') {
       t = 'Assignee';
       opts = [
@@ -100,7 +111,7 @@ export function QuickFieldPopover({
     }
 
     return { title: t, options: opts };
-  }, [field]);
+  }, [field, states]);
 
   // Anchor popover position strictly via CSSOM element refs inside useLayoutEffect (Strict CSP)
   useLayoutEffect(() => {

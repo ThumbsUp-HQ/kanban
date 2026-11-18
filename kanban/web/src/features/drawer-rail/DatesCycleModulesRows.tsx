@@ -34,7 +34,10 @@ export function DatesCycleModulesRows({
   const stateGroup = issue.state?.group ?? (issue.state?.name === 'Done' ? 'completed' : '');
   const isResolved = stateGroup === 'completed' || stateGroup === 'cancelled';
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const year = new Date().getFullYear();
+  const month = String(new Date().getMonth() + 1).padStart(2, '0');
+  const day = String(new Date().getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
   const isOverdue = Boolean(dueDate && dueDate < todayStr && !isResolved);
 
   const handleStartDateChange = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {

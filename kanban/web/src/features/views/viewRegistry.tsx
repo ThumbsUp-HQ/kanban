@@ -473,12 +473,18 @@ export function IssuesWorkspaceRoute({
     }
   };
 
-  const handleCreateIssue = (newIssue: Partial<IssueItem>) => {
-    setIsCreateModalOpen(false);
+  const handleCreateIssue = async (newIssue: Partial<IssueItem>): Promise<Partial<IssueItem> | undefined> => {
+    if (isLiveMode) {
+      const persisted = await createProjectIssue(projectKey, newIssue, projectStates);
+      setIssues((prev) => {
+        const hasPersisted = prev.some((existing) => existing.key === persisted.key);
+        return hasPersisted ? prev : [persisted, ...prev];
+      });
+      return persisted;
+    }
     const nextNum = issues.length + 140;
-    const optimisticId = `01931234-new-${String(Date.now())}`;
     const item: IssueItem = {
-      id: optimisticId,
+      id: `01931234-new-${String(Date.now())}`,
       key: `${projectKey}-${String(nextNum)}`,
       summary: newIssue.summary ?? 'Untitled work item',
       state: newIssue.state ?? { id: 'state-todo', name: 'Todo', group: 'unstarted' },
@@ -491,22 +497,8 @@ export function IssuesWorkspaceRoute({
       item.module_ids = newIssue.module_ids;
     }
     setIssues((prev) => [item, ...prev]);
-
-    if (isLiveMode) {
-      void createProjectIssue(projectKey, newIssue, projectStates)
-        .then((persisted) => {
-          setIssues((prev) => {
-            const replaced = prev.map((existing) =>
-              existing.id === optimisticId ? persisted : existing
-            );
-            const hasPersisted = replaced.some((existing) => existing.key === persisted.key);
-            return hasPersisted ? replaced : [persisted, ...replaced];
-          });
-        })
-        .catch(() => {
-          // Keep optimistic item if network fails in offline mode
-        });
-    }
+    setIsCreateModalOpen(false);
+    return item;
   };
 
   const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
@@ -685,6 +677,8 @@ export function IssuesWorkspaceRoute({
         modulesEnabled={modulesEnabled}
         isFilterOpen={isFilterOpen}
         onToggleFilterOpen={setIsFilterOpen}
+        projectKey={projectKey}
+        issues={issues}
       />
 
       {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
@@ -835,6 +829,7 @@ export function IssuesWorkspaceRoute({
           onCreate={handleCreateIssue}
           projectKey={projectKey}
           modulesEnabled={modulesEnabled}
+          states={boardStates}
         />
       )}
 
@@ -847,6 +842,7 @@ export function IssuesWorkspaceRoute({
         onClose={() => { setPopoverState((prev) => ({ ...prev, isOpen: false })); }}
         onSelect={handleFieldSelect}
         modulesEnabled={modulesEnabled}
+        states={boardStates}
       />
     </div>
   </QueryClientProvider>

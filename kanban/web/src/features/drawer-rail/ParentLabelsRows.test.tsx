@@ -266,7 +266,7 @@ describe('ParentLabelsRows', () => {
     fireEvent.click(createBtn);
 
     await waitFor(() => {
-      expect(onCreateLabel).toHaveBeenCalledWith('backend');
+      expect(onCreateLabel).toHaveBeenCalledWith('backend', '#3b82f6');
       expect(onUpdateLabels).toHaveBeenCalledWith(['lbl-new']);
     });
   });
@@ -332,7 +332,7 @@ describe('ParentLabelsRows', () => {
     fireEvent.click(screen.getByRole('button', { name: /Create label “error-lbl”/i }));
 
     await waitFor(() => {
-      expect(onCreateLabel).toHaveBeenCalledWith('error-lbl');
+      expect(onCreateLabel).toHaveBeenCalledWith('error-lbl', '#3b82f6');
     });
     // Menu remains open after catch
     expect(screen.getByPlaceholderText('Filter or create...')).toBeDefined();

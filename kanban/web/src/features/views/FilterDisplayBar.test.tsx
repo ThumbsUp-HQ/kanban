@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import React from 'react';
 import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
+import * as railApi from '../drawer-rail/railApi';
 
 describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
   beforeEach(() => {
@@ -296,6 +297,38 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     fireEvent.click(highBtn);
     expect(handleFiltersChange).toHaveBeenCalledWith({
       state: ['state-todo'],
+    });
+  });
+
+  it('hydrates dynamic facets from live project endpoints when projectKey is provided', async () => {
+    vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockResolvedValue([
+      { id: 'u1', handle: 'maya', display_name: 'Maya Lin', type: 'USER' },
+    ]);
+    vi.spyOn(railApi, 'fetchProjectLabels').mockResolvedValue([
+      { id: 'l1', name: 'Infrastructure' },
+    ]);
+    vi.spyOn(railApi, 'fetchProjectCycles').mockResolvedValue([
+      { id: 'c1', name: 'Sprint 42' },
+    ]);
+    vi.spyOn(railApi, 'fetchProjectModules').mockResolvedValue([
+      { id: 'm1', name: 'Telemetry' },
+    ]);
+
+    render(
+      <FilterDisplayBar
+        projectKey="KAN"
+        modulesEnabled={true}
+      />
+    );
+
+    // Open filter popover
+    fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Maya Lin/i })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Infrastructure/i })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Sprint 42/i })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Telemetry/i })).toBeDefined();
     });
   });
 });

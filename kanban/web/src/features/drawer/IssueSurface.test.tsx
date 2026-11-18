@@ -389,6 +389,52 @@ describe('IssueSurface', () => {
       });
     });
 
+    it('catches 412/428 precondition conflict, preserves draft text, and renders actionable conflict banner', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      vi.spyOn(apiClient, 'patch').mockRejectedValue(
+        new ApiProblem(412, {
+          title: 'Precondition Failed',
+          status: 412,
+          detail: 'Issue has been modified concurrently by another user.',
+        }),
+      );
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+      });
+
+      // Click Edit description, change text, and Save
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole('textbox', { name: 'Description' });
+      fireEvent.change(textarea, {
+        target: { value: 'Conflicting draft edit' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+
+      // Conflict banner is rendered
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+      expect(screen.getByText(/412 Precondition Failed/i)).toBeDefined();
+
+      // Draft text is preserved in textarea
+      expect((screen.getByRole('textbox', { name: 'Description' }) as HTMLTextAreaElement).value).toBe(
+        'Conflicting draft edit',
+      );
+
+      // Verify actions exist: Reload Latest, Overwrite, Discard Draft
+      expect(screen.getByRole('button', { name: 'Reload Latest' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Overwrite' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Discard Draft' })).toBeDefined();
+
+      // Discard Draft dismisses banner and resets
+      fireEvent.click(screen.getByRole('button', { name: 'Discard Draft' }));
+      expect(screen.queryByTestId('conflict-banner')).toBeNull();
+    });
+
     it('loads project workflow states and forwards onIssueUpdate when RailSlot is mounted', async () => {
       vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
       const originalFetch = globalThis.fetch;

@@ -306,7 +306,7 @@ describe('PropertiesRail', () => {
     fireEvent.click(createBtn);
 
     await waitFor(() => {
-      expect(railApi.createProjectLabel).toHaveBeenCalledWith('KAN', { name: 'security' });
+      expect(railApi.createProjectLabel).toHaveBeenCalledWith('KAN', { name: 'security', color_hex: '#3b82f6' });
     });
   });
 

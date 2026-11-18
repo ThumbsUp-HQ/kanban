@@ -27,6 +27,7 @@ import base64
 import binascii
 import hashlib
 import uuid
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import delete, select, text, update
@@ -82,7 +83,6 @@ from kanban.workflows.engine import TransitionEngine
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from datetime import date, datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -560,6 +560,46 @@ async def _resolve_archive_eligibility(
     return ArchiveEligibility(allowed=True, reason=None)
 
 
+def compute_issue_etag(
+    issue_resp: IssueResponse,
+    updated_at: datetime | str | None = None,
+) -> str:
+    """Compute strong ETag covering description and all serialized issue attributes (KANBA-212)."""
+    assignee_tokens: list[str] = []
+    for a in issue_resp.assignees:
+        principal_obj = getattr(a, "principal", None)
+        free_text_val = getattr(a, "free_text", None)
+        token_val = getattr(principal_obj, "id", None) or free_text_val or ""
+        assignee_tokens.append(f"{a.kind}:{token_val}")
+    assignees_repr = ",".join(sorted(assignee_tokens))
+    module_ids_repr = ",".join(sorted(str(m) for m in (issue_resp.module_ids or [])))
+    labels_repr = ",".join(sorted(str(lbl.id) for lbl in issue_resp.labels))
+    parent_repr = getattr(issue_resp.parent, "key", "") if issue_resp.parent else ""
+    updated_at_str = (
+        updated_at.isoformat() if isinstance(updated_at, datetime) else str(updated_at or "")
+    )
+    parts = [
+        issue_resp.description_sha256 or "",
+        issue_resp.summary,
+        str(issue_resp.created_by_id),
+        issue_resp.start_date.isoformat() if issue_resp.start_date else "",
+        issue_resp.due_date.isoformat() if issue_resp.due_date else "",
+        str(issue_resp.state.id),
+        issue_resp.priority.slug,
+        assignees_repr,
+        str(issue_resp.cycle_id or ""),
+        module_ids_repr,
+        labels_repr,
+        parent_repr,
+        f"{issue_resp.access_manifest.pill_label}:{issue_resp.access_manifest.explicit_grant_count}",
+        str(issue_resp.board_rank),
+        updated_at_str,
+    ]
+    raw = "|".join(parts)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f'"{digest}"'
+
+
 async def serialize_issue(
     session: AsyncSession, caller: PrincipalContext, issue: Issue
 ) -> IssueResponse:
@@ -623,7 +663,7 @@ async def serialize_issue(
     pending_gate = await resolve_pending_gate(session, issue)
     latest_gate_verdict = await resolve_latest_gate_verdict(session, issue)
 
-    return IssueResponse(
+    res = IssueResponse(
         id=issue.id,
         key=f"{project.identifier}-{issue.sequence_id}",
         summary=issue.summary,
@@ -656,6 +696,8 @@ async def serialize_issue(
         pending_gate=pending_gate,
         latest_gate_verdict=latest_gate_verdict,
     )
+    res.etag = compute_issue_etag(res, obj.updated_at if obj is not None else None)
+    return res
 
 
 async def create_issue(
@@ -776,10 +818,11 @@ async def create_issue(
     if created_issue is None:  # pragma: no cover
         not_found()
 
-    etag = (
+    serialized = await serialize_issue(session, caller, created_issue)
+    etag = serialized.etag or (
         f'"{created_issue.description_sha256.hex()}"' if created_issue.description_sha256 else '""'
     )
-    return await serialize_issue(session, caller, created_issue), etag
+    return serialized, etag
 
 
 async def get_issue_or_404(
@@ -825,7 +868,9 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
     await require_capability(session, caller, issue.id, required)
 
     current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-    current_etag = f'"{current_sha256_hex}"'
+    current_serialized = await serialize_issue(session, caller, issue)
+    current_etag = current_serialized.etag or f'"{current_sha256_hex}"'
+    current_etag_hex = current_etag.strip('"')
 
     desc_in_patch = "description_markdown" in body.model_fields_set
     if desc_in_patch and not if_match:
@@ -841,7 +886,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
         if raw_etag.startswith("W/"):
             raw_etag = raw_etag[2:].strip()
         client_hex = raw_etag.strip('"')
-        if client_hex.lower() != current_sha256_hex.lower():
+        if client_hex.lower() not in (current_etag_hex.lower(), current_sha256_hex.lower()):
             raise _problem(
                 code="PRECONDITION_FAILED",
                 status=412,
@@ -1090,10 +1135,11 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
     if updated_issue is None:  # pragma: no cover
         not_found()
 
-    new_etag = (
+    serialized = await serialize_issue(session, caller, updated_issue)
+    new_etag = serialized.etag or (
         f'"{updated_issue.description_sha256.hex()}"' if updated_issue.description_sha256 else '""'
     )
-    return await serialize_issue(session, caller, updated_issue), new_etag
+    return serialized, new_etag
 
 
 async def list_issues(  # noqa: PLR0913

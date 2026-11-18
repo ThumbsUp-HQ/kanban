@@ -44,7 +44,7 @@ async def _count(env: ApiEnv, sql: str, params: dict[str, object] | None = None)
     return int(row.scalar_one())
 
 
-async def test_case_1_positive_admin_override_and_provenance(
+async def test_case_1_positive_admin_override_and_provenance(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -134,6 +134,15 @@ async def test_case_1_positive_admin_override_and_provenance(
     assert act["payload"]["reason"] == override_reason
     assert len(bytes(act["prev_hash"])) == 32
     assert len(bytes(act["row_hash"])) == 32
+
+    # Verify GET /api/v1/issues/PROV-1/activity returns human-readable handles
+    act_resp = await client_admin.get("/api/v1/issues/PROV-1/activity")
+    assert act_resp.status_code == 200
+    act_items = act_resp.json()["items"]
+    override_items = [i for i in act_items if i["event_type"] == "CREATOR_OVERRIDDEN"]
+    assert len(override_items) == 1
+    assert override_items[0]["payload"]["old_created_by"] == "@original_creator"
+    assert override_items[0]["payload"]["new_created_by"] == "@new_creator"
 
     # Save raw activity row sample proof
     raw_sample = {
@@ -396,10 +405,10 @@ async def test_case_5_second_override_preserves_original_creator(
     assert ov1.json()["provenance"]["created_by"]["id"] == str(u2.id)
     assert ov1.json()["provenance"]["reason"] == "First override reason 123"
 
-    # Second override: u2 -> u3
+    # Second override: u2 -> u3 (using handle string without leading @)
     ov2 = await client_admin.patch(
         "/api/v1/issues/MULTI-1/created-by",
-        json={"created_by": str(u3.id), "reason": "Second override reason 456"},
+        json={"created_by": u3.handle, "reason": "Second override reason 456"},
     )
     assert ov2.status_code == 200
     assert ov2.json()["provenance"]["original_created_by"]["id"] == str(u1.id)

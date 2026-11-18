@@ -64,24 +64,27 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
     if_none_match: Annotated[str | None, Header()] = None,
 ) -> IssueResponse | Response:
-    """Return an issue, or 304 when If-None-Match matches current description ETag."""
+    """Return an issue, or 304 when If-None-Match matches current issue ETag."""
     workspace_ref = workspace or request.headers.get("x-kb-scope-workspace")
     async with timing_floor(floor_ms=25.0):
         issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
         await taint_recorder.record_project_ids([issue.project_id])
-        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-        etag = f'"{sha256_hex}"'
+        serialized = await svc.serialize_issue(session, caller, issue)
+        desc_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
+        etag = serialized.etag or (f'"{desc_sha}"' if desc_sha else '""')
+        etag_hex = etag.strip('"')
+        sha256_hex = desc_sha
 
         if if_none_match is not None:
             raw_header = if_none_match.strip()
             if raw_header.startswith("W/"):
                 raw_header = raw_header[2:].strip()
             client_hex = raw_header.strip('"')
-            if client_hex.lower() == sha256_hex.lower() or raw_header == etag:
+            if client_hex.lower() in (etag_hex.lower(), sha256_hex.lower()) or raw_header == etag:
                 return Response(status_code=304, headers={"ETag": etag})
 
         response.headers["ETag"] = etag
-        return await svc.serialize_issue(session, caller, issue)
+        return serialized
 
 
 @router.patch(

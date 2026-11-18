@@ -1,0 +1,33 @@
+=== Python Ruff Check ===
+All checks passed!
+
+=== Python MyPy Check ===
+Success: no issues found in 5 source files
+
+=== Web TypeScript Typecheck ===
+
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+
+=== Web Production Build ===
+
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 650 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-g0eDXHG1.css            285.82 kB │ gzip:  42.13 kB
+dist/assets/index-aYF-0cgP.js           1,653.04 kB │ gzip: 462.97 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.25s

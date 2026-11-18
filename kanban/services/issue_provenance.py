@@ -166,7 +166,7 @@ async def _resolve_target_creator_id(
         obj_stmt = select(ObjectRecord.id).where(
             ObjectRecord.workspace_id == workspace_id,
             ObjectRecord.object_type == ObjectKind.USER,
-            func.lower(ObjectRecord.canonical_key) == clean_handle,
+            func.lower(ObjectRecord.canonical_key).in_([f"@{clean_handle}", clean_handle]),
         )
         resolved_id = (await session.execute(obj_stmt)).scalar_one_or_none()
         if resolved_id is not None:

@@ -63,6 +63,8 @@ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPa
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
+import { fetchProjectStates } from '../features/views/viewsApi';
+import { fetchProjectModules } from '../features/drawer-rail/railApi';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -507,31 +509,50 @@ export function DraftsWorkspaceView(): JSX.Element {
       if (draft.description) {
         payload.description_markdown = draft.description;
       }
-      if (draft.stateId) {
-        payload.state_id = draft.stateId;
-      }
       if (draft.prioritySlug) {
-        payload.priority_slug = draft.prioritySlug;
-      }
-      if (draft.moduleIds && draft.moduleIds.length > 0) {
-        payload.module_ids = draft.moduleIds;
+        payload.priority = draft.prioritySlug;
       }
 
-      const res = await fetch(`/api/v1/projects/${draft.projectKey}/issues`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
+      // Resolve live project states to find matching state_id
+      try {
+        const liveStates = await fetchProjectStates(draft.projectKey);
+        if (draft.stateId) {
+          const matched = liveStates.find(
+            (s) =>
+              s.id === draft.stateId ||
+              s.name.toLowerCase() === draft.stateId.toLowerCase().replace(/^state-/, ''),
+          );
+          if (matched?.id && !matched.id.startsWith('state-')) {
+            payload.state_id = matched.id;
+          }
+        }
+      } catch {
+        // Ignore fallback
+      }
+
+      // Resolve live project modules
+      try {
+        const liveModules = await fetchProjectModules(draft.projectKey);
+        if (draft.moduleIds && draft.moduleIds.length > 0) {
+          const validIds = liveModules
+            .filter((m) => draft.moduleIds?.includes(m.id))
+            .map((m) => m.id);
+          if (validIds.length > 0) {
+            payload.module_ids = validIds;
+          }
+        }
+      } catch {
+        // Ignore fallback
+      }
+
+      await apiFetch('POST', '/api/v1/projects/{project_ref}/issues' as never, {
+        params: { project_ref: draft.projectKey },
+        body: payload,
       });
 
-      if (res.ok) {
-        deleteDraft(draft.id);
-        void navigate(`/projects/${draft.projectKey}/issues`);
-        return;
-      }
+      deleteDraft(draft.id);
+      void navigate(`/projects/${draft.projectKey}/issues`);
+      return;
     } catch {
       // Fallback on network error
     }

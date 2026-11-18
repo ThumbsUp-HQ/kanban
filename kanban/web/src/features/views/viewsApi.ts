@@ -276,14 +276,23 @@ export async function fetchProjectIssues(
     throw new Error(`Failed to fetch project issues: ${String(response.status)} ${response.statusText}`);
   }
 
-  const data = (await response.json()) as {
-    items: (Partial<IssueItem> & Record<string, unknown>)[];
-    next_cursor: string | null;
-    total?: number;
-  };
+  const rawData = (await response.json()) as unknown;
+  const rawItems = Array.isArray(rawData)
+    ? rawData
+    : (rawData && typeof rawData === 'object' && Array.isArray((rawData as { items?: unknown[] }).items))
+    ? (rawData as { items: unknown[] }).items
+    : [];
+  const nextCursor = (rawData && typeof rawData === 'object' && 'next_cursor' in rawData)
+    ? (rawData as { next_cursor: string | null }).next_cursor
+    : null;
+  const total = (rawData && typeof rawData === 'object' && 'total' in rawData)
+    ? (rawData as { total?: number }).total
+    : undefined;
+
   return {
-    ...data,
-    items: data.items.map((item) => normalizeIssueItem(item)),
+    items: rawItems.map((item) => normalizeIssueItem(item as Partial<IssueItem> & Record<string, unknown>)),
+    next_cursor: nextCursor,
+    ...(total !== undefined ? { total } : {}),
   };
 }
 
@@ -291,6 +300,9 @@ export async function fetchProjectIssues(
  * Fetch workflow states for a project from GET /api/v1/projects/:projectKey/states.
  */
 export async function fetchProjectStates(projectKey: string): Promise<StateSummary[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
   const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/states`;
   const response = await fetch(url, {
     headers: {
