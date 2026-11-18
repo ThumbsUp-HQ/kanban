@@ -716,6 +716,14 @@ async def test_case_9_multi_workspace_switch_roundtrip_project_creation(  # noqa
 ) -> None:
     """Case 9: Multi-workspace switch roundtrip and project creation with stale CSRF."""
     ws_id, admin_id, member_id = await _setup_workspace_and_principals(db_session)
+    await db_session.execute(
+        text(
+            "INSERT INTO role_bindings "
+            "(id, workspace_id, principal_id, role, scope_type, project_id) "
+            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
+        ),
+        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": member_id},
+    )
     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
     session_service = SessionService(key_material.session_hmac_key)
     app = _create_test_app(factory, key_material, session_service)
