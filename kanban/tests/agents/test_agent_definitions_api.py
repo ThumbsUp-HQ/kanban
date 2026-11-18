@@ -995,7 +995,7 @@ async def test_schema_validations_on_patch(
         f"/api/v1/agent-definitions/{agent_id}",
         json={
             "cli_binary_allowlist_id": "codex",
-            "cli_args": ["-p", "-s", "read-only"],
+            "cli_args": ["exec", "-s", "read-only", "-"],
             "repo_access_mode": "ro_vfs_mount",
             "mcp_allowed_tools": ["read_ticket", "read_doc"],
             "system_instructions_md": "# Instructions\n\nBe helpful.",
@@ -1005,7 +1005,7 @@ async def test_schema_validations_on_patch(
     assert patch_cli.status_code == 200, patch_cli.text
     body_cli = patch_cli.json()
     assert body_cli["cli_binary_allowlist_id"] == "codex"
-    assert body_cli["cli_args"] == ["-p", "-s", "read-only"]
+    assert body_cli["cli_args"] == ["exec", "-s", "read-only", "-"]
     assert body_cli["repo_access_mode"] == "ro_vfs_mount"
     assert body_cli["mcp_allowed_tools"] == ["read_ticket", "read_doc"]
     assert "Be helpful" in body_cli["system_instructions_md"]

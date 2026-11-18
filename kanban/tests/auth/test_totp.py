@@ -784,6 +784,20 @@ async def test_delete_totp_factor(
             aal_level=1,
         )
         async with factory.session(anon_ctx) as session:
+            # Seed backup WebAuthn credential so admin retains at least one AAL2 factor
+            await session.execute(
+                text(
+                    "INSERT INTO webauthn_credentials "
+                    "(id, principal_id, credential_id, public_key, sign_count) "
+                    "VALUES (:id, :p_id, :cred_id, :pub_key, 0)"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "p_id": p_id,
+                    "cred_id": b"grace_cred_backup_16b",
+                    "pub_key": b"pk",
+                },
+            )
             issued = await session_service.create_after_login(
                 session,
                 principal_id=p_id,

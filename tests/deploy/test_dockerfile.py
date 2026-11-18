@@ -8,7 +8,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"
 DOCKERIGNORE_PATH = REPO_ROOT / ".dockerignore"
 
-REQUIRED_STAGES = ["web-builder", "py-builder", "runtime-slim", "agent-runner", "standalone"]
+REQUIRED_STAGES = [
+    "web-builder",
+    "py-builder",
+    "runtime-slim",
+    "agent-runner",
+    "sandbox",
+    "standalone",
+]
 REQUIRED_DOCKERIGNORE_ENTRIES = [
     ".git",
     ".venv",

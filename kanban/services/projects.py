@@ -114,18 +114,14 @@ def decode_cursor(cursor: str) -> str:
 
 
 async def _require_project_creator(session: AsyncSession, caller: PrincipalContext) -> None:
-    """Allow workspace/server admins or members holding a token scope that includes ADMIN."""
-    is_member = (
+    """Allow only workspace or server admins holding a token scope that includes ADMIN."""
+    is_admin = (
         await session.execute(
-            text(
-                "SELECT app_principal_has_role("
-                "  NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER']"
-                ")"
-            )
+            text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
         )
     ).scalar_one()
     scope_ok = Capability.ADMIN in parse_token_scope_mask(caller.token_scopes)
-    if caller.agent_principal_id is not None or not is_member or not scope_ok:
+    if caller.agent_principal_id is not None or not is_admin or not scope_ok:
         raise _problem(code="INSUFFICIENT_CAPABILITY", status=403, title="Insufficient Capability")
 
 
