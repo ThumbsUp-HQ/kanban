@@ -67,6 +67,18 @@ USER 65532:65532
 ENTRYPOINT ["/usr/bin/tini", "--", "kanban-agent-runner"]
 CMD ["run"]
 
+# Stage 4b: sandbox (extends runtime-slim, runs isolated script runner/worker, non-root UID 10001:10001)
+FROM runtime-slim AS sandbox
+USER root
+RUN groupadd -r -g 10001 sandbox && \
+    useradd -r -u 10001 -g 10001 -s /usr/sbin/nologin -M -d /nonexistent sandbox && \
+    install -d -o sandbox -g sandbox -m 0700 /run/kanban/sandbox && \
+    printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m kanban.sandbox.worker "$@"\n' > /usr/local/bin/kanban-sandbox-worker && \
+    chmod 0755 /usr/local/bin/kanban-sandbox-worker
+USER 10001:10001
+ENTRYPOINT ["/usr/bin/tini", "--", "kanban-sandbox-worker"]
+CMD ["run"]
+
 # Stage 5: standalone (default final stage: extends runtime-slim + PostgreSQL 16 + pgvector)
 FROM runtime-slim AS standalone
 # The standalone stage remains USER root only because the PID-1 entrypoint (KB-P0-08)

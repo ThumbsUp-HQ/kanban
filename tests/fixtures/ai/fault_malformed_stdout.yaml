@@ -1,6 +1,6 @@
 cassette_version: 1
 matcher:
-  argv_prefix: ["/usr/local/bin/codex", "-p"]
+  argv_prefix: ["/usr/local/bin/codex", "exec", "-s", "read-only", "-"]
   stdin_contains: ["simulate_malformed"]
 simulated_ttft_ms: 15.0
 fault:

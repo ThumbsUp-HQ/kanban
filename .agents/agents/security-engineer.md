@@ -3,24 +3,6 @@ name: security-engineer
 description: Expert application security engineer specializing in threat modeling,
   vulnerability assessment, secure code review, and security architecture design for
   modern web and cloud-native applications.
-tools:
-- glob
-- grep_search
-- list_directory
-- read_file
-- run_shell_command
-- write_file
-- replace
-- google_web_search
-- write_todos
-- web_fetch
-- read_many_files
-- save_memory
-- get_internal_docs
-- activate_skill
-- ask_user
-- enter_plan_mode
-- exit_plan_mode
 ---
 # Security Engineer Agent
 

@@ -1,0 +1,107 @@
+{
+  "transition_gate_verdict_reject": {
+    "decision": "reject",
+    "hook_name": "forensic_code_check",
+    "reason_markdown": "Test computation returned -1 instead of 42. Unit tests failing.",
+    "cited_files": [
+      "src/calc.py"
+    ],
+    "labels_to_add": [
+      "needs-rework"
+    ],
+    "labels_to_remove": [
+      "qa-pending"
+    ]
+  },
+  "transition_gate_verdict_approve": {
+    "decision": "approve",
+    "hook_name": "forensic_code_check",
+    "reason_markdown": "Fix verified in commit snapshot. All unit tests pass with clean exit.",
+    "cited_files": [
+      "src/calc.py"
+    ],
+    "labels_to_add": [
+      "qa-passed"
+    ],
+    "labels_to_remove": [
+      "needs-rework"
+    ]
+  },
+  "codex_cli_invocation_contract": {
+    "binary": "/usr/local/bin/codex",
+    "pinned_prefix": [
+      "exec",
+      "-s",
+      "read-only",
+      "-"
+    ],
+    "allowed_flags": [
+      "--model",
+      "--temperature",
+      "--max-tokens",
+      "--timeout",
+      "--json-output"
+    ],
+    "banned_flags": [
+      "-p",
+      "--profile",
+      "--dangerously-skip-permissions",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--allow-all-tools",
+      "--yolo",
+      "--full-auto"
+    ]
+  },
+  "mcp_admin_scope_contract": {
+    "tools": [
+      "configure_workspace",
+      "manage_auth_cards",
+      "architect_project",
+      "manage_cycles_and_modules",
+      "manage_custom_fields_and_scripts",
+      "manage_workflow_interceptors",
+      "manage_ai_and_agent_runners",
+      "manage_users_and_groups",
+      "manage_project_policies",
+      "manage_object_links",
+      "manage_audit_ledger",
+      "manage_system_settings"
+    ],
+    "action_scope_levels": {
+      "inspection": {
+        "required_scope": "admin:read",
+        "example_actions": ["list_providers", "get_status", "list_harnesses"]
+      },
+      "mutation": {
+        "required_scope": "admin:write",
+        "example_actions": ["create_provider", "update_harness", "provision_runner"]
+      },
+      "destructive": {
+        "required_scope": "admin:destructive",
+        "example_actions": ["delete_provider", "purge_logs", "revoke_credential"]
+      }
+    }
+  },
+  "favicon_endpoint_contract": {
+    "path": "/favicon.ico",
+    "method": "GET",
+    "status": 200,
+    "headers": {
+      "Content-Type": "image/svg+xml",
+      "Cache-Control": "public, max-age=86400"
+    }
+  },
+  "principal_create_contract": {
+    "path": "/api/v1/admin/principals",
+    "method": "POST",
+    "body_agent": {
+      "name": "Reality-Checker Gate Worker",
+      "type": "AGENT",
+      "email": "agent-gate@internal.kanban"
+    },
+    "body_group": {
+      "name": "Security Auditors",
+      "type": "GROUP"
+    }
+  }
+}

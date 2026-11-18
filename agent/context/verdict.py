@@ -72,6 +72,7 @@ class TransitionVerdict(BaseModel):
     nonce: str = Field(min_length=16, max_length=64)
     decision: Literal["approve", "reject"]
     reason_markdown: str = Field(min_length=1, max_length=MAX_REASON_CHARS)
+    cited_files: list[str] = Field(default_factory=list)
     field_updates: dict[str, Any] = Field(default_factory=dict)
     add_labels: list[str] = Field(default_factory=list, max_length=MAX_LABELS_COUNT)
     add_links: list[VerdictLinkSpec] = Field(default_factory=list, max_length=MAX_LINKS_COUNT)
@@ -253,6 +254,7 @@ def parse_verdict_output(raw: bytes, ctx: RenderedContext) -> VerdictResult:  # 
         field_updates=dict(selected.field_updates),
         add_labels=tuple(selected.add_labels),
         add_links=links_tuple,
+        cited_files=tuple(selected.cited_files),
         verdict_sha256=sha256_bytes,
         latency_ms=0,
     )

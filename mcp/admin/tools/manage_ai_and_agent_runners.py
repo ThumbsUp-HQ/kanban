@@ -42,6 +42,8 @@ _ALLOWED_TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
         "api_key",
         "is_enabled",
         "project_id",
+        "project",
+        "project_key",
         "provider_config_id",
         "period_kind",
         "token_cap",
@@ -148,6 +150,14 @@ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
         "project_id": {
             "type": "string",
             "description": "Optional project UUID for project-scoped entities",
+        },
+        "project": {
+            "type": "string",
+            "description": "Optional project UUID or identifier (alias for project_id)",
+        },
+        "project_key": {
+            "type": "string",
+            "description": "Optional project key or identifier (alias for project_id)",
         },
         "provider_config_id": {
             "type": "string",
@@ -410,6 +420,15 @@ async def manage_ai_and_agent_runners(arguments: dict[str, Any]) -> str:  # noqa
         ):
             msg = f"Action '{action}' requires 'admin:destructive' scope"
             raise KbMcpError(McpErrorCode.INSUFFICIENT_SCOPE, msg)
+
+    # Normalize project / project_key / project_id alias
+    resolved_proj = (
+        arguments.get("project_id")
+        or arguments.get("project")
+        or arguments.get("project_key")
+    )
+    if resolved_proj:
+        arguments["project_id"] = str(resolved_proj).strip()
 
     if action == "list_providers":
         params: dict[str, Any] = {}
