@@ -1,0 +1,92 @@
+{
+  "landing_page_title": "\ud83d\udc4dkanban",
+  "csp_policy": "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;",
+  "auth_cards": [
+    {
+      "id": "bced5d37-97b8-42a5-b6c2-69990764c952",
+      "slug": "google-oauth",
+      "display_name": "Google Workspace",
+      "button_subtext": "Sign in with your Google account",
+      "icon_preset": "google",
+      "provider_kind": "OIDC"
+    },
+    {
+      "id": "01a1dd7a-02bd-7478-a12a-42976c5c73a0",
+      "slug": "local-admin",
+      "display_name": "Local Admin",
+      "button_subtext": "Username and password",
+      "icon_preset": "key",
+      "provider_kind": "LOCAL_ADMIN"
+    }
+  ],
+  "setup_status": {
+    "initialized": true
+  },
+  "invalid_setup_claim_rejection": {
+    "status": 403,
+    "response": {
+      "type": "https://kanban.hackedyour.info/problems/csrf-rejected",
+      "title": "CSRF validation failed",
+      "status": 403,
+      "code": "CSRF_REJECTED",
+      "detail": "Missing CSRF token header or cookie",
+      "request_id": "8da02ecfaf1f46809805c7abf42f7b26"
+    }
+  },
+  "local_login_fail_closed": {
+    "status": 403,
+    "response": {
+      "type": "https://kanban.hackedyour.info/problems/csrf-rejected",
+      "title": "CSRF validation failed",
+      "status": 403,
+      "code": "CSRF_REJECTED",
+      "detail": "Missing CSRF token header or cookie",
+      "request_id": "c98f05af058949f89d3ef3bc45e836b5"
+    }
+  },
+  "lockout_prevention_contract": {
+    "status": 409,
+    "detail": "LOCKOUT_PREVENTED: Cannot disable the last administrative authentication card.",
+    "recovery_cli": "kanban-ctl auth emergency-unlock --enable-local-admin"
+  },
+  "multi_situation_workspaces": [
+    {
+      "project_key": "QAADM",
+      "name": "Admin QA Workspace",
+      "role": "workspace_admin",
+      "modules": [
+        "backlog",
+        "cycles",
+        "modules",
+        "docs",
+        "stickies"
+      ],
+      "custom_fields": 4
+    },
+    {
+      "project_key": "QAVIEW",
+      "name": "Viewer Restricted Workspace",
+      "role": "viewer",
+      "modules": [
+        "board",
+        "docs"
+      ],
+      "custom_fields": 1
+    },
+    {
+      "project_key": "QANOMOD",
+      "name": "No-Module Minimal Workspace",
+      "role": "project_member",
+      "modules": [],
+      "custom_fields": 0
+    }
+  ],
+  "mcp_key_mint_sample": {
+    "id": "mcp-key-live-qa-01",
+    "label": "Live QA Verification Runner",
+    "surface": "admin",
+    "key_prefix": "kb_agt_live_",
+    "masked_key": "kb_agt_live_...[REDACTED]",
+    "created_at": "2026-11-18T00:36:00Z"
+  }
+}
