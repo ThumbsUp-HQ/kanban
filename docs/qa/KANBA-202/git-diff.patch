@@ -769,6 +769,481 @@ index 8a2bcaf..96821a0 100644
 +        {"proj_id": project.id, "p_id": principal_id},
 +    )
 +    await session.flush()
+diff --git a/kanban/tests/auth/test_standard_user_rbac_matrix.py b/kanban/tests/auth/test_standard_user_rbac_matrix.py
+new file mode 100644
+index 0000000..3f17121
+--- /dev/null
++++ b/kanban/tests/auth/test_standard_user_rbac_matrix.py
+@@ -0,0 +1,253 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit test suite for Standard User vs Admin RBAC matrix (KANBA-202)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++
++from kanban.admin.principal_service import bind_role
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.tests.security.helpers import create_workspace
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++async def test_auth_me_role_and_capabilities_matrix(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify GET /api/v1/auth/me returns role and capabilities across all principal tiers."""
++    del api_env
++    # 1. Standard user (WORKSPACE_MEMBER)
++    member = await make_user("standard_user", workspace_role="WORKSPACE_MEMBER")
++    client_member = as_principal(member)
++    res_mem = await client_member.get("/api/v1/auth/me")
++    assert res_mem.status_code == 200
++    data_mem = res_mem.json()
++    assert data_mem["is_server_admin"] is False
++    assert data_mem["is_workspace_admin"] is False
++    assert data_mem["workspace_role"] == "WORKSPACE_MEMBER"
++    assert "CREATE_PROJECT" in data_mem["workspace_capabilities"]
++    assert "MANAGE_WORKSPACE_SETTINGS" not in data_mem["workspace_capabilities"]
++    assert "ADMIN_AUTH_STUDIO" not in data_mem["workspace_capabilities"]
++
++    # 2. Workspace Admin
++    ws_admin = await make_user("ws_admin_user", workspace_role="WORKSPACE_ADMIN")
++    client_ws_admin = as_principal(ws_admin, aal_level=2)
++    res_ws = await client_ws_admin.get("/api/v1/auth/me")
++    assert res_ws.status_code == 200
++    data_ws = res_ws.json()
++    assert data_ws["is_server_admin"] is False
++    assert data_ws["is_workspace_admin"] is True
++    assert data_ws["workspace_role"] == "WORKSPACE_ADMIN"
++    assert "CREATE_PROJECT" in data_ws["workspace_capabilities"]
++    assert "MANAGE_WORKSPACE_SETTINGS" in data_ws["workspace_capabilities"]
++    assert "MANAGE_WORKSPACE_MCP_KEYS" in data_ws["workspace_capabilities"]
++    assert "ADMIN_AUTH_STUDIO" not in data_ws["workspace_capabilities"]
++
++    # 3. Server Admin
++    srv_admin = await make_user("srv_admin_user", workspace_role="SERVER_ADMIN")
++    client_srv_admin = as_principal(srv_admin, aal_level=2)
++    res_srv = await client_srv_admin.get("/api/v1/auth/me")
++    assert res_srv.status_code == 200
++    data_srv = res_srv.json()
++    assert data_srv["is_server_admin"] is True
++    assert data_srv["is_workspace_admin"] is True
++    assert data_srv["workspace_role"] == "SERVER_ADMIN"
++    assert "MANAGE_SERVER_ADMIN" in data_srv["workspace_capabilities"]
++    assert "ADMIN_AUTH_STUDIO" in data_srv["workspace_capabilities"]
++    assert "SYSTEM_STORAGE" in data_srv["workspace_capabilities"]
++
++
++async def test_project_response_is_project_admin_and_role(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify ProjectResponse includes is_project_admin and project_role."""
++    del api_env
++    admin = await make_user("proj_owner", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("proj_member", workspace_role="WORKSPACE_MEMBER")
++
++    client_admin = as_principal(admin)
++    p_res = await client_admin.post(
++        "/api/v1/projects",
++        json={"identifier": "RBAC", "name": "RBAC Studio", "description_markdown": "Test"},
++    )
++    assert p_res.status_code == 201
++    proj_body = p_res.json()
++    assert proj_body["is_project_admin"] is True
++    assert proj_body["project_role"] == "PROJECT_ADMIN"
++
++    # Add member as VIEWER
++    add_res = await client_admin.post(
++        "/api/v1/projects/RBAC/members",
++        json={"principal_id": str(member.id), "role": "VIEWER"},
++    )
++    assert add_res.status_code == 201
++
++    # Member reads project
++    client_mem = as_principal(member)
++    get_res = await client_mem.get("/api/v1/projects/RBAC")
++    assert get_res.status_code == 200
++    mem_proj = get_res.json()
++    assert mem_proj["is_project_admin"] is False
++    assert mem_proj["project_role"] == "VIEWER"
++
++
++async def test_project_members_crud_and_capability_gating(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify GET, POST, DELETE /api/v1/projects/{ref}/members capability enforcement."""
++    del api_env
++    admin = await make_user("admin_lead", workspace_role="WORKSPACE_ADMIN")
++    p_res = await as_principal(admin).post(
++        "/api/v1/projects",
++        json={"identifier": "MEM", "name": "Member Project", "description_markdown": "Desc"},
++    )
++    assert p_res.status_code == 201
++    member_a = await make_user("user_a", workspace_role="WORKSPACE_MEMBER")
++    member_b = await make_user("user_b", workspace_role="WORKSPACE_MEMBER")
++
++    # 1. Project Admin adds member_a
++    add_a = await as_principal(admin).post(
++        "/api/v1/projects/MEM/members",
++        json={"principal_id": str(member_a.id), "role": "MEMBER"},
++    )
++    assert add_a.status_code == 201
++    assert add_a.json()["role"] == "MEMBER"
++    assert add_a.json()["principal_id"] == str(member_a.id)
++
++    # 2. Member A cannot add member_b (403 INSUFFICIENT_CAPABILITY)
++    denied_add = await as_principal(member_a).post(
++        "/api/v1/projects/MEM/members",
++        json={"principal_id": str(member_b.id), "role": "VIEWER"},
++    )
++    assert denied_add.status_code == 403
++    assert denied_add.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 3. List members
++    list_res = await as_principal(member_a).get("/api/v1/projects/MEM/members")
++    assert list_res.status_code == 200
++    members_data = list_res.json()
++    assert any(m["principal_id"] == str(member_a.id) for m in members_data)
++
++    # 4. Member A cannot delete member_a (403 INSUFFICIENT_CAPABILITY)
++    denied_del = await as_principal(member_a).delete(f"/api/v1/projects/MEM/members/{member_a.id}")
++    assert denied_del.status_code == 403
++    assert denied_del.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 5. Project Admin deletes member_a (204)
++    ok_del = await as_principal(admin).delete(f"/api/v1/projects/MEM/members/{member_a.id}")
++    assert ok_del.status_code == 204
++
++
++async def test_workspace_admin_cannot_grant_server_admin(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Verify WORKSPACE_ADMIN cannot bind SERVER_ADMIN role (403 INSUFFICIENT_CAPABILITY)."""
++    ws_admin = await make_user("mid_admin", workspace_role="WORKSPACE_ADMIN")
++    target_user = await make_user("normal_user", workspace_role="WORKSPACE_MEMBER")
++
++    with pytest.raises(ProblemException) as exc_info:
++        await bind_role(
++            api_env.seed,
++            workspace_id=api_env.workspace_id,
++            actor_id=ws_admin.id,
++            principal_id=target_user.id,
++            role_name="SERVER_ADMIN",
++            scope_type="server",
++        )
++    assert exc_info.value.status == 403
++    assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
++
++
++async def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> None:
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user.id,
++            "blob": b" " + b"0" * 28,
++            "dek": b" " + b"0" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++
++
++async def test_workspace_settings_update_name_slug_and_conflict(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify workspace name/slug updates and duplicate slug rejection."""
++    admin = await make_user("ws_settings_admin", workspace_role="WORKSPACE_ADMIN")
++    standard_user = await make_user("regular_user", workspace_role="WORKSPACE_MEMBER")
++    await _as_admin_aal2(api_env, admin)
++    client_admin = api_env.client
++
++    # 1. Update name and slug via PATCH /api/v1/admin/workspace-settings
++    patch_res = await client_admin.patch(
++        "/api/v1/admin/workspace-settings",
++        json={"name": "Engineering Alpha", "slug": "eng-alpha"},
++    )
++    assert patch_res.status_code == 200
++    data = patch_res.json()
++    assert data["name"] == "Engineering Alpha"
++    assert data["slug"] == "eng-alpha"
++
++    # 2. Duplicate slug conflict via PATCH /api/v1/workspaces/{id}
++    # Create another workspace first via seed session
++    ws_other_id = await create_workspace(api_env.seed, name="Other Team")
++    await api_env.seed.execute(
++        text("UPDATE workspaces SET slug = 'other-team' WHERE id = :id"),
++        {"id": ws_other_id},
++    )
++    await api_env.seed.commit()
++
++    # Attempt to change current workspace slug to 'other-team' -> 409 WORKSPACE_SLUG_CONFLICT
++    conflict_res = await client_admin.patch(
++        f"/api/v1/workspaces/{api_env.workspace_id}",
++        json={"slug": "other-team"},
++    )
++    assert conflict_res.status_code == 409
++    assert conflict_res.json()["code"] == "WORKSPACE_SLUG_CONFLICT"
++
++    # 3. Standard user denied PATCH /api/v1/workspaces/{id} -> 403 INSUFFICIENT_CAPABILITY
++    denied_patch = await as_principal(standard_user).patch(
++        f"/api/v1/workspaces/{api_env.workspace_id}",
++        json={"name": "Hacked Name"},
++    )
++    assert denied_patch.status_code == 403
++    assert denied_patch.json()["code"] == "INSUFFICIENT_CAPABILITY"
+diff --git a/kanban/web/e2e/rbac-settings.spec.ts b/kanban/web/e2e/rbac-settings.spec.ts
+new file mode 100644
+index 0000000..7e15cc8
+--- /dev/null
++++ b/kanban/web/e2e/rbac-settings.spec.ts
+@@ -0,0 +1,210 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from './support/test';
++import { mockApi, type MockHandlers } from './support/mockApi';
++import { annotatedScreenshot } from './support/annotate';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../docs/qa/KANBA-202/screenshots',
++);
++
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++const mockAdminUser = {
++  id: 'usr-admin-1',
++  handle: 'alice_admin',
++  display_name: 'Alice Admin',
++  email: 'alice@example.com',
++  is_server_admin: true,
++  is_workspace_admin: true,
++  workspace_role: 'SERVER_ADMIN',
++  workspace_capabilities: ['ADMIN', 'SETTINGS', 'MANAGE_USERS', 'MANAGE_PROJECTS'],
++};
++
++const mockProjectAdmin = {
++  id: 'proj-kanba-1',
++  identifier: 'KANBA',
++  name: 'Platform Engineering',
++  description_markdown: 'Core platform engineering and agent framework development.',
++  modules_enabled: true,
++  auto_archive_days: 90,
++  capabilities: ['VIEW', 'CREATE', 'EDIT', 'TRANSITION', 'DELETE', 'ADMIN'],
++  is_project_admin: true,
++  project_role: 'PROJECT_ADMIN',
++};
++
++const mockProjectMembers = [
++  {
++    id: 'pm-1',
++    principal_id: 'usr-admin-1',
++    principal_type: 'USER',
++    role: 'PROJECT_ADMIN',
++    display_name: 'Alice Admin',
++    handle: 'alice_admin',
++    email: 'alice@example.com',
++  },
++  {
++    id: 'pm-2',
++    principal_id: 'usr-dev-2',
++    principal_type: 'USER',
++    role: 'MEMBER',
++    display_name: 'Bob Builder',
++    handle: 'bob_builder',
++    email: 'bob@example.com',
++  },
++];
++
++const mockWorkspaceSettings = {
++  id: 'ws-default',
++  name: 'Primary Enterprise Workspace',
++  slug: 'primary-enterprise',
++  default_project_visibility: 'workspace',
++  session_idle_timeout_min: 120,
++  session_absolute_timeout_min: 1440,
++  trash_retention_days: 30,
++};
++
++const mockWorkspacePrincipals = [
++  {
++    id: 'usr-admin-1',
++    principal_type: 'USER',
++    handle: 'alice_admin',
++    display_name: 'Alice Admin',
++    email: 'alice@example.com',
++  },
++  {
++    id: 'usr-dev-2',
++    principal_type: 'USER',
++    handle: 'bob_builder',
++    display_name: 'Bob Builder',
++    email: 'bob@example.com',
++  },
++];
++
++async function setupRbacMocks(page: Page, overrides: MockHandlers = {}): Promise<void> {
++  await page.unroute('**/api/v1/**');
++  await mockApi(page, {
++    'GET /api/v1/auth/me': { json: mockAdminUser },
++    'GET /api/v1/workspaces': {
++      json: [
++        {
++          id: 'ws-default',
++          name: 'Primary Enterprise Workspace',
++          slug: 'primary-enterprise',
++          is_current: true,
++        },
++      ],
++    },
++    'GET /api/v1/admin/workspace-settings': { json: mockWorkspaceSettings },
++    'PATCH /api/v1/admin/workspace-settings': { json: mockWorkspaceSettings },
++    'GET /api/v1/admin/principals': { json: mockWorkspacePrincipals },
++    'GET /api/v1/projects': {
++      json: [mockProjectAdmin],
++    },
++    'GET /api/v1/projects/KANBA': { json: mockProjectAdmin },
++    'PATCH /api/v1/projects/KANBA': { json: mockProjectAdmin },
++    'GET /api/v1/projects/KANBA/members': { json: mockProjectMembers },
++    'POST /api/v1/projects/KANBA/members': {
++      json: {
++        id: 'pm-3',
++        principal_id: 'usr-charlie',
++        principal_type: 'USER',
++        role: 'MEMBER',
++        display_name: 'Charlie Contributor',
++        handle: 'charlie',
++        email: 'charlie@example.com',
++      },
++    },
++    'GET /api/v1/system/status': {
++      json: {
++        standalone: true,
++        version: '0.1.0',
++        allow_unlimited_mcp_keys: true,
++      },
++    },
++    'GET /api/v1/session/csrf': {
++      json: { csrf_token: 'test-csrf-token' },
++    },
++    'GET /api/v1/setup/status': {
++      json: { is_initialized: true, initialized: true, requires_setup: false },
++    },
++    'GET /api/v1/auth/session': {
++      json: { authenticated: true, user: mockAdminUser },
++    },
++    'GET /api/v1/objects/:objectId/access': {
++      json: {
++        object_id: 'proj-kanba-1',
++        inherited_from: null,
++        users: [
++          {
++            principal_id: 'usr-admin-1',
++            display_name: 'Alice Admin',
++            handle: 'alice_admin',
++            role: 'PROJECT_ADMIN',
++            capabilities: ['ADMIN'],
++          },
++        ],
++        groups: [],
++        agents: [],
++        deny_overrides: [],
++      },
++    },
++    ...overrides,
++  });
++}
++
++test.describe('KANBA-202: Project and Workspace Settings RBAC Views', () => {
++  test('01-project-settings: renders project settings with general and members tabs', async ({ page }, testInfo) => {
++    await setupRbacMocks(page);
++    await page.goto('/projects/KANBA/settings');
++
++    const pageContainer = page.getByTestId('project-settings-page');
++    await expect(pageContainer).toBeVisible();
++
++    const titleHeading = page.getByRole('heading', { name: /Project Settings: Platform Engineering/i });
++    await expect(titleHeading).toBeVisible();
++
++    // Take screenshot of General tab
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-project-settings-general',
++      annotations: [
++        { selector: '[data-testid="project-settings-page"]', label: 'Project Settings Studio' },
++        { selector: '[data-testid="general-form"]', label: 'Project Identity & Retention' },
++      ],
++    });
++
++    // Switch to Members & Access tab
++    const membersTab = page.getByTestId('tab-members');
++    await membersTab.click();
++    await expect(page.getByTestId('members-section')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-project-settings-members',
++      annotations: [
++        { selector: '[data-testid="members-section"]', label: 'Members & Access Control' },
++        { selector: '[data-testid="add-member-form"]', label: 'Project Role Assignment' },
++      ],
++    });
++  });
++
++  test('03-workspace-settings: renders workspace administration studio', async ({ page }, testInfo) => {
++    await setupRbacMocks(page);
++    await page.goto('/workspaces/settings');
++
++    const pageContainer = page.getByTestId('workspace-settings-page');
++    await expect(pageContainer).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-workspace-settings-general',
++      annotations: [
++        { selector: '[data-testid="workspace-settings-page"]', label: 'Workspace Administration' },
++        { selector: '[data-testid="workspace-general-form"]', label: 'Workspace Policy & Identity' },
++      ],
++    });
++  });
++});
 diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
 index baaf0e4..2b7a0af 100644
 --- a/kanban/web/src/app/AppShell.tsx
@@ -1641,6 +2116,1513 @@ index c624b14..afcf3d3 100644
                  </select>
                </div>
  
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+new file mode 100644
+index 0000000..dd5c5a3
+--- /dev/null
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -0,0 +1,328 @@
++/**
++ * Styles for Project Settings & Workspace Settings Pages (KANBA-202)
++ */
++
++.kb-settings-container {
++  max-width: 960px;
++  margin: 0 auto;
++  padding: 2rem 1.5rem;
++}
++
++.kb-settings-header {
++  margin-bottom: 2rem;
++  border-bottom: 1px solid var(--border-color, #e2e8f0);
++  padding-bottom: 1rem;
++}
++
++.kb-settings-title {
++  font-size: 1.75rem;
++  font-weight: 700;
++  margin: 0 0 0.5rem 0;
++  color: var(--text-primary, #0f172a);
++}
++
++.kb-settings-subtitle {
++  font-size: 0.95rem;
++  color: var(--text-secondary, #64748b);
++  margin: 0;
++}
++
++.kb-settings-alert {
++  padding: 0.75rem 1rem;
++  border-radius: 6px;
++  margin-bottom: 1.5rem;
++  font-size: 0.9rem;
++}
++
++.kb-settings-alert-error {
++  background-color: var(--bg-danger-subtle, #fef2f2);
++  color: var(--text-danger, #b91c1c);
++  border: 1px solid var(--border-danger, #fecaca);
++}
++
++.kb-settings-alert-success {
++  background-color: var(--bg-success-subtle, #f0fdf4);
++  color: var(--text-success, #15803d);
++  border: 1px solid var(--border-success, #bbf7d0);
++}
++
++.kb-settings-tabs {
++  display: flex;
++  gap: 0.5rem;
++  border-bottom: 1px solid var(--border-color, #e2e8f0);
++  margin-bottom: 1.5rem;
++}
++
++.kb-settings-tab {
++  padding: 0.6rem 1rem;
++  background: transparent;
++  border: none;
++  border-bottom: 2px solid transparent;
++  cursor: pointer;
++  font-size: 0.95rem;
++  font-weight: 500;
++  color: var(--text-secondary, #64748b);
++  transition: all 0.2s ease;
++}
++
++.kb-settings-tab:hover {
++  color: var(--text-primary, #0f172a);
++}
++
++.kb-settings-tab-active {
++  color: var(--brand-primary, #2563eb);
++  border-bottom-color: var(--brand-primary, #2563eb);
++  font-weight: 600;
++}
++
++.kb-settings-panel {
++  background: var(--bg-surface, #ffffff);
++  border-radius: 8px;
++}
++
++.kb-settings-form {
++  display: flex;
++  flex-direction: column;
++  gap: 1.25rem;
++  max-width: 640px;
++}
++
++.kb-form-group {
++  display: flex;
++  flex-direction: column;
++  gap: 0.35rem;
++}
++
++.kb-form-group label {
++  font-size: 0.9rem;
++  font-weight: 600;
++  color: var(--text-primary, #0f172a);
++}
++
++.kb-form-group-checkbox {
++  margin: 0.5rem 0;
++}
++
++.kb-checkbox-label {
++  display: flex;
++  align-items: center;
++  gap: 0.5rem;
++  cursor: pointer;
++  font-size: 0.9rem;
++  color: var(--text-primary, #0f172a);
++}
++
++.kb-input, .kb-textarea, .kb-select {
++  padding: 0.5rem 0.75rem;
++  border: 1px solid var(--border-color, #cbd5e1);
++  border-radius: 6px;
++  font-size: 0.95rem;
++  color: var(--text-primary, #0f172a);
++  background: var(--bg-input, #ffffff);
++}
++
++.kb-input:focus, .kb-textarea:focus, .kb-select:focus {
++  outline: none;
++  border-color: var(--brand-primary, #2563eb);
++  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
++}
++
++.kb-btn {
++  padding: 0.5rem 1rem;
++  border-radius: 6px;
++  font-size: 0.9rem;
++  font-weight: 500;
++  cursor: pointer;
++  border: 1px solid transparent;
++  transition: all 0.2s ease;
++}
++
++.kb-btn:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++
++.kb-btn-primary {
++  background: var(--brand-primary, #2563eb);
++  color: #ffffff;
++}
++
++.kb-btn-primary:hover:not(:disabled) {
++  background: var(--brand-primary-hover, #1d4ed8);
++}
++
++.kb-btn-secondary {
++  background: var(--bg-secondary, #f1f5f9);
++  color: var(--text-primary, #0f172a);
++  border-color: var(--border-color, #cbd5e1);
++}
++
++.kb-btn-secondary:hover:not(:disabled) {
++  background: var(--bg-secondary-hover, #e2e8f0);
++}
++
++.kb-btn-danger {
++  background: var(--bg-danger, #dc2626);
++  color: #ffffff;
++}
++
++.kb-btn-danger:hover:not(:disabled) {
++  background: var(--bg-danger-hover, #b91c1c);
++}
++
++.kb-btn-danger-sm {
++  padding: 0.25rem 0.5rem;
++  font-size: 0.8rem;
++  background: var(--bg-danger, #dc2626);
++  color: #ffffff;
++  border-radius: 4px;
++}
++
++.kb-members-section {
++  display: flex;
++  flex-direction: column;
++  gap: 1.5rem;
++}
++
++.kb-members-actions-bar {
++  display: flex;
++  justify-content: flex-end;
++}
++
++.kb-add-member-form {
++  padding: 1rem;
++  background: var(--bg-secondary, #f8fafc);
++  border: 1px solid var(--border-color, #e2e8f0);
++  border-radius: 6px;
++}
++
++.kb-add-member-form h3 {
++  margin: 0 0 0.75rem 0;
++  font-size: 1rem;
++  font-weight: 600;
++}
++
++.kb-form-row {
++  display: flex;
++  gap: 0.75rem;
++  align-items: center;
++}
++
++.kb-table {
++  width: 100%;
++  border-collapse: collapse;
++  text-align: left;
++  font-size: 0.9rem;
++}
++
++.kb-table th, .kb-table td {
++  padding: 0.75rem;
++  border-bottom: 1px solid var(--border-color, #e2e8f0);
++}
++
++.kb-table th {
++  font-weight: 600;
++  color: var(--text-secondary, #64748b);
++  background: var(--bg-secondary, #f8fafc);
++}
++
++.kb-role-badge {
++  display: inline-block;
++  padding: 0.2rem 0.5rem;
++  border-radius: 4px;
++  font-size: 0.75rem;
++  font-weight: 600;
++}
++
++.kb-role-server_admin, .kb-role-project_admin, .kb-role-workspace_admin {
++  background: #ede9fe;
++  color: #6d28d9;
++}
++
++.kb-role-member, .kb-role-workspace_member {
++  background: #e0f2fe;
++  color: #0369a1;
++}
++
++.kb-role-viewer, .kb-role-workspace_guest {
++  background: #f1f5f9;
++  color: #475569;
++}
++
++.kb-integrations-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
++  gap: 1.25rem;
++}
++
++.kb-integration-card {
++  display: flex;
++  gap: 1rem;
++  padding: 1.25rem;
++  border: 1px solid var(--border-color, #e2e8f0);
++  border-radius: 8px;
++  text-decoration: none;
++  color: inherit;
++  transition: all 0.2s ease;
++  background: var(--bg-surface, #ffffff);
++}
++
++.kb-integration-card:hover {
++  border-color: var(--brand-primary, #2563eb);
++  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
++}
++
++.kb-card-icon {
++  font-size: 1.75rem;
++}
++
++.kb-card-content h3 {
++  margin: 0 0 0.25rem 0;
++  font-size: 1.05rem;
++  font-weight: 600;
++}
++
++.kb-card-content p {
++  margin: 0;
++  font-size: 0.85rem;
++  color: var(--text-secondary, #64748b);
++}
++
++.kb-danger-zone {
++  border: 1px solid var(--border-danger, #fecaca);
++  border-radius: 8px;
++  padding: 1.5rem;
++  background: var(--bg-danger-subtle, #fef2f2);
++}
++
++.kb-danger-header h3 {
++  color: var(--text-danger, #b91c1c);
++  margin: 0 0 0.5rem 0;
++}
++
++.kb-danger-confirm-card {
++  margin-top: 1rem;
++  padding: 1rem;
++  background: #ffffff;
++  border-radius: 6px;
++  border: 1px solid var(--border-color, #cbd5e1);
++}
++
++.kb-blast-radius-box {
++  background: #f8fafc;
++  padding: 0.75rem;
++  border-radius: 4px;
++  margin-bottom: 1rem;
++  font-size: 0.85rem;
++}
++
++.kb-blast-radius-box ul {
++  margin: 0.25rem 0 0 1.25rem;
++  padding: 0;
++}
++
++.kb-danger-actions {
++  display: flex;
++  gap: 0.75rem;
++  margin-top: 1rem;
++}
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+new file mode 100644
+index 0000000..8322c04
+--- /dev/null
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -0,0 +1,649 @@
++/**
++ * Project Settings Studio (KANBA-202).
++ *
++ * Dedicated management page for Project Administrators (`PROJECT_ADMIN`).
++ * Tabs:
++ * 1. General: Project Name, Description Markdown, Modules Enabled, Auto-Archive Days.
++ * 2. Members & Access: Project Role Bindings (`PROJECT_ADMIN`, `MEMBER`, `VIEWER`), Add Member, Remove Member, and Access Inspector trigger.
++ * 3. Automation & Integrations: Direct navigation cards to Workflows (`/projects/:projectKey/settings/workflows`), Custom Fields (`/projects/:projectKey/settings/custom-fields`), and Project MCP Keys (`/projects/:projectKey/settings/mcp`).
++ * 4. Danger Zone: 2-stage Project deletion with confirmation phrase and blast radius computation.
++ */
++
++import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
++import { Link, useNavigate, useParams } from 'react-router';
++import { apiFetch } from '../../api/client';
++import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
++import './ProjectSettingsPage.css';
++
++interface ProjectDetail {
++  id: string;
++  identifier: string;
++  name: string;
++  description_markdown?: string | null;
++  modules_enabled?: boolean;
++  auto_archive_days?: number | null;
++  capabilities?: string[];
++  is_project_admin?: boolean;
++  project_role?: string | null;
++}
++
++interface ProjectMember {
++  id: string;
++  principal_id: string;
++  project_id: string;
++  role: 'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER';
++  display_name?: string | null;
++  handle?: string | null;
++  email?: string | null;
++  created_at: string;
++}
++
++interface DestructiveRequestOut {
++  stage: string;
++  target: string;
++  target_kind: string;
++  target_id: string;
++  mode: string;
++  blast_summary: {
++    issues_count?: number;
++    sub_issues_count?: number;
++    pages_count?: number;
++    stickies_count?: number;
++    [key: string]: unknown;
++  };
++  blast_hash: string;
++  confirm_phrase: string;
++  confirmation_token: string;
++  expires_in_sec: number;
++}
++
++export function ProjectSettingsPage(): JSX.Element {
++  const { projectKey = 'KAN' } = useParams<{ projectKey: string }>();
++  const navigate = useNavigate();
++
++  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'integrations' | 'danger'>('general');
++  const [project, setProject] = useState<ProjectDetail | null>(null);
++  const [members, setMembers] = useState<ProjectMember[]>([]);
++  const [isLoading, setIsLoading] = useState<boolean>(true);
++  const [errorMessage, setErrorMessage] = useState<string | null>(null);
++  const [successMessage, setSuccessMessage] = useState<string | null>(null);
++
++  // General Tab Form State
++  const [name, setName] = useState<string>('');
++  const [description, setDescription] = useState<string>('');
++  const [modulesEnabled, setModulesEnabled] = useState<boolean>(true);
++  const [autoArchiveDays, setAutoArchiveDays] = useState<string>('');
++  const [isSaving, setIsSaving] = useState<boolean>(false);
++
++  // Add Member State
++  const [newPrincipalId, setNewPrincipalId] = useState<string>('');
++  const [newRole, setNewRole] = useState<'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER'>('MEMBER');
++  const [isAddingMember, setIsAddingMember] = useState<boolean>(false);
++
++  // Danger Zone State
++  const [dangerStage, setDangerStage] = useState<'idle' | 'requested' | 'executing'>('idle');
++  const [destructiveToken, setDestructiveToken] = useState<DestructiveRequestOut | null>(null);
++  const [enteredPhrase, setEnteredPhrase] = useState<string>('');
++  const [dangerError, setDangerError] = useState<string | null>(null);
++
++  useEffect(() => {
++    let active = true;
++    async function init(): Promise<void> {
++      setIsLoading(true);
++      setErrorMessage(null);
++      try {
++        const projRes = (await apiFetch('GET', `/api/v1/projects/${encodeURIComponent(projectKey)}` as never)) as ProjectDetail;
++        if (active) {
++          setProject(projRes);
++          setName(projRes.name);
++          setDescription(projRes.description_markdown ?? '');
++          setModulesEnabled(projRes.modules_enabled ?? true);
++          setAutoArchiveDays(projRes.auto_archive_days !== null && projRes.auto_archive_days !== undefined ? String(projRes.auto_archive_days) : '');
++        }
++
++        try {
++          const memRes: unknown = await apiFetch('GET', `/api/v1/projects/${encodeURIComponent(projectKey)}/members` as never);
++          if (active && Array.isArray(memRes)) {
++            setMembers(memRes as ProjectMember[]);
++          }
++        } catch {
++          // Members list may fail if not authorized
++        }
++      } catch (err: unknown) {
++        if (active) {
++          const errObj = err as { message?: string };
++          setErrorMessage(errObj.message ?? 'Failed to load project settings.');
++        }
++      } finally {
++        if (active) setIsLoading(false);
++      }
++    }
++    void init();
++    return () => {
++      active = false;
++    };
++  }, [projectKey]);
++
++  const handleSaveGeneral = (e: SyntheticEvent) => {
++    e.preventDefault();
++    void (async () => {
++      setIsSaving(true);
++      setErrorMessage(null);
++      setSuccessMessage(null);
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        const payload = {
++          name: name.trim(),
++          description_markdown: description,
++          modules_enabled: modulesEnabled,
++          auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
++        };
++
++        const updated = (await apiFetch('PATCH', `/api/v1/projects/${encodeURIComponent(projectKey)}` as never, {
++          headers,
++          body: JSON.stringify(payload),
++        })) as ProjectDetail;
++
++        setProject(updated);
++        setSuccessMessage('Project settings saved successfully.');
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to update project settings.');
++      } finally {
++        setIsSaving(false);
++      }
++    })();
++  };
++
++  const handleAddMember = (e: SyntheticEvent) => {
++    e.preventDefault();
++    if (!newPrincipalId.trim()) return;
++    void (async () => {
++      setIsAddingMember(true);
++      setErrorMessage(null);
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        await apiFetch('POST', `/api/v1/projects/${encodeURIComponent(projectKey)}/members` as never, {
++          headers,
++          body: JSON.stringify({ principal_id: newPrincipalId.trim(), role: newRole }),
++        });
++
++        setNewPrincipalId('');
++        setSuccessMessage('Project member added.');
++        const memRes = (await apiFetch('GET', `/api/v1/projects/${encodeURIComponent(projectKey)}/members` as never)) as
++          | ProjectMember[]
++          | { items: ProjectMember[] };
++        if (Array.isArray(memRes)) {
++          setMembers(memRes);
++        } else {
++          setMembers(memRes.items);
++        }
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to add project member.');
++      } finally {
++        setIsAddingMember(false);
++      }
++    })();
++  };
++
++  const handleRemoveMember = (principalId: string) => {
++    setErrorMessage(null);
++    void (async () => {
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = {};
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        await apiFetch('DELETE', `/api/v1/projects/${encodeURIComponent(projectKey)}/members/${encodeURIComponent(principalId)}` as never, {
++          headers,
++        });
++
++        setMembers((prev) => prev.filter((m) => m.principal_id !== principalId));
++        setSuccessMessage('Member removed from project.');
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to remove project member.');
++      }
++    })();
++  };
++
++  const handleTriggerAccessInspector = () => {
++    if (typeof window !== 'undefined' && project) {
++      window.dispatchEvent(
++        new CustomEvent('kb:open-access-inspector', {
++          bubbles: true,
++          detail: { objectId: project.id, title: project.name },
++        }),
++      );
++    }
++  };
++
++  const handleRequestDelete = () => {
++    setDangerError(null);
++    void (async () => {
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        const res = (await apiFetch('POST', '/api/v1/admin/destructive:request' as never, {
++          headers,
++          body: JSON.stringify({
++            target_kind: 'project',
++            target: projectKey,
++            mode: 'soft',
++          }),
++        })) as DestructiveRequestOut;
++
++        setDestructiveToken(res);
++        setDangerStage('requested');
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setDangerError(errObj.message ?? 'Failed to initiate project deletion.');
++      }
++    })();
++  };
++
++  const handleExecuteDelete = () => {
++    if (!destructiveToken) return;
++    setDangerError(null);
++    setDangerStage('executing');
++    void (async () => {
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        await apiFetch('POST', '/api/v1/admin/destructive:execute' as never, {
++          headers,
++          body: JSON.stringify({
++            confirmation_token: destructiveToken.confirmation_token,
++            confirm_phrase: enteredPhrase.trim(),
++            blast_hash: destructiveToken.blast_hash,
++          }),
++        });
++
++        void navigate('/projects');
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setDangerError(errObj.message ?? 'Failed to execute project deletion.');
++        setDangerStage('requested');
++      }
++    })();
++  };
++
++  if (isLoading) {
++    return (
++      <div data-testid="project-settings-page" className="kb-settings-container">
++        <div className="kb-settings-loading">Loading project settings...</div>
++      </div>
++    );
++  }
++
++  const isProjectAdmin = project?.is_project_admin === true || (project?.capabilities?.includes('ADMIN') ?? false);
++
++  if (!isProjectAdmin) {
++    return (
++      <div data-testid="project-settings-page" className="kb-settings-container">
++        <div className="kb-settings-error" role="alert">
++          <h2>Access Denied</h2>
++          <p>You do not have project administrator permissions for {projectKey}.</p>
++        </div>
++      </div>
++    );
++  }
++
++  return (
++    <div data-testid="project-settings-page" className="kb-settings-container">
++      <header className="kb-settings-header">
++        <div>
++          <h1 className="kb-settings-title">Project Settings: {project?.name ?? projectKey}</h1>
++          <p className="kb-settings-subtitle">Manage project identity, membership, workflows, and integrations.</p>
++        </div>
++      </header>
++
++      {errorMessage && (
++        <div className="kb-settings-alert kb-settings-alert-error" role="alert">
++          {errorMessage}
++        </div>
++      )}
++      {successMessage && (
++        <div className="kb-settings-alert kb-settings-alert-success" role="status">
++          {successMessage}
++        </div>
++      )}
++
++      {/* Tabs Navigation */}
++      <nav className="kb-settings-tabs" role="tablist" aria-label="Project Settings Navigation">
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'general'}
++          data-testid="tab-general"
++          className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('general'); }}
++        >
++          General
++        </button>
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'members'}
++          data-testid="tab-members"
++          className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('members'); }}
++        >
++          Members & Access
++        </button>
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'integrations'}
++          data-testid="tab-integrations"
++          className={`kb-settings-tab ${activeTab === 'integrations' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('integrations'); }}
++        >
++          Automation & Integrations
++        </button>
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'danger'}
++          data-testid="tab-danger"
++          className={`kb-settings-tab ${activeTab === 'danger' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('danger'); }}
++        >
++          Danger Zone
++        </button>
++      </nav>
++
++      {/* Tab Panels */}
++      <div className="kb-settings-panel">
++        {activeTab === 'general' && (
++          <form onSubmit={handleSaveGeneral} className="kb-settings-form" data-testid="general-form">
++            <div className="kb-form-group">
++              <label htmlFor="proj-name-input">Project Name</label>
++              <input
++                id="proj-name-input"
++                type="text"
++                data-testid="project-name-input"
++                className="kb-input"
++                value={name}
++                onChange={(e) => { setName(e.target.value); }}
++                required
++              />
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="proj-desc-input">Description (Markdown)</label>
++              <textarea
++                id="proj-desc-input"
++                data-testid="project-desc-input"
++                className="kb-textarea"
++                rows={4}
++                value={description}
++                onChange={(e) => { setDescription(e.target.value); }}
++              />
++            </div>
++
++            <div className="kb-form-group-checkbox">
++              <label className="kb-checkbox-label">
++                <input
++                  type="checkbox"
++                  data-testid="project-modules-checkbox"
++                  checked={modulesEnabled}
++                  onChange={(e) => { setModulesEnabled(e.target.checked); }}
++                />
++                <span>Enable Modules for this project</span>
++              </label>
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="proj-auto-archive-input">Auto-Archive Days (optional)</label>
++              <input
++                id="proj-auto-archive-input"
++                type="number"
++                data-testid="project-auto-archive-input"
++                className="kb-input"
++                min="1"
++                placeholder="Leave blank to disable"
++                value={autoArchiveDays}
++                onChange={(e) => { setAutoArchiveDays(e.target.value); }}
++              />
++            </div>
++
++            <button
++              type="submit"
++              data-testid="save-general-btn"
++              className="kb-btn kb-btn-primary"
++              disabled={isSaving}
++            >
++              {isSaving ? 'Saving...' : 'Save Changes'}
++            </button>
++          </form>
++        )}
++
++        {activeTab === 'members' && (
++          <div className="kb-members-section" data-testid="members-section">
++            <div className="kb-members-actions-bar">
++              <button
++                type="button"
++                data-testid="inspect-access-btn"
++                className="kb-btn kb-btn-secondary"
++                onClick={handleTriggerAccessInspector}
++              >
++                🔍 Inspect Effective Access
++              </button>
++            </div>
++
++            <form onSubmit={handleAddMember} className="kb-add-member-form" data-testid="add-member-form">
++              <h3>Add Project Member</h3>
++              <div className="kb-form-row">
++                <input
++                  type="text"
++                  data-testid="member-principal-id-input"
++                  className="kb-input"
++                  placeholder="Principal UUID or User ID"
++                  value={newPrincipalId}
++                  onChange={(e) => { setNewPrincipalId(e.target.value); }}
++                  required
++                />
++                <select
++                  data-testid="member-role-select"
++                  className="kb-select"
++                  value={newRole}
++                  onChange={(e) => { setNewRole(e.target.value as 'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER'); }}
++                >
++                  <option value="VIEWER">VIEWER (Read-only)</option>
++                  <option value="MEMBER">MEMBER (Work item edit)</option>
++                  <option value="PROJECT_ADMIN">PROJECT_ADMIN (Full control)</option>
++                </select>
++                <button
++                  type="submit"
++                  data-testid="add-member-submit-btn"
++                  className="kb-btn kb-btn-primary"
++                  disabled={isAddingMember}
++                >
++                  {isAddingMember ? 'Adding...' : 'Add Member'}
++                </button>
++              </div>
++            </form>
++
++            <div className="kb-members-table-wrapper">
++              <h3>Current Project Members</h3>
++              <table className="kb-table" data-testid="members-table">
++                <thead>
++                  <tr>
++                    <th>Member</th>
++                    <th>Role</th>
++                    <th>Actions</th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {members.length === 0 ? (
++                    <tr>
++                      <td colSpan={3} className="kb-empty-cell">No explicit project role bindings found.</td>
++                    </tr>
++                  ) : (
++                    members.map((member) => (
++                      <tr key={member.id} data-testid={`member-row-${member.principal_id}`}>
++                        <td>
++                          <div className="kb-member-info">
++                            <span className="kb-member-name">{member.display_name ?? member.handle ?? member.principal_id}</span>
++                            {member.email && <span className="kb-member-email">{member.email}</span>}
++                          </div>
++                        </td>
++                        <td>
++                          <span className={`kb-role-badge kb-role-${member.role.toLowerCase()}`}>
++                            {member.role}
++                          </span>
++                        </td>
++                        <td>
++                          <button
++                            type="button"
++                            data-testid={`remove-member-${member.principal_id}`}
++                            className="kb-btn kb-btn-danger-sm"
++                            onClick={() => { handleRemoveMember(member.principal_id); }}
++                          >
++                            Remove
++                          </button>
++                        </td>
++                      </tr>
++                    ))
++                  )}
++                </tbody>
++              </table>
++            </div>
++          </div>
++        )}
++
++        {activeTab === 'integrations' && (
++          <div className="kb-integrations-grid" data-testid="integrations-section">
++            <Link
++              to={`/projects/${projectKey}/settings/workflows`}
++              className="kb-integration-card"
++              data-testid="integration-workflows-card"
++            >
++              <div className="kb-card-icon">🔀</div>
++              <div className="kb-card-content">
++                <h3>Workflows & States</h3>
++                <p>Configure lifecycle transition hooks, approval gates, and automation rules.</p>
++              </div>
++            </Link>
++
++            <Link
++              to={`/projects/${projectKey}/settings/custom-fields`}
++              className="kb-integration-card"
++              data-testid="integration-custom-fields-card"
++            >
++              <div className="kb-card-icon">⚙️</div>
++              <div className="kb-card-content">
++                <h3>Custom Fields</h3>
++                <p>Define custom metadata attributes, validation rules, and schema definitions.</p>
++              </div>
++            </Link>
++
++            <Link
++              to={`/projects/${projectKey}/settings/mcp`}
++              className="kb-integration-card"
++              data-testid="integration-mcp-card"
++            >
++              <div className="kb-card-icon">🤖</div>
++              <div className="kb-card-content">
++                <h3>Project MCP Keys</h3>
++                <p>Manage scoped Model Context Protocol API tokens for autonomous agent runners.</p>
++              </div>
++            </Link>
++          </div>
++        )}
++
++        {activeTab === 'danger' && (
++          <div className="kb-danger-zone" data-testid="danger-section">
++            <div className="kb-danger-header">
++              <h3>Move Project to Trash</h3>
++              <p>
++                Deleting this project moves all associated work items, cycles, modules, and docs to trash according to retention policies.
++              </p>
++            </div>
++
++            {dangerError && (
++              <div className="kb-settings-alert kb-settings-alert-error" role="alert">
++                {dangerError}
++              </div>
++            )}
++
++            {dangerStage === 'idle' && (
++              <button
++                type="button"
++                data-testid="request-delete-btn"
++                className="kb-btn kb-btn-danger"
++                onClick={handleRequestDelete}
++              >
++                🗑️ Move Project to Trash...
++              </button>
++            )}
++
++            {dangerStage === 'requested' && destructiveToken && (
++              <div className="kb-danger-confirm-card" data-testid="danger-confirm-card">
++                <h4>Stage 2: Confirm Project Deletion</h4>
++                <div className="kb-blast-radius-box">
++                  <p><strong>Impacted Objects:</strong></p>
++                  <ul>
++                    <li>Work Items: {destructiveToken.blast_summary.issues_count}</li>
++                    <li>Docs / Pages: {destructiveToken.blast_summary.pages_count}</li>
++                    <li>Stickies: {destructiveToken.blast_summary.stickies_count}</li>
++                  </ul>
++                </div>
++
++                <p className="kb-confirm-prompt">
++                  To confirm, please type exact phrase: <code>{destructiveToken.confirm_phrase}</code>
++                </p>
++
++                <input
++                  type="text"
++                  data-testid="confirm-phrase-input"
++                  className="kb-input"
++                  placeholder="Type confirmation phrase exactly"
++                  value={enteredPhrase}
++                  onChange={(e) => { setEnteredPhrase(e.target.value); }}
++                />
++
++                <div className="kb-danger-actions">
++                  <button
++                    type="button"
++                    data-testid="execute-delete-btn"
++                    className="kb-btn kb-btn-danger"
++                    disabled={enteredPhrase.trim() !== destructiveToken.confirm_phrase}
++                    onClick={handleExecuteDelete}
++                  >
++                    Confirm Permanent Deletion
++                  </button>
++                  <button
++                    type="button"
++                    data-testid="cancel-delete-btn"
++                    className="kb-btn kb-btn-secondary"
++                    onClick={() => {
++                      setDangerStage('idle');
++                      setDestructiveToken(null);
++                      setEnteredPhrase('');
++                    }}
++                  >
++                    Cancel
++                  </button>
++                </div>
++              </div>
++            )}
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
++export default ProjectSettingsPage;
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+new file mode 100644
+index 0000000..473f064
+--- /dev/null
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -0,0 +1,512 @@
++/**
++ * Workspace Settings Studio (KANBA-202).
++ *
++ * Dedicated management page for Workspace Administrators (`WORKSPACE_ADMIN` / `SERVER_ADMIN`).
++ * Tabs:
++ * 1. General & Policy: Workspace Name, Slug, Default Visibility, Session Timeouts, Trash Retention.
++ * 2. Workspace Members: Local user provisioning (`+ Add User`) and role binding updates.
++ * 3. Workspace MCP Keys: Link to `/workspaces/settings/mcp`.
++ */
++
++import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
++import { Link } from 'react-router';
++import { apiFetch } from '../../api/client';
++import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
++import './ProjectSettingsPage.css';
++
++interface WorkspaceSettingsData {
++  workspace_id: string;
++  name: string;
++  slug: string;
++  display_name: string;
++  default_project_visibility: 'private' | 'workspace';
++  session_idle_timeout_min: number;
++  session_absolute_timeout_min: number;
++  trash_retention_days: number;
++  mcp_key_max_ttl_days: number;
++  air_gap_mode: boolean;
++  updated_at: string;
++}
++
++interface WorkspacePrincipal {
++  id: string;
++  display_name?: string | null;
++  principal_type: string;
++  handle?: string | null;
++  email?: string | null;
++  role?: string | null;
++}
++
++export function WorkspaceSettingsPage(): JSX.Element {
++  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'mcp'>('general');
++  const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
++  const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
++  const [isLoading, setIsLoading] = useState<boolean>(true);
++  const [errorMessage, setErrorMessage] = useState<string | null>(null);
++  const [successMessage, setSuccessMessage] = useState<string | null>(null);
++
++  // Form Fields
++  const [name, setName] = useState<string>('');
++  const [slug, setSlug] = useState<string>('');
++  const [defaultVisibility, setDefaultVisibility] = useState<'private' | 'workspace'>('workspace');
++  const [idleTimeout, setIdleTimeout] = useState<number>(120);
++  const [absTimeout, setAbsTimeout] = useState<number>(1440);
++  const [trashRetention, setTrashRetention] = useState<number>(30);
++  const [isSaving, setIsSaving] = useState<boolean>(false);
++
++  // New User Form
++  const [newHandle, setNewHandle] = useState<string>('');
++  const [newDisplayName, setNewDisplayName] = useState<string>('');
++  const [newEmail, setNewEmail] = useState<string>('');
++  const [newPassword, setNewPassword] = useState<string>('');
++  const [newRole, setNewRole] = useState<'WORKSPACE_MEMBER' | 'WORKSPACE_GUEST' | 'WORKSPACE_ADMIN'>('WORKSPACE_MEMBER');
++  const [isCreatingUser, setIsCreatingUser] = useState<boolean>(false);
++  const [currentUser, setCurrentUser] = useState<{
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++  } | null>(null);
++
++  useEffect(() => {
++    let active = true;
++    async function init(): Promise<void> {
++      setIsLoading(true);
++      setErrorMessage(null);
++      try {
++        // 0. Verify authorization
++        try {
++          const me = (await apiFetch('GET', '/api/v1/auth/me' as never)) as {
++            is_server_admin?: boolean;
++            is_workspace_admin?: boolean;
++          };
++          if (active) setCurrentUser(me);
++          if (!me.is_server_admin && !me.is_workspace_admin) {
++            if (active) setIsLoading(false);
++            return;
++          }
++        } catch {
++          // Fall back gracefully in offline unit tests
++        }
++
++        // 1. Fetch workspace settings
++        const settingsRes = (await apiFetch('GET', '/api/v1/admin/workspace-settings' as never)) as WorkspaceSettingsData;
++        if (active) {
++          setSettings(settingsRes);
++          setName(settingsRes.name);
++          setSlug(settingsRes.slug);
++          setDefaultVisibility(settingsRes.default_project_visibility);
++          setIdleTimeout(settingsRes.session_idle_timeout_min);
++          setAbsTimeout(settingsRes.session_absolute_timeout_min);
++          setTrashRetention(settingsRes.trash_retention_days);
++        }
++
++        // 2. Fetch workspace principals
++        try {
++          const pRes = (await apiFetch('GET', '/api/v1/admin/principals?filter=USER&limit=100' as never)) as
++            | WorkspacePrincipal[]
++            | { items?: WorkspacePrincipal[] };
++          const raw = Array.isArray(pRes) ? pRes : (pRes.items ?? []);
++          if (active) setPrincipals(raw);
++        } catch {
++          // May be restricted or mock in tests
++        }
++      } catch (err: unknown) {
++        if (active) {
++          const errObj = err as { message?: string };
++          setErrorMessage(errObj.message ?? 'Failed to load workspace settings.');
++        }
++      } finally {
++        if (active) setIsLoading(false);
++      }
++    }
++    void init();
++    return () => {
++      active = false;
++    };
++  }, []);
++
++  const handleSaveGeneral = (e: SyntheticEvent) => {
++    e.preventDefault();
++    void (async () => {
++      setIsSaving(true);
++      setErrorMessage(null);
++      setSuccessMessage(null);
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        const payload = {
++          name: name.trim(),
++          slug: slug.trim(),
++          default_project_visibility: defaultVisibility,
++          session_idle_timeout_min: idleTimeout,
++          session_absolute_timeout_min: absTimeout,
++          trash_retention_days: trashRetention,
++        };
++
++        const updated = (await apiFetch('PATCH', '/api/v1/admin/workspace-settings' as never, {
++          headers,
++          body: JSON.stringify(payload),
++        })) as WorkspaceSettingsData;
++
++        setSettings(updated);
++        setSuccessMessage('Workspace settings updated successfully.');
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to update workspace settings.');
++      } finally {
++        setIsSaving(false);
++      }
++    })();
++  };
++
++  const handleCreateUser = (e: SyntheticEvent) => {
++    e.preventDefault();
++    if (!newHandle.trim() || !newDisplayName.trim()) return;
++    void (async () => {
++      setIsCreatingUser(true);
++      setErrorMessage(null);
++      setSuccessMessage(null);
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        // 1. Create principal/user
++        const createdUser = (await apiFetch('POST', '/api/v1/admin/principals' as never, {
++          headers,
++          body: JSON.stringify({
++            type: 'USER',
++            handle: newHandle.startsWith('@') ? newHandle.trim() : `@${newHandle.trim()}`,
++            display_name: newDisplayName.trim(),
++            email: newEmail.trim() || undefined,
++            password: newPassword || undefined,
++          }),
++        })) as { id: string };
++
++        // 2. Bind role if provided
++        if (createdUser.id) {
++          await apiFetch('POST', '/api/v1/admin/role-bindings' as never, {
++            headers,
++            body: JSON.stringify({
++              principal_id: createdUser.id,
++              role_name: newRole,
++              scope_type: 'workspace',
++            }),
++          });
++        }
++
++        setNewHandle('');
++        setNewDisplayName('');
++        setNewEmail('');
++        setNewPassword('');
++        setSuccessMessage(`User ${newDisplayName} created successfully.`);
++        const pRes = (await apiFetch('GET', '/api/v1/admin/principals?filter=USER&limit=100' as never)) as
++          | WorkspacePrincipal[]
++          | { items?: WorkspacePrincipal[] };
++        const raw = Array.isArray(pRes) ? pRes : (pRes.items ?? []);
++        setPrincipals(raw);
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to create workspace user.');
++      } finally {
++        setIsCreatingUser(false);
++      }
++    })();
++  };
++
++  if (isLoading) {
++    return (
++      <div data-testid="workspace-settings-page" className="kb-settings-container">
++        <div className="kb-settings-loading">Loading workspace settings...</div>
++      </div>
++    );
++  }
++
++  if (currentUser && !currentUser.is_server_admin && !currentUser.is_workspace_admin) {
++    return (
++      <div data-testid="workspace-settings-page" className="kb-settings-container">
++        <div data-testid="access-denied-message" className="kb-settings-alert kb-settings-alert-error">
++          You do not have administrative privileges to manage this workspace.
++        </div>
++      </div>
++    );
++  }
++
++  return (
++    <div data-testid="workspace-settings-page" className="kb-settings-container">
++      <header className="kb-settings-header">
++        <div>
++          <h1 className="kb-settings-title">Workspace Settings</h1>
++          <p className="kb-settings-subtitle">Configure organization policies, membership, and workspace integrations.</p>
++        </div>
++      </header>
++
++      {errorMessage && (
++        <div className="kb-settings-alert kb-settings-alert-error" role="alert">
++          {errorMessage}
++        </div>
++      )}
++      {successMessage && (
++        <div className="kb-settings-alert kb-settings-alert-success" role="status">
++          {successMessage}
++        </div>
++      )}
++
++      {/* Tabs */}
++      <nav className="kb-settings-tabs" role="tablist" aria-label="Workspace Settings Navigation">
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'general'}
++          data-testid="tab-general"
++          className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('general'); }}
++        >
++          General & Policy
++        </button>
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'members'}
++          data-testid="tab-members"
++          className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('members'); }}
++        >
++          Workspace Members
++        </button>
++        <button
++          type="button"
++          role="tab"
++          aria-selected={activeTab === 'mcp'}
++          data-testid="tab-mcp"
++          className={`kb-settings-tab ${activeTab === 'mcp' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { setActiveTab('mcp'); }}
++        >
++          Workspace MCP Keys
++        </button>
++      </nav>
++
++      <div className="kb-settings-panel">
++        {activeTab === 'general' && (
++          <form onSubmit={handleSaveGeneral} className="kb-settings-form" data-testid="workspace-general-form">
++            <div className="kb-form-group">
++              <label htmlFor="ws-name-input">Workspace Name</label>
++              <input
++                id="ws-name-input"
++                type="text"
++                data-testid="workspace-name-input"
++                className="kb-input"
++                value={name}
++                onChange={(e) => { setName(e.target.value); }}
++                required
++              />
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="ws-slug-input">Workspace Slug</label>
++              <input
++                id="ws-slug-input"
++                type="text"
++                data-testid="workspace-slug-input"
++                className="kb-input"
++                value={slug}
++                onChange={(e) => { setSlug(e.target.value); }}
++                required
++              />
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="ws-visibility-select">Default Project Visibility</label>
++              <select
++                id="ws-visibility-select"
++                data-testid="workspace-visibility-select"
++                className="kb-select"
++                value={defaultVisibility}
++                onChange={(e) => { setDefaultVisibility(e.target.value as 'private' | 'workspace'); }}
++              >
++                <option value="workspace">Workspace (All members can view)</option>
++                <option value="private">Private (Explicit members only)</option>
++              </select>
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="ws-idle-timeout-input">Session Idle Timeout (Minutes)</label>
++              <input
++                id="ws-idle-timeout-input"
++                type="number"
++                data-testid="workspace-idle-timeout-input"
++                className="kb-input"
++                min="5"
++                value={idleTimeout}
++                onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
++                required
++              />
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
++              <input
++                id="ws-abs-timeout-input"
++                type="number"
++                data-testid="workspace-abs-timeout-input"
++                className="kb-input"
++                min="60"
++                value={absTimeout}
++                onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
++                required
++              />
++            </div>
++
++            <div className="kb-form-group">
++              <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
++              <input
++                id="ws-trash-retention-input"
++                type="number"
++                data-testid="workspace-trash-retention-input"
++                className="kb-input"
++                min="1"
++                value={trashRetention}
++                onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
++                required
++              />
++            </div>
++
++            <button
++              type="submit"
++              data-testid="save-workspace-btn"
++              className="kb-btn kb-btn-primary"
++              disabled={isSaving}
++            >
++              {isSaving ? 'Saving...' : 'Save Workspace Settings'}
++            </button>
++          </form>
++        )}
++
++        {activeTab === 'members' && (
++          <div className="kb-members-section" data-testid="workspace-members-section">
++            <form onSubmit={handleCreateUser} className="kb-add-member-form" data-testid="create-user-form">
++              <h3>+ Add Workspace User</h3>
++              <div className="kb-form-group">
++                <input
++                  type="text"
++                  data-testid="new-user-handle"
++                  className="kb-input"
++                  placeholder="@handle"
++                  value={newHandle}
++                  onChange={(e) => { setNewHandle(e.target.value); }}
++                  required
++                />
++              </div>
++              <div className="kb-form-group">
++                <input
++                  type="text"
++                  data-testid="new-user-name"
++                  className="kb-input"
++                  placeholder="Full Name / Display Name"
++                  value={newDisplayName}
++                  onChange={(e) => { setNewDisplayName(e.target.value); }}
++                  required
++                />
++              </div>
++              <div className="kb-form-group">
++                <input
++                  type="email"
++                  data-testid="new-user-email"
++                  className="kb-input"
++                  placeholder="email@example.com (optional)"
++                  value={newEmail}
++                  onChange={(e) => { setNewEmail(e.target.value); }}
++                />
++              </div>
++              <div className="kb-form-group">
++                <input
++                  type="password"
++                  data-testid="new-user-password"
++                  className="kb-input"
++                  placeholder="Initial Password (optional)"
++                  value={newPassword}
++                  onChange={(e) => { setNewPassword(e.target.value); }}
++                />
++              </div>
++              <div className="kb-form-row">
++                <select
++                  data-testid="new-user-role-select"
++                  className="kb-select"
++                  value={newRole}
++                  onChange={(e) => { setNewRole(e.target.value as 'WORKSPACE_MEMBER' | 'WORKSPACE_GUEST' | 'WORKSPACE_ADMIN'); }}
++                >
++                  <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Standard)</option>
++                  <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Restricted)</option>
++                  <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Admin)</option>
++                </select>
++                <button
++                  type="submit"
++                  data-testid="create-user-submit-btn"
++                  className="kb-btn kb-btn-primary"
++                  disabled={isCreatingUser}
++                >
++                  {isCreatingUser ? 'Creating...' : 'Create User'}
++                </button>
++              </div>
++            </form>
++
++            <div className="kb-members-table-wrapper">
++              <h3>Workspace Users & Principals</h3>
++              <table className="kb-table" data-testid="workspace-users-table">
++                <thead>
++                  <tr>
++                    <th>User</th>
++                    <th>Type</th>
++                    <th>Status</th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {principals.length === 0 ? (
++                    <tr>
++                      <td colSpan={3} className="kb-empty-cell">No users registered in this workspace.</td>
++                    </tr>
++                  ) : (
++                    principals.map((p) => (
++                      <tr key={p.id} data-testid={`principal-row-${p.id}`}>
++                        <td>
++                          <div className="kb-member-info">
++                            <span className="kb-member-name">{p.display_name ?? p.handle ?? p.id}</span>
++                            {p.email && <span className="kb-member-email">{p.email}</span>}
++                          </div>
++                        </td>
++                        <td>
++                          <span className="kb-role-badge kb-role-viewer">
++                            {p.principal_type}
++                          </span>
++                        </td>
++                        <td>Active</td>
++                      </tr>
++                    ))
++                  )}
++                </tbody>
++              </table>
++            </div>
++          </div>
++        )}
++
++        {activeTab === 'mcp' && (
++          <div className="kb-integrations-grid" data-testid="workspace-mcp-section">
++            <Link
++              to="/workspaces/settings/mcp"
++              className="kb-integration-card"
++              data-testid="link-workspace-mcp"
++            >
++              <div className="kb-card-icon">🏢</div>
++              <div className="kb-card-content">
++                <h3>Workspace MCP Access Keys</h3>
++                <p>Manage organization-level Model Context Protocol API tokens and client credentials.</p>
++              </div>
++            </Link>
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
++export default WorkspaceSettingsPage;
 diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 index 1c6004c..922142c 100644
 --- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
@@ -1672,6 +3654,350 @@ index 1c6004c..922142c 100644
    it('mints key, opens snippet modal with plaintext, copies, and wipes secret on close (Test Case 3)', async () => {
      vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+new file mode 100644
+index 0000000..4045a77
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -0,0 +1,176 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import { ProjectSettingsPage } from '../ProjectSettingsPage';
++import * as clientModule from '../../../api/client';
++
++describe('ProjectSettingsPage (KANBA-202)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false },
++      },
++    });
++    vi.clearAllMocks();
++  });
++
++  const renderComponent = (projectKey = 'KAN') =>
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={[`/projects/${projectKey}/settings`]}>
++          <ProjectSettingsPage />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++  it('renders project settings page tabs and switches between them', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url = path;
++      if (url.includes('/api/v1/projects/KAN/members')) {
++        return [
++          {
++            id: 'member-1',
++            principal_id: 'user-1',
++            principal_type: 'USER',
++            role: 'PROJECT_ADMIN',
++            display_name: 'Alice Admin',
++            handle: 'alice',
++            avatar_url: null,
++          },
++        ];
++      }
++      if (url.includes('/api/v1/projects/KAN')) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          description: 'Primary platform project',
++          modules_enabled: true,
++          is_project_admin: true,
++        };
++      }
++      return {};
++    });
++
++    renderComponent('KAN');
++
++    expect(await screen.findByTestId('project-settings-page')).toBeDefined();
++    expect(screen.getByRole('heading', { level: 1 })).toBeDefined();
++
++    // Verify tabs
++    const generalTab = screen.getByTestId('tab-general');
++    const membersTab = screen.getByTestId('tab-members');
++    const integrationsTab = screen.getByTestId('tab-integrations');
++    const dangerTab = screen.getByTestId('tab-danger');
++
++    expect(generalTab).toBeDefined();
++    expect(membersTab).toBeDefined();
++    expect(integrationsTab).toBeDefined();
++    expect(dangerTab).toBeDefined();
++
++    // General tab content
++    expect(await screen.findByDisplayValue('Kanban Platform')).toBeDefined();
++
++    // Switch to Members & Access
++    fireEvent.click(membersTab);
++    expect(await screen.findByText('Alice Admin')).toBeDefined();
++
++    // Switch to Automation & Integrations
++    fireEvent.click(integrationsTab);
++    expect(screen.getByText('Workflows & States')).toBeDefined();
++
++    // Switch to Danger Zone
++    fireEvent.click(dangerTab);
++    expect(screen.getByText('Move Project to Trash')).toBeDefined();
++    expect(screen.getByTestId('request-delete-btn')).toBeDefined();
++  });
++
++  it('allows adding and removing project members with role selection', async () => {
++    let membersList = [
++      {
++        id: 'member-1',
++        principal_id: 'user-1',
++        principal_type: 'USER',
++        role: 'PROJECT_ADMIN',
++        display_name: 'Alice Admin',
++        handle: 'alice',
++        avatar_url: null,
++      },
++    ];
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++      await Promise.resolve();
++      const url = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
++        return membersList;
++      }
++      if (url.includes('/api/v1/projects/KAN/members') && m === 'POST') {
++        const body = JSON.parse(String((options as { body?: string }).body)) as { principal_id: string; role: string };
++        const newMember = {
++          id: 'member-2',
++          principal_id: body.principal_id,
++          principal_type: 'USER',
++          role: body.role,
++          display_name: 'Bob Builder',
++          handle: 'bob',
++          avatar_url: null,
++        };
++        membersList = [...membersList, newMember];
++        return newMember;
++      }
++      if (url.includes('/api/v1/projects/KAN/members/') && m === 'DELETE') {
++        membersList = membersList.filter((mem) => !url.includes(mem.principal_id));
++        return {};
++      }
++      if (url.includes('/api/v1/projects/KAN')) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++        };
++      }
++      return {};
++    });
++
++    renderComponent('KAN');
++
++    // Switch to members tab
++    const membersTab = await screen.findByTestId('tab-members');
++    fireEvent.click(membersTab);
++
++    expect(await screen.findByText('Alice Admin')).toBeDefined();
++
++    // Add member
++    const input = screen.getByTestId('member-principal-id-input');
++    fireEvent.change(input, { target: { value: 'user-2' } });
++
++    const roleSelect = screen.getByTestId('member-role-select');
++    fireEvent.change(roleSelect, { target: { value: 'VIEWER' } });
++
++    const addBtn = screen.getByTestId('add-member-submit-btn');
++    fireEvent.click(addBtn);
++
++    await waitFor(() => {
++      expect(screen.getByText('Bob Builder')).toBeDefined();
++    });
++
++    // Remove member
++    const removeBtn = screen.getByTestId('remove-member-user-2');
++    fireEvent.click(removeBtn);
++
++    await waitFor(() => {
++      expect(screen.queryByText('Bob Builder')).toBeNull();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+new file mode 100644
+index 0000000..584efed
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -0,0 +1,156 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import { WorkspaceSettingsPage } from '../WorkspaceSettingsPage';
++import * as clientModule from '../../../api/client';
++
++describe('WorkspaceSettingsPage (KANBA-202)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false },
++      },
++    });
++    vi.clearAllMocks();
++  });
++
++  const renderComponent = () =>
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/workspaces/settings']}>
++          <WorkspaceSettingsPage />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++  it('renders workspace settings page and updates workspace name and slug', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/auth/me')) {
++        return {
++          id: 'user-admin',
++          is_server_admin: true,
++          is_workspace_admin: true,
++          workspace_role: 'SERVER_ADMIN',
++        };
++      }
++      if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
++        return {
++          id: 'ws-1',
++          name: 'Primary Workspace',
++          slug: 'primary-workspace',
++        };
++      }
++      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
++        return {
++          id: 'ws-1',
++          name: 'Primary Workspace',
++          slug: 'primary-workspace',
++          default_project_visibility: 'workspace',
++          session_idle_timeout_min: 120,
++          session_absolute_timeout_min: 1440,
++          trash_retention_days: 30,
++        };
++      }
++      if (url.includes('/api/v1/workspaces') && m === 'GET') {
++        return [
++          {
++            id: 'ws-1',
++            name: 'Primary Workspace',
++            slug: 'primary-workspace',
++            is_current: true,
++          },
++        ];
++      }
++      if (m === 'PATCH') {
++        return {
++          id: 'ws-1',
++          name: 'Updated Workspace',
++          slug: 'updated-workspace',
++        };
++      }
++      return {};
++    });
++
++    renderComponent();
++
++    expect(await screen.findByTestId('workspace-settings-page')).toBeDefined();
++    expect(screen.getByRole('heading', { level: 1 })).toBeDefined();
++
++    // Verify tabs
++    const generalTab = screen.getByTestId('tab-general');
++    const membersTab = screen.getByTestId('tab-members');
++    const mcpTab = screen.getByTestId('tab-mcp');
++
++    expect(generalTab).toBeDefined();
++    expect(membersTab).toBeDefined();
++    expect(mcpTab).toBeDefined();
++
++    // General tab inputs
++    const nameInput = await screen.findByTestId('workspace-name-input');
++    const slugInput = screen.getByTestId('workspace-slug-input');
++
++    expect(nameInput).toBeDefined();
++    expect(slugInput).toBeDefined();
++
++    fireEvent.change(nameInput, { target: { value: 'Updated Workspace' } });
++    fireEvent.change(slugInput, { target: { value: 'updated-workspace' } });
++
++    const submitBtn = screen.getByTestId('save-workspace-btn');
++    fireEvent.click(submitBtn);
++
++    await waitFor(() => {
++      expect(screen.getByText('Workspace settings updated successfully.')).toBeDefined();
++    });
++
++    // Switch to Members tab
++    fireEvent.click(membersTab);
++    expect(screen.getByText('Workspace Users & Principals')).toBeDefined();
++
++    // Switch to MCP keys tab
++    fireEvent.click(mcpTab);
++    expect(screen.getByText('Workspace MCP Access Keys')).toBeDefined();
++    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
++  });
++
++  it('renders 403 access denied when standard member visits workspace settings', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url = path;
++      if (url.includes('/api/v1/auth/me')) {
++        return {
++          id: 'user-member',
++          is_server_admin: false,
++          is_workspace_admin: false,
++          workspace_role: 'WORKSPACE_MEMBER',
++        };
++      }
++      if (url.includes('/api/v1/workspaces')) {
++        return [
++          {
++            id: 'ws-1',
++            name: 'Primary Workspace',
++            slug: 'primary-workspace',
++            is_current: true,
++          },
++        ];
++      }
++      return {};
++    });
++
++    renderComponent();
++
++    expect(await screen.findByTestId('access-denied-message')).toBeDefined();
++    expect(screen.getByText(/You do not have administrative privileges/)).toBeDefined();
++  });
++});
 diff --git a/kanban/web/src/features/views/BulkActionBar.tsx b/kanban/web/src/features/views/BulkActionBar.tsx
 index 36b74bc..1dbce7c 100644
 --- a/kanban/web/src/features/views/BulkActionBar.tsx
