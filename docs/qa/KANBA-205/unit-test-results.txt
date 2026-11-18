@@ -1,0 +1,128 @@
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 65%]
+........................................................................ [ 87%]
+........................................                                 [100%]
+=============================== warnings summary ===============================
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py::test_mcp_mint_enrollment_token_and_list_runners
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/e1f74689-a7a3-4ad2-818b-738c8f3eeab1/swarm-mcp-qa-builder-e35c49ae/.venv/lib/python3.12/site-packages/fastapi/routing.py:372: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                                       Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------------------------
+mcp/__init__.py                                                8      0      0      0   100%
+mcp/admin/__init__.py                                          1      0      0      0   100%
+mcp/admin/registry.py                                          3      3      0      0     0%   5-13
+mcp/admin/tools/__init__.py                                    3      0      0      0   100%
+mcp/admin/tools/manage_ai_and_agent_runners.py               239     31    146     25    85%   303, 309, 335, 337, 367-379, 388-389, 418-422, 590->602, 591->590, 593->590, 610->615, 660, 662, 664, 675-676, 688-689, 697-698, 735->738, 746-747, 753->755, 756, 766-767, 775-776, 799-800, 804-805
+mcp/admin/tools/manage_custom_fields_and_scripts.py          141      0     86      2    99%   267->266, 441->447
+mcp/admin/tools/manage_cycles_and_modules.py                   2      2      0      0     0%   5-11
+mcp/admin/tools/manage_workflow_interceptors.py              228     11    112      7    95%   154, 178-180, 214->227, 223->227, 225-226, 238-239, 289->304, 337->336, 341->340, 370-371, 579-580
+mcp/app.py                                                    60      0     18      0   100%
+mcp/auth.py                                                  276     15     82      9    93%   253, 268, 272, 341-345, 357->364, 403-407, 450-451, 453->482, 473-479, 567->569
+mcp/bench/__init__.py                                          0      0      0      0   100%
+mcp/bench/token_benchmark.py                                  42      1      8      1    96%   73
+mcp/context.py                                                40      2      0      0    95%   84-85
+mcp/errors.py                                                 83      1     12      1    98%   116
+mcp/help.py                                                   48      1     18      3    94%   114->119, 126->131, 172
+mcp/internal_client.py                                       175      5     82      5    96%   150->155, 153-154, 187->200, 319, 321, 324
+mcp/lod.py                                                   252     12    168     16    92%   37->42, 137->139, 139->127, 152->151, 168, 172, 174->179, 176->179, 184, 209, 219, 239-241, 261->exit, 330-333, 337->336, 360
+mcp/markdown_sections.py                                      72      0     30      1    99%   50->53
+mcp/metadata.py                                               63     13     34     11    69%   33, 39, 44-47, 61, 71-73, 94->108, 97->108, 98->100, 104-106, 109
+mcp/protocol.py                                              330     17    146     11    94%   156->exit, 268, 308, 322-323, 377-379, 405->437, 415, 427-428, 535->544, 610->627, 709->822, 721-726, 744, 771-783
+mcp/registry.py                                               42      0      4      0   100%
+mcp/resolver.py                                               39      1      8      1    96%   68
+mcp/scoping.py                                               120      1     50      2    98%   248, 330->exit
+mcp/settings.py                                               19      0      0      0   100%
+mcp/surfaces/__init__.py                                       0      0      0      0   100%
+mcp/surfaces/admin/__init__.py                                33      0      0      0   100%
+mcp/surfaces/admin/architect_project.py                       97      5     48      4    94%   77, 94-103, 111->122, 119-120
+mcp/surfaces/admin/audit_and_purge_object_links.py            72      3     42      4    94%   144, 192, 250->249, 282
+mcp/surfaces/admin/configure_workspace.py                    105      2     60      5    96%   117->121, 123->127, 176->187, 221->232, 226-227
+mcp/surfaces/admin/destructive_lifecycle.py                   90      0     38      0   100%
+mcp/surfaces/admin/manage_access_policies.py                  90      2     44      3    96%   147->149, 212, 270
+mcp/surfaces/admin/manage_ai_and_agent_runners.py              3      0      0      0   100%
+mcp/surfaces/admin/manage_auth_cards.py                      141      6     78      7    94%   165-166, 192-193, 219-220, 230->232, 291->294, 314->317, 318->321
+mcp/surfaces/admin/manage_custom_fields_and_scripts.py         2      0      0      0   100%
+mcp/surfaces/admin/manage_cycles_and_modules.py              343     26    178     17    91%   191->195, 213->217, 215->214, 238->241, 242->241, 290, 301->312, 382->384, 469-470, 495-496, 543->546, 631->633, 663-664, 679, 704-705, 727-728, 733-740, 753-754, 759-766
+mcp/surfaces/admin/manage_principals_and_groups.py           124      4     52      4    95%   121, 171, 194, 383
+mcp/surfaces/admin/manage_workflow_interceptors.py             3      0      0      0   100%
+mcp/surfaces/admin/override_ticket_provenance.py              99      2     60      2    97%   149, 156
+mcp/surfaces/agent/__init__.py                                24      0      0      0   100%
+mcp/surfaces/agent/add_comment.py                             86      0     36      0   100%
+mcp/surfaces/agent/begin_work.py                              71      2     28      2    96%   94, 149
+mcp/surfaces/agent/complete_work.py                           91      2     36      3    96%   134, 147, 199->202
+mcp/surfaces/agent/create_ticket.py                           93      0     46      0   100%
+mcp/surfaces/agent/link_objects.py                           124      3     68      9    94%   203->220, 206, 210->204, 213->204, 222->239, 225, 227, 229->223, 232->223
+mcp/surfaces/agent/proof.py                                    5      0      0      0   100%
+mcp/surfaces/agent/read_ticket.py                            238     25    124     32    84%   103, 111, 120, 128->126, 146, 148, 150->152, 165, 167->169, 176, 185, 200->203, 205->208, 220-221, 227->229, 231-232, 233->235, 235->237, 237->239, 256-257, 260, 263, 279-280, 286->288, 288->290, 290->292, 292->301, 299->301, 307, 316-317, 320, 323, 341, 366
+mcp/surfaces/agent/search_tickets.py                         166     15     80      9    90%   211, 223-224, 249-250, 254-257, 261-264, 267, 282-283, 293-294, 360
+mcp/surfaces/agent/transition_ticket.py                       87      4     36      2    95%   102-103, 125, 137
+mcp/surfaces/agent/update_ticket.py                          243      8    158     21    92%   165, 302->307, 304->307, 307->312, 309->312, 324->329, 326->329, 329->334, 331->334, 354->376, 366->368, 373, 379->437, 384, 390, 392->388, 397->388, 421-424, 439->480, 455, 464->471, 491->495
+mcp/surfaces/docs/__init__.py                                 22      0      0      0   100%
+mcp/surfaces/docs/link_knowledge.py                          115      2     42      9    93%   89->93, 93->102, 98->102, 105->109, 159-160, 161->174, 167->174, 201->215, 203->215, 211->204
+mcp/surfaces/docs/manage_stickies.py                         108      0     50      2    99%   133->148, 194->200
+mcp/surfaces/docs/promote_sticky_to_doc.py                    84      2     26      3    95%   70->78, 83->88, 100-101
+mcp/surfaces/docs/read_doc.py                                163      7     56      8    93%   97-99, 117->123, 119-120, 128->134, 137->143, 145->150, 180->216, 279, 283
+mcp/surfaces/docs/search_knowledge.py                         70      0     26      0   100%
+mcp/surfaces/docs/upsert_doc.py                              127      3     42      2    97%   101-102, 136, 168->170
+mcp/tests/__init__.py                                          0      0      0      0   100%
+mcp/tests/admin/__init__.py                                    0      0      0      0   100%
+mcp/tests/admin/conftest.py                                  113      0      6      1    99%   171->157
+mcp/tests/admin/test_architect_project.py                    182      0      8      1    99%   43->61
+mcp/tests/admin/test_audit_and_purge_links.py                243      5     26      7    96%   37, 72->74, 103->105, 154, 213, 276, 308
+mcp/tests/admin/test_bind_project_repo.py                     95      1     10      5    94%   35->53, 54->56, 56->58, 58->61, 295
+mcp/tests/admin/test_configure_workspace.py                  190      0     10      2    99%   51->69, 457->463
+mcp/tests/admin/test_destructive_lifecycle.py                294      0      6      1    99%   48->66
+mcp/tests/admin/test_manage_access_policies.py               157      4     14      5    95%   50->75, 53, 57, 77, 81
+mcp/tests/admin/test_manage_ai_and_agent_runners.py          213      2      8      4    97%   47->65, 66->68, 69, 71
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py     145      0      0      0   100%
+mcp/tests/admin/test_manage_auth_cards.py                    190      2     10      3    98%   46->64, 66, 70
+mcp/tests/admin/test_manage_custom_fields_and_scripts.py     228      0      0      0   100%
+mcp/tests/admin/test_manage_cycles_and_modules.py            291      0     14      1    99%   48->66
+mcp/tests/admin/test_manage_principals.py                    156      4     14      5    95%   38->63, 41, 45, 65, 69
+mcp/tests/admin/test_manage_workflow_interceptors.py         293      0      0      0   100%
+mcp/tests/admin/test_override_ticket_provenance.py           294      8     52     10    95%   72->74, 103->105, 155, 214, 251, 284, 523, 746, 775, 801
+mcp/tests/agent/__init__.py                                    0      0      0      0   100%
+mcp/tests/agent/conftest.py                                  125      0      6      0   100%
+mcp/tests/agent/test_add_comment.py                          196      0      6      1    99%   32->50
+mcp/tests/agent/test_create_ticket.py                        191      0      4      1    99%   30->48
+mcp/tests/agent/test_link_objects.py                         167      0      4      1    99%   31->49
+mcp/tests/agent/test_pending_gate_contract.py                 67      0      2      0   100%
+mcp/tests/agent/test_read_ticket.py                          246      2     20      7    97%   39->57, 420->429, 425->421, 430->444, 434->440, 440->431, 445-446
+mcp/tests/agent/test_search_tickets.py                       172      0      6      0   100%
+mcp/tests/agent/test_transition_ticket_gate.py                47      0      2      0   100%
+mcp/tests/agent/test_update_ticket.py                        287      1     10      3    99%   37->55, 84->86, 711
+mcp/tests/agent/test_workflow_argument_validation.py         142      0      0      0   100%
+mcp/tests/agent/test_workflow_tools.py                       105      0      4      1    99%   54->72
+mcp/tests/conftest.py                                         70      2     12      1    96%   95-96
+mcp/tests/docs/__init__.py                                     0      0      0      0   100%
+mcp/tests/docs/conftest.py                                    63      0      2      1    98%   109->117
+mcp/tests/docs/test_docs_surfaces_unit.py                    448     17     86     14    94%   130, 194, 386, 389, 437, 514, 591, 599, 609, 623-625, 735, 780, 934, 957, 990
+mcp/tests/docs/test_docs_tools.py                            314      1      2      1    99%   61
+mcp/tests/test_admin_scope_requirements_all_12.py             23      0      2      0   100%
+mcp/tests/test_app.py                                        201      0     10      1    99%   238->exit
+mcp/tests/test_auth.py                                       328     16     10      2    93%   52, 70-73, 144-145, 349, 397-410, 529, 532, 555
+mcp/tests/test_connection_scoping.py                         297     11     30      3    93%   158-193, 237->272, 273, 300
+mcp/tests/test_ephemeral_auth.py                             308      7     18      3    97%   88, 140, 147, 181, 234, 280, 840
+mcp/tests/test_internal_client.py                            143      0     14      0   100%
+mcp/tests/test_key_narrowing.py                               92      4      4      1    93%   36, 54-57
+mcp/tests/test_lod_help.py                                   222      1      6      2    99%   381, 488->492
+mcp/tests/test_markdown_sections.py                           53      0      0      0   100%
+mcp/tests/test_metadata.py                                    42      0      0      0   100%
+mcp/tests/test_protocol.py                                   195      0      2      0   100%
+mcp/tests/test_registry_isolation.py                          76      0      0      0   100%
+mcp/tests/test_resolver.py                                    59      1      4      1    97%   46
+mcp/tests/test_schema_budget.py                               15      0      0      0   100%
+mcp/tests/test_smoke.py                                        3      0      0      0   100%
+mcp/tests/test_token_benchmark.py                             36      0      0      0   100%
+mcp/tests/test_yaml_out.py                                    50      0      0      0   100%
+mcp/yaml_out.py                                               79      1     38      1    98%   39
+------------------------------------------------------------------------------------------------------
+TOTAL                                                      13351    329   2940    333    96%
+Required test coverage of 95% reached. Total coverage: 95.67%
+328 passed, 1 warning in 89.43s (0:01:29)

@@ -1,0 +1,1727 @@
+{
+  "ticket": "KANBA-205",
+  "exchanges": [
+    {
+      "name": "condition_a_initialize",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "content-length": "88",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "initialize",
+          "params": {
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "mcp-session-id": "SjAlQWyPIb187qwkbVeHaf-FKE5Wc-cofNxAlB-k4jo",
+          "content-length": "172",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+              "tools": {
+                "listChanged": false
+              }
+            },
+            "serverInfo": {
+              "name": "kanban-mcp-agent",
+              "version": "0.0.0"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_a_tools_list",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "SjAlQWyPIb187qwkbVeHaf-FKE5Wc-cofNxAlB-k4jo",
+          "content-length": "46",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "7885",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "tools": [
+              {
+                "name": "search_tickets",
+                "description": "Search tickets.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "maxLength": 500,
+                      "description": "Search query"
+                    },
+                    "workspace": {
+                      "type": "string",
+                      "description": "Workspace slug"
+                    },
+                    "project": {
+                      "type": "string",
+                      "description": "Project ref"
+                    },
+                    "states": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "State filters"
+                    },
+                    "assignees": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Assignee filters"
+                    },
+                    "cycle": {
+                      "type": "string",
+                      "description": "Cycle filter"
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Module filters"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Label filters"
+                    },
+                    "blocked": {
+                      "type": "boolean",
+                      "description": "Blocked filter"
+                    },
+                    "gate_status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "rejected"
+                      ],
+                      "description": "Gate status filter"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "lexical",
+                        "hybrid"
+                      ],
+                      "default": "lexical",
+                      "description": "Search mode"
+                    },
+                    "lod": {
+                      "type": "string",
+                      "enum": [
+                        "summary",
+                        "standard"
+                      ],
+                      "default": "summary",
+                      "description": "LOD tier"
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50,
+                      "default": 20,
+                      "description": "Max results"
+                    },
+                    "cursor": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Cursor"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "read_ticket",
+                "description": "Read ticket.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "workspace": {
+                      "type": "string",
+                      "description": "Workspace"
+                    },
+                    "lod": {
+                      "type": "string",
+                      "enum": [
+                        "summary",
+                        "standard",
+                        "full"
+                      ],
+                      "default": "standard",
+                      "description": "LOD tier"
+                    },
+                    "comments_limit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 50,
+                      "default": 20,
+                      "description": "Max comments"
+                    }
+                  },
+                  "required": [
+                    "identifier"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "create_ticket",
+                "description": "Create ticket.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "type": "string",
+                      "description": "Project ref"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "description": "Summary"
+                    },
+                    "description_markdown": {
+                      "type": "string",
+                      "description": "Description"
+                    },
+                    "state": {
+                      "type": "string",
+                      "description": "State name or UUID"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "description": "Priority slug"
+                    },
+                    "assignees": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Assignees"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Labels"
+                    },
+                    "cycle": {
+                      "type": "string",
+                      "description": "Cycle"
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Modules"
+                    },
+                    "parent": {
+                      "type": "string",
+                      "description": "Parent issue ref"
+                    },
+                    "start_date": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Start date"
+                    },
+                    "due_date": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Due date"
+                    },
+                    "children": {
+                      "type": "array",
+                      "maxItems": 49,
+                      "items": {
+                        "$ref": "#"
+                      },
+                      "description": "Child sub-issues"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "summary"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "update_ticket",
+                "description": "Update ticket.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "if_match": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "64-char SHA-256 hex ETag (required when description_markdown is provided)"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "description": "New summary"
+                    },
+                    "description_markdown": {
+                      "type": "string",
+                      "description": "Description (requires if_match)"
+                    },
+                    "description_mode": {
+                      "type": "string",
+                      "enum": [
+                        "append",
+                        "replace"
+                      ],
+                      "default": "append",
+                      "description": "append or replace"
+                    },
+                    "assignees_add": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Assignees to add"
+                    },
+                    "assignees_remove": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Assignees to remove"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "description": "Priority slug"
+                    },
+                    "start_date": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date",
+                      "description": "Start date"
+                    },
+                    "due_date": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date",
+                      "description": "Due date"
+                    },
+                    "cycle": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Cycle"
+                    },
+                    "modules_add": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Modules to add"
+                    },
+                    "modules_remove": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Modules to remove"
+                    },
+                    "labels_add": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Labels to add"
+                    },
+                    "labels_remove": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Labels to remove"
+                    },
+                    "parent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Parent issue ref"
+                    }
+                  },
+                  "required": [
+                    "identifier"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "begin_work",
+                "description": "Begin work.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "plan_markdown": {
+                      "type": "string",
+                      "description": "Plan markdown"
+                    }
+                  },
+                  "required": [
+                    "identifier",
+                    "plan_markdown"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "transition_ticket",
+                "description": "Transition ticket.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "to_state": {
+                      "type": "string",
+                      "description": "Target state"
+                    },
+                    "comment_markdown": {
+                      "type": "string",
+                      "description": "Comment"
+                    },
+                    "verification_proof": {
+                      "type": "object",
+                      "description": "Proof packet",
+                      "properties": {
+                        "qa_dir": {
+                          "type": "string",
+                          "description": "QA directory path"
+                        },
+                        "artifacts": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "QA artifact paths"
+                        },
+                        "reality_checker": {
+                          "type": "object",
+                          "description": "Reality-checker audit verdict",
+                          "properties": {
+                            "verdict": {
+                              "type": "string",
+                              "enum": [
+                                "READY",
+                                "NEEDS_WORK"
+                              ]
+                            },
+                            "grade": {
+                              "type": "string",
+                              "pattern": "^[A-F]$"
+                            },
+                            "report_path": {
+                              "type": "string",
+                              "description": "Report path"
+                            }
+                          },
+                          "required": [
+                            "verdict",
+                            "grade",
+                            "report_path"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "ci_run_url": {
+                          "type": "string",
+                          "description": "CI run URL"
+                        }
+                      },
+                      "required": [
+                        "qa_dir",
+                        "artifacts",
+                        "reality_checker",
+                        "ci_run_url"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "identifier",
+                    "to_state"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "complete_work",
+                "description": "Complete work.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "summary_markdown": {
+                      "type": "string",
+                      "description": "Summary"
+                    },
+                    "verification_proof": {
+                      "type": "object",
+                      "description": "Proof packet",
+                      "properties": {
+                        "qa_dir": {
+                          "type": "string",
+                          "description": "QA directory path"
+                        },
+                        "artifacts": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "QA artifact paths"
+                        },
+                        "reality_checker": {
+                          "type": "object",
+                          "description": "Reality-checker audit verdict",
+                          "properties": {
+                            "verdict": {
+                              "type": "string",
+                              "enum": [
+                                "READY",
+                                "NEEDS_WORK"
+                              ]
+                            },
+                            "grade": {
+                              "type": "string",
+                              "pattern": "^[A-F]$"
+                            },
+                            "report_path": {
+                              "type": "string",
+                              "description": "Report path"
+                            }
+                          },
+                          "required": [
+                            "verdict",
+                            "grade",
+                            "report_path"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "ci_run_url": {
+                          "type": "string",
+                          "description": "CI run URL"
+                        }
+                      },
+                      "required": [
+                        "qa_dir",
+                        "artifacts",
+                        "reality_checker",
+                        "ci_run_url"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "to_state": {
+                      "type": "string",
+                      "description": "Target state"
+                    }
+                  },
+                  "required": [
+                    "identifier",
+                    "summary_markdown",
+                    "verification_proof"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "add_comment",
+                "description": "Add comment.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "body_markdown": {
+                      "type": "string",
+                      "description": "Body markdown"
+                    },
+                    "reply_to": {
+                      "type": "string",
+                      "description": "Reply to ID"
+                    },
+                    "ack_mentions": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Ack mentions"
+                    }
+                  },
+                  "required": [
+                    "identifier",
+                    "body_markdown"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "link_objects",
+                "description": "Link objects.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "description": "Source ref"
+                    },
+                    "target": {
+                      "type": "string",
+                      "description": "Target ref"
+                    },
+                    "link_type": {
+                      "type": "string",
+                      "description": "Link kind"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "add",
+                        "remove"
+                      ],
+                      "default": "add",
+                      "description": "add or remove"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target",
+                    "link_type"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_a_create_ticket",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "SjAlQWyPIb187qwkbVeHaf-FKE5Wc-cofNxAlB-k4jo",
+          "content-length": "201",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "method": "tools/call",
+          "params": {
+            "name": "create_ticket",
+            "arguments": {
+              "project": "QAUSR1",
+              "summary": "QA Disposable Ticket",
+              "description_markdown": "Test verification description"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "187",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "created: 1\nroot: {key: QAUSR1-99, summary: QA Disposable Ticket, state: open, priority: medium}\n"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_b_project_autofill",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAUSR1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "4KSHSTPExDbTXvBjlqAoBZbLUAyjJ6-83ZnIkpyQKh4",
+          "content-length": "154",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 21,
+          "method": "tools/call",
+          "params": {
+            "name": "create_ticket",
+            "arguments": {
+              "summary": "Project Pinned Ticket Without Explicit Project"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "214",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 21,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "created: 1\nroot: {key: QAUSR1-99, summary: Project Pinned Ticket Without Explicit Project, state: open, priority: medium}\n"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_b_cross_project_blocked",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAUSR1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "4KSHSTPExDbTXvBjlqAoBZbLUAyjJ6-83ZnIkpyQKh4",
+          "content-length": "158",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 22,
+          "method": "tools/call",
+          "params": {
+            "name": "create_ticket",
+            "arguments": {
+              "project": "QAADM",
+              "summary": "Forbidden Cross Project Mutation"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "444",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 22,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "error:\n  code: CONNECTION_SCOPE_VIOLATION\n  message: Connection is strictly pinned to project 'QAUSR1'. Mutation targeting foreign project 'QAADM' was blocked.\n  pinned_scope: {workspace: kanban, project: QAUSR1}\n  attempted_target: QAADM\n  hint: Connect to /mcp/agent/w/kanban/p/QAADM or run in Global mode (/mcp/agent) to operate across projects.\n"
+              }
+            ],
+            "isError": true
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_c_workspace_wide_rejected",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "content-length": "59",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 32,
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-length": "155",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "KEY_SCOPE_VIOLATION",
+          "message": "Token is pinned to specific project(s) and cannot connect in workspace-wide mode.",
+          "allowed_projects": [
+            "QAUSR1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "condition_c_wrong_project_rejected",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAADM",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "content-length": "59",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 33,
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-length": "205",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "KEY_SCOPE_VIOLATION",
+          "message": "Requested project 'QAADM' is outside the scope boundary of this API key.",
+          "allowed_projects": [
+            "QAUSR1"
+          ],
+          "hint": "Use an API key with permissions for this project."
+        }
+      }
+    },
+    {
+      "name": "condition_c_readonly_write_blocked",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAUSR1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "JnUUGTEdGZgLLxBAtLwYtf1EsskS2Tjn9smusoMTjn8",
+          "content-length": "143",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 36,
+          "method": "tools/call",
+          "params": {
+            "name": "create_ticket",
+            "arguments": {
+              "summary": "Unauthorized Write on Read-Only Key"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "212",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 36,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "error: {code: INSUFFICIENT_SCOPE, message: 'Caller lacks required scope(s) [''agent:write''] for tool ''create_ticket'''}\n"
+              }
+            ],
+            "isError": true
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_d_tool_filtering",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAADM",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "rZ0zQhL5MVZQ6lQwZahWSoLbhe_Q2I5RpYWyKEtyS3A",
+          "content-length": "47",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 46,
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "1819",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 46,
+          "result": {
+            "tools": [
+              {
+                "name": "search_tickets",
+                "description": "Search tickets.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "maxLength": 500,
+                      "description": "Search query"
+                    },
+                    "workspace": {
+                      "type": "string",
+                      "description": "Workspace slug"
+                    },
+                    "project": {
+                      "type": "string",
+                      "description": "Project ref"
+                    },
+                    "states": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "State filters"
+                    },
+                    "assignees": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Assignee filters"
+                    },
+                    "cycle": {
+                      "type": "string",
+                      "description": "Cycle filter"
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Module filters"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "description": "Label filters"
+                    },
+                    "blocked": {
+                      "type": "boolean",
+                      "description": "Blocked filter"
+                    },
+                    "gate_status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "rejected"
+                      ],
+                      "description": "Gate status filter"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "lexical",
+                        "hybrid"
+                      ],
+                      "default": "lexical",
+                      "description": "Search mode"
+                    },
+                    "lod": {
+                      "type": "string",
+                      "enum": [
+                        "summary",
+                        "standard"
+                      ],
+                      "default": "summary",
+                      "description": "LOD tier"
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50,
+                      "default": 20,
+                      "description": "Max results"
+                    },
+                    "cursor": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Cursor"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              {
+                "name": "read_ticket",
+                "description": "Read ticket.",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "identifier": {
+                      "type": "string",
+                      "description": "Issue ref"
+                    },
+                    "workspace": {
+                      "type": "string",
+                      "description": "Workspace"
+                    },
+                    "lod": {
+                      "type": "string",
+                      "enum": [
+                        "summary",
+                        "standard",
+                        "full"
+                      ],
+                      "default": "standard",
+                      "description": "LOD tier"
+                    },
+                    "comments_limit": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 50,
+                      "default": 20,
+                      "description": "Max comments"
+                    }
+                  },
+                  "required": [
+                    "identifier"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_d_capability_mask_blocked",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAADM",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "bG404HXrb_SmgGd4_nyMQspRZ0lBViBWffs4vXHw8sQ",
+          "content-length": "140",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 49,
+          "method": "tools/call",
+          "params": {
+            "name": "create_ticket",
+            "arguments": {
+              "summary": "Write Blocked by Capability Mask"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "200",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 49,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "error: {code: INSUFFICIENT_PERMISSION, message: Caller holds VIEW but lacks EDIT capability on this project.}\n"
+              }
+            ],
+            "isError": true
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_e_surface_isolation_mismatch",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/admin",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "content-length": "2",
+          "content-type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-length": "32",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "SURFACE_KEY_MISMATCH"
+        }
+      }
+    },
+    {
+      "name": "condition_e_stage1_destructive_request",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/admin",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "DRkpHvxg_hsn_40RN4QwS0y42omJhJLlBO7J_idYQ_Y",
+          "content-length": "186",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 61,
+          "method": "tools/call",
+          "params": {
+            "name": "destructive_lifecycle",
+            "arguments": {
+              "action": "request_delete",
+              "target_kind": "issue",
+              "target": "QAADM-99",
+              "mode": "trash"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "322",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 61,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "stage: confirmation_required\ntarget: QAADM-99\ntarget_kind: issue\nmode: trash\nblast_summary: 1 issue and related objects will be deleted\nconfirm_phrase: PURGE QAADM-99\nconfirmation_token: tok_9549ea2842c4\nexpires_in_sec: 300\n"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_e_stage2_destructive_execute",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/admin",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "DRkpHvxg_hsn_40RN4QwS0y42omJhJLlBO7J_idYQ_Y",
+          "content-length": "318",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 62,
+          "method": "tools/call",
+          "params": {
+            "name": "destructive_lifecycle",
+            "arguments": {
+              "action": "execute_delete",
+              "target_kind": "issue",
+              "target": "QAADM-99",
+              "mode": "trash",
+              "confirmation_token": "tok_9549ea2842c4",
+              "confirm_phrase": "PURGE QAADM-99",
+              "reason": "Authorized forensic test cleanup for KANBA-205"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "215",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 62,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "status: executed\ntarget: QAADM-99\ntarget_kind: issue\nmode: trash\nreason: Authorized forensic test cleanup for KANBA-205\n"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_f_unauthenticated_agent_401",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "content-length": "2",
+          "content-type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer realm=\"kanban-mcp\", resource_metadata=\"https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent\"",
+          "content-length": "67",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "unauthorized",
+          "message": "Bearer authentication required"
+        }
+      }
+    },
+    {
+      "name": "condition_f_rfc9728_metadata",
+      "request": {
+        "method": "GET",
+        "path": "/.well-known/oauth-protected-resource/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "cache-control": "public, max-age=3600",
+          "content-length": "162"
+        },
+        "body": {
+          "resource": "http://test/mcp/agent",
+          "authorization_servers": [
+            "http://test"
+          ],
+          "scopes_supported": [
+            "agent:read",
+            "agent:write"
+          ],
+          "bearer_methods_supported": [
+            "header"
+          ]
+        }
+      }
+    },
+    {
+      "name": "condition_f_conflicting_headers",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "x-workspace-slug": "general",
+          "content-length": "59",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 70,
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-length": "113",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "CONFLICTING_SCOPE_HEADERS",
+          "message": "Conflicting workspace in URL path 'kanban' and header 'general'"
+        }
+      }
+    },
+    {
+      "name": "condition_f_project_without_workspace",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "x-project-key": "QAUSR1",
+          "content-length": "59",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 71,
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-length": "94",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "VALIDATION_FAILED",
+          "message": "X-Project-Key requires X-Workspace-Slug or /w/{slug}"
+        }
+      }
+    },
+    {
+      "name": "condition_f_session_scope_replay_404",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAADM",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "ZS-obtcRS-TfLjxHG7QuogdkvXpvUU7M3S8ZDwo9Ws0",
+          "content-length": "47",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 73,
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-length": "43"
+        },
+        "body": "Session bound to different scope or expired"
+      }
+    },
+    {
+      "name": "condition_f_session_token_replay_404",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban/p/QAUSR1",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "ZS-obtcRS-TfLjxHG7QuogdkvXpvUU7M3S8ZDwo9Ws0",
+          "content-length": "47",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 74,
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-length": "32"
+        },
+        "body": "Session bound to different token"
+      }
+    },
+    {
+      "name": "condition_f_taint_guard_rejection",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent/w/kanban",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "mcp-session-id": "9-hIAg02gHp3S5MLHdof9ycGt_XfDHkpPHhWfhUzoyc",
+          "content-length": "149",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 76,
+          "method": "tools/call",
+          "params": {
+            "name": "create_ticket",
+            "arguments": {
+              "project": "QAADM",
+              "summary": "TRIGGER_TAINT_REJECTION"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "268",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 76,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "error: {code: CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED, message: 'Write targeting project ''QAADM'' blocked: audience is broader\n    than previously inspected tainted project.'}\n"
+              }
+            ],
+            "isError": true
+          }
+        }
+      }
+    },
+    {
+      "name": "condition_f_revocation_post_ttl_401",
+      "request": {
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": {
+          "host": "test",
+          "accept": "*/*",
+          "accept-encoding": "gzip, deflate",
+          "connection": "keep-alive",
+          "user-agent": "python-httpx/0.28.1",
+          "authorization": "<redacted>",
+          "content-length": "59",
+          "content-type": "application/json"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 81,
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer realm=\"kanban-mcp\", resource_metadata=\"https://127.0.0.1:8443/.well-known/oauth-protected-resource/mcp/agent\"",
+          "content-length": "67",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "unauthorized",
+          "message": "Bearer authentication required"
+        }
+      }
+    }
+  ],
+  "feature": "CLI MCP Scoping QA: User vs Project Agent Matrix (agy & codex)",
+  "matrix_summary": {
+    "Condition_A": {
+      "role": "User Agent (personal_user kb_agt_ PAT)",
+      "scope_tier": "global",
+      "connection_mode": "unscoped (/mcp/agent)",
+      "tools_count": 9,
+      "crud_qa_project": "QAUSR1",
+      "unauthorized_anti_enumeration": "NOT_FOUND"
+    },
+    "Condition_B": {
+      "role": "User Agent (personal_user kb_agt_ PAT)",
+      "scope_tier": "global",
+      "connection_mode": "scoped (/mcp/agent/w/kanban and /mcp/agent/w/kanban/p/QAUSR1)",
+      "autofill_behavior": "project='QAUSR1' auto-filled when omitted",
+      "cross_project_rejection": "CONNECTION_SCOPE_VIOLATION"
+    },
+    "Condition_C": {
+      "role": "User Agent (personal_user kb_agt_ PAT)",
+      "scope_tier": "project (pinned to QAUSR1)",
+      "narrowing_behavior": "narrows effective scope to QAUSR1 on unscoped endpoint",
+      "forbidden_connections": [
+        "/mcp/agent/w/kanban",
+        "/mcp/agent/w/kanban/p/QAADM"
+      ],
+      "forbidden_status": 403,
+      "forbidden_error": "KEY_SCOPE_VIOLATION",
+      "readonly_pat_mutation_rejection": "INSUFFICIENT_SCOPE"
+    },
+    "Condition_D": {
+      "role": "Project Agent (service_bot kb_agt_ PAT)",
+      "scope_tier": "project (pinned to QAADM)",
+      "positive_connection": "/mcp/agent/w/kanban/p/QAADM and /mcp/agent + X-Workspace-Slug/X-Project-Key",
+      "negative_connections": [
+        "/mcp/agent/w/kanban",
+        "/mcp/agent/w/kanban/p/QAUSR1"
+      ],
+      "negative_status": 403,
+      "tool_filtering_behavior": "allowed_tools and disabled_tools filter tools/list and block tools/call",
+      "view_only_capability_mask_rejection": "INSUFFICIENT_CAPABILITY"
+    },
+    "Condition_E": {
+      "role": "Surface Cross-Isolation and Admin RBAC Parity",
+      "cross_surface_rejections": [
+        "kb_agt_ on /mcp/docs or /mcp/admin -> 403 SURFACE_KEY_MISMATCH",
+        "kb_doc_ on /mcp/agent or /mcp/admin -> 403 SURFACE_KEY_MISMATCH",
+        "kb_adm_ on /mcp/agent or /mcp/docs -> 403 SURFACE_KEY_MISMATCH",
+        "kb_agt_eph_ on /mcp/admin -> 403 SURFACE_KEY_MISMATCH"
+      ],
+      "admin_rbac_parity": "admin:read-only denied on mutations (INSUFFICIENT_SCOPE); WORKSPACE_ADMIN denied on server admin endpoints",
+      "destructive_confirmation": "2-stage request_delete -> execute_delete with token, confirm_phrase, and audit reason"
+    },
+    "Condition_F": {
+      "role": "Protocol Preconditions, Session Binding, TaintGuard, and TTL Revocation",
+      "unauthenticated_status": 401,
+      "unauthenticated_header": "WWW-Authenticate: Bearer realm='kanban-mcp', resource_metadata='...'",
+      "conflicting_headers_status": 400,
+      "conflicting_headers_error": "CONFLICTING_SCOPE_HEADERS",
+      "missing_workspace_status": 400,
+      "missing_workspace_error": "VALIDATION_FAILED",
+      "session_replay_rejection": 404,
+      "taint_guard_rejection": "409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED",
+      "ttl_revocation_status": 401
+    }
+  },
+  "rfc9728_metadata_samples": {
+    "agent_global": {
+      "resource": "https://127.0.0.1:8443/mcp/agent",
+      "authorization_servers": [
+        "https://127.0.0.1:8443"
+      ],
+      "scopes_supported": [
+        "agent:read",
+        "agent:write"
+      ]
+    },
+    "agent_workspace_scoped": {
+      "resource": "https://127.0.0.1:8443/mcp/agent/w/kanban",
+      "authorization_servers": [
+        "https://127.0.0.1:8443"
+      ],
+      "scopes_supported": [
+        "agent:read",
+        "agent:write"
+      ]
+    },
+    "agent_project_scoped": {
+      "resource": "https://127.0.0.1:8443/mcp/agent/w/kanban/p/QAUSR1",
+      "authorization_servers": [
+        "https://127.0.0.1:8443"
+      ],
+      "scopes_supported": [
+        "agent:read",
+        "agent:write"
+      ]
+    },
+    "docs": {
+      "resource": "https://127.0.0.1:8443/mcp/docs",
+      "authorization_servers": [
+        "https://127.0.0.1:8443"
+      ],
+      "scopes_supported": [
+        "docs:read",
+        "docs:write"
+      ]
+    },
+    "admin": {
+      "resource": "https://127.0.0.1:8443/mcp/admin",
+      "authorization_servers": [
+        "https://127.0.0.1:8443"
+      ],
+      "scopes_supported": [
+        "admin:read",
+        "admin:write",
+        "admin:destructive"
+      ]
+    }
+  }
+}

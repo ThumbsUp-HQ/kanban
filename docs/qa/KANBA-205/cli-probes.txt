@@ -1,0 +1,101 @@
+=== KANBA-205 Live CLI Probes Execution Log ===
+Timestamp: 2026-11-18T05:10:57Z
+Added MCP server "kb_probe_1" (http)
+Added global MCP server 'kb_probe_1'.
+--- Condition A: agy User Agent Unscoped Tools List & Search ---
+### Tools Available on `kb_probe_1`
+- `search_tickets`
+- `read_ticket`
+- `create_ticket`
+- `update_ticket`
+- `begin_work`
+- `transition_ticket`
+- `complete_work`
+- `add_comment`
+- `link_objects`
+
+### `search_tickets` Result (`project: "QAUSR1"`)
+```
+mode: lexical
+total: 0
+```
+--- Condition A: codex User Agent Unscoped Tools List ---
+OpenAI Codex v0.169.0
+--------
+workdir: /tmp/kb-mcp-probe
+model: gpt-6-luna
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a1ed10-d75f-7ef2-8f7d-6c170fafe103
+--------
+user
+Strict containment: execute MCP tool calls strictly on kb_probe_1 targeting disposable QA projects (QAADM, QAUSR1). Do not run shell commands, do not read or write local files, do not touch git repositories or KANBA-* tickets. Report the available tools on kb_probe_1.
+codex
+I’ll inspect the available `kb_probe_1` tool definitions, then report the ones exposed. I’ll keep this to MCP tool discovery and won’t use shell or local files.
+codex
+The available `kb_probe_1` tools are:
+
+- `add_comment` - add a comment to an issue.
+- `begin_work` - begin work on an issue with a plan.
+- `complete_work` - complete work with a summary and verification proof.
+- `create_ticket` - create a ticket, optionally with child issues.
+- `link_objects` - add or remove a link between objects.
+- `read_ticket` - read a ticket.
+- `search_tickets` - search tickets with filters.
+- `transition_ticket` - change an issue’s state, optionally with verification proof.
+- `update_ticket` - update issue fields.
+tokens used
+11,572
+The available `kb_probe_1` tools are:
+
+- `add_comment` - add a comment to an issue.
+- `begin_work` - begin work on an issue with a plan.
+- `complete_work` - complete work with a summary and verification proof.
+- `create_ticket` - create a ticket, optionally with child issues.
+- `link_objects` - add or remove a link between objects.
+- `read_ticket` - read a ticket.
+- `search_tickets` - search tickets with filters.
+- `transition_ticket` - change an issue’s state, optionally with verification proof.
+- `update_ticket` - update issue fields.
+--- Condition B: Workspace and Project Scoped Probing ---
+HTTP/1.1 200 OK
+date: Wed, 18 Nov 2026 05:11:16 GMT
+server: uvicorn
+mcp-session-id: MS7zVYErPsIRwdvAomJx1uOG4pZRbWzK8uYq6krkksg
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}--- Condition C: Project Pinned Scope Violation Probing ---
+HTTP/1.1 403 Forbidden
+date: Wed, 18 Nov 2026 05:11:16 GMT
+server: uvicorn
+content-length: 155
+content-type: application/json
+
+{"error":"KEY_SCOPE_VIOLATION","message":"Token is pinned to specific project(s) and cannot connect in workspace-wide mode.","allowed_projects":["QAUSR1"]}--- Condition D: Project Agent Service Bot Scoping Probing ---
+HTTP/1.1 200 OK
+date: Wed, 18 Nov 2026 05:11:16 GMT
+server: uvicorn
+mcp-session-id: bS0s75AQV4uVtGkhfwHasNnJQm8F8YXzPeVmD2jYz2w
+content-length: 172
+content-type: application/json
+
+{"jsonrpc":"2.0","id":3,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"kanban-mcp-agent","version":"0.0.0"}}}--- Condition E: Surface Cross-Isolation Probing ---
+HTTP/1.1 403 Forbidden
+date: Wed, 18 Nov 2026 05:11:16 GMT
+server: uvicorn
+content-length: 32
+content-type: application/json
+
+{"error":"SURFACE_KEY_MISMATCH"}--- Condition F: Unauthenticated 401 & Metadata Probing ---
+HTTP/1.1 401 Unauthorized
+date: Wed, 18 Nov 2026 05:11:16 GMT
+server: uvicorn
+www-authenticate: Bearer realm="kanban-mcp", resource_metadata="http://127.0.0.1:18443/.well-known/oauth-protected-resource/mcp/agent"
+content-length: 67
+content-type: application/json
+
+{"error":"unauthorized","message":"Bearer authentication required"}
