@@ -40,6 +40,10 @@ describe('CommentComposer', () => {
     });
 
     it('detects when cursor is inside fenced code block or inline backticks', () => {
+      expect(isCursorInsideCode('', 0)).toBe(false);
+      expect(isCursorInsideCode('hello world', 5)).toBe(false);
+      expect(isCursorInsideCode('line 1\nline 2', 8)).toBe(false);
+
       const fenced = '```\nconst a = 1;\n```';
       expect(isCursorInsideCode(fenced, 10)).toBe(true);
       expect(isCursorInsideCode(fenced, 2)).toBe(false);
@@ -47,6 +51,9 @@ describe('CommentComposer', () => {
       const inline = '`const x = 1` outside';
       expect(isCursorInsideCode(inline, 5)).toBe(true);
       expect(isCursorInsideCode(inline, 16)).toBe(false);
+
+      const multiline = 'line1\n`code on line 2` outside';
+      expect(isCursorInsideCode(multiline, 12)).toBe(true);
     });
 
     it('extracts mention prefix when outside code and suppresses inside code', () => {
@@ -474,6 +481,37 @@ describe('CommentComposer', () => {
       expect(textarea.value).toContain('```mermaid\ngraph TD;\n  A-->B;\n```');
     });
 
+    it('fence newlines: prepends newline when start > 0 and appends trailing newline after closing fence', () => {
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+
+      // Type some text without a newline
+      fireEvent.change(textarea, { target: { value: 'existing text' } });
+      textarea.setSelectionRange(13, 13);
+
+      // Click Mermaid button
+      const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
+      fireEvent.click(mermaidBtn);
+
+      expect(textarea.value).toBe('existing text\n```mermaid\ngraph TD;\n  A-->B;\n```\n');
+
+      // Click Mermaid button again without cursor move: should not glue lines together
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      fireEvent.click(mermaidBtn);
+
+      expect(textarea.value).toBe(
+        'existing text\n```mermaid\ngraph TD;\n  A-->B;\n```\n```mermaid\ngraph TD;\n  A-->B;\n```\n',
+      );
+
+      // Click Code button
+      const codeBtn = screen.getByRole('button', { name: 'Insert code' });
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      fireEvent.click(codeBtn);
+
+      expect(textarea.value).toContain('```\ncode\n```\n');
+      expect(textarea.value.endsWith('\n')).toBe(true);
+    });
+
     it('handles ApiProblem with empty message on submit', async () => {
       mockCreateComment.mockRejectedValueOnce(new ApiProblem(500, { detail: '' }));
       render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
@@ -737,6 +775,136 @@ describe('CommentComposer', () => {
       const rawBtn = screen.getByTestId('comment-tool-raw');
       fireEvent.click(rawBtn);
       expect(screen.getByText('No comment content')).toBeDefined();
+    });
+
+    it('covers additional edge branches: tab suggestion, empty markdownUri, and submitting states', async () => {
+      const uploadSpy = vi
+        .spyOn(autoConvertPasteMod, 'defaultUploadAttachment')
+        .mockResolvedValue({ markdownUri: '', id: 'att_fallback_9' });
+
+      // 1. isEditing = true rendering 'Save Changes'
+      render(
+        <CommentComposer
+          issueKey="KAN-142"
+          projectKey="KAN"
+          isEditing={true}
+          commentId="c-1"
+          initialValue="Editing text"
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDefined();
+
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+
+      // 2. Drop with empty markdownUri
+      const validImg = new File(['img'], 'drop_test.png', { type: 'image/png' });
+      fireEvent.drop(textarea.parentElement ?? textarea, { dataTransfer: { files: [validImg] } });
+      await waitFor(() => {
+        expect(textarea.value).toContain('![drop_test.png](attachment://att_fallback_9)');
+      });
+
+      // 3. Paste image with empty markdownUri
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [validImg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(textarea.value).toContain('![drop_test.png](attachment://att_fallback_9)');
+      });
+
+      // 4. Paste with empty files list
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: [],
+          getData: () => '',
+        },
+      });
+
+      // 5. Paste whitespace-only HTML
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: ['text/html'],
+          getData: (type: string) => (type === 'text/html' ? '   ' : ''),
+        },
+      });
+
+      // 6. Suggestion selection with Tab key and enter without chosen
+      mockFetchAssigneeSuggestions.mockResolvedValueOnce({
+        items: [
+          { id: 'u1', display_name: 'Alice', is_agent: false, handle: 'alice' },
+        ],
+      });
+      fireEvent.change(textarea, { target: { value: '@al', selectionStart: 3, selectionEnd: 3 } });
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeDefined();
+      });
+
+      // Tab selects active suggestion
+      fireEvent.keyDown(textarea, { key: 'Tab' });
+      expect(textarea.value).toContain('@alice ');
+
+      // Enter without modifier key when no suggestions
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+
+      // Shortcut with metaKey vs ctrlKey
+      fireEvent.keyDown(textarea, { key: 'm', metaKey: true, shiftKey: true });
+      expect(screen.getByTestId('comment-preview')).toBeDefined();
+      fireEvent.click(screen.getByTestId('comment-tool-raw'));
+      expect(screen.queryByTestId('comment-preview')).toBeNull();
+
+      // Suggestion navigation with invalid chosen idx
+      const freshTextarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+      mockFetchAssigneeSuggestions.mockResolvedValueOnce({
+        items: [
+          { id: 'u2', display_name: 'Bob', is_agent: false, handle: 'bob' },
+        ],
+      });
+      fireEvent.change(freshTextarea, { target: { value: '@bo', selectionStart: 3, selectionEnd: 3 } });
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeDefined();
+      });
+      // Fire keydown with key other than arrows/enter/tab/escape
+      fireEvent.keyDown(freshTextarea, { key: 'Space' });
+      // Clear suggestions via typing empty prefix
+      fireEvent.change(freshTextarea, { target: { value: 'plain', selectionStart: 5, selectionEnd: 5 } });
+
+      // 7. Submitting state (Saving...)
+      let resolveSubmit!: (v: unknown) => void;
+      const pendingSubmit = new Promise((resolve) => {
+        resolveSubmit = resolve;
+      });
+      mockCreateComment.mockReturnValue(pendingSubmit as unknown as Promise<activityApi.CommentResponse>);
+
+      fireEvent.change(freshTextarea, { target: { value: 'New content to save' } });
+      fireEvent.keyDown(freshTextarea, { key: 'Enter', ctrlKey: true });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDefined();
+      });
+
+      resolveSubmit({ id: 'c-new', body: 'New content to save' });
+
+      // 8. ApiProblem with other status code (400)
+      fireEvent.change(freshTextarea, { target: { value: 'Content for error test' } });
+      mockPatchComment.mockRejectedValueOnce(new ApiProblem(400, { detail: 'Bad request' }));
+      fireEvent.keyDown(freshTextarea, { key: 'Enter', ctrlKey: true });
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('Bad request');
+      });
+
+      fireEvent.change(freshTextarea, { target: { value: 'Content for empty error' } });
+      mockPatchComment.mockRejectedValueOnce(new Error(''));
+      fireEvent.keyDown(freshTextarea, { key: 'Enter', ctrlKey: true });
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('Failed to submit comment.');
+      });
+
+      uploadSpy.mockRestore();
     });
   });
 });

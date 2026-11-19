@@ -1157,16 +1157,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('issue-mermaid-diagram')).toBeDefined();
-      });
-
-      const navToggleBtn = screen.getByRole('button', { name: /Hide Nav|Show Nav/i });
-      fireEvent.click(navToggleBtn);
-
-      act(() => {
-        window.dispatchEvent(
-          new CustomEvent('kb:sidebar-changed', { detail: { collapsed: 'collapsed' } }),
-        );
+        expect(screen.getByTestId('mermaid-block')).toBeDefined();
       });
 
       // Edit description, cancel, then edit and save
@@ -1248,7 +1239,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
       fireEvent.keyDown(aside, { key: 'Escape' });
       expect(onClose).toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole('button', { name: /Collapse sidebar/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Collapse.*sidebar/i }));
       expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
     });
   });

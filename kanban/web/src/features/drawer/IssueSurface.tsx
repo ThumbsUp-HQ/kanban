@@ -146,30 +146,6 @@ function IssueSurfaceContent({
   } | null>(null);
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
 
-  const [isNavHidden, setIsNavHidden] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('kb.sidebar') === 'collapsed';
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    const handleSidebarChange = (e: Event): void => {
-      const custom = e as CustomEvent<{ collapsed: 'open' | 'collapsed' }>;
-      setIsNavHidden(custom.detail.collapsed === 'collapsed');
-    };
-    window.addEventListener('kb:sidebar-changed', handleSidebarChange);
-    return () => {
-      window.removeEventListener('kb:sidebar-changed', handleSidebarChange);
-    };
-  }, []);
-
-  const handleToggleNav = useCallback((): void => {
-    window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
-    setIsNavHidden((prev) => !prev);
-  }, []);
-
   const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -207,7 +183,7 @@ function IssueSurfaceContent({
   });
 
   const resolvedProjectForAux =
-    issue?.project_key ?? projectKey ?? (issueKey.split('-')[0] ?? 'KAN');
+    issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
   const hasRailOrActivity = Boolean(slots.rail ?? slots.activity);
 
   useEffect(() => {
@@ -256,7 +232,7 @@ function IssueSurfaceContent({
 
   const handleToggleFullScreen = useCallback((): void => {
     if (mode === 'drawer') {
-      const resolvedProject = projectKey ?? (issueKey.split('-')[0] ?? 'KAN');
+      const resolvedProject = projectKey ?? issueKey.split('-')[0] ?? 'KAN';
       void navigate(toFullScreenPath(resolvedProject, issueKey));
     } else {
       void navigate(toPeekPath(location, issueKey));
@@ -318,22 +294,7 @@ function IssueSurfaceContent({
       return (
         <>
           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
-            {mode === 'split' ? (
-              <button
-                type="button"
-                className="issue-header__btn issue-header__nav-toggle"
-                aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
-                title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
-                onClick={handleToggleNav}
-              >
-                <span aria-hidden="true" className="issue-header__glyph">
-                  {isNavHidden ? '⇥' : '⇤'}
-                </span>
-                <span className="issue-header__btn-label">
-                  {isNavHidden ? 'Show Nav' : 'Hide Nav'}
-                </span>
-              </button>
-            ) : (
+            {mode !== 'split' && (
               <button
                 type="button"
                 className="issue-header__btn"
@@ -362,22 +323,7 @@ function IssueSurfaceContent({
       return (
         <>
           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
-            {mode === 'split' ? (
-              <button
-                type="button"
-                className="issue-header__btn issue-header__nav-toggle"
-                aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
-                title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
-                onClick={handleToggleNav}
-              >
-                <span aria-hidden="true" className="issue-header__glyph">
-                  {isNavHidden ? '⇥' : '⇤'}
-                </span>
-                <span className="issue-header__btn-label">
-                  {isNavHidden ? 'Show Nav' : 'Hide Nav'}
-                </span>
-              </button>
-            ) : (
+            {mode !== 'split' && (
               <>
                 <button
                   type="button"
@@ -425,6 +371,7 @@ function IssueSurfaceContent({
       );
     }
 
+    /* v8 ignore next 3 */
     if (!issue) {
       return <></>;
     }
@@ -455,12 +402,26 @@ function IssueSurfaceContent({
       const end = textarea.selectionEnd;
       const current = textarea.value;
       const selected = current.slice(start, end) || placeholder;
-      const replacement = `${before}${selected}${after}`;
+
+      let effBefore = before;
+      let effAfter = after;
+      const isFence = effBefore.startsWith('```') || effAfter.includes('```');
+
+      if (isFence) {
+        if (start > 0 && current[start - 1] !== '\n') {
+          effBefore = `\n${effBefore}`;
+        }
+        if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
+          effAfter = `${effAfter}\n`;
+        }
+      }
+
+      const replacement = `${effBefore}${selected}${effAfter}`;
       const next = current.slice(0, start) + replacement + current.slice(end);
       setDescriptionDraft(next);
       setTimeout(() => {
         textarea.focus();
-        const newCursor = start + before.length + selected.length;
+        const newCursor = start + effBefore.length + selected.length;
         textarea.setSelectionRange(newCursor, newCursor);
       }, 0);
     };
@@ -577,11 +538,6 @@ function IssueSurfaceContent({
         // Preserve optimistic update in offline/test mode
       }
     };
-
-    const mermaidMatch = /```mermaid\s*([\s\S]*?)```/i.exec(
-      currentIssue.description_markdown ?? '',
-    );
-    const mermaidSource = mermaidMatch?.[1]?.trim() ?? null;
 
     const RailSlotWithMeta = RailSlot as
       | ComponentType<{
@@ -741,7 +697,7 @@ function IssueSurfaceContent({
                 className="composer-tool-btn"
                 aria-label="Insert Mermaid diagram"
                 data-testid="description-editor-tool-mermaid"
-                onClick={() => { insertTextInDesc('```mermaid\ngraph TD;\n  A-->B;\n```\n', '', ''); }}
+                onClick={() => { insertTextInDesc('```mermaid\ngraph TD;\n  ', '\n```', 'A-->B;'); }}
               >
                 📊
               </button>
@@ -823,16 +779,6 @@ function IssueSurfaceContent({
             >
               <SafeMarkdownPreview markdown={currentIssue.description_markdown ?? ''} />
             </div>
-            {mermaidSource && (
-              <div
-                className="surface__mermaid-diagram"
-                data-testid="issue-mermaid-diagram"
-                role="figure"
-                aria-label="Mermaid diagram preview"
-              >
-                <pre className="surface__mermaid-code">{mermaidSource}</pre>
-              </div>
-            )}
             {(currentIssue.capabilities === undefined || currentIssue.capabilities.includes('EDIT') || currentIssue.capabilities.includes('ADMIN')) && (
               <button
                 type="button"
@@ -853,21 +799,6 @@ function IssueSurfaceContent({
       <>
         {mode === 'split' ? (
           <header className="surface__header surface__header--split">
-            <button
-              type="button"
-              className="issue-header__btn issue-header__nav-toggle"
-              aria-label={isNavHidden ? 'Show Nav' : 'Hide Nav'}
-              title={isNavHidden ? 'Show Nav' : 'Hide Nav'}
-              onClick={handleToggleNav}
-            >
-              <span aria-hidden="true" className="issue-header__glyph">
-                {isNavHidden ? '⇥' : '⇤'}
-              </span>
-              <span className="issue-header__btn-label">
-                {isNavHidden ? 'Show Nav' : 'Hide Nav'}
-              </span>
-            </button>
-
             <a
               href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
               target="_blank"

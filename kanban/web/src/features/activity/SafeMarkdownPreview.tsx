@@ -6,6 +6,7 @@
 
 import React, { type JSX, type ReactNode } from 'react';
 import { MediaViewport } from '../../editor/media/MediaViewport';
+import { MermaidBlockView } from '../../editor/mermaid/MermaidBlockView';
 
 export type CommentBodyRenderer = (markdown: string) => ReactNode;
 
@@ -132,7 +133,8 @@ export function SafeMarkdownPreview({
 
   // Parse blocks: fenced code blocks vs standard blocks
   const blocks: ReactNode[] = [];
-  const lines = markdown.split('\n');
+  const normalized = markdown.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
   let inCodeBlock = false;
   let codeLang = '';
   let codeLines: string[] = [];
@@ -199,7 +201,15 @@ export function SafeMarkdownPreview({
     if (trimmed.startsWith('```')) {
       if (inCodeBlock) {
         // Closing code block
-        if (codeLang === 'svg') {
+        if (codeLang === 'mermaid') {
+          blocks.push(
+            <MermaidBlockView
+              key={`mermaid-${String(blockIdx++)}`}
+              source={codeLines.join('\n')}
+              readOnly={true}
+            />,
+          );
+        } else if (codeLang === 'svg') {
           const rawSvg = codeLines.join('\n');
           const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
           blocks.push(
@@ -226,7 +236,7 @@ export function SafeMarkdownPreview({
         // Opening code block
         flushTextLines();
         inCodeBlock = true;
-        codeLang = trimmed.slice(3).trim();
+        codeLang = trimmed.slice(3).trim().toLowerCase();
         codeLines = [];
       }
     } else if (inCodeBlock) {

@@ -162,5 +162,14 @@ describe('SafeMarkdownPreview', () => {
       const { container: unclosedNoLangContainer } = render(<SafeMarkdownPreview markdown={unclosedNoLang} />);
       expect(unclosedNoLangContainer.querySelector('pre')).not.toBeNull();
     });
+
+    it('renders fenced mermaid code blocks via MermaidBlockView with CRLF and case normalization', () => {
+      const mermaidMarkdown = '```MERMAID\r\ngraph TD;\r\n  A-->B;\r\n```';
+      render(<SafeMarkdownPreview markdown={mermaidMarkdown} />);
+      const mermaidEl = screen.getByTestId('mermaid-block');
+      expect(mermaidEl).toBeDefined();
+      expect(mermaidEl.getAttribute('data-lang')).toBe('mermaid');
+      expect(screen.queryByTestId('mermaid-block-toggle-btn')).toBeNull();
+    });
   });
 });

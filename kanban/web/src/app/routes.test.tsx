@@ -63,7 +63,7 @@ describe('routes and AppShell integration', () => {
     );
 
     // Sidebar items
-    expect(screen.getByText(/👍kanban/)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Workspace switcher: kanban/i })).toBeDefined();
     expect(screen.getByRole('link', { name: /Work Items/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();

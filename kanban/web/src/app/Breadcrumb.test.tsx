@@ -21,7 +21,10 @@ describe('Breadcrumb', () => {
     const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
     expect(nav).toBeDefined();
 
-    expect(screen.getByText('kanban')).toBeDefined();
+    expect(screen.getByRole('link', { name: 'kanban' })).toBeDefined();
+    expect(screen.getByTestId('breadcrumb-workspace')).toBeDefined();
+    expect(screen.getByTestId('breadcrumb-workspace').textContent).not.toContain('[👍]');
+    expect(screen.getByTestId('workspace-badge')).toBeDefined();
     expect(screen.getByText('Work Items')).toBeDefined();
     expect(screen.getByText('(7)')).toBeDefined();
 

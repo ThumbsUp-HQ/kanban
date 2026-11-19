@@ -507,6 +507,8 @@
   border-radius: var(--radius-md, 6px);
   color: var(--fg-primary, #f8fafc);
   font-family: inherit;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   font-size: var(--text-body, 15px);
   line-height: var(--leading-prose, 1.73);
   padding: 10px 12px;
@@ -680,6 +682,8 @@
   padding: 10px 12px;
   overflow-x: auto;
   font-family: var(--font-mono, monospace);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   font-size: 13px;
   margin: 8px 0;
 }
@@ -689,6 +693,8 @@
   padding: 2px 4px;
   border-radius: var(--radius-sm, 4px);
   font-family: var(--font-mono, monospace);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   font-size: 13px;
 }
 

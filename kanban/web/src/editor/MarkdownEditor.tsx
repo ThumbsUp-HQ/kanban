@@ -250,9 +250,14 @@ export function MarkdownEditor({
   const insertTextInRaw = (before: string, after = '', placeholder = ''): void => {
     const textarea = rawTextareaRef.current;
     const current = rawTextRef.current;
+
+    let effBefore = before;
+    let effAfter = after;
+    const isFence = effBefore.startsWith('```') || effAfter.includes('```');
+
     /* v8 ignore next 8 */
     if (!textarea) {
-      const next = `${current}${before}${placeholder}${after}`;
+      const next = `${current}${effBefore}${placeholder}${effAfter}`;
       setRawText(next);
       rawTextRef.current = next;
       lastSerializedRef.current = next;
@@ -262,7 +267,17 @@ export function MarkdownEditor({
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selected = current.slice(start, end) || placeholder;
-    const replacement = `${before}${selected}${after}`;
+
+    if (isFence) {
+      if (start > 0 && current[start - 1] !== '\n') {
+        effBefore = `\n${effBefore}`;
+      }
+      if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
+        effAfter = `${effAfter}\n`;
+      }
+    }
+
+    const replacement = `${effBefore}${selected}${effAfter}`;
     const next = current.slice(0, start) + replacement + current.slice(end);
     setRawText(next);
     rawTextRef.current = next;
@@ -270,7 +285,7 @@ export function MarkdownEditor({
     onChangeRef.current(next);
     setTimeout(() => {
       textarea.focus();
-      const newCursor = start + before.length + selected.length;
+      const newCursor = start + effBefore.length + selected.length;
       textarea.setSelectionRange(newCursor, newCursor);
     }, 0);
   };
@@ -344,7 +359,7 @@ export function MarkdownEditor({
 
   const handleToolbarMermaid = (): void => {
     if (isRawMode) {
-      insertTextInRaw('```mermaid\ngraph TD;\n  A-->B;\n```\n', '', '');
+      insertTextInRaw('```mermaid\ngraph TD;\n  A-->B;\n', '```\n', '');
       return;
     }
     /* v8 ignore next */

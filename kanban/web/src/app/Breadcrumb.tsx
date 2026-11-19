@@ -6,6 +6,7 @@
 
 import React, { type JSX } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { WorkspaceBadge } from '../components/workspace/WorkspaceBadge';
 import './Breadcrumb.css';
 
 export interface BreadcrumbProps {
@@ -50,7 +51,8 @@ export function Breadcrumb({
           <>
             <li className="kb-breadcrumb-item">
               <span className="kb-breadcrumb-workspace" data-testid="breadcrumb-workspace">
-                [👍] {workspaceName}
+                <WorkspaceBadge name={workspaceName} size="sm" />
+                <span>{workspaceName}</span>
               </span>
             </li>
             <li aria-hidden="true" className="kb-breadcrumb-separator">

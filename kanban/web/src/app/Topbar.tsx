@@ -20,6 +20,7 @@ import { NotificationsBell } from '../features/notifications/NotificationsBell';
 import { useTheme, type Theme } from '../theme/ThemeProvider';
 import { type SystemStatus } from './useSystemStatus';
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+import { PanelLeftOpen } from '../components/icons/KanbanIcons';
 import './Topbar.css';
 
 export interface TopbarUser {
@@ -67,7 +68,9 @@ export function resolveDisplayHandle(user?: TopbarUser | null): string {
 
 export interface TopbarProps {
   isSidebarOpen?: boolean | undefined;
+  isSidebarCollapsed?: boolean | undefined;
   onToggleSidebar?: (() => void) | undefined;
+  onToggleCollapse?: (() => void) | undefined;
   onOpenPalette?: (() => void) | undefined;
   workspaceName?: string | undefined;
   projectKey?: string | undefined;
@@ -89,7 +92,9 @@ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
 
 export function Topbar({
   isSidebarOpen = true,
+  isSidebarCollapsed = false,
   onToggleSidebar,
+  onToggleCollapse,
   onOpenPalette,
   workspaceName = 'kanban',
   projectKey,
@@ -204,7 +209,7 @@ export function Topbar({
 
   return (
     <header className="kb-topbar">
-      {/* Left: Hamburger & Breadcrumb */}
+      {/* Left: Hamburger (<=1279px) & Expand Button (desktop >=1280px when collapsed) & Breadcrumb */}
       <div className="kb-topbar-left">
         <button
           type="button"
@@ -215,6 +220,17 @@ export function Topbar({
         >
           ☰
         </button>
+        {isSidebarCollapsed && (
+          <button
+            type="button"
+            className="kb-topbar-expand-btn"
+            aria-label="Expand navigation sidebar"
+            title="Expand sidebar ([)"
+            onClick={onToggleCollapse}
+          >
+            <PanelLeftOpen size={16} />
+          </button>
+        )}
         <Breadcrumb
           workspaceName={workspaceName}
           projectKey={projectKey}
