@@ -354,7 +354,7 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
           } as never,
         ]}
         activeFilters={{
-          empty_cat: undefined as never,
+          empty_cat: undefined,
           state: ['st-todo'],
         }}
         onFiltersChange={vi.fn()}

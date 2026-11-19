@@ -875,7 +875,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   });
 
   it('manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete', async () => {
-    let stateList: Array<Record<string, unknown>> = [
+    let stateList: Record<string, unknown>[] = [
       {
         id: 'st-1',
         name: 'Backlog',
@@ -1010,7 +1010,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   });
 
   it('manages priorities: list, add, delete, and error handling', async () => {
-    let prioList: Array<Record<string, unknown>> = [
+    let prioList: Record<string, unknown>[] = [
       {
         id: 'prio-1',
         slug: 'high',
@@ -1099,7 +1099,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   });
 
   it('manages labels: list, add with exclusive group, delete, and error handling', async () => {
-    let labelList: Array<Record<string, unknown>> = [
+    let labelList: Record<string, unknown>[] = [
       {
         id: 'lbl-1',
         name: 'frontend',

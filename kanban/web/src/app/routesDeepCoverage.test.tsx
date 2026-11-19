@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import {
   saveDraft,
-  DRAFTS_STORAGE_KEY,
 } from '../features/drafts/draftsStore';
 import {
   DraftsWorkspaceView,
@@ -113,7 +112,10 @@ describe('routesDeepCoverage', () => {
 
       // Resume draft 1 (name match + modules)
       const resumeButtons = screen.getAllByTestId('draft-resume-btn');
-      fireEvent.click(resumeButtons[0]!);
+      const firstResumeBtn = resumeButtons[0];
+      if (firstResumeBtn) {
+        fireEvent.click(firstResumeBtn);
+      }
 
       await waitFor(() => {
         expect(fetchSpy).toHaveBeenCalled();
@@ -233,10 +235,14 @@ describe('routesDeepCoverage', () => {
         }
 
         if (url.includes('/api/v1/projects/KAN/cycles') && method === 'POST') {
-          const body = JSON.parse((init?.body as string) || '{}');
+          const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
+            name?: string;
+            start_date?: string | null;
+            end_date?: string | null;
+          };
           const newCycle = {
             id: 'c-9',
-            name: body.name,
+            name: body.name ?? '',
             status: 'upcoming',
             start_date: body.start_date ?? null,
             end_date: body.end_date ?? null,
@@ -250,14 +256,18 @@ describe('routesDeepCoverage', () => {
         }
 
         if (url.includes('/api/v1/cycles/c-1') && method === 'PATCH') {
-          const body = JSON.parse((init?.body as string) || '{}');
+          const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
+            name?: string;
+            start_date?: string | null;
+            end_date?: string | null;
+          };
           return Promise.resolve(
             jsonResponse({
               id: 'c-1',
-              name: body.name,
+              name: body.name ?? '',
               status: 'in_progress',
-              start_date: body.start_date,
-              end_date: body.end_date,
+              start_date: body.start_date ?? null,
+              end_date: body.end_date ?? null,
             }),
           );
         }
@@ -367,14 +377,20 @@ describe('routesDeepCoverage', () => {
         }
 
         if (url.includes('/api/v1/projects/KAN/modules') && method === 'POST') {
-          const body = JSON.parse((init?.body as string) || '{}');
+          const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
+            name?: string;
+            status?: string;
+            start_date?: string | null;
+            target_date?: string | null;
+            description_markdown?: string | null;
+          };
           const newMod = {
             id: 'm-2',
-            name: body.name,
-            status: body.status,
-            start_date: body.start_date,
-            target_date: body.target_date,
-            description_markdown: body.description_markdown,
+            name: body.name ?? '',
+            status: body.status ?? 'planned',
+            start_date: body.start_date ?? null,
+            target_date: body.target_date ?? null,
+            description_markdown: body.description_markdown ?? '',
           };
           moduleItems.push(newMod);
           return Promise.resolve(jsonResponse(newMod, 201));
@@ -884,7 +900,8 @@ describe('routesDeepCoverage', () => {
       // Set end date earlier than start date
       fireEvent.change(screen.getByTestId('edit-cycle-start-input'), { target: { value: '2026-06-15' } });
       fireEvent.change(screen.getByTestId('edit-cycle-end-input'), { target: { value: '2026-06-01' } });
-      fireEvent.submit(screen.getByTestId('edit-cycle-modal').querySelector('form')!);
+      const cycleForm = screen.getByTestId('edit-cycle-modal').querySelector('form');
+      if (cycleForm) fireEvent.submit(cycleForm);
 
       await waitFor(() => {
         expect(screen.getByTestId('edit-cycle-error')).toBeDefined();
@@ -925,7 +942,8 @@ describe('routesDeepCoverage', () => {
       // Set target date earlier than start date
       fireEvent.change(screen.getByTestId('edit-module-start-input'), { target: { value: '2026-05-15' } });
       fireEvent.change(screen.getByTestId('edit-module-target-input'), { target: { value: '2026-05-01' } });
-      fireEvent.submit(screen.getByTestId('edit-module-modal').querySelector('form')!);
+      const modForm = screen.getByTestId('edit-module-modal').querySelector('form');
+      if (modForm) fireEvent.submit(modForm);
 
       await waitFor(() => {
         expect(screen.getByTestId('edit-module-error')).toBeDefined();

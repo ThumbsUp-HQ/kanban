@@ -181,7 +181,7 @@ test.describe('KANBA-222 Visual Proofs: Rich Markdown Toolbar, Raw Toggle, Paste
 
     // Dispatch simulated paste event with rich HTML containing forbidden script and hidden payload
     await page.evaluate(() => {
-      const surface = document.querySelector('.kb-editor__surface') || document.querySelector('textarea');
+      const surface = document.querySelector('.kb-editor__surface') ?? document.querySelector('textarea');
       if (surface) {
         const dt = new DataTransfer();
         dt.setData('text/html', '<p>Sanitized <strong>rich content</strong><script>alert(1)</script><span style="display:none">injection</span></p>');

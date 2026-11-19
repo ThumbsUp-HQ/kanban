@@ -486,9 +486,9 @@ export function IssuesWorkspaceRoute({
     const item: IssueItem = {
       id: `01931234-new-${String(Date.now())}`,
       key: `${projectKey}-${String(nextNum)}`,
-      summary: newIssue.summary as string,
-      state: newIssue.state as IssueItem['state'],
-      priority: newIssue.priority as IssueItem['priority'],
+      summary: newIssue.summary!,
+      state: newIssue.state!,
+      priority: newIssue.priority!,
     };
     if (newIssue.description_markdown) {
       item.description_markdown = newIssue.description_markdown;
@@ -523,7 +523,7 @@ export function IssuesWorkspaceRoute({
         normalizeStateKey(currentIssue.state?.name) !== normalizeStateKey(targetStateName);
 
       const targetStateAny = targetState as { wip_hard_limit?: number | null } | undefined;
-      if (isCrossState && targetStateAny && targetStateAny.wip_hard_limit != null) {
+      if (isCrossState && targetStateAny?.wip_hard_limit != null) {
         const targetCount = issues.filter(
           (i) =>
             i.key !== targetKey &&

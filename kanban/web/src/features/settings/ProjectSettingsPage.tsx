@@ -358,14 +358,14 @@ export function ProjectSettingsPage(): JSX.Element {
             ) {
               const mapped: TrashedItem[] = (
                 fallbackTrash as {
-                  items: Array<{
+                  items: {
                     id: string;
                     key: string;
                     summary?: string;
                     title?: string;
                     deleted_at: string;
                     purge_after: string;
-                  }>;
+                  }[];
                 }
               ).items.map((i) => {
                 const rem = Math.max(
@@ -917,7 +917,7 @@ export function ProjectSettingsPage(): JSX.Element {
     const q = principalSearch.toLowerCase();
     return (
       p.display_name.toLowerCase().includes(q) ||
-      (p.handle && p.handle.toLowerCase().includes(q)) ||
+      (p.handle?.toLowerCase().includes(q)) ||
       p.id.toLowerCase().includes(q)
     );
   });
@@ -955,7 +955,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-general"
           className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('general')}
+          onClick={() => { setActiveTab('general'); }}
         >
           General
         </button>
@@ -963,7 +963,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-states"
           className={`kb-settings-tab ${activeTab === 'states' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('states')}
+          onClick={() => { setActiveTab('states'); }}
         >
           Workflow States
         </button>
@@ -971,7 +971,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-priorities"
           className={`kb-settings-tab ${activeTab === 'priorities' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('priorities')}
+          onClick={() => { setActiveTab('priorities'); }}
         >
           Priorities
         </button>
@@ -979,7 +979,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-labels"
           className={`kb-settings-tab ${activeTab === 'labels' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('labels')}
+          onClick={() => { setActiveTab('labels'); }}
         >
           Labels
         </button>
@@ -987,7 +987,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-members"
           className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('members')}
+          onClick={() => { setActiveTab('members'); }}
         >
           Members & Access
         </button>
@@ -995,7 +995,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-integrations"
           className={`kb-settings-tab ${activeTab === 'integrations' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('integrations')}
+          onClick={() => { setActiveTab('integrations'); }}
         >
           Automation & Integrations
         </button>
@@ -1003,7 +1003,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-trash"
           className={`kb-settings-tab ${activeTab === 'trash' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('trash')}
+          onClick={() => { setActiveTab('trash'); }}
         >
           Trash & Retention
         </button>
@@ -1011,7 +1011,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-danger"
           className={`kb-settings-tab ${activeTab === 'danger' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => setActiveTab('danger')}
+          onClick={() => { setActiveTab('danger'); }}
         >
           Danger Zone
         </button>
@@ -1029,7 +1029,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 className="kb-input"
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); }}
                 required
               />
             </div>
@@ -1042,7 +1042,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 className="kb-textarea"
                 rows={4}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => { setDescription(e.target.value); }}
               />
             </div>
 
@@ -1053,7 +1053,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   id="enable-modules"
                   data-testid="project-modules-checkbox"
                   checked={modulesEnabled}
-                  onChange={(e) => setModulesEnabled(e.target.checked)}
+                  onChange={(e) => { setModulesEnabled(e.target.checked); }}
                 />
                 <span>Enable Modules for this project</span>
               </label>
@@ -1102,7 +1102,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 min="1"
                 max="365"
                 value={autoArchiveDays}
-                onChange={(e) => setAutoArchiveDays(e.target.value)}
+                onChange={(e) => { setAutoArchiveDays(e.target.value); }}
                 placeholder="e.g. 30"
               />
             </div>
@@ -1139,22 +1139,21 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="State name (e.g. In Review)"
                   value={stateName}
-                  onChange={(e) => setStateName(e.target.value)}
+                  onChange={(e) => { setStateName(e.target.value); }}
                   required
                 />
                 <select
                   data-testid="state-group-select"
                   className="kb-select"
                   value={stateGroup}
-                  onChange={(e) =>
-                    setStateGroup(
+                  onChange={(e) => { setStateGroup(
                       e.target.value as
                         | 'backlog'
                         | 'unstarted'
                         | 'started'
                         | 'completed'
                         | 'cancelled',
-                    )
+                    ); }
                   }
                 >
                   <option value="backlog">Backlog</option>
@@ -1169,7 +1168,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Color Hex (#4f46e5)"
                   value={stateColor}
-                  onChange={(e) => setStateColor(e.target.value)}
+                  onChange={(e) => { setStateColor(e.target.value); }}
                 />
                 <input
                   type="number"
@@ -1177,7 +1176,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Order (0)"
                   value={stateSortOrder}
-                  onChange={(e) => setStateSortOrder(e.target.value)}
+                  onChange={(e) => { setStateSortOrder(e.target.value); }}
                 />
                 <input
                   type="number"
@@ -1206,7 +1205,7 @@ export function ProjectSettingsPage(): JSX.Element {
                     type="checkbox"
                     data-testid="state-default-checkbox"
                     checked={stateIsDefault}
-                    onChange={(e) => setStateIsDefault(e.target.checked)}
+                    onChange={(e) => { setStateIsDefault(e.target.checked); }}
                   />
                   <span>Default</span>
                 </label>
@@ -1242,7 +1241,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         type="button"
                         data-testid={`state-up-${st.id}`}
                         className="kb-btn kb-btn-secondary"
-                        onClick={() => handleReorderState(st.id, 'up')}
+                        onClick={() => { handleReorderState(st.id, 'up'); }}
                         title="Move Up"
                       >
                         ▲
@@ -1251,7 +1250,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         type="button"
                         data-testid={`state-down-${st.id}`}
                         className="kb-btn kb-btn-secondary"
-                        onClick={() => handleReorderState(st.id, 'down')}
+                        onClick={() => { handleReorderState(st.id, 'down'); }}
                         title="Move Down"
                       >
                         ▼
@@ -1288,7 +1287,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         type="button"
                         data-testid={`delete-state-btn-${st.id}`}
                         className="kb-btn-danger-sm"
-                        onClick={() => handleDeleteState(st.id)}
+                        onClick={() => { handleDeleteState(st.id); }}
                       >
                         Delete
                       </button>
@@ -1320,7 +1319,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Slug (e.g. urgent)"
                   value={prioritySlug}
-                  onChange={(e) => setPrioritySlug(e.target.value)}
+                  onChange={(e) => { setPrioritySlug(e.target.value); }}
                   required
                 />
                 <input
@@ -1329,7 +1328,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Label (e.g. Urgent)"
                   value={priorityLabel}
-                  onChange={(e) => setPriorityLabel(e.target.value)}
+                  onChange={(e) => { setPriorityLabel(e.target.value); }}
                   required
                 />
                 <input
@@ -1338,7 +1337,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Emoji (🔥)"
                   value={priorityEmoji}
-                  onChange={(e) => setPriorityEmoji(e.target.value)}
+                  onChange={(e) => { setPriorityEmoji(e.target.value); }}
                 />
                 <input
                   type="text"
@@ -1346,7 +1345,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Color (#dc2626)"
                   value={priorityColor}
-                  onChange={(e) => setPriorityColor(e.target.value)}
+                  onChange={(e) => { setPriorityColor(e.target.value); }}
                 />
                 <input
                   type="number"
@@ -1354,14 +1353,14 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Sort Order"
                   value={prioritySortOrder}
-                  onChange={(e) => setPrioritySortOrder(e.target.value)}
+                  onChange={(e) => { setPrioritySortOrder(e.target.value); }}
                 />
                 <label className="kb-checkbox-label">
                   <input
                     type="checkbox"
                     data-testid="priority-default-checkbox"
                     checked={priorityIsDefault}
-                    onChange={(e) => setPriorityIsDefault(e.target.checked)}
+                    onChange={(e) => { setPriorityIsDefault(e.target.checked); }}
                   />
                   <span>Default</span>
                 </label>
@@ -1412,7 +1411,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         type="button"
                         data-testid={`delete-priority-btn-${p.id}`}
                         className="kb-btn-danger-sm"
-                        onClick={() => handleDeletePriority(p.id)}
+                        onClick={() => { handleDeletePriority(p.id); }}
                       >
                         Delete
                       </button>
@@ -1444,7 +1443,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Label name (e.g. bug, backend)"
                   value={labelName}
-                  onChange={(e) => setLabelName(e.target.value)}
+                  onChange={(e) => { setLabelName(e.target.value); }}
                   required
                 />
                 <input
@@ -1453,7 +1452,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Color Hex (#2563eb)"
                   value={labelColor}
-                  onChange={(e) => setLabelColor(e.target.value)}
+                  onChange={(e) => { setLabelColor(e.target.value); }}
                 />
                 <input
                   type="text"
@@ -1461,7 +1460,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Exclusive Group (optional)"
                   value={labelExclusiveGroup}
-                  onChange={(e) => setLabelExclusiveGroup(e.target.value)}
+                  onChange={(e) => { setLabelExclusiveGroup(e.target.value); }}
                 />
                 <button type="submit" data-testid="create-label-btn" className="kb-btn kb-btn-primary">
                   Add Label
@@ -1502,7 +1501,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         type="button"
                         data-testid={`delete-label-btn-${lbl.id}`}
                         className="kb-btn-danger-sm"
-                        onClick={() => handleDeleteLabel(lbl.id)}
+                        onClick={() => { handleDeleteLabel(lbl.id); }}
                       >
                         Delete
                       </button>
@@ -1545,14 +1544,14 @@ export function ProjectSettingsPage(): JSX.Element {
                       setNewPrincipalId(val);
                       setIsPickerOpen(true);
                     }}
-                    onFocus={() => setIsPickerOpen(true)}
+                    onFocus={() => { setIsPickerOpen(true); }}
                     required
                   />
                   {isPickerOpen && principalsList.length > 0 && (
                     <div
                       className="kb-principal-dropdown"
                       data-testid="principal-picker-dropdown"
-                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseDown={(e) => { e.preventDefault(); }}
                     >
                       {filteredPrincipals.slice(0, 10).map((p) => (
                         <div
@@ -1584,8 +1583,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   data-testid="member-role-select"
                   className="kb-select"
                   value={newRole}
-                  onChange={(e) =>
-                    setNewRole(e.target.value as 'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER')
+                  onChange={(e) => { setNewRole(e.target.value as 'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER'); }
                   }
                 >
                   <option value="MEMBER">Member (Read &amp; Write)</option>
@@ -1636,7 +1634,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         type="button"
                         data-testid={`remove-member-${m.principal_id}`}
                         className="kb-btn-danger-sm"
-                        onClick={() => handleRemoveMember(m.principal_id)}
+                        onClick={() => { handleRemoveMember(m.principal_id); }}
                       >
                         Remove
                       </button>
@@ -1708,7 +1706,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   type="button"
                   data-testid={`trash-filter-${kind}`}
                   className={`kb-trash-filter-btn ${trashKindFilter === kind ? 'kb-trash-filter-btn-active' : ''}`}
-                  onClick={() => setTrashKindFilter(kind)}
+                  onClick={() => { setTrashKindFilter(kind); }}
                 >
                   {kind === 'all'
                     ? 'All'
@@ -1771,7 +1769,7 @@ export function ProjectSettingsPage(): JSX.Element {
                           type="button"
                           data-testid={`restore-btn-${item.id}`}
                           className="kb-btn kb-btn-secondary"
-                          onClick={() => handleRestoreItem(item)}
+                          onClick={() => { handleRestoreItem(item); }}
                         >
                           ↩️ Restore
                         </button>
@@ -1807,7 +1805,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   type="button"
                   data-testid="request-delete-btn"
                   className="kb-btn kb-btn-danger"
-                  onClick={() => handleRequestDelete('trash')}
+                  onClick={() => { handleRequestDelete('trash'); }}
                 >
                   🗑️ Move Project to Trash...
                 </button>
@@ -1817,7 +1815,7 @@ export function ProjectSettingsPage(): JSX.Element {
                     type="button"
                     data-testid="request-purge-btn"
                     className="kb-btn kb-btn-danger kb-btn-purge"
-                    onClick={() => handleRequestDelete('permanent_purge')}
+                    onClick={() => { handleRequestDelete('permanent_purge'); }}
                   >
                     💥 Permanently Purge Project (Irreversible)...
                   </button>
@@ -1857,7 +1855,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   className="kb-input"
                   placeholder="Type confirmation phrase exactly"
                   value={enteredPhrase}
-                  onChange={(e) => setEnteredPhrase(e.target.value)}
+                  onChange={(e) => { setEnteredPhrase(e.target.value); }}
                 />
 
                 <input
@@ -1867,7 +1865,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   style={{ marginTop: '0.5rem' }}
                   placeholder="Reason for deletion (optional, min 10 chars)"
                   value={dangerReason}
-                  onChange={(e) => setDangerReason(e.target.value)}
+                  onChange={(e) => { setDangerReason(e.target.value); }}
                 />
 
                 <div className="kb-danger-actions">

@@ -822,7 +822,7 @@ describe('Sidebar', () => {
   });
 
   it('covers no-projects empty state, custom events, and project expand toggle', async () => {
-    let mockProjects: Array<{ identifier: string; name: string; modules_enabled?: boolean }> = [];
+    let mockProjects: { identifier: string; name: string; modules_enabled?: boolean }[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes('/api/v1/workspaces') && !url.includes('/switch')) {
