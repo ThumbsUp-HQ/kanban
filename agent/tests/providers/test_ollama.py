@@ -781,15 +781,15 @@ def test_ollama_auto_populate_default_cidrs() -> None:
 
     # 6. Explicit CIDRs missing host IP are augmented in validate_settings
     s_extra = OllamaSettings(
-        base_url="http://192.168.1.10:11434",
-        allowed_ollama_cidrs=("10.0.0.0/8",),
+        base_url=HttpUrl("http://192.168.1.10:11434"),
+        allowed_ollama_cidrs=(ipaddress.ip_network("10.0.0.0/8"),),
         model_allowlist=("llama3",),
     )
     assert ipaddress.ip_network("192.168.1.10/32") in s_extra.allowed_ollama_cidrs
 
     s_extra_v6 = OllamaSettings(
-        base_url="http://[fc00::2]:11434",
-        allowed_ollama_cidrs=("10.0.0.0/8",),
+        base_url=HttpUrl("http://[fc00::2]:11434"),
+        allowed_ollama_cidrs=(ipaddress.ip_network("10.0.0.0/8"),),
         model_allowlist=("llama3",),
     )
     assert ipaddress.ip_network("fc00::2/128") in s_extra_v6.allowed_ollama_cidrs

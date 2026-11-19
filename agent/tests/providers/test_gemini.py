@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 from google.auth.credentials import Credentials
-from pydantic import BaseModel, SecretStr, ValidationError
+from pydantic import BaseModel, HttpUrl, SecretStr, ValidationError
 
 from agent.providers.base import (
     CompletionRequest,
@@ -911,7 +911,7 @@ def test_gemini_custom_base_url_validation() -> None:
     settings = GeminiSettings(
         mode="ai_studio_paid",
         api_key=SecretStr("test-key"),
-        base_url="https://generativelanguage.googleapis.com",
+        base_url=HttpUrl("https://generativelanguage.googleapis.com"),
         model_allowlist=("gemini-2.5-flash",),
     )
     assert settings.base_url is not None
@@ -919,27 +919,33 @@ def test_gemini_custom_base_url_validation() -> None:
 
     # 2. Userinfo rejected
     with pytest.raises(ValidationError, match="base_url must not contain userinfo"):
-        GeminiSettings(
-            mode="ai_studio_paid",
-            api_key=SecretStr("test-key"),
-            base_url="https://user:pass@generativelanguage.googleapis.com",
-            model_allowlist=("gemini-2.5-flash",),
+        GeminiSettings.model_validate(
+            {
+                "mode": "ai_studio_paid",
+                "api_key": "test-key",
+                "base_url": "https://user:pass@generativelanguage.googleapis.com",
+                "model_allowlist": ("gemini-2.5-flash",),
+            }
         )
 
     # 3. Query rejected
     with pytest.raises(ValidationError, match="base_url must not contain query parameters"):
-        GeminiSettings(
-            mode="ai_studio_paid",
-            api_key=SecretStr("test-key"),
-            base_url="https://generativelanguage.googleapis.com?key=123",
-            model_allowlist=("gemini-2.5-flash",),
+        GeminiSettings.model_validate(
+            {
+                "mode": "ai_studio_paid",
+                "api_key": "test-key",
+                "base_url": "https://generativelanguage.googleapis.com?key=123",
+                "model_allowlist": ("gemini-2.5-flash",),
+            }
         )
 
     # 4. Fragment rejected
     with pytest.raises(ValidationError, match="base_url must not contain fragment"):
-        GeminiSettings(
-            mode="ai_studio_paid",
-            api_key=SecretStr("test-key"),
-            base_url="https://generativelanguage.googleapis.com#frag",
-            model_allowlist=("gemini-2.5-flash",),
+        GeminiSettings.model_validate(
+            {
+                "mode": "ai_studio_paid",
+                "api_key": "test-key",
+                "base_url": "https://generativelanguage.googleapis.com#frag",
+                "model_allowlist": ("gemini-2.5-flash",),
+            }
         )
