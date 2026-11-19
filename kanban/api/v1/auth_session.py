@@ -210,6 +210,7 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
     email: str | None = None
     is_server_admin = False
     is_workspace_admin = False
+    is_project_admin = False
     workspace_role: Literal[
         "SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"
     ] = "WORKSPACE_MEMBER"
@@ -313,6 +314,24 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
                     workspace_role = "WORKSPACE_MEMBER"
                     workspace_capabilities = ["CREATE_PROJECT"]
 
+            is_project_admin = is_workspace_admin
+            if not is_project_admin:
+                try:
+                    async with async_session.begin_nested():
+                        pa_res = await async_session.execute(
+                            text(
+                                "SELECT 1 FROM role_bindings "
+                                "WHERE principal_id = :p_id "
+                                "  AND role IN "
+                                "  ('PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN') "
+                                "LIMIT 1"
+                            ),
+                            {"p_id": principal.principal_id},
+                        )
+                        is_project_admin = pa_res.scalar_one_or_none() is not None
+                except Exception:  # noqa: BLE001
+                    is_project_admin = False
+
             try:
                 async with async_session.begin_nested():
                     pref_res = await async_session.execute(
@@ -333,6 +352,7 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
     else:
         is_server_admin = getattr(principal, "is_server_admin", False)
         is_workspace_admin = getattr(principal, "is_workspace_admin", is_server_admin)
+        is_project_admin = getattr(principal, "is_project_admin", is_workspace_admin)
         if is_server_admin:
             workspace_role = "SERVER_ADMIN"
             workspace_capabilities = [
@@ -369,6 +389,7 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
             "email": email,
             "is_server_admin": is_server_admin,
             "is_workspace_admin": is_workspace_admin,
+            "is_project_admin": is_project_admin,
             "workspace_role": workspace_role,
             "workspace_capabilities": workspace_capabilities,
             "timezone": timezone,

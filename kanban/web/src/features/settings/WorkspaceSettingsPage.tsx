@@ -50,7 +50,7 @@ export function formatHandle(handle?: string | null): string {
 }
 
 export function WorkspaceSettingsPage(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups' | 'mcp'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>('general');
   const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
   const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -498,16 +498,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
         >
           Groups & Governance
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'mcp'}
-          data-testid="tab-mcp"
-          className={`kb-settings-tab ${activeTab === 'mcp' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('mcp'); }}
-        >
-          Workspace MCP Keys
-        </button>
       </nav>
 
       <div className="kb-settings-panel">
@@ -647,6 +637,20 @@ export function WorkspaceSettingsPage(): JSX.Element {
             >
               {isSaving ? 'Saving...' : 'Save Workspace Settings'}
             </button>
+
+            <div className="kb-integrations-grid" data-testid="workspace-mcp-section">
+              <Link
+                to="/settings/mcp?scope=workspace"
+                className="kb-integration-card"
+                data-testid="link-workspace-mcp"
+              >
+                <div className="kb-card-icon">🏢</div>
+                <div className="kb-card-content">
+                  <h3>Workspace MCP Access Keys</h3>
+                  <p>Manage organization-level Model Context Protocol API tokens and client credentials.</p>
+                </div>
+              </Link>
+            </div>
           </form>
         )}
 
@@ -996,22 +1000,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 )}
               </div>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'mcp' && (
-          <div className="kb-integrations-grid" data-testid="workspace-mcp-section">
-            <Link
-              to="/workspaces/settings/mcp"
-              className="kb-integration-card"
-              data-testid="link-workspace-mcp"
-            >
-              <div className="kb-card-icon">🏢</div>
-              <div className="kb-card-content">
-                <h3>Workspace MCP Access Keys</h3>
-                <p>Manage organization-level Model Context Protocol API tokens and client credentials.</p>
-              </div>
-            </Link>
           </div>
         )}
       </div>

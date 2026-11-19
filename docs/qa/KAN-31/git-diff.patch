@@ -1,0 +1,4298 @@
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 50d926e..a340911 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -54,6 +54,7 @@ from kanban.api.v1.issue_trees import router as issue_trees_router
+ from kanban.api.v1.issue_workflow import router as issue_workflow_router
+ from kanban.api.v1.issues import router as issues_router
+ from kanban.api.v1.links import router as links_router
++from kanban.api.v1.mcp_keys import router as mcp_keys_router
+ from kanban.api.v1.media_proxy import router as media_proxy_router
+ from kanban.api.v1.modules import router as modules_router
+ from kanban.api.v1.notifications import router as notifications_router
+@@ -107,6 +108,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(auth_identities_router)
+     v1.include_router(auth_local_router)
+     v1.include_router(auth_mcp_keys_router)
++    v1.include_router(mcp_keys_router)
+     v1.include_router(auth_oidc_router)
+     v1.include_router(auth_mfa_router)
+     v1.include_router(auth_ldap_router)
+diff --git a/kanban/api/v1/admin/mcp_keys.py b/kanban/api/v1/admin/mcp_keys.py
+index 5148da5..e6f8861 100644
+--- a/kanban/api/v1/admin/mcp_keys.py
++++ b/kanban/api/v1/admin/mcp_keys.py
+@@ -41,7 +41,7 @@ class McpApiKeyMintRequest(BaseModel):
+     principal_id: uuid.UUID | None = None
+     expires_in_days: int | None = Field(default=None, ge=1, le=365)
+     expires_at: datetime | None = None
+-    scope_tier: Literal["global", "workspace", "project"] = "workspace"
++    scope_tier: Literal["global", "workspace", "project", "server"] = "workspace"
+     owner_kind: Literal["service_bot", "personal_user"] = "service_bot"
+     project_id: uuid.UUID | None = None
+     allowed_workspace_ids: list[uuid.UUID] | None = None
+@@ -128,8 +128,9 @@ async def mint_key(
+     response: Response,
+ ) -> McpApiKeyMintResponse:
+     """Mint a surface-bound MCP API key and return plaintext token once."""
++    resolved_scope_tier = "global" if body.scope_tier in ("global", "server") else body.scope_tier
+     target_principal_id = body.principal_id or caller.principal_id
+-    target_workspace_id = None if body.scope_tier == "global" else caller.workspace_id
++    target_workspace_id = None if resolved_scope_tier == "global" else caller.workspace_id
+ 
+     allowed_project_ids = list(body.allowed_project_ids or [])
+     if body.allowed_projects:
+@@ -152,7 +153,7 @@ async def mint_key(
+                     pass
+ 
+     target_project_id = body.project_id
+-    if target_project_id is None and body.scope_tier == "project" and allowed_project_ids:
++    if target_project_id is None and resolved_scope_tier == "project" and allowed_project_ids:
+         target_project_id = allowed_project_ids[0]
+ 
+     key_record, plaintext_token = await mint_mcp_api_key(
+@@ -164,7 +165,7 @@ async def mint_key(
+         created_by_id=caller.principal_id,
+         expires_at=body.expires_at,
+         expires_in_days=body.expires_in_days,
+-        scope_tier=body.scope_tier,
++        scope_tier=resolved_scope_tier,
+         owner_kind=body.owner_kind,
+         project_id=target_project_id,
+         allowed_workspace_ids=body.allowed_workspace_ids,
+@@ -267,6 +268,10 @@ async def list_keys(
+     """List metadata for MCP API keys belonging to the workspace or global scope."""
+     stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+     is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
++    stmt_wa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
++    is_workspace_admin = bool((await session.execute(stmt_wa)).scalar_one())
++
++    normalized_scope_tier = "global" if scope_tier in ("global", "server") else scope_tier
+ 
+     stmt = select(McpApiKey)
+     if is_server_admin:
+@@ -276,13 +281,38 @@ async def list_keys(
+                 McpApiKey.workspace_id.is_(None),
+             )
+         )
+-    else:
++    elif is_workspace_admin:
+         stmt = stmt.where(McpApiKey.workspace_id == caller.workspace_id)
++    else:
++        # PROJECT_ADMIN only: strictly restricted to scope_tier == "project" targeting projects
++        # where the caller holds Capability.ADMIN (never workspace-wide or other projects' keys)
++        if normalized_scope_tier is not None and normalized_scope_tier != "project":
++            return []
++
++        stmt_admin_projs = select(Project.id).where(
++            Project.workspace_id == caller.workspace_id,
++            or_(
++                text("app_has_object_capability(projects.id, 64)"),
++                text(
++                    "app_principal_has_role(projects.id, "
++                    "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
++                ),
++            ),
++        )
++        admin_proj_ids = list((await session.execute(stmt_admin_projs)).scalars().all())
++        if not admin_proj_ids:
++            return []
++
++        stmt = stmt.where(
++            McpApiKey.workspace_id == caller.workspace_id,
++            McpApiKey.scope_tier == "project",
++            McpApiKey.project_id.in_(admin_proj_ids),
++        )
+ 
+     if surface:
+         stmt = stmt.where(McpApiKey.surface == surface)
+-    if scope_tier:
+-        stmt = stmt.where(McpApiKey.scope_tier == scope_tier)
++    if normalized_scope_tier:
++        stmt = stmt.where(McpApiKey.scope_tier == normalized_scope_tier)
+     stmt = stmt.order_by(McpApiKey.created_at.desc())
+ 
+     result = await session.execute(stmt)
+@@ -342,13 +372,37 @@ async def revoke_key(
+     if key is None:
+         not_found()
+ 
+-    if key.workspace_id is None:
+-        stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+-        is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
+-        if not is_server_admin:
++    stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++    is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
++    stmt_wa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
++    is_workspace_admin = bool((await session.execute(stmt_wa)).scalar_one())
++
++    if is_server_admin:
++        if key.workspace_id is not None and key.workspace_id != caller.workspace_id:
++            not_found()
++    elif is_workspace_admin:
++        if key.workspace_id != caller.workspace_id:
++            not_found()
++    else:
++        # PROJECT_ADMIN only: strictly restricted to scope_tier == "project" targeting
++        # projects where caller holds Capability.ADMIN
++        if (
++            key.scope_tier != "project"
++            or key.workspace_id != caller.workspace_id
++            or key.project_id is None
++        ):
++            not_found()
++
++        stmt_can_admin = text(
++            "SELECT app_has_object_capability(:p_id, 64) OR "
++            "app_principal_has_role(:p_id, "
++            "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
++        )
++        can_admin = bool(
++            (await session.execute(stmt_can_admin, {"p_id": key.project_id})).scalar_one()
++        )
++        if not can_admin:
+             not_found()
+-    elif key.workspace_id != caller.workspace_id:
+-        not_found()
+ 
+     await revoke_mcp_api_key(
+         session,
+diff --git a/kanban/api/v1/auth_session.py b/kanban/api/v1/auth_session.py
+index b2baf19..779cbca 100644
+--- a/kanban/api/v1/auth_session.py
++++ b/kanban/api/v1/auth_session.py
+@@ -210,6 +210,7 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
+     email: str | None = None
+     is_server_admin = False
+     is_workspace_admin = False
++    is_project_admin = False
+     workspace_role: Literal[
+         "SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"
+     ] = "WORKSPACE_MEMBER"
+@@ -313,6 +314,24 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
+                     workspace_role = "WORKSPACE_MEMBER"
+                     workspace_capabilities = ["CREATE_PROJECT"]
+ 
++            is_project_admin = is_workspace_admin
++            if not is_project_admin:
++                try:
++                    async with async_session.begin_nested():
++                        pa_res = await async_session.execute(
++                            text(
++                                "SELECT 1 FROM role_bindings "
++                                "WHERE principal_id = :p_id "
++                                "  AND role IN "
++                                "  ('PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN') "
++                                "LIMIT 1"
++                            ),
++                            {"p_id": principal.principal_id},
++                        )
++                        is_project_admin = pa_res.scalar_one_or_none() is not None
++                except Exception:  # noqa: BLE001
++                    is_project_admin = False
++
+             try:
+                 async with async_session.begin_nested():
+                     pref_res = await async_session.execute(
+@@ -333,6 +352,7 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
+     else:
+         is_server_admin = getattr(principal, "is_server_admin", False)
+         is_workspace_admin = getattr(principal, "is_workspace_admin", is_server_admin)
++        is_project_admin = getattr(principal, "is_project_admin", is_workspace_admin)
+         if is_server_admin:
+             workspace_role = "SERVER_ADMIN"
+             workspace_capabilities = [
+@@ -369,6 +389,7 @@ async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
+             "email": email,
+             "is_server_admin": is_server_admin,
+             "is_workspace_admin": is_workspace_admin,
++            "is_project_admin": is_project_admin,
+             "workspace_role": workspace_role,
+             "workspace_capabilities": workspace_capabilities,
+             "timezone": timezone,
+diff --git a/kanban/api/v1/mcp_keys.py b/kanban/api/v1/mcp_keys.py
+new file mode 100644
+index 0000000..102a21e
+--- /dev/null
++++ b/kanban/api/v1/mcp_keys.py
+@@ -0,0 +1,484 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unified canonical REST API router for MCP keys (KB-P3-AUDIT-25 / KAN-31).
++
++Mounts canonical /api/v1/mcp-keys supporting both self-service (view=mine)
++and tier-matched governance (view=governance) for project, workspace, and server scopes.
++"""
++
++from __future__ import annotations
++
++import contextlib
++import uuid
++from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
++from typing import Annotated, Final, Literal
++
++from fastapi import APIRouter, Depends, Query, Response, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy import or_, select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models.mcp_api_key import McpApiKey
++from database.models.projects import Project
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.problems import ProblemException, not_found
++from kanban.security.mcp_keys import (
++    mint_mcp_api_key,
++    revoke_mcp_api_key,
++)
++
++REQUIRED_AAL2_LEVEL: Final[int] = 2
++
++router = APIRouter(prefix="/mcp-keys", tags=["mcp-keys"])
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class UnifiedMcpKeyMintRequest(BaseModel):
++    """Payload for minting a scoped MCP API key."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    surface: Literal["agent", "docs", "admin"]
++    scopes: list[str] | None = None
++    label: str | None = Field(default=None, max_length=120)
++    principal_id: uuid.UUID | None = None
++    expires_in_days: int | None = Field(default=60, ge=1, le=365)
++    expires_at: datetime | None = None
++    scope_tier: Literal["global", "workspace", "project", "server"] = "workspace"
++    owner_kind: Literal["service_bot", "personal_user"] = "personal_user"
++    workspace_id: uuid.UUID | None = None
++    project_id: uuid.UUID | None = None
++    project_ref: str | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    allowed_projects: list[str] | None = None
++    capability_mask: int = Field(default=7, ge=1, le=255)
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
++    unlimited: bool = False
++    confirm_unlimited: bool = False
++
++
++class UnifiedMcpApiKeyResponse(BaseModel):
++    """Consistent metadata response for an MCP API key without secret hash."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    id: uuid.UUID
++    label: str | None = None
++    workspace_id: uuid.UUID | None = None
++    principal_id: uuid.UUID
++    surface: str
++    key_prefix: str
++    display_hint: str
++    scopes: list[str]
++    created_at: datetime
++    expires_at: datetime | None = None
++    revoked_at: datetime | None = None
++    last_used_at: datetime | None = None
++    scope_tier: str = "workspace"
++    owner_kind: str = "personal_user"
++    project_id: uuid.UUID | None = None
++    allowed_workspace_ids: list[uuid.UUID] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    allowed_projects: list[str] | None = None
++    capability_mask: int = 7
++    allowed_tools: list[str] | None = None
++    disabled_tools: list[str] = Field(default_factory=list)
++    allowed_cidrs: list[str] | None = None
++
++
++class UnifiedMcpKeyMintResponse(UnifiedMcpApiKeyResponse):
++    """Response returned exactly once carrying the one-time plaintext token."""
++
++    token: str
++    raw_key: str | None = None
++
++
++async def _resolve_project_id_to_key_map(
++    session: Session,
++    project_ids: set[uuid.UUID],
++) -> dict[uuid.UUID, str]:
++    if not project_ids:
++        return {}
++    with contextlib.suppress(Exception):
++        stmt = select(Project.id, Project.identifier).where(Project.id.in_(project_ids))
++        rows = (await session.execute(stmt)).all()
++        return {row[0]: row[1] for row in rows}
++    return {}
++
++
++def _resolve_key_project_list(
++    key_item: McpApiKey,
++    id_to_key: dict[uuid.UUID, str],
++) -> list[str] | None:
++    if key_item.allowed_project_ids:
++        res = [id_to_key.get(p, str(p)) for p in key_item.allowed_project_ids]
++        return res or None
++    if key_item.project_id:
++        return [id_to_key.get(key_item.project_id, str(key_item.project_id))]
++    return None
++
++
++@router.get(
++    "",
++    response_model=list[UnifiedMcpApiKeyResponse],
++    summary="List MCP API keys (mine or governance)",
++)
++async def list_unified_mcp_keys(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
++    caller: Caller,
++    session: Session,
++    view: Annotated[
++        Literal["mine", "governance"],
++        Query(description="View mode: mine (personal keys) or governance (scoped keys)"),
++    ] = "mine",
++    scope_tier: Annotated[
++        str | None,
++        Query(description="Filter by scope tier (project, workspace, server, or global)"),
++    ] = None,
++    project_ref: Annotated[
++        str | None,
++        Query(description="Filter by target project key or UUID"),
++    ] = None,
++    surface: Annotated[
++        str | None,
++        Query(description="Filter by surface (agent, docs, admin)"),
++    ] = None,
++) -> list[UnifiedMcpApiKeyResponse]:
++    """Retrieve MCP API keys matching view, scope, and principal permissions."""
++    normalized_scope_tier = "global" if scope_tier in ("global", "server") else scope_tier
++
++    resolved_project_id: uuid.UUID | None = None
++    if project_ref:
++        p_ref_str = str(project_ref).strip()
++        resolved_project_id = (
++            await session.execute(
++                text("SELECT resolve_project_id_by_key_or_id(:ws_id, :ident)"),
++                {"ws_id": caller.workspace_id, "ident": p_ref_str},
++            )
++        ).scalar_one_or_none()
++        if not resolved_project_id:
++            try:
++                resolved_project_id = uuid.UUID(p_ref_str)
++            except ValueError:
++                resolved_project_id = None
++        if not resolved_project_id:
++            return []
++
++    stmt = select(McpApiKey)
++
++    if view == "mine":
++        stmt = stmt.where(McpApiKey.principal_id == caller.principal_id)
++        if normalized_scope_tier:
++            stmt = stmt.where(McpApiKey.scope_tier == normalized_scope_tier)
++        if resolved_project_id:
++            stmt = stmt.where(
++                or_(
++                    McpApiKey.project_id == resolved_project_id,
++                    McpApiKey.allowed_project_ids.contains([resolved_project_id]),
++                )
++            )
++    else:
++        # Governance view: strictly requires fresh AAL2 + administrative role
++        if caller.aal_level < REQUIRED_AAL2_LEVEL:
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Required",
++                detail="Accessing governance MCP keys requires fresh AAL2 authentication.",
++            )
++
++        stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++        is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
++        stmt_wa = text(
++            "SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])"
++        )
++        is_workspace_admin = bool((await session.execute(stmt_wa)).scalar_one())
++
++        if is_server_admin:
++            stmt = stmt.where(
++                or_(
++                    McpApiKey.workspace_id == caller.workspace_id,
++                    McpApiKey.workspace_id.is_(None),
++                )
++            )
++        elif is_workspace_admin:
++            stmt = stmt.where(McpApiKey.workspace_id == caller.workspace_id)
++        else:
++            # PROJECT_ADMIN only: strictly restricted to scope_tier == "project" targeting projects
++            # where the caller holds Capability.ADMIN (never workspace-wide or other projects' keys)
++            if normalized_scope_tier is not None and normalized_scope_tier != "project":
++                return []
++
++            stmt_admin_projs = select(Project.id).where(
++                Project.workspace_id == caller.workspace_id,
++                or_(
++                    text("app_has_object_capability(projects.id, 64)"),
++                    text(
++                        "app_principal_has_role(projects.id, "
++                        "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
++                    ),
++                ),
++            )
++            admin_proj_ids = list((await session.execute(stmt_admin_projs)).scalars().all())
++            if not admin_proj_ids:
++                raise ProblemException(
++                    code="FORBIDDEN",
++                    status=403,
++                    title="Forbidden",
++                    detail="Caller possesses no project administration permissions in workspace.",
++                )
++
++            stmt = stmt.where(
++                McpApiKey.workspace_id == caller.workspace_id,
++                McpApiKey.scope_tier == "project",
++                McpApiKey.project_id.in_(admin_proj_ids),
++            )
++
++        if normalized_scope_tier:
++            stmt = stmt.where(McpApiKey.scope_tier == normalized_scope_tier)
++        if resolved_project_id:
++            stmt = stmt.where(
++                or_(
++                    McpApiKey.project_id == resolved_project_id,
++                    McpApiKey.allowed_project_ids.contains([resolved_project_id]),
++                )
++            )
++
++    if surface:
++        stmt = stmt.where(McpApiKey.surface == surface)
++
++    stmt = stmt.order_by(McpApiKey.created_at.desc())
++    records = (await session.execute(stmt)).scalars().all()
++
++    all_proj_ids: set[uuid.UUID] = set()
++    for k in records:
++        if k.allowed_project_ids:
++            all_proj_ids.update(k.allowed_project_ids)
++        if k.project_id:
++            all_proj_ids.add(k.project_id)
++
++    id_to_key = await _resolve_project_id_to_key_map(session, all_proj_ids)
++
++    return [
++        UnifiedMcpApiKeyResponse(
++            id=k.id,
++            label=k.label,
++            workspace_id=k.workspace_id,
++            principal_id=k.principal_id,
++            surface=k.surface,
++            key_prefix=k.key_prefix,
++            display_hint=k.display_hint,
++            scopes=list(k.scopes),
++            created_at=k.created_at,
++            expires_at=k.expires_at,
++            revoked_at=k.revoked_at,
++            last_used_at=k.last_used_at,
++            scope_tier=k.scope_tier,
++            owner_kind=k.owner_kind,
++            project_id=k.project_id,
++            allowed_workspace_ids=k.allowed_workspace_ids,
++            allowed_project_ids=k.allowed_project_ids,
++            allowed_projects=_resolve_key_project_list(k, id_to_key),
++            capability_mask=k.capability_mask,
++            allowed_tools=k.allowed_tools,
++            disabled_tools=list(k.disabled_tools or []),
++            allowed_cidrs=([str(c) for c in k.allowed_cidrs] if k.allowed_cidrs else None),
++        )
++        for k in records
++    ]
++
++
++@router.post(
++    "",
++    status_code=status.HTTP_201_CREATED,
++    response_model=UnifiedMcpKeyMintResponse,
++    summary="Mint an MCP API key",
++)
++async def mint_unified_mcp_key(  # noqa: C901
++    body: UnifiedMcpKeyMintRequest,
++    caller: Caller,
++    session: Session,
++    response: Response,
++) -> UnifiedMcpKeyMintResponse:
++    """Mint a scoped MCP API key returning the one-time plaintext token."""
++    resolved_scope_tier = "global" if body.scope_tier in ("global", "server") else body.scope_tier
++    target_workspace_id = None if resolved_scope_tier == "global" else caller.workspace_id
++    target_principal_id = (
++        body.principal_id
++        if (body.owner_kind == "service_bot" and body.principal_id is not None)
++        else caller.principal_id
++    )
++
++    allowed_project_ids = list(body.allowed_project_ids or [])
++    project_refs = list(body.allowed_projects or [])
++    if body.project_ref and body.project_ref not in project_refs:
++        project_refs.append(body.project_ref)
++
++    if project_refs:
++        for p_ref in project_refs:
++            p_ref_str = str(p_ref).strip()
++            resolved_p = (
++                await session.execute(
++                    text("SELECT resolve_project_id_by_key_or_id(:ws_id, :ident)"),
++                    {"ws_id": target_workspace_id, "ident": p_ref_str},
++                )
++            ).scalar_one_or_none()
++            if resolved_p and resolved_p not in allowed_project_ids:
++                allowed_project_ids.append(resolved_p)
++            elif not resolved_p:
++                try:
++                    p_uuid = uuid.UUID(p_ref_str)
++                    if p_uuid not in allowed_project_ids:
++                        allowed_project_ids.append(p_uuid)
++                except ValueError:
++                    pass
++
++    target_project_id = body.project_id
++    if target_project_id is None and resolved_scope_tier == "project" and allowed_project_ids:
++        target_project_id = allowed_project_ids[0]
++
++    effective_scopes = body.scopes or [f"{body.surface}:read", f"{body.surface}:write"]
++
++    key_record, plaintext_token = await mint_mcp_api_key(
++        session,
++        workspace_id=target_workspace_id,
++        principal_id=target_principal_id,
++        surface=body.surface,
++        scopes=effective_scopes,
++        created_by_id=caller.principal_id,
++        expires_at=body.expires_at,
++        expires_in_days=body.expires_in_days,
++        scope_tier=resolved_scope_tier,
++        owner_kind=body.owner_kind,
++        project_id=target_project_id,
++        allowed_workspace_ids=body.allowed_workspace_ids,
++        allowed_project_ids=allowed_project_ids or None,
++        capability_mask=body.capability_mask,
++        allowed_tools=body.allowed_tools,
++        disabled_tools=body.disabled_tools,
++        allowed_cidrs=body.allowed_cidrs,
++        unlimited=body.unlimited,
++        confirm_unlimited=body.confirm_unlimited,
++        caller_aal_level=caller.aal_level,
++        label=body.label,
++    )
++
++    response.headers["Location"] = f"/api/v1/mcp-keys/{key_record.id}"
++
++    resolved_proj_keys: list[str] = []
++    if key_record.allowed_project_ids:
++        keys_res = (
++            await session.execute(
++                text("SELECT resolve_project_keys(:p_ids)"),
++                {"p_ids": list(key_record.allowed_project_ids)},
++            )
++        ).scalar_one_or_none()
++        if keys_res:
++            resolved_proj_keys = [str(k) for k in keys_res]
++
++    return UnifiedMcpKeyMintResponse(
++        id=key_record.id,
++        token=plaintext_token,
++        raw_key=plaintext_token,
++        label=key_record.label,
++        workspace_id=key_record.workspace_id,
++        principal_id=key_record.principal_id,
++        surface=key_record.surface,
++        key_prefix=key_record.key_prefix,
++        display_hint=key_record.display_hint,
++        scopes=list(key_record.scopes),
++        created_at=key_record.created_at,
++        expires_at=key_record.expires_at,
++        revoked_at=key_record.revoked_at,
++        last_used_at=key_record.last_used_at,
++        scope_tier=key_record.scope_tier,
++        owner_kind=key_record.owner_kind,
++        project_id=key_record.project_id,
++        allowed_workspace_ids=key_record.allowed_workspace_ids,
++        allowed_project_ids=key_record.allowed_project_ids,
++        allowed_projects=(
++            resolved_proj_keys
++            or (
++                [str(p) for p in key_record.allowed_project_ids]
++                if key_record.allowed_project_ids
++                else None
++            )
++        ),
++        capability_mask=key_record.capability_mask,
++        allowed_tools=key_record.allowed_tools,
++        disabled_tools=list(key_record.disabled_tools or []),
++        allowed_cidrs=(
++            [str(c) for c in key_record.allowed_cidrs] if key_record.allowed_cidrs else None
++        ),
++    )
++
++
++@router.delete(
++    "/{key_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Revoke an MCP API key",
++)
++async def revoke_unified_mcp_key(
++    key_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> None:
++    """Revoke an active MCP API key with owner or tier-matched governance authority."""
++    key = await session.get(McpApiKey, key_id)
++    if key is None:
++        not_found()
++
++    is_owner = key.principal_id == caller.principal_id
++
++    if not is_owner:
++        if caller.aal_level < REQUIRED_AAL2_LEVEL:
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Required",
++                detail="Revoking keys under governance requires fresh AAL2 authentication.",
++            )
++
++        stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++        is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
++        stmt_wa = text(
++            "SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])"
++        )
++        is_workspace_admin = bool((await session.execute(stmt_wa)).scalar_one())
++
++        if is_server_admin:
++            if key.workspace_id is not None and key.workspace_id != caller.workspace_id:
++                not_found()
++        elif is_workspace_admin:
++            if key.workspace_id != caller.workspace_id:
++                not_found()
++        else:
++            # PROJECT_ADMIN only: strictly restricted to scope_tier == "project" targeting
++            # projects where caller holds Capability.ADMIN
++            if (
++                key.scope_tier != "project"
++                or key.workspace_id != caller.workspace_id
++                or key.project_id is None
++            ):
++                not_found()
++
++            stmt_can_admin = text(
++                "SELECT app_has_object_capability(:p_id, 64) OR "
++                "app_principal_has_role(:p_id, "
++                "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
++            )
++            can_admin = bool(
++                (await session.execute(stmt_can_admin, {"p_id": key.project_id})).scalar_one()
++            )
++            if not can_admin:
++                not_found()
++
++    await revoke_mcp_api_key(
++        session,
++        key_id=key_id,
++        caller_principal_id=caller.principal_id,
++    )
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index 493855b..8058378 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -30,6 +30,7 @@ from kanban.api.request_id import (
+     register_mcp_key_revocation_listener,
+ )
+ from kanban.security.keys import derive_subkey, load_key_material
++from kanban.security.permissions import Capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.settings import get_settings
+ 
+@@ -263,7 +264,7 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
+     created_by_id: uuid.UUID,
+     expires_at: datetime | None = None,
+     expires_in_days: int | None = None,
+-    scope_tier: Literal["global", "workspace", "project"] = "workspace",
++    scope_tier: Literal["global", "workspace", "project", "server"] = "workspace",
+     owner_kind: Literal["personal_user", "service_bot"] = "service_bot",
+     project_id: uuid.UUID | None = None,
+     allowed_workspace_ids: list[uuid.UUID] | None = None,
+@@ -296,8 +297,30 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
+             detail=f"Scopes {invalid_scopes} not allowed for surface {surface!r}.",
+         )
+ 
+-    # Check admin:destructive capability
++    # Normalize scope_tier alias ("server" -> "global")
++    if scope_tier == "server":
++        scope_tier = "global"
++
++    # Resolve effective AAL level early for privilege and scope checks
++    if caller_aal_level is None:
++        try:
++            stmt_aal = text("SELECT NULLIF(current_setting('app.aal_level', true), '')::integer")
++            sess_aal = (await session.execute(stmt_aal)).scalar_one_or_none()
++            effective_aal = sess_aal if sess_aal is not None else REQUIRED_SERVICE_BOT_AAL
++        except SQLAlchemyError:
++            effective_aal = REQUIRED_SERVICE_BOT_AAL
++    else:
++        effective_aal = caller_aal_level
++
++    # Check admin:destructive capability (strictly requires SERVER_ADMIN + fresh AAL2)
+     if "admin:destructive" in scopes:
++        if effective_aal < REQUIRED_SERVICE_BOT_AAL:
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Required",
++                detail="admin:destructive scope requires fresh AAL2 authentication.",
++            )
+         stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+         is_server_admin = (await session.execute(stmt)).scalar_one()
+         if not is_server_admin:
+@@ -346,17 +369,6 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
+         elif project_id not in allowed_project_ids:
+             allowed_project_ids = [*allowed_project_ids, project_id]
+ 
+-    # Resolve effective AAL level
+-    if caller_aal_level is None:
+-        try:
+-            stmt_aal = text("SELECT NULLIF(current_setting('app.aal_level', true), '')::integer")
+-            sess_aal = (await session.execute(stmt_aal)).scalar_one_or_none()
+-            effective_aal = sess_aal if sess_aal is not None else REQUIRED_SERVICE_BOT_AAL
+-        except SQLAlchemyError:
+-            effective_aal = REQUIRED_SERVICE_BOT_AAL
+-    else:
+-        effective_aal = caller_aal_level
+-
+     # 2. Authorization and Privilege Checks
+     if owner_kind == "service_bot":
+         if effective_aal < REQUIRED_SERVICE_BOT_AAL:
+@@ -412,16 +424,75 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
+                 title="Forbidden",
+                 detail="Personal user keys cannot be minted for another user.",
+             )
+-        if (
+-            surface == "admin" or (capability_mask & 8)
+-        ) and effective_aal < REQUIRED_SERVICE_BOT_AAL:
++        # Check delete capability bitmask (Capability.DELETE is 128 / bit 7, not 8 / TRANSITION)
++        has_delete_cap = bool(capability_mask & int(Capability.DELETE.value))
++        if (surface == "admin" or has_delete_cap) and effective_aal < REQUIRED_SERVICE_BOT_AAL:
+             raise ProblemException(
+                 code="AAL2_REQUIRED",
+                 status=403,
+                 title="AAL2 Required",
+                 detail="Minting admin surface or delete capability personal keys requires AAL2.",
+             )
+-        if scope_tier == "workspace":
++        # Surface == "admin" requires tier-matched admin role + AAL2
++        if surface == "admin":
++            if scope_tier == "global":
++                stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++                if not bool((await session.execute(stmt_sa)).scalar_one()):
++                    raise ProblemException(
++                        code="INSUFFICIENT_CAPABILITY",
++                        status=403,
++                        title="Insufficient Capability",
++                        detail="Minting admin surface global keys requires SERVER_ADMIN role.",
++                    )
++            elif scope_tier == "workspace":
++                stmt_wa = text(
++                    "SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])"
++                )
++                if not bool((await session.execute(stmt_wa)).scalar_one()):
++                    raise ProblemException(
++                        code="INSUFFICIENT_CAPABILITY",
++                        status=403,
++                        title="Insufficient Capability",
++                        detail=(
++                            "Minting admin surface workspace keys requires "
++                            "WORKSPACE_ADMIN or SERVER_ADMIN role."
++                        ),
++                    )
++            elif scope_tier == "project":
++                stmt_pa = text(
++                    "SELECT app_principal_has_role("
++                    ":p_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
++                )
++                if not bool((await session.execute(stmt_pa, {"p_id": project_id})).scalar_one()):
++                    raise ProblemException(
++                        code="INSUFFICIENT_CAPABILITY",
++                        status=403,
++                        title="Insufficient Capability",
++                        detail=(
++                            "Minting admin surface project keys requires "
++                            "PROJECT_ADMIN, WORKSPACE_ADMIN, or SERVER_ADMIN role."
++                        ),
++                    )
++
++        # Global tier privilege escalation guard: personal user global keys
++        # strictly require SERVER_ADMIN + fresh AAL2
++        if scope_tier == "global":
++            if effective_aal < REQUIRED_SERVICE_BOT_AAL:
++                raise ProblemException(
++                    code="AAL2_REQUIRED",
++                    status=403,
++                    title="AAL2 Required",
++                    detail="Minting global personal keys requires fresh AAL2 authentication.",
++                )
++            stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++            if not bool((await session.execute(stmt_sa)).scalar_one()):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Minting global personal user keys requires SERVER_ADMIN role.",
++                )
++        elif scope_tier == "workspace":
+             stmt_ws_view = text(
+                 "SELECT app_has_object_capability(:ws_id, 1) OR "
+                 "app_principal_has_role(NULL, "
+diff --git a/kanban/tests/api/test_unified_mcp_keys_api.py b/kanban/tests/api/test_unified_mcp_keys_api.py
+new file mode 100644
+index 0000000..d3a185a
+--- /dev/null
++++ b/kanban/tests/api/test_unified_mcp_keys_api.py
+@@ -0,0 +1,994 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration and RBAC security tests for unified /api/v1/mcp-keys router (KAN-31)."""
++
++from __future__ import annotations
++
++import base64
++import uuid
++from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++from sqlalchemy import text
++
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.api.v1.mcp_keys import (
++    _resolve_key_project_list,
++    _resolve_project_id_to_key_map,
++    revoke_unified_mcp_key,
++)
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_project,
++    create_user,
++    create_workspace,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _enroll_and_confirm_totp(api_env: ApiEnv, user_id: uuid.UUID) -> None:
++    """Enroll and confirm TOTP for user to satisfy AAL2 policy."""
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user_id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user_id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
++
++@pytest.mark.asyncio
++async def test_unified_mcp_keys_self_service_lifecycle(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Standard user can mint, list (view=mine), and revoke personal/workspace keys."""
++    user = await make_user("unified_member", workspace_role="WORKSPACE_MEMBER")
++    await api_env.seed.commit()
++    client = api_env.client
++
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        aal_level=1,
++    )
++
++    # 1. Mint personal key
++    mint_resp = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "My Personal CLI",
++            "surface": "agent",
++            "scopes": ["agent:read", "agent:write"],
++            "scope_tier": "workspace",
++            "expires_in_days": 30,
++        },
++    )
++    assert mint_resp.status_code == 201
++    mint_data = mint_resp.json()
++    assert mint_data["label"] == "My Personal CLI"
++    assert mint_data["surface"] == "agent"
++    assert "token" in mint_data
++    assert "raw_key" in mint_data
++    assert "key_prefix" in mint_data
++    assert mint_data["key_prefix"] == "kb_agt_"
++    key_id = mint_data["id"]
++
++    # 2. List caller keys via view=mine
++    list_resp = await client.get("/api/v1/mcp-keys?view=mine")
++    assert list_resp.status_code == 200
++    list_data = list_resp.json()
++    items = list_data if isinstance(list_data, list) else list_data.get("keys", [])
++    found_keys = [k for k in items if k["id"] == key_id]
++    assert len(found_keys) == 1
++    assert "token" not in found_keys[0]
++    assert "raw_key" not in found_keys[0]
++
++    # 3. Revoke key
++    del_resp = await client.delete(f"/api/v1/mcp-keys/{key_id}")
++    assert del_resp.status_code == 204
++
++    # 4. List again: key should be marked revoked
++    list_after = await client.get("/api/v1/mcp-keys?view=mine")
++    assert list_after.status_code == 200
++    raw_after = list_after.json()
++    items_after = raw_after if isinstance(raw_after, list) else raw_after.get("keys", [])
++    revoked_key = next(k for k in items_after if k["id"] == key_id)
++    assert revoked_key["revoked_at"] is not None
++
++
++@pytest.mark.asyncio
++async def test_global_scope_tier_privilege_escalation_guard(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Global/server scope tier strictly requires SERVER_ADMIN with AAL2."""
++    regular_user = await make_user("non_admin_esc", workspace_role="WORKSPACE_MEMBER")
++    ws_admin = await make_user("ws_admin_esc", workspace_role="WORKSPACE_ADMIN")
++    server_admin = await make_user("srv_admin_esc", workspace_role="SERVER_ADMIN")
++
++    await _enroll_and_confirm_totp(api_env, ws_admin.id)
++    await _enroll_and_confirm_totp(api_env, server_admin.id)
++
++    client = api_env.client
++
++    # 1. Regular user trying to mint global/server scope tier is rejected 403
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=regular_user.id,
++        workspace_id=regular_user.workspace_id,
++        aal_level=1,
++    )
++    resp_reg = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Escalation Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "server",
++        },
++    )
++    assert resp_reg.status_code == 403
++
++    # 2. Workspace admin trying to mint global/server tier is rejected 403
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_ws = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Admin Escalation",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "server",
++        },
++    )
++    assert resp_ws.status_code == 403
++
++    # 3. Server admin with AAL1 is rejected 403 AAL2_REQUIRED
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=1,
++    )
++    resp_srv_aal1 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Srv Admin AAL1",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "server",
++        },
++    )
++    assert resp_srv_aal1.status_code == 403
++    assert resp_srv_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 4. Server admin with AAL2 succeeds
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_srv_aal2 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Legitimate Server Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "server",
++        },
++    )
++    assert resp_srv_aal2.status_code == 201
++    assert resp_srv_aal2.json()["scope_tier"] == "global"
++
++
++@pytest.mark.asyncio
++async def test_admin_surface_and_destructive_guards(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Admin surface requires tier-matched admin role; admin:destructive requires SERVER_ADMIN."""
++    regular_user = await make_user("admin_surf_regular", workspace_role="WORKSPACE_MEMBER")
++    ws_admin = await make_user("admin_surf_ws", workspace_role="WORKSPACE_ADMIN")
++    server_admin = await make_user("admin_surf_srv", workspace_role="SERVER_ADMIN")
++
++    await _enroll_and_confirm_totp(api_env, ws_admin.id)
++    await _enroll_and_confirm_totp(api_env, server_admin.id)
++
++    client = api_env.client
++
++    # 1. Regular user cannot mint admin surface key
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=regular_user.id,
++        workspace_id=regular_user.workspace_id,
++        aal_level=1,
++    )
++    resp_reg = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Bypass Admin Key",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert resp_reg.status_code == 403
++
++    # 1b. Regular user with AAL2 also cannot mint admin surface workspace or global key
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=regular_user.id,
++        workspace_id=regular_user.workspace_id,
++        aal_level=2,
++    )
++    resp_reg_aal2 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Bypass Admin Key AAL2",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert resp_reg_aal2.status_code == 403
++    assert resp_reg_aal2.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    resp_reg_glob_admin = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Bypass Admin Global Key AAL2",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "server",
++        },
++    )
++    assert resp_reg_glob_admin.status_code == 403
++    assert resp_reg_glob_admin.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 2. Workspace admin with AAL1 cannot mint admin surface key
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=1,
++    )
++    resp_ws_aal1 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Admin Key AAL1",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert resp_ws_aal1.status_code == 403
++    assert resp_ws_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 3. Workspace admin with AAL2 can mint admin:read key
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_ws_aal2 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Admin Key AAL2",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert resp_ws_aal2.status_code == 201
++
++    # 4. Workspace admin cannot mint admin:destructive scope
++    resp_ws_dest = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Destructive",
++            "surface": "admin",
++            "scopes": ["admin:read", "admin:destructive"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert resp_ws_dest.status_code == 403
++
++    # 5. Server admin with AAL2 can mint admin:destructive scope
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_srv_dest = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Server Destructive",
++            "surface": "admin",
++            "scopes": ["admin:read", "admin:destructive"],
++            "scope_tier": "server",
++        },
++    )
++    assert resp_srv_dest.status_code == 201
++
++
++@pytest.mark.asyncio
++async def test_capability_delete_bitmask_aal2_guard(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Capability.DELETE (128) in capability_mask strictly requires AAL2."""
++    ws_admin = await make_user("bitmask_ws_admin", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_and_confirm_totp(api_env, ws_admin.id)
++    client = api_env.client
++
++    # AAL1 with capability_mask=128 fails with 403 AAL2_REQUIRED
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=1,
++    )
++    resp_aal1 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Delete Mask Key",
++            "surface": "agent",
++            "scopes": ["agent:read", "agent:write"],
++            "capability_mask": 128,
++        },
++    )
++    assert resp_aal1.status_code == 403
++    assert resp_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # AAL2 with capability_mask=128 succeeds
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_aal2 = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Delete Mask Key",
++            "surface": "agent",
++            "scopes": ["agent:read", "agent:write"],
++            "capability_mask": 128,
++        },
++    )
++    assert resp_aal2.status_code == 201
++
++
++@pytest.mark.asyncio
++async def test_project_admin_governance_leak_prevention(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """PROJECT_ADMIN governance listing and revocation is confined to own projects."""
++    ws_admin = await make_user("proj_leak_ws_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_admin = await make_user("proj_leak_p_admin", workspace_role="WORKSPACE_MEMBER")
++
++    await _enroll_and_confirm_totp(api_env, ws_admin.id)
++    await _enroll_and_confirm_totp(api_env, proj_admin.id)
++
++    client = api_env.client
++
++    # Create two projects in the workspace: PJA and PJB using helper
++    pja_id = await create_project(
++        api_env.seed,
++        ws_admin.workspace_id,
++        identifier="PJA",
++        name="Project Alpha",
++        created_by_id=ws_admin.id,
++    )
++    await create_project(
++        api_env.seed,
++        ws_admin.workspace_id,
++        identifier="PJB",
++        name="Project Beta",
++        created_by_id=ws_admin.id,
++    )
++    await api_env.seed.commit()
++
++    # Grant proj_admin PROJECT_ADMIN role on PJA only
++    await add_role_binding(
++        api_env.seed,
++        ws_admin.workspace_id,
++        proj_admin.id,
++        "PROJECT_ADMIN",
++        scope_type="project",
++        project_id=pja_id,
++    )
++    await api_env.seed.commit()
++
++    # WS admin mints keys for:
++    # 1. Workspace scope
++    # 2. PJA project scope
++    # 3. PJB project scope
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    k_ws_resp = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert k_ws_resp.status_code == 201
++    k_ws_id = k_ws_resp.json()["id"]
++
++    k_pja_resp = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "PJA Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["PJA"],
++        },
++    )
++    assert k_pja_resp.status_code == 201
++    k_pja_id = k_pja_resp.json()["id"]
++
++    k_pjb_resp = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "PJB Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["PJB"],
++        },
++    )
++    assert k_pjb_resp.status_code == 201
++    k_pjb_id = k_pjb_resp.json()["id"]
++
++    # Now proj_admin calls view=governance with AAL2
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=proj_admin.id,
++        workspace_id=proj_admin.workspace_id,
++        aal_level=2,
++    )
++
++    # 1. Listing governance keys without project filter returns ONLY PJA keys
++    gov_list_resp = await client.get("/api/v1/mcp-keys?view=governance")
++    assert gov_list_resp.status_code == 200
++    gov_items = (
++        gov_list_resp.json()
++        if isinstance(gov_list_resp.json(), list)
++        else gov_list_resp.json().get("keys", [])
++    )
++    listed_ids = {k["id"] for k in gov_items}
++    assert k_pja_id in listed_ids
++    assert k_ws_id not in listed_ids
++    assert k_pjb_id not in listed_ids
++
++    # 2. Filtering governance for PJB (which proj_admin does not administer) returns empty
++    gov_pjb_resp = await client.get("/api/v1/mcp-keys?view=governance&project_ref=PJB")
++    assert gov_pjb_resp.status_code == 200
++    pjb_items = (
++        gov_pjb_resp.json()
++        if isinstance(gov_pjb_resp.json(), list)
++        else gov_pjb_resp.json().get("keys", [])
++    )
++    assert len(pjb_items) == 0
++
++    # 2b. Legacy /api/v1/admin/mcp-keys endpoint parity for project admin
++    # Filtering legacy admin endpoint for workspace scope as project admin returns empty list
++    legacy_ws = await client.get("/api/v1/admin/mcp-keys?scope_tier=workspace")
++    assert legacy_ws.status_code == 200
++    assert legacy_ws.json() == []
++
++    # Listing legacy admin endpoint as project admin returns only PJA keys
++    legacy_list = await client.get("/api/v1/admin/mcp-keys")
++    assert legacy_list.status_code == 200
++    legacy_ids = {k["id"] for k in legacy_list.json()}
++    assert k_pja_id in legacy_ids
++    assert k_ws_id not in legacy_ids
++    assert k_pjb_id not in legacy_ids
++
++    # Legacy delete: proj_admin cannot revoke workspace key or PJB key via admin route
++    del_legacy_ws = await client.delete(f"/api/v1/admin/mcp-keys/{k_ws_id}")
++    assert del_legacy_ws.status_code == 404
++    del_legacy_pjb = await client.delete(f"/api/v1/admin/mcp-keys/{k_pjb_id}")
++    assert del_legacy_pjb.status_code == 404
++
++    # 2c. proj_admin can mint admin surface project key for PJA, but not for PJB
++    pja_admin_surf = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "PJA Admin Surf",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["PJA"],
++        },
++    )
++    assert pja_admin_surf.status_code == 201
++
++    pjb_admin_surf = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "PJB Admin Surf",
++            "surface": "admin",
++            "scopes": ["admin:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["PJB"],
++        },
++    )
++    assert pjb_admin_surf.status_code == 403
++    assert pjb_admin_surf.json()["code"] == "INSUFFICIENT_CAPABILITY"
++
++    # 3. proj_admin cannot revoke workspace key
++    del_ws = await client.delete(f"/api/v1/mcp-keys/{k_ws_id}")
++    assert del_ws.status_code == 404
++
++    # 4. proj_admin cannot revoke PJB key
++    del_pjb = await client.delete(f"/api/v1/mcp-keys/{k_pjb_id}")
++    assert del_pjb.status_code == 404
++
++    # 5. proj_admin CAN revoke PJA key
++    del_pja = await client.delete(f"/api/v1/mcp-keys/{k_pja_id}")
++    assert del_pja.status_code == 204
++
++
++@pytest.mark.asyncio
++async def test_unified_mcp_keys_filters_and_validation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test project_ref, surface, and scope_tier filters, and 404 validation."""
++    user = await make_user("filter_user", workspace_role="WORKSPACE_MEMBER")
++    client = api_env.client
++
++    pja_id = await create_project(
++        api_env.seed,
++        user.workspace_id,
++        identifier="PJF",
++        name="Filter Project",
++        created_by_id=user.id,
++    )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        aal_level=1,
++    )
++
++    # 1. Mint key with allowed_projects
++    mint_pja = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Project Filter Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["PJF"],
++        },
++    )
++    assert mint_pja.status_code == 201
++    pja_key_id = mint_pja.json()["id"]
++
++    # 2. Mint key with allowed_project_ids directly
++    mint_pja_ids = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Project IDs Key",
++            "surface": "docs",
++            "scopes": ["docs:read"],
++            "scope_tier": "project",
++            "allowed_project_ids": [str(pja_id)],
++        },
++    )
++    assert mint_pja_ids.status_code == 201
++
++    # 3. Mint with invalid project ref -> 422 INVALID_TIER_SHAPE
++    mint_bad_proj = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Bad Proj Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["DOES_NOT_EXIST"],
++        },
++    )
++    assert mint_bad_proj.status_code == 422
++
++    # 4. Filter view=mine by surface
++    list_agent = await client.get("/api/v1/mcp-keys?view=mine&surface=agent")
++    assert list_agent.status_code == 200
++    agent_keys = list_agent.json()
++    assert all(k["surface"] == "agent" for k in agent_keys)
++
++    # 5. Filter view=mine by scope_tier
++    list_project = await client.get("/api/v1/mcp-keys?view=mine&scope_tier=project")
++    assert list_project.status_code == 200
++    assert any(k["id"] == pja_key_id for k in list_project.json())
++
++    # 6. Filter view=mine by non-existent project_ref -> returns empty list 200 OK
++    list_bad_ref = await client.get("/api/v1/mcp-keys?view=mine&project_ref=NO_SUCH_PROJ")
++    assert list_bad_ref.status_code == 200
++    assert len(list_bad_ref.json()) == 0
++
++    # 7. Filter view=mine by valid project_ref
++    list_good_ref = await client.get("/api/v1/mcp-keys?view=mine&project_ref=PJF")
++    assert list_good_ref.status_code == 200
++    assert any(k["id"] == pja_key_id for k in list_good_ref.json())
++
++    # 8. Revoke non-existent key -> 404
++    del_nf = await client.delete("/api/v1/mcp-keys/00000000-0000-0000-0000-000000000000")
++    assert del_nf.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_governance_rbac_and_aal2_filters(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test governance view AAL2 checks and non-admin role rejection."""
++    reg_user = await make_user("gov_reg_user", workspace_role="WORKSPACE_MEMBER")
++    ws_admin = await make_user("gov_ws_admin", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_and_confirm_totp(api_env, reg_user.id)
++    await _enroll_and_confirm_totp(api_env, ws_admin.id)
++
++    client = api_env.client
++
++    # 1. Non-admin with AAL1 calling governance -> 403 AAL2_REQUIRED
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=reg_user.id,
++        workspace_id=reg_user.workspace_id,
++        aal_level=1,
++    )
++    resp_aal1 = await client.get("/api/v1/mcp-keys?view=governance")
++    assert resp_aal1.status_code == 403
++    assert resp_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 2. Non-admin with AAL2 calling governance -> 403 FORBIDDEN
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=reg_user.id,
++        workspace_id=reg_user.workspace_id,
++        aal_level=2,
++    )
++    resp_reg_aal2 = await client.get("/api/v1/mcp-keys?view=governance")
++    assert resp_reg_aal2.status_code == 403
++    assert resp_reg_aal2.json()["code"] == "FORBIDDEN"
++
++    # 3. WS Admin with AAL2 mints key, then revokes under governance
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    mint_resp = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Gov Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert mint_resp.status_code == 201
++
++    # 4. Mint key owned by reg_user
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=reg_user.id,
++        workspace_id=reg_user.workspace_id,
++        aal_level=1,
++    )
++    mint_reg = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Reg Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert mint_reg.status_code == 201
++    reg_k_id = mint_reg.json()["id"]
++
++    # 5. WS Admin with AAL1 attempting to revoke reg_user's key -> 403 AAL2_REQUIRED
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=1,
++    )
++    resp_rev_aal1 = await client.delete(f"/api/v1/mcp-keys/{reg_k_id}")
++    assert resp_rev_aal1.status_code == 403
++    assert resp_rev_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 6. WS Admin with AAL2 can revoke the key (204)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_rev_ws = await client.delete(f"/api/v1/mcp-keys/{reg_k_id}")
++    assert resp_rev_ws.status_code == 204
++
++
++@pytest.mark.asyncio
++async def test_unified_mcp_keys_edge_cases_and_governance_coverage(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test governance scope queries, server/workspace/project admin edge revocation cases."""
++    ws_admin = await make_user("edge_ws_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_admin = await make_user("edge_p_admin", workspace_role="WORKSPACE_MEMBER")
++    server_admin = await make_user("edge_s_admin", workspace_role="SERVER_ADMIN")
++
++    await _enroll_and_confirm_totp(api_env, ws_admin.id)
++    await _enroll_and_confirm_totp(api_env, proj_admin.id)
++    await _enroll_and_confirm_totp(api_env, server_admin.id)
++
++    client = api_env.client
++
++    # Create project PJE
++    pje_id = await create_project(
++        api_env.seed,
++        ws_admin.workspace_id,
++        identifier="PJE",
++        name="Project Echo",
++        created_by_id=ws_admin.id,
++    )
++    # Create project PJZ (proj_admin has no role on PJZ)
++    await create_project(
++        api_env.seed,
++        ws_admin.workspace_id,
++        identifier="PJZ",
++        name="Project Zulu",
++        created_by_id=ws_admin.id,
++    )
++    # Grant proj_admin PROJECT_ADMIN on PJE only
++    await add_role_binding(
++        api_env.seed,
++        ws_admin.workspace_id,
++        proj_admin.id,
++        "PROJECT_ADMIN",
++        scope_type="project",
++        project_id=pje_id,
++    )
++    await api_env.seed.commit()
++
++    # 1. Project Admin calls view=governance with scope_tier=workspace -> returns [] (line 216)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=proj_admin.id,
++        workspace_id=proj_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_p_ws = await client.get("/api/v1/mcp-keys?view=governance&scope_tier=workspace")
++    assert resp_p_ws.status_code == 200
++    assert len(resp_p_ws.json()) == 0
++
++    # 2. Workspace Admin calls view=governance with scope_tier=project (lines 211, 244)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_w_proj = await client.get("/api/v1/mcp-keys?view=governance&scope_tier=project")
++    assert resp_w_proj.status_code == 200
++
++    # 3. Server Admin calls view=governance with scope_tier=server (line 204)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=2,
++    )
++    resp_s_server = await client.get("/api/v1/mcp-keys?view=governance&scope_tier=server")
++    assert resp_s_server.status_code == 200
++
++    # 4. Mint key on PJZ (where proj_admin has no role)
++    mint_pjz = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "PJZ Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "project",
++            "allowed_projects": ["PJZ"],
++        },
++    )
++    assert mint_pjz.status_code == 201
++    pjz_key_id = mint_pjz.json()["id"]
++
++    # Mint workspace key
++    mint_ws_key = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "WS Edge Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert mint_ws_key.status_code == 201
++    ws_key_id = mint_ws_key.json()["id"]
++
++    # 5. Project Admin attempts to revoke workspace key -> 404 (line 469)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=proj_admin.id,
++        workspace_id=proj_admin.workspace_id,
++        aal_level=2,
++    )
++    del_ws_fail = await client.delete(f"/api/v1/mcp-keys/{ws_key_id}")
++    assert del_ws_fail.status_code == 404
++
++    # 6. Project Admin attempts to revoke PJZ key (no can_admin) -> 404 (line 480)
++    del_pjz_fail = await client.delete(f"/api/v1/mcp-keys/{pjz_key_id}")
++    assert del_pjz_fail.status_code == 404
++
++    # 7. Create foreign workspace key directly in seed to test cross-workspace revocation guards
++    foreign_ws_id = await create_workspace(api_env.seed, name="Foreign Workspace")
++    foreign_p_id = await create_user(
++        api_env.seed, foreign_ws_id, handle="@foreign", display_name="Foreign"
++    )
++    await add_role_binding(
++        api_env.seed,
++        foreign_ws_id,
++        foreign_p_id,
++        "WORKSPACE_MEMBER",
++        scope_type="workspace",
++    )
++    await api_env.seed.commit()
++
++    # Workspace Admin attempts to revoke foreign workspace key -> 404 (line 460)
++    # Server Admin attempts to revoke foreign workspace key -> 404 (line 456-457)
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=foreign_p_id,
++        workspace_id=foreign_ws_id,
++        aal_level=1,
++    )
++    mint_foreign = await client.post(
++        "/api/v1/mcp-keys",
++        json={
++            "label": "Foreign Key",
++            "surface": "agent",
++            "scopes": ["agent:read"],
++            "scope_tier": "workspace",
++        },
++    )
++    assert mint_foreign.status_code == 201
++    foreign_key_id = mint_foreign.json()["id"]
++
++    # WS Admin in primary workspace tries to revoke foreign key -> 404
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=ws_admin.id,
++        workspace_id=ws_admin.workspace_id,
++        aal_level=2,
++    )
++    del_foreign_ws = await client.delete(f"/api/v1/mcp-keys/{foreign_key_id}")
++    assert del_foreign_ws.status_code == 404
++
++    # Server Admin with primary workspace tries to revoke foreign key -> 404
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=server_admin.id,
++        workspace_id=server_admin.workspace_id,
++        aal_level=2,
++    )
++    del_foreign_srv = await client.delete(f"/api/v1/mcp-keys/{foreign_key_id}")
++    assert del_foreign_srv.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_unified_mcp_keys_unit_branch_coverage() -> None:  # noqa: PLR0915
++    """Test helper functions and branch edges in unified router."""
++    # 1. _resolve_project_id_to_key_map exception handling
++    failing_session = AsyncMock()
++    failing_session.execute.side_effect = RuntimeError("DB error")
++    res_empty = await _resolve_project_id_to_key_map(failing_session, {uuid.uuid4()})
++    assert res_empty == {}
++
++    # 2. _resolve_key_project_list with key having project_id but no allowed_project_ids
++    p_id = uuid.uuid4()
++    mock_key = MagicMock()
++    mock_key.allowed_project_ids = None
++    mock_key.project_id = p_id
++    assert _resolve_key_project_list(mock_key, {p_id: "PROJ"}) == ["PROJ"]
++
++    # 3. Direct branch tests for revoke_unified_mcp_key
++    mock_session = AsyncMock()
++    key_id = uuid.uuid4()
++    owner_id = uuid.uuid4()
++    foreign_ws = uuid.uuid4()
++    caller_ws = uuid.uuid4()
++
++    mock_db_key = MagicMock()
++    mock_db_key.principal_id = owner_id
++    mock_db_key.workspace_id = foreign_ws
++    mock_db_key.scope_tier = "workspace"
++    mock_session.get.return_value = mock_db_key
++
++    # 3a. Server Admin trying to revoke key from different workspace -> 404
++    caller_sa = MagicMock()
++    caller_sa.principal_id = uuid.uuid4()
++    caller_sa.workspace_id = caller_ws
++    caller_sa.aal_level = 2
++    mock_scalar_sa = MagicMock()
++    mock_scalar_sa.scalar_one.return_value = True
++    mock_session.execute.return_value = mock_scalar_sa
++
++    with pytest.raises(ProblemException) as exc_info:
++        await revoke_unified_mcp_key(key_id, caller_sa, mock_session)
++    assert exc_info.value.status == 404
++
++    # 3b. Workspace Admin trying to revoke key from different workspace -> 404
++    caller_wa = MagicMock()
++    caller_wa.principal_id = uuid.uuid4()
++    caller_wa.workspace_id = caller_ws
++    caller_wa.aal_level = 2
++
++    async def mock_exec_wa(*_args: object, **_kwargs: object) -> MagicMock:
++        scalar = MagicMock()
++        # First call: server_admin check -> False; Second call: workspace_admin check -> True
++        call_count = getattr(mock_exec_wa, "calls", 0)
++        mock_exec_wa.calls = call_count + 1  # type: ignore[attr-defined]
++        scalar.scalar_one.return_value = call_count > 0
++        return scalar
++
++    mock_session.execute = mock_exec_wa
++    with pytest.raises(ProblemException) as exc_info_wa:
++        await revoke_unified_mcp_key(key_id, caller_wa, mock_session)
++    assert exc_info_wa.value.status == 404
++
++    # 3c. Project Admin trying to revoke workspace-tier key -> 404
++    caller_pa = MagicMock()
++    caller_pa.principal_id = uuid.uuid4()
++    caller_pa.workspace_id = foreign_ws
++    caller_pa.aal_level = 2
++
++    async def mock_exec_pa_non_admin(*_args: object, **_kwargs: object) -> MagicMock:
++        scalar = MagicMock()
++        scalar.scalar_one.return_value = False
++        return scalar
++
++    mock_session.execute = mock_exec_pa_non_admin
++    with pytest.raises(ProblemException) as exc_info_pa:
++        await revoke_unified_mcp_key(key_id, caller_pa, mock_session)
++    assert exc_info_pa.value.status == 404
++
++    # 3d. Project Admin trying to revoke project-tier key without can_admin -> 404
++    mock_db_key.scope_tier = "project"
++    mock_db_key.project_id = uuid.uuid4()
++    with pytest.raises(ProblemException) as exc_info_pa2:
++        await revoke_unified_mcp_key(key_id, caller_pa, mock_session)
++    assert exc_info_pa2.value.status == 404
+diff --git a/kanban/web/e2e/qa/kan-31-screenshots.spec.ts b/kanban/web/e2e/qa/kan-31-screenshots.spec.ts
+new file mode 100644
+index 0000000..09a6879
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-31-screenshots.spec.ts
+@@ -0,0 +1,280 @@
++/**
++ * Playwright Visual & QA Proof Verification for KAN-31.
++ * Captures Desktop (1440x900) and Mobile (390x844) in Light and Dark themes.
++ * Plain ASCII hyphens only. Zero em-dashes or en-dashes.
++ */
++
++import { test, expect } from '../support/test';
++import type { Page } from '@playwright/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { resolve } from 'node:path';
++
++const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
++const SCREENSHOT_DIR = resolve(REPO_ROOT, 'docs/qa/KAN-31/screenshots');
++
++const mockUser = {
++  principal_id: '11111111-1111-4111-8111-111111111111',
++  id: '11111111-1111-4111-8111-111111111111',
++  display_name: 'Security Architect',
++  username: 'architect',
++  email: 'architect@thumbsup.org',
++  timezone: 'UTC',
++  avatar_url: null,
++  roles: ['admin'],
++  is_server_admin: true,
++  is_workspace_admin: true,
++  is_project_admin: true,
++  capabilities: ['SERVER_ADMIN', 'WORKSPACE_ADMIN'],
++};
++
++const mockKeys = [
++  {
++    id: 'key-dev-001',
++    label: 'Personal Developer CLI Key',
++    display_hint: 'a1b2',
++    surface: 'agent',
++    scope_tier: 'personal_user',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: null,
++    created_at: '2026-11-19T08:00:00Z',
++    expires_at: '2026-12-19T08:00:00Z',
++    last_used_at: '2026-11-19T11:45:00Z',
++    revoked_at: null,
++  },
++  {
++    id: 'key-proj-002',
++    label: 'KANBA Automation Bot Key',
++    display_hint: 'c3d4',
++    surface: 'agent',
++    scope_tier: 'project',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: ['KANBA'],
++    created_at: '2026-11-18T10:00:00Z',
++    expires_at: null,
++    last_used_at: '2026-11-19T12:00:00Z',
++    revoked_at: null,
++  },
++  {
++    id: 'key-ws-003',
++    label: 'Workspace Shared CI Bot',
++    display_hint: 'e5f6',
++    surface: 'agent',
++    scope_tier: 'workspace',
++    scopes: ['agent:read'],
++    allowed_projects: null,
++    created_at: '2026-11-15T09:00:00Z',
++    expires_at: '2027-11-15T09:00:00Z',
++    last_used_at: null,
++    revoked_at: null,
++  },
++  {
++    id: 'key-srv-004',
++    label: 'Server Administrative Bot',
++    display_hint: 'g7h8',
++    surface: 'admin',
++    scope_tier: 'global',
++    scopes: ['admin:read'],
++    allowed_projects: null,
++    created_at: '2026-11-10T08:30:00Z',
++    expires_at: null,
++    last_used_at: null,
++    revoked_at: null,
++  },
++];
++
++const mockConnectedApps = [
++  {
++    id: 'app-grant-001',
++    client_id: 'client-claude-desktop',
++    client_name: 'Claude Desktop Integration',
++    surface: 'agent',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: null,
++    created_at: '2026-11-17T14:00:00Z',
++    revoked_at: null,
++  },
++];
++
++const baseMocks = {
++  'GET /api/v1/setup/status': { json: { initialized: true } },
++  'GET /api/v1/auth/session': {
++    json: {
++      authenticated: true,
++      principal_id: mockUser.id,
++      workspace_id: '22222222-2222-2222-2222-222222222222',
++      aal_level: 2,
++      mfa_pending: false,
++      csrf_token: 'test-csrf-token-kan31',
++      remember_me: true,
++    },
++  },
++  'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++  'GET /api/v1/workspaces': {
++    json: [{ id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' }],
++  },
++  'GET /api/v1/workspaces/current': {
++    json: { id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' },
++  },
++  'GET /api/v1/projects': {
++    json: [
++      { id: '33333333-3333-3333-3333-333333333333', key: 'KANBA', identifier: 'KANBA', name: 'kanban' },
++      { id: '44444444-4444-4444-4444-444444444444', key: 'QAADM', identifier: 'QAADM', name: 'QA Admin' },
++    ],
++  },
++  'GET /api/v1/projects/KANBA': { json: loadFixture('project-kan') },
++  'GET /api/v1/projects/KANBA/views': { json: [] },
++  'GET /api/v1/projects/KANBA/issues': { json: [] },
++  'GET /api/v1/projects/KANBA/cycles': { json: { items: [] } },
++  'GET /api/v1/projects/KANBA/modules': { json: { items: [] } },
++  'GET /api/v1/projects/KANBA/states': { json: { items: [] } },
++  'GET /api/v1/projects/KANBA/priorities': { json: { items: [] } },
++  'GET /api/v1/projects/KANBA/labels': { json: { items: [] } },
++  'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++  'GET /api/v1/notifications': { json: { items: [] } },
++  'GET /api/v1/users/me': { json: mockUser },
++  'GET /api/v1/auth/me': { json: mockUser },
++  'GET /api/v1/auth/cards': { json: loadFixture('auth-cards-kan') },
++  'GET /api/v1/auth/mcp-keys': { json: { keys: mockKeys } },
++  'GET /api/v1/mcp-keys': { json: mockKeys },
++  'GET /api/v1/auth/oauth-grants': { json: mockConnectedApps },
++};
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t: string) => {
++    localStorage.setItem('kb.theme', t);
++    document.documentElement.dataset.theme = t;
++  }, theme);
++  await page.waitForTimeout(150);
++}
++
++test.describe('KAN-31 Visual Verification & Proofs', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-kan31',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01: /settings/mcp My Keys view with scope pills and architecture explainer', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, baseMocks);
++    await page.goto('/settings/mcp');
++
++    await expect(page.locator('[data-testid="mcp-access-studio"]')).toBeVisible();
++    await expect(page.locator('[data-testid="mcp-scope-explainer"]')).toBeVisible();
++    await expect(page.locator('[data-testid="scope-pill-all"]')).toBeVisible();
++    await expect(page.locator('[data-testid="admin-view-toggle"]')).toBeVisible();
++    await expect(page.locator('[data-testid="key-row-key-dev-001"]')).toBeVisible();
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `01-settings-mcp-my-keys-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `01-settings-mcp-my-keys-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++
++  test('02: /settings/mcp?view=governance Governance view with scoped keys', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, baseMocks);
++    await page.goto('/settings/mcp?view=governance');
++
++    await expect(page.locator('[data-testid="mcp-access-studio"]')).toBeVisible();
++    await expect(page.locator('[data-testid="view-governance-btn"]')).toHaveClass(/kb-mcp-view-btn-active/);
++    await expect(page.locator('[data-testid="studio-title"]')).toContainText('MCP Key Governance');
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `02-settings-mcp-governance-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `02-settings-mcp-governance-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++
++  test('03: /settings/mcp?scope=project Project scope active with project selector', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, baseMocks);
++    await page.goto('/settings/mcp?scope=project&project=KANBA');
++
++    await expect(page.locator('[data-testid="mcp-access-studio"]')).toBeVisible();
++    await expect(page.locator('[data-testid="scope-pill-project"]')).toHaveClass(/kb-mcp-filter-pill-active/);
++    await expect(page.locator('[data-testid="scope-project-select"]')).toBeVisible();
++    await expect(page.locator('[data-testid="key-row-key-proj-002"]')).toBeVisible();
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `03-settings-mcp-project-scope-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `03-settings-mcp-project-scope-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++
++  test('04: Topbar avatar dropdown menu with unified MCP Studio link', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, baseMocks);
++    await page.goto('/settings/mcp');
++
++    const avatarBtn = page.locator('[data-testid="topbar-avatar-button"]');
++    await expect(avatarBtn).toBeVisible();
++    await avatarBtn.click();
++
++    const mcpLink = page.locator('[data-testid="topbar-mcp-studio-link"]');
++    await expect(mcpLink).toBeVisible();
++    await expect(mcpLink).toHaveText(/MCP Keys & OAuth Apps/);
++
++    // Verify old duplicate links are NOT present in avatar menu
++    const menu = page.locator('.kb-avatar-menu');
++    await expect(menu.getByText('Personal MCP Keys')).toHaveCount(0);
++    await expect(menu.getByText('Workspace MCP Keys')).toHaveCount(0);
++    await expect(menu.getByText('Admin MCP Keys')).toHaveCount(0);
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `04-topbar-menu-mcp-studio-light-${projectName}.png`),
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    if (!(await mcpLink.isVisible())) {
++      await avatarBtn.click();
++    }
++    await expect(mcpLink).toBeVisible();
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `04-topbar-menu-mcp-studio-dark-${projectName}.png`),
++    });
++  });
++});
+diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
+index b9f0ca5..4660954 100644
+--- a/kanban/web/src/app/Topbar.test.tsx
++++ b/kanban/web/src/app/Topbar.test.tsx
+@@ -214,10 +214,8 @@ describe('Topbar', () => {
+       avatarBtn.click();
+     });
+ 
+-    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /MCP Keys & OAuth Apps/ })).toBeDefined();
+     expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
+     expect(
+       screen.getByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
+     ).toBeDefined();
+@@ -259,11 +257,9 @@ describe('Topbar', () => {
+     });
+ 
+     expect(screen.getByRole('menuitem', { name: /Personal Settings/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /MCP Keys & OAuth Apps/ })).toBeDefined();
+     expect(screen.queryByRole('menuitem', { name: /Workspace Settings/ })).toBeNull();
+-    expect(screen.queryByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeNull();
+     expect(screen.queryByRole('menuitem', { name: /Admin Auth Studio/ })).toBeNull();
+-    expect(screen.queryByRole('menuitem', { name: /Admin MCP Keys/ })).toBeNull();
+     expect(
+       screen.queryByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
+     ).toBeNull();
+@@ -623,27 +619,9 @@ describe('Topbar', () => {
+         avatarBtn.click();
+       });
+ 
+-      const personalMcp = screen.getByText('Personal MCP Keys');
++      const mcpStudio = screen.getByText(/MCP Keys & OAuth Apps/);
+       act(() => {
+-        personalMcp.click();
+-      });
+-
+-      act(() => {
+-        avatarBtn.click();
+-      });
+-
+-      const wsMcp = screen.getByText('Workspace MCP Keys');
+-      act(() => {
+-        wsMcp.click();
+-      });
+-
+-      act(() => {
+-        avatarBtn.click();
+-      });
+-
+-      const adminMcp = screen.getByText('Admin MCP Keys');
+-      act(() => {
+-        adminMcp.click();
++        mcpStudio.click();
+       });
+ 
+       act(() => {
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 4bba652..9d81329 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -259,6 +259,7 @@ export function Topbar({
+             ref={avatarButtonRef}
+             type="button"
+             className="kb-avatar-button"
++            data-testid="topbar-avatar-button"
+             aria-label="User profile and settings"
+             aria-haspopup="menu"
+             aria-expanded={avatarMenuOpen}
+@@ -370,6 +371,7 @@ export function Topbar({
+                 <Link
+                   to="/settings/mcp"
+                   role="menuitem"
++                  data-testid="topbar-mcp-studio-link"
+                   className="kb-theme-radio kb-avatar-menu-link"
+                   onClick={() => {
+                     setAvatarMenuOpen(false);
+@@ -379,7 +381,7 @@ export function Topbar({
+                     <span aria-hidden="true" className="kb-avatar-menu-icon">
+                       🔑
+                     </span>
+-                    Personal MCP Keys
++                    MCP Keys & OAuth Apps
+                   </span>
+                 </Link>
+ 
+@@ -402,22 +404,6 @@ export function Topbar({
+                       </span>
+                     </Link>
+ 
+-                    <Link
+-                      to="/workspaces/settings/mcp"
+-                      role="menuitem"
+-                      className="kb-theme-radio kb-avatar-menu-link"
+-                      onClick={() => {
+-                        setAvatarMenuOpen(false);
+-                      }}
+-                    >
+-                      <span>
+-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+-                          🔑
+-                        </span>
+-                        Workspace MCP Keys
+-                      </span>
+-                    </Link>
+-
+                     <Link
+                       to="/workspaces/settings/ai"
+                       role="menuitem"
+@@ -473,22 +459,6 @@ export function Topbar({
+                       </span>
+                     </Link>
+ 
+-                    <Link
+-                      to="/admin/mcp"
+-                      role="menuitem"
+-                      className="kb-theme-radio kb-avatar-menu-link"
+-                      onClick={() => {
+-                        setAvatarMenuOpen(false);
+-                      }}
+-                    >
+-                      <span>
+-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+-                          🤖
+-                        </span>
+-                        Admin MCP Keys
+-                      </span>
+-                    </Link>
+-
+                     <Link
+                       to="/admin/ai"
+                       role="menuitem"
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 20ce461..7615365 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -1825,6 +1825,37 @@ export function RootShellLayout(): JSX.Element {
+   return <AppShell projectKey={undefined} projectId={undefined} />;
+ }
+ 
++export function ProjectMcpRedirect(): JSX.Element {
++  const { projectKey } = useParams<{ projectKey?: string }>();
++  const [searchParams] = useSearchParams();
++  const nextParams = new URLSearchParams(searchParams);
++  if (!nextParams.has('scope')) {
++    nextParams.set('scope', 'project');
++  }
++  if (projectKey && !nextParams.has('project')) {
++    nextParams.set('project', projectKey);
++  }
++  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
++}
++
++export function WorkspaceMcpRedirect(): JSX.Element {
++  const [searchParams] = useSearchParams();
++  const nextParams = new URLSearchParams(searchParams);
++  if (!nextParams.has('scope')) {
++    nextParams.set('scope', 'workspace');
++  }
++  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
++}
++
++export function AdminMcpRedirect(): JSX.Element {
++  const [searchParams] = useSearchParams();
++  const nextParams = new URLSearchParams(searchParams);
++  if (!nextParams.has('scope')) {
++    nextParams.set('scope', 'server');
++  }
++  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
++}
++
+ const projectRouteChildren: RouteObject[] = [
+   {
+     path: 'issues',
+@@ -1860,7 +1891,7 @@ const projectRouteChildren: RouteObject[] = [
+   },
+   {
+     path: 'settings/mcp',
+-    element: <McpAccessStudio tier="project" />,
++    element: <ProjectMcpRedirect />,
+   },
+   {
+     path: 'settings/custom-fields',
+@@ -1928,7 +1959,7 @@ export const appRoutes: RouteObject[] = [
+           },
+           {
+             path: 'settings/mcp',
+-            element: <McpAccessStudio tier="personal" />,
++            element: <McpAccessStudio />,
+           },
+           {
+             path: 'workspaces/settings',
+@@ -1936,7 +1967,7 @@ export const appRoutes: RouteObject[] = [
+           },
+           {
+             path: 'workspaces/settings/mcp',
+-            element: <McpAccessStudio tier="workspace" />,
++            element: <WorkspaceMcpRedirect />,
+           },
+           {
+             path: 'workspaces/settings/ai',
+@@ -1952,7 +1983,11 @@ export const appRoutes: RouteObject[] = [
+               },
+               {
+                 path: 'mcp',
+-                element: <McpAccessStudio tier="global" />,
++                element: <AdminMcpRedirect />,
++              },
++              {
++                path: 'mcp-keys',
++                element: <AdminMcpRedirect />,
+               },
+               {
+                 path: 'oauth',
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 683a41f..95f18f3 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -344,6 +344,108 @@
+   font-weight: 500;
+ }
+ 
++/* Scope Filter Pills & Governance View Switch */
++.kb-mcp-filter-bar {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 16px;
++  flex-wrap: wrap;
++  margin-bottom: 16px;
++}
++
++.kb-mcp-pills-group {
++  display: inline-flex;
++  gap: 6px;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #161b22));
++  padding: 4px;
++  border-radius: 8px;
++  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++}
++
++.kb-mcp-filter-pill {
++  padding: 6px 14px;
++  font-size: 0.8125rem;
++  font-weight: 500;
++  border-radius: 6px;
++  border: none;
++  background: transparent;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  cursor: pointer;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-mcp-filter-pill:hover {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++  background-color: rgba(110, 118, 129, 0.1);
++}
++
++.kb-mcp-filter-pill-active {
++  background-color: var(--brand-primary, #1f6feb) !important;
++  color: #ffffff !important;
++  font-weight: 600;
++}
++
++.kb-mcp-project-selector {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 0.875rem;
++}
++
++.kb-mcp-project-selector label {
++  font-weight: 500;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++.kb-mcp-view-toggle {
++  display: inline-flex;
++  border-radius: 8px;
++  overflow: hidden;
++  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  margin-bottom: 20px;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #161b22));
++}
++
++.kb-mcp-view-btn {
++  padding: 8px 18px;
++  font-size: 0.875rem;
++  font-weight: 500;
++  border: none;
++  background: transparent;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  cursor: pointer;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-mcp-view-btn:hover {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++}
++
++.kb-mcp-view-btn-active {
++  background-color: var(--brand-primary, #238636) !important;
++  color: #ffffff !important;
++  font-weight: 600;
++}
++
++.kb-mcp-explainer-card {
++  margin-bottom: 20px;
++  background-color: var(--bg-surface-raised, rgba(56, 139, 253, 0.05));
++  border: 1px solid var(--kb-color-border-subtle, rgba(56, 139, 253, 0.2));
++  border-radius: 8px;
++  padding: 12px 16px;
++  font-size: 0.8125rem;
++  line-height: 1.5;
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++.kb-mcp-explainer-item strong {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++}
++
+ /* Mobile Responsiveness (<= 768px, KANBA-213) */
+ @media (max-width: 768px) {
+   .kb-mcp-studio-container {
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 30817b9..e1c0c67 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -1,19 +1,23 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, useEffect, type JSX } from 'react';
+-import { useParams, Link } from 'react-router';
++import React, { useState, useEffect, useCallback, type JSX } from 'react';
++import { useParams, useSearchParams, Link } from 'react-router';
+ import {
+   fetchPersonalMcpKeys,
+   mintPersonalMcpKey,
+   revokePersonalMcpKey,
+   fetchConnectedApps,
+   revokeConnectedApp,
++  fetchUnifiedMcpKeys,
+   type McpApiKeyItem,
+   type OAuthConnectedApp,
+   type ScopeTier,
+ } from './settingsApi';
+ import { McpConfigSnippetModal } from './McpConfigSnippetModal';
++import { SecondFactorStep } from '../auth/SecondFactorStep';
++import type { MfaMethod } from '../auth/authApi';
++import { ApiProblem } from '../../api/problem';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { useSystemStatus } from '../../app/useSystemStatus';
+ import { apiFetch } from '../../api/client';
+@@ -78,20 +82,55 @@ export const WRITE_MCP_TOOLS = new Set([
+   'destructive_lifecycle',
+ ]);
+ 
++export type ActiveScopeFilter = 'all' | 'project' | 'workspace' | 'server';
++export type ActiveView = 'mine' | 'governance';
++
+ export interface McpAccessStudioProps {
+   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
+   allowUnlimitedKeys?: boolean | undefined;
+-  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean; workspace_role?: string } | null | undefined;
++  user?: {
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++    is_project_admin?: boolean;
++    workspace_role?: string;
++  } | null | undefined;
+ }
+ 
+ export function McpAccessStudio({
+-  tier = 'personal',
++  tier,
+   allowUnlimitedKeys,
+   user: propUser,
+ }: McpAccessStudioProps): JSX.Element {
++  const [searchParams, setSearchParams] = useSearchParams();
++  const routeParams = useParams<{ projectKey?: string }>();
++
++  // Determine initial scope filter from props or query
++  const queryScope = searchParams.get('scope');
++  const queryProject = searchParams.get('project');
++  const queryView = searchParams.get('view');
++
++  const resolvedInitialScope: ActiveScopeFilter = (() => {
++    if (tier === 'global') return 'server';
++    if (tier === 'workspace') return 'workspace';
++    if (tier === 'project') return 'project';
++    if (queryScope === 'server' || queryScope === 'global') return 'server';
++    if (queryScope === 'workspace') return 'workspace';
++    if (queryScope === 'project') return 'project';
++    return 'all';
++  })();
++
++  const [activeScope, setActiveScope] = useState<ActiveScopeFilter>(resolvedInitialScope);
++  const [selectedProject, setSelectedProject] = useState<string>(
++    queryProject ?? routeParams.projectKey ?? 'KANBA',
++  );
++  const [activeView, setActiveView] = useState<ActiveView>(
++    queryView === 'governance' ? 'governance' : 'mine',
++  );
++
+   const [fetchedUser, setFetchedUser] = useState<{
+     is_server_admin?: boolean;
+     is_workspace_admin?: boolean;
++    is_project_admin?: boolean;
+     workspace_role?: string;
+   } | null>(null);
+ 
+@@ -103,6 +142,7 @@ export function McpAccessStudio({
+         const u = (await apiFetch('GET', '/api/v1/auth/me')) as {
+           is_server_admin?: boolean;
+           is_workspace_admin?: boolean;
++          is_project_admin?: boolean;
+           workspace_role?: string;
+         };
+         if (isMounted.current) setFetchedUser(u);
+@@ -118,13 +158,17 @@ export function McpAccessStudio({
+   const currentUser = propUser ?? fetchedUser;
+   const isServerAdmin = currentUser?.is_server_admin === true;
+   const isWorkspaceAdmin = currentUser?.is_workspace_admin === true || isServerAdmin;
+-  const isViewer = currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
++  const isProjectAdmin = currentUser?.is_project_admin === true || isWorkspaceAdmin;
++  const canAccessGovernance = isServerAdmin || isWorkspaceAdmin || isProjectAdmin;
++  const isViewer =
++    currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
+ 
+   const systemStatusQuery = useSystemStatus();
+   const allowUnlimited =
+     allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
+ 
+-  const { projectKey = 'KANBA' } = useParams<{ projectKey?: string }>();
++  const effectiveProjectKey = selectedProject;
++
+   const [keys, setKeys] = useState<McpApiKeyItem[]>([]);
+   const [connectedApps, setConnectedApps] = useState<OAuthConnectedApp[]>([]);
+   const [loading, setLoading] = useState<boolean>(true);
+@@ -133,6 +177,10 @@ export function McpAccessStudio({
+   const [showMintModal, setShowMintModal] = useState<boolean>(false);
+   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
+   const [newKeySurface, setNewKeySurface] = useState<'agent' | 'docs' | 'admin'>('agent');
++  const [newKeyScopeTier, setNewKeyScopeTier] = useState<ScopeTier>(
++    activeScope === 'server' ? 'global' : activeScope === 'project' ? 'project' : 'workspace',
++  );
++  const [newKeyProject, setNewKeyProject] = useState<string>(effectiveProjectKey);
+   const [newKeyExpiry, setNewKeyExpiry] = useState<number>(60);
+   const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
+   const [confirmUnlimited, setConfirmUnlimited] = useState<boolean>(false);
+@@ -148,30 +196,103 @@ export function McpAccessStudio({
+   const [confirmRevokeKeyId, setConfirmRevokeKeyId] = useState<string | null>(null);
+   const [confirmRevokeAppId, setConfirmRevokeAppId] = useState<string | null>(null);
+ 
+-  useEffect(() => {
+-    const isMounted = { current: true };
+-    void (async () => {
+-      try {
++  // Inline AAL2 challenge state
++  const [aal2Challenge, setAal2Challenge] = useState<{
++    challengeId: string;
++    methods: MfaMethod[];
++  } | null>(null);
++  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
++
++  const loadData = useCallback(async (): Promise<void> => {
++    setLoading(true);
++    try {
++      if (activeView === 'governance') {
++        const fetched = await fetchUnifiedMcpKeys({
++          view: 'governance',
++          scope_tier: activeScope !== 'all' ? activeScope : undefined,
++          project_ref: activeScope === 'project' ? effectiveProjectKey : undefined,
++        });
++        setKeys(fetched);
++        setConnectedApps([]);
++      } else {
+         const [fetchedKeys, fetchedApps] = await Promise.all([
+           tier === 'global' ? fetchPersonalMcpKeys('global') : fetchPersonalMcpKeys(),
+           fetchConnectedApps(),
+         ]);
+-        if (isMounted.current) {
+-          setKeys(fetchedKeys);
+-          setConnectedApps(fetchedApps);
+-          setLoading(false);
+-        }
+-      } catch {
+-        if (isMounted.current) {
+-          setLoading(false);
+-        }
++        setKeys(fetchedKeys);
++        setConnectedApps(fetchedApps);
+       }
+-    })();
++    } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++        const data = err.data;
++        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++        const methods = Array.isArray(data.methods)
++          ? (data.methods as MfaMethod[])
++          : (['webauthn', 'totp'] as MfaMethod[]);
++        setAal2Challenge({ challengeId, methods });
++        setPendingAction(() => async () => {
++          await loadData();
++        });
++      }
++    } finally {
++      setLoading(false);
++    }
++  }, [activeView, activeScope, effectiveProjectKey, tier]);
+ 
+-    return () => {
+-      isMounted.current = false;
+-    };
+-  }, [tier, projectKey]);
++  useEffect(() => {
++    void loadData();
++  }, [loadData]);
++
++  const handleScopeFilterChange = (newScope: ActiveScopeFilter): void => {
++    setActiveScope(newScope);
++    setSearchParams((prev) => {
++      const updated = new URLSearchParams(prev);
++      if (newScope === 'all') {
++        updated.delete('scope');
++      } else {
++        updated.set('scope', newScope);
++      }
++      return updated;
++    });
++  };
++
++  const handleProjectSelectChange = (newProject: string): void => {
++    setSelectedProject(newProject);
++    setSearchParams((prev) => {
++      const updated = new URLSearchParams(prev);
++      updated.set('project', newProject);
++      return updated;
++    });
++  };
++
++  const handleViewToggle = (newView: ActiveView): void => {
++    setActiveView(newView);
++    setSearchParams((prev) => {
++      const updated = new URLSearchParams(prev);
++      if (newView === 'governance') {
++        updated.set('view', 'governance');
++      } else {
++        updated.delete('view');
++      }
++      return updated;
++    });
++  };
++
++  const handleOpenMintModal = (): void => {
++    let initialTier: ScopeTier = 'workspace';
++    if (activeScope === 'server' || tier === 'global') {
++      initialTier = 'global';
++    } else if (activeScope === 'project' || tier === 'project') {
++      initialTier = 'project';
++    } else if (activeScope === 'workspace' || tier === 'workspace') {
++      initialTier = 'workspace';
++    } else {
++      initialTier = 'workspace';
++    }
++    setNewKeyScopeTier(initialTier);
++    setNewKeyProject(effectiveProjectKey);
++    setShowMintModal(true);
++  };
+ 
+   const handleMintSubmit = async (e: React.SyntheticEvent): Promise<void> => {
+     e.preventDefault();
+@@ -183,24 +304,28 @@ export function McpAccessStudio({
+     }
+     setMinting(true);
+     setMintError(null);
+-    try {
+-      const minted = await mintPersonalMcpKey({
++
++    const mintAction = async (): Promise<void> => {
++      const resolvedScopeTier: ScopeTier =
++        tier === 'global' ? 'global' : tier === 'project' ? 'project' : newKeyScopeTier;
++
++      const payload = {
+         label: newKeyLabel.trim(),
+         surface: newKeySurface,
+         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
+-        scope_tier:
+-          tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
+-        ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
++        scope_tier: resolvedScopeTier,
++        ...(resolvedScopeTier === 'project'
++          ? { allowed_projects: [newKeyProject.trim() ? newKeyProject.trim() : effectiveProjectKey] }
++          : {}),
+         ...(isUnlimited
+           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
+           : { expires_in_days: newKeyExpiry }),
+         ...(disabledTools.length > 0 ? { disabled_tools: disabledTools } : {}),
+-      });
++      };
+ 
+-      // Update keys table (table receives key item with display_hint only)
+-      setKeys((prev) => [minted, ...prev]);
++      const minted = await mintPersonalMcpKey(payload);
+ 
+-      // Open Snippet modal with ephemeral plaintext key
++      setKeys((prev) => [minted, ...prev]);
+       setActiveSnippetKey(minted.raw_key);
+       setShowMintModal(false);
+       setShowSnippetModal(true);
+@@ -210,7 +335,23 @@ export function McpAccessStudio({
+       setDisabledTools([]);
+       setNewKeyExpiry(60);
+       setMintError(null);
++    };
++
++    try {
++      await mintAction();
+     } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++        const data = err.data;
++        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++        const methods = Array.isArray(data.methods)
++          ? (data.methods as MfaMethod[])
++          : (['webauthn', 'totp'] as MfaMethod[]);
++        setAal2Challenge({ challengeId, methods });
++        setPendingAction(() => async () => {
++          await mintAction();
++        });
++        return;
++      }
+       if (err instanceof Error) {
+         setMintError(err.message);
+       } else {
+@@ -222,19 +363,32 @@ export function McpAccessStudio({
+   };
+ 
+   const handleConfirmRevokeKey = async (keyId: string): Promise<void> => {
+-    try {
++    const revokeAction = async (): Promise<void> => {
+       if (tier === 'global') {
+         await revokePersonalMcpKey(keyId, 'global');
+       } else {
+         await revokePersonalMcpKey(keyId);
+       }
+       setKeys((prev) =>
+-        prev.map((k) =>
+-          k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k,
+-        ),
++        prev.map((k) => (k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k)),
+       );
+-    } catch {
+-      // Handle error
++    };
++
++    try {
++      await revokeAction();
++    } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++        const data = err.data;
++        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++        const methods = Array.isArray(data.methods)
++          ? (data.methods as MfaMethod[])
++          : (['webauthn', 'totp'] as MfaMethod[]);
++        setAal2Challenge({ challengeId, methods });
++        setPendingAction(() => async () => {
++          await revokeAction();
++        });
++        return;
++      }
+     } finally {
+       setConfirmRevokeKeyId(null);
+     }
+@@ -251,6 +405,15 @@ export function McpAccessStudio({
+     }
+   };
+ 
++  const handleAal2Success = async (): Promise<void> => {
++    const action = pendingAction;
++    setAal2Challenge(null);
++    setPendingAction(null);
++    if (action) {
++      await action();
++    }
++  };
++
+   const getTierBadge = (
+     keyTier: ScopeTier,
+     allowedProjects?: string[] | null,
+@@ -273,7 +436,7 @@ export function McpAccessStudio({
+       const projLabel =
+         allowedProjects && allowedProjects.length > 0
+           ? allowedProjects.join(', ')
+-          : projectKey;
++          : effectiveProjectKey;
+       return (
+         <span className="kb-mcp-tier-badge kb-mcp-tier-project" data-testid="tier-badge-project">
+           <EmojiHint kind="access" /> Project: {projLabel}
+@@ -287,15 +450,35 @@ export function McpAccessStudio({
+     );
+   };
+ 
+-  const titleForTier = {
++  const titleForTier: Record<string, string> = {
+     personal: 'Personal MCP Keys & Connected Apps',
+-    project: `Project (${projectKey}) MCP Bot Keys`,
++    project: `Project (${effectiveProjectKey}) MCP Bot Keys`,
+     workspace: 'Workspace MCP Bot Keys & Client Approvals',
+     global: 'Global Cross-Workspace Bot Keys (meatloaf-bot)',
+-  }[tier];
++  };
++
++  const displayedTitle =
++    activeView === 'governance'
++      ? 'MCP Key Governance (All Scoped Keys)'
++      : (tier ? titleForTier[tier] : 'Personal MCP Keys & Connected Apps');
++
++  // Filter keys for display based on activeScope when in 'mine' view
++  const displayedKeys = keys.filter((k) => {
++    if (activeView === 'governance') return true;
++    if (activeScope === 'all') return true;
++    if (activeScope === 'project') {
++      if (k.scope_tier !== 'project') return false;
++      if (effectiveProjectKey && k.allowed_projects && k.allowed_projects.length > 0) {
++        return k.allowed_projects.includes(effectiveProjectKey);
++      }
++      return true;
++    }
++    if (activeScope === 'workspace') {
++      return k.scope_tier === 'workspace';
++    }
++    return k.scope_tier === 'global';
++  });
+ 
+-  // If tier is global (admin/mcp), require server admin. If workspace (workspaces/settings/mcp), require workspace admin.
+-  // In offline/mocked unit tests without currentUser data or user mock, fall back gracefully if not specified.
+   if (currentUser !== null) {
+     if (tier === 'global' && !isServerAdmin) {
+       return <NotFoundView />;
+@@ -309,7 +492,7 @@ export function McpAccessStudio({
+     <div className="kb-mcp-studio-container" data-testid="mcp-access-studio">
+       <header className="kb-mcp-studio-header">
+         <div>
+-          <h1 className="kb-mcp-studio-title" data-testid="studio-title">{titleForTier}</h1>
++          <h1 className="kb-mcp-studio-title" data-testid="studio-title">{displayedTitle}</h1>
+           <p className="kb-mcp-studio-subtitle">
+             Mint and manage Model Context Protocol API keys with explicit scope tiers and one-click revocation.
+           </p>
+@@ -318,14 +501,13 @@ export function McpAccessStudio({
+           type="button"
+           className="kb-mcp-studio-mint-btn"
+           data-testid="mint-key-button"
+-          onClick={() => {
+-            setShowMintModal(true);
+-          }}
++          onClick={handleOpenMintModal}
+         >
+           + Mint MCP Key
+         </button>
+       </header>
+ 
++      {/* Admin subnav for global tier */}
+       {tier === 'global' && (
+         <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
+           <Link
+@@ -352,10 +534,113 @@ export function McpAccessStudio({
+         </nav>
+       )}
+ 
++      {/* Admin View Switch (My Keys vs Governance) */}
++      {canAccessGovernance && (
++        <div className="kb-mcp-view-toggle" data-testid="admin-view-toggle">
++          <button
++            type="button"
++            className={`kb-mcp-view-btn ${activeView === 'mine' ? 'kb-mcp-view-btn-active' : ''}`}
++            data-testid="view-mine-btn"
++            onClick={() => {
++              handleViewToggle('mine');
++            }}
++          >
++            My Keys & Connected Apps
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-view-btn ${activeView === 'governance' ? 'kb-mcp-view-btn-active' : ''}`}
++            data-testid="view-governance-btn"
++            onClick={() => {
++              handleViewToggle('governance');
++            }}
++          >
++            Governance (All Scoped Keys)
++          </button>
++        </div>
++      )}
++
++      {/* Explanatory Architecture Card */}
++      <div className="kb-mcp-explainer-card" data-testid="mcp-scope-explainer">
++        <div className="kb-mcp-explainer-item">
++          <strong>Personal Keys vs Service Bot Keys:</strong> Personal keys act on your behalf across permitted surfaces, while Service Bot keys provide dedicated automation identities tied to project, workspace, or server scopes.
++        </div>
++        <div className="kb-mcp-explainer-item">
++          <strong>Scope Tiers:</strong> Project keys are confined to tickets and docs in designated projects. Workspace keys cover all projects in this workspace. Server keys have system-wide privileges for administrative orchestration.
++        </div>
++      </div>
++
++      {/* Scope Filter Pills & Project Selector */}
++      <div className="kb-mcp-filter-bar" data-testid="mcp-filter-bar">
++        <div className="kb-mcp-pills-group" data-testid="mcp-pills-group">
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'all' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-all"
++            onClick={() => {
++              handleScopeFilterChange('all');
++            }}
++          >
++            All
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'project' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-project"
++            onClick={() => {
++              handleScopeFilterChange('project');
++            }}
++          >
++            Project
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'workspace' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-workspace"
++            onClick={() => {
++              handleScopeFilterChange('workspace');
++            }}
++          >
++            Workspace
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'server' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-server"
++            onClick={() => {
++              handleScopeFilterChange('server');
++            }}
++          >
++            Server
++          </button>
++        </div>
++
++        {activeScope === 'project' && (
++          <div className="kb-mcp-project-selector" data-testid="scope-project-container">
++            <label htmlFor="scope-project-select">Target Project:</label>
++            <select
++              id="scope-project-select"
++              className="kb-mcp-form-select"
++              data-testid="scope-project-select"
++              value={effectiveProjectKey}
++              onChange={(e) => {
++                handleProjectSelectChange(e.target.value);
++              }}
++            >
++              <option value="KANBA">KANBA</option>
++              <option value="QAADM">QAADM</option>
++              {effectiveProjectKey !== 'KANBA' && effectiveProjectKey !== 'QAADM' && (
++                <option value={effectiveProjectKey}>{effectiveProjectKey}</option>
++              )}
++            </select>
++          </div>
++        )}
++      </div>
++
+       {/* MCP Keys Table Section */}
+       <section className="kb-mcp-studio-section" data-testid="mcp-keys-section">
+         <h2 className="kb-mcp-section-title">
+-          <EmojiHint kind="agent" /> Active MCP Keys
++          <EmojiHint kind="agent" /> {activeView === 'governance' ? 'Governance Scoped Keys' : 'Active MCP Keys'}
+         </h2>
+         <div className="kb-mcp-table-wrap">
+           <table className="kb-mcp-table" data-testid="mcp-keys-table">
+@@ -371,14 +656,14 @@ export function McpAccessStudio({
+               </tr>
+             </thead>
+             <tbody>
+-              {keys.length === 0 && !loading && (
++              {displayedKeys.length === 0 && !loading && (
+                 <tr>
+                   <td colSpan={7} className="kb-mcp-empty-state">
+                     No active MCP keys configured. Click "+ Mint MCP Key" to create one.
+                   </td>
+                 </tr>
+               )}
+-              {keys.map((k) => {
++              {displayedKeys.map((k) => {
+                 const isRevoked = Boolean(k.revoked_at);
+                 const isConfirming = confirmRevokeKeyId === k.id;
+                 const prefix = k.surface === 'agent' ? 'kb_agt_' : k.surface === 'docs' ? 'kb_doc_' : 'kb_adm_';
+@@ -461,91 +746,92 @@ export function McpAccessStudio({
+         </div>
+       </section>
+ 
+-      {/* Connected OAuth Apps Section */}
+-      <section className="kb-mcp-studio-section" data-testid="connected-apps-section">
+-        <h2 className="kb-mcp-section-title">
+-          <EmojiHint kind="restricted" /> Connected OAuth Apps
+-        </h2>
+-        <div className="kb-mcp-table-wrap">
+-          <table className="kb-mcp-table" data-testid="connected-apps-table">
+-            <thead>
+-              <tr>
+-                <th className="kb-mcp-th">Application</th>
+-                <th className="kb-mcp-th">Client ID</th>
+-                <th className="kb-mcp-th">Surface</th>
+-                <th className="kb-mcp-th">Connected Date</th>
+-                <th className="kb-mcp-th">Actions</th>
+-              </tr>
+-            </thead>
+-            <tbody>
+-              {connectedApps.length === 0 && !loading && (
++      {/* Connected OAuth Apps Section (in mine view) */}
++      {activeView === 'mine' && (
++        <section className="kb-mcp-studio-section" data-testid="connected-apps-section">
++          <h2 className="kb-mcp-section-title">
++            <EmojiHint kind="restricted" /> Connected OAuth Apps
++          </h2>
++          <div className="kb-mcp-table-wrap">
++            <table className="kb-mcp-table" data-testid="connected-apps-table">
++              <thead>
+                 <tr>
+-                  <td colSpan={5} className="kb-mcp-empty-state">
+-                    No external OAuth applications currently connected.
+-                  </td>
++                  <th className="kb-mcp-th">Application</th>
++                  <th className="kb-mcp-th">Client ID</th>
++                  <th className="kb-mcp-th">Surface</th>
++                  <th className="kb-mcp-th">Connected Date</th>
++                  <th className="kb-mcp-th">Actions</th>
+                 </tr>
+-              )}
+-              {connectedApps.map((app) => {
+-                const isConfirming = confirmRevokeAppId === app.id;
+-
+-                return (
+-                  <tr key={app.id} className="kb-mcp-tr" data-testid={`app-row-${app.id}`}>
+-                    <td className="kb-mcp-td" data-testid={`app-name-${app.id}`}>
+-                      {/* Render client_name strictly as text node against XSS */}
+-                      <span>{app.client_name ?? app.client_id}</span>
+-                    </td>
+-                    <td className="kb-mcp-td">
+-                      <code>{app.client_id}</code>
++              </thead>
++              <tbody>
++                {connectedApps.length === 0 && !loading && (
++                  <tr>
++                    <td colSpan={5} className="kb-mcp-empty-state">
++                      No external OAuth applications currently connected.
+                     </td>
+-                    <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
+-                    <td className="kb-mcp-td">
+-                      {new Date(app.created_at).toLocaleDateString()}
+-                    </td>
+-                    <td className="kb-mcp-td">
+-                      {isConfirming ? (
+-                        <div className="kb-mcp-confirm-bar" data-testid="confirm-disconnect-bar">
+-                          <button
+-                            type="button"
+-                            className="kb-mcp-cancel-btn"
+-                            data-testid="cancel-disconnect-btn"
+-                            autoFocus
+-                            onClick={() => {
+-                              setConfirmRevokeAppId(null);
+-                            }}
+-                          >
+-                            Cancel
+-                          </button>
++                  </tr>
++                )}
++                {connectedApps.map((app) => {
++                  const isConfirming = confirmRevokeAppId === app.id;
++
++                  return (
++                    <tr key={app.id} className="kb-mcp-tr" data-testid={`app-row-${app.id}`}>
++                      <td className="kb-mcp-td" data-testid={`app-name-${app.id}`}>
++                        <span>{app.client_name ?? app.client_id}</span>
++                      </td>
++                      <td className="kb-mcp-td">
++                        <code>{app.client_id}</code>
++                      </td>
++                      <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
++                      <td className="kb-mcp-td">
++                        {new Date(app.created_at).toLocaleDateString()}
++                      </td>
++                      <td className="kb-mcp-td">
++                        {isConfirming ? (
++                          <div className="kb-mcp-confirm-bar" data-testid="confirm-disconnect-bar">
++                            <button
++                              type="button"
++                              className="kb-mcp-cancel-btn"
++                              data-testid="cancel-disconnect-btn"
++                              autoFocus
++                              onClick={() => {
++                                setConfirmRevokeAppId(null);
++                              }}
++                            >
++                              Cancel
++                            </button>
++                            <button
++                              type="button"
++                              className="kb-mcp-confirm-revoke-btn"
++                              data-testid="confirm-disconnect-btn"
++                              onClick={() => {
++                                void handleConfirmRevokeApp(app.id);
++                              }}
++                            >
++                              Confirm Disconnect
++                            </button>
++                          </div>
++                        ) : (
+                           <button
+                             type="button"
+-                            className="kb-mcp-confirm-revoke-btn"
+-                            data-testid="confirm-disconnect-btn"
++                            className="kb-mcp-action-btn"
++                            data-testid={`disconnect-btn-${app.id}`}
+                             onClick={() => {
+-                              void handleConfirmRevokeApp(app.id);
++                              setConfirmRevokeAppId(app.id);
+                             }}
+                           >
+-                            Confirm Disconnect
++                            Disconnect
+                           </button>
+-                        </div>
+-                      ) : (
+-                        <button
+-                          type="button"
+-                          className="kb-mcp-action-btn"
+-                          data-testid={`disconnect-btn-${app.id}`}
+-                          onClick={() => {
+-                            setConfirmRevokeAppId(app.id);
+-                          }}
+-                        >
+-                          Disconnect
+-                        </button>
+-                      )}
+-                    </td>
+-                  </tr>
+-                );
+-              })}
+-            </tbody>
+-          </table>
+-        </div>
+-      </section>
++                        )}
++                      </td>
++                    </tr>
++                  );
++                })}
++              </tbody>
++            </table>
++          </div>
++        </section>
++      )}
+ 
+       {/* Mint Key Modal */}
+       {showMintModal && (
+@@ -608,6 +894,46 @@ export function McpAccessStudio({
+                 />
+               </div>
+ 
++              {/* Scope Tier Selector in Mint Modal */}
++              <div className="kb-mcp-form-row">
++                <label htmlFor="mint-scope-select" className="kb-mcp-form-label">
++                  Scope Tier:
++                </label>
++                <select
++                  id="mint-scope-select"
++                  className="kb-mcp-form-select"
++                  data-testid="mint-scope-select"
++                  value={newKeyScopeTier}
++                  onChange={(e) => {
++                    setNewKeyScopeTier(e.target.value as ScopeTier);
++                  }}
++                >
++                  <option value="workspace">Workspace Bot Key</option>
++                  <option value="project">Project Bot Key</option>
++                  {isServerAdmin && <option value="global">Server / Global Key</option>}
++                  <option value="personal_user">Personal User Key</option>
++                </select>
++              </div>
++
++              {newKeyScopeTier === 'project' && (
++                <div className="kb-mcp-form-row">
++                  <label htmlFor="mint-project-input" className="kb-mcp-form-label">
++                    Allowed Project:
++                  </label>
++                  <input
++                    id="mint-project-input"
++                    type="text"
++                    className="kb-mcp-form-input"
++                    data-testid="mint-project-input"
++                    value={newKeyProject}
++                    onChange={(e) => {
++                      setNewKeyProject(e.target.value);
++                    }}
++                    required
++                  />
++                </div>
++              )}
++
+               <div className="kb-mcp-form-row">
+                 <label htmlFor="mint-surface-select" className="kb-mcp-form-label">
+                   Target Surface:
+@@ -747,14 +1073,62 @@ export function McpAccessStudio({
+         <McpConfigSnippetModal
+           rawKey={activeSnippetKey}
+           surface={newKeySurface}
+-          projectKey={projectKey}
++          projectKey={effectiveProjectKey}
+           onClose={() => {
+-            // Memory wipe: clear plaintext secret from state upon close
+             setActiveSnippetKey(undefined);
+             setShowSnippetModal(false);
+           }}
+         />
+       )}
++
++      {/* Inline AAL2 Step-Up Modal */}
++      {aal2Challenge && (
++        <div className="kb-snippet-modal-backdrop" data-testid="aal2-modal-backdrop">
++          <div
++            className="kb-snippet-modal-card"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="aal2-modal-title"
++            data-testid="aal2-modal-card"
++          >
++            <div className="kb-snippet-modal-header">
++              <h2 id="aal2-modal-title" className="kb-snippet-modal-title">
++                Admin Verification Required (AAL2)
++              </h2>
++              <button
++                type="button"
++                className="kb-snippet-modal-close-btn"
++                onClick={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              >
++                x
++              </button>
++            </div>
++            <div className="kb-mcp-studio-section">
++              <SecondFactorStep
++                challengeId={aal2Challenge.challengeId}
++                methods={aal2Challenge.methods}
++                onSuccess={() => {
++                  void handleAal2Success();
++                }}
++                onError={() => {
++                  // Handled inside SecondFactorStep
++                }}
++                onSessionExpired={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++                onCancel={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              />
++            </div>
++          </div>
++        </div>
++      )}
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 495ca5b..4e849d4 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -1678,7 +1678,7 @@ export function ProjectSettingsPage(): JSX.Element {
+             </Link>
+ 
+             <Link
+-              to={`/projects/${projectKey}/settings/mcp`}
++              to={`/settings/mcp?scope=project&project=${projectKey}`}
+               className="kb-integration-card"
+               data-testid="integration-mcp-card"
+             >
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index cfb529f..8a032bf 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -50,7 +50,7 @@ export function formatHandle(handle?: string | null): string {
+ }
+ 
+ export function WorkspaceSettingsPage(): JSX.Element {
+-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups' | 'mcp'>('general');
++  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>('general');
+   const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
+   const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+@@ -498,16 +498,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         >
+           Groups & Governance
+         </button>
+-        <button
+-          type="button"
+-          role="tab"
+-          aria-selected={activeTab === 'mcp'}
+-          data-testid="tab-mcp"
+-          className={`kb-settings-tab ${activeTab === 'mcp' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('mcp'); }}
+-        >
+-          Workspace MCP Keys
+-        </button>
+       </nav>
+ 
+       <div className="kb-settings-panel">
+@@ -647,6 +637,20 @@ export function WorkspaceSettingsPage(): JSX.Element {
+             >
+               {isSaving ? 'Saving...' : 'Save Workspace Settings'}
+             </button>
++
++            <div className="kb-integrations-grid" data-testid="workspace-mcp-section">
++              <Link
++                to="/settings/mcp?scope=workspace"
++                className="kb-integration-card"
++                data-testid="link-workspace-mcp"
++              >
++                <div className="kb-card-icon">🏢</div>
++                <div className="kb-card-content">
++                  <h3>Workspace MCP Access Keys</h3>
++                  <p>Manage organization-level Model Context Protocol API tokens and client credentials.</p>
++                </div>
++              </Link>
++            </div>
+           </form>
+         )}
+ 
+@@ -998,22 +1002,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
+             </div>
+           </div>
+         )}
+-
+-        {activeTab === 'mcp' && (
+-          <div className="kb-integrations-grid" data-testid="workspace-mcp-section">
+-            <Link
+-              to="/workspaces/settings/mcp"
+-              className="kb-integration-card"
+-              data-testid="link-workspace-mcp"
+-            >
+-              <div className="kb-card-icon">🏢</div>
+-              <div className="kb-card-content">
+-                <h3>Workspace MCP Access Keys</h3>
+-                <p>Manage organization-level Model Context Protocol API tokens and client credentials.</p>
+-              </div>
+-            </Link>
+-          </div>
+-        )}
+       </div>
+     </div>
+   );
+diff --git a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+new file mode 100644
+index 0000000..dd7e775
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+@@ -0,0 +1,786 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React from 'react';
++import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
++import { McpAccessStudio } from '../McpAccessStudio';
++import * as settingsApi from '../settingsApi';
++import * as clientModule from '../../../api/client';
++import { ApiProblem } from '../../../api/problem';
++import { ProjectMcpRedirect, WorkspaceMcpRedirect, AdminMcpRedirect } from '../../../app/routes';
++
++vi.mock('../../../app/useSystemStatus', () => ({
++  useSystemStatus: vi.fn(() => ({
++    data: { allow_unlimited_mcp_keys: true },
++    isLoading: false,
++    error: null,
++  })),
++}));
++
++vi.mock('../../auth/SecondFactorStep', () => ({
++  SecondFactorStep: ({
++    onSuccess,
++    onError,
++    onSessionExpired,
++    onCancel,
++  }: {
++    onSuccess?: () => void;
++    onError?: () => void;
++    onSessionExpired?: () => void;
++    onCancel?: () => void;
++  }) => (
++    <div data-testid="second-factor-step-mock">
++      <button type="button" data-testid="mfa-success-btn" onClick={() => onSuccess?.()}>
++        MFA Success
++      </button>
++      <button type="button" data-testid="mfa-expired-btn" onClick={() => onSessionExpired?.()}>
++        MFA Expired
++      </button>
++      <button type="button" data-testid="mfa-cancel-btn" onClick={() => onCancel?.()}>
++        MFA Cancel
++      </button>
++      <button type="button" data-testid="mfa-error-btn" onClick={() => onError?.()}>
++        MFA Error
++      </button>
++    </div>
++  ),
++}));
++
++describe('Unified MCP Studio (KAN-31)', () => {
++  const mockKeys: settingsApi.McpApiKeyItem[] = [
++    {
++      id: 'key-personal',
++      label: 'Personal Developer Key',
++      display_hint: '1a2b',
++      surface: 'agent',
++      scope_tier: 'personal_user',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    },
++    {
++      id: 'key-project-kanba',
++      label: 'KANBA Automation Bot',
++      display_hint: '3c4d',
++      surface: 'agent',
++      scope_tier: 'project',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: ['KANBA'],
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    },
++    {
++      id: 'key-project-qaadm',
++      label: 'QAADM Automation Bot',
++      display_hint: '5e6f',
++      surface: 'agent',
++      scope_tier: 'project',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: ['QAADM'],
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    },
++    {
++      id: 'key-workspace',
++      label: 'Workspace Shared Bot',
++      display_hint: '7g8h',
++      surface: 'agent',
++      scope_tier: 'workspace',
++      scopes: ['agent:read'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    },
++    {
++      id: 'key-server',
++      label: 'Server Administrative Bot',
++      display_hint: '9i0j',
++      surface: 'admin',
++      scope_tier: 'global',
++      scopes: ['admin:read'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    },
++  ];
++
++  const adminUser = {
++    is_server_admin: true,
++    is_workspace_admin: true,
++    is_project_admin: true,
++    workspace_role: 'SERVER_ADMIN',
++  };
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(adminUser);
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++  });
++
++  it('renders unified scope pills and explanatory architecture card', async () => {
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mcp-access-studio')).toBeDefined();
++      expect(screen.getByTestId('mcp-scope-explainer')).toBeDefined();
++      expect(screen.getByTestId('scope-pill-all')).toBeDefined();
++      expect(screen.getByTestId('scope-pill-project')).toBeDefined();
++      expect(screen.getByTestId('scope-pill-workspace')).toBeDefined();
++      expect(screen.getByTestId('scope-pill-server')).toBeDefined();
++    });
++
++    // Check explainer text content contains key distinctions
++    const explainer = screen.getByTestId('mcp-scope-explainer');
++    expect(explainer.textContent).toContain('Personal Keys vs Service Bot Keys');
++    expect(explainer.textContent).toContain('Scope Tiers');
++  });
++
++  it('filters keys by scope pills and shows project selector when Project scope is active', async () => {
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-personal')).toBeDefined();
++      expect(screen.getByTestId('key-row-key-project-kanba')).toBeDefined();
++      expect(screen.getByTestId('key-row-key-workspace')).toBeDefined();
++      expect(screen.getByTestId('key-row-key-server')).toBeDefined();
++    });
++
++    // Switch to Workspace pill
++    fireEvent.click(screen.getByTestId('scope-pill-workspace'));
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-workspace')).toBeDefined();
++      expect(screen.queryByTestId('key-row-key-personal')).toBeNull();
++      expect(screen.queryByTestId('key-row-key-server')).toBeNull();
++    });
++
++    // Switch to Server pill
++    fireEvent.click(screen.getByTestId('scope-pill-server'));
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-server')).toBeDefined();
++      expect(screen.queryByTestId('key-row-key-workspace')).toBeNull();
++    });
++
++    // Switch to Project pill
++    fireEvent.click(screen.getByTestId('scope-pill-project'));
++    await waitFor(() => {
++      expect(screen.getByTestId('scope-project-container')).toBeDefined();
++      expect(screen.getByTestId('scope-project-select')).toBeDefined();
++      expect(screen.getByTestId('key-row-key-project-kanba')).toBeDefined();
++      expect(screen.queryByTestId('key-row-key-project-qaadm')).toBeNull();
++    });
++
++    // Change project selector to QAADM
++    fireEvent.change(screen.getByTestId('scope-project-select'), {
++      target: { value: 'QAADM' },
++    });
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-project-qaadm')).toBeDefined();
++      expect(screen.queryByTestId('key-row-key-project-kanba')).toBeNull();
++    });
++  });
++
++  it('switches between My Keys and Governance views and updates title', async () => {
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('admin-view-toggle')).toBeDefined();
++      expect(screen.getByTestId('studio-title').textContent).toContain('Personal MCP Keys & Connected Apps');
++    });
++
++    // Switch to Governance
++    fireEvent.click(screen.getByTestId('view-governance-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('studio-title').textContent).toContain('Governance');
++      expect(settingsApi.fetchUnifiedMcpKeys).toHaveBeenCalledWith(
++        expect.objectContaining({ view: 'governance' }),
++      );
++    });
++
++    // Switch back to My Keys
++    fireEvent.click(screen.getByTestId('view-mine-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('studio-title').textContent).toContain('Personal MCP Keys & Connected Apps');
++    });
++  });
++
++  it('hides admin view toggle when caller is non-admin viewer or guest', async () => {
++    const regularUser = {
++      is_server_admin: false,
++      is_workspace_admin: false,
++      is_project_admin: false,
++      workspace_role: 'WORKSPACE_MEMBER',
++    };
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={regularUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mcp-access-studio')).toBeDefined();
++      expect(screen.queryByTestId('admin-view-toggle')).toBeNull();
++    });
++  });
++
++  it('pre-fills scope tier in mint modal according to active scope filter', async () => {
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?scope=server']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-modal-card')).toBeDefined();
++      const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-scope-select');
++      expect(scopeSelect.value).toBe('global');
++    });
++  });
++
++  it('handles inline AAL2 challenge step-up modal on 403 AAL2_REQUIRED in governance view', async () => {
++    const aal2Error = new ApiProblem(403, {
++      code: 'AAL2_REQUIRED',
++      challenge_id: 'test-aal2-challenge',
++      methods: ['totp', 'webauthn'],
++    });
++
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys')
++      .mockRejectedValueOnce(aal2Error)
++      .mockResolvedValueOnce(mockKeys);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?view=governance']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
++    });
++
++    // Close button cancels modal
++    const closeBtn = screen.getByRole('button', { name: 'x' });
++    fireEvent.click(closeBtn);
++    await waitFor(() => {
++      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
++    });
++  });
++
++  it('completes MFA challenge on loadData retry and handles session expired and cancel', async () => {
++    const aal2Error = new ApiProblem(403, {
++      code: 'AAL2_REQUIRED',
++      challenge_id: 'test-challenge',
++      methods: ['totp'],
++    });
++
++    const fetchSpy = vi
++      .spyOn(settingsApi, 'fetchUnifiedMcpKeys')
++      .mockRejectedValueOnce(aal2Error)
++      .mockResolvedValueOnce(mockKeys);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?view=governance']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('second-factor-step-mock')).toBeDefined();
++    });
++
++    // Trigger MFA success
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++    await waitFor(() => {
++      expect(fetchSpy).toHaveBeenCalledTimes(2);
++      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
++    });
++  });
++
++  it('handles AAL2 step-up challenge on minting and retries on MFA success, error, and cancel', async () => {
++    const aal2MintError = new ApiProblem(403, {
++      code: 'AAL2_REQUIRED',
++      challenge_id: 'mint-challenge',
++      methods: ['webauthn'],
++    });
++
++    const mintSpy = vi
++      .spyOn(settingsApi, 'mintPersonalMcpKey')
++      .mockRejectedValueOnce(aal2MintError)
++      .mockResolvedValueOnce({
++        id: 'new-key-1',
++        token: 'kb_mcp_sec_secret123',
++        raw_key: 'kb_mcp_sec_secret123',
++        label: 'Step-up Key',
++        surface: 'agent',
++        scope_tier: 'workspace',
++        scopes: ['agent:read'],
++        display_hint: '1234',
++        key_prefix: 'kb_mcp_sec_',
++        created_at: new Date().toISOString(),
++        expires_at: null,
++        last_used_at: null,
++        revoked_at: null,
++      } as unknown as settingsApi.McpApiKeyItem);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-modal-card')).toBeDefined();
++    });
++
++    // Fill label and change scope
++    const labelInput = screen.getByTestId<HTMLInputElement>('mint-label-input');
++    fireEvent.change(labelInput, { target: { value: 'Step-up Key' } });
++
++    const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-scope-select');
++    fireEvent.change(scopeSelect, { target: { value: 'project' } });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-project-input')).toBeDefined();
++    });
++    const projInput = screen.getByTestId<HTMLInputElement>('mint-project-input');
++    fireEvent.change(projInput, { target: { value: 'KANBA' } });
++
++    // Submit
++    const submitBtn = screen.getByRole('button', { name: 'Mint Key' });
++    fireEvent.click(submitBtn);
++
++    // Expect AAL2 modal
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++
++    // Test error callback (handled inside SecondFactorStep)
++    fireEvent.click(screen.getByTestId('mfa-error-btn'));
++
++    // Trigger MFA success to finish minting
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++    await waitFor(() => {
++      expect(mintSpy).toHaveBeenCalledTimes(2);
++      expect(screen.getByTestId('mcp-snippet-modal')).toBeDefined();
++    });
++  });
++
++  it('handles MFA challenge cancel and session expired', async () => {
++    const aal2MintError = new ApiProblem(403, {
++      code: 'AAL2_REQUIRED',
++      challenge_id: 'mint-cancel-challenge',
++      methods: ['totp'],
++    });
++    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValue(aal2MintError);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-modal-card')).toBeDefined();
++    });
++    const labelInput = screen.getByTestId<HTMLInputElement>('mint-label-input');
++    fireEvent.change(labelInput, { target: { value: 'Cancel Key' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-expired-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
++    });
++
++    fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-cancel-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
++    });
++  });
++
++  it('handles mint error reporting on generic failure', async () => {
++    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce(
++      new Error('Quota limit reached'),
++    );
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-modal-card')).toBeDefined();
++    });
++
++    const labelInput = screen.getByTestId<HTMLInputElement>('mint-label-input');
++    fireEvent.change(labelInput, { target: { value: 'Quota Key' } });
++
++    const submitBtn = screen.getByRole('button', { name: 'Mint Key' });
++    fireEvent.click(submitBtn);
++
++    await waitFor(() => {
++      expect(screen.getByText('Quota limit reached')).toBeDefined();
++    });
++  });
++
++  it('handles AAL2 step-up challenge on revoking keys and retries on MFA success', async () => {
++    const aal2RevokeError = new ApiProblem(403, {
++      code: 'AAL2_REQUIRED',
++      challenge_id: 'revoke-challenge',
++      methods: ['totp'],
++    });
++
++    const revokeSpy = vi
++      .spyOn(settingsApi, 'revokePersonalMcpKey')
++      .mockRejectedValueOnce(aal2RevokeError)
++      .mockResolvedValueOnce(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?view=governance']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-project-kanba')).toBeDefined();
++    });
++
++    // Click revoke button for key-project-kanba
++    const revokeBtn = screen.getByTestId('revoke-btn-key-project-kanba');
++    fireEvent.click(revokeBtn);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
++    });
++
++    // Confirm revocation inline
++    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
++
++    // Expect AAL2 modal
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++
++    // Click MFA success
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++
++    await waitFor(() => {
++      expect(revokeSpy).toHaveBeenCalledTimes(2);
++      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
++    });
++  });
++
++  it('handles scope filter changes and clears scope on All pill', async () => {
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?scope=workspace']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('scope-pill-workspace')).toBeDefined();
++    });
++
++    // Click All pill to delete scope
++    fireEvent.click(screen.getByTestId('scope-pill-all'));
++    await waitFor(() => {
++      expect(screen.getByTestId('scope-pill-all').className).toContain(
++        'kb-mcp-filter-pill-active',
++      );
++    });
++
++    // Open mint modal from workspace scope to verify initialTier workspace
++    fireEvent.click(screen.getByTestId('scope-pill-workspace'));
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    await waitFor(() => {
++      const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-scope-select');
++      expect(scopeSelect.value).toBe('workspace');
++    });
++  });
++
++  it('handles global tier personal key revocation and connected app revocation', async () => {
++    const revokePersonalSpy = vi
++      .spyOn(settingsApi, 'revokePersonalMcpKey')
++      .mockResolvedValue(undefined);
++
++    const mockApps: settingsApi.OAuthConnectedApp[] = [
++      {
++        id: 'grant-123',
++        client_id: 'client-ci-runner',
++        client_name: 'External CI Runner',
++        surface: 'agent',
++        scopes: ['agent:read'],
++        allowed_projects: null,
++        created_at: new Date().toISOString(),
++        revoked_at: null,
++      },
++    ];
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/mcp']}>
++        <McpAccessStudio user={adminUser} tier="global" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-server')).toBeDefined();
++    });
++
++    // Revoke key-server
++    const revokeBtn = screen.getByTestId('revoke-btn-key-server');
++    fireEvent.click(revokeBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
++    await waitFor(() => {
++      expect(revokePersonalSpy).toHaveBeenCalledWith('key-server', 'global');
++    });
++  });
++
++  it('handles connected app revocation in personal view', async () => {
++    const mockApps: settingsApi.OAuthConnectedApp[] = [
++      {
++        id: 'grant-123',
++        client_id: 'client-ci-runner',
++        client_name: 'External CI Runner',
++        surface: 'agent',
++        scopes: ['agent:read'],
++        allowed_projects: null,
++        created_at: new Date().toISOString(),
++        revoked_at: null,
++      },
++    ];
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
++    const revokeAppSpy = vi
++      .spyOn(settingsApi, 'revokeConnectedApp')
++      .mockResolvedValue(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio user={adminUser} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('app-row-grant-123')).toBeDefined();
++    });
++
++    // Revoke connected app
++    const disconnectBtn = screen.getByTestId('disconnect-btn-grant-123');
++    fireEvent.click(disconnectBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-disconnect-btn')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('confirm-disconnect-btn'));
++    await waitFor(() => {
++      expect(revokeAppSpy).toHaveBeenCalledWith('grant-123');
++    });
++  });
++
++  it('covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects', async () => {
++    const keysWithEdgeCases: settingsApi.McpApiKeyItem[] = [
++      {
++        id: 'key-edge-proj',
++        label: 'Edge Project Key',
++        display_hint: '9999',
++        surface: 'agent',
++        scope_tier: 'project',
++        scopes: ['agent:read'],
++        allowed_projects: null,
++        created_at: new Date().toISOString(),
++        expires_at: null,
++        last_used_at: null,
++        revoked_at: null,
++      },
++    ];
++
++    const staleError = new ApiProblem(403, {
++      code: 'AAL2_STALE',
++    });
++
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys')
++      .mockRejectedValueOnce(staleError)
++      .mockResolvedValueOnce(keysWithEdgeCases);
++
++    const mintSpy = vi
++      .spyOn(settingsApi, 'mintPersonalMcpKey')
++      .mockRejectedValueOnce(staleError)
++      .mockResolvedValueOnce({
++        id: 'new-key-custom',
++        token: 'kb_mcp_sec_custom',
++        raw_key: 'kb_mcp_sec_custom',
++        label: 'Custom Key',
++        surface: 'agent',
++        scope_tier: 'project',
++        scopes: ['agent:read'],
++        display_hint: '8888',
++        key_prefix: 'kb_mcp_sec_',
++        created_at: new Date().toISOString(),
++        expires_at: null,
++        last_used_at: null,
++        revoked_at: null,
++      } as unknown as settingsApi.McpApiKeyItem);
++
++    const revokeSpy = vi
++      .spyOn(settingsApi, 'revokePersonalMcpKey')
++      .mockRejectedValueOnce(staleError)
++      .mockResolvedValueOnce(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?view=governance&scope=project&project=CUSTOM']}>
++        <McpAccessStudio user={adminUser} allowUnlimitedKeys={false} />
++      </MemoryRouter>,
++    );
++
++    // 1. Initial load hits AAL2_STALE without challengeId or methods
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++
++    // 2. Project select should include custom option 'CUSTOM' and key-edge-proj is visible
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-key-edge-proj')).toBeDefined();
++      const projSelect = screen.getByTestId<HTMLSelectElement>('scope-project-select');
++      expect(projSelect.value).toBe('CUSTOM');
++    });
++
++    // 3. Open mint modal in project scope, test project input onChange and minting
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-project-input')).toBeDefined();
++    });
++    const projInput = screen.getByTestId<HTMLInputElement>('mint-project-input');
++    fireEvent.change(projInput, { target: { value: 'CUSTOM_PRJ' } });
++    const labelInput = screen.getByTestId<HTMLInputElement>('mint-label-input');
++    fireEvent.change(labelInput, { target: { value: 'Custom Key' } });
++
++    // Submit minting -> hits AAL2_STALE
++    fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++    await waitFor(() => {
++      expect(mintSpy).toHaveBeenCalledTimes(2);
++    });
++
++    // 4. Revoke key-edge-proj -> hits AAL2_STALE
++    fireEvent.click(screen.getByTestId('revoke-btn-key-edge-proj'));
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++    await waitFor(() => {
++      expect(revokeSpy).toHaveBeenCalledTimes(2);
++    });
++  });
++
++  it('redirects old routes preserving scope and project search params', () => {
++    function RouteInspector(): React.JSX.Element {
++      const loc = useLocation();
++      return <div data-testid="resolved-location">{loc.pathname}{loc.search}</div>;
++    }
++
++    // 1. Project redirect: /projects/:projectKey/settings/mcp
++    const { unmount: u1 } = render(
++      <MemoryRouter initialEntries={['/projects/PRJ1/settings/mcp?extra=1']}>
++        <Routes>
++          <Route path="/projects/:projectKey/settings/mcp" element={<ProjectMcpRedirect />} />
++          <Route path="/settings/mcp" element={<RouteInspector />} />
++        </Routes>
++      </MemoryRouter>,
++    );
++    expect(screen.getByTestId('resolved-location').textContent).toBe(
++      '/settings/mcp?extra=1&scope=project&project=PRJ1',
++    );
++    u1();
++
++    // 2. Workspace redirect: /workspaces/settings/mcp
++    const { unmount: u2 } = render(
++      <MemoryRouter initialEntries={['/workspaces/settings/mcp?foo=bar']}>
++        <Routes>
++          <Route path="/workspaces/settings/mcp" element={<WorkspaceMcpRedirect />} />
++          <Route path="/settings/mcp" element={<RouteInspector />} />
++        </Routes>
++      </MemoryRouter>,
++    );
++    expect(screen.getByTestId('resolved-location').textContent).toBe(
++      '/settings/mcp?foo=bar&scope=workspace',
++    );
++    u2();
++
++    // 3. Admin redirect: /admin/mcp
++    render(
++      <MemoryRouter initialEntries={['/admin/mcp']}>
++        <Routes>
++          <Route path="/admin/mcp" element={<AdminMcpRedirect />} />
++          <Route path="/settings/mcp" element={<RouteInspector />} />
++        </Routes>
++      </MemoryRouter>,
++    );
++    expect(screen.getByTestId('resolved-location').textContent).toBe(
++      '/settings/mcp?scope=server',
++    );
++  });
++});
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index 43199c8..e6fa1d7 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -91,11 +91,10 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     // Verify tabs
+     const generalTab = screen.getByTestId('tab-general');
+     const membersTab = screen.getByTestId('tab-members');
+-    const mcpTab = screen.getByTestId('tab-mcp');
+ 
+     expect(generalTab).toBeDefined();
+     expect(membersTab).toBeDefined();
+-    expect(mcpTab).toBeDefined();
++    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
+ 
+     // General tab inputs
+     const nameInput = await screen.findByTestId('workspace-name-input');
+@@ -124,14 +123,10 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     fireEvent.click(membersTab);
+     expect(screen.getByText('Workspace Users & Principals')).toBeDefined();
+ 
+-    // Switch to MCP keys tab
+-    fireEvent.click(mcpTab);
+-    expect(screen.getByText('Workspace MCP Access Keys')).toBeDefined();
+-    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
+-
+     // Switch back to General tab
+     fireEvent.click(generalTab);
+     expect(screen.getByTestId('workspace-general-form')).toBeDefined();
++    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
+   });
+ 
+   it('renders 403 access denied when standard member visits workspace settings', async () => {
+@@ -346,9 +341,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+       expect(screen.getByText('Handle already registered')).toBeDefined();
+     });
+ 
+-    // Switch to MCP tab
+-    const mcpTab = screen.getByTestId('tab-mcp');
+-    fireEvent.click(mcpTab);
++    // Switch back to general tab and verify workspace-mcp-section
++    const generalTab = screen.getByTestId('tab-general');
++    fireEvent.click(generalTab);
+     expect(screen.getByTestId('workspace-mcp-section')).toBeDefined();
+   });
+ 
+diff --git a/kanban/web/src/features/settings/settingsApi.ts b/kanban/web/src/features/settings/settingsApi.ts
+index 4649ef1..f0cd66a 100644
+--- a/kanban/web/src/features/settings/settingsApi.ts
++++ b/kanban/web/src/features/settings/settingsApi.ts
+@@ -73,6 +73,45 @@ function normalizeMcpKeyItem(
+   };
+ }
+ 
++export interface FetchMcpKeysOptions {
++  view?: 'mine' | 'governance' | undefined;
++  scope_tier?: string | undefined;
++  project_ref?: string | undefined;
++  surface?: string | undefined;
++}
++
++export async function fetchUnifiedMcpKeys(options?: FetchMcpKeysOptions): Promise<McpApiKeyItem[]> {
++  const query = new URLSearchParams();
++  if (options?.view) query.set('view', options.view);
++  if (options?.scope_tier && options.scope_tier !== 'all') {
++    query.set('scope_tier', options.scope_tier);
++  }
++  if (options?.project_ref) query.set('project_ref', options.project_ref);
++  if (options?.surface) query.set('surface', options.surface);
++
++  const qs = query.toString();
++  const endpoint = `/api/v1/mcp-keys${qs ? `?${qs}` : ''}`;
++  const res = (await apiFetch('GET', endpoint as never)) as
++    | McpKeyListResponse
++    | McpApiKeyItem[];
++  const items = Array.isArray(res) ? res : res.keys;
++  return items.map((item) => normalizeMcpKeyItem(item));
++}
++
++export async function mintUnifiedMcpKey(payload: MintMcpKeyRequest): Promise<McpApiKeyItem> {
++  const created = (await apiFetch('POST', '/api/v1/mcp-keys' as never, {
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  })) as McpApiKeyItem;
++  return normalizeMcpKeyItem(created, payload.label);
++}
++
++export async function revokeUnifiedMcpKey(keyId: string): Promise<void> {
++  await apiFetch('DELETE', '/api/v1/mcp-keys/{key_id}' as never, {
++    params: { key_id: keyId },
++  });
++}
++
+ export async function fetchPersonalMcpKeys(tier?: string): Promise<McpApiKeyItem[]> {
+   const endpoint = tier === 'global' ? '/api/v1/admin/mcp-keys' : '/api/v1/auth/mcp-keys';
+   const res = (await apiFetch('GET', endpoint as never)) as

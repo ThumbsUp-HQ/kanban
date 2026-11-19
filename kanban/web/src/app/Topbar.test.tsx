@@ -214,10 +214,8 @@ describe('Topbar', () => {
       avatarBtn.click();
     });
 
-    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
-    expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /MCP Keys & OAuth Apps/ })).toBeDefined();
     expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
-    expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
     expect(
       screen.getByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
     ).toBeDefined();
@@ -259,11 +257,9 @@ describe('Topbar', () => {
     });
 
     expect(screen.getByRole('menuitem', { name: /Personal Settings/ })).toBeDefined();
-    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /MCP Keys & OAuth Apps/ })).toBeDefined();
     expect(screen.queryByRole('menuitem', { name: /Workspace Settings/ })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Admin Auth Studio/ })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /Admin MCP Keys/ })).toBeNull();
     expect(
       screen.queryByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
     ).toBeNull();
@@ -623,27 +619,9 @@ describe('Topbar', () => {
         avatarBtn.click();
       });
 
-      const personalMcp = screen.getByText('Personal MCP Keys');
+      const mcpStudio = screen.getByText(/MCP Keys & OAuth Apps/);
       act(() => {
-        personalMcp.click();
-      });
-
-      act(() => {
-        avatarBtn.click();
-      });
-
-      const wsMcp = screen.getByText('Workspace MCP Keys');
-      act(() => {
-        wsMcp.click();
-      });
-
-      act(() => {
-        avatarBtn.click();
-      });
-
-      const adminMcp = screen.getByText('Admin MCP Keys');
-      act(() => {
-        adminMcp.click();
+        mcpStudio.click();
       });
 
       act(() => {

@@ -259,6 +259,7 @@ export function Topbar({
             ref={avatarButtonRef}
             type="button"
             className="kb-avatar-button"
+            data-testid="topbar-avatar-button"
             aria-label="User profile and settings"
             aria-haspopup="menu"
             aria-expanded={avatarMenuOpen}
@@ -370,6 +371,7 @@ export function Topbar({
                 <Link
                   to="/settings/mcp"
                   role="menuitem"
+                  data-testid="topbar-mcp-studio-link"
                   className="kb-theme-radio kb-avatar-menu-link"
                   onClick={() => {
                     setAvatarMenuOpen(false);
@@ -379,7 +381,7 @@ export function Topbar({
                     <span aria-hidden="true" className="kb-avatar-menu-icon">
                       🔑
                     </span>
-                    Personal MCP Keys
+                    MCP Keys & OAuth Apps
                   </span>
                 </Link>
 
@@ -399,22 +401,6 @@ export function Topbar({
                           🏢
                         </span>
                         Workspace Settings
-                      </span>
-                    </Link>
-
-                    <Link
-                      to="/workspaces/settings/mcp"
-                      role="menuitem"
-                      className="kb-theme-radio kb-avatar-menu-link"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                      }}
-                    >
-                      <span>
-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
-                          🔑
-                        </span>
-                        Workspace MCP Keys
                       </span>
                     </Link>
 
@@ -470,22 +456,6 @@ export function Topbar({
                           🛡️
                         </span>
                         Admin Auth Studio
-                      </span>
-                    </Link>
-
-                    <Link
-                      to="/admin/mcp"
-                      role="menuitem"
-                      className="kb-theme-radio kb-avatar-menu-link"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                      }}
-                    >
-                      <span>
-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
-                          🤖
-                        </span>
-                        Admin MCP Keys
                       </span>
                     </Link>
 

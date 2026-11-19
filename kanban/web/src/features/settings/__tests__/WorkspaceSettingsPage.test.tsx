@@ -91,11 +91,10 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     // Verify tabs
     const generalTab = screen.getByTestId('tab-general');
     const membersTab = screen.getByTestId('tab-members');
-    const mcpTab = screen.getByTestId('tab-mcp');
 
     expect(generalTab).toBeDefined();
     expect(membersTab).toBeDefined();
-    expect(mcpTab).toBeDefined();
+    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
 
     // General tab inputs
     const nameInput = await screen.findByTestId('workspace-name-input');
@@ -124,14 +123,10 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     fireEvent.click(membersTab);
     expect(screen.getByText('Workspace Users & Principals')).toBeDefined();
 
-    // Switch to MCP keys tab
-    fireEvent.click(mcpTab);
-    expect(screen.getByText('Workspace MCP Access Keys')).toBeDefined();
-    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
-
     // Switch back to General tab
     fireEvent.click(generalTab);
     expect(screen.getByTestId('workspace-general-form')).toBeDefined();
+    expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
   });
 
   it('renders 403 access denied when standard member visits workspace settings', async () => {
@@ -346,9 +341,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Handle already registered')).toBeDefined();
     });
 
-    // Switch to MCP tab
-    const mcpTab = screen.getByTestId('tab-mcp');
-    fireEvent.click(mcpTab);
+    // Switch back to general tab and verify workspace-mcp-section
+    const generalTab = screen.getByTestId('tab-general');
+    fireEvent.click(generalTab);
     expect(screen.getByTestId('workspace-mcp-section')).toBeDefined();
   });
 
