@@ -271,12 +271,17 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(screen.getByTestId('upload-avatar-btn'));
     expect(clickSpy).toHaveBeenCalled();
 
-    // Upload valid image file
+    // Upload valid image file opens AvatarCropModal
     const validFile = new File(['valid-image-bytes'], 'avatar.png', { type: 'image/png' });
     fireEvent.change(fileInput, { target: { files: [validFile] } });
 
     await waitFor(() => {
-      expect(api.uploadAvatar).toHaveBeenCalledWith(validFile);
+      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
+
+    await waitFor(() => {
+      expect(api.uploadAvatar).toHaveBeenCalled();
       expect(screen.getByTestId('alert-success').textContent).toContain('Avatar uploaded successfully.');
     });
 
@@ -617,6 +622,13 @@ describe('PersonalSettingsPage', () => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Invalid TOTP verification code');
     });
 
+    // Test non-Error rejection fallback for confirmTotp
+    vi.mocked(api.confirmTotp).mockRejectedValueOnce('raw string reject');
+    fireEvent.click(screen.getByTestId('confirm-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Invalid TOTP code.');
+    });
+
     // Regenerate recovery codes error
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
     fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
@@ -895,6 +907,10 @@ describe('PersonalSettingsPage', () => {
 
     const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
     fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to upload avatar.');
     });
@@ -1479,5 +1495,128 @@ describe('PersonalSettingsPage', () => {
     });
     const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
     expect(regenBtn.getAttribute('title')).toBe('Enable TOTP or Passkey 2FA first');
+  });
+
+  it('preserves unsaved display_name and timezone input when avatar is uploaded and removed', async () => {
+    vi.mocked(api.uploadAvatar).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: '/api/v1/users/11111111-1111-4111-8111-111111111111/avatar?v=abcdef123456',
+    });
+    vi.mocked(api.deleteAvatar).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: null,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('display-name-input')).toBeDefined();
+    });
+
+    const nameInput = screen.getByTestId<HTMLInputElement>('display-name-input');
+    const tzSelect = screen.getByTestId<HTMLSelectElement>('timezone-select');
+
+    // Type unsaved draft
+    fireEvent.change(nameInput, { target: { value: 'Unsaved Draft Name' } });
+    fireEvent.change(tzSelect, { target: { value: 'Asia/Tokyo' } });
+
+    expect(nameInput.value).toBe('Unsaved Draft Name');
+    expect(tzSelect.value).toBe('Asia/Tokyo');
+
+    // Upload avatar via crop modal
+    const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-success').textContent).toContain('Avatar uploaded successfully.');
+    });
+
+    // Verify unsaved draft is preserved
+    expect(nameInput.value).toBe('Unsaved Draft Name');
+    expect(tzSelect.value).toBe('Asia/Tokyo');
+
+    // Remove avatar
+    fireEvent.click(screen.getByTestId('remove-avatar-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-success').textContent).toContain('Avatar removed.');
+    });
+
+    // Verify unsaved draft is still preserved
+    expect(nameInput.value).toBe('Unsaved Draft Name');
+    expect(tzSelect.value).toBe('Asia/Tokyo');
+  });
+
+  it('opens and closes AvatarCropModal without saving', async () => {
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-file-input')).toBeDefined();
+    });
+
+    const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('avatar-crop-cancel-btn'));
+    expect(screen.queryByTestId('avatar-crop-modal')).toBeNull();
+  });
+
+  it('opens and closes AvatarLightboxModal when clicking avatar preview', async () => {
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: '/api/v1/users/11111111-1111-4111-8111-111111111111/avatar?v=123456789012',
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-preview')).toBeDefined();
+    });
+
+    // Click avatar preview to open lightbox
+    fireEvent.click(screen.getByTestId('avatar-preview'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
+    });
+
+    // Close lightbox
+    fireEvent.click(screen.getByTestId('avatar-lightbox-close-btn'));
+    expect(screen.queryByTestId('avatar-lightbox-modal')).toBeNull();
+  });
+
+  it('renders default empty fallbacks when profile fields are null or empty', async () => {
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      display_name: null as unknown as string,
+      timezone: null as unknown as string,
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('display-name-input')).toBeDefined();
+    });
+
+    const displayInput = screen.getByTestId<HTMLInputElement>('display-name-input');
+    expect(displayInput.value).toBe('');
+
+    // Empty files does nothing
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [] } });
+
+    // Selecting an SVG by type triggers rejection error
+    const svgFile = new File(['<svg></svg>'], 'pic.svg', { type: 'image/svg+xml' });
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile] } });
+    expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
+
+    // Selecting an SVG by extension with generic type
+    const svgFile2 = new File(['<svg></svg>'], 'bad.SVG', { type: '' });
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile2] } });
+    expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
   });
 });
