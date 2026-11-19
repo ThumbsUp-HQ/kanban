@@ -1,10 +1,10 @@
 ================================================================================
 FORENSIC EVIDENCE: TAINT CANARY EXFILTRATION DEFENSE AUDIT (KB-P4-07)
 ================================================================================
-Timestamp: 2026-11-18T01:30:01.713161+00:00
-Workspace ID: 01a1ec46-6e5b-7ece-9af0-d15497c76281
-Restricted Project (SEC): 01a1ec46-6e6a-72c1-9eb6-722ace4f1258
-Public Project (PUB): 01a1ec46-6e68-768d-b37d-87704846fc9a
+Timestamp: 2026-11-19T02:02:34.056456+00:00
+Workspace ID: 01a1f18a-925a-773e-adb4-fa71b6a972f3
+Restricted Project (SEC): 01a1f18a-9273-713e-b52b-42606f9641a6
+Public Project (PUB): 01a1f18a-9270-7ea4-922b-f081bfcae47f
 Canary String: CANARY-7f3a
 
 --------------------------------------------------------------------------------
@@ -21,10 +21,10 @@ QUERY 2: Audit log showing MCP_TAINT_BLOCKED security events
 SQL: SELECT id, workspace_id, actor_principal_id, event_type, payload, created_at
      FROM activity_records WHERE event_type = 'MCP_TAINT_BLOCKED' ORDER BY created_at ASC;
 Result row count: 2
-  - Event: MCP_TAINT_BLOCKED | Actor: 01a1ec46-6e5c-7803-9bf3-6b9dd1b3abc2 | Target Object: 01a1ec46-6e5b-7ece-9af0-d15497c76281 | Created: 2026-11-18 01:30:01.587947+00:00
-    Payload: {'tool': 'add_comment', 'tool_name': 'add_comment', 'session_key_hash': 'f232696cd2ff12e95b200112033ecb8acc300f897be62e7df1d60073b4d51c14', 'source_project_id': '01a1ec46-6e6a-72c1-9eb6-722ace4f1258', 'target_project_id': '01a1ec46-6e68-768d-b37d-87704846fc9a'}
-  - Event: MCP_TAINT_BLOCKED | Actor: 01a1ec46-6e5c-7803-9bf3-6b9dd1b3abc2 | Target Object: 01a1ec46-6e5b-7ece-9af0-d15497c76281 | Created: 2026-11-18 01:30:01.644217+00:00
-    Payload: {'tool': 'add_comment', 'tool_name': 'add_comment', 'session_key_hash': '12cb8b1c03668ce761adb50d4a048999b577b1065306c684f3d3415ea82b6582', 'source_project_id': '01a1ec46-6e6a-72c1-9eb6-722ace4f1258', 'target_project_id': '01a1ec46-6e68-768d-b37d-87704846fc9a'}
+  - Event: MCP_TAINT_BLOCKED | Actor: 01a1f18a-925e-7516-9061-c3236378908e | Target Object: 01a1f18a-925a-773e-adb4-fa71b6a972f3 | Created: 2026-11-19 02:02:33.862394+00:00
+    Payload: {'tool': 'add_comment', 'tool_name': 'add_comment', 'session_key_hash': '96b0ec2fb537d1c20c76823f6903be5dd8f00911be8a71e44f316bf19dabfdf4', 'source_project_id': '01a1f18a-9273-713e-b52b-42606f9641a6', 'target_project_id': '01a1f18a-9270-7ea4-922b-f081bfcae47f'}
+  - Event: MCP_TAINT_BLOCKED | Actor: 01a1f18a-925e-7516-9061-c3236378908e | Target Object: 01a1f18a-925a-773e-adb4-fa71b6a972f3 | Created: 2026-11-19 02:02:33.939164+00:00
+    Payload: {'tool': 'add_comment', 'tool_name': 'add_comment', 'session_key_hash': '8ecf109f6769d423400965728f462d9b34c2123cfd781b4f1cf72b699c3916b0', 'source_project_id': '01a1f18a-9273-713e-b52b-42606f9641a6', 'target_project_id': '01a1f18a-9270-7ea4-922b-f081bfcae47f'}
 
 --------------------------------------------------------------------------------
 QUERY 3: mcp_read_taint table records (session and credential taints)
@@ -32,8 +32,8 @@ QUERY 3: mcp_read_taint table records (session and credential taints)
 SQL: SELECT encode(taint_key, 'hex') AS taint_key_hex, key_kind, project_id, first_read_at, expires_at
      FROM mcp_read_taint WHERE project_id = :proj_sec_id;
 Result row count: 2
-  - Key Kind: session | Taint Key SHA256: 6e5ffd20a26605d3... | Project: 01a1ec46-6e6a-72c1-9eb6-722ace4f1258 | Expires: 2026-11-18 02:30:01.485616+00:00
-  - Key Kind: credential | Taint Key SHA256: 9472ca479c7c775f... | Project: 01a1ec46-6e6a-72c1-9eb6-722ace4f1258 | Expires: 2026-11-18 09:30:01.485616+00:00
+  - Key Kind: session | Taint Key SHA256: 937b96b66376c3ac... | Project: 01a1f18a-9273-713e-b52b-42606f9641a6 | Expires: 2026-11-19 03:02:33.670406+00:00
+  - Key Kind: credential | Taint Key SHA256: 9472ca479c7c775f... | Project: 01a1f18a-9273-713e-b52b-42606f9641a6 | Expires: 2026-11-19 10:02:33.670406+00:00
 
 ================================================================================
 AUDIT VERDICT: PASS - EXFILTRATION BLOCKED, ZERO LEAKS, AUDIT LOGS RECORDED
