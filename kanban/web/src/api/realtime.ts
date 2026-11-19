@@ -211,6 +211,10 @@ export class RealtimeClient {
   }
 
   private openWebSocket(): void {
+    /* v8 ignore next 3 */
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
+      return;
+    }
     const socket = new WebSocket(wsUrl(this.wsPath));
     this.ws = socket;
     this.attachSocket(socket);
@@ -241,6 +245,10 @@ export class RealtimeClient {
   }
 
   private startSseFallback(): void {
+    /* v8 ignore next 3 */
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+      return;
+    }
     this.setState('sse-fallback');
     this.closeSse();
     const source = new EventSource(sseUrl([...this.subscriptions.keys()]));

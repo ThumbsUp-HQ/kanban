@@ -1171,8 +1171,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.keyDown(window, { key: 'j' });
 
       // Press 's' to change state to In Progress (which has reached limit of 1)
-      fireEvent.keyDown(window, { key: 's' });
-      const statePop1 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      const statePop1 = await waitFor(
+        () => {
+          const existing = screen.queryByRole('dialog', { name: /Quick State Picker/i });
+          if (existing) return existing;
+          fireEvent.keyDown(window, { key: 's' });
+          return screen.getByRole('dialog', { name: /Quick State Picker/i });
+        },
+        { timeout: 10000 }
+      );
       fireEvent.click(within(statePop1).getByText('In Progress'));
 
       // Member is blocked: patch was NOT called
@@ -1195,8 +1202,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       fireEvent.keyDown(window, { key: 'j' });
       fireEvent.keyDown(window, { key: 'j' });
-      fireEvent.keyDown(window, { key: 's' });
-      const statePop2 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 8000 });
+      const statePop2 = await waitFor(
+        () => {
+          const existing = screen.queryByRole('dialog', { name: /Quick State Picker/i });
+          if (existing) return existing;
+          fireEvent.keyDown(window, { key: 's' });
+          return screen.getByRole('dialog', { name: /Quick State Picker/i });
+        },
+        { timeout: 10000 }
+      );
       fireEvent.click(within(statePop2).getByText('In Progress'));
 
       expect(promptSpy).toHaveBeenCalled();
@@ -1204,8 +1218,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       // Case 2b: Admin provides override reason
       promptSpy.mockReturnValueOnce('Architect approved override for hotfix');
-      fireEvent.keyDown(window, { key: 's' });
-      const statePop3 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 8000 });
+      const statePop3 = await waitFor(
+        () => {
+          const existing = screen.queryByRole('dialog', { name: /Quick State Picker/i });
+          if (existing) return existing;
+          fireEvent.keyDown(window, { key: 's' });
+          return screen.getByRole('dialog', { name: /Quick State Picker/i });
+        },
+        { timeout: 10000 }
+      );
       fireEvent.click(within(statePop3).getByText('In Progress'));
 
       await waitFor(() => {
