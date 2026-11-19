@@ -136,41 +136,40 @@ def _build_test_registries() -> tuple[ToolRegistry, ToolRegistry, ToolRegistry]:
     # 2. Docs surface
     docs_reg = ToolRegistry(Surface.DOCS)
 
-    async def _search_knowledge_handler(args: dict[str, Any]) -> dict[str, Any]:
+    async def _search_handler(args: dict[str, Any]) -> dict[str, Any]:
         return {"items": [{"slug": "docs/kan-spec", "title": "KAN Spec"}]}
 
-    async def _read_doc_handler(args: dict[str, Any]) -> dict[str, Any]:
-        slug = args.get("slug", "docs/kan-spec")
-        return {"slug": slug, "title": "KAN Spec", "content": "# Spec"}
+    async def _create_handler(args: dict[str, Any]) -> dict[str, Any]:
+        return {"status": "created"}
 
-    async def _upsert_doc_handler(args: dict[str, Any]) -> dict[str, Any]:
-        return {"status": "upserted"}
+    async def _update_handler(args: dict[str, Any]) -> dict[str, Any]:
+        return {"status": "updated"}
 
     docs_reg.register(
         ToolSpec(
-            name="search_knowledge",
+            name="search",
             description="Search knowledge",
             surface=Surface.DOCS,
             input_schema=_DUMMY_SCHEMA,
-            handler=_search_knowledge_handler,
+            handler=_search_handler,
         )
     )
     docs_reg.register(
         ToolSpec(
-            name="read_doc",
-            description="Read doc",
+            name="create",
+            description="Create doc",
             surface=Surface.DOCS,
             input_schema=_DUMMY_SCHEMA,
-            handler=_read_doc_handler,
+            handler=_create_handler,
         )
     )
     docs_reg.register(
         ToolSpec(
-            name="upsert_doc",
-            description="Upsert doc",
+            name="update",
+            description="Update doc",
             surface=Surface.DOCS,
             input_schema=_DUMMY_SCHEMA,
-            handler=_upsert_doc_handler,
+            handler=_update_handler,
         )
     )
 
@@ -210,8 +209,7 @@ class _MockStatefulIntrospectService:
         self.allowed_tools = allowed_tools or [
             "search_tickets",
             "read_ticket",
-            "search_knowledge",
-            "read_doc",
+            "search",
         ]
         self.created_at = time.time()
         self.expires_at = self.created_at + ttl_seconds
@@ -237,11 +235,7 @@ class _MockStatefulIntrospectService:
         if self.revoked or now >= self.expires_at:
             return {"active": False, "reason": "TOKEN_EXPIRED_OR_REVOKED"}
 
-        surface_tools = (
-            ["search_tickets", "read_ticket"]
-            if surface == "agent"
-            else ["search_knowledge", "read_doc"]
-        )
+        surface_tools = ["search_tickets", "read_ticket"] if surface == "agent" else ["search"]
 
         if not consume_call:
             if self.calls_used >= self.max_calls:
@@ -357,7 +351,7 @@ async def test_case_1_positive_read_only_lookup_and_tools_list_filtering() -> No
         # 3. Initialize session on /mcp/docs
         docs_session = await _init_session(client, "/mcp/docs", token)
 
-        # 4. tools/list on /mcp/docs: MUST list only [search_knowledge, read_doc]
+        # 4. tools/list on /mcp/docs: MUST list only [search]
         list_docs = await client.post(
             "/mcp/docs",
             headers={"Authorization": f"Bearer {token}", "mcp-session-id": docs_session},
@@ -365,7 +359,7 @@ async def test_case_1_positive_read_only_lookup_and_tools_list_filtering() -> No
         )
         assert list_docs.status_code == 200
         docs_tools = [t["name"] for t in list_docs.json()["result"]["tools"]]
-        assert sorted(docs_tools) == ["read_doc", "search_knowledge"]
+        assert sorted(docs_tools) == ["search"]
         assert mock_service.calls_used == 0
 
         # 5. Call 1: search_tickets
@@ -396,7 +390,7 @@ async def test_case_1_positive_read_only_lookup_and_tools_list_filtering() -> No
         assert c2.status_code == 200
         assert mock_service.calls_used == 2
 
-        # 7. Call 3: read_doc("docs/kan-spec") on /mcp/docs
+        # 7. Call 3: search(id="docs/kan-spec") on /mcp/docs
         c3 = await client.post(
             "/mcp/docs",
             headers={"Authorization": f"Bearer {token}", "mcp-session-id": docs_session},
@@ -404,7 +398,7 @@ async def test_case_1_positive_read_only_lookup_and_tools_list_filtering() -> No
                 "jsonrpc": "2.0",
                 "id": 7,
                 "method": "tools/call",
-                "params": {"name": "read_doc", "arguments": {"slug": "docs/kan-spec"}},
+                "params": {"name": "search", "arguments": {"id": "docs/kan-spec"}},
             },
         )
         assert c3.status_code == 200
@@ -631,21 +625,21 @@ async def test_case_3_write_tools_and_surface_isolation() -> None:
             == "EPHEMERAL_TOOL_FORBIDDEN"
         )
 
-        # 4. Calling upsert_doc on /mcp/docs -> EPHEMERAL_TOOL_FORBIDDEN
-        res_upsert = await client.post(
+        # 4. Calling create/update on /mcp/docs -> EPHEMERAL_TOOL_FORBIDDEN
+        res_create_doc = await client.post(
             "/mcp/docs",
             headers={"Authorization": f"Bearer {token}", "mcp-session-id": docs_session},
             json={
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "upsert_doc", "arguments": {"slug": "forbidden"}},
+                "params": {"name": "create", "arguments": {"type": "DOC", "title": "forbidden"}},
             },
         )
-        assert res_upsert.status_code == 200
-        assert res_upsert.json()["result"]["isError"] is True
+        assert res_create_doc.status_code == 200
+        assert res_create_doc.json()["result"]["isError"] is True
         assert (
-            yaml.safe_load(res_upsert.json()["result"]["content"][0]["text"])["error"]["code"]
+            yaml.safe_load(res_create_doc.json()["result"]["content"][0]["text"])["error"]["code"]
             == "EPHEMERAL_TOOL_FORBIDDEN"
         )
 

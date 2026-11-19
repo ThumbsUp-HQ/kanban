@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-# ruff: noqa: E501, PLR0915, D103, ANN401, ARG001, ARG005, PLC0415, F841, C901
+# ruff: noqa: E501, PLR0915, D103, ANN401, ARG001, ARG005, PLC0415, F841, C901, PT018
 """Unit tests targeting 100% branch and line coverage for mcp/surfaces/docs (KANBA-127)."""
 
 from __future__ import annotations
@@ -14,12 +14,55 @@ import pytest
 
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.internal_client import KanbanApiClient
+from mcp.lod import Lod
 from mcp.settings import McpSettings
+from mcp.surfaces.docs.create import (
+    _parse_link_target as parse_create_link,
+)
+from mcp.surfaces.docs.create import (
+    _sync_inline_links as sync_create_links,
+)
+from mcp.surfaces.docs.create import (
+    create_docs_create_tool,
+)
+from mcp.surfaces.docs.create import (
+    create_handler as create_v2_handler,
+)
 from mcp.surfaces.docs.link_knowledge import link_knowledge_handler
 from mcp.surfaces.docs.manage_stickies import manage_stickies_handler
 from mcp.surfaces.docs.promote_sticky_to_doc import promote_sticky_to_doc_handler
 from mcp.surfaces.docs.read_doc import read_doc_handler
+from mcp.surfaces.docs.search import (
+    _extract_headings,
+    _extract_sticky_title,
+    _format_access_pill,
+    _read_doc_or_page,
+    _read_sticky,
+    _try_get_page_or_doc,
+    _try_get_sticky,
+    create_docs_search_tool,
+)
+from mcp.surfaces.docs.search import (
+    search_handler as search_v2_handler,
+)
 from mcp.surfaces.docs.search_knowledge import search_knowledge_handler
+from mcp.surfaces.docs.update import (
+    _diff_patch_content,
+    _fetch_current_entity,
+    _find_closest_matches,
+    _find_line_hints,
+    _resolve_parent_ids,
+    create_docs_update_tool,
+)
+from mcp.surfaces.docs.update import (
+    _parse_link_target as parse_update_link,
+)
+from mcp.surfaces.docs.update import (
+    _sync_inline_links as sync_update_links,
+)
+from mcp.surfaces.docs.update import (
+    update_handler as update_v2_handler,
+)
 from mcp.surfaces.docs.upsert_doc import upsert_doc_handler
 
 
@@ -1007,3 +1050,762 @@ async def test_docs_all_remaining_uncovered_branches() -> None:
         client=c_multi_res,
     )
     assert res_p3["status"] == "linked"
+
+
+# =============================================================================
+# CONSOLIDATED /mcp/docs V2 TOOLS UNIT TESTS (KAN-18)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_create_v2_unit_coverage() -> None:
+    client = _build_mock_client(lambda r: httpx.Response(201, json={"id": "doc-uuid-1"}))
+
+    # Link targets parsing
+    t1, lt1 = parse_create_link("VERIFIED_BY_DOC:XYZ")
+    assert t1 == "XYZ" and lt1 == "VERIFIED_BY_DOC"
+    t2, lt2 = parse_create_link("PLAIN")
+    assert t2 == "PLAIN" and lt2 == "RELATES_TO"
+
+    # Sync links with dict and failure
+    def link_err_h(req: httpx.Request) -> httpx.Response:
+        if "fail" in str(req.read()):
+            return httpx.Response(500, json={"error": "db err"})
+        return httpx.Response(201, json={"status": "ok"})
+
+    c_link = _build_mock_client(link_err_h)
+    res_sync = await sync_create_links(
+        c_link,
+        "src-1",
+        {
+            "add": ["T1", "fail-target"],
+            "remove": [],
+        },
+        None,
+    )
+    assert len(res_sync) == 2
+
+    # Validation errors
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler({"type": "DOC", "title": "T"}, client=None)
+    assert exc.value.code == McpErrorCode.UPSTREAM_UNAVAILABLE
+
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler({}, client=client)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler({"type": "BOGUS", "title": "T"}, client=client)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler({"type": "STICKY", "title": "S", "parent": "p"}, client=client)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler({"type": "STICKY", "title": "S"}, client=client)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler(
+            {"type": "STICKY", "title": "S", "project": "P", "color": "bad"}, client=client
+        )
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # Sticky content without title prefix
+    def stk_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json={"id": "stk-id-1", "color_token": "mint"})
+
+    c_stk = _build_mock_client(stk_h)
+    stk_res = await create_v2_handler(
+        {"type": "STICKY", "title": "Title", "project": "P", "content": "Raw content"},
+        client=c_stk,
+    )
+    assert stk_res["status"] == "created"
+
+    # Sticky upstream error
+    c_stk_err = _build_mock_client(lambda r: httpx.Response(200, json=["non-dict"]))
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler(
+            {"type": "STICKY", "title": "Title", "project": "P"}, client=c_stk_err
+        )
+    assert exc.value.code == McpErrorCode.UPSTREAM_ERROR
+
+    # Doc with project UUID
+    u = str(uuid.uuid4())
+    doc_uuid_res = await create_v2_handler(
+        {"type": "DOC", "title": "Doc Title", "project": u}, client=client
+    )
+    assert doc_uuid_res["status"] == "created"
+
+    # Doc upstream error
+    with pytest.raises(KbMcpError) as exc:
+        await create_v2_handler({"type": "DOC", "title": "Doc"}, client=c_stk_err)
+    assert exc.value.code == McpErrorCode.UPSTREAM_ERROR
+
+    # Project key resolution failure fallback
+    def proj_fail_h(req: httpx.Request) -> httpx.Response:
+        if "/projects/" in req.url.path:
+            return httpx.Response(500, json={"error": "not found"})
+        return httpx.Response(201, json={"id": "d-id-pf"})
+
+    c_pf = _build_mock_client(proj_fail_h)
+    res_pf = await create_v2_handler(
+        {"type": "DOC", "title": "Doc", "project": "FAIL_KEY"}, client=c_pf
+    )
+    assert res_pf["status"] == "created"
+
+    # Project key resolution success and inline links variations
+    def proj_succ_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if "/projects/SUCC_KEY" in p:
+            return httpx.Response(200, json={"id": "proj-uuid-succ"})
+        if "/links" in p:
+            return httpx.Response(201, json={"status": "ok"})
+        return httpx.Response(201, json={"id": "d-id-ps"})
+
+    c_ps = _build_mock_client(proj_succ_h)
+    res_ps = await create_v2_handler(
+        {
+            "type": "DOC",
+            "title": "Doc Succ",
+            "project": "SUCC_KEY",
+            "links": [
+                "+PREFIX:T1",
+                {"action": "add", "target": "T2", "link_type": "VERIFIED_BY_DOC"},
+                "",
+            ],
+        },
+        client=c_ps,
+    )
+    assert res_ps["status"] == "created"
+
+    # ToolSpec builder handler
+    tool = create_docs_create_tool(client=client)
+    res_tool = await tool.handler({"type": "DOC", "title": "Tool Doc"})
+    assert res_tool["status"] == "created"
+
+
+@pytest.mark.asyncio
+async def test_search_v2_unit_coverage() -> None:
+    # Heading outline with code fences
+    md = "# H1\n```python\n# inside fence\n```\n~~~bash\n# fence 2\n~~~\n## H2\n"
+    outl = _extract_headings(md)
+    assert len(outl) == 2
+
+    # Sticky title extraction
+    assert _extract_sticky_title("", "mint") == "Sticky mint"
+    assert _extract_sticky_title("Line", "sky") == "Line"
+
+    # Access pill
+    assert _format_access_pill(None) == "project"
+    assert _format_access_pill({"scope": "WORKSPACE"}) == "workspace"
+
+    # Client unavailable
+    with pytest.raises(KbMcpError) as exc:
+        await search_v2_handler({}, client=None)
+    assert exc.value.code == McpErrorCode.UPSTREAM_UNAVAILABLE
+
+    # Sticky not found when type is STICKY
+    c_404 = _build_mock_client(lambda r: httpx.Response(404, json={}))
+    with pytest.raises(KbMcpError) as exc:
+        await search_v2_handler({"id": str(uuid.uuid4()), "type": "STICKY"}, client=c_404)
+    assert exc.value.code == McpErrorCode.NOT_FOUND
+
+    # Doc not found
+    with pytest.raises(KbMcpError) as exc:
+        await search_v2_handler({"id": "docs/nonexistent"}, client=c_404)
+    assert exc.value.code == McpErrorCode.NOT_FOUND
+
+    # _read_sticky branches (LODs, promoted_to_doc_id, links failure)
+    def stk_full_h(req: httpx.Request) -> httpx.Response:
+        if "/links" in req.url.path:
+            return httpx.Response(500, json={"error": "db err"})
+        return httpx.Response(404)
+
+    c_stk_links_err = _build_mock_client(stk_full_h)
+    stk_d = {
+        "id": "s-id-1",
+        "color_token": "mint",
+        "body_markdown": "# Note\nBody",
+        "etag": "e",
+        "promoted_to_doc_id": "doc-uuid-target",
+    }
+    r_stk_sum = await _read_sticky(stk_d, Lod.SUMMARY, c_stk_links_err, None)
+    assert "body_markdown" not in r_stk_sum
+
+    r_stk_std = await _read_sticky(stk_d, Lod.STANDARD, c_stk_links_err, None)
+    assert "body_markdown" in r_stk_std
+
+    r_stk_full = await _read_sticky(stk_d, Lod.FULL, c_stk_links_err, None)
+    assert r_stk_full["promoted_to_doc_id"] == "doc-uuid-target"
+    assert r_stk_full["links"] == []
+
+    # _read_doc_or_page with parent_title and tree list
+    def doc_full_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if "/tree" in p:
+            return httpx.Response(200, json=[{"title": "Child"}])
+        if "/links" in p:
+            return httpx.Response(200, json=["non-dict"])
+        return httpx.Response(404)
+
+    c_doc_full = _build_mock_client(doc_full_h)
+    doc_d = {
+        "id": "d-id-1",
+        "canonical_key": "docs/k",
+        "title": "Title",
+        "parent_title": "Parent",
+        "body_markdown": "# H\nContent",
+    }
+    r_doc_full = await _read_doc_or_page(
+        "doc",
+        doc_d,
+        "docs/k",
+        Lod.FULL,
+        include_tree=True,
+        active_client=c_doc_full,
+        active_token=None,
+    )
+    assert r_doc_full["breadcrumbs"] == ["Parent", "Title"]
+    assert "tree" in r_doc_full
+    assert r_doc_full["links"] == []
+
+    # Hybrid search formatting (truncation, next_cursor, no key fallback)
+    def search_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "items": [
+                    {
+                        "kind": "doc",
+                        "id": "hit-id-1",
+                        "title": "Hit",
+                        "snippet": "x" * 350,
+                    }
+                ],
+                "next_cursor": "cur-next",
+            },
+        )
+
+    c_srch = _build_mock_client(search_h)
+    res_srch = await search_v2_handler(
+        {"query": "q", "project": "P", "type": "ALL", "cursor": "c1"}, client=c_srch
+    )
+    assert res_srch["total"] == 1
+    assert res_srch["items"][0]["key"] == "hit-id-1"
+    assert len(res_srch["items"][0]["snippet"]) <= 300
+    assert res_srch["next_cursor"] == "cur-next"
+
+    # Hybrid search non-dict response
+    c_srch_nd = _build_mock_client(lambda r: httpx.Response(200, json="non-dict"))
+    res_srch_nd = await search_v2_handler({"query": "q"}, client=c_srch_nd)
+    assert res_srch_nd["total"] == 0
+
+    # Project and workspace lists with non-dict items
+    def list_nd_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if "/docs" in p:
+            return httpx.Response(
+                200, json=["non-dict", {"id": "d", "canonical_key": "docs/d", "title": "D"}]
+            )
+        if "/stickies" in p:
+            return httpx.Response(
+                200, json=["non-dict", {"id": "s", "color_token": "amber", "body_markdown": ""}]
+            )
+        return httpx.Response(404)
+
+    c_list_nd = _build_mock_client(list_nd_h)
+    res_p_nd = await search_v2_handler({"project": "EXH", "type": "ALL"}, client=c_list_nd)
+    assert len(res_p_nd["docs"]) == 1
+    assert len(res_p_nd["stickies"]) == 1
+
+    res_w_nd = await search_v2_handler({"type": "ALL"}, client=c_list_nd)
+    assert len(res_w_nd["docs"]) == 1
+    assert len(res_w_nd["stickies"]) == 1
+
+    # Project list error fallback
+    def list_err_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "fail"})
+
+    c_list_err = _build_mock_client(list_err_h)
+    res_p_err = await search_v2_handler(
+        {"project": "EXH", "type": "DOC", "include_tree": True}, client=c_list_err
+    )
+    assert res_p_err["tree"] == []
+
+    # _try_get_page_or_doc paths
+    def resolve_paths_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if p == "/api/v1/pages/my-page":
+            return httpx.Response(200, json={"id": "p-1"})
+        if p == "/api/v1/pages/sub/p":
+            return httpx.Response(200, json={"id": "sub-p"})
+        if p == "/api/v1/docs/sub/d":
+            return httpx.Response(200, json={"id": "sub-d"})
+        if p == "/api/v1/docs/root-d":
+            return httpx.Response(200, json={"id": "root-d"})
+        if p == "/api/v1/pages/orphan-p":
+            return httpx.Response(200, json={"id": "orphan-p"})
+        return httpx.Response(404)
+
+    c_rp = _build_mock_client(resolve_paths_h)
+    assert await _try_get_page_or_doc(c_rp, "pages/my-page", None) == ("page", {"id": "p-1"})
+    assert await _try_get_page_or_doc(c_rp, "sub/p", None) == ("page", {"id": "sub-p"})
+    assert await _try_get_page_or_doc(c_rp, "docs/sub/d", None) == ("doc", {"id": "sub-d"})
+    assert await _try_get_page_or_doc(c_rp, "root-d", None) == ("doc", {"id": "root-d"})
+    assert await _try_get_page_or_doc(c_rp, "orphan-p", None) == ("page", {"id": "orphan-p"})
+    assert await _try_get_page_or_doc(c_rp, "totally-missing", None) is None
+
+    # _try_get_sticky with missing id and error
+    c_stk_miss = _build_mock_client(lambda r: httpx.Response(200, json={}))
+    assert await _try_get_sticky(c_stk_miss, str(uuid.uuid4()), None) is None
+    c_stk_err_sticky = _build_mock_client(lambda r: httpx.Response(500, json={}))
+    assert await _try_get_sticky(c_stk_err_sticky, str(uuid.uuid4()), None) is None
+
+    # _read_sticky LOD FULL non-dict links
+    c_links_nd = _build_mock_client(lambda r: httpx.Response(200, json=["non-dict"]))
+    r_stk_nd = await _read_sticky(
+        {"id": "s-nd", "color_token": "amber", "body_markdown": "x"},
+        Lod.FULL,
+        c_links_nd,
+        None,
+    )
+    assert r_stk_nd["links"] == []
+
+    # _read_doc_or_page standalone breadcrumbs & tree error fallback to outline
+    r_doc_basic = await _read_doc_or_page(
+        "doc",
+        {"title": "Standalone", "id": "d-std"},
+        "docs/std",
+        Lod.FULL,
+        include_tree=False,
+        active_client=c_rp,
+        active_token=None,
+    )
+    assert r_doc_basic["breadcrumbs"] == ["Standalone"]
+    c_tree_err = _build_mock_client(lambda r: httpx.Response(500, json={}))
+    r_doc_tree_err = await _read_doc_or_page(
+        "doc",
+        {"title": "T", "id": "d-1", "body_markdown": "# Sec 1\nBody"},
+        "docs/t",
+        Lod.STANDARD,
+        include_tree=True,
+        active_client=c_tree_err,
+        active_token=None,
+    )
+    assert "outline" in r_doc_tree_err
+
+    # Hybrid search extra branches (anchor without hash, non-dict item)
+    def srch_extra_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "total": 2,
+                "items": [
+                    "non-dict",
+                    {
+                        "kind": "page",
+                        "id": "p-hit",
+                        "anchor": "section-one",
+                        "snippet": "short",
+                    },
+                ],
+            },
+        )
+
+    c_srch_extra = _build_mock_client(srch_extra_h)
+    res_extra = await search_v2_handler({"query": "q", "type": "ALL"}, client=c_srch_extra)
+    assert res_extra["items"][0]["anchor"] == "#section-one"
+
+    # Project docs list without tree (include_tree=False) and stickies list error
+    def p_list_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if "/docs" in p:
+            return httpx.Response(
+                200, json=[{"id": "d1", "canonical_key": "docs/d1", "title": "D1"}]
+            )
+        if "/stickies" in p:
+            return httpx.Response(500, json={})
+        return httpx.Response(404)
+
+    c_plist = _build_mock_client(p_list_h)
+    res_plist = await search_v2_handler(
+        {"project": "PROJ", "type": "ALL", "include_tree": False}, client=c_plist
+    )
+    assert len(res_plist["docs"]) == 1
+    assert res_plist["stickies"] == []
+
+    # Workspace list for type="DOC" and type="STICKY" with error handling
+    def w_list_err_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={})
+
+    c_wlist_err = _build_mock_client(w_list_err_h)
+    res_w_doc_err = await search_v2_handler({"type": "DOC"}, client=c_wlist_err)
+    assert res_w_doc_err["docs"] == []
+    res_w_stk_err = await search_v2_handler({"type": "STICKY"}, client=c_wlist_err)
+    assert res_w_stk_err["stickies"] == []
+
+    # ToolSpec builder for search
+    t_srch = create_docs_search_tool(client=c_list_nd)
+    res_t_srch = await t_srch.handler({"id": "help"})
+    assert res_t_srch["tool"] == "search"
+
+
+@pytest.mark.asyncio
+async def test_update_v2_unit_coverage() -> None:
+    # Parse link targets
+    t, lt = parse_update_link("VERIFIED_BY_DOC:XYZ")
+    assert t == "XYZ" and lt == "VERIFIED_BY_DOC"
+
+    # _resolve_parent_ids
+    def parent_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if p.startswith("/api/v1/pages/my-page"):
+            return httpx.Response(200, json={"id": "page-id-99", "doc_id": "doc-id-88"})
+        if p.startswith("/api/v1/docs/my-doc"):
+            return httpx.Response(200, json={"id": "doc-id-77"})
+        return httpx.Response(404)
+
+    c_par = _build_mock_client(parent_h)
+    d_uuid = str(uuid.uuid4())
+    res_u_doc, res_u_page = await _resolve_parent_ids(c_par, d_uuid, None)
+    assert res_u_doc == d_uuid and res_u_page is None
+
+    res_p_doc, res_p_page = await _resolve_parent_ids(c_par, "my-page", None)
+    assert res_p_doc == "doc-id-88" and res_p_page == "page-id-99"
+
+    res_d_doc, res_d_page = await _resolve_parent_ids(c_par, "docs/my-doc", None)
+    assert res_d_doc == "doc-id-77" and res_d_page is None
+
+    res_m_doc, res_m_page = await _resolve_parent_ids(c_par, "missing", None)
+    assert res_m_doc is None and res_m_page is None
+
+    # _fetch_current_entity
+    def fetch_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if p.startswith("/api/v1/pages/p1"):
+            return httpx.Response(200, json={"id": "p-1", "canonical_key": "pages/p1"})
+        if p.startswith("/api/v1/docs/d1"):
+            return httpx.Response(200, json={"id": "d-1", "canonical_key": "docs/d1"})
+        return httpx.Response(404)
+
+    c_fetch = _build_mock_client(fetch_h)
+    kp, dp = await _fetch_current_entity(c_fetch, "pages/p1", None)
+    assert kp == "page" and dp["id"] == "p-1"
+
+    kd, dd = await _fetch_current_entity(c_fetch, "docs/d1", None)
+    assert kd == "doc" and dd["id"] == "d-1"
+
+    with pytest.raises(KbMcpError) as exc:
+        await _fetch_current_entity(c_fetch, "missing", None)
+    assert exc.value.code == McpErrorCode.NOT_FOUND
+
+    # _find_closest_matches and _find_line_hints
+    assert _find_closest_matches("", "target") == []
+    assert _find_line_hints("line 1\ntarget\nline 3\ntarget", "target") == [2, 4]
+
+    # _diff_patch_content ETag mismatch
+    with pytest.raises(KbMcpError) as exc:
+        _diff_patch_content("body", "orig", "rep", "sha1", "sha2")
+    assert exc.value.code == McpErrorCode.CONFLICT_ETAG
+
+    # _sync_inline_links
+    def sync_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if req.method == "GET" and "/links" in p:
+            return httpx.Response(
+                200,
+                json={
+                    "outbound": [
+                        {
+                            "id": "link-1",
+                            "type": "RELATES_TO",
+                            "target": {"key": "T1", "id": "uuid-1"},
+                        }
+                    ]
+                },
+            )
+        if req.method == "POST" and "/links" in p:
+            return httpx.Response(201, json={"status": "ok"})
+        if req.method == "DELETE" and "/links/" in p:
+            return httpx.Response(204)
+        return httpx.Response(404)
+
+    c_sync = _build_mock_client(sync_h)
+    ops = await sync_update_links(
+        c_sync,
+        "src-id",
+        ["+T2", "-T1", "-NONEXISTENT", {"action": "add", "target": "T3"}],
+        None,
+    )
+    assert any(o["action"] == "added" for o in ops)
+    assert any(o["action"] == "removed" for o in ops)
+
+    # Validations: client none, missing id, long title, bad color
+    c_dummy = _build_mock_client(lambda r: httpx.Response(200, json={}))
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({"id": "some-id"}, client=None)
+    assert exc.value.code == McpErrorCode.UPSTREAM_UNAVAILABLE
+
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({}, client=c_dummy)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({"id": "x", "title": "x" * 201}, client=c_dummy)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({"id": "x", "color": "bad"}, client=c_dummy)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # Sticky ETag conflicts
+    def stk_etag_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"id": "s-1", "etag": "fresh", "body_sha256": "fresh", "color_token": "amber"}
+        )
+
+    c_stk_etag = _build_mock_client(stk_etag_h)
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler(
+            {"id": str(uuid.uuid4()), "type": "DOC", "if_match": "stale"}, client=c_stk_etag
+        )
+    assert exc.value.code == McpErrorCode.CONFLICT_ETAG
+
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler(
+            {"id": str(uuid.uuid4()), "content": "c", "if_match": "stale"}, client=c_stk_etag
+        )
+    assert exc.value.code == McpErrorCode.CONFLICT_ETAG
+
+    # Doc update ETag conflict
+    def doc_etag_h(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "d-1",
+                "canonical_key": "docs/d",
+                "etag": "fresh",
+                "body_sha256": "fresh",
+            },
+        )
+
+    c_doc_etag = _build_mock_client(doc_etag_h)
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler(
+            {"id": "docs/d", "content": "c", "if_match": "stale"}, client=c_doc_etag
+        )
+    assert exc.value.code == McpErrorCode.CONFLICT_ETAG
+
+    # Sticky promotion and update upstream errors
+    def stk_err_h(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET":
+            return httpx.Response(200, json={"id": "s-1", "etag": "e"})
+        return httpx.Response(200, json=["non-dict"])
+
+    c_stk_err = _build_mock_client(stk_err_h)
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({"id": str(uuid.uuid4()), "type": "DOC"}, client=c_stk_err)
+    assert exc.value.code == McpErrorCode.UPSTREAM_ERROR
+
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({"id": str(uuid.uuid4()), "color": "sky"}, client=c_stk_err)
+    assert exc.value.code == McpErrorCode.UPSTREAM_ERROR
+
+    # Promotion with parent page and links
+    def prom_full_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if req.method == "GET" and "/stickies/" in p:
+            return httpx.Response(200, json={"id": "s-1", "etag": "sha-f", "body_sha256": "sha-f"})
+        if req.method == "GET" and p.startswith("/api/v1/pages/mp"):
+            return httpx.Response(200, json={"id": "p-99", "doc_id": "d-99"})
+        if req.method == "POST" and "/promote-to-doc" in p:
+            return httpx.Response(
+                200,
+                json={"promoted_to_doc": {"id": "d-99", "canonical_key": "docs/p", "title": "P"}},
+            )
+        if req.method == "POST" and "/links" in p:
+            return httpx.Response(201, json={"status": "ok"})
+        return httpx.Response(404)
+
+    c_prom_f = _build_mock_client(prom_full_h)
+    res_prom_f = await update_v2_handler(
+        {
+            "id": str(uuid.uuid4()),
+            "type": "DOC",
+            "parent": "mp",
+            "content": "# Body",
+            "title": "Prom",
+            "if_match": "sha-f",
+            "links": ["T1"],
+        },
+        client=c_prom_f,
+    )
+    assert res_prom_f["status"] == "promoted"
+
+    # Sticky already promoted via promoted_to_doc_id
+    c_already = _build_mock_client(
+        lambda r: httpx.Response(
+            200, json={"id": "s-1", "promoted_to_doc_id": "doc-target", "etag": "e"}
+        )
+    )
+    with pytest.raises(KbMcpError) as exc:
+        await update_v2_handler({"id": str(uuid.uuid4()), "type": "DOC"}, client=c_already)
+    assert exc.value.code == McpErrorCode.ALREADY_PROMOTED
+
+    # Page update (starts with pages/)
+    def page_patch_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "p-5",
+                    "canonical_key": "pages/p5",
+                    "etag": "e5",
+                    "body_markdown": "orig",
+                },
+            )
+        if req.method == "PATCH":
+            return httpx.Response(
+                200, json={"id": "p-5", "canonical_key": "pages/p5", "etag": "e6", "version_seq": 2}
+            )
+        return httpx.Response(404)
+
+    c_pp = _build_mock_client(page_patch_h)
+    res_pp = await update_v2_handler(
+        {"id": "pages/p5", "original_text": "orig", "replacement_text": "rep"}, client=c_pp
+    )
+    assert res_pp["status"] == "updated" and res_pp["kind"] == "page"
+
+    # Doc update with if_match
+    def doc_im_h(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "d-im",
+                    "canonical_key": "docs/im",
+                    "etag": "im-e",
+                    "body_markdown": "a",
+                },
+            )
+        if req.method == "PATCH":
+            assert req.headers.get("if-match") == "im-e"
+            return httpx.Response(
+                200, json={"id": "d-im", "canonical_key": "docs/im", "version_seq": 2}
+            )
+        return httpx.Response(404)
+
+    c_im = _build_mock_client(doc_im_h)
+    res_im = await update_v2_handler(
+        {"id": "docs/im", "content": "new", "if_match": "im-e"}, client=c_im
+    )
+    assert res_im["status"] == "updated"
+
+    # Extra update coverage: parent fallback missing fields, closest matches deduplication, links delete error
+    def par_miss_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if p == "/api/v1/pages/some-page":
+            return httpx.Response(200, json={"id": "p-noid"})  # no doc_id
+        if p == "/api/v1/pages/no-page-id":
+            return httpx.Response(200, json={})  # page dict without id -> falls through to doc
+        if p == "/api/v1/docs/no-page-id":
+            return httpx.Response(200, json={"id": "doc-fallback-id"})
+        if p == "/api/v1/docs/missing-id":
+            return httpx.Response(200, json={})  # doc dict without id
+        return httpx.Response(404)
+
+    c_pm = _build_mock_client(par_miss_h)
+    d_id, p_id = await _resolve_parent_ids(c_pm, "some-page", None)
+    assert d_id is None and p_id == "p-noid"
+    d_id_fb, p_id_fb = await _resolve_parent_ids(c_pm, "no-page-id", None)
+    assert d_id_fb == "doc-fallback-id" and p_id_fb is None
+    d_id2, p_id2 = await _resolve_parent_ids(c_pm, "missing-id", None)
+    assert d_id2 is None and p_id2 is None
+
+    # _fetch_current_entity fallbacks
+    def fetch_fall_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if p == "/api/v1/pages/docs/fb":
+            return httpx.Response(404)
+        if p == "/api/v1/docs/fb":
+            return httpx.Response(200, json={"id": "fb-doc", "canonical_key": "docs/fb"})
+        if p == "/api/v1/docs/orphan-fb":
+            return httpx.Response(404)
+        if p == "/api/v1/pages/orphan-fb":
+            return httpx.Response(200, json={"id": "fb-page", "canonical_key": "pages/orphan-fb"})
+        return httpx.Response(404)
+
+    c_ff = _build_mock_client(fetch_fall_h)
+    k_fb, d_fb = await _fetch_current_entity(c_ff, "docs/fb", None)
+    assert k_fb == "doc" and d_fb["id"] == "fb-doc"
+    k_ofb, d_ofb = await _fetch_current_entity(c_ff, "orphan-fb", None)
+    assert k_ofb == "page" and d_ofb["id"] == "fb-page"
+
+    # _try_get_sticky error
+    c_stk_500 = _build_mock_client(lambda r: httpx.Response(500, json={}))
+    assert await _try_get_sticky(c_stk_500, str(uuid.uuid4()), None) is None
+
+    # Closest matches seen_starts deduplication
+    assert (
+        len(_find_closest_matches("hello world\nhello world\nhello world", "hello world", top_n=2))
+        <= 2
+    )
+
+    # sync_update_links with plain string, dict with link_type, and delete error
+    def sync_del_err_h(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "outbound": [
+                        {
+                            "id": "link-del",
+                            "type": "RELATES_TO",
+                            "target": {"key": "T-DEL", "id": "uuid-del"},
+                        }
+                    ]
+                },
+            )
+        if req.method == "POST":
+            return httpx.Response(500, json={"error": "fail add"})
+        if req.method == "DELETE":
+            return httpx.Response(500, json={"error": "fail del"})
+        return httpx.Response(404)
+
+    c_sde = _build_mock_client(sync_del_err_h)
+    ops_sde = await sync_update_links(
+        c_sde,
+        "src-1",
+        [
+            "ARCH-PLAIN",
+            "+ARCH-PLUS",
+            "-T-DEL",
+            {"action": "add", "target": "FAIL-ADD", "link_type": "VERIFIED_BY_DOC"},
+            "",
+        ],
+        None,
+    )
+    assert any(o.get("action") == "failed" for o in ops_sde)
+
+    # Doc update without diff patch and no ETag in entity
+    def doc_no_etag_h(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET":
+            return httpx.Response(
+                200, json={"id": "d-no-e", "canonical_key": "docs/noe", "body_markdown": "x"}
+            )
+        if req.method == "PATCH":
+            return httpx.Response(200, json=["non-dict"])
+        return httpx.Response(404)
+
+    c_dne = _build_mock_client(doc_no_etag_h)
+    res_dne = await update_v2_handler({"id": "docs/noe", "title": "New Title"}, client=c_dne)
+    assert res_dne["status"] == "updated"
+
+    # ToolSpec builder for update
+    t_up = create_docs_update_tool(client=c_im)
+    res_t_up = await t_up.handler({"id": "docs/im", "title": "T"})
+    assert res_t_up["status"] == "updated"

@@ -1,13 +1,13 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-# ruff: noqa: E501, PLR0915, SLF001, ERA001, D400, D415, RUF015, E741, PTH123, ASYNC230, PLC0415, ARG001
-"""Comprehensive unit and integration tests for /mcp/docs surface (S11.3, KB-P4-08)."""
+# ruff: noqa: E501, PLR0915, SLF001, ERA001, D400, D415, RUF015, PLC0415, ARG001
+"""Comprehensive unit and integration tests for consolidated /mcp/docs surface (S11.3, KAN-18)."""
 
 from __future__ import annotations
 
 import json
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import pytest
@@ -92,14 +92,16 @@ async def test_case_1_positive_knowledge_lifecycle(
 ) -> None:
     """Test Case 1: Positive lifecycle:
 
-    - Create page under Architecture
-    - Append content
-    - Section patch the ## PKCE section
-    - read_doc returns updated body and version_seq incremented
-    - search_knowledge("PKCE") returns the page with anchor #pkce
-    - manage_stickies(create) with 700-char body returns promotion_recommended: true
-    - promote_sticky_to_doc creates a doc with row-for-row preserved ACLs and PROMOTED_TO_DOC link
-    - link_knowledge connects doc to project with RELATES_TO
+    - Create Doc "Architecture" via create tool
+    - Create child Page under Architecture via create tool
+    - Search by id (standard LOD) to get etag and version_seq
+    - Surgical diff-patch via update tool with original_text and replacement_text
+    - Search by id (full LOD) returns updated body, outline, and incremented version_seq
+    - Hybrid search for "PKCE" returns the page with anchor
+    - Create Sticky with 700-char body returning promotion_recommended: true
+    - Add explicit ACL entry to sticky
+    - Auto-promote Sticky to Doc via update(id=sticky_id, type="DOC") with row-for-row preserved ACLs
+    - Sync inline links via update(id=page_key, links=["+ARCH-1", "-ARCH-1"])
     """
     user = await make_user("arch_author", workspace_role="WORKSPACE_ADMIN")
     as_principal(user)
@@ -117,10 +119,11 @@ async def test_case_1_positive_knowledge_lifecycle(
         res_create_doc = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "upsert_doc",
+            "create",
             {
+                "type": "DOC",
                 "title": "Architecture",
-                "body_markdown": "# Architecture\nOverview of system architecture.",
+                "content": "# Architecture\nOverview of system architecture.",
             },
         )
         assert res_create_doc["isError"] is False
@@ -132,11 +135,12 @@ async def test_case_1_positive_knowledge_lifecycle(
         res_create_page = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "upsert_doc",
+            "create",
             {
+                "type": "DOC",
                 "parent": "docs/architecture",
                 "title": "Auth Studio",
-                "body_markdown": "## PKCE\nInitial PKCE content.\n\n## Overview\nAuth overview.",
+                "content": "## PKCE\nInitial PKCE content.\n\n## Overview\nAuth overview.",
             },
         )
         assert res_create_page["isError"] is False
@@ -145,12 +149,12 @@ async def test_case_1_positive_knowledge_lifecycle(
         page_key = "docs/architecture/auth-studio"
         assert f"key: {page_key}" in page_yaml
 
-        # Read page standard to get etag
+        # 3. Read page via search tool to get etag and version_seq
         res_read_initial = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "read_doc",
-            {"identifier": page_key, "lod": "standard"},
+            "search",
+            {"id": page_key, "lod": "standard"},
         )
         assert res_read_initial["isError"] is False
         read_text1 = res_read_initial["content"][0]["text"]
@@ -160,75 +164,43 @@ async def test_case_1_positive_knowledge_lifecycle(
         etag_line = [line for line in read_text1.splitlines() if line.startswith("etag:")][0]
         etag1 = etag_line.split(":", 1)[1].strip().strip('"')
 
-        # 3. Append to Page
-        res_append = await _call_mcp_tool(
-            mcp_client,
-            session_id,
-            "upsert_doc",
-            {
-                "identifier": page_key,
-                "mode": "append",
-                "body_markdown": "### Security Notes\nEnsure state is 128-bit.",
-                "if_match": etag1,
-            },
-        )
-        assert res_append["isError"] is False
-        append_yaml = res_append["content"][0]["text"]
-        assert "status: updated" in append_yaml
-        assert "version_seq: 2" in append_yaml
-
-        # Read page to get new etag
-        res_read_append = await _call_mcp_tool(
-            mcp_client,
-            session_id,
-            "read_doc",
-            {"identifier": page_key, "lod": "standard"},
-        )
-        assert res_read_append["isError"] is False
-        read_text2 = res_read_append["content"][0]["text"]
-        assert "version_seq: 2" in read_text2
-        assert "Security Notes" in read_text2
-        etag_line2 = [line for line in read_text2.splitlines() if line.startswith("etag:")][0]
-        etag2 = etag_line2.split(":", 1)[1].strip().strip('"')
-
-        # 4. Section Patch the ## PKCE section
+        # 4. Surgical diff-patch the ## PKCE section via update tool
         res_patch = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "upsert_doc",
+            "update",
             {
-                "identifier": page_key,
-                "mode": "section_patch",
-                "section_heading": "## PKCE",
-                "body_markdown": "## PKCE\nMandatory PKCE (S256), single-use 128-bit state parameter verification.",
-                "if_match": etag2,
+                "id": page_key,
+                "original_text": "Initial PKCE content.",
+                "replacement_text": "Mandatory PKCE (S256), single-use 128-bit state parameter verification.",
+                "if_match": etag1,
             },
         )
         assert res_patch["isError"] is False
         patch_yaml = res_patch["content"][0]["text"]
         assert "status: updated" in patch_yaml
-        assert "version_seq: 3" in patch_yaml
+        assert "version_seq: 2" in patch_yaml
 
-        # 5. Verify read_doc updated body and version_seq
+        # 5. Verify search tool returns updated body and incremented version_seq
         res_read_final = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "read_doc",
-            {"identifier": page_key, "lod": "full"},
+            "search",
+            {"id": page_key, "lod": "full", "include_tree": True},
         )
         assert res_read_final["isError"] is False
-        read_text3 = res_read_final["content"][0]["text"]
-        assert "version_seq: 3" in read_text3
-        assert "Mandatory PKCE (S256)" in read_text3
-        assert "outline:" in read_text3
-        assert "access_manifest:" in read_text3
+        read_text2 = res_read_final["content"][0]["text"]
+        assert "version_seq: 2" in read_text2
+        assert "Mandatory PKCE (S256)" in read_text2
+        assert "outline:" in read_text2
+        assert "access_manifest:" in read_text2
 
-        # 6. Search Knowledge for "PKCE"
+        # 6. Hybrid Search Knowledge for "PKCE"
         res_search = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "search_knowledge",
-            {"query": "PKCE", "kinds": ["page"]},
+            "search",
+            {"query": "PKCE", "type": "DOC"},
         )
         assert res_search["isError"] is False
         search_yaml = res_search["content"][0]["text"]
@@ -245,7 +217,7 @@ async def test_case_1_positive_knowledge_lifecycle(
         )
         assert create_proj_resp.status_code == 201, create_proj_resp.text
 
-        # 8. Manage Stickies: create sticky with 700-char body -> promotion_recommended: true
+        # 8. Create sticky with 700-char body -> promotion_recommended: true
         long_body = (
             "# Architecture Notes\n"
             "- Item 1: PKCE S256 verification\n"
@@ -259,11 +231,12 @@ async def test_case_1_positive_knowledge_lifecycle(
         res_sticky_create = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "manage_stickies",
+            "create",
             {
-                "action": "create",
+                "type": "STICKY",
                 "project": "ARCH",
-                "body_markdown": long_body,
+                "title": "Architecture Notes",
+                "content": long_body,
                 "color": "amber",
             },
         )
@@ -271,7 +244,7 @@ async def test_case_1_positive_knowledge_lifecycle(
         sticky_yaml = res_sticky_create["content"][0]["text"]
         assert "status: created" in sticky_yaml
         assert "promotion_recommended: true" in sticky_yaml
-        sticky_id_line = [l for l in sticky_yaml.splitlines() if l.startswith("id:")][0]
+        sticky_id_line = [line for line in sticky_yaml.splitlines() if line.startswith("id:")][0]
         sticky_id = sticky_id_line.split(":", 1)[1].strip()
 
         # Add explicit ACL entry to sticky to test row-for-row preservation
@@ -286,13 +259,14 @@ async def test_case_1_positive_knowledge_lifecycle(
         api_env.seed.add(acl_entry)
         await api_env.seed.commit()
 
-        # 9. Promote Sticky to Doc
+        # 9. Auto-promote Sticky to Doc via update(id=sticky_id, type="DOC")
         res_promote = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "promote_sticky_to_doc",
+            "update",
             {
-                "sticky": sticky_id,
+                "id": sticky_id,
+                "type": "DOC",
                 "title": "Promoted Arch Notes",
             },
         )
@@ -345,23 +319,6 @@ async def test_case_1_positive_knowledge_lifecycle(
         doc_acl_tuples = {(a.principal_id, a.effect, a.capability_mask) for a in doc_acls}
         assert sticky_acl_tuples == doc_acl_tuples, "ACL rows must match row-by-row verbatim!"
 
-        # Write proof to docs/qa/KANBA-127/acl-preservation-proof.txt
-        with open("docs/qa/KANBA-127/acl-preservation-proof.txt", "w", encoding="utf-8") as f:
-            f.write("=== ACL Row-for-Row Preservation Proof: Sticky -> Doc ===\n")
-            f.write(f"Source Sticky UUID: {sticky_id}\n")
-            f.write(f"Target Doc UUID:   {target_doc_id}\n\n")
-            f.write("Sticky ACL Rows:\n")
-            f.writelines(
-                f"  - principal: {a.principal_id}, effect: {a.effect}, capability_mask: {a.capability_mask}\n"
-                for a in sticky_acls
-            )
-            f.write("\nPromoted Doc ACL Rows:\n")
-            f.writelines(
-                f"  - principal: {a.principal_id}, effect: {a.effect}, capability_mask: {a.capability_mask}\n"
-                for a in doc_acls
-            )
-            f.write("\nVerdict: 100% IDENTICAL (PASS)\n")
-
         # Create issue under ARCH to link with
         issue_res = await api_env.client.post(
             "/api/v1/projects/ARCH/issues",
@@ -372,21 +329,34 @@ async def test_case_1_positive_knowledge_lifecycle(
         assert issue_res.status_code == 201, issue_res.text
         issue_key = issue_res.json()["key"]
 
-        # 10. Link Knowledge
-        res_link = await _call_mcp_tool(
+        # 10. Sync inline links via update tool: add and remove
+        res_link_add = await _call_mcp_tool(
             mcp_client,
             session_id,
-            "link_knowledge",
+            "update",
             {
-                "source": page_key,
-                "target": issue_key,
-                "target_kind": "issue",
-                "link_type": "RELATES_TO",
-                "action": "add",
+                "id": page_key,
+                "links": [f"+{issue_key}"],
             },
         )
-        assert res_link["isError"] is False
-        assert "status: linked" in res_link["content"][0]["text"]
+        assert res_link_add["isError"] is False
+        link_add_yaml = res_link_add["content"][0]["text"]
+        assert "status: updated" in link_add_yaml
+        assert "links:" in link_add_yaml
+
+        # Now remove the link via delta syntax
+        res_link_rem = await _call_mcp_tool(
+            mcp_client,
+            session_id,
+            "update",
+            {
+                "id": page_key,
+                "links": [f"-{issue_key}"],
+            },
+        )
+        assert res_link_rem["isError"] is False
+        link_rem_yaml = res_link_rem["content"][0]["text"]
+        assert "status: updated" in link_rem_yaml
 
 
 # =============================================================================
@@ -401,10 +371,10 @@ async def test_case_2_security_and_permission_isolation(
 ) -> None:
     """Test Case 2: Security invariants:
 
-    - read_doc of a page in a project the caller cannot VIEW -> NOT_FOUND byte-identical
+    - search of a page in a project the caller cannot VIEW -> NOT_FOUND byte-identical
     - kb_doc_ key on /mcp/agent -> 403 SURFACE_KEY_MISMATCH
-    - upsert_doc body with hidden display:none text stored without it
-    - docs:read-only key calling upsert_doc -> INSUFFICIENT_SCOPE
+    - create doc body with hidden display:none text stored without it
+    - docs:read-only key calling update -> INSUFFICIENT_SCOPE
     """
     owner = await make_user("proj_owner", workspace_role="WORKSPACE_ADMIN")
     stranger = await make_user("stranger", workspace_role="WORKSPACE_MEMBER")
@@ -454,15 +424,13 @@ async def test_case_2_security_and_permission_isolation(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as mcp_client:
         sess = await _init_mcp_session(mcp_client)
 
-        res_secret = await _call_mcp_tool(
-            mcp_client, sess, "read_doc", {"identifier": "docs/confidential"}
-        )
+        res_secret = await _call_mcp_tool(mcp_client, sess, "search", {"id": "docs/confidential"})
         assert res_secret["isError"] is True
         err_secret = res_secret["content"][0]["text"]
         assert "code: NOT_FOUND" in err_secret
 
         res_nonexistent = await _call_mcp_tool(
-            mcp_client, sess, "read_doc", {"identifier": "docs/missing-doc"}
+            mcp_client, sess, "search", {"id": "docs/missing-doc"}
         )
         err_nonexistent = res_nonexistent["content"][0]["text"]
         assert err_secret.replace("docs/confidential", "TARGET") == err_nonexistent.replace(
@@ -484,7 +452,7 @@ async def test_case_2_security_and_permission_isolation(
         assert agent_init.status_code == 403
         assert agent_init.json() == {"error": "SURFACE_KEY_MISMATCH"}
 
-    # 3. upsert_doc body with hidden display:none text stored without it
+    # 3. create doc body with hidden display:none text stored without it
     as_principal(owner)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as mcp_client:
         sess = await _init_mcp_session(mcp_client)
@@ -492,20 +460,20 @@ async def test_case_2_security_and_permission_isolation(
             "# Safe Document\n"
             'Visible text <span style="display:none">ATTACK_EXFIL_PAYLOAD</span> continues here.'
         )
-        res_upsert = await _call_mcp_tool(
+        res_create = await _call_mcp_tool(
             mcp_client,
             sess,
-            "upsert_doc",
-            {"title": "Sanitization Check", "body_markdown": payload_with_hidden},
+            "create",
+            {"type": "DOC", "title": "Sanitization Check", "content": payload_with_hidden},
         )
-        assert res_upsert["isError"] is False
+        assert res_create["isError"] is False
 
-        # Read back document
+        # Read back document via search
         res_read = await _call_mcp_tool(
             mcp_client,
             sess,
-            "read_doc",
-            {"identifier": "docs/sanitization-check", "lod": "standard"},
+            "search",
+            {"id": "docs/sanitization-check", "lod": "standard"},
         )
         assert res_read["isError"] is False
         body_read = res_read["content"][0]["text"]
@@ -513,7 +481,7 @@ async def test_case_2_security_and_permission_isolation(
             "Hidden display:none payload must be pruned!"
         )
 
-    # 4. Scope enforcement: docs:read-only caller calling upsert_doc -> INSUFFICIENT_SCOPE
+    # 4. Scope enforcement: docs:read-only caller calling update -> INSUFFICIENT_SCOPE
     def mock_docs_read_introspect(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -564,8 +532,8 @@ async def test_case_2_security_and_permission_isolation(
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "upsert_doc",
-                    "arguments": {"title": "Fail Doc", "body_markdown": "Body"},
+                    "name": "update",
+                    "arguments": {"id": "docs/sanitization-check", "title": "Updated Title"},
                 },
             },
         )
@@ -576,7 +544,7 @@ async def test_case_2_security_and_permission_isolation(
 
 
 # =============================================================================
-# TEST CASE 3 & 4: Boundary & Section Patch Edge Cases
+# TEST CASE 4: Boundary & Surgical Diff-Patch Validation
 # =============================================================================
 
 
@@ -587,10 +555,13 @@ async def test_case_4_boundary_and_validation(
 ) -> None:
     """Test Case 4: Boundary validations:
 
+    - sticky with bad color -> VALIDATION_FAILED
+    - sticky with parent -> VALIDATION_FAILED
     - sticky body 65,537 bytes -> VALIDATION_FAILED
-    - color: "red" -> VALIDATION_FAILED
     - promote twice -> ALREADY_PROMOTED
     - stale if_match -> CONFLICT_ETAG
+    - diff-patch target not found -> PATCH_TARGET_NOT_FOUND with closest_match
+    - diff-patch ambiguous target -> PATCH_TARGET_AMBIGUOUS with line_hints
     - page at depth 10 accepts no child -> VALIDATION_FAILED
     """
     user = await make_user("boundary_user", workspace_role="WORKSPACE_ADMIN")
@@ -613,40 +584,63 @@ async def test_case_4_boundary_and_validation(
         res_bad_color = await _call_mcp_tool(
             mcp_client,
             sess,
-            "manage_stickies",
-            {"action": "create", "project": "BND", "color": "red"},
+            "create",
+            {"type": "STICKY", "project": "BND", "title": "Bad Color", "color": "red"},
         )
         assert res_bad_color["isError"] is True
         assert "code: VALIDATION_FAILED" in res_bad_color["content"][0]["text"]
 
-        # 2. Sticky body 65,537 bytes -> VALIDATION_FAILED
+        # 2. Sticky with parent -> VALIDATION_FAILED
+        res_bad_parent = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "STICKY",
+                "project": "BND",
+                "title": "Bad Parent",
+                "parent": "docs/architecture",
+            },
+        )
+        assert res_bad_parent["isError"] is True
+        assert "code: VALIDATION_FAILED" in res_bad_parent["content"][0]["text"]
+
+        # 3. Sticky body 65,537 bytes -> VALIDATION_FAILED
         res_oversized = await _call_mcp_tool(
             mcp_client,
             sess,
-            "manage_stickies",
-            {"action": "create", "project": "BND", "body_markdown": "x" * 65537},
+            "create",
+            {"type": "STICKY", "project": "BND", "title": "Big", "content": "x" * 65537},
         )
         assert res_oversized["isError"] is True
         assert "code: VALIDATION_FAILED" in res_oversized["content"][0]["text"]
 
-        # 3. Create normal sticky, promote twice -> ALREADY_PROMOTED
+        # 4. Create normal sticky, promote twice -> ALREADY_PROMOTED
         res_sticky = await _call_mcp_tool(
             mcp_client,
             sess,
-            "manage_stickies",
-            {"action": "create", "project": "BND", "body_markdown": "Normal note", "color": "sky"},
+            "create",
+            {
+                "type": "STICKY",
+                "project": "BND",
+                "title": "Normal Note",
+                "content": "Normal note",
+                "color": "sky",
+            },
         )
         sticky_yaml = res_sticky["content"][0]["text"]
         s_id = (
-            [l for l in sticky_yaml.splitlines() if l.startswith("id:")][0].split(":", 1)[1].strip()
+            [line for line in sticky_yaml.splitlines() if line.startswith("id:")][0]
+            .split(":", 1)[1]
+            .strip()
         )
 
         # Promote 1st time
         res_promote1 = await _call_mcp_tool(
             mcp_client,
             sess,
-            "promote_sticky_to_doc",
-            {"sticky": s_id},
+            "update",
+            {"id": s_id, "type": "DOC", "title": "Promoted Once"},
         )
         assert res_promote1["isError"] is False
 
@@ -654,71 +648,90 @@ async def test_case_4_boundary_and_validation(
         res_promote2 = await _call_mcp_tool(
             mcp_client,
             sess,
-            "promote_sticky_to_doc",
-            {"sticky": s_id},
+            "update",
+            {"id": s_id, "type": "DOC", "title": "Promote Again"},
         )
         assert res_promote2["isError"] is True
         assert "code: ALREADY_PROMOTED" in res_promote2["content"][0]["text"]
 
-        # 4. Stale if_match -> CONFLICT_ETAG
+        # 5. Create doc to test diff-patch errors and stale if_match
         res_doc = await _call_mcp_tool(
             mcp_client,
             sess,
-            "upsert_doc",
-            {"title": "Boundary Doc", "body_markdown": "# Boundary Doc\nInitial content."},
+            "create",
+            {
+                "type": "DOC",
+                "title": "Boundary Doc",
+                "content": "# Boundary Doc\nLine one alpha.\nLine two duplicate.\nLine three duplicate.\nLine four omega.",
+            },
         )
         assert res_doc["isError"] is False
-
-        # 4a. Section patch with missing heading -> SECTION_NOT_FOUND
-        read_bnd = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "read_doc",
-            {"identifier": "docs/boundary-doc", "lod": "standard"},
-        )
+        doc_res_text = res_doc["content"][0]["text"]
         bnd_etag = (
-            [l for l in read_bnd["content"][0]["text"].splitlines() if l.startswith("etag:")][0]
+            [line for line in doc_res_text.splitlines() if line.startswith("etag:")][0]
             .split(":", 1)[1]
             .strip()
             .strip('"')
         )
-        res_sec_not_found = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "upsert_doc",
-            {
-                "identifier": "docs/boundary-doc",
-                "mode": "section_patch",
-                "section_heading": "Nonexistent Heading",
-                "body_markdown": "Replacement",
-                "if_match": bnd_etag,
-            },
-        )
-        assert res_sec_not_found["isError"] is True
-        assert "code: SECTION_NOT_FOUND" in res_sec_not_found["content"][0]["text"]
 
+        # 5a. Stale if_match -> CONFLICT_ETAG
         res_stale = await _call_mcp_tool(
             mcp_client,
             sess,
-            "upsert_doc",
+            "update",
             {
-                "identifier": "docs/boundary-doc",
-                "body_markdown": "Updated body",
+                "id": "docs/boundary-doc",
+                "original_text": "Line one alpha.",
+                "replacement_text": "Line one beta.",
                 "if_match": "0" * 64,
             },
         )
         assert res_stale["isError"] is True
         assert "code: CONFLICT_ETAG" in res_stale["content"][0]["text"]
 
-        # 5. Page at depth 10 accepts no child -> VALIDATION_FAILED
+        # 5b. Diff-patch count == 0 -> PATCH_TARGET_NOT_FOUND with closest_match
+        res_not_found = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": "docs/boundary-doc",
+                "original_text": "Line one mispelled alpha.",
+                "replacement_text": "Line one beta.",
+                "if_match": bnd_etag,
+            },
+        )
+        assert res_not_found["isError"] is True
+        err_not_found = res_not_found["content"][0]["text"]
+        assert "code: PATCH_TARGET_NOT_FOUND" in err_not_found
+        assert "closest_match:" in err_not_found
+
+        # 5c. Diff-patch count > 1 -> PATCH_TARGET_AMBIGUOUS with line_hints
+        res_ambiguous = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": "docs/boundary-doc",
+                "original_text": "duplicate.",
+                "replacement_text": "replacement.",
+            },
+        )
+        assert res_ambiguous["isError"] is True
+        err_ambig = res_ambiguous["content"][0]["text"]
+        assert "code: PATCH_TARGET_AMBIGUOUS" in err_ambig
+        assert "line_hints:" in err_ambig
+
+        # 6. Page at depth 10 accepts no child -> VALIDATION_FAILED
         res_deep = await _call_mcp_tool(
             mcp_client,
             sess,
-            "upsert_doc",
+            "create",
             {
+                "type": "DOC",
                 "parent": "docs/l1/l2/l3/l4/l5/l6/l7/l8/l9/l10",
                 "title": "Depth 11",
-                "body_markdown": "Too deep",
+                "content": "Too deep",
             },
         )
         assert res_deep["isError"] is True
@@ -733,7 +746,7 @@ async def test_case_4_boundary_and_validation(
 def test_case_5_isolation_and_token_budget() -> None:
     """Test Case 5:
 
-    - /mcp/docs tools/list returns exactly the 6 registered names
+    - /mcp/docs tools/list returns exactly the 3 registered names (search, create, update)
     - schema <= 1,350 approximate tokens
     """
     registry = build_docs_registry()
@@ -741,7 +754,9 @@ def test_case_5_isolation_and_token_budget() -> None:
     tool_names = [s.name for s in specs]
 
     assert tool_names == list(DOCS_TOOL_NAMES), f"Expected {DOCS_TOOL_NAMES}, got {tool_names}"
-    assert "ping_docs" not in tool_names
+    assert set(tool_names) == {"search", "create", "update"}
+    assert "read_doc" not in tool_names
+    assert "upsert_doc" not in tool_names
 
     tools_list = [
         {
@@ -766,7 +781,7 @@ async def test_case_6_handler_exhaustive_branches(
     make_user: Callable[..., Awaitable[SeededUser]],
     as_principal: Callable[..., httpx.AsyncClient],
 ) -> None:
-    """Test exhaustive branches across all 6 docs tools for >=95% coverage."""
+    """Test exhaustive branches across all 3 docs tools for >=95% coverage."""
     user = await make_user("branch_user", workspace_role="WORKSPACE_ADMIN")
     as_principal(user)
 
@@ -784,248 +799,404 @@ async def test_case_6_handler_exhaustive_branches(
         sess = await _init_mcp_session(mcp_client)
 
         # -------------------------------------------------------------
-        # manage_stickies branches
+        # search branches
         # -------------------------------------------------------------
-        # action: help
-        h_resp = await _call_mcp_tool(mcp_client, sess, "manage_stickies", {"action": "help"})
+        # id="help"
+        h_resp = await _call_mcp_tool(mcp_client, sess, "search", {"id": "help"})
         assert h_resp["isError"] is False
-        assert "tool: manage_stickies" in h_resp["content"][0]["text"]
+        assert "tool: search" in h_resp["content"][0]["text"]
 
-        # action: list
-        l_resp = await _call_mcp_tool(
-            mcp_client, sess, "manage_stickies", {"action": "list", "project": "EXH"}
-        )
+        # project listing with ALL
+        l_resp = await _call_mcp_tool(mcp_client, sess, "search", {"project": "EXH", "type": "ALL"})
         assert l_resp["isError"] is False
         assert "project: EXH" in l_resp["content"][0]["text"]
 
-        # action validation errors
-        bad_act = await _call_mcp_tool(
-            mcp_client, sess, "manage_stickies", {"action": "invalid_action"}
+        # project listing with DOC and include_tree
+        tree_resp = await _call_mcp_tool(
+            mcp_client, sess, "search", {"project": "EXH", "type": "DOC", "include_tree": True}
         )
-        assert bad_act["isError"] is True
-        assert "code: VALIDATION_FAILED" in bad_act["content"][0]["text"]
+        assert tree_resp["isError"] is False
 
-        miss_proj = await _call_mcp_tool(mcp_client, sess, "manage_stickies", {"action": "create"})
+        # workspace listing (no project, no id, no query)
+        ws_resp = await _call_mcp_tool(mcp_client, sess, "search", {})
+        assert ws_resp["isError"] is False
+
+        # query validation: empty, too long, bad type
+        q_empty = await _call_mcp_tool(mcp_client, sess, "search", {"query": ""})
+        assert q_empty["isError"] is True
+
+        q_long = await _call_mcp_tool(mcp_client, sess, "search", {"query": "a" * 501})
+        assert q_long["isError"] is True
+
+        q_bad_type = await _call_mcp_tool(
+            mcp_client, sess, "search", {"query": "test", "type": "invalid"}
+        )
+        assert q_bad_type["isError"] is True
+
+        # query with STICKY
+        q_valid = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "search",
+            {"query": "test", "type": "STICKY", "project": "EXH", "limit": 10},
+        )
+        assert q_valid["isError"] is False
+
+        # search by non-existent UUID -> NOT_FOUND
+        missing_uuid = str(uuid.uuid4())
+        miss_resp = await _call_mcp_tool(mcp_client, sess, "search", {"id": missing_uuid})
+        assert miss_resp["isError"] is True
+        assert "NOT_FOUND" in miss_resp["content"][0]["text"]
+
+        # -------------------------------------------------------------
+        # create branches
+        # -------------------------------------------------------------
+        # invalid type
+        bad_type = await _call_mcp_tool(
+            mcp_client, sess, "create", {"type": "INVALID", "title": "T"}
+        )
+        assert bad_type["isError"] is True
+
+        # missing title
+        miss_title = await _call_mcp_tool(mcp_client, sess, "create", {"type": "DOC", "title": ""})
+        assert miss_title["isError"] is True
+
+        # sticky missing project
+        miss_proj = await _call_mcp_tool(
+            mcp_client, sess, "create", {"type": "STICKY", "title": "T"}
+        )
         assert miss_proj["isError"] is True
-        assert "Parameter 'project' is required" in miss_proj["content"][0]["text"]
 
-        # create a sticky for edit & recolor
-        stk_resp = await _call_mcp_tool(
+        # sticky with links and valid color
+        stk_ok = await _call_mcp_tool(
             mcp_client,
             sess,
-            "manage_stickies",
+            "create",
             {
-                "action": "create",
+                "type": "STICKY",
                 "project": "EXH",
-                "body_markdown": "# Sticky Note\nDetails here.",
+                "title": "Branch Sticky",
+                "content": "Sticky details here",
                 "color": "mint",
+                "links": ["EXH-1"],
             },
         )
-        assert stk_resp["isError"] is False
-        stk_yaml = stk_resp["content"][0]["text"]
+        assert stk_ok["isError"] is False
+        stk_yaml = stk_ok["content"][0]["text"]
         stk_id = (
-            [l for l in stk_yaml.splitlines() if l.startswith("id:")][0].split(":", 1)[1].strip()
+            [line for line in stk_yaml.splitlines() if line.startswith("id:")][0]
+            .split(":", 1)[1]
+            .strip()
         )
 
-        # edit without body_markdown -> error
-        edit_no_body = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "manage_stickies",
-            {"action": "edit", "project": "EXH", "sticky": stk_id},
-        )
-        assert edit_no_body["isError"] is True
+        # search sticky by ID with summary and full LOD
+        stk_sum = await _call_mcp_tool(mcp_client, sess, "search", {"id": stk_id, "lod": "summary"})
+        assert stk_sum["isError"] is False
+        assert "kind: sticky" in stk_sum["content"][0]["text"]
 
-        # edit with body_markdown -> updated
-        edit_ok = await _call_mcp_tool(
+        stk_full = await _call_mcp_tool(mcp_client, sess, "search", {"id": stk_id, "lod": "full"})
+        assert stk_full["isError"] is False
+        assert "capabilities:" in stk_full["content"][0]["text"]
+
+        # create doc with body > 1 MiB -> VALIDATION_FAILED
+        from mcp.errors import KbMcpError, McpErrorCode
+        from mcp.surfaces.docs.create import create_handler
+
+        with pytest.raises(KbMcpError) as exc_large:
+            await create_handler(
+                {"type": "DOC", "title": "Large Doc", "content": "x" * 1_048_577},
+                client=cast("Any", api_env.client),
+            )
+        assert exc_large.value.code == McpErrorCode.VALIDATION_FAILED
+
+        # create doc with inline links
+        doc_ok = await _call_mcp_tool(
             mcp_client,
             sess,
-            "manage_stickies",
+            "create",
             {
-                "action": "edit",
+                "type": "DOC",
+                "title": "Exhaustive Doc",
                 "project": "EXH",
-                "sticky": stk_id,
-                "body_markdown": "# Updated Sticky\nNew body.",
+                "content": "# Exhaustive Doc\nInitial paragraph.",
+                "links": ["EXH-1", "VERIFIED_BY_DOC:EXH-1"],
             },
         )
-        assert edit_ok["isError"] is False
-        assert "status: updated" in edit_ok["content"][0]["text"]
-
-        # recolor without color -> error
-        rec_no_color = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "manage_stickies",
-            {"action": "recolor", "project": "EXH", "sticky": stk_id},
-        )
-        assert rec_no_color["isError"] is True
-
-        # recolor with valid color -> recolored
-        rec_ok = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "manage_stickies",
-            {"action": "recolor", "project": "EXH", "sticky": stk_id, "color": "coral"},
-        )
-        assert rec_ok["isError"] is False
-        assert "status: recolored" in rec_ok["content"][0]["text"]
-
-        # -------------------------------------------------------------
-        # read_doc branches (sticky by UUID, summary, full)
-        # -------------------------------------------------------------
-        rd_summary = await _call_mcp_tool(
-            mcp_client, sess, "read_doc", {"identifier": stk_id, "lod": "summary"}
-        )
-        assert rd_summary["isError"] is False
-        assert "kind: sticky" in rd_summary["content"][0]["text"]
-
-        rd_full = await _call_mcp_tool(
-            mcp_client, sess, "read_doc", {"identifier": stk_id, "lod": "full"}
-        )
-        assert rd_full["isError"] is False
-        assert "capabilities:" in rd_full["content"][0]["text"]
-
-        # -------------------------------------------------------------
-        # search_knowledge branches (kinds filter, invalid query, limit)
-        # -------------------------------------------------------------
-        sk_doc = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "search_knowledge",
-            {"query": "Sticky", "kinds": ["sticky"], "project": "EXH", "limit": 10},
-        )
-        assert sk_doc["isError"] is False
-
-        sk_empty = await _call_mcp_tool(mcp_client, sess, "search_knowledge", {"query": ""})
-        assert sk_empty["isError"] is True
-        assert "VALIDATION_FAILED" in sk_empty["content"][0]["text"]
-
-        sk_toolong = await _call_mcp_tool(
-            mcp_client, sess, "search_knowledge", {"query": "a" * 501}
-        )
-        assert sk_toolong["isError"] is True
-
-        sk_badkinds = await _call_mcp_tool(
-            mcp_client, sess, "search_knowledge", {"query": "test", "kinds": ["invalid"]}
-        )
-        assert sk_badkinds["isError"] is True
-
-        # -------------------------------------------------------------
-        # upsert_doc branches (invalid mode, invalid title, append)
-        # -------------------------------------------------------------
-        up_notitle = await _call_mcp_tool(mcp_client, sess, "upsert_doc", {"title": ""})
-        assert up_notitle["isError"] is True
-
-        # create a doc to test append & mode errors
-        doc_resp = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "upsert_doc",
-            {"title": "Exhaustive Doc", "body_markdown": "# Title\nInitial text."},
-        )
-        assert doc_resp["isError"] is False
-        d_etag = (
-            [l for l in doc_resp["content"][0]["text"].splitlines() if l.startswith("etag:")][0]
+        assert doc_ok["isError"] is False
+        doc_yaml = doc_ok["content"][0]["text"]
+        doc_etag = (
+            [line for line in doc_yaml.splitlines() if line.startswith("etag:")][0]
             .split(":", 1)[1]
             .strip()
             .strip('"')
         )
 
-        # invalid update mode
-        bad_mode = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "upsert_doc",
-            {
-                "identifier": "docs/exhaustive-doc",
-                "if_match": d_etag,
-                "mode": "invalid_mode",
-                "body_markdown": "x",
-            },
-        )
-        assert bad_mode["isError"] is True
-        assert "VALIDATION_FAILED" in bad_mode["content"][0]["text"]
-
-        # append mode
-        append_ok = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "upsert_doc",
-            {
-                "identifier": "docs/exhaustive-doc",
-                "if_match": d_etag,
-                "mode": "append",
-                "body_markdown": "Appended text.",
-            },
-        )
-        assert append_ok["isError"] is False
-
         # -------------------------------------------------------------
-        # promote_sticky_to_doc branches
+        # update branches
         # -------------------------------------------------------------
-        bad_stk_id = await _call_mcp_tool(
-            mcp_client, sess, "promote_sticky_to_doc", {"sticky": "not-a-uuid"}
-        )
-        assert bad_stk_id["isError"] is True
-        assert "VALIDATION_FAILED" in bad_stk_id["content"][0]["text"]
+        # missing id
+        up_noid = await _call_mcp_tool(mcp_client, sess, "update", {"id": ""})
+        assert up_noid["isError"] is True
 
-        miss_stk = await _call_mcp_tool(
-            mcp_client, sess, "promote_sticky_to_doc", {"sticky": str(uuid.uuid4())}
+        # title length > 200
+        up_badtitle = await _call_mcp_tool(
+            mcp_client, sess, "update", {"id": "docs/exhaustive-doc", "title": "x" * 201}
         )
-        assert miss_stk["isError"] is True
-        assert "NOT_FOUND" in miss_stk["content"][0]["text"]
+        assert up_badtitle["isError"] is True
 
-        # promote top-level doc
-        prom_ok = await _call_mcp_tool(
+        # sticky invalid color
+        stk_badcol = await _call_mcp_tool(
+            mcp_client, sess, "update", {"id": stk_id, "color": "invalid"}
+        )
+        assert stk_badcol["isError"] is True
+
+        # update sticky color and diff-patch
+        stk_up = await _call_mcp_tool(
             mcp_client,
             sess,
-            "promote_sticky_to_doc",
-            {"sticky": stk_id, "title": "Promoted Sticky Doc"},
-        )
-        assert prom_ok["isError"] is False
-
-        # -------------------------------------------------------------
-        # link_knowledge branches (remove, invalid action, invalid link_type)
-        # -------------------------------------------------------------
-        bad_link_type = await _call_mcp_tool(
-            mcp_client,
-            sess,
-            "link_knowledge",
+            "update",
             {
-                "source": "docs/exhaustive-doc",
-                "target": "EXH",
-                "target_kind": "project",
-                "link_type": "INVALID_TYPE",
+                "id": stk_id,
+                "color": "coral",
+                "original_text": "details here",
+                "replacement_text": "updated details",
             },
         )
-        assert bad_link_type["isError"] is True
-        assert "LINK_TYPE_NOT_ALLOWED" in bad_link_type["content"][0]["text"]
+        assert stk_up["isError"] is False
+        assert "color: coral" in stk_up["content"][0]["text"]
 
-        bad_action = await _call_mcp_tool(
+        # update sticky content directly
+        stk_content = await _call_mcp_tool(
             mcp_client,
             sess,
-            "link_knowledge",
+            "update",
             {
-                "source": "docs/exhaustive-doc",
-                "target": "EXH",
-                "target_kind": "project",
-                "action": "explode",
+                "id": stk_id,
+                "content": "# New Sticky Title\nUpdated full content",
             },
         )
-        assert bad_action["isError"] is True
-        assert "VALIDATION_FAILED" in bad_action["content"][0]["text"]
+        assert stk_content["isError"] is False
 
-        # remove link
-        rem_link = await _call_mcp_tool(
+        # update sticky links with dict syntax
+        stk_links_dict = await _call_mcp_tool(
             mcp_client,
             sess,
-            "link_knowledge",
+            "update",
             {
-                "source": "docs/exhaustive-doc",
-                "target": "EXH",
-                "target_kind": "project",
-                "action": "remove",
+                "id": stk_id,
+                "links": {"add": ["EXH-1"], "remove": ["EXH-1"]},
             },
         )
-        assert rem_link["isError"] is False
-        assert "status: unlinked" in rem_link["content"][0]["text"]
+        assert stk_links_dict["isError"] is False
+
+        # update doc title and content directly with valid if_match
+        doc_update_ok = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": "docs/exhaustive-doc",
+                "title": "Renamed Exhaustive Doc",
+                "content": "# Renamed Doc\nAll new content here.",
+                "if_match": doc_etag,
+                "links": ["-EXH-1"],
+            },
+        )
+        assert doc_update_ok["isError"] is False
+        assert "title: Renamed Exhaustive Doc" in doc_update_ok["content"][0]["text"]
+
+        # auto-promote sticky to child page under docs/exhaustive-doc
+        stk_child = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "STICKY",
+                "project": "EXH",
+                "title": "Child Sticky",
+                "content": "Content to be child page",
+            },
+        )
+        child_stk_id = (
+            [
+                line
+                for line in stk_child["content"][0]["text"].splitlines()
+                if line.startswith("id:")
+            ][0]
+            .split(":", 1)[1]
+            .strip()
+        )
+
+        promote_child = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": child_stk_id,
+                "type": "DOC",
+                "parent": "docs/exhaustive-doc",
+                "title": "Promoted Child Page",
+                "links": ["+EXH-1"],
+            },
+        )
+        assert promote_child["isError"] is False
+        assert "status: promoted" in promote_child["content"][0]["text"]
+
+        # Additional search coverage
+        srch_sum = await _call_mcp_tool(
+            mcp_client, sess, "search", {"id": "docs/exhaustive-doc", "lod": "summary"}
+        )
+        assert srch_sum["isError"] is False
+
+        srch_std = await _call_mcp_tool(
+            mcp_client, sess, "search", {"id": "docs/exhaustive-doc", "lod": "standard"}
+        )
+        assert srch_std["isError"] is False
+
+        srch_full_tree = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "search",
+            {"id": "docs/exhaustive-doc", "lod": "full", "include_tree": True},
+        )
+        assert srch_full_tree["isError"] is False
+
+        srch_stk_list = await _call_mcp_tool(
+            mcp_client, sess, "search", {"project": "EXH", "type": "STICKY"}
+        )
+        assert srch_stk_list["isError"] is False
+
+        srch_doc_list = await _call_mcp_tool(
+            mcp_client, sess, "search", {"project": "EXH", "type": "DOC"}
+        )
+        assert srch_doc_list["isError"] is False
+
+        srch_missing_doc = await _call_mcp_tool(
+            mcp_client, sess, "search", {"id": "docs/nonexistent-doc"}
+        )
+        assert srch_missing_doc["isError"] is True
+        assert "NOT_FOUND" in srch_missing_doc["content"][0]["text"]
+
+        # Additional create coverage
+        cr_empty_doc = await _call_mcp_tool(
+            mcp_client, sess, "create", {"type": "DOC", "title": "Empty Doc"}
+        )
+        assert cr_empty_doc["isError"] is False
+
+        cr_child_page = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "DOC",
+                "parent": "docs/exhaustive-doc",
+                "title": "Direct Child Page",
+                "content": "Page content here",
+            },
+        )
+        assert cr_child_page["isError"] is False
+        page_ref = "docs/exhaustive-doc/direct-child-page"
+
+        cr_bare_stk = await _call_mcp_tool(
+            mcp_client, sess, "create", {"type": "STICKY", "project": "EXH", "title": "Bare Sticky"}
+        )
+        assert cr_bare_stk["isError"] is False
+
+        # Additional update coverage
+        up_page_patch = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": page_ref,
+                "original_text": "Page content",
+                "replacement_text": "Patched page content",
+            },
+        )
+        assert up_page_patch["isError"] is False
+        assert "status: updated" in up_page_patch["content"][0]["text"]
+
+        up_page_title = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": page_ref,
+                "title": "Renamed Direct Child Page",
+            },
+        )
+        assert up_page_title["isError"] is False
+
+        up_stk_empty_link = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": stk_id,
+                "links": [""],
+            },
+        )
+        assert up_stk_empty_link["isError"] is False
+
+        # Direct helper functions verification
+        from mcp.surfaces.docs.create import (
+            _parse_link_target as parse_create_link,
+        )
+        from mcp.surfaces.docs.create import (
+            create_docs_create_tool,
+        )
+        from mcp.surfaces.docs.search import (
+            _extract_headings,
+            _extract_sticky_title,
+            _format_access_pill,
+            create_docs_search_tool,
+        )
+        from mcp.surfaces.docs.update import (
+            _diff_patch_content,
+            _find_closest_matches,
+            _find_line_hints,
+            create_docs_update_tool,
+        )
+        from mcp.surfaces.docs.update import (
+            _parse_link_target as parse_update_link,
+        )
+
+        md_test = (
+            "# Heading 1\n"
+            "```python\n"
+            "# Code comment\n"
+            "```\n"
+            "~~~bash\n"
+            "# Bash comment\n"
+            "~~~\n"
+            "## Heading 2\n"
+        )
+        extracted = _extract_headings(md_test)
+        assert len(extracted) == 2
+        assert extracted[0]["text"] == "Heading 1"
+        assert extracted[1]["text"] == "Heading 2"
+
+        assert _format_access_pill(None) == "project"
+        assert _format_access_pill({"scope": "WORKSPACE"}) == "workspace"
+        assert _extract_sticky_title("", "mint") == "Sticky mint"
+        assert _extract_sticky_title("First line", "amber") == "First line"
+
+        t_c, lt_c = parse_create_link("DERIVED_FROM_STICKY:STK-1")
+        assert t_c == "STK-1"
+        assert lt_c == "DERIVED_FROM_STICKY"
+
+        t_u, lt_u = parse_update_link("VERIFIED_BY_DOC:DOC-9")
+        assert t_u == "DOC-9"
+        assert lt_u == "VERIFIED_BY_DOC"
+
+        assert _find_closest_matches("", "target") == []
+        assert _find_line_hints("line 1\ntarget\nline 3\ntarget", "target") == [2, 4]
+
+        with pytest.raises(KbMcpError) as exc_etag:
+            _diff_patch_content("body", "orig", "rep", "sha1", "sha2")
+        assert exc_etag.value.code == McpErrorCode.CONFLICT_ETAG
+
+        # Verify tool builders
+        assert create_docs_search_tool().name == "search"
+        assert create_docs_create_tool().name == "create"
+        assert create_docs_update_tool().name == "update"
