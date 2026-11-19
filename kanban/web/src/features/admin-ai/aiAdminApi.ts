@@ -107,13 +107,55 @@ export async function setBudget(payload: BudgetSetRequest): Promise<BudgetRecord
   return (await apiFetch('PUT', '/api/v1/admin/ai/budgets' as never, { body: payload })) as BudgetRecord;
 }
 
+export interface ProviderProbeRequest {
+  provider_kind: string;
+  base_url?: string | null;
+  api_key?: string | null;
+  settings_json?: Record<string, unknown> | null;
+}
+
+export interface ProviderProbeResult {
+  ok: boolean;
+  latency_ms: number;
+  models: string[];
+  model_count: number;
+  error_code?: string | null;
+  message?: string | null;
+}
+
 export async function fetchAirGapMode(): Promise<boolean> {
   try {
-    const settings = (await apiFetch('GET', '/api/v1/workspaces/settings' as never)) as {
+    const settings = (await apiFetch('GET', '/api/v1/admin/workspace-settings' as never)) as {
       air_gap_mode?: boolean;
     };
     return Boolean(settings.air_gap_mode);
   } catch {
     return false;
   }
+}
+
+export async function reorderAiProviders(orderedIds: string[]): Promise<ProviderConfigPublic[]> {
+  return (await apiFetch('PUT', '/api/v1/admin/ai/providers/order' as never, {
+    body: { ordered_ids: orderedIds },
+  })) as ProviderConfigPublic[];
+}
+
+export async function probeAiModels(
+  payload: ProviderProbeRequest,
+  providerId?: string,
+): Promise<ProviderProbeResult> {
+  const path = providerId
+    ? `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}/probe-models`
+    : '/api/v1/admin/ai/providers/probe-models';
+  return (await apiFetch('POST', path as never, { body: payload })) as ProviderProbeResult;
+}
+
+export async function testAiConnection(
+  payload: ProviderProbeRequest,
+  providerId?: string,
+): Promise<ProviderProbeResult> {
+  const path = providerId
+    ? `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}/test-connection`
+    : '/api/v1/admin/ai/providers/test-connection';
+  return (await apiFetch('POST', path as never, { body: payload })) as ProviderProbeResult;
 }

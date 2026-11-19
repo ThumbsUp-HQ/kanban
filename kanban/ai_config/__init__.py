@@ -2,6 +2,11 @@
 # Apache-2.0 License. See LICENSE for details.
 """AI provider configuration package."""
 
+from kanban.ai_config.net_guard import (
+    EgressDeniedError,
+    is_local_base_url,
+    resolve_and_pin,
+)
 from kanban.ai_config.service import (
     AIConfigNotFoundError,
     AIConfigValidationError,
@@ -17,7 +22,10 @@ __all__ = [
     "AIConfigValidationError",
     "AIProviderConfigService",
     "AirGapViolation",
+    "EgressDeniedError",
     "EnvelopeIntegrityError",
     "build_ai_provider_aad",
+    "is_local_base_url",
+    "resolve_and_pin",
     "validate_base_url",
 ]

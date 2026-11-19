@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import re
 
+from kanban.ai_config.net_guard import EgressDeniedError
+
 _CODE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 
 _BEARER_PATTERN: re.Pattern[str] = re.compile(
@@ -151,9 +153,10 @@ class ProviderPolicyError(ProviderError):
         super().__init__(message, code=code)
 
 
-class EgressDenied(ProviderPolicyError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
+class EgressDenied(ProviderPolicyError, EgressDeniedError):  # noqa: N818  # Class name mandated by KB-P0-12 spec
     """Raised when air-gap mode or network policy forbids egress to the provider."""
 
     def __init__(self, message: str, code: str = "EGRESS_DENIED") -> None:
         """Initialize egress denied policy error."""
         super().__init__(message, code=code)
+        self.code = _validate_code(code)

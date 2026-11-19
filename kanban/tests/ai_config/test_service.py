@@ -6,10 +6,13 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
+from unittest import mock
 
+import httpx
 import pytest
 
 from database.tests.conftest import bootstrap_workspace_admin
+from kanban.ai_config.net_guard import EgressDeniedError
 from kanban.ai_config.service import (
     AIConfigNotFoundError,
     AIConfigValidationError,
@@ -455,3 +458,345 @@ async def test_unwrap_edge_cases(
             uuid.uuid4(),
             secret_override=(b"k", b"n" * 12, b"d", "kek-v1"),
         )
+
+
+def test_private_lan_and_ssrf_base_urls() -> None:
+    """Verify validate_base_url allows private LAN and rejects SSRF/metadata/insecure public."""
+    # 1. RFC1918 private IPv4 addresses allowed over http
+    assert validate_base_url("http://10.0.0.1:11434") == "http://10.0.0.1:11434"
+    assert validate_base_url("http://172.16.0.5:8000/v1") == "http://172.16.0.5:8000/v1"
+    assert validate_base_url("http://192.168.1.100:8080") == "http://192.168.1.100:8080"
+
+    # 2. IPv6 ULA (fc00::/7) allowed over http
+    assert validate_base_url("http://[fc00::1]:8000") == "http://[fc00::1]:8000"
+    assert (
+        validate_base_url("http://[fd12:3456:789a::1]:11434") == "http://[fd12:3456:789a::1]:11434"
+    )
+
+    # 3. Pinned private LAN hostnames allowed over http
+    assert validate_base_url("http://ollama.local:11434") == "http://ollama.local:11434"
+    assert validate_base_url("http://vllm.internal:8000") == "http://vllm.internal:8000"
+    assert validate_base_url("http://inference.lan:8000") == "http://inference.lan:8000"
+    assert validate_base_url("http://model.home:8000") == "http://model.home:8000"
+    assert validate_base_url("http://cluster.corp:8000") == "http://cluster.corp:8000"
+
+    # 4. Public HTTPS allowed
+    assert validate_base_url("https://api.openai.com/v1") == "https://api.openai.com/v1"
+    assert (
+        validate_base_url("https://generativelanguage.googleapis.com")
+        == "https://generativelanguage.googleapis.com"
+    )
+
+    # 5. Public HTTP rejected
+    with pytest.raises(AIConfigValidationError, match="must use HTTPS"):
+        validate_base_url("http://api.openai.com/v1")
+    with pytest.raises(AIConfigValidationError, match="must use HTTPS"):
+        validate_base_url("http://8.8.8.8:8000")
+
+    # 6. Hard-denied cloud metadata and link-local rejected on HTTP and HTTPS
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("http://169.254.169.254/latest/meta-data")
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("https://169.254.169.254")
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("http://[fe80::1]:8000")
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("http://100.64.0.1:8000")
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("http://0.0.0.0:8000")
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("http://224.0.0.1:8000")
+    with pytest.raises(AIConfigValidationError, match="link-local, multicast, or metadata"):
+        validate_base_url("http://[ff02::1]:8000")
+
+
+@pytest.mark.asyncio
+async def test_air_gap_with_local_openai(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify local openai endpoints are allowed under air gap mode, while cloud is rejected."""
+    ws_id, _ = await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    # 1. Local OpenAI endpoint with private LAN base_url works under air-gap
+    local_cfg = await service.create_config(
+        workspace_id=ws_id,
+        provider_kind="openai",
+        display_name="Local vLLM Server",
+        model_allowlist=["llama-3-70b"],
+        base_url="http://192.168.1.50:8000/v1",
+        air_gap_mode=True,
+    )
+    assert local_cfg.base_url == "http://192.168.1.50:8000/v1"
+
+    # 2. Cloud OpenAI endpoint without local base_url fails under air-gap
+    with pytest.raises(AirGapViolation, match="outbound cloud egress"):
+        await service.create_config(
+            workspace_id=ws_id,
+            provider_kind="openai",
+            display_name="Cloud OpenAI",
+            model_allowlist=["gpt-4o"],
+            base_url="https://api.openai.com/v1",
+            air_gap_mode=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_ollama(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify probe_provider for ollama returns models on 200 and handles non-200."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    # 1. Successful probe
+    mock_resp = mock.MagicMock(spec=httpx.Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"models": [{"name": "llama3:8b"}, {"name": "mistral:latest"}]}
+
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+        res = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://127.0.0.1:11434",
+        )
+        assert res["ok"] is True
+        assert res["models"] == ["llama3:8b", "mistral:latest"]
+        assert res["model_count"] == 2
+        assert res["error_code"] is None
+        assert mock_get.call_args[0][0] == "http://127.0.0.1:11434/api/tags"
+
+    # 2. HTTP error response
+    mock_err_resp = mock.MagicMock(spec=httpx.Response)
+    mock_err_resp.status_code = 503
+    mock_err_resp.text = "Service Unavailable"
+
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.return_value = mock_err_resp
+        res = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://127.0.0.1:11434",
+        )
+        assert res["ok"] is False
+        assert res["error_code"] == "HTTP_503"
+        assert "Service Unavailable" in res["message"]
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_gemini_and_headers(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify probe_provider sends x-goog-api-key header and strips prefix."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    # 1. Successful probe with x-goog-api-key header
+    mock_resp = mock.MagicMock(spec=httpx.Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "models": [{"name": "models/gemini-1.5-pro"}, {"name": "models/gemini-1.5-flash"}]
+    }
+
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = mock_resp
+        res = await service.probe_provider(
+            provider_kind="gemini",
+            api_key="secret-gemini-key",
+        )
+        assert res["ok"] is True
+        assert res["models"] == ["gemini-1.5-pro", "gemini-1.5-flash"]
+        assert res["model_count"] == 2
+
+        # Verify x-goog-api-key header was used, not ?key= URL query
+        called_url = mock_get.call_args[0][0]
+        assert "?key=" not in called_url
+        headers = mock_get.call_args[1].get("headers", {})
+        assert headers.get("x-goog-api-key") == "secret-gemini-key"
+
+    # 2. Upstream auth failure
+    mock_auth_fail = mock.MagicMock(spec=httpx.Response)
+    mock_auth_fail.status_code = 401
+    mock_auth_fail.text = "API key not valid"
+
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = mock_auth_fail
+        res = await service.probe_provider(
+            provider_kind="gemini",
+            api_key="invalid-key",
+        )
+        assert res["ok"] is False
+        assert res["error_code"] == "UPSTREAM_AUTH_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_openai_and_network_errors(  # noqa: PLR0915
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify probe_provider for openai handles fallback, connection errors, and timeouts."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    # 1. OpenAI 404 fallback from /v1/models to /models
+    resp_404 = mock.MagicMock(spec=httpx.Response)
+    resp_404.status_code = 404
+    resp_200 = mock.MagicMock(spec=httpx.Response)
+    resp_200.status_code = 200
+    resp_200.json.return_value = {"data": [{"id": "gpt-4o"}, {"id": "gpt-4o-mini"}]}
+
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.side_effect = [resp_404, resp_200]
+        res = await service.probe_provider(
+            provider_kind="openai",
+            base_url="http://127.0.0.1:8000",
+            api_key="test-key",
+        )
+        assert res["ok"] is True
+        assert res["models"] == ["gpt-4o", "gpt-4o-mini"]
+        assert mock_get.call_count == 2
+
+    # 2. Connection refused error
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.side_effect = httpx.ConnectError("Connection refused")
+        res = await service.probe_provider(
+            provider_kind="openai",
+            base_url="http://127.0.0.1:8000/v1",
+        )
+        assert res["ok"] is False
+        assert res["error_code"] == "CONNECTION_REFUSED"
+
+    # 3. Upstream timeout error
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.side_effect = httpx.TimeoutException("Timed out")
+        res = await service.probe_provider(
+            provider_kind="openai",
+            base_url="http://127.0.0.1:8000/v1",
+        )
+        assert res["ok"] is False
+        assert res["error_code"] == "UPSTREAM_TIMEOUT"
+
+    # 4. Air gap rejection during probe
+    res_air_gap = await service.probe_provider(
+        provider_kind="openai",
+        base_url="https://api.openai.com/v1",
+        air_gap_mode=True,
+    )
+    assert res_air_gap["ok"] is False
+    assert res_air_gap["error_code"] == "AIR_GAP_EGRESS_DENIED"
+
+    # 5. Invalid base URL during probe
+    res_bad_url = await service.probe_provider(
+        provider_kind="openai",
+        base_url="ftp://127.0.0.1",
+    )
+    assert res_bad_url["ok"] is False
+    assert res_bad_url["error_code"] == "INVALID_BASE_URL"
+
+    # 6. EgressDeniedError during probe
+    with mock.patch(
+        "kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock
+    ) as mock_pin:
+        mock_pin.side_effect = EgressDeniedError("SSRF denied", code="METADATA_DENIED")
+        res_egress = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://127.0.0.1:11434",
+        )
+        assert res_egress["ok"] is False
+        assert res_egress["error_code"] == "METADATA_DENIED"
+
+    # 7. Generic unexpected Exception during probe
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.side_effect = RuntimeError("Fatal hardware failure")
+        res_err = await service.probe_provider(
+            provider_kind="openai",
+            base_url="http://127.0.0.1:8000/v1",
+        )
+        assert res_err["ok"] is False
+        assert res_err["error_code"] == "PROBE_ERROR"
+
+    # 8. Gemini HTTP 500 error
+    resp_500 = mock.MagicMock(spec=httpx.Response)
+    resp_500.status_code = 500
+    resp_500.text = "Internal error"
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = resp_500
+        res_g500 = await service.probe_provider(
+            provider_kind="gemini",
+            api_key="valid-key",
+        )
+        assert res_g500["ok"] is False
+        assert res_g500["error_code"] == "HTTP_500"
+
+    # 9. OpenAI HTTP 500 error
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = resp_500
+        res_o500 = await service.probe_provider(
+            provider_kind="openai",
+            base_url="http://127.0.0.1:8000/v1",
+        )
+        assert res_o500["ok"] is False
+        assert res_o500["error_code"] == "HTTP_500"
+
+    # 7. Empty host rejected
+    with pytest.raises(AIConfigValidationError, match="valid host"):
+        validate_base_url("http://:8080")
+
+
+@pytest.mark.asyncio
+async def test_budget_additional_branches(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify set_budget and get_budgets validation branches and monthly period."""
+    ws_id, _ = await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+    proj_id = await create_project(db_session, ws_id, identifier="BPRJ")
+
+    cfg = await service.create_config(
+        workspace_id=ws_id,
+        provider_kind="ollama",
+        display_name="Budget Ollama",
+        model_allowlist=["llama3"],
+    )
+
+    # 1. Invalid period_kind
+    with pytest.raises(AIConfigValidationError, match="period_kind must be 'daily' or 'monthly'"):
+        await service.set_budget(ws_id, cfg.id, period_kind="yearly", token_cap=1000)
+
+    # 2. Negative token_cap
+    with pytest.raises(AIConfigValidationError, match="token_cap must be between 0"):
+        await service.set_budget(ws_id, cfg.id, period_kind="daily", token_cap=-1)
+
+    # 3. Monthly budget creation and update
+    monthly_b = await service.set_budget(
+        ws_id, cfg.id, period_kind="monthly", token_cap=50000, project_id=proj_id
+    )
+    assert monthly_b.period_kind == "monthly"
+    assert monthly_b.token_cap == 50000
+    assert monthly_b.project_id == proj_id
+
+    # Update existing monthly budget
+    monthly_updated = await service.set_budget(
+        ws_id, cfg.id, period_kind="monthly", token_cap=60000, project_id=proj_id
+    )
+    assert monthly_updated.token_cap == 60000
+
+    # 4. get_budgets with project_id
+    budgets = await service.get_budgets(cfg.id, project_id=proj_id)
+    assert len(budgets) == 1
+    assert budgets[0].project_id == proj_id

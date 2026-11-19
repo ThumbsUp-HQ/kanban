@@ -29,6 +29,10 @@ from kanban.api.v1.admin.ai_schemas import (
     ProviderConfigCreate,
     ProviderConfigPublic,
     ProviderConfigUpdate,
+    ProviderProbeRequest,
+    ProviderProbeResult,
+    ProviderReorderRequest,
+    SavedProviderProbeRequest,
 )
 from kanban.auth.mfa.policy import require_admin_aal2
 from kanban.services.activity import ActivityEventType, record_activity
@@ -152,6 +156,200 @@ async def list_providers(
             project_id=project_id,
         )
         return [_to_public_config(c) for c in configs]
+
+
+@router.put(
+    "/providers/order",
+    response_model=list[ProviderConfigPublic],
+    summary="Atomically reorder AI providers",
+)
+async def reorder_providers(
+    body: ProviderReorderRequest,
+    caller: Caller,
+    session: Session,
+) -> list[ProviderConfigPublic]:
+    """Atomically reorder all AI provider configurations in workspace."""
+    async with timing_floor(floor_ms=25.0):
+        await _assert_admin_for_scope(session, caller, None)
+
+        if len(body.ordered_ids) != len(set(body.ordered_ids)):
+            raise ProblemException(
+                code="INVALID_REORDER_REQUEST",
+                status=422,
+                title="Validation Error",
+                detail="ordered_ids list contains duplicate IDs",
+            )
+
+        stmt = (
+            select(AIProviderConfig)
+            .where(AIProviderConfig.workspace_id == caller.workspace_id)
+            .with_for_update()
+        )
+        res = await session.execute(stmt)
+        configs = list(res.scalars().all())
+        config_map = {c.id: c for c in configs}
+
+        existing_ids = set(config_map.keys())
+        req_ids = set(body.ordered_ids)
+        if existing_ids != req_ids:
+            missing = existing_ids - req_ids
+            extra = req_ids - existing_ids
+            detail_parts: list[str] = []
+            if missing:
+                detail_parts.append(f"missing provider IDs: {[str(m) for m in missing]}")
+            if extra:
+                detail_parts.append(f"unrecognized provider IDs: {[str(e) for e in extra]}")
+            raise ProblemException(
+                code="INVALID_REORDER_MEMBERSHIP",
+                status=422,
+                title="Validation Error",
+                detail=f"Full membership validation failed: {'; '.join(detail_parts)}",
+            )
+
+        assigned: dict[str, int] = {}
+        for idx, provider_id in enumerate(body.ordered_ids):
+            new_priority = (idx + 1) * 10
+            config_map[provider_id].priority = new_priority
+            assigned[str(provider_id)] = new_priority
+
+        await session.flush()
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_REORDERED,
+            payload={
+                "ordered_ids": [str(uid) for uid in body.ordered_ids],
+                "assigned_priorities": assigned,
+            },
+        )
+
+        return [_to_public_config(config_map[uid]) for uid in body.ordered_ids]
+
+
+@router.post(
+    "/providers/probe-models",
+    response_model=ProviderProbeResult,
+    summary="Probe upstream models for unsaved AI provider configuration",
+)
+async def probe_provider_models(
+    body: ProviderProbeRequest,
+    caller: Caller,
+    session: Session,
+) -> ProviderProbeResult:
+    """Probe models for an unsaved AI provider draft configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _assert_admin_for_scope(session, caller, None)
+        service = AIProviderConfigService(session)
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
+        res = await service.probe_provider(
+            provider_kind=body.provider_kind,
+            base_url=body.base_url,
+            api_key=api_key_str,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(res)
+
+
+@router.post(
+    "/providers/test-connection",
+    response_model=ProviderProbeResult,
+    summary="Test connection to unsaved AI provider configuration",
+)
+async def check_provider_connection(
+    body: ProviderProbeRequest,
+    caller: Caller,
+    session: Session,
+) -> ProviderProbeResult:
+    """Test connectivity, auth, and model listing for an unsaved AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _assert_admin_for_scope(session, caller, None)
+        service = AIProviderConfigService(session)
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
+        res = await service.probe_provider(
+            provider_kind=body.provider_kind,
+            base_url=body.base_url,
+            api_key=api_key_str,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(res)
+
+
+@router.post(
+    "/providers/{provider_id}/probe-models",
+    response_model=ProviderProbeResult,
+    summary="Probe upstream models for saved AI provider configuration",
+)
+async def probe_saved_provider_models(
+    provider_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+    body: SavedProviderProbeRequest | None = None,
+) -> ProviderProbeResult:
+    """Probe models for a saved AI provider configuration using stored envelope key."""
+    async with timing_floor(floor_ms=25.0):
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session)
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = (
+            body.api_key.get_secret_value()
+            if body is not None and body.api_key is not None
+            else None
+        )
+        probe_res = await service.probe_provider(
+            provider_kind=config.provider_kind,
+            base_url=config.base_url,
+            api_key=api_key_str,
+            config_id=config.id,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(probe_res)
+
+
+@router.post(
+    "/providers/{provider_id}/test-connection",
+    response_model=ProviderProbeResult,
+    summary="Test connection to saved AI provider configuration",
+)
+async def check_saved_provider_connection(
+    provider_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+    body: SavedProviderProbeRequest | None = None,
+) -> ProviderProbeResult:
+    """Test connectivity, auth, and model listing for a saved AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session)
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = (
+            body.api_key.get_secret_value()
+            if body is not None and body.api_key is not None
+            else None
+        )
+        probe_res = await service.probe_provider(
+            provider_kind=config.provider_kind,
+            base_url=config.base_url,
+            api_key=api_key_str,
+            config_id=config.id,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(probe_res)
 
 
 @router.get(

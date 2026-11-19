@@ -1,0 +1,64 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 205 items
+
+kanban/tests/ai_config/test_net_guard.py ..........                      [  4%]
+kanban/tests/ai_config/test_service.py ..............                    [ 11%]
+kanban/tests/api/admin/test_ai_providers_api.py ..........               [ 16%]
+agent/tests/providers/test_air_gap.py .....                              [ 19%]
+agent/tests/providers/test_base_protocol.py .........                    [ 23%]
+agent/tests/providers/test_circuit_breaker.py .......                    [ 26%]
+agent/tests/providers/test_gemini.py ...........................         [ 40%]
+agent/tests/providers/test_net_guard.py ................................ [ 55%]
+.......                                                                  [ 59%]
+agent/tests/providers/test_ollama.py ................................... [ 76%]
+......                                                                   [ 79%]
+agent/tests/providers/test_openai_provider.py ......................     [ 89%]
+agent/tests/providers/test_router.py ...................../home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.admin.ai_providers was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.admin.ai_schemas was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+               [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+agent/providers/__init__.py              6      0      0      0   100%
+agent/providers/air_gap.py              20      0     10      0   100%
+agent/providers/base.py                119      1     14      0    99%   105
+agent/providers/circuit_breaker.py     121      0     30      0   100%
+agent/providers/errors.py               68      0      2      0   100%
+agent/providers/gemini.py              223      2     92      6    97%   255->exit, 276->275, 279, 287->290, 372->371, 375
+agent/providers/net_guard.py            11      0      0      0   100%
+agent/providers/ollama.py              299     10     76      5    96%   89->103, 93->103, 110-111, 243->248, 271-272, 353-354, 427-428, 480-481
+agent/providers/openai_provider.py     211      6     70      4    96%   79-80, 82-85, 115-116, 126->131
+agent/providers/registry.py             45      0     22      0   100%
+agent/providers/router.py              233      5     76      5    97%   169-170, 175-176, 191->193, 205->207, 329
+kanban/ai_config/__init__.py             3      0      0      0   100%
+kanban/ai_config/net_guard.py          125      2     74      4    97%   106, 122->126, 151, 253->262
+kanban/ai_config/service.py            387      9    136      6    97%   543-544, 646-647, 670-671, 683, 687, 817
+--------------------------------------------------------------------------------
+TOTAL                                 1871     35    602     30    97%
+============================= 205 passed in 17.69s =============================
+
+=================== Frontend Vitest Results ===================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/kanban/web
+> vitest run src/features/admin-ai/__tests__/aiAdminApi.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/kanban/web
+
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (5 tests) 12ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  14:46:03
+   Duration  917ms (environment 94%, import 2%, tests 2%, transform 1%, worker 1%)
+
