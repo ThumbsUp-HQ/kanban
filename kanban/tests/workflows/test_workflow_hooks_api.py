@@ -18,6 +18,8 @@ from database.models.projects import WorkflowState
 from database.models.wasm_module import ApprovedWasmModule
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import httpx
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -900,3 +902,43 @@ async def test_hooks_service_agent_and_sync_cross_configuration_rejections(
         },
     )
     assert resp3.status_code == 201
+
+
+async def test_approved_wasm_modules_list_and_builtin_auto_seed(
+    workflow_api_setup: dict[str, Any],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify GET /projects/{project}/approved-wasm-modules and auto-seeding built-in formulas."""
+    admin = workflow_api_setup["admin"]
+    member = workflow_api_setup["member"]
+    client = as_principal(admin, aal_level=2)
+
+    # 1. Non-admin caller receives 404/403 anti-enumeration
+    member_client = as_principal(member, aal_level=2)
+    res_member = await member_client.get("/api/v1/projects/WFAPI/approved-wasm-modules")
+    assert res_member.status_code in (403, 404)
+
+    # 2. Admin caller receives seeded built-in formulas list
+    client = as_principal(admin, aal_level=2)
+    res_admin = await client.get("/api/v1/projects/WFAPI/approved-wasm-modules")
+    assert res_admin.status_code == 200
+    modules = res_admin.json()
+    assert isinstance(modules, list)
+    names = [m["name"] for m in modules]
+    assert "qa-proof-validator" in names
+    assert "security-invariant-validator" in names
+    assert "auto-label-mutator" in names
+
+    # 3. Create hook using built-in sha without prior manual seeding succeeds (201)
+    qa_sha = "2274a8517568ba72a2aa1bf322bfe14b205ce47b712a0533929e7535010aeede"
+    resp_hook = await client.post(
+        "/api/v1/projects/WFAPI/workflow-hooks",
+        json={
+            "name": "Builtin QA Hook",
+            "to_state": "In QA",
+            "hook_kind": "sync_validator",
+            "wasm_module_sha256": qa_sha,
+        },
+    )
+    assert resp_hook.status_code == 201
+    assert resp_hook.json()["wasm_module_sha256"] == qa_sha

@@ -1,0 +1,288 @@
+=== BACKEND PYTEST SUITES ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-wf-6f02732b/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-wf-6f02732b
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 59 items
+
+kanban/tests/workflows/test_workflow_hooks_api.py::test_list_workflow_hooks_empty PASSED [  1%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_list_workflow_hooks_anti_enumeration PASSED [  3%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_workflow_hook_aal2_required PASSED [  5%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_workflow_hook_validations PASSED [  6%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_and_list_workflow_hooks_success PASSED [  8%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_update_workflow_hook PASSED [ 10%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_enable_disable_workflow_hook PASSED [ 11%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_delete_workflow_hook PASSED [ 13%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_reorder_workflow_hooks PASSED [ 15%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_dry_run_endpoint PASSED [ 16%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_workflow_hook_not_found_and_invalid_ids PASSED [ 18%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_workflow_hook_advanced_updates_and_validations PASSED [ 20%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_reorder_hooks_edge_cases PASSED [ 22%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_hooks_service_internal_utilities PASSED [ 23%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_hooks_service_agent_and_sync_cross_configuration_rejections PASSED [ 25%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_approved_wasm_modules_list_and_builtin_auto_seed PASSED [ 27%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_access_control PASSED [ 28%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_validation_errors PASSED [ 30%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_pipeline_steps_and_rowcount_invariance PASSED [ 32%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_rejection_step PASSED [ 33%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_with_existing_issue PASSED [ 35%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_failure_policies_and_edge_cases PASSED [ 37%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_wasm_exceptions_and_mutation_errors PASSED [ 38%]
+kanban/tests/repos/test_repo_bindings_api.py::test_create_repo_binding_admin_aal2_success PASSED [ 40%]
+kanban/tests/repos/test_repo_bindings_api.py::test_member_gets_404_anti_enumeration PASSED [ 42%]
+kanban/tests/repos/test_repo_bindings_api.py::test_aal1_admin_rejected_with_403_aal2_required PASSED [ 44%]
+kanban/tests/repos/test_repo_bindings_api.py::test_rejected_malicious_refs_and_urls PASSED [ 45%]
+kanban/tests/repos/test_repo_bindings_api.py::test_refresh_and_delete_repo_binding PASSED [ 47%]
+kanban/tests/repos/test_repo_bindings_api.py::test_delete_returns_409_when_in_use_by_hook PASSED [ 49%]
+kanban/tests/repos/test_repo_bindings_api.py::test_duplicate_slug_rejected_with_409 PASSED [ 50%]
+kanban/tests/repos/test_repo_bindings_api.py::test_nonexistent_binding_operations_return_404 PASSED [ 52%]
+kanban/tests/repos/test_repo_bindings_api.py::test_mirror_failure_handled_gracefully PASSED [ 54%]
+kanban/tests/repos/test_repo_bindings_api.py::test_refresh_or_delete_by_non_admin_returns_404 PASSED [ 55%]
+kanban/tests/repos/test_repo_bindings_api.py::test_schema_validators_and_get_kek PASSED [ 57%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_1_positive_create_cli_pipe_and_codex PASSED [ 59%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo] PASSED [ 61%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--YOLO] PASSED [ 62%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo=true] PASSED [ 64%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-skip-permissions] PASSED [ 66%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously] PASSED [ 67%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-foo] PASSED [ 69%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--full-auto] PASSED [ 71%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--allow-all-tools=1] PASSED [ 72%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args0] PASSED [ 74%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args1] PASSED [ 76%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args2] PASSED [ 77%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args3] PASSED [ 79%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3b_security_binary_allowlist PASSED [ 81%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_4_security_arg_boundaries_and_opaque_injection PASSED [ 83%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_5_runtime_argv_assertion_catches_tampered_records PASSED [ 84%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_6_rls_member_denial_and_cross_workspace_404 PASSED [ 86%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_7_boundary_and_validation PASSED [ 88%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_8_delete_and_agent_in_use PASSED [ 89%]
+kanban/tests/agents/test_agent_definitions_api.py::test_crud_endpoints_get_list_patch PASSED [ 91%]
+kanban/tests/agents/test_agent_definitions_api.py::test_duplicate_slug_conflict_409 PASSED [ 93%]
+kanban/tests/agents/test_agent_definitions_api.py::test_workspace_slug_lookup PASSED [ 94%]
+kanban/tests/agents/test_agent_definitions_api.py::test_project_scoped_agent_lifecycle PASSED [ 96%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_create PASSED [ 98%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_patch PASSED [100%]
+
+============================= 59 passed in 17.25s ==============================
+=== FRONTEND WORKFLOW VITEST SUITES ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-wf-6f02732b/kanban/web
+> vitest run src/features/workflows/
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-wf-6f02732b/kanban/web
+
+ ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx (2 tests) 152ms
+stderr | src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4)
+An update to DryRunDrawerInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (5 tests) 368ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (6 tests) 762ms
+   ✓ AttachHookDialog (KB-P5-24) (6)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 315ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (16 tests) 826ms
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises pragmatic drag and drop hooks and callbacks
+An update to HookPipelineRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to HookPipelineRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to HookPipelineRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to HookPipelineRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to HookPipelineRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises cli_pipe fallback allowlist and is-dragging style class
+An update to HookPipelineRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > exercises drop reorder success and failure rollbacks
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > handles non-Error rejection and drop error catch in TransitionRuleCard
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > handles non-Error rejection and drop error catch in TransitionRuleCard
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (11 tests) 782ms
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises onAddHook from card and non-AAL2 error handling in studio
+An update to AttachHookDialogInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AttachHookDialogInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TransitionRuleCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > AttachHookDialog extra branches > exercises mutator submission, mutable field toggle off, and select onChange handlers
+An update to AttachHookDialogInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (28 tests) 1683ms
+
+ Test Files  6 passed (6)
+      Tests  68 passed (68)
+   Start at  23:57:09
+   Duration  3.84s (environment 42%, tests 36%, import 16%, transform 6%)
+

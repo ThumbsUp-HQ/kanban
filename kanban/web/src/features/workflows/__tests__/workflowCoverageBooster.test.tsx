@@ -151,9 +151,66 @@ describe('Workflow Studio Coverage Booster', () => {
       const statesFallback = await api.fetchProjectStates('KAN');
       expect(statesFallback.length).toBeGreaterThan(0);
 
-      // fetchApprovedWasmModules
+      // fetchApprovedWasmModules with and without projectKey
+      fetchSpy.mockResolvedValueOnce([{ sha256: 'custom-sha', name: 'custom' }]);
+      const wasmCustom = await api.fetchApprovedWasmModules('KAN');
+      expect(wasmCustom[0]?.name).toBe('custom');
+
+      fetchSpy.mockResolvedValueOnce('not-an-array');
+      const wasmNonArray = await api.fetchApprovedWasmModules('KAN');
+      expect(wasmNonArray).toEqual(api.DEFAULT_WASM_MODULES);
+
+      fetchSpy.mockRejectedValueOnce(new Error('fail'));
+      const wasmFail = await api.fetchApprovedWasmModules('KAN');
+      expect(wasmFail).toEqual(api.DEFAULT_WASM_MODULES);
+
       const wasm = await api.fetchApprovedWasmModules();
       expect(wasm.length).toBeGreaterThan(0);
+
+      // repo-bindings CRUD
+      fetchSpy.mockResolvedValueOnce({ id: 'r1', slug: 'new-b' });
+      const createdRepo = await api.createRepoBinding('KAN', {
+        slug: 'new-b',
+        remote_url: 'https://github.com/a/b.git',
+        access_mode: 'ro_vfs_mount',
+      });
+      expect(createdRepo.id).toBe('r1');
+
+      fetchSpy.mockResolvedValueOnce({ id: 'r1', slug: 'refreshed' });
+      const refreshedRepo = await api.refreshRepoBinding('r1');
+      expect(refreshedRepo.slug).toBe('refreshed');
+
+      fetchSpy.mockResolvedValueOnce({ success: true });
+      await api.deleteRepoBinding('r1');
+
+      // fetchAgentDefinitions 404 and fallbackOnCatch=false
+      fetchSpy.mockRejectedValueOnce(new ApiProblem(404));
+      const agents404 = await api.fetchAgentDefinitions('kanban', true);
+      expect(agents404).toEqual([]);
+
+      fetchSpy.mockRejectedValueOnce(new Error('generic'));
+      const agentsNoFallback = await api.fetchAgentDefinitions('kanban', false);
+      expect(agentsNoFallback).toEqual([]);
+
+      // validateGitRemoteUrl all validation rules
+      expect(api.validateGitRemoteUrl('').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('a'.repeat(2049)).valid).toBe(false);
+      expect(api.validateGitRemoteUrl('file:///etc/passwd').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('http://insecure.com/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('git://insecure.com/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('ftp://insecure.com/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('unknown://protocol.com/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://localhost/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://127.0.0.1/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://[::1]/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://169.254.169.254/meta').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://0.0.0.0/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://10.0.1.5/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://192.168.1.1/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://172.20.0.1/repo.git').valid).toBe(false);
+      expect(api.validateGitRemoteUrl('https://github.com/owner/repo.git').valid).toBe(true);
+      expect(api.validateGitRemoteUrl('ssh://git@github.com/owner/repo.git').valid).toBe(true);
+      expect(api.validateGitRemoteUrl('git@github.com:owner/repo.git').valid).toBe(true);
     });
   });
 

@@ -20,6 +20,7 @@ from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
 from kanban.api.problems import ProblemException, not_found
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.projects import get_project_or_404
+from kanban.workflows.builtins import seed_builtin_wasm
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 from kanban.workflows.mutations import IMMUTABLE_FIELDS, is_in_mutable_universe
 
@@ -480,6 +481,14 @@ class WorkflowHookService:
             )
             approved_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
             if approved_mod is None:
+                approved_mod = await seed_builtin_wasm(
+                    session,
+                    caller.workspace_id,
+                    caller.principal_id,
+                    wasm_sha_bytes,
+                    project_id=project.id,
+                )
+            if approved_mod is None:
                 raise ProblemException(
                     code="WASM_MODULE_NOT_APPROVED",
                     status=422,
@@ -675,6 +684,14 @@ class WorkflowHookService:
                 ApprovedWasmModule.sha256 == wasm_sha_bytes,
             )
             approved_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+            if approved_mod is None:
+                approved_mod = await seed_builtin_wasm(
+                    session,
+                    caller.workspace_id,
+                    caller.principal_id,
+                    wasm_sha_bytes,
+                    project_id=hook.project_id,
+                )
             if approved_mod is None:
                 raise ProblemException(
                     code="WASM_MODULE_NOT_APPROVED",

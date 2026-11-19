@@ -9,10 +9,12 @@ import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { NotFoundView } from '../../app/routes';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
+import { useAuth } from '../auth/AuthContext';
 import type { MfaMethod } from '../auth/authApi';
 import { TransitionRuleCard } from './TransitionRuleCard';
 import { AttachHookDialog } from './AttachHookDialog';
 import { DryRunDrawer } from './DryRunDrawer';
+import { GitRepoBindingsSection } from './GitRepoBindingsSection';
 import {
   fetchWorkflowHooks,
   createWorkflowHook,
@@ -32,22 +34,30 @@ import './workflows.css';
 
 export interface WorkflowStudioPageProps {
   projectKeyOverride?: string;
+  workspaceSlugOverride?: string;
   isAdmin?: boolean;
 }
 
 interface PendingMutation {
-  type: 'create' | 'update' | 'reorder' | 'enable' | 'disable' | 'delete';
+  type: string;
   execute: () => Promise<void>;
 }
 
 export function WorkflowStudioPage({
   projectKeyOverride,
+  workspaceSlugOverride,
   isAdmin: propIsAdmin,
 }: WorkflowStudioPageProps): JSX.Element {
-  const params = useParams<{ projectKey?: string }>();
+  const params = useParams<{ projectKey?: string; workspaceSlug?: string }>();
   const [searchParams] = useSearchParams();
+  const auth = useAuth();
   const projectKey = projectKeyOverride ?? params.projectKey ?? 'KAN';
   const queryClient = useQueryClient();
+
+  const activeWorkspaceSlug =
+    workspaceSlugOverride ??
+    params.workspaceSlug ??
+    (auth.session?.workspace_id ?? 'current');
 
   // Query parameter overrides for non-admin testing
   const queryNonAdmin =
@@ -123,16 +133,25 @@ export function WorkflowStudioPage({
   });
 
   const agentsQuery = useQuery({
-    queryKey: ['agent-definitions', 'kanban'],
-    queryFn: () => fetchAgentDefinitions('kanban'),
+    queryKey: ['agent-definitions', activeWorkspaceSlug],
+    queryFn: () => fetchAgentDefinitions(activeWorkspaceSlug),
     enabled: isUserAdmin,
   });
 
   const wasmModulesQuery = useQuery({
-    queryKey: ['approved-wasm-modules'],
-    queryFn: () => fetchApprovedWasmModules(),
+    queryKey: ['approved-wasm-modules', projectKey],
+    queryFn: () => fetchApprovedWasmModules(projectKey),
     enabled: isUserAdmin,
   });
+
+  // If checking project permissions, show loading
+  if (projectQuery.isLoading && propIsAdmin === undefined && !queryNonAdmin) {
+    return (
+      <main className="workflow-studio" data-testid="workflow-studio-page">
+        <div className="empty-hooks-cta">Loading project permissions...</div>
+      </main>
+    );
+  }
 
   // If user lacks admin permissions, render uniform Not found or no access view (zero write requests)
   if (!isUserAdmin) {
@@ -315,6 +334,13 @@ export function WorkflowStudioPage({
         ))
       )}
 
+      {/* Git Repository Bindings Section */}
+      <GitRepoBindingsSection
+        projectKey={projectKey}
+        isUserAdmin={isUserAdmin}
+        onAal2Intercept={handleAal2Intercept}
+      />
+
       {/* Attach / Edit Hook Dialog */}
       <AttachHookDialog
         isOpen={isAttachDialogOpen}
@@ -353,27 +379,31 @@ export function WorkflowStudioPage({
             aria-modal="true"
             aria-labelledby="aal2-stepup-title"
           >
-            <h2 id="aal2-stepup-title" className="workflow-dialog-title">
-              Admin Verification Required (AAL2)
-            </h2>
-            <SecondFactorStep
-              challengeId={aal2Challenge.challengeId}
-              methods={aal2Challenge.methods}
-              onSuccess={() => {
-                void handleAal2Success();
-              }}
-              onError={() => {
-                // Handled in SecondFactorStep
-              }}
-              onSessionExpired={() => {
-                setAal2Challenge(null);
-                setPendingMutation(null);
-              }}
-              onCancel={() => {
-                setAal2Challenge(null);
-                setPendingMutation(null);
-              }}
-            />
+            <div className="workflow-dialog-header">
+              <h2 id="aal2-stepup-title" className="workflow-dialog-title">
+                Admin Verification Required (AAL2)
+              </h2>
+            </div>
+            <div className="workflow-dialog-body">
+              <SecondFactorStep
+                challengeId={aal2Challenge.challengeId}
+                methods={aal2Challenge.methods}
+                onSuccess={() => {
+                  void handleAal2Success();
+                }}
+                onError={() => {
+                  // Handled in SecondFactorStep
+                }}
+                onSessionExpired={() => {
+                  setAal2Challenge(null);
+                  setPendingMutation(null);
+                }}
+                onCancel={() => {
+                  setAal2Challenge(null);
+                  setPendingMutation(null);
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

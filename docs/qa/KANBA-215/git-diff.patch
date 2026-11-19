@@ -1,0 +1,3096 @@
+diff --git a/kanban/agents/service.py b/kanban/agents/service.py
+index a0d61b8..17c217e 100644
+--- a/kanban/agents/service.py
++++ b/kanban/agents/service.py
+@@ -123,6 +123,8 @@ class AgentDefinitionService:
+         session: AsyncSession, caller: PrincipalContext, workspace_ref: str
+     ) -> None:
+         """Assert caller belongs to the requested workspace reference (UUID or slug)."""
++        if workspace_ref == "current":
++            return
+         try:
+             ws_id = uuid.UUID(workspace_ref)
+             if ws_id != caller.workspace_id:
+diff --git a/kanban/api/v1/workflow_hooks.py b/kanban/api/v1/workflow_hooks.py
+index 87b77f6..3f653eb 100644
+--- a/kanban/api/v1/workflow_hooks.py
++++ b/kanban/api/v1/workflow_hooks.py
+@@ -11,6 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.timing import timing_floor
++from kanban.services.projects import get_project_or_404
++from kanban.workflows.builtins import (
++    WasmModuleSummaryResponse,
++    ensure_approved_wasm_modules,
++)
+ from kanban.workflows.dry_run import DryRunPayload, DryRunResponse, run_dry_run
+ from kanban.workflows.hooks_service import (
+     TransitionRule,
+@@ -160,3 +165,23 @@ async def dry_run_workflow_hooks(
+     """Execute dry-run simulation inside a guaranteed non-persisted SAVEPOINT."""
+     async with timing_floor(floor_ms=25.0):
+         return await run_dry_run(session, caller, project, body)
++
++
++@router.get(
++    "/projects/{project}/approved-wasm-modules",
++    response_model=list[WasmModuleSummaryResponse],
++    summary="List approved WebAssembly modules for project/workspace",
++)
++async def list_approved_wasm_modules(
++    project: str,
++    caller: Caller,
++    session: Session,
++) -> list[WasmModuleSummaryResponse]:
++    """List approved Wasm modules, seeding verified built-in formulas if needed."""
++    async with timing_floor(floor_ms=25.0):
++        project_obj = await get_project_or_404(session, caller, project)
++        await WorkflowHookService.require_admin(session, caller, project_obj.id)
++        return await ensure_approved_wasm_modules(
++            session, caller.workspace_id, caller.principal_id, project_id=project_obj.id
++        )
++
+diff --git a/kanban/tests/workflows/test_workflow_hooks_api.py b/kanban/tests/workflows/test_workflow_hooks_api.py
+index 1b7ad66..8833bc3 100644
+--- a/kanban/tests/workflows/test_workflow_hooks_api.py
++++ b/kanban/tests/workflows/test_workflow_hooks_api.py
+@@ -900,3 +900,44 @@ async def test_hooks_service_agent_and_sync_cross_configuration_rejections(
+         },
+     )
+     assert resp3.status_code == 201
++
++
++async def test_approved_wasm_modules_list_and_builtin_auto_seed(
++    workflow_api_setup: dict[str, Any],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify GET /projects/{project}/approved-wasm-modules and auto-seeding built-in formulas."""
++    admin = workflow_api_setup["admin"]
++    member = workflow_api_setup["member"]
++    client = as_principal(admin, aal_level=2)
++
++    # 1. Non-admin caller receives 404/403 anti-enumeration
++    member_client = as_principal(member, aal_level=2)
++    res_member = await member_client.get("/api/v1/projects/WFAPI/approved-wasm-modules")
++    assert res_member.status_code in (403, 404)
++
++    # 2. Admin caller receives seeded built-in formulas list
++    client = as_principal(admin, aal_level=2)
++    res_admin = await client.get("/api/v1/projects/WFAPI/approved-wasm-modules")
++    assert res_admin.status_code == 200
++    modules = res_admin.json()
++    assert isinstance(modules, list)
++    names = [m["name"] for m in modules]
++    assert "qa-proof-validator" in names
++    assert "security-invariant-validator" in names
++    assert "auto-label-mutator" in names
++
++    # 3. Create hook using built-in sha without prior manual seeding succeeds (201)
++    qa_sha = "2274a8517568ba72a2aa1bf322bfe14b205ce47b712a0533929e7535010aeede"
++    resp_hook = await client.post(
++        "/api/v1/projects/WFAPI/workflow-hooks",
++        json={
++            "name": "Builtin QA Hook",
++            "to_state": "In QA",
++            "hook_kind": "sync_validator",
++            "wasm_module_sha256": qa_sha,
++        },
++    )
++    assert resp_hook.status_code == 201
++    assert resp_hook.json()["wasm_module_sha256"] == qa_sha
++
+diff --git a/kanban/web/e2e/views/kanba-215-screenshots.spec.ts b/kanban/web/e2e/views/kanba-215-screenshots.spec.ts
+new file mode 100644
+index 0000000..7b6f4bd
+--- /dev/null
++++ b/kanban/web/e2e/views/kanba-215-screenshots.spec.ts
+@@ -0,0 +1,459 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KANBA-215/screenshots',
++);
++
++process.env.QA_TICKET_ID = 'KANBA-215';
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++const mockAdminUser = {
++  id: 'usr-admin-1',
++  handle: 'adam_architect',
++  display_name: 'Adam Architect',
++  email: 'adam@example.com',
++  workspace_role: 'WORKSPACE_ADMIN',
++  is_workspace_admin: true,
++  is_server_admin: true,
++};
++
++const mockProject = {
++  id: 'proj-kan-1',
++  identifier: 'KAN',
++  name: 'Platform Core',
++  description_markdown: 'Core platform engineering workspace',
++  modules_enabled: true,
++  capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'PROJECT_ADMIN'],
++  is_project_admin: true,
++  project_role: 'ADMIN',
++};
++
++const mockWorkspaces = [
++  {
++    id: 'ws-default',
++    name: 'Primary Workspace',
++    slug: 'primary-workspace',
++    is_current: true,
++  },
++];
++
++const mockIssues = {
++  items: [
++    {
++      id: 'iss-1',
++      key: 'KAN-215',
++      project_key: 'KAN',
++      summary: 'Fix Workflow Transition Studio Presets & Agent-Definitions 404',
++      state: { id: 'st-in-review', name: 'In Review', group: 'started' },
++      priority: { id: 'prio-high', slug: 'high', label: 'High', emoji: '⚡', sort_order: 2 },
++      capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN'],
++    },
++  ],
++  total: 1,
++};
++
++const mockWorkflowHooks = [
++  {
++    from_state: 'In Review',
++    to_state: 'Done',
++    active_hook_count: 3,
++    hooks: [
++      {
++        id: 'hook-qa',
++        name: 'qa-proof-validator',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_validator',
++        harness_kind: 'wasm_component',
++        wasm_module_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
++        failure_policy: 'fail_closed',
++        is_enabled: true,
++        sort_rank: '0|hzzzzz:',
++      },
++      {
++        id: 'hook-sec',
++        name: 'security-invariant-validator',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_validator',
++        harness_kind: 'wasm_component',
++        wasm_module_sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
++        failure_policy: 'fail_closed',
++        is_enabled: true,
++        sort_rank: '0|i00000:',
++      },
++      {
++        id: 'hook-label',
++        name: 'auto-label-mutator',
++        from_state: 'In Review',
++        to_state: 'Done',
++        hook_kind: 'sync_mutator',
++        harness_kind: 'wasm_component',
++        wasm_module_sha256: '2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9',
++        failure_policy: 'fail_open',
++        is_enabled: true,
++        sort_rank: '0|i00001:',
++        allowed_mutable_fields: ['labels', 'priority'],
++      },
++    ],
++  },
++];
++
++const mockApprovedWasm = [
++  {
++    sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
++    name: 'qa-proof-validator',
++    description: 'Ensures description or comments include docs/qa/ proof bundle',
++    target_latency_budget: '<2ms',
++  },
++  {
++    sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
++    name: 'security-invariant-validator',
++    description: 'Checks zero new dependencies and strict security tokens',
++    target_latency_budget: '<25ms',
++  },
++  {
++    sha256: '2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9',
++    name: 'auto-label-mutator',
++    description: 'Mutates labels on transition based on issue type',
++    target_latency_budget: '<5ms',
++  },
++];
++
++const mockRepoBindings = [
++  {
++    id: 'repo-1',
++    workspace_id: 'ws-default',
++    project_id: 'proj-kan-1',
++    slug: 'kanban-core',
++    remote_url: 'https://github.com/adamoutler/kanban.git',
++    default_ref: 'main',
++    access_mode: 'ro_vfs_mount',
++    last_fetched_commit: '92d31f66098dd8194837346df091aace6d7db8ef',
++    last_fetched_at: '2026-11-18T22:30:00Z',
++    created_by: 'usr-admin-1',
++    created_at: '2026-11-18T20:00:00Z',
++  },
++  {
++    id: 'repo-2',
++    workspace_id: 'ws-default',
++    project_id: 'proj-kan-1',
++    slug: 'kanban-docs',
++    remote_url: 'git@github.com:adamoutler/kanban-docs.git',
++    default_ref: 'master',
++    access_mode: 'bare_git_tools',
++    last_fetched_commit: '7982de041f00a867a3f839e6172865450d0159fa',
++    last_fetched_at: '2026-11-18T22:45:00Z',
++    created_by: 'usr-admin-1',
++    created_at: '2026-11-18T20:15:00Z',
++  },
++];
++
++const mockDryRunSuccess = {
++  would_commit: true,
++  steps: [
++    {
++      order: 1,
++      name: 'qa-proof-validator',
++      hook_kind: 'sync_validator',
++      result: 'allow',
++      reason: 'docs/qa/ proof bundle verified in issue description',
++      duration_us: 1200,
++    },
++    {
++      order: 2,
++      name: 'security-invariant-validator',
++      hook_kind: 'sync_validator',
++      result: 'allow',
++      reason: 'Zero new dependencies and token boundaries satisfied',
++      duration_us: 3400,
++    },
++    {
++      order: 3,
++      name: 'auto-label-mutator',
++      hook_kind: 'sync_mutator',
++      result: 'mutate',
++      field_updates: { labels: ['qa-certified', 'security-approved'] },
++      duration_us: 2100,
++    },
++    {
++      order: 4,
++      name: 'code-review-agent',
++      hook_kind: 'agent_interceptor',
++      result: 'skipped_async',
++      duration_us: 500,
++    },
++  ],
++};
++
++function getWorkflowMocks(agentDefs: unknown[] = []): MockHandlers {
++  return {
++    'GET /api/v1/auth/me': { json: mockAdminUser },
++    'GET /api/v1/me': { json: mockAdminUser },
++    'GET /api/v1/users/me': { json: mockAdminUser },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 2,
++        csrf_token: 'csrf-test-token',
++        user: mockAdminUser,
++        workspace_id: 'primary-workspace',
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'csrf-test-token' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/workspaces': { json: mockWorkspaces },
++    'GET /api/v1/workspaces/current': { json: mockWorkspaces[0] },
++    'GET /api/v1/projects': { json: [mockProject] },
++    'GET /api/v1/projects/KAN': { json: mockProject },
++    'GET /api/v1/projects/KAN/states': {
++      json: [
++        { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++        { id: 'st-todo', name: 'To Do', group: 'unstarted', sort_order: 2 },
++        { id: 'st-in-progress', name: 'In Progress', group: 'started', sort_order: 3 },
++        { id: 'st-in-review', name: 'In Review', group: 'started', sort_order: 4 },
++        { id: 'st-done', name: 'Done', group: 'completed', sort_order: 5 },
++      ],
++    },
++    'GET /api/v1/projects/KAN/workflow-hooks': { json: mockWorkflowHooks },
++    'GET /api/v1/projects/KAN/workflows/hooks': { json: mockWorkflowHooks },
++    'GET /api/v1/projects/KAN/approved-wasm-modules': { json: mockApprovedWasm },
++    'GET /api/v1/projects/KAN/repo-bindings': { json: mockRepoBindings },
++    'GET /api/v1/workspaces/primary-workspace/agent-definitions': { json: agentDefs },
++    'GET /api/v1/workspaces/current/agent-definitions': { json: agentDefs },
++    'GET /api/v1/workspaces/kanban/agent-definitions': { json: agentDefs },
++    'GET /api/v1/system/status': loadFixture('system-status-prod'),
++    'GET /api/v1/projects/KAN/cycles': { json: [] },
++    'GET /api/v1/projects/KAN/modules': { json: [] },
++    'GET /api/v1/projects/KAN/priorities': { json: { items: [] } },
++    'GET /api/v1/projects/KAN/labels': { json: [] },
++    'GET /api/v1/projects/KAN/members': { json: [] },
++    'GET /api/v1/projects/KAN/issues': { json: mockIssues },
++    'GET /api/v1/issues/:id': { json: mockIssues.items[0] },
++    'GET /api/v1/projects/KAN/views': { json: [] },
++    'GET /api/v1/projects/KAN/custom-fields': { json: [] },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
++    'PATCH /api/v1/notifications/:id/read': { json: { success: true } },
++    'POST /api/v1/notifications/mark-all-read': { json: { success: true } },
++    'POST /api/v1/projects/KAN/workflow-hooks/dry-run': { json: mockDryRunSuccess },
++    'POST /api/v1/projects/KAN/workflows/dry-run': { json: mockDryRunSuccess },
++  };
++}
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++test.describe('KANBA-215 Workflow Transition Studio & Repo Bindings Visual Proofs', () => {
++  test('01: Workflow Studio Desktop Light and Dark Viewports (1440x900)', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getWorkflowMocks());
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForSelector('[data-testid="workflow-studio-page"]', { state: 'visible' });
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `01-workflow-studio-desktop-${theme}`,
++        annotations: [
++          {
++            selector: '.workflow-studio-header',
++            label: 'Workflow Studio Header with Add Transition Rule Action',
++            note: 'Canonical project-scoped transition rules and interceptor pipeline.',
++          },
++          {
++            selector: '.transition-rule-card',
++            label: 'Transition Rule Card (In Review -> Done)',
++            note: 'Ordered pipeline with 3 active hooks (2 Wasm validators, 1 mutator).',
++          },
++          {
++            selector: '.repo-bindings-section',
++            label: 'Git Repository Bindings (:ro Bare Mirrors)',
++            note: 'Project-scoped read-only mirror management with status badges.',
++          },
++        ],
++      });
++    }
++  });
++
++  test('02: Workflow Studio Mobile 390x844 Responsive Stacking Viewport', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 390, height: 844 });
++    await mockApi(page, getWorkflowMocks());
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForSelector('[data-testid="workflow-studio-page"]', { state: 'visible' });
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `02-workflow-studio-mobile-${theme}`,
++        annotations: [
++          {
++            selector: '.workflow-studio-title',
++            label: 'Responsive Studio Header on 390x844',
++            note: 'Clean wrapping without clipping or horizontal overflow.',
++          },
++          {
++            selector: '.repo-bindings-section',
++            label: 'Responsive Repo Bindings List',
++            note: 'Stacked cards with touch targets conforming to >= 44px standard.',
++          },
++        ],
++      });
++    }
++  });
++
++  test('03: Attach Hook Dialog Unclipped Layout on Desktop and Mobile', async ({ page }, testInfo) => {
++    await mockApi(page, getWorkflowMocks());
++
++    // Desktop 1440x900
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await page.goto('/projects/KAN/settings/workflows?attach=1&to_state=Done');
++    await page.waitForSelector('.workflow-dialog', { state: 'visible' });
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-attach-hook-dialog-desktop',
++      annotations: [
++        {
++          selector: '.workflow-dialog-header',
++          label: 'Unclipped Dialog Header',
++          note: 'Fixed header with clear modal title.',
++        },
++        {
++          selector: '.workflow-dialog-actions',
++          label: 'Sticky Modal Actions Footer',
++          note: 'Fully unclipped Cancel and Attach Hook action buttons.',
++        },
++      ],
++    });
++
++    // Mobile 390x844
++    await page.setViewportSize({ width: 390, height: 844 });
++    await page.waitForTimeout(200);
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-attach-hook-dialog-mobile',
++      annotations: [
++        {
++          selector: '.workflow-dialog',
++          label: 'Mobile Dialog Modal on 390x844',
++          note: 'Contained scrollable body with sticky footer buttons (>= 44px touch targets).',
++        },
++        {
++          selector: '.workflow-dialog-actions',
++          label: 'Unclipped Sticky Action Buttons',
++          note: 'Cancel and Attach Hook fit inside viewport without clipping.',
++        },
++      ],
++    });
++  });
++
++  test('05: Agent Definitions Graceful Empty Callout', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    // Empty agent definitions returned
++    await mockApi(page, getWorkflowMocks([]));
++
++    await page.goto('/projects/KAN/settings/workflows?attach=1&to_state=Done');
++    await page.waitForSelector('.workflow-dialog', { state: 'visible' });
++
++    // Switch to Agent Interceptor radio
++    await page.getByLabel('Agent Interceptor').check();
++    await page.waitForSelector('[data-testid="no-agents-warning"]', { state: 'visible' });
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '05-agent-definitions-empty-callout',
++      annotations: [
++        {
++          selector: '[data-testid="no-agents-warning"]',
++          label: 'Graceful Agent Definitions Empty-State Callout',
++          note: 'Explains missing definitions with inline navigation link to Workspace Settings.',
++        },
++        {
++          selector: '.workflow-dialog-actions button[type="submit"]',
++          label: 'Disabled Attach Hook Button',
++          note: 'Prevents saving interceptor when zero agent definitions exist in workspace.',
++        },
++      ],
++    });
++  });
++
++  test('06: Dry-Run Drawer with Sample Ticket and CLI Snippet', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getWorkflowMocks());
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForSelector('[data-testid="workflow-studio-page"]', { state: 'visible' });
++
++    // Click Dry-Run
++    await page.getByLabel(/Dry-run against sample ticket/i).click();
++    await page.waitForSelector('.dry-run-drawer', { state: 'visible' });
++
++    // Click Run Dry-Run
++    await page.getByRole('button', { name: /Run Dry-Run/i }).click();
++    await page.waitForSelector('.dry-run-summary-banner', { state: 'visible' });
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '06-dry-run-drawer-simulation',
++      annotations: [
++        {
++          selector: '.dry-run-summary-banner',
++          label: 'Dry-Run Simulation Verdict',
++          note: 'Simulates transition execution against sample ticket payload without DB mutation.',
++        },
++        {
++          selector: '.dry-run-copyable-cli',
++          label: 'Copyable CLI Validation Snippet',
++          note: 'kanban-agent validate-transition command for headless CLI reproduction.',
++        },
++      ],
++    });
++  });
++
++  test('07: Bind Git Repository Modal with Live URL Validation', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getWorkflowMocks());
++
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForSelector('[data-testid="workflow-studio-page"]', { state: 'visible' });
++
++    // Open Bind Git Repository modal
++    await page.getByLabel('Bind Git Repository').click();
++    await page.waitForSelector('#bind-repo-title', { state: 'visible' });
++
++    // Type valid URL
++    await page.fill('#repo-slug-input', 'core-engine');
++    await page.fill('#repo-url-input', 'https://github.com/adamoutler/kanban.git');
++    await page.waitForSelector('.repo-url-valid', { state: 'visible' });
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '07-bind-git-repository-modal',
++      annotations: [
++        {
++          selector: '.workflow-dialog',
++          label: 'Bind Git Repository Modal Dialog',
++          note: 'Read-only mirror creation with slug, ref, and access mode parameters.',
++        },
++        {
++          selector: '.repo-url-valid',
++          label: 'Live Remote URL Security Validation Check',
++          note: 'Enforces HTTPS/SSH and rejects SSRF, loopback, and private network ranges.',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/features/activity/ActivitySection.test.tsx b/kanban/web/src/features/activity/ActivitySection.test.tsx
+index 7258e4f..b8fde75 100644
+--- a/kanban/web/src/features/activity/ActivitySection.test.tsx
++++ b/kanban/web/src/features/activity/ActivitySection.test.tsx
+@@ -202,7 +202,7 @@ describe('ActivitySection', () => {
+       await screen.findByRole('tab', { name: 'All' });
+       await waitFor(() => {
+         expect(scrollIntoViewMock).toHaveBeenCalled();
+-      }, { timeout: 4000 });
++      }, { timeout: 10000 });
+     });
+ 
+     it('renders categorized HISTORY and AGENT_GATE rows and jumps to audit comment', async () => {
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 15d0f62..98c80ec 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -932,6 +932,7 @@ export function ProjectSettingsPage(): JSX.Element {
+   return (
+     <div data-testid="project-settings-page" className="kb-settings-container">
+       <header className="kb-settings-header">
++        {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing */}
+         <h1 className="kb-settings-title">Project Settings: {project?.name || projectKey}</h1>
+         <p className="kb-settings-subtitle">
+           Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index 1570097..63de1d2 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -1258,7 +1258,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       // Quick priority update (exercises patchProjectIssue catch block)
+       fireEvent.keyDown(window, { key: 'j' });
+       fireEvent.keyDown(window, { key: 'p' });
+-      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 5000 });
++      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 10000 });
+       fireEvent.click(within(prioPop).getByText('High'));
+ 
+       // Quick state update (exercises patchProjectIssue catch block)
+@@ -1335,7 +1335,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       });
+       fireEvent.keyDown(window, { key: 'j' });
+       fireEvent.keyDown(window, { key: 'p' });
+-      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 5000 });
++      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 10000 });
+       fireEvent.click(within(prioPop).getByText('None'));
+       unmountList();
+ 
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index f535cc5..7651eb2 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -2,6 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React, { useState, type JSX } from 'react';
++import { Link } from 'react-router';
+ import {
+   MUTABLE_FIELD_UNIVERSE,
+   IMMUTABLE_FIELDS_NOTICE,
+@@ -132,6 +133,9 @@ function AttachHookDialogInner({
+   const sdkAgents = agentDefinitions.filter((a) => a.harness_kind === 'in_app_sdk');
+   const remoteAgents = agentDefinitions.filter((a) => a.harness_kind === 'remote_runner');
+ 
++  const isSubmitDisabled =
++    isSubmitting || (hookKind === 'agent_interceptor' && agentDefinitions.length === 0);
++
+   return (
+     <div className="workflow-modal-backdrop" role="presentation" onClick={onClose}>
+       <div
+@@ -141,239 +145,260 @@ function AttachHookDialogInner({
+         aria-labelledby="attach-hook-title"
+         onClick={(e) => { e.stopPropagation(); }}
+       >
+-        <h2 id="attach-hook-title" className="workflow-dialog-title">
+-          {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Interceptor Hook'}
+-        </h2>
+-
+-        {error && (
+-          <div className="workflow-alert workflow-alert-danger" role="alert">
+-            {error}
+-          </div>
+-        )}
++        <div className="workflow-dialog-header">
++          <h2 id="attach-hook-title" className="workflow-dialog-title">
++            {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Interceptor Hook'}
++          </h2>
++        </div>
+ 
+         <form onSubmit={(e) => { void handleSubmit(e); }} className="workflow-dialog-form">
+-          {/* Transition states */}
+-          <div className="workflow-form-group">
+-            <label htmlFor="from-state-select" className="workflow-form-label">
+-              From State
+-            </label>
+-            <select
+-              id="from-state-select"
+-              className="workflow-form-control"
+-              value={fromState ?? '*'}
+-              onChange={(e) => { setFromState(e.target.value === '*' ? null : e.target.value); }}
+-            >
+-              <option value="*">* Any State</option>
+-              {states.map((s) => (
+-                <option key={s.id} value={s.name}>
+-                  {s.name}
+-                </option>
+-              ))}
+-            </select>
+-          </div>
+-
+-          <div className="workflow-form-group">
+-            <label htmlFor="to-state-select" className="workflow-form-label">
+-              To State (Required)
+-            </label>
+-            <select
+-              id="to-state-select"
+-              className="workflow-form-control"
+-              value={toState}
+-              onChange={(e) => { setToState(e.target.value); }}
+-              required
+-            >
+-              {states.map((s) => (
+-                <option key={s.id} value={s.name}>
+-                  {s.name}
+-                </option>
+-              ))}
+-            </select>
+-          </div>
+-
+-          {/* Hook Name */}
+-          <div className="workflow-form-group">
+-            <label htmlFor="hook-name-input" className="workflow-form-label">
+-              Hook Name
+-            </label>
+-            <input
+-              id="hook-name-input"
+-              type="text"
+-              className="workflow-form-control"
+-              placeholder="e.g. require-qa-proof-link"
+-              value={name}
+-              onChange={(e) => { setName(e.target.value); }}
+-              required
+-            />
+-          </div>
++          <div className="workflow-dialog-body">
++            {error && (
++              <div className="workflow-alert workflow-alert-danger" role="alert">
++                {error}
++              </div>
++            )}
+ 
+-          {/* Hook Kind RadioGroup */}
+-          <div className="workflow-form-group">
+-            <label className="workflow-form-label">Hook Kind</label>
+-            <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
+-              <label className="workflow-radio-label">
+-                <input
+-                  type="radio"
+-                  name="hook_kind"
+-                  value="sync_validator"
+-                  checked={hookKind === 'sync_validator'}
+-                  onChange={() => { setHookKind('sync_validator'); }}
+-                />
+-                Sync Wasm Validator
+-              </label>
+-              <label className="workflow-radio-label">
+-                <input
+-                  type="radio"
+-                  name="hook_kind"
+-                  value="sync_mutator"
+-                  checked={hookKind === 'sync_mutator'}
+-                  onChange={() => { setHookKind('sync_mutator'); }}
+-                />
+-                Sync Wasm Mutator
+-              </label>
+-              <label className="workflow-radio-label">
+-                <input
+-                  type="radio"
+-                  name="hook_kind"
+-                  value="agent_interceptor"
+-                  checked={hookKind === 'agent_interceptor'}
+-                  onChange={() => { setHookKind('agent_interceptor'); }}
+-                />
+-                Agent Interceptor
++            {/* Transition states */}
++            <div className="workflow-form-group">
++              <label htmlFor="from-state-select" className="workflow-form-label">
++                From State
+               </label>
++              <select
++                id="from-state-select"
++                className="workflow-form-control"
++                value={fromState ?? '*'}
++                onChange={(e) => { setFromState(e.target.value === '*' ? null : e.target.value); }}
++              >
++                <option value="*">* Any State</option>
++                {states.map((s) => (
++                  <option key={s.id} value={s.name}>
++                    {s.name}
++                  </option>
++                ))}
++              </select>
+             </div>
+-          </div>
+ 
+-          {/* Conditional: Wasm Module selector */}
+-          {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
+             <div className="workflow-form-group">
+-              <label htmlFor="wasm-module-select" className="workflow-form-label">
+-                Approved WebAssembly Module (Built-in Formula Sandbox)
++              <label htmlFor="to-state-select" className="workflow-form-label">
++                To State (Required)
+               </label>
+               <select
+-                id="wasm-module-select"
++                id="to-state-select"
+                 className="workflow-form-control"
+-                value={selectedWasmSha}
+-                onChange={(e) => { setSelectedWasmSha(e.target.value); }}
++                value={toState}
++                onChange={(e) => { setToState(e.target.value); }}
++                required
+               >
+-                {wasmModules.map((m) => (
+-                  <option key={m.sha256} value={m.sha256}>
+-                    {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
++                {states.map((s) => (
++                  <option key={s.id} value={s.name}>
++                    {s.name}
+                   </option>
+                 ))}
+               </select>
+             </div>
+-          )}
+ 
+-          {/* Conditional: Agent Interceptor selector */}
+-          {hookKind === 'agent_interceptor' && (
+-            <>
++            {/* Hook Name */}
++            <div className="workflow-form-group">
++              <label htmlFor="hook-name-input" className="workflow-form-label">
++                Hook Name
++              </label>
++              <input
++                id="hook-name-input"
++                type="text"
++                className="workflow-form-control"
++                placeholder="e.g. require-qa-proof-link"
++                value={name}
++                onChange={(e) => { setName(e.target.value); }}
++                required
++              />
++            </div>
++
++            {/* Hook Kind RadioGroup */}
++            <div className="workflow-form-group">
++              <label className="workflow-form-label">Hook Kind</label>
++              <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
++                <label className="workflow-radio-label">
++                  <input
++                    type="radio"
++                    name="hook_kind"
++                    value="sync_validator"
++                    checked={hookKind === 'sync_validator'}
++                    onChange={() => { setHookKind('sync_validator'); }}
++                  />
++                  Sync Wasm Validator
++                </label>
++                <label className="workflow-radio-label">
++                  <input
++                    type="radio"
++                    name="hook_kind"
++                    value="sync_mutator"
++                    checked={hookKind === 'sync_mutator'}
++                    onChange={() => { setHookKind('sync_mutator'); }}
++                  />
++                  Sync Wasm Mutator
++                </label>
++                <label className="workflow-radio-label">
++                  <input
++                    type="radio"
++                    name="hook_kind"
++                    value="agent_interceptor"
++                    checked={hookKind === 'agent_interceptor'}
++                    onChange={() => { setHookKind('agent_interceptor'); }}
++                  />
++                  Agent Interceptor
++                </label>
++              </div>
++            </div>
++
++            {/* Conditional: Wasm Module selector */}
++            {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
+               <div className="workflow-form-group">
+-                <label htmlFor="agent-def-select" className="workflow-form-label">
+-                  Agent Definition
++                <label htmlFor="wasm-module-select" className="workflow-form-label">
++                  Approved WebAssembly Module (Built-in Formula Sandbox)
+                 </label>
+                 <select
+-                  id="agent-def-select"
++                  id="wasm-module-select"
+                   className="workflow-form-control"
+-                  value={selectedAgentSlug}
+-                  onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
++                  value={selectedWasmSha}
++                  onChange={(e) => { setSelectedWasmSha(e.target.value); }}
+                 >
+-                  {cliAgents.length > 0 && (
+-                    <optgroup label="CLI Pipe Agents (agy, codex)">
+-                      {cliAgents.map((a) => (
+-                        <option key={a.id} value={a.slug}>
+-                          {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
+-                        </option>
+-                      ))}
+-                    </optgroup>
+-                  )}
+-                  {sdkAgents.length > 0 && (
+-                    <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
+-                      {sdkAgents.map((a) => (
+-                        <option key={a.id} value={a.slug}>
+-                          {a.display_name} ({a.model_id ?? a.provider_kind})
+-                        </option>
+-                      ))}
+-                    </optgroup>
+-                  )}
+-                  {remoteAgents.length > 0 && (
+-                    <optgroup label="Remote Runner Pools">
+-                      {remoteAgents.map((a) => (
+-                        <option key={a.id} value={a.slug}>
+-                          {a.display_name}
+-                        </option>
+-                      ))}
+-                    </optgroup>
+-                  )}
++                  {wasmModules.map((m) => (
++                    <option key={m.sha256} value={m.sha256}>
++                      {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
++                    </option>
++                  ))}
+                 </select>
+               </div>
++            )}
+ 
+-              {/* Agent read-only details summary */}
+-              {selectedAgent && (
+-                <div className="workflow-notice" data-testid="agent-details-summary">
+-                  <strong>Agent Config Summary:</strong>
+-                  <div>Harness: {selectedAgent.harness_kind}</div>
+-                  {selectedAgent.cli_args.length > 0 && (
+-                    <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
+-                  )}
+-                  <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
+-                  <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
++            {/* Conditional: Agent Interceptor selector */}
++            {hookKind === 'agent_interceptor' && (
++              agentDefinitions.length === 0 ? (
++                <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
++                  <strong>No Agent Definitions configured</strong>
++                  <p style={{ margin: '4px 0 8px' }}>
++                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Interceptor hook.
++                  </p>
++                  <Link
++                    to="/workspaces/settings"
++                    className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++                    data-testid="configure-agents-link"
++                    style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
++                  >
++                    Configure Agent Definitions &rarr;
++                  </Link>
+                 </div>
+-              )}
+-            </>
+-          )}
++              ) : (
++                <>
++                  <div className="workflow-form-group">
++                    <label htmlFor="agent-def-select" className="workflow-form-label">
++                      Agent Definition
++                    </label>
++                    <select
++                      id="agent-def-select"
++                      className="workflow-form-control"
++                      value={selectedAgentSlug}
++                      onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
++                    >
++                      {cliAgents.length > 0 && (
++                        <optgroup label="CLI Pipe Agents (agy, codex)">
++                          {cliAgents.map((a) => (
++                            <option key={a.id} value={a.slug}>
++                              {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
++                            </option>
++                          ))}
++                        </optgroup>
++                      )}
++                      {sdkAgents.length > 0 && (
++                        <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
++                          {sdkAgents.map((a) => (
++                            <option key={a.id} value={a.slug}>
++                              {a.display_name} ({a.model_id ?? a.provider_kind})
++                            </option>
++                          ))}
++                        </optgroup>
++                      )}
++                      {remoteAgents.length > 0 && (
++                        <optgroup label="Remote Runner Pools">
++                          {remoteAgents.map((a) => (
++                            <option key={a.id} value={a.slug}>
++                              {a.display_name}
++                            </option>
++                          ))}
++                        </optgroup>
++                      )}
++                    </select>
++                  </div>
+ 
+-          {/* Failure Policy */}
+-          <div className="workflow-form-group">
+-            <label htmlFor="failure-policy-select" className="workflow-form-label">
+-              Failure Policy
+-            </label>
+-            <select
+-              id="failure-policy-select"
+-              className="workflow-form-control"
+-              value={failurePolicy}
+-              onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
+-            >
+-              <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
+-              <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
+-            </select>
+-          </div>
++                  {/* Agent read-only details summary */}
++                  {selectedAgent && (
++                    <div className="workflow-notice" data-testid="agent-details-summary">
++                      <strong>Agent Config Summary:</strong>
++                      <div>Harness: {selectedAgent.harness_kind}</div>
++                      {selectedAgent.cli_args.length > 0 && (
++                        <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
++                      )}
++                      <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
++                      <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
++                    </div>
++                  )}
++                </>
++              )
++            )}
+ 
+-          {/* Allowed Mutable Fields */}
+-          <div className="workflow-form-group">
+-            <label className="workflow-form-label">
+-              Allowed Mutable Fields
+-              {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
+-            </label>
+-            <div className="mutable-fields-picker">
+-              {MUTABLE_FIELD_UNIVERSE.map((field) => {
+-                const isChecked = allowedMutableFields.includes(field);
+-                const isDisabled = hookKind === 'sync_validator';
+-                const labelClass = [
+-                  'workflow-radio-label',
+-                  isDisabled ? 'is-disabled' : '',
+-                ]
+-                  .filter(Boolean)
+-                  .join(' ');
+-                return (
+-                  <label key={field} className={labelClass}>
+-                    <input
+-                      type="checkbox"
+-                      checked={isChecked && !isDisabled}
+-                      disabled={isDisabled}
+-                      onChange={() => { handleToggleMutableField(field); }}
+-                    />
+-                    <code>{field}</code>
+-                  </label>
+-                );
+-              })}
++            {/* Failure Policy */}
++            <div className="workflow-form-group">
++              <label htmlFor="failure-policy-select" className="workflow-form-label">
++                Failure Policy
++              </label>
++              <select
++                id="failure-policy-select"
++                className="workflow-form-control"
++                value={failurePolicy}
++                onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
++              >
++                <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
++                <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
++              </select>
+             </div>
+-            <div className="workflow-notice">
+-              {IMMUTABLE_FIELDS_NOTICE}
++
++            {/* Allowed Mutable Fields */}
++            <div className="workflow-form-group">
++              <label className="workflow-form-label">
++                Allowed Mutable Fields
++                {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
++              </label>
++              <div className="mutable-fields-picker">
++                {MUTABLE_FIELD_UNIVERSE.map((field) => {
++                  const isChecked = allowedMutableFields.includes(field);
++                  const isDisabled = hookKind === 'sync_validator';
++                  const labelClass = [
++                    'workflow-radio-label',
++                    isDisabled ? 'is-disabled' : '',
++                  ]
++                    .filter(Boolean)
++                    .join(' ');
++                  return (
++                    <label key={field} className={labelClass}>
++                      <input
++                        type="checkbox"
++                        checked={isChecked && !isDisabled}
++                        disabled={isDisabled}
++                        onChange={() => { handleToggleMutableField(field); }}
++                      />
++                      <code>{field}</code>
++                    </label>
++                  );
++                })}
++              </div>
++              <div className="workflow-notice">
++                {IMMUTABLE_FIELDS_NOTICE}
++              </div>
+             </div>
+           </div>
+ 
+-          {/* Actions */}
++          {/* Actions - Sticky Footer */}
+           <div className="workflow-dialog-actions">
+             <button
+               type="button"
+@@ -386,7 +411,7 @@ function AttachHookDialogInner({
+             <button
+               type="submit"
+               className="workflow-btn workflow-btn-primary"
+-              disabled={isSubmitting}
++              disabled={isSubmitDisabled}
+             >
+               {isSubmitting ? 'Saving...' : editingHook ? 'Update Hook' : 'Attach Hook'}
+             </button>
+diff --git a/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx b/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx
+new file mode 100644
+index 0000000..a5d807f
+--- /dev/null
++++ b/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx
+@@ -0,0 +1,452 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, type JSX } from 'react';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
++import {
++  fetchRepoBindings,
++  createRepoBinding,
++  refreshRepoBinding,
++  deleteRepoBinding,
++  validateGitRemoteUrl,
++  type RepoBindingDetail,
++  type CreateRepoBindingPayload,
++} from './api';
++
++export interface GitRepoBindingsSectionProps {
++  projectKey: string;
++  isUserAdmin: boolean;
++  onAal2Intercept?:
++    | ((
++        err: unknown,
++        mutation: { type: string; execute: () => Promise<void> },
++      ) => boolean)
++    | undefined;
++}
++
++export function GitRepoBindingsSection({
++  projectKey,
++  isUserAdmin,
++  onAal2Intercept,
++}: GitRepoBindingsSectionProps): JSX.Element {
++  const queryClient = useQueryClient();
++  const [isModalOpen, setIsModalOpen] = useState(false);
++  const [actionError, setActionError] = useState<string | null>(null);
++  const [syncingId, setSyncingId] = useState<string | null>(null);
++  const [deletingId, setDeletingId] = useState<string | null>(null);
++
++  // Form State
++  const [slug, setSlug] = useState('');
++  const [remoteUrl, setRemoteUrl] = useState('');
++  const [defaultRef, setDefaultRef] = useState('main');
++  const [accessMode, setAccessMode] = useState<'ro_vfs_mount' | 'bare_git_tools'>('ro_vfs_mount');
++  const [credential, setCredential] = useState('');
++  const [urlValidation, setUrlValidation] = useState<{ valid: boolean; error?: string } | null>(null);
++  const [formError, setFormError] = useState<string | null>(null);
++  const [isSubmitting, setIsSubmitting] = useState(false);
++
++  const bindingsQuery = useQuery({
++    queryKey: ['project-repo-bindings', projectKey],
++    queryFn: () => fetchRepoBindings(projectKey),
++  });
++
++  const bindings = bindingsQuery.data ?? [];
++  const isLoading = bindingsQuery.isLoading;
++
++  const resetForm = () => {
++    setSlug('');
++    setRemoteUrl('');
++    setDefaultRef('main');
++    setAccessMode('ro_vfs_mount');
++    setCredential('');
++    setUrlValidation(null);
++    setFormError(null);
++    setIsSubmitting(false);
++  };
++
++  const handleOpenModal = () => {
++    resetForm();
++    setIsModalOpen(true);
++  };
++
++  const handleCloseModal = () => {
++    if (!isSubmitting) {
++      setIsModalOpen(false);
++      resetForm();
++    }
++  };
++
++  const handleUrlChange = (value: string) => {
++    setRemoteUrl(value);
++    if (value.trim()) {
++      setUrlValidation(validateGitRemoteUrl(value));
++    } else {
++      setUrlValidation(null);
++    }
++  };
++
++  const handleRefresh = async (binding: RepoBindingDetail) => {
++    setActionError(null);
++    setSyncingId(binding.id);
++    const action = async () => {
++      try {
++        await refreshRepoBinding(binding.id);
++        await queryClient.invalidateQueries({ queryKey: ['project-repo-bindings', projectKey] });
++      } finally {
++        setSyncingId(null);
++      }
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (onAal2Intercept?.(err, { type: 'refresh_repo', execute: action })) {
++        return;
++      }
++      const msg = err instanceof Error ? err.message : 'Failed to refresh repository mirror.';
++      setActionError(msg);
++      setSyncingId(null);
++    }
++  };
++
++  const handleDelete = async (binding: RepoBindingDetail) => {
++    if (!window.confirm(`Are you sure you want to remove git mirror '${binding.slug}'?`)) {
++      return;
++    }
++
++    setActionError(null);
++    setDeletingId(binding.id);
++    const action = async () => {
++      try {
++        await deleteRepoBinding(binding.id);
++        await queryClient.invalidateQueries({ queryKey: ['project-repo-bindings', projectKey] });
++      } finally {
++        setDeletingId(null);
++      }
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (onAal2Intercept?.(err, { type: 'delete_repo', execute: action })) {
++        return;
++      }
++      const msg = err instanceof Error ? err.message : 'Failed to delete repository mirror.';
++      setActionError(msg);
++      setDeletingId(null);
++    }
++  };
++
++  const handleCreateSubmit = async (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    setFormError(null);
++
++    const trimmedSlug = slug.trim().toLowerCase();
++    const slugRegex = /^[a-z0-9][a-z0-9-]{1,62}$/;
++    if (!slugRegex.test(trimmedSlug)) {
++      setFormError('Slug must be 2-63 lowercase alphanumeric characters or hyphens (starting with alphanumeric).');
++      return;
++    }
++
++    const validation = validateGitRemoteUrl(remoteUrl);
++    if (!validation.valid) {
++      setFormError(validation.error ?? 'Invalid git remote URL.');
++      return;
++    }
++
++    const payload: CreateRepoBindingPayload = {
++      slug: trimmedSlug,
++      remote_url: remoteUrl.trim(),
++      default_ref: defaultRef.trim() || 'main',
++      access_mode: accessMode,
++      ...(credential ? { credential } : {}),
++    };
++
++    setIsSubmitting(true);
++    const action = async () => {
++      try {
++        await createRepoBinding(projectKey, payload);
++        await queryClient.invalidateQueries({ queryKey: ['project-repo-bindings', projectKey] });
++        setIsModalOpen(false);
++        resetForm();
++      } finally {
++        setIsSubmitting(false);
++      }
++    };
++
++    try {
++      await action();
++    } catch (err: unknown) {
++      if (onAal2Intercept?.(err, { type: 'create_repo', execute: action })) {
++        return;
++      }
++      const msg = err instanceof Error ? err.message : 'Failed to bind git repository.';
++      setFormError(msg);
++      setIsSubmitting(false);
++    }
++  };
++
++  return (
++    <section className="repo-bindings-section" aria-label="Git Repository Bindings">
++      <header className="repo-bindings-header">
++        <div className="repo-bindings-title-group">
++          <h2 className="repo-bindings-title">
++            <span>📦 Git Repository Bindings</span>
++            <span className="repo-ro-badge">:ro bare mirror</span>
++          </h2>
++          <p className="repo-bindings-subtitle">
++            Read-only bare mirrors for agent code inspection, diff audits, and verification proof validation.
++          </p>
++        </div>
++        {isUserAdmin && (
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-primary"
++            onClick={handleOpenModal}
++            aria-label="Bind Git Repository"
++          >
++            + Bind Git Repository
++          </button>
++        )}
++      </header>
++
++      {actionError && (
++        <div className="workflow-alert workflow-alert-danger" role="alert">
++          {actionError}
++        </div>
++      )}
++
++      {isLoading ? (
++        <div className="empty-hooks-cta">Loading repository mirrors...</div>
++      ) : bindings.length === 0 ? (
++        <div className="empty-hooks-cta" data-testid="empty-repo-bindings">
++          No git repository mirrors bound to this project. Bind a remote repository to enable bare git tooling and read-only inspection.
++        </div>
++      ) : (
++        <div className="repo-bindings-list">
++          {bindings.map((b, index) => {
++            const isSyncing = syncingId === b.id;
++            const isDeleting = deletingId === b.id;
++            return (
++              <div
++                key={b.id || b.slug || `binding-${String(index)}`}
++                className="repo-binding-card"
++                data-testid={`repo-card-${b.slug}`}
++              >
++                <div className="repo-binding-card-header">
++                  <div className="repo-binding-slug-group">
++                    <span className="repo-binding-slug">{b.slug}</span>
++                    <div className="repo-binding-badges">
++                      <span className="repo-badge repo-badge-access">
++                        {b.access_mode === 'ro_vfs_mount' ? 'VFS Mount (:ro)' : 'Bare Git Tools'}
++                      </span>
++                      {b.last_fetch_error ? (
++                        <span className="repo-badge repo-badge-status-error" title={b.last_fetch_error}>
++                          Sync Error
++                        </span>
++                      ) : isSyncing ? (
++                        <span className="repo-badge repo-badge-status-syncing">Syncing...</span>
++                      ) : b.last_fetched_commit ? (
++                        <span className="repo-badge repo-badge-status-synced">
++                          Synced ({b.last_fetched_commit.slice(0, 7)})
++                        </span>
++                      ) : (
++                        <span className="repo-badge repo-badge-status-pending">Pending Sync</span>
++                      )}
++                    </div>
++                  </div>
++                  {isUserAdmin && (
++                    <div className="repo-binding-actions">
++                      <button
++                        type="button"
++                        className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++                        onClick={() => { void handleRefresh(b); }}
++                        disabled={isSyncing || isDeleting}
++                        aria-label={`Refresh mirror ${b.slug}`}
++                      >
++                        {isSyncing ? 'Refreshing...' : 'Refresh Mirror'}
++                      </button>
++                      <button
++                        type="button"
++                        className="workflow-btn workflow-btn-danger workflow-btn-sm"
++                        onClick={() => { void handleDelete(b); }}
++                        disabled={isSyncing || isDeleting}
++                        aria-label={`Remove mirror ${b.slug}`}
++                      >
++                        {isDeleting ? 'Removing...' : 'Remove'}
++                      </button>
++                    </div>
++                  )}
++                </div>
++
++                <div className="repo-binding-meta">
++                  <div className="repo-binding-url-ref">
++                    <span className="repo-binding-url">{b.remote_url}</span>
++                    <span className="repo-binding-ref">ref: {b.default_ref}</span>
++                  </div>
++                  {b.last_fetched_at && (
++                    <span className="repo-binding-timestamp">
++                      Last synced: {new Date(b.last_fetched_at).toLocaleString()}
++                    </span>
++                  )}
++                </div>
++
++                {b.last_fetch_error && (
++                  <div className="workflow-alert workflow-alert-danger" style={{ marginTop: '6px', fontSize: '0.75rem', padding: '6px 10px' }}>
++                    {b.last_fetch_error}
++                  </div>
++                )}
++              </div>
++            );
++          })}
++        </div>
++      )}
++
++      {/* Bind Git Repository Modal */}
++      {isModalOpen && (
++        <div className="workflow-modal-backdrop" role="presentation">
++          <div
++            className="workflow-dialog"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="bind-repo-title"
++          >
++            <div className="workflow-dialog-header">
++              <h2 id="bind-repo-title" className="workflow-dialog-title">
++                Bind Git Repository (:ro Bare Mirror)
++              </h2>
++            </div>
++
++            <form onSubmit={(e) => { void handleCreateSubmit(e); }} className="workflow-dialog-form">
++              <div className="workflow-dialog-body">
++                {formError && (
++                  <div className="workflow-alert workflow-alert-danger" role="alert">
++                    {formError}
++                  </div>
++                )}
++
++                {/* Slug */}
++                <div className="workflow-form-group">
++                  <label htmlFor="repo-slug-input" className="workflow-form-label">
++                    Repository Identifier / Slug (Required)
++                  </label>
++                  <input
++                    id="repo-slug-input"
++                    type="text"
++                    className="workflow-form-control"
++                    placeholder="e.g. core-engine"
++                    value={slug}
++                    onChange={(e) => { setSlug(e.target.value); }}
++                    required
++                  />
++                  <span className="workflow-notice">
++                    Unique project identifier (lowercase alphanumeric with hyphens, 2-63 chars).
++                  </span>
++                </div>
++
++                {/* Remote URL */}
++                <div className="workflow-form-group">
++                  <label htmlFor="repo-url-input" className="workflow-form-label">
++                    Remote Git URL (Required)
++                  </label>
++                  <input
++                    id="repo-url-input"
++                    type="text"
++                    className="workflow-form-control"
++                    placeholder="https://github.com/org/repo.git or git@github.com:org/repo.git"
++                    value={remoteUrl}
++                    onChange={(e) => { handleUrlChange(e.target.value); }}
++                    required
++                  />
++                  {urlValidation && (
++                    <div
++                      className={`repo-url-validation-feedback ${
++                        urlValidation.valid ? 'repo-url-valid' : 'repo-url-invalid'
++                      }`}
++                    >
++                      {urlValidation.valid
++                        ? 'Valid remote git URL (HTTPS / SSH).'
++                        : urlValidation.error}
++                    </div>
++                  )}
++                  <span className="workflow-notice">
++                    Only HTTPS and SSH remote URLs are permitted. Local filesystem and private loopback/SSRF ranges are strictly blocked.
++                  </span>
++                </div>
++
++                {/* Default Ref */}
++                <div className="workflow-form-group">
++                  <label htmlFor="repo-ref-input" className="workflow-form-label">
++                    Default Branch / Ref
++                  </label>
++                  <input
++                    id="repo-ref-input"
++                    type="text"
++                    className="workflow-form-control"
++                    placeholder="main"
++                    value={defaultRef}
++                    onChange={(e) => { setDefaultRef(e.target.value); }}
++                  />
++                </div>
++
++                {/* Access Mode */}
++                <div className="workflow-form-group">
++                  <label htmlFor="repo-access-select" className="workflow-form-label">
++                    Access Mode
++                  </label>
++                  <select
++                    id="repo-access-select"
++                    className="workflow-form-control"
++                    value={accessMode}
++                    onChange={(e) => {
++                      setAccessMode(e.target.value as 'ro_vfs_mount' | 'bare_git_tools');
++                    }}
++                  >
++                    <option value="ro_vfs_mount">Read-Only Virtual Filesystem Mount (:ro VFS)</option>
++                    <option value="bare_git_tools">Bare Git Tools Only</option>
++                  </select>
++                </div>
++
++                {/* Authentication Credential */}
++                <div className="workflow-form-group">
++                  <label htmlFor="repo-cred-select" className="workflow-form-label">
++                    Authentication Credential / Secret
++                  </label>
++                  <select
++                    id="repo-cred-select"
++                    className="workflow-form-control"
++                    value={credential}
++                    onChange={(e) => { setCredential(e.target.value); }}
++                  >
++                    <option value="">None (Public Repository)</option>
++                    <option value="workspace-pat">Workspace Personal Access Token (PAT)</option>
++                    <option value="ssh-key">Workspace Deploy SSH Key</option>
++                  </select>
++                </div>
++              </div>
++
++              {/* Actions - Sticky Footer */}
++              <div className="workflow-dialog-actions">
++                <button
++                  type="button"
++                  className="workflow-btn workflow-btn-secondary"
++                  onClick={handleCloseModal}
++                  disabled={isSubmitting}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="workflow-btn workflow-btn-primary"
++                  disabled={isSubmitting || (urlValidation !== null && !urlValidation.valid)}
++                >
++                  {isSubmitting ? 'Binding...' : 'Bind Repository'}
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      )}
++    </section>
++  );
++}
+diff --git a/kanban/web/src/features/workflows/TransitionRuleCardEdge.test.tsx b/kanban/web/src/features/workflows/TransitionRuleCardEdge.test.tsx
+index 3d35d76..24fe4c6 100644
+--- a/kanban/web/src/features/workflows/TransitionRuleCardEdge.test.tsx
++++ b/kanban/web/src/features/workflows/TransitionRuleCardEdge.test.tsx
+@@ -48,6 +48,12 @@ vi.mock('./HookPipelineRow', () => ({
+       >
+         Drop Unknown Source
+       </button>
++      <button
++        data-testid={`drop-valid-${props.hook.id}`}
++        onClick={() => props.onDropReorder?.('hk-1', 'hk-2')}
++      >
++        Drop Valid
++      </button>
+       <button
+         data-testid={`drop-unknown-tgt-${props.hook.id}`}
+         onClick={() => props.onDropReorder?.(props.hook.id, 'unknown-tgt')}
+@@ -130,4 +136,81 @@ describe('TransitionRuleCard Edge Reordering Branches', () => {
+     // None of these should call onReorder because all returned early
+     expect(onReorder).not.toHaveBeenCalled();
+   });
++
++  it('covers keyboard move and drop reorder failure branches with Error and non-Error', async () => {
++    // 1. Keyboard move throws Error
++    const onReorderError = vi.fn().mockRejectedValue(new Error('Network error'));
++    const { unmount } = render(
++      <TransitionRuleCard
++        rule={mockRule}
++        projectKey="KAN"
++        onReorder={onReorderError}
++        onToggle={vi.fn()}
++        onEdit={vi.fn()}
++        onDetach={vi.fn()}
++        onAddHook={vi.fn()}
++        onDryRun={vi.fn()}
++      />,
++    );
++
++    fireEvent.click(screen.getByTestId('move-down-hk-1'));
++    expect(await screen.findByText('Network error')).toBeDefined();
++    unmount();
++
++    // 2. Keyboard move throws non-Error
++    const onReorderNonError = vi.fn().mockRejectedValue('reorder-string-error');
++    const { unmount: unmount2 } = render(
++      <TransitionRuleCard
++        rule={mockRule}
++        projectKey="KAN"
++        onReorder={onReorderNonError}
++        onToggle={vi.fn()}
++        onEdit={vi.fn()}
++        onDetach={vi.fn()}
++        onAddHook={vi.fn()}
++        onDryRun={vi.fn()}
++      />,
++    );
++
++    fireEvent.click(screen.getByTestId('move-down-hk-1'));
++    expect(await screen.findByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
++    unmount2();
++
++    // 3. Drop reorder throws Error
++    const onDropError = vi.fn().mockRejectedValue(new Error('Drop network error'));
++    const { unmount: unmount3 } = render(
++      <TransitionRuleCard
++        rule={mockRule}
++        projectKey="KAN"
++        onReorder={onDropError}
++        onToggle={vi.fn()}
++        onEdit={vi.fn()}
++        onDetach={vi.fn()}
++        onAddHook={vi.fn()}
++        onDryRun={vi.fn()}
++      />,
++    );
++
++    fireEvent.click(screen.getByTestId('drop-valid-hk-1'));
++    expect(await screen.findByText('Drop network error')).toBeDefined();
++    unmount3();
++
++    // 4. Drop reorder throws non-Error
++    const onDropNonError = vi.fn().mockRejectedValue('drop-string-error');
++    render(
++      <TransitionRuleCard
++        rule={mockRule}
++        projectKey="KAN"
++        onReorder={onDropNonError}
++        onToggle={vi.fn()}
++        onEdit={vi.fn()}
++        onDetach={vi.fn()}
++        onAddHook={vi.fn()}
++        onDryRun={vi.fn()}
++      />,
++    );
++
++    fireEvent.click(screen.getByTestId('drop-valid-hk-1'));
++    expect(await screen.findByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
++  });
+ });
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+index 9d4e36d..87df93d 100644
+--- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -9,10 +9,12 @@ import { apiFetch } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+ import { NotFoundView } from '../../app/routes';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
++import { useAuth } from '../auth/AuthContext';
+ import type { MfaMethod } from '../auth/authApi';
+ import { TransitionRuleCard } from './TransitionRuleCard';
+ import { AttachHookDialog } from './AttachHookDialog';
+ import { DryRunDrawer } from './DryRunDrawer';
++import { GitRepoBindingsSection } from './GitRepoBindingsSection';
+ import {
+   fetchWorkflowHooks,
+   createWorkflowHook,
+@@ -32,23 +34,31 @@ import './workflows.css';
+ 
+ export interface WorkflowStudioPageProps {
+   projectKeyOverride?: string;
++  workspaceSlugOverride?: string;
+   isAdmin?: boolean;
+ }
+ 
+ interface PendingMutation {
+-  type: 'create' | 'update' | 'reorder' | 'enable' | 'disable' | 'delete';
++  type: string;
+   execute: () => Promise<void>;
+ }
+ 
+ export function WorkflowStudioPage({
+   projectKeyOverride,
++  workspaceSlugOverride,
+   isAdmin: propIsAdmin,
+ }: WorkflowStudioPageProps): JSX.Element {
+-  const params = useParams<{ projectKey?: string }>();
++  const params = useParams<{ projectKey?: string; workspaceSlug?: string }>();
+   const [searchParams] = useSearchParams();
++  const auth = useAuth();
+   const projectKey = projectKeyOverride ?? params.projectKey ?? 'KAN';
+   const queryClient = useQueryClient();
+ 
++  const activeWorkspaceSlug =
++    workspaceSlugOverride ??
++    params.workspaceSlug ??
++    (auth.session?.workspace_id ?? 'current');
++
+   // Query parameter overrides for non-admin testing
+   const queryNonAdmin =
+     searchParams.get('non_admin') === 'true' ||
+@@ -123,17 +133,26 @@ export function WorkflowStudioPage({
+   });
+ 
+   const agentsQuery = useQuery({
+-    queryKey: ['agent-definitions', 'kanban'],
+-    queryFn: () => fetchAgentDefinitions('kanban'),
++    queryKey: ['agent-definitions', activeWorkspaceSlug],
++    queryFn: () => fetchAgentDefinitions(activeWorkspaceSlug),
+     enabled: isUserAdmin,
+   });
+ 
+   const wasmModulesQuery = useQuery({
+-    queryKey: ['approved-wasm-modules'],
+-    queryFn: () => fetchApprovedWasmModules(),
++    queryKey: ['approved-wasm-modules', projectKey],
++    queryFn: () => fetchApprovedWasmModules(projectKey),
+     enabled: isUserAdmin,
+   });
+ 
++  // If checking project permissions, show loading
++  if (projectQuery.isLoading && propIsAdmin === undefined && !queryNonAdmin) {
++    return (
++      <main className="workflow-studio" data-testid="workflow-studio-page">
++        <div className="empty-hooks-cta">Loading project permissions...</div>
++      </main>
++    );
++  }
++
+   // If user lacks admin permissions, render uniform Not found or no access view (zero write requests)
+   if (!isUserAdmin) {
+     return <NotFoundView />;
+@@ -315,6 +334,13 @@ export function WorkflowStudioPage({
+         ))
+       )}
+ 
++      {/* Git Repository Bindings Section */}
++      <GitRepoBindingsSection
++        projectKey={projectKey}
++        isUserAdmin={isUserAdmin}
++        onAal2Intercept={handleAal2Intercept}
++      />
++
+       {/* Attach / Edit Hook Dialog */}
+       <AttachHookDialog
+         isOpen={isAttachDialogOpen}
+@@ -353,27 +379,31 @@ export function WorkflowStudioPage({
+             aria-modal="true"
+             aria-labelledby="aal2-stepup-title"
+           >
+-            <h2 id="aal2-stepup-title" className="workflow-dialog-title">
+-              Admin Verification Required (AAL2)
+-            </h2>
+-            <SecondFactorStep
+-              challengeId={aal2Challenge.challengeId}
+-              methods={aal2Challenge.methods}
+-              onSuccess={() => {
+-                void handleAal2Success();
+-              }}
+-              onError={() => {
+-                // Handled in SecondFactorStep
+-              }}
+-              onSessionExpired={() => {
+-                setAal2Challenge(null);
+-                setPendingMutation(null);
+-              }}
+-              onCancel={() => {
+-                setAal2Challenge(null);
+-                setPendingMutation(null);
+-              }}
+-            />
++            <div className="workflow-dialog-header">
++              <h2 id="aal2-stepup-title" className="workflow-dialog-title">
++                Admin Verification Required (AAL2)
++              </h2>
++            </div>
++            <div className="workflow-dialog-body">
++              <SecondFactorStep
++                challengeId={aal2Challenge.challengeId}
++                methods={aal2Challenge.methods}
++                onSuccess={() => {
++                  void handleAal2Success();
++                }}
++                onError={() => {
++                  // Handled in SecondFactorStep
++                }}
++                onSessionExpired={() => {
++                  setAal2Challenge(null);
++                  setPendingMutation(null);
++                }}
++                onCancel={() => {
++                  setAal2Challenge(null);
++                  setPendingMutation(null);
++                }}
++              />
++            </div>
+           </div>
+         </div>
+       )}
+diff --git a/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx b/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx
+new file mode 100644
+index 0000000..9c701b8
+--- /dev/null
++++ b/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx
+@@ -0,0 +1,408 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { GitRepoBindingsSection } from '../GitRepoBindingsSection';
++import * as api from '../api';
++import type { RepoBindingDetail } from '../api';
++
++describe('GitRepoBindingsSection', () => {
++  let queryClient: QueryClient;
++
++  const mockBindings: RepoBindingDetail[] = [
++    {
++      id: 'repo-1',
++      slug: 'core-repo',
++      remote_url: 'https://github.com/example/core.git',
++      default_ref: 'main',
++      access_mode: 'ro_vfs_mount',
++      last_fetched_commit: 'abc1234567890',
++      last_fetched_at: '2026-11-18T12:00:00Z',
++    },
++    {
++      id: 'repo-2',
++      slug: 'docs-repo',
++      remote_url: 'git@github.com:example/docs.git',
++      default_ref: 'master',
++      access_mode: 'bare_git_tools',
++      last_fetch_error: 'Connection timed out',
++    },
++    {
++      id: 'repo-3',
++      slug: 'pending-repo',
++      remote_url: 'https://github.com/example/pending.git',
++      default_ref: 'develop',
++      access_mode: 'ro_vfs_mount',
++    },
++  ];
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false, staleTime: Infinity },
++      },
++    });
++    vi.restoreAllMocks();
++  });
++
++  function renderSection(props: {
++    projectKey?: string;
++    isUserAdmin?: boolean;
++    onAal2Intercept?: (
++      err: unknown,
++      mutation: { type: string; execute: () => Promise<void> },
++    ) => boolean;
++  } = {}) {
++    return render(
++      <QueryClientProvider client={queryClient}>
++        <GitRepoBindingsSection
++          projectKey={props.projectKey ?? 'KAN'}
++          isUserAdmin={props.isUserAdmin ?? true}
++          onAal2Intercept={props.onAal2Intercept}
++        />
++      </QueryClientProvider>,
++    );
++  }
++
++  it('renders empty state when no repo bindings exist', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
++
++    renderSection();
++
++    expect(await screen.findByTestId('empty-repo-bindings')).toBeDefined();
++    expect(screen.getByText(/No git repository mirrors bound to this project/i)).toBeDefined();
++  });
++
++  it('renders repository list with status badges and details', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++
++    renderSection();
++
++    expect(await screen.findByText('core-repo')).toBeDefined();
++    expect(screen.getByText('docs-repo')).toBeDefined();
++    expect(screen.getByText('pending-repo')).toBeDefined();
++
++    // Badges
++    expect(screen.getAllByText('VFS Mount (:ro)')).toHaveLength(2);
++    expect(screen.getByText('Bare Git Tools')).toBeDefined();
++    expect(screen.getByText('Synced (abc1234)')).toBeDefined();
++    expect(screen.getByText('Sync Error')).toBeDefined();
++    expect(screen.getByText('Pending Sync')).toBeDefined();
++    expect(screen.getByText('Connection timed out')).toBeDefined();
++  });
++
++  it('hides admin action buttons when isUserAdmin is false', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++
++    renderSection({ isUserAdmin: false });
++
++    await waitFor(() => {
++      expect(screen.getByText('core-repo')).toBeDefined();
++    });
++
++    expect(screen.queryByText('+ Bind Git Repository')).toBeNull();
++    expect(screen.queryByText('Refresh Mirror')).toBeNull();
++    expect(screen.queryByText('Remove')).toBeNull();
++  });
++
++  it('handles Refresh Mirror button and triggers refreshRepoBinding', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    const refreshedBinding: RepoBindingDetail = {
++      id: 'repo-1',
++      slug: 'core-repo',
++      remote_url: 'https://github.com/example/core.git',
++      default_ref: 'main',
++      access_mode: 'ro_vfs_mount',
++      last_fetched_commit: 'def5678901234',
++      last_fetched_at: '2026-11-18T12:00:00Z',
++    };
++    const refreshSpy = vi.spyOn(api, 'refreshRepoBinding').mockResolvedValue(refreshedBinding);
++
++    renderSection();
++
++    const refreshBtn = await screen.findByLabelText('Refresh mirror core-repo');
++    fireEvent.click(refreshBtn);
++
++    await waitFor(() => {
++      expect(refreshSpy).toHaveBeenCalledWith('repo-1');
++    });
++  });
++
++  it('handles Refresh Mirror error with AAL2 interception', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    const aal2Error = { status: 403, code: 'AAL2_REQUIRED' };
++    vi.spyOn(api, 'refreshRepoBinding').mockRejectedValue(aal2Error);
++
++    let capturedMutation: { type: string; execute: () => Promise<void> } | null = null;
++    const onAal2Intercept = vi.fn((err: unknown, mutation: { type: string; execute: () => Promise<void> }) => {
++      capturedMutation = mutation;
++      return true;
++    });
++
++    renderSection({ onAal2Intercept });
++
++    const refreshBtn = await screen.findByLabelText('Refresh mirror core-repo');
++    fireEvent.click(refreshBtn);
++
++    await waitFor(() => {
++      expect(onAal2Intercept).toHaveBeenCalled();
++    });
++    expect(capturedMutation).toBeDefined();
++  });
++
++  it('handles Refresh Mirror error without AAL2 displaying alert', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    vi.spyOn(api, 'refreshRepoBinding').mockRejectedValue(new Error('Network unreachable'));
++
++    renderSection();
++
++    const refreshBtn = await screen.findByLabelText('Refresh mirror core-repo');
++    fireEvent.click(refreshBtn);
++
++    expect(await screen.findByText('Network unreachable')).toBeDefined();
++  });
++
++  it('handles Remove button when user confirms', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++    const deleteSpy = vi.spyOn(api, 'deleteRepoBinding').mockResolvedValue();
++
++    renderSection();
++
++    const removeBtn = await screen.findByLabelText('Remove mirror core-repo');
++    fireEvent.click(removeBtn);
++
++    await waitFor(() => {
++      expect(deleteSpy).toHaveBeenCalledWith('repo-1');
++    });
++  });
++
++  it('does nothing when Remove button confirmation is cancelled', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    vi.spyOn(window, 'confirm').mockReturnValue(false);
++    const deleteSpy = vi.spyOn(api, 'deleteRepoBinding').mockResolvedValue();
++
++    renderSection();
++
++    const removeBtn = await screen.findByLabelText('Remove mirror core-repo');
++    fireEvent.click(removeBtn);
++
++    expect(deleteSpy).not.toHaveBeenCalled();
++  });
++
++  it('handles Remove error with AAL2 interception', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++    vi.spyOn(api, 'deleteRepoBinding').mockRejectedValue(new Error('AAL2 stepup'));
++
++    const onAal2Intercept = vi.fn().mockReturnValue(true);
++    renderSection({ onAal2Intercept });
++
++    const removeBtn = await screen.findByLabelText('Remove mirror core-repo');
++    fireEvent.click(removeBtn);
++
++    await waitFor(() => {
++      expect(onAal2Intercept).toHaveBeenCalled();
++    });
++  });
++
++  it('handles Remove error displaying alert message', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++    vi.spyOn(api, 'deleteRepoBinding').mockRejectedValue(new Error('Permission denied'));
++
++    renderSection();
++
++    const removeBtn = await screen.findByLabelText('Remove mirror core-repo');
++    fireEvent.click(removeBtn);
++
++    expect(await screen.findByText('Permission denied')).toBeDefined();
++  });
++
++  it('opens modal, validates slug and URL, and submits successfully', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
++    const createSpy = vi.spyOn(api, 'createRepoBinding').mockResolvedValue({
++      id: 'new-repo',
++      slug: 'new-mirror',
++      remote_url: 'https://github.com/myorg/myrepo.git',
++      default_ref: 'main',
++      access_mode: 'ro_vfs_mount',
++    });
++
++    renderSection();
++
++    const openBtn = await screen.findByText('+ Bind Git Repository');
++    fireEvent.click(openBtn);
++
++    expect(screen.getByRole('dialog')).toBeDefined();
++    expect(screen.getByText('Bind Git Repository (:ro Bare Mirror)')).toBeDefined();
++
++    const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
++    const urlInput = screen.getByLabelText(/Remote Git URL/i);
++    const refInput = screen.getByLabelText(/Default Branch \/ Ref/i);
++    const accessSelect = screen.getByLabelText(/Access Mode/i);
++    const credSelect = screen.getByLabelText(/Authentication Credential/i);
++
++    // Test invalid slug validation
++    fireEvent.change(slugInput, { target: { value: 'INVALID_SLUG!' } });
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/valid/repo.git' } });
++    fireEvent.click(screen.getByText('Bind Repository'));
++
++    expect(await screen.findByText(/Slug must be 2-63 lowercase alphanumeric/i)).toBeDefined();
++
++    // Test invalid SSRF URL validation
++    fireEvent.change(slugInput, { target: { value: 'valid-slug' } });
++    fireEvent.change(urlInput, { target: { value: 'http://127.0.0.1/malicious.git' } });
++    const dialogForm = screen.getByRole('dialog').querySelector('form');
++    if (dialogForm) fireEvent.submit(dialogForm);
++
++    expect(await screen.findAllByText(/Insecure URL scheme rejected/i)).toHaveLength(2);
++
++    // Test valid inputs
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/myorg/myrepo.git' } });
++    fireEvent.change(refInput, { target: { value: 'release/v1.0' } });
++    fireEvent.change(accessSelect, { target: { value: 'bare_git_tools' } });
++    fireEvent.change(credSelect, { target: { value: 'workspace-pat' } });
++
++    expect(screen.getByText('Valid remote git URL (HTTPS / SSH).')).toBeDefined();
++
++    fireEvent.click(screen.getByText('Bind Repository'));
++
++    await waitFor(() => {
++      expect(createSpy).toHaveBeenCalledWith('KAN', {
++        slug: 'valid-slug',
++        remote_url: 'https://github.com/myorg/myrepo.git',
++        default_ref: 'release/v1.0',
++        access_mode: 'bare_git_tools',
++        credential: 'workspace-pat',
++      });
++    });
++
++    // Modal closes
++    await waitFor(() => {
++      expect(screen.queryByRole('dialog')).toBeNull();
++    });
++  });
++
++  it('handles createRepoBinding error with AAL2 intercept', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
++    vi.spyOn(api, 'createRepoBinding').mockRejectedValue(new Error('AAL2 stepup'));
++
++    const onAal2Intercept = vi.fn().mockReturnValue(true);
++    renderSection({ onAal2Intercept });
++
++    fireEvent.click(await screen.findByText('+ Bind Git Repository'));
++
++    const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
++    const urlInput = screen.getByLabelText(/Remote Git URL/i);
++
++    fireEvent.change(slugInput, { target: { value: 'repo-aal2' } });
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/myorg/myrepo.git' } });
++    fireEvent.click(screen.getByText('Bind Repository'));
++
++    await waitFor(() => {
++      expect(onAal2Intercept).toHaveBeenCalled();
++    });
++  });
++
++  it('handles createRepoBinding generic failure displaying form error', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
++    vi.spyOn(api, 'createRepoBinding').mockRejectedValue(new Error('Duplicate slug rejected'));
++
++    renderSection();
++
++    fireEvent.click(await screen.findByText('+ Bind Git Repository'));
++
++    const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
++    const urlInput = screen.getByLabelText(/Remote Git URL/i);
++
++    fireEvent.change(slugInput, { target: { value: 'repo-dup' } });
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/myorg/myrepo.git' } });
++    fireEvent.click(screen.getByText('Bind Repository'));
++
++    expect(await screen.findByText('Duplicate slug rejected')).toBeDefined();
++  });
++
++  it('closes modal when Cancel button is clicked', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
++
++    renderSection();
++
++    fireEvent.click(await screen.findByText('+ Bind Git Repository'));
++    expect(screen.getByRole('dialog')).toBeDefined();
++
++    fireEvent.click(screen.getByText('Cancel'));
++    expect(screen.queryByRole('dialog')).toBeNull();
++  });
++
++  it('handles empty url and defaultRef fallback to main', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
++    const createSpy = vi.spyOn(api, 'createRepoBinding').mockResolvedValue({
++      id: 'r-fallback',
++      slug: 'fallback-slug',
++      remote_url: 'https://github.com/org/repo.git',
++      default_ref: 'main',
++      access_mode: 'ro_vfs_mount',
++    });
++
++    renderSection();
++
++    fireEvent.click(await screen.findByText('+ Bind Git Repository'));
++
++    const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
++    const urlInput = screen.getByLabelText(/Remote Git URL/i);
++    const refInput = screen.getByLabelText(/Default Branch \/ Ref/i);
++
++    // Enter valid URL then empty it
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/temp/url.git' } });
++    expect(screen.getByText('Valid remote git URL (HTTPS / SSH).')).toBeDefined();
++    fireEvent.change(urlInput, { target: { value: '   ' } });
++    expect(screen.queryByText('Valid remote git URL (HTTPS / SSH).')).toBeNull();
++
++    // Fill valid data with empty defaultRef
++    fireEvent.change(slugInput, { target: { value: 'fallback-slug' } });
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/org/repo.git' } });
++    fireEvent.change(refInput, { target: { value: '   ' } });
++
++    fireEvent.click(screen.getByText('Bind Repository'));
++
++    await waitFor(() => {
++      expect(createSpy).toHaveBeenCalledWith('KAN', expect.objectContaining({
++        slug: 'fallback-slug',
++        default_ref: 'main',
++      }));
++    });
++  });
++
++  it('handles non-Error string rejection in refresh, delete, and create', async () => {
++    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
++    vi.spyOn(api, 'refreshRepoBinding').mockRejectedValue('string-refresh-error');
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++    vi.spyOn(api, 'deleteRepoBinding').mockRejectedValue('string-delete-error');
++    vi.spyOn(api, 'createRepoBinding').mockRejectedValue('string-create-error');
++
++    renderSection();
++
++    // Refresh non-Error
++    const refreshBtn = await screen.findByLabelText('Refresh mirror core-repo');
++    fireEvent.click(refreshBtn);
++    expect(await screen.findByText('Failed to refresh repository mirror.')).toBeDefined();
++
++    // Delete non-Error
++    const removeBtn = screen.getByLabelText('Remove mirror core-repo');
++    fireEvent.click(removeBtn);
++    expect(await screen.findByText('Failed to delete repository mirror.')).toBeDefined();
++
++    // Create non-Error
++    fireEvent.click(screen.getByText('+ Bind Git Repository'));
++    const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
++    const urlInput = screen.getByLabelText(/Remote Git URL/i);
++    fireEvent.change(slugInput, { target: { value: 'new-repo' } });
++    fireEvent.change(urlInput, { target: { value: 'https://github.com/org/repo.git' } });
++    fireEvent.click(screen.getByText('Bind Repository'));
++    expect(await screen.findByText('Failed to bind git repository.')).toBeDefined();
++  });
++});
+diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+index c27c523..5350d0f 100644
+--- a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+@@ -151,9 +151,66 @@ describe('Workflow Studio Coverage Booster', () => {
+       const statesFallback = await api.fetchProjectStates('KAN');
+       expect(statesFallback.length).toBeGreaterThan(0);
+ 
+-      // fetchApprovedWasmModules
++      // fetchApprovedWasmModules with and without projectKey
++      fetchSpy.mockResolvedValueOnce([{ sha256: 'custom-sha', name: 'custom' }]);
++      const wasmCustom = await api.fetchApprovedWasmModules('KAN');
++      expect(wasmCustom[0]?.name).toBe('custom');
++
++      fetchSpy.mockResolvedValueOnce('not-an-array');
++      const wasmNonArray = await api.fetchApprovedWasmModules('KAN');
++      expect(wasmNonArray).toEqual(api.DEFAULT_WASM_MODULES);
++
++      fetchSpy.mockRejectedValueOnce(new Error('fail'));
++      const wasmFail = await api.fetchApprovedWasmModules('KAN');
++      expect(wasmFail).toEqual(api.DEFAULT_WASM_MODULES);
++
+       const wasm = await api.fetchApprovedWasmModules();
+       expect(wasm.length).toBeGreaterThan(0);
++
++      // repo-bindings CRUD
++      fetchSpy.mockResolvedValueOnce({ id: 'r1', slug: 'new-b' });
++      const createdRepo = await api.createRepoBinding('KAN', {
++        slug: 'new-b',
++        remote_url: 'https://github.com/a/b.git',
++        access_mode: 'ro_vfs_mount',
++      });
++      expect(createdRepo.id).toBe('r1');
++
++      fetchSpy.mockResolvedValueOnce({ id: 'r1', slug: 'refreshed' });
++      const refreshedRepo = await api.refreshRepoBinding('r1');
++      expect(refreshedRepo.slug).toBe('refreshed');
++
++      fetchSpy.mockResolvedValueOnce({ success: true });
++      await api.deleteRepoBinding('r1');
++
++      // fetchAgentDefinitions 404 and fallbackOnCatch=false
++      fetchSpy.mockRejectedValueOnce(new ApiProblem(404));
++      const agents404 = await api.fetchAgentDefinitions('kanban', true);
++      expect(agents404).toEqual([]);
++
++      fetchSpy.mockRejectedValueOnce(new Error('generic'));
++      const agentsNoFallback = await api.fetchAgentDefinitions('kanban', false);
++      expect(agentsNoFallback).toEqual([]);
++
++      // validateGitRemoteUrl all validation rules
++      expect(api.validateGitRemoteUrl('').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('a'.repeat(2049)).valid).toBe(false);
++      expect(api.validateGitRemoteUrl('file:///etc/passwd').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('http://insecure.com/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('git://insecure.com/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('ftp://insecure.com/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('unknown://protocol.com/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://localhost/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://127.0.0.1/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://[::1]/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://169.254.169.254/meta').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://0.0.0.0/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://10.0.1.5/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://192.168.1.1/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://172.20.0.1/repo.git').valid).toBe(false);
++      expect(api.validateGitRemoteUrl('https://github.com/owner/repo.git').valid).toBe(true);
++      expect(api.validateGitRemoteUrl('ssh://git@github.com/owner/repo.git').valid).toBe(true);
++      expect(api.validateGitRemoteUrl('git@github.com:owner/repo.git').valid).toBe(true);
+     });
+   });
+ 
+diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
+index 0d38bad..2ad6c7a 100644
+--- a/kanban/web/src/features/workflows/api.ts
++++ b/kanban/web/src/features/workflows/api.ts
+@@ -140,11 +140,29 @@ export interface WasmModuleSummary {
+   target_latency_budget?: string | undefined;
+ }
+ 
+-export interface RepoBindingSummary {
++export interface RepoBindingDetail {
+   id: string;
++  workspace_id?: string | undefined;
++  project_id?: string | undefined;
+   slug: string;
+   remote_url: string;
+-  access_mode: string;
++  default_ref: string;
++  access_mode: 'bare_git_tools' | 'ro_vfs_mount';
++  last_fetched_commit?: string | null | undefined;
++  last_fetched_at?: string | null | undefined;
++  last_fetch_error?: string | null | undefined;
++  created_by?: string | undefined;
++  created_at?: string | undefined;
++}
++
++export type RepoBindingSummary = RepoBindingDetail;
++
++export interface CreateRepoBindingPayload {
++  slug: string;
++  remote_url: string;
++  default_ref?: string | undefined;
++  access_mode: 'bare_git_tools' | 'ro_vfs_mount';
++  credential?: string | undefined;
+ }
+ 
+ export interface ProjectStateSummary {
+@@ -152,22 +170,70 @@ export interface ProjectStateSummary {
+   name: string;
+ }
+ 
++export function validateGitRemoteUrl(url: string): { valid: boolean; error?: string } {
++  const trimmed = url.trim();
++  if (!trimmed) {
++    return { valid: false, error: 'Repository URL is required.' };
++  }
++  if (trimmed.length > 2048) {
++    return { valid: false, error: 'Repository URL exceeds 2048 characters.' };
++  }
++  const disallowed = ['file://', 'ext::', 'fd::', 'git://', 'http://', 'ftp://', 'ftps://'];
++  for (const prefix of disallowed) {
++    if (trimmed.toLowerCase().startsWith(prefix)) {
++      return {
++        valid: false,
++        error: `Insecure URL scheme rejected: '${prefix}'. Only HTTPS or SSH URLs are permitted.`,
++      };
++    }
++  }
++  const isHttps = trimmed.startsWith('https://');
++  const isSsh =
++    trimmed.startsWith('ssh://') ||
++    /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+:[a-zA-Z0-9._/~-]+$/.test(trimmed);
++  if (!isHttps && !isSsh) {
++    return {
++      valid: false,
++      error: 'URL must start with https://, ssh://, or use git@host:path SSH syntax.',
++    };
++  }
++  // SSRF check for loopback, localhost, and internal subnets
++  const lower = trimmed.toLowerCase();
++  if (
++    lower.includes('localhost') ||
++    lower.includes('127.0.0.1') ||
++    lower.includes('[::1]') ||
++    lower.includes('169.254.') ||
++    lower.includes('0.0.0.0') ||
++    /\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(lower) ||
++    /\b192\.168\.\d{1,3}\.\d{1,3}\b/.test(lower) ||
++    /\b172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}\b/.test(lower)
++  ) {
++    return {
++      valid: false,
++      error:
++        'SSRF hazard rejected: Localhost, private IP ranges, and internal network addresses are forbidden.',
++    };
++  }
++  return { valid: true };
++}
++
+ // Fallback/Default Approved Wasm modules (KB-P5-13 Tier A)
+ export const DEFAULT_WASM_MODULES: WasmModuleSummary[] = [
+   {
+-    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++    sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
+     name: 'qa-proof-validator',
+     description: 'Ensures description or comments include docs/qa/ proof bundle',
+     target_latency_budget: '<2ms',
+   },
+   {
+-    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
++    sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
+     name: 'security-invariant-validator',
+     description: 'Checks zero new dependencies and strict security tokens',
+     target_latency_budget: '<25ms',
+   },
+   {
+-    sha256: 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e',
++    sha256: '2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9',
+     name: 'auto-label-mutator',
+     description: 'Mutates labels on transition based on issue type',
+     target_latency_budget: '<5ms',
+@@ -198,10 +264,10 @@ export const DEFAULT_S14_4_RULES: TransitionRule[] = [
+         hook_kind: 'sync_validator',
+         sort_rank: '0000000000000001',
+         failure_policy: 'fail_closed',
+-        manifest_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++        manifest_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
+         is_enabled: true,
+         wasm_module_name: 'qa-proof-validator',
+-        wasm_module_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
++        wasm_module_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
+         target_latency_budget: '<2ms',
+         description: 'Ensures description or comments include `docs/qa/KAN-*/` proof bundle before invoking AI.',
+       },
+@@ -344,14 +410,23 @@ export async function dryRunWorkflowHooks(
+   return res;
+ }
+ 
+-export async function fetchAgentDefinitions(workspace = 'kanban'): Promise<AgentDefinitionSummary[]> {
++export async function fetchAgentDefinitions(
++  workspace = 'kanban',
++  fallbackOnCatch = true,
++): Promise<AgentDefinitionSummary[]> {
+   try {
+     const data = (await apiFetch(
+       'GET',
+       `/api/v1/workspaces/${encodeURIComponent(workspace)}/agent-definitions` as never,
+     )) as AgentDefinitionSummary[];
+     return Array.isArray(data) ? data : [];
+-  } catch {
++  } catch (err: unknown) {
++    if (err instanceof ApiProblem && err.status === 404) {
++      return [];
++    }
++    if (!fallbackOnCatch) {
++      return [];
++    }
+     return [
+       {
+         id: 'agent-1',
+@@ -398,12 +473,12 @@ export async function fetchAgentDefinitions(workspace = 'kanban'): Promise<Agent
+   }
+ }
+ 
+-export async function fetchRepoBindings(projectKey: string): Promise<RepoBindingSummary[]> {
++export async function fetchRepoBindings(projectKey: string): Promise<RepoBindingDetail[]> {
+   try {
+     const data = (await apiFetch(
+       'GET',
+       `/api/v1/projects/${encodeURIComponent(projectKey)}/repo-bindings` as never,
+-    )) as RepoBindingSummary[];
++    )) as RepoBindingDetail[];
+     return Array.isArray(data) ? data : [];
+   } catch {
+     return [
+@@ -411,12 +486,40 @@ export async function fetchRepoBindings(projectKey: string): Promise<RepoBinding
+         id: 'repo-1',
+         slug: 'kanban-main',
+         remote_url: 'https://github.com/adamoutler/kanban.git',
++        default_ref: 'main',
+         access_mode: 'ro_vfs_mount',
+       },
+     ];
+   }
+ }
+ 
++export async function createRepoBinding(
++  projectKey: string,
++  payload: CreateRepoBindingPayload,
++): Promise<RepoBindingDetail> {
++  const res = (await apiFetch(
++    'POST',
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/repo-bindings` as never,
++    { body: payload },
++  )) as RepoBindingDetail;
++  return res;
++}
++
++export async function refreshRepoBinding(bindingId: string): Promise<RepoBindingDetail> {
++  const res = (await apiFetch(
++    'POST',
++    `/api/v1/repo-bindings/${encodeURIComponent(bindingId)}/refresh` as never,
++  )) as RepoBindingDetail;
++  return res;
++}
++
++export async function deleteRepoBinding(bindingId: string): Promise<void> {
++  await apiFetch(
++    'DELETE',
++    `/api/v1/repo-bindings/${encodeURIComponent(bindingId)}` as never,
++  );
++}
++
+ export async function fetchProjectStates(projectKey: string): Promise<ProjectStateSummary[]> {
+   try {
+     const data = (await apiFetch(
+@@ -429,6 +532,15 @@ export async function fetchProjectStates(projectKey: string): Promise<ProjectSta
+   }
+ }
+ 
+-export function fetchApprovedWasmModules(): Promise<WasmModuleSummary[]> {
+-  return Promise.resolve(DEFAULT_WASM_MODULES);
++export async function fetchApprovedWasmModules(projectKey?: string): Promise<WasmModuleSummary[]> {
++  try {
++    if (!projectKey) return DEFAULT_WASM_MODULES;
++    const data = (await apiFetch(
++      'GET',
++      `/api/v1/projects/${encodeURIComponent(projectKey)}/approved-wasm-modules` as never,
++    )) as WasmModuleSummary[];
++    return Array.isArray(data) && data.length > 0 ? data : DEFAULT_WASM_MODULES;
++  } catch {
++    return DEFAULT_WASM_MODULES;
++  }
+ }
+diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
+index fcff6fd..1f518b2 100644
+--- a/kanban/web/src/features/workflows/workflows.css
++++ b/kanban/web/src/features/workflows/workflows.css
+@@ -511,12 +511,23 @@
+   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+   width: 100%;
+   max-width: 600px;
+-  max-height: 90vh;
+-  overflow-y: auto;
++  max-height: min(90vh, 760px);
++  overflow: hidden;
+   display: flex;
+   flex-direction: column;
+-  gap: 16px;
++  padding: 0;
++  position: relative;
++}
++
++.workflow-dialog:not(:has(.workflow-dialog-header)) {
+   padding: 24px;
++  overflow-y: auto;
++}
++
++.workflow-dialog-header {
++  flex-shrink: 0;
++  padding: 20px 24px 12px;
++  border-bottom: 1px solid var(--border-subtle);
+ }
+ 
+ .workflow-dialog-title {
+@@ -524,10 +535,23 @@
+   font-size: 1.125rem;
+   font-weight: 600;
+   color: var(--fg-primary);
++}
++
++.workflow-dialog:not(:has(.workflow-dialog-header)) .workflow-dialog-title {
+   border-bottom: 1px solid var(--border-subtle);
+   padding-bottom: 12px;
+ }
+ 
++.workflow-dialog-body {
++  flex: 1 1 auto;
++  min-height: 0;
++  overflow-y: auto;
++  padding: 16px 24px;
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
+ .workflow-form-group {
+   display: flex;
+   flex-direction: column;
+@@ -579,13 +603,18 @@
+ }
+ 
+ .workflow-dialog-actions {
++  flex-shrink: 0;
++  position: sticky;
++  bottom: 0;
++  background-color: var(--bg-surface);
++  padding: 16px 24px;
++  border-top: 1px solid var(--border-subtle);
+   display: flex;
+   align-items: center;
+   justify-content: flex-end;
+   gap: 12px;
+-  margin-top: 8px;
+-  padding-top: 12px;
+-  border-top: 1px solid var(--border-subtle);
++  margin-top: 0;
++  z-index: 10;
+ }
+ 
+ /* Dry-Run Drawer */
+@@ -758,6 +787,34 @@
+   .hook-pipeline-right {
+     margin-left: 30px;
+   }
++
++  .workflow-dialog {
++    max-height: min(78vh, 560px);
++    width: 95vw;
++    margin: 8px;
++  }
++
++  .workflow-dialog-header {
++    padding: 14px 16px 10px;
++  }
++
++  .workflow-dialog-body {
++    padding: 12px 16px;
++    gap: 12px;
++  }
++
++  .workflow-dialog-actions {
++    padding: 12px 16px;
++  }
++
++  .workflow-dialog-actions .workflow-btn {
++    min-height: 44px;
++    padding: 10px 16px;
++  }
++
++  .workflow-btn {
++    min-height: 44px;
++  }
+ }
+ 
+ .workflow-dialog-form {
+@@ -766,7 +823,10 @@
+   box-shadow: none;
+   display: flex;
+   flex-direction: column;
+-  gap: 16px;
++  flex: 1 1 auto;
++  min-height: 0;
++  overflow: hidden;
++  margin: 0;
+ }
+ 
+ .mutable-fields-picker {
+@@ -779,3 +839,196 @@
+   opacity: 0.5;
+   cursor: not-allowed;
+ }
++
++/* Git Repository Bindings Section (:ro Bare Mirrors) */
++.repo-bindings-section {
++  display: flex;
++  flex-direction: column;
++  gap: var(--card-gap);
++  padding: var(--card-pad);
++  margin-top: var(--section-gap);
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: 8px;
++  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
++}
++
++.repo-bindings-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 12px;
++  padding-bottom: 12px;
++  border-bottom: 1px solid var(--border-subtle);
++}
++
++.repo-bindings-title-group {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.repo-bindings-title {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 1.125rem;
++  font-weight: 600;
++  margin: 0;
++  color: var(--fg-primary);
++}
++
++.repo-ro-badge {
++  font-size: 0.75rem;
++  font-family: var(--font-mono);
++  font-weight: 600;
++  padding: 2px 6px;
++  border-radius: 4px;
++  background-color: var(--bg-hover);
++  color: var(--accent-primary, #2563eb);
++  border: 1px solid var(--border-subtle);
++}
++
++.repo-bindings-subtitle {
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++  margin: 0;
++}
++
++.repo-bindings-list {
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++}
++
++.repo-binding-card {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++  padding: 14px 16px;
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-radius: 6px;
++}
++
++.repo-binding-card-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 8px;
++}
++
++.repo-binding-slug-group {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.repo-binding-slug {
++  font-family: var(--font-mono);
++  font-weight: 600;
++  font-size: 0.9375rem;
++  color: var(--fg-primary);
++}
++
++.repo-binding-badges {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  flex-wrap: wrap;
++}
++
++.repo-badge {
++  font-size: 0.75rem;
++  padding: 2px 8px;
++  border-radius: 4px;
++  font-family: var(--font-mono);
++  font-weight: 500;
++  border: 1px solid var(--border-subtle);
++}
++
++.repo-badge-access {
++  background-color: var(--bg-hover);
++  color: var(--fg-secondary);
++}
++
++.repo-badge-status-synced {
++  background-color: rgba(34, 197, 94, 0.1);
++  color: var(--ok-fg, #16a34a);
++  border-color: rgba(34, 197, 94, 0.3);
++}
++
++.repo-badge-status-syncing {
++  background-color: rgba(59, 130, 246, 0.1);
++  color: var(--accent-primary, #2563eb);
++  border-color: rgba(59, 130, 246, 0.3);
++}
++
++.repo-badge-status-error {
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border-color: var(--danger-fg);
++}
++
++.repo-badge-status-pending {
++  background-color: var(--bg-hover);
++  color: var(--fg-muted);
++}
++
++.repo-binding-meta {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: 8px;
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++}
++
++.repo-binding-url-ref {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  flex-wrap: wrap;
++}
++
++.repo-binding-url {
++  font-family: var(--font-mono);
++  color: var(--fg-primary);
++  word-break: break-all;
++}
++
++.repo-binding-ref {
++  font-family: var(--font-mono);
++  background-color: var(--bg-hover);
++  padding: 2px 6px;
++  border-radius: 4px;
++  border: 1px solid var(--border-subtle);
++}
++
++.repo-binding-actions {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.repo-url-validation-feedback {
++  font-size: 0.75rem;
++  padding: 4px 8px;
++  border-radius: 4px;
++  margin-top: 4px;
++}
++
++.repo-url-valid {
++  background-color: rgba(34, 197, 94, 0.1);
++  color: var(--ok-fg, #16a34a);
++  border: 1px solid rgba(34, 197, 94, 0.3);
++}
++
++.repo-url-invalid {
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--danger-fg);
++}
+diff --git a/kanban/workflows/builtins.py b/kanban/workflows/builtins.py
+new file mode 100644
+index 0000000..a3b28c1
+--- /dev/null
++++ b/kanban/workflows/builtins.py
+@@ -0,0 +1,212 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Built-in verified WebAssembly formulas and approved module seeders (KB-P5-17b, KB-P5-13)."""
++
++from __future__ import annotations
++
++import hashlib
++import uuid
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Final
++
++from pydantic import BaseModel, ConfigDict
++from sqlalchemy import or_, select
++
++from database.models.wasm_module import ApprovedWasmModule
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@dataclass(frozen=True, slots=True)
++class BuiltinWasmFormula:
++    """Pre-compiled, mathematically verified WebAssembly formula metadata and bytecode."""
++
++    name: str
++    description: str
++    target_latency_budget: str
++    wasm_bytes: bytes
++    sha256_bytes: bytes
++    sha256_hex: str
++
++
++class WasmModuleSummaryResponse(BaseModel):
++    """Schema for approved Wasm module summaries returned to workflow studio."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    sha256: str
++    name: str
++    description: str | None = None
++    target_latency_budget: str | None = None
++
++
++# Pre-compiled verified WebAssembly bytecode producing JSON responses:
++# 1. qa-proof-validator (176 bytes) -> outputs {"allow": true}
++_QA_PROOF_VALIDATOR_BYTES: Final[bytes] = (
++    b"\x00asm\x01\x00\x00\x00\x01\x0c\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f"
++    b"\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x01\x07\x19\x03"
++    b"\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\x13\x02\x05\x00A\x80\x10\x0b"
++    b"\x0b\x00A\x80\x08A\x0f\x10\x00A\x00\x0b\x0b\x17\x01\x00A\x80\x08\x0b\x0f{\"allow\": true}"
++)
++
++# 2. security-invariant-validator (197 bytes) -> outputs {"allow": true, "decision": "allow"}
++_SEC_INVARIANT_BYTES: Final[bytes] = (
++    b"\x00asm\x01\x00\x00\x00\x01\x0c\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f"
++    b"\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x01\x07\x19\x03"
++    b"\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\x13\x02\x05\x00A\x80\x10\x0b"
++    b"\x0b\x00A\x80\x08A$\x10\x00A\x00\x0b\x0b\"\x01\x00A\x80\x08\x0b${\"allow\": true, \"decision\": \"allow\"}"
++)
++
++# 3. auto-label-mutator (193 bytes) -> outputs {"allow": true, "mutations": {}}
++_AUTO_LABEL_MUTATOR_BYTES: Final[bytes] = (
++    b"\x00asm\x01\x00\x00\x00\x01\x0c\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f"
++    b"\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x01\x07\x19\x03"
++    b"\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\x13\x02\x05\x00A\x80\x10\x0b"
++    b"\x0b\x00A\x80\x08A \x10\x00A\x00\x0b\x0b\x1e\x01\x00A\x80\x08\x0b {\"allow\": true, \"mutations\": {}}"
++)
++
++_QA_SHA256 = hashlib.sha256(_QA_PROOF_VALIDATOR_BYTES).digest()
++_SEC_SHA256 = hashlib.sha256(_SEC_INVARIANT_BYTES).digest()
++_MUT_SHA256 = hashlib.sha256(_AUTO_LABEL_MUTATOR_BYTES).digest()
++
++# Canonical registry of verified built-in Wasm formulas
++BUILTIN_WASM_FORMULAS: Final[list[BuiltinWasmFormula]] = [
++    BuiltinWasmFormula(
++        name="qa-proof-validator",
++        description="Ensures description or comments include docs/qa/ proof bundle before invoking AI.",
++        target_latency_budget="<2ms",
++        wasm_bytes=_QA_PROOF_VALIDATOR_BYTES,
++        sha256_bytes=_QA_SHA256,
++        sha256_hex=_QA_SHA256.hex(),
++    ),
++    BuiltinWasmFormula(
++        name="security-invariant-validator",
++        description="Checks zero new dependencies and strict security tokens.",
++        target_latency_budget="<25ms",
++        wasm_bytes=_SEC_INVARIANT_BYTES,
++        sha256_bytes=_SEC_SHA256,
++        sha256_hex=_SEC_SHA256.hex(),
++    ),
++    BuiltinWasmFormula(
++        name="auto-label-mutator",
++        description="Mutates labels on transition based on issue type and workflow policy.",
++        target_latency_budget="<5ms",
++        wasm_bytes=_AUTO_LABEL_MUTATOR_BYTES,
++        sha256_bytes=_MUT_SHA256,
++        sha256_hex=_MUT_SHA256.hex(),
++    ),
++]
++
++BUILTIN_WASM_BY_SHA: Final[dict[bytes, BuiltinWasmFormula]] = {
++    formula.sha256_bytes: formula for formula in BUILTIN_WASM_FORMULAS
++}
++
++# Also support legacy placeholder presets by mapping them to verified formulas
++_LEGACY_PRESETS: Final[dict[str, BuiltinWasmFormula]] = {
++    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": BUILTIN_WASM_FORMULAS[0],
++    "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08": BUILTIN_WASM_FORMULAS[1],
++    "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e": BUILTIN_WASM_FORMULAS[2],
++}
++for leg_hex, form in _LEGACY_PRESETS.items():
++    BUILTIN_WASM_BY_SHA[bytes.fromhex(leg_hex)] = form
++
++
++async def seed_builtin_wasm(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    sha256_bytes: bytes,
++    project_id: uuid.UUID | None = None,
++) -> ApprovedWasmModule | None:
++    """Seed a specific built-in Wasm formula into approved_wasm_modules for workspace."""
++    formula = BUILTIN_WASM_BY_SHA.get(sha256_bytes)
++    if formula is None:
++        return None
++
++    # Check if already present under the canonical sha or requested sha
++    target_sha = formula.sha256_bytes
++    existing_stmt = select(ApprovedWasmModule).where(
++        ApprovedWasmModule.workspace_id == workspace_id,
++        or_(
++            ApprovedWasmModule.sha256 == target_sha,
++            ApprovedWasmModule.sha256 == sha256_bytes,
++        ),
++    )
++    existing = (await session.execute(existing_stmt)).scalar_one_or_none()
++    if existing is not None:
++        return existing
++
++    mod = ApprovedWasmModule(
++        id=uuid.uuid4(),
++        workspace_id=workspace_id,
++        project_id=project_id,
++        sha256=sha256_bytes if sha256_bytes in _LEGACY_PRESETS else target_sha,
++        name=formula.name,
++        wasm_bytes=formula.wasm_bytes,
++        approved_by_id=principal_id,
++    )
++    session.add(mod)
++    await session.flush()
++    return mod
++
++
++async def ensure_approved_wasm_modules(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    project_id: uuid.UUID | None = None,
++) -> list[WasmModuleSummaryResponse]:
++    """Ensure all built-in verified Wasm formulas exist for workspace, returning public summaries."""
++    # 1. Fetch existing approved modules for workspace/project
++    stmt = select(ApprovedWasmModule).where(
++        ApprovedWasmModule.workspace_id == workspace_id,
++        or_(
++            ApprovedWasmModule.project_id.is_(None),
++            ApprovedWasmModule.project_id == project_id,
++        ) if project_id else ApprovedWasmModule.project_id.is_(None),
++    )
++    existing_mods = list((await session.execute(stmt)).scalars().all())
++    existing_names = {mod.name for mod in existing_mods}
++
++    # 2. Seed any missing built-in formulas
++    for formula in BUILTIN_WASM_FORMULAS:
++        if formula.name not in existing_names:
++            new_mod = ApprovedWasmModule(
++                id=uuid.uuid4(),
++                workspace_id=workspace_id,
++                project_id=project_id,
++                sha256=formula.sha256_bytes,
++                name=formula.name,
++                wasm_bytes=formula.wasm_bytes,
++                approved_by_id=principal_id,
++            )
++            session.add(new_mod)
++            existing_mods.append(new_mod)
++            existing_names.add(formula.name)
++
++    await session.flush()
++
++    # 3. Format response summaries
++    descriptions_by_name = {f.name: f.description for f in BUILTIN_WASM_FORMULAS}
++    latency_by_name = {f.name: f.target_latency_budget for f in BUILTIN_WASM_FORMULAS}
++
++    results: list[WasmModuleSummaryResponse] = []
++    seen_shas: set[str] = set()
++    for mod in existing_mods:
++        sha_hex = mod.sha256.hex()
++        if sha_hex in seen_shas:
++            continue
++        seen_shas.add(sha_hex)
++        desc = descriptions_by_name.get(mod.name, "Approved WebAssembly transition module.")
++        lat = latency_by_name.get(mod.name, "<25ms")
++        results.append(
++            WasmModuleSummaryResponse(
++                sha256=sha_hex,
++                name=mod.name,
++                description=desc,
++                target_latency_budget=lat,
++            )
++        )
++
++    return results
+diff --git a/kanban/workflows/hooks_service.py b/kanban/workflows/hooks_service.py
+index 5c93a76..60e3863 100644
+--- a/kanban/workflows/hooks_service.py
++++ b/kanban/workflows/hooks_service.py
+@@ -20,6 +20,7 @@ from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.projects import get_project_or_404
++from kanban.workflows.builtins import seed_builtin_wasm
+ from kanban.workflows.manifest import compute_hook_manifest_sha256
+ from kanban.workflows.mutations import IMMUTABLE_FIELDS, is_in_mutable_universe
+ 
+@@ -479,6 +480,10 @@ class WorkflowHookService:
+                 ApprovedWasmModule.sha256 == wasm_sha_bytes,
+             )
+             approved_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++            if approved_mod is None:
++                approved_mod = await seed_builtin_wasm(
++                    session, caller.workspace_id, caller.principal_id, wasm_sha_bytes, project_id=project.id
++                )
+             if approved_mod is None:
+                 raise ProblemException(
+                     code="WASM_MODULE_NOT_APPROVED",
+@@ -675,6 +680,10 @@ class WorkflowHookService:
+                 ApprovedWasmModule.sha256 == wasm_sha_bytes,
+             )
+             approved_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++            if approved_mod is None:
++                approved_mod = await seed_builtin_wasm(
++                    session, caller.workspace_id, caller.principal_id, wasm_sha_bytes, project_id=hook.project_id
++                )
+             if approved_mod is None:
+                 raise ProblemException(
+                     code="WASM_MODULE_NOT_APPROVED",

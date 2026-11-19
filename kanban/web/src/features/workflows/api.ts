@@ -140,11 +140,29 @@ export interface WasmModuleSummary {
   target_latency_budget?: string | undefined;
 }
 
-export interface RepoBindingSummary {
+export interface RepoBindingDetail {
   id: string;
+  workspace_id?: string | undefined;
+  project_id?: string | undefined;
   slug: string;
   remote_url: string;
-  access_mode: string;
+  default_ref: string;
+  access_mode: 'bare_git_tools' | 'ro_vfs_mount';
+  last_fetched_commit?: string | null | undefined;
+  last_fetched_at?: string | null | undefined;
+  last_fetch_error?: string | null | undefined;
+  created_by?: string | undefined;
+  created_at?: string | undefined;
+}
+
+export type RepoBindingSummary = RepoBindingDetail;
+
+export interface CreateRepoBindingPayload {
+  slug: string;
+  remote_url: string;
+  default_ref?: string | undefined;
+  access_mode: 'bare_git_tools' | 'ro_vfs_mount';
+  credential?: string | undefined;
 }
 
 export interface ProjectStateSummary {
@@ -152,22 +170,70 @@ export interface ProjectStateSummary {
   name: string;
 }
 
+export function validateGitRemoteUrl(url: string): { valid: boolean; error?: string } {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return { valid: false, error: 'Repository URL is required.' };
+  }
+  if (trimmed.length > 2048) {
+    return { valid: false, error: 'Repository URL exceeds 2048 characters.' };
+  }
+  const disallowed = ['file://', 'ext::', 'fd::', 'git://', 'http://', 'ftp://', 'ftps://'];
+  for (const prefix of disallowed) {
+    if (trimmed.toLowerCase().startsWith(prefix)) {
+      return {
+        valid: false,
+        error: `Insecure URL scheme rejected: '${prefix}'. Only HTTPS or SSH URLs are permitted.`,
+      };
+    }
+  }
+  const isHttps = trimmed.startsWith('https://');
+  const isSsh =
+    trimmed.startsWith('ssh://') ||
+    /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+:[a-zA-Z0-9._/~-]+$/.test(trimmed);
+  if (!isHttps && !isSsh) {
+    return {
+      valid: false,
+      error: 'URL must start with https://, ssh://, or use git@host:path SSH syntax.',
+    };
+  }
+  // SSRF check for loopback, localhost, and internal subnets
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes('localhost') ||
+    lower.includes('127.0.0.1') ||
+    lower.includes('[::1]') ||
+    lower.includes('169.254.') ||
+    lower.includes('0.0.0.0') ||
+    /\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(lower) ||
+    /\b192\.168\.\d{1,3}\.\d{1,3}\b/.test(lower) ||
+    /\b172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}\b/.test(lower)
+  ) {
+    return {
+      valid: false,
+      error:
+        'SSRF hazard rejected: Localhost, private IP ranges, and internal network addresses are forbidden.',
+    };
+  }
+  return { valid: true };
+}
+
 // Fallback/Default Approved Wasm modules (KB-P5-13 Tier A)
 export const DEFAULT_WASM_MODULES: WasmModuleSummary[] = [
   {
-    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
     name: 'qa-proof-validator',
     description: 'Ensures description or comments include docs/qa/ proof bundle',
     target_latency_budget: '<2ms',
   },
   {
-    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
     name: 'security-invariant-validator',
     description: 'Checks zero new dependencies and strict security tokens',
     target_latency_budget: '<25ms',
   },
   {
-    sha256: 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e',
+    sha256: '2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9',
     name: 'auto-label-mutator',
     description: 'Mutates labels on transition based on issue type',
     target_latency_budget: '<5ms',
@@ -198,10 +264,10 @@ export const DEFAULT_S14_4_RULES: TransitionRule[] = [
         hook_kind: 'sync_validator',
         sort_rank: '0000000000000001',
         failure_policy: 'fail_closed',
-        manifest_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        manifest_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
         is_enabled: true,
         wasm_module_name: 'qa-proof-validator',
-        wasm_module_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        wasm_module_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
         target_latency_budget: '<2ms',
         description: 'Ensures description or comments include `docs/qa/KAN-*/` proof bundle before invoking AI.',
       },
@@ -344,14 +410,23 @@ export async function dryRunWorkflowHooks(
   return res;
 }
 
-export async function fetchAgentDefinitions(workspace = 'kanban'): Promise<AgentDefinitionSummary[]> {
+export async function fetchAgentDefinitions(
+  workspace = 'kanban',
+  fallbackOnCatch = true,
+): Promise<AgentDefinitionSummary[]> {
   try {
     const data = (await apiFetch(
       'GET',
       `/api/v1/workspaces/${encodeURIComponent(workspace)}/agent-definitions` as never,
     )) as AgentDefinitionSummary[];
     return Array.isArray(data) ? data : [];
-  } catch {
+  } catch (err: unknown) {
+    if (err instanceof ApiProblem && err.status === 404) {
+      return [];
+    }
+    if (!fallbackOnCatch) {
+      return [];
+    }
     return [
       {
         id: 'agent-1',
@@ -398,12 +473,12 @@ export async function fetchAgentDefinitions(workspace = 'kanban'): Promise<Agent
   }
 }
 
-export async function fetchRepoBindings(projectKey: string): Promise<RepoBindingSummary[]> {
+export async function fetchRepoBindings(projectKey: string): Promise<RepoBindingDetail[]> {
   try {
     const data = (await apiFetch(
       'GET',
       `/api/v1/projects/${encodeURIComponent(projectKey)}/repo-bindings` as never,
-    )) as RepoBindingSummary[];
+    )) as RepoBindingDetail[];
     return Array.isArray(data) ? data : [];
   } catch {
     return [
@@ -411,10 +486,38 @@ export async function fetchRepoBindings(projectKey: string): Promise<RepoBinding
         id: 'repo-1',
         slug: 'kanban-main',
         remote_url: 'https://github.com/adamoutler/kanban.git',
+        default_ref: 'main',
         access_mode: 'ro_vfs_mount',
       },
     ];
   }
+}
+
+export async function createRepoBinding(
+  projectKey: string,
+  payload: CreateRepoBindingPayload,
+): Promise<RepoBindingDetail> {
+  const res = (await apiFetch(
+    'POST',
+    `/api/v1/projects/${encodeURIComponent(projectKey)}/repo-bindings` as never,
+    { body: payload },
+  )) as RepoBindingDetail;
+  return res;
+}
+
+export async function refreshRepoBinding(bindingId: string): Promise<RepoBindingDetail> {
+  const res = (await apiFetch(
+    'POST',
+    `/api/v1/repo-bindings/${encodeURIComponent(bindingId)}/refresh` as never,
+  )) as RepoBindingDetail;
+  return res;
+}
+
+export async function deleteRepoBinding(bindingId: string): Promise<void> {
+  await apiFetch(
+    'DELETE',
+    `/api/v1/repo-bindings/${encodeURIComponent(bindingId)}` as never,
+  );
 }
 
 export async function fetchProjectStates(projectKey: string): Promise<ProjectStateSummary[]> {
@@ -429,6 +532,15 @@ export async function fetchProjectStates(projectKey: string): Promise<ProjectSta
   }
 }
 
-export function fetchApprovedWasmModules(): Promise<WasmModuleSummary[]> {
-  return Promise.resolve(DEFAULT_WASM_MODULES);
+export async function fetchApprovedWasmModules(projectKey?: string): Promise<WasmModuleSummary[]> {
+  try {
+    if (!projectKey) return DEFAULT_WASM_MODULES;
+    const data = (await apiFetch(
+      'GET',
+      `/api/v1/projects/${encodeURIComponent(projectKey)}/approved-wasm-modules` as never,
+    )) as WasmModuleSummary[];
+    return Array.isArray(data) && data.length > 0 ? data : DEFAULT_WASM_MODULES;
+  } catch {
+    return DEFAULT_WASM_MODULES;
+  }
 }

@@ -123,6 +123,8 @@ class AgentDefinitionService:
         session: AsyncSession, caller: PrincipalContext, workspace_ref: str
     ) -> None:
         """Assert caller belongs to the requested workspace reference (UUID or slug)."""
+        if workspace_ref == "current":
+            return
         try:
             ws_id = uuid.UUID(workspace_ref)
             if ws_id != caller.workspace_id:

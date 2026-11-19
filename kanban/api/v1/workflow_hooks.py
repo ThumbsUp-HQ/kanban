@@ -11,6 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
+from kanban.services.projects import get_project_or_404
+from kanban.workflows.builtins import (
+    WasmModuleSummaryResponse,
+    ensure_approved_wasm_modules,
+)
 from kanban.workflows.dry_run import DryRunPayload, DryRunResponse, run_dry_run
 from kanban.workflows.hooks_service import (
     TransitionRule,
@@ -160,3 +165,22 @@ async def dry_run_workflow_hooks(
     """Execute dry-run simulation inside a guaranteed non-persisted SAVEPOINT."""
     async with timing_floor(floor_ms=25.0):
         return await run_dry_run(session, caller, project, body)
+
+
+@router.get(
+    "/projects/{project}/approved-wasm-modules",
+    response_model=list[WasmModuleSummaryResponse],
+    summary="List approved WebAssembly modules for project/workspace",
+)
+async def list_approved_wasm_modules(
+    project: str,
+    caller: Caller,
+    session: Session,
+) -> list[WasmModuleSummaryResponse]:
+    """List approved Wasm modules, seeding verified built-in formulas if needed."""
+    async with timing_floor(floor_ms=25.0):
+        project_obj = await get_project_or_404(session, caller, project)
+        await WorkflowHookService.require_admin(session, caller, project_obj.id)
+        return await ensure_approved_wasm_modules(
+            session, caller.workspace_id, caller.principal_id, project_id=project_obj.id
+        )

@@ -49,6 +49,12 @@ vi.mock('./HookPipelineRow', () => ({
         Drop Unknown Source
       </button>
       <button
+        data-testid={`drop-valid-${props.hook.id}`}
+        onClick={() => props.onDropReorder?.('hk-1', 'hk-2')}
+      >
+        Drop Valid
+      </button>
+      <button
         data-testid={`drop-unknown-tgt-${props.hook.id}`}
         onClick={() => props.onDropReorder?.(props.hook.id, 'unknown-tgt')}
       >
@@ -129,5 +135,82 @@ describe('TransitionRuleCard Edge Reordering Branches', () => {
 
     // None of these should call onReorder because all returned early
     expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  it('covers keyboard move and drop reorder failure branches with Error and non-Error', async () => {
+    // 1. Keyboard move throws Error
+    const onReorderError = vi.fn().mockRejectedValue(new Error('Network error'));
+    const { unmount } = render(
+      <TransitionRuleCard
+        rule={mockRule}
+        projectKey="KAN"
+        onReorder={onReorderError}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onDetach={vi.fn()}
+        onAddHook={vi.fn()}
+        onDryRun={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('move-down-hk-1'));
+    expect(await screen.findByText('Network error')).toBeDefined();
+    unmount();
+
+    // 2. Keyboard move throws non-Error
+    const onReorderNonError = vi.fn().mockRejectedValue('reorder-string-error');
+    const { unmount: unmount2 } = render(
+      <TransitionRuleCard
+        rule={mockRule}
+        projectKey="KAN"
+        onReorder={onReorderNonError}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onDetach={vi.fn()}
+        onAddHook={vi.fn()}
+        onDryRun={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('move-down-hk-1'));
+    expect(await screen.findByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
+    unmount2();
+
+    // 3. Drop reorder throws Error
+    const onDropError = vi.fn().mockRejectedValue(new Error('Drop network error'));
+    const { unmount: unmount3 } = render(
+      <TransitionRuleCard
+        rule={mockRule}
+        projectKey="KAN"
+        onReorder={onDropError}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onDetach={vi.fn()}
+        onAddHook={vi.fn()}
+        onDryRun={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('drop-valid-hk-1'));
+    expect(await screen.findByText('Drop network error')).toBeDefined();
+    unmount3();
+
+    // 4. Drop reorder throws non-Error
+    const onDropNonError = vi.fn().mockRejectedValue('drop-string-error');
+    render(
+      <TransitionRuleCard
+        rule={mockRule}
+        projectKey="KAN"
+        onReorder={onDropNonError}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onDetach={vi.fn()}
+        onAddHook={vi.fn()}
+        onDryRun={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('drop-valid-hk-1'));
+    expect(await screen.findByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
   });
 });
