@@ -629,7 +629,7 @@ export function CustomFieldDefinitionEditor({
                   type="text"
                   className="custom-field-input mono"
                   maxLength={63}
-                  pattern="^[a-z0-9][a-z0-9\\-]{1,62}$"
+                  pattern={'^[a-z0-9][a-z0-9\\-]{1,62}$'}
                   required
                   disabled={Boolean(selectedField)}
                   value={slug}
@@ -894,6 +894,24 @@ export function CustomFieldDefinitionEditor({
                 </select>
               </div>
 
+              {/* Immediate Dual-Control Explanation Banner (KB-P3-AUDIT-04, S13.2) */}
+              {(targetScope === 'WORKSPACE' || targetScope === 'SERVER') && (
+                <div
+                  className="custom-field-dual-control-banner"
+                  data-testid="dual-control-explanation-banner"
+                  role="status"
+                >
+                  <span className="custom-field-dual-control-icon">🛡️</span>
+                  <div className="custom-field-dual-control-text">
+                    <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
+                    <strong>{targetScope === 'SERVER' ? 'SERVER_ADMIN' : 'WORKSPACE_ADMIN'}</strong> authority
+                    with a fresh <strong>AAL2</strong> step-up must approve this escalation. Self-approval is
+                    blocked (403 Forbidden). Any subsequent edit to script source or format metadata will
+                    immediately revoke approval and reset state.
+                  </div>
+                </div>
+              )}
+
               {/* Credential Mode */}
               <div className="custom-field-form-group">
                 <label htmlFor="credential-mode" className="custom-field-form-label">
@@ -952,6 +970,7 @@ export function CustomFieldDefinitionEditor({
           <EscalationApprovalPanel
             field={selectedField}
             callerTier="WORKSPACE_ADMIN"
+            suppressDualControlBanner={targetScope === 'WORKSPACE' || targetScope === 'SERVER'}
             onApproved={() => {
               void refetch();
             }}

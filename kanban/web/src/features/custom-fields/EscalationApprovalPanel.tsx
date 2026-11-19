@@ -21,6 +21,7 @@ export interface EscalationApprovalPanelProps {
   callerTier?: 'MEMBER' | 'PROJECT_ADMIN' | 'WORKSPACE_ADMIN' | 'SERVER_ADMIN';
   onAal2Challenge?: () => Promise<boolean>;
   onApproved?: () => void;
+  suppressDualControlBanner?: boolean;
 }
 
 function getTierRank(
@@ -64,6 +65,7 @@ export function EscalationApprovalPanel({
   callerTier = 'PROJECT_ADMIN',
   onAal2Challenge,
   onApproved,
+  suppressDualControlBanner = false,
 }: EscalationApprovalPanelProps): JSX.Element {
   const queryClient = useQueryClient();
   const [justification, setJustification] = useState('');
@@ -232,19 +234,20 @@ export function EscalationApprovalPanel({
       )}
 
       {/* Dual-Control Explanation Banner */}
-      {(latestApproval?.status === 'PENDING' ||
-        latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
-        <div
-          className="custom-field-dual-control-banner"
-          data-testid="dual-control-explanation-banner"
-          role="status"
-        >
-          <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
-          <strong>{requiredTier}</strong> authority with a fresh <strong>AAL2</strong> step-up must
-          approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to
-          script source or format metadata will immediately revoke approval and reset state.
-        </div>
-      )}
+      {!suppressDualControlBanner &&
+        (latestApproval?.status === 'PENDING' ||
+          latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
+          <div
+            className="custom-field-dual-control-banner"
+            data-testid="dual-control-explanation-banner"
+            role="status"
+          >
+            <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
+            <strong>{requiredTier}</strong> authority with a fresh <strong>AAL2</strong> step-up must
+            approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to
+            script source or format metadata will immediately revoke approval and reset state.
+          </div>
+        )}
 
       {/* Error Banners */}
       {manifestMismatchError && (

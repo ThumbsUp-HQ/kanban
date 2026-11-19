@@ -16,16 +16,18 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
 from collections.abc import Sequence  # noqa: TC003  # Runtime annotation for route candidates
 from typing import TYPE_CHECKING, Annotated, Any, Final
-from uuid import UUID  # noqa: TC003  # Required for runtime model fields and casts
+from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from agent.providers.router import ProviderRouter, RouteCandidate
 from agent.sparkle.pipeline import SparkleRequest, SparkleResult, run_sparkle_pipeline
@@ -73,17 +75,23 @@ async def verify_csrf(
         )
 
 
-async def verify_sparkle_access(
+async def verify_sparkle_access(  # noqa: C901, PLR0912, PLR0915
     req: SparkleRequest,
     principal: PrincipalContext,
     session_factory: Any,  # noqa: ANN401
-) -> None:
+) -> UUID | None:
     """Enforce EDIT capability on object_id or VIEW capability on project_id.
 
     Rejections use timing-equalized 404 Not Found to prevent resource enumeration.
+    Returns the resolved canonical project UUID if identified.
     """
     if session_factory is None:
-        return
+        if isinstance(req.project_id, UUID):
+            return req.project_id
+        if isinstance(req.project_id, str):
+            with contextlib.suppress(ValueError):
+                return UUID(req.project_id)
+        return None
 
     async with timing_floor():
         if hasattr(session_factory, "sessionmaker"):
@@ -114,6 +122,56 @@ async def verify_sparkle_access(
             finally:
                 session.info.pop("_binding_in_progress", None)
 
+            target_proj_id: UUID | None = None
+            if req.project_id is not None:
+                if isinstance(req.project_id, UUID):
+                    target_proj_id = req.project_id
+                else:
+                    # req.project_id is str
+                    try:
+                        target_proj_id = UUID(req.project_id)
+                    except ValueError:
+                        # Project key/identifier string (e.g. "KAN", "KANBA")
+                        # Look up by identifier in caller workspace
+                        stmt_key = text(
+                            "SELECT id FROM projects "
+                            "WHERE identifier = upper(:ident) AND workspace_id = :ws_id"
+                        )
+                        res_key = await session.execute(
+                            stmt_key,
+                            {"ident": req.project_id.strip(), "ws_id": principal.workspace_id},
+                        )
+                        target_proj_id = res_key.scalar_one_or_none()
+                        if target_proj_id is None:
+                            # Stored function fallback if available
+                            try:
+                                func_stmt = text(
+                                    "SELECT resolve_project_id_by_key_or_id(:ws_id, :ident)"
+                                )
+                                res_func = await session.execute(
+                                    func_stmt,
+                                    {
+                                        "ws_id": principal.workspace_id,
+                                        "ident": req.project_id.strip(),
+                                    },
+                                )
+                                target_proj_id = res_func.scalar_one_or_none()
+                            except (SQLAlchemyError, OSError, RuntimeError):
+                                target_proj_id = None
+
+                        if target_proj_id is None:
+                            not_found()
+
+            elif req.object_id is not None:
+                stmt_obj = text(
+                    "SELECT project_id FROM issues WHERE id = :obj_id "
+                    "UNION ALL SELECT project_id FROM docs WHERE id = :obj_id "
+                    "UNION ALL SELECT project_id FROM stickies WHERE id = :obj_id "
+                    "UNION ALL SELECT project_id FROM pages WHERE id = :obj_id"
+                )
+                res_obj = await session.execute(stmt_obj, {"obj_id": req.object_id})
+                target_proj_id = res_obj.scalar_one_or_none()
+
             if req.object_id is not None:
                 # Must have EDIT capability (bit 4) on target object
                 stmt = text(
@@ -126,7 +184,7 @@ async def verify_sparkle_access(
                 res = await session.execute(stmt, {"obj_id": req.object_id})
                 if res.scalar_one_or_none() is None:
                     not_found()
-            else:
+            elif target_proj_id is not None:
                 # Must have VIEW capability (bit 1) on project
                 stmt = text(
                     "SELECT 1 FROM effective_resource_access era "
@@ -135,9 +193,13 @@ async def verify_sparkle_access(
                     "  AND (era.allow_mask & 1) = 1 "
                     "  AND (era.deny_mask & 1) = 0"
                 )
-                res = await session.execute(stmt, {"proj_id": req.project_id})
+                res = await session.execute(stmt, {"proj_id": target_proj_id})
                 if res.scalar_one_or_none() is None:
                     not_found()
+            else:
+                not_found()
+
+            return target_proj_id
 
 
 def _resolve_provider_router(request: Request, workspace_id: UUID) -> ProviderRouter:
@@ -181,7 +243,9 @@ async def complete_sparkle(
         ) from exc
 
     session_factory = getattr(request.app.state, "session_factory", None)
-    await verify_sparkle_access(req, principal, session_factory)
+    resolved_proj_id = await verify_sparkle_access(req, principal, session_factory)
+    if resolved_proj_id is not None and req.project_id != resolved_proj_id:
+        req = req.model_copy(update={"project_id": resolved_proj_id})
 
     router_inst = _resolve_provider_router(request, principal.workspace_id)
     embedder_inst = getattr(request.app.state, "embedder", None)

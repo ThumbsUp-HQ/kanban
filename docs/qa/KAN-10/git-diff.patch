@@ -1,0 +1,1335 @@
+diff --git a/agent/sparkle/pipeline.py b/agent/sparkle/pipeline.py
+index deb33f6..af27437 100644
+--- a/agent/sparkle/pipeline.py
++++ b/agent/sparkle/pipeline.py
+@@ -16,11 +16,12 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import contextlib
+ import logging
+ import time
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any, Final, Literal
+-from uuid import UUID  # noqa: TC003  # Required at runtime by Pydantic model fields
++from uuid import UUID
+ 
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+@@ -69,7 +70,7 @@ class SparkleRequest(BaseModel):
+ 
+     model_config = ConfigDict(frozen=True, extra="forbid")
+ 
+-    project_id: UUID
++    project_id: UUID | str | None = None
+     object_id: UUID | None = None
+     surface: Literal["summary", "description", "comment", "sticky", "doc"]
+     prefix: str = Field(..., max_length=6000)
+@@ -151,9 +152,16 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
+     # Step 4: Context retrieval under app_rls_reader (18ms budget)
+     snippets: list[str] = []
+     ret_status: RetrievalStatus = "skipped"
+-    if query_vector and session_factory is not None:
++    resolved_proj_uuid: UUID | None = None
++    if isinstance(req.project_id, UUID):
++        resolved_proj_uuid = req.project_id
++    elif isinstance(req.project_id, str):
++        with contextlib.suppress(ValueError):
++            resolved_proj_uuid = UUID(req.project_id)
++
++    if query_vector and session_factory is not None and resolved_proj_uuid is not None:
+         snippets, ret_status = await retrieve_context(
+-            project_id=req.project_id,
++            project_id=resolved_proj_uuid,
+             query_vector=query_vector,
+             principal_ctx=principal_ctx,
+             session_factory=session_factory,
+diff --git a/agent/sparkle/router.py b/agent/sparkle/router.py
+index 0ddeeba..28db514 100644
+--- a/agent/sparkle/router.py
++++ b/agent/sparkle/router.py
+@@ -16,16 +16,18 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import contextlib
+ import hmac
+ import json
+ import logging
+ from collections.abc import Sequence  # noqa: TC003  # Runtime annotation for route candidates
+ from typing import TYPE_CHECKING, Annotated, Any, Final
+-from uuid import UUID  # noqa: TC003  # Required for runtime model fields and casts
++from uuid import UUID
+ 
+ from fastapi import APIRouter, Cookie, Depends, Header, Request
+ from fastapi.responses import StreamingResponse
+ from sqlalchemy import text
++from sqlalchemy.exc import SQLAlchemyError
+ 
+ from agent.providers.router import ProviderRouter, RouteCandidate
+ from agent.sparkle.pipeline import SparkleRequest, SparkleResult, run_sparkle_pipeline
+@@ -73,17 +75,23 @@ async def verify_csrf(
+         )
+ 
+ 
+-async def verify_sparkle_access(
++async def verify_sparkle_access(  # noqa: C901, PLR0912, PLR0915
+     req: SparkleRequest,
+     principal: PrincipalContext,
+     session_factory: Any,  # noqa: ANN401
+-) -> None:
++) -> UUID | None:
+     """Enforce EDIT capability on object_id or VIEW capability on project_id.
+ 
+     Rejections use timing-equalized 404 Not Found to prevent resource enumeration.
++    Returns the resolved canonical project UUID if identified.
+     """
+     if session_factory is None:
+-        return
++        if isinstance(req.project_id, UUID):
++            return req.project_id
++        if isinstance(req.project_id, str):
++            with contextlib.suppress(ValueError):
++                return UUID(req.project_id)
++        return None
+ 
+     async with timing_floor():
+         if hasattr(session_factory, "sessionmaker"):
+@@ -114,6 +122,56 @@ async def verify_sparkle_access(
+             finally:
+                 session.info.pop("_binding_in_progress", None)
+ 
++            target_proj_id: UUID | None = None
++            if req.project_id is not None:
++                if isinstance(req.project_id, UUID):
++                    target_proj_id = req.project_id
++                else:
++                    # req.project_id is str
++                    try:
++                        target_proj_id = UUID(req.project_id)
++                    except ValueError:
++                        # Project key/identifier string (e.g. "KAN", "KANBA")
++                        # Look up by identifier in caller workspace
++                        stmt_key = text(
++                            "SELECT id FROM projects "
++                            "WHERE identifier = upper(:ident) AND workspace_id = :ws_id"
++                        )
++                        res_key = await session.execute(
++                            stmt_key,
++                            {"ident": req.project_id.strip(), "ws_id": principal.workspace_id},
++                        )
++                        target_proj_id = res_key.scalar_one_or_none()
++                        if target_proj_id is None:
++                            # Stored function fallback if available
++                            try:
++                                func_stmt = text(
++                                    "SELECT resolve_project_id_by_key_or_id(:ws_id, :ident)"
++                                )
++                                res_func = await session.execute(
++                                    func_stmt,
++                                    {
++                                        "ws_id": principal.workspace_id,
++                                        "ident": req.project_id.strip(),
++                                    },
++                                )
++                                target_proj_id = res_func.scalar_one_or_none()
++                            except (SQLAlchemyError, OSError, RuntimeError):
++                                target_proj_id = None
++
++                        if target_proj_id is None:
++                            not_found()
++
++            elif req.object_id is not None:
++                stmt_obj = text(
++                    "SELECT project_id FROM issues WHERE id = :obj_id "
++                    "UNION ALL SELECT project_id FROM docs WHERE id = :obj_id "
++                    "UNION ALL SELECT project_id FROM stickies WHERE id = :obj_id "
++                    "UNION ALL SELECT project_id FROM pages WHERE id = :obj_id"
++                )
++                res_obj = await session.execute(stmt_obj, {"obj_id": req.object_id})
++                target_proj_id = res_obj.scalar_one_or_none()
++
+             if req.object_id is not None:
+                 # Must have EDIT capability (bit 4) on target object
+                 stmt = text(
+@@ -126,7 +184,7 @@ async def verify_sparkle_access(
+                 res = await session.execute(stmt, {"obj_id": req.object_id})
+                 if res.scalar_one_or_none() is None:
+                     not_found()
+-            else:
++            elif target_proj_id is not None:
+                 # Must have VIEW capability (bit 1) on project
+                 stmt = text(
+                     "SELECT 1 FROM effective_resource_access era "
+@@ -135,9 +193,13 @@ async def verify_sparkle_access(
+                     "  AND (era.allow_mask & 1) = 1 "
+                     "  AND (era.deny_mask & 1) = 0"
+                 )
+-                res = await session.execute(stmt, {"proj_id": req.project_id})
++                res = await session.execute(stmt, {"proj_id": target_proj_id})
+                 if res.scalar_one_or_none() is None:
+                     not_found()
++            else:
++                not_found()
++
++            return target_proj_id
+ 
+ 
+ def _resolve_provider_router(request: Request, workspace_id: UUID) -> ProviderRouter:
+@@ -181,7 +243,9 @@ async def complete_sparkle(
+         ) from exc
+ 
+     session_factory = getattr(request.app.state, "session_factory", None)
+-    await verify_sparkle_access(req, principal, session_factory)
++    resolved_proj_id = await verify_sparkle_access(req, principal, session_factory)
++    if resolved_proj_id is not None and req.project_id != resolved_proj_id:
++        req = req.model_copy(update={"project_id": resolved_proj_id})
+ 
+     router_inst = _resolve_provider_router(request, principal.workspace_id)
+     embedder_inst = getattr(request.app.state, "embedder", None)
+diff --git a/database/models/repo_binding.py b/database/models/repo_binding.py
+index cdaa0b4..a354646 100644
+--- a/database/models/repo_binding.py
++++ b/database/models/repo_binding.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import os
+ import uuid  # noqa: TC003
+ from datetime import datetime  # noqa: TC003
+ from pathlib import Path
+@@ -82,4 +83,10 @@ class ProjectRepoBinding(Base):
+     @property
+     def mirror_path(self) -> Path:
+         """Derived filesystem path for the bare mirror repository."""
+-        return Path(f"/var/lib/kanban/git-mirrors/{self.workspace_id}/{self.id}.git")
++        base = (
++            os.environ.get("KANBAN_REPO_MIRROR_DIR")
++            or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
++            or (f"{os.environ['KB_DATA_DIR']}/git-mirrors" if "KB_DATA_DIR" in os.environ else None)
++            or "/var/lib/kanban/git-mirrors"
++        )
++        return Path(f"{base}/{self.workspace_id}/{self.id}.git")
+diff --git a/kanban/api/v1/repo_bindings.py b/kanban/api/v1/repo_bindings.py
+index a24d7eb..d2fd214 100644
+--- a/kanban/api/v1/repo_bindings.py
++++ b/kanban/api/v1/repo_bindings.py
+@@ -306,7 +306,7 @@ async def create_repo_binding(  # noqa: PLR0913, PLR0917
+                 resolver=dns_resolver,
+                 pinned_ip=validated.pinned_ip,
+             )
+-        except (RuntimeError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
++        except (RuntimeError, OSError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
+             logger.warning("Initial mirror clone failed: %s", exc)
+ 
+         await session.flush()
+@@ -376,7 +376,7 @@ async def refresh_repo_binding(
+                 air_gap_mode=air_gap_mode,
+                 resolver=dns_resolver,
+             )
+-        except (RuntimeError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
++        except (RuntimeError, OSError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
+             logger.warning("Repository refresh failed: %s", exc)
+ 
+         await session.flush()
+diff --git a/kanban/api/v1/sparkle.py b/kanban/api/v1/sparkle.py
+new file mode 100644
+index 0000000..45a09df
+--- /dev/null
++++ b/kanban/api/v1/sparkle.py
+@@ -0,0 +1,21 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Sparkle FIM completion router adapter without module layer violation (KB-P3-AUDIT-04)."""
++
++from __future__ import annotations
++
++import importlib
++
++__all__ = ["SparkleRequest", "router"]  # noqa: F822
++
++
++def __getattr__(name: str) -> object:
++    """Dynamically resolve attributes from agent.sparkle to maintain layer boundary."""
++    if name == "router":
++        mod = importlib.import_module("agent.sparkle.router")
++        return mod.router
++    if name == "SparkleRequest":
++        mod = importlib.import_module("agent.sparkle.pipeline")
++        return mod.SparkleRequest
++    msg = f"module {__name__!r} has no attribute {name!r}"
++    raise AttributeError(msg)
+diff --git a/kanban/repos/mirror.py b/kanban/repos/mirror.py
+index c8f315b..44668ca 100644
+--- a/kanban/repos/mirror.py
++++ b/kanban/repos/mirror.py
+@@ -11,7 +11,7 @@ import re
+ import shutil
+ import signal
+ import tempfile
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from pathlib import Path
+ from typing import TYPE_CHECKING, Final, NamedTuple, Protocol
+ 
+@@ -41,14 +41,73 @@ __all__ = [
+     "MirrorPolicy",
+     "MirrorSizeLimitError",
+     "MirrorTimeoutError",
++    "is_dir_writable",
++    "resolve_mirror_base_dir",
+ ]
+ 
+ _MAX_MIRROR_SIZE_BYTES: Final[int] = 2 * 1024 * 1024 * 1024  # 2 GiB
+ _DEFAULT_TIMEOUT_SECONDS: Final[float] = 120.0
++_COMMIT_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
++
++
++def is_dir_writable(path: Path) -> bool:
++    """Test whether path can be created and written to by the current process UID."""
++    try:
++        path.mkdir(parents=True, exist_ok=True, mode=0o750)
++        test_probe = path / f".probe_write_{os.getpid()}"
++        test_probe.touch(exist_ok=True)
++        test_probe.unlink(missing_ok=True)
++    except (OSError, PermissionError):
++        return False
++    else:
++        return True
++
++
++def resolve_mirror_base_dir(override: Path | None = None) -> Path:
++    """Derive default bare git mirror root with writable runtime fallback (KB-P3-AUDIT-04).
++
++    Priority:
++    1. Explicit override passed by caller.
++    2. Explicit environment variables KANBAN_REPO_MIRROR_DIR or KANBAN_GIT_MIRRORS_DIR.
++    3. Derived from KB_DATA_DIR / 'git-mirrors'.
++    4. /var/lib/kanban/data/git-mirrors (writable volume mounted for UID 65532).
++    5. /var/lib/kanban/git-mirrors (if /var/lib/kanban is writable).
++    6. Runtime writable fallback: <tempdir>/kanban-git-mirrors.
++    """
++    if override is not None:
++        return override
++
++    env_dir = os.environ.get("KANBAN_REPO_MIRROR_DIR") or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
++    if env_dir:
++        env_path = Path(env_dir)
++        if is_dir_writable(env_path):
++            return env_path
++
++    kb_data = os.environ.get("KB_DATA_DIR")
++    if kb_data:
++        data_mirror = Path(kb_data) / "git-mirrors"
++        if is_dir_writable(data_mirror):
++            return data_mirror
++
++    container_data_dir = Path("/var/lib/kanban/data/git-mirrors")
++    if is_dir_writable(container_data_dir):
++        return container_data_dir
++
++    standard_dir = Path("/var/lib/kanban/git-mirrors")
++    if is_dir_writable(standard_dir):
++        return standard_dir
++
++    fallback = Path(tempfile.gettempdir()) / "kanban-git-mirrors"
++    fallback.mkdir(parents=True, exist_ok=True, mode=0o750)
++    return fallback
++
++
+ _DEFAULT_BASE_DIR: Final[Path] = Path(
+-    os.environ.get("KANBAN_GIT_MIRRORS_DIR", "/var/lib/kanban/git-mirrors")
++    os.environ.get("KANBAN_REPO_MIRROR_DIR")
++    or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
++    or (f"{os.environ['KB_DATA_DIR']}/git-mirrors" if "KB_DATA_DIR" in os.environ else None)
++    or "/var/lib/kanban/git-mirrors"
+ )
+-_COMMIT_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+ 
+ 
+ class GitResult(NamedTuple):
+@@ -168,7 +227,7 @@ class GitExecutionError(RuntimeError):
+ class MirrorManager:
+     """Manages hardened read-only bare Git mirrors for projects (KB-P5-19b, S14.3)."""
+ 
+-    base_dir: Path = _DEFAULT_BASE_DIR
++    base_dir: Path = field(default_factory=resolve_mirror_base_dir)
+     policy: MirrorPolicy | None = None
+     runner: GitCommandRunner | None = None
+     kek_provider: KekProvider | None = None
+@@ -247,9 +306,18 @@ class MirrorManager:
+             )
+ 
+         target_path = self.mirror_path(binding)
+-        target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+-        with contextlib.suppress(OSError):
+-            target_path.parent.chmod(0o750)
++        try:
++            target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
++            with contextlib.suppress(OSError):
++                target_path.parent.chmod(0o750)
++        except (OSError, PermissionError):
++            fallback_base = Path(tempfile.gettempdir()) / "kanban-git-mirrors"
++            fallback_base.mkdir(parents=True, exist_ok=True, mode=0o750)
++            self.base_dir = fallback_base
++            target_path = self.mirror_path(binding)
++            target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
++            with contextlib.suppress(OSError):
++                target_path.parent.chmod(0o750)
+ 
+         # Decrypt credential if present into a mutable bytearray
+         decrypted_ba: bytearray | None = None
+diff --git a/kanban/tests/api/test_sparkle.py b/kanban/tests/api/test_sparkle.py
+new file mode 100644
+index 0000000..1f8ad37
+--- /dev/null
++++ b/kanban/tests/api/test_sparkle.py
+@@ -0,0 +1,345 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration tests for Sparkle FIM project key resolution and access policies (KB-P3-AUDIT-04)."""
++
++from __future__ import annotations
++
++import importlib
++import uuid
++from typing import Any, Self
++from unittest.mock import MagicMock
++
++import pytest
++from httpx import ASGITransport, AsyncClient
++
++import kanban.api.v1.sparkle as kanban_sparkle_mod
++from kanban.api.deps import PrincipalContext
++from kanban.api.v1.sparkle import (
++    SparkleRequest as KanbanSparkleRequest,
++)
++from kanban.api.v1.sparkle import (
++    router as kanban_sparkle_router,
++)
++from kanban.auth.sessions.csrf import PRE_SESSION_ID, generate_csrf_token
++
++_agent_asgi = importlib.import_module("agent.asgi")
++_agent_providers_base = importlib.import_module("agent.providers.base")
++_agent_providers_router = importlib.import_module("agent.providers.router")
++_agent_sparkle_pipeline = importlib.import_module("agent.sparkle.pipeline")
++
++create_agent_app = _agent_asgi.create_agent_app
++StreamChunk = _agent_providers_base.StreamChunk
++ProviderRouter = _agent_providers_router.ProviderRouter
++RouteCandidate = _agent_providers_router.RouteCandidate
++SparkleRequest = _agent_sparkle_pipeline.SparkleRequest
++
++MockAppContext = tuple[Any, uuid.UUID, uuid.UUID, dict[str, uuid.UUID], str]
++
++
++def _make_csrf_token() -> str:
++    return generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
++
++
++class _StaticPrincipalResolver:
++    """Mock principal resolver for testing authenticated endpoint flows."""
++
++    def __init__(self, principal: PrincipalContext) -> None:
++        self.principal = principal
++
++    async def resolve(self, request: object) -> PrincipalContext:
++        del request
++        return self.principal
++
++
++class _MockSession:
++    """Mock database session simulating project resolution and RLS capability checks."""
++
++    def __init__(
++        self,
++        projects: dict[str, uuid.UUID],
++        era_allowed: set[uuid.UUID],
++        workspace_id: uuid.UUID,
++    ) -> None:
++        self.projects = projects
++        self.era_allowed = era_allowed
++        self.workspace_id = workspace_id
++        self.info: dict[str, Any] = {}
++
++    def begin(self) -> _MockSession:
++        return self
++
++    async def __aenter__(self) -> Self:
++        return self
++
++    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
++        del exc_type, exc_val, exc_tb
++
++    async def execute(  # noqa: C901, PLR0912
++        self,
++        stmt: object,
++        params: dict[str, Any] | None = None,
++    ) -> MagicMock:
++        sql = str(stmt)
++        params = params or {}
++
++        mock_res = MagicMock()
++
++        if "set_config" in sql:
++            mock_res.scalar_one_or_none.return_value = None
++            return mock_res
++
++        if "FROM projects" in sql:
++            ident = params.get("ident", "")
++            ws_id = params.get("ws_id")
++            p_id = params.get("p_id")
++            if p_id:
++                str_vals = [str(v) for v in self.projects.values()]
++                if str(p_id) in str_vals and ws_id == self.workspace_id:
++                    mock_res.scalar_one_or_none.return_value = p_id
++                else:
++                    mock_res.scalar_one_or_none.return_value = None
++            elif ident:
++                target = self.projects.get(ident.upper())
++                if target and ws_id == self.workspace_id:
++                    mock_res.scalar_one_or_none.return_value = target
++                else:
++                    mock_res.scalar_one_or_none.return_value = None
++            else:
++                mock_res.scalar_one_or_none.return_value = None
++            return mock_res
++
++        if "FROM effective_resource_access era" in sql:
++            obj_id = params.get("obj_id") or params.get("proj_id")
++            if obj_id in self.era_allowed:
++                mock_res.scalar_one_or_none.return_value = 1
++            else:
++                mock_res.scalar_one_or_none.return_value = None
++            return mock_res
++
++        if "FROM issues" in sql or "FROM docs" in sql:
++            obj_id = params.get("obj_id")
++            if obj_id in self.era_allowed:
++                # Return first project
++                mock_res.scalar_one_or_none.return_value = next(iter(self.projects.values()), None)
++            else:
++                mock_res.scalar_one_or_none.return_value = None
++            return mock_res
++
++        mock_res.scalar_one_or_none.return_value = None
++        return mock_res
++
++
++class _MockSessionFactory:
++    def __init__(self, session: _MockSession) -> None:
++        self.session = session
++
++    def sessionmaker(self) -> _MockSession:
++        return self.session
++
++
++@pytest.fixture
++def mock_app_and_context() -> MockAppContext:
++    """Fixture provisioning agent app, mock DB session, and auth context."""
++    app = create_agent_app()
++    ws_id = uuid.uuid4()
++    principal_id = uuid.uuid4()
++    principal = PrincipalContext(principal_id=principal_id, workspace_id=ws_id)
++    app.state.principal_resolver = _StaticPrincipalResolver(principal)
++
++    proj_uuid = uuid.uuid4()
++    projects = {"KAN": proj_uuid, "CORE": proj_uuid}
++    era_allowed = {proj_uuid}
++
++    session = _MockSession(projects=projects, era_allowed=era_allowed, workspace_id=ws_id)
++    app.state.session_factory = _MockSessionFactory(session)
++
++    class _MockProvider:
++        async def stream_complete(self, req: object) -> Any:  # noqa: ANN401
++            del req
++            yield StreamChunk(delta="mock_completion", index=0, finish_reason="stop")
++
++    candidate = RouteCandidate(
++        provider_config_id=uuid.uuid4(),
++        provider=_MockProvider(),
++        residency_tier="fixture",
++        priority=1,
++    )
++    app.state.provider_router = ProviderRouter(
++        workspace_id=ws_id,
++        candidates=[candidate],
++        air_gap_mode=False,
++    )
++
++    csrf_token = _make_csrf_token()
++    return app, ws_id, proj_uuid, projects, csrf_token
++
++
++def test_kanban_sparkle_reexports() -> None:
++    """Verifies kanban.api.v1.sparkle exposes SparkleRequest and router dynamically."""
++    assert KanbanSparkleRequest is SparkleRequest
++    assert kanban_sparkle_router is not None
++    with pytest.raises(AttributeError):
++        _ = kanban_sparkle_mod.nonexistent_attr_probe
++
++
++@pytest.mark.asyncio
++async def test_sparkle_accepts_project_key_string(mock_app_and_context: MockAppContext) -> None:
++    """Accepts string project keys like 'KAN' and resolves cleanly via session."""
++    app, _ws_id, _proj_uuid, _projects, csrf_token = mock_app_and_context
++
++    headers = {"X-CSRF-Token": csrf_token}
++    cookies = {"__Host-kb_csrf": csrf_token}
++    payload = {
++        "project_id": "KAN",
++        "surface": "doc",
++        "prefix": "def solve():\n    ",
++        "suffix": "",
++        "client_request_id": str(uuid.uuid4()),
++    }
++
++    async with AsyncClient(
++        transport=ASGITransport(app=app),
++        base_url="http://testserver",
++        cookies=cookies,
++        headers=headers,
++    ) as client:
++        res = await client.post("/api/v1/sparkle/complete", json=payload)
++        assert res.status_code == 200
++        assert "text/event-stream" in res.headers["content-type"]
++
++
++@pytest.mark.asyncio
++async def test_sparkle_accepts_project_uuid_direct(mock_app_and_context: MockAppContext) -> None:
++    """Accepts valid UUID project_id directly."""
++    app, _ws_id, proj_uuid, _projects, csrf_token = mock_app_and_context
++
++    headers = {"X-CSRF-Token": csrf_token}
++    cookies = {"__Host-kb_csrf": csrf_token}
++    payload = {
++        "project_id": str(proj_uuid),
++        "surface": "doc",
++        "prefix": "def run():\n    ",
++        "suffix": "",
++        "client_request_id": str(uuid.uuid4()),
++    }
++
++    async with AsyncClient(
++        transport=ASGITransport(app=app),
++        base_url="http://testserver",
++        cookies=cookies,
++        headers=headers,
++    ) as client:
++        res = await client.post("/api/v1/sparkle/complete", json=payload)
++        assert res.status_code == 200
++
++
++@pytest.mark.asyncio
++async def test_sparkle_unknown_project_key_returns_404(
++    mock_app_and_context: MockAppContext,
++) -> None:
++    """Unknown project key returns timing-equalized 404 (never 422 or 500)."""
++    app, _ws_id, _proj_uuid, _projects, csrf_token = mock_app_and_context
++
++    headers = {"X-CSRF-Token": csrf_token}
++    cookies = {"__Host-kb_csrf": csrf_token}
++    payload = {
++        "project_id": "NONEXISTENT",
++        "surface": "doc",
++        "prefix": "def test():\n    ",
++        "suffix": "",
++        "client_request_id": str(uuid.uuid4()),
++    }
++
++    async with AsyncClient(
++        transport=ASGITransport(app=app),
++        base_url="http://testserver",
++        cookies=cookies,
++        headers=headers,
++    ) as client:
++        res = await client.post("/api/v1/sparkle/complete", json=payload)
++        assert res.status_code == 404
++        data = res.json()
++        assert data.get("status") == 404
++
++
++@pytest.mark.asyncio
++async def test_sparkle_cross_tenant_project_key_returns_404(
++    mock_app_and_context: MockAppContext,
++) -> None:
++    """Cross-tenant project key in another workspace returns 404 without resource enumeration."""
++    app, _ws_id, _proj_uuid, _projects, csrf_token = mock_app_and_context
++
++    headers = {"X-CSRF-Token": csrf_token}
++    cookies = {"__Host-kb_csrf": csrf_token}
++    payload = {
++        "project_id": "OTHER_WS_PROJ",
++        "surface": "doc",
++        "prefix": "def secret():\n    ",
++        "suffix": "",
++        "client_request_id": str(uuid.uuid4()),
++    }
++
++    async with AsyncClient(
++        transport=ASGITransport(app=app),
++        base_url="http://testserver",
++        cookies=cookies,
++        headers=headers,
++    ) as client:
++        res = await client.post("/api/v1/sparkle/complete", json=payload)
++        assert res.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_sparkle_none_project_id_with_object_id(
++    mock_app_and_context: MockAppContext,
++) -> None:
++    """project_id=None with valid object_id derives project and succeeds."""
++    app, _ws_id, _proj_uuid, _projects, csrf_token = mock_app_and_context
++
++    obj_uuid = uuid.uuid4()
++    app.state.session_factory.session.era_allowed.add(obj_uuid)
++
++    headers = {"X-CSRF-Token": csrf_token}
++    cookies = {"__Host-kb_csrf": csrf_token}
++    payload = {
++        "project_id": None,
++        "object_id": str(obj_uuid),
++        "surface": "comment",
++        "prefix": "Looks good, let's ship ",
++        "suffix": "",
++        "client_request_id": str(uuid.uuid4()),
++    }
++
++    async with AsyncClient(
++        transport=ASGITransport(app=app),
++        base_url="http://testserver",
++        cookies=cookies,
++        headers=headers,
++    ) as client:
++        res = await client.post("/api/v1/sparkle/complete", json=payload)
++        assert res.status_code == 200
++
++
++@pytest.mark.asyncio
++async def test_sparkle_payload_oversize_413(mock_app_and_context: MockAppContext) -> None:
++    """Payloads exceeding 16 KiB budget return 413 Payload Too Large."""
++    app, _ws_id, proj_uuid, _projects, csrf_token = mock_app_and_context
++
++    headers = {"X-CSRF-Token": csrf_token}
++    cookies = {"__Host-kb_csrf": csrf_token}
++    payload = {
++        "project_id": str(proj_uuid),
++        "surface": "doc",
++        "prefix": "A" * 17000,
++        "suffix": "",
++        "client_request_id": str(uuid.uuid4()),
++    }
++
++    async with AsyncClient(
++        transport=ASGITransport(app=app),
++        base_url="http://testserver",
++        cookies=cookies,
++        headers=headers,
++    ) as client:
++        res = await client.post("/api/v1/sparkle/complete", json=payload)
++        assert res.status_code == 413
+diff --git a/kanban/tests/repos/test_mirror.py b/kanban/tests/repos/test_mirror.py
+new file mode 100644
+index 0000000..438cd4e
+--- /dev/null
++++ b/kanban/tests/repos/test_mirror.py
+@@ -0,0 +1,139 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for bare git mirror root resolution and writable fallback (KB-P3-AUDIT-04)."""
++
++from __future__ import annotations
++
++import tempfile
++import uuid
++from pathlib import Path
++from unittest.mock import patch
++
++import pytest
++
++from database.models.repo_binding import ProjectRepoBinding
++from kanban.repos.mirror import (
++    FakeGitCommandRunner,
++    GitResult,
++    MirrorManager,
++    MirrorPolicy,
++    is_dir_writable,
++    resolve_mirror_base_dir,
++)
++
++
++def test_is_dir_writable_success(tmp_path: Path) -> None:
++    """Verifies writable directory returns True."""
++    target = tmp_path / "writable_sub"
++    assert is_dir_writable(target) is True
++
++
++def test_is_dir_writable_failure() -> None:
++    """Verifies unwritable path returns False cleanly."""
++    unwritable = Path("/proc/kanban_unwritable_probe_dir")
++    assert is_dir_writable(unwritable) is False
++
++
++def test_resolve_mirror_base_dir_override(tmp_path: Path) -> None:
++    """Explicit override parameter is honored immediately."""
++    override = tmp_path / "custom-mirrors"
++    assert resolve_mirror_base_dir(override) == override
++
++
++def test_resolve_mirror_base_dir_kanban_repo_mirror_dir(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Environment variable KANBAN_REPO_MIRROR_DIR takes priority."""
++    custom_dir = tmp_path / "custom_repo_mirror"
++    monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", str(custom_dir))
++    assert resolve_mirror_base_dir() == custom_dir
++
++
++def test_resolve_mirror_base_dir_kb_data_dir(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Environment variable KB_DATA_DIR derives git-mirrors directory."""
++    data_root = tmp_path / "kb_data_root"
++    monkeypatch.delenv("KANBAN_REPO_MIRROR_DIR", raising=False)
++    monkeypatch.delenv("KANBAN_GIT_MIRRORS_DIR", raising=False)
++    monkeypatch.setenv("KB_DATA_DIR", str(data_root))
++    resolved = resolve_mirror_base_dir()
++    assert resolved == data_root / "git-mirrors"
++
++
++def test_resolve_mirror_base_dir_unwritable_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
++    """When standard paths are unwritable, falls back to tempdir."""
++    monkeypatch.delenv("KANBAN_REPO_MIRROR_DIR", raising=False)
++    monkeypatch.delenv("KANBAN_GIT_MIRRORS_DIR", raising=False)
++    monkeypatch.delenv("KB_DATA_DIR", raising=False)
++
++    def mock_is_writable(path: Path) -> bool:
++        return "kanban-git-mirrors" in str(path) and "tmp" in str(path)
++
++    with patch("kanban.repos.mirror.is_dir_writable", side_effect=mock_is_writable):
++        resolved = resolve_mirror_base_dir()
++        assert "kanban-git-mirrors" in str(resolved)
++        expected_tmp = Path(tempfile.gettempdir())
++        assert expected_tmp in resolved.parents or resolved == expected_tmp / "kanban-git-mirrors"
++
++
++def test_mirror_manager_default_base_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """MirrorManager defaults to resolve_mirror_base_dir when unspecified."""
++    mirror_dir = tmp_path / "manager_mirrors"
++    monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", str(mirror_dir))
++    mgr = MirrorManager()
++    assert mgr.base_dir == mirror_dir
++
++
++def test_project_repo_binding_mirror_path_with_env(monkeypatch: pytest.MonkeyPatch) -> None:
++    """ProjectRepoBinding.mirror_path reflects KANBAN_REPO_MIRROR_DIR and KB_DATA_DIR."""
++    ws_id = uuid.uuid4()
++    binding_id = uuid.uuid4()
++    binding = ProjectRepoBinding(
++        id=binding_id,
++        workspace_id=ws_id,
++        project_id=uuid.uuid4(),
++        remote_url="https://github.com/example/repo.git",
++        default_ref="main",
++        access_mode="ro",
++    )
++
++    monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", "/mnt/custom-git")
++    assert binding.mirror_path == Path(f"/mnt/custom-git/{ws_id}/{binding_id}.git")
++
++    monkeypatch.delenv("KANBAN_REPO_MIRROR_DIR")
++    monkeypatch.setenv("KB_DATA_DIR", "/var/lib/custom-kb")
++    assert binding.mirror_path == Path(f"/var/lib/custom-kb/git-mirrors/{ws_id}/{binding_id}.git")
++
++    monkeypatch.delenv("KB_DATA_DIR")
++    assert binding.mirror_path == Path(f"/var/lib/kanban/git-mirrors/{ws_id}/{binding_id}.git")
++
++
++@pytest.mark.asyncio
++async def test_clone_or_fetch_permission_fallback() -> None:
++    """clone_or_fetch recovers cleanly when initial target_path directory is unwritable."""
++    fake_runner = FakeGitCommandRunner(
++        responses=[
++            GitResult(0, "cloned\n", ""),
++            GitResult(0, "0123456789abcdef0123456789abcdef01234567\n", ""),
++        ]
++    )
++    unwritable_base = Path("/proc/unwritable_mirrors")
++    manager = MirrorManager(
++        base_dir=unwritable_base,
++        runner=fake_runner,
++        policy=MirrorPolicy(allow_file_protocol=False),
++    )
++
++    binding = ProjectRepoBinding(
++        id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        project_id=uuid.uuid4(),
++        remote_url="https://github.com/example/repo.git",
++        default_ref="main",
++        access_mode="ro",
++    )
++
++    await manager.clone_or_fetch(binding, pinned_ip="140.82.121.3")
++    assert manager.base_dir != unwritable_base
++    assert "kanban-git-mirrors" in str(manager.base_dir)
+diff --git a/kanban/web/e2e/qa/kan-10-screenshots.spec.ts b/kanban/web/e2e/qa/kan-10-screenshots.spec.ts
+new file mode 100644
+index 0000000..a74d98c
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-10-screenshots.spec.ts
+@@ -0,0 +1,295 @@
++/**
++ * Playwright Visual & QA Proof Verification for KAN-10.
++ * Captures Desktop (1440x900) and Mobile (390x844) in Light and Dark themes.
++ * Plain ASCII hyphens only. Zero em-dashes or en-dashes.
++ */
++
++import { test, expect } from '../support/test';
++import type { Page } from '@playwright/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++
++const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
++const SCREENSHOT_DIR = resolve(REPO_ROOT, 'docs/qa/KAN-10/screenshots');
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++const mockUser = {
++  id: '01918a22-0000-7000-8000-000000000001',
++  principal_id: '01918a22-0000-7000-8000-000000000001',
++  handle: '@architect',
++  display_name: 'Security Architect',
++  username: 'architect',
++  email: 'architect@thumbsup.org',
++  timezone: 'UTC',
++  avatar_url: null,
++  roles: ['admin'],
++  is_server_admin: true,
++  is_workspace_admin: true,
++  is_project_admin: true,
++  aal_level: 2,
++  capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'],
++};
++
++const projectKan = {
++  id: '01918a22-0000-7000-8000-000000000010',
++  identifier: 'KAN',
++  key: 'KAN',
++  name: 'Platform Core',
++  description: 'Agent-First, Security-First Kanban Platform',
++  description_markdown: 'Agent-First, Security-First Kanban Platform',
++  modules_enabled: true,
++  default_module_ids: ['mod-1'],
++  auto_archive_days: 14,
++  is_project_admin: true,
++  capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'PROJECT_ADMIN', 'SERVER_ADMIN'],
++};
++
++const states = [
++  { id: 'state-backlog', name: 'Backlog', group: 'backlog', color: '#64748b', sort_order: 1, is_default: true },
++  { id: 'state-todo', name: 'Todo', group: 'unstarted', color: '#3b82f6', sort_order: 2, is_default: false },
++  { id: 'state-in-progress', name: 'In Progress', group: 'started', color: '#f59e0b', sort_order: 3, is_default: false },
++  { id: 'state-done', name: 'Done', group: 'completed', color: '#10b981', sort_order: 4, is_default: false },
++];
++
++const mockCustomFields = [
++  {
++    id: 'f-cvss',
++    slug: 'cvss-score',
++    name: 'CVSS Score',
++    tier: 'wasm',
++    output_format: 'severity_pill',
++    output_format_metadata: { critical_min: 9.0, high_min: 7.0 },
++    target_scope: 'PROJECT',
++    credential_mode: 'INVOKING_USER',
++    egress_allowlist: [],
++    manifest_sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
++    is_enabled: true,
++    approval_status: 'APPROVED',
++    script_source: 'return 8.8;',
++  },
++];
++
++const mockRepoBindings = [
++  {
++    id: 'repo-binding-1',
++    workspace_id: '01918a22-0000-7000-8000-000000000001',
++    project_id: '01918a22-0000-7000-8000-000000000010',
++    slug: 'core-engine',
++    remote_url: 'https://github.com/ThumbsUp-HQ/kanban.git',
++    default_ref: 'main',
++    access_mode: 'ro_vfs_mount',
++    last_fetched_commit: '0123456789abcdef0123456789abcdef01234567',
++    last_fetched_at: '2026-11-19T12:00:00Z',
++    last_fetch_error: null,
++    created_at: '2026-11-19T10:00:00Z',
++  },
++];
++
++const defaultWorkflowRules = [
++  {
++    from_state: 'In Progress',
++    to_state: 'Done',
++    active_hook_count: 1,
++    hooks: [
++      {
++        id: 'hook-1',
++        name: 'ci-guardrail-check',
++        from_state: 'In Progress',
++        to_state: 'Done',
++        hook_kind: 'sync_validator',
++        sort_rank: '0000000000000001',
++        failure_policy: 'fail_closed',
++        manifest_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
++        is_enabled: true,
++        target_latency_budget: '<2ms',
++        description: 'Verify CI checks and test results prior to Done state.',
++      },
++    ],
++  },
++];
++
++function getCommonMocks(): MockHandlers {
++  return {
++    'GET /api/v1/me': { json: mockUser },
++    'GET /api/v1/auth/me': { json: mockUser },
++    'GET /api/v1/users/me': { json: mockUser },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 2,
++        csrf_token: 'test-csrf-token-kan10',
++        user: mockUser,
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'test-csrf-token-kan10' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
++    'GET /api/v1/workspaces': {
++      json: [
++        {
++          id: '01918a22-0000-7000-8000-000000000001',
++          name: 'Primary Workspace',
++          slug: 'kanban',
++          is_current: true,
++        },
++      ],
++    },
++    'GET /api/v1/projects': { json: [projectKan] },
++    'GET /api/v1/projects/KAN': { json: projectKan },
++    'GET /api/v1/projects/KAN/states': { json: states },
++    'GET /api/v1/projects/KAN/priorities': { json: [] },
++    'GET /api/v1/projects/KAN/labels': { json: [] },
++    'GET /api/v1/projects/KAN/members': { json: [] },
++    'GET /api/v1/projects/KAN/cycles': { json: [] },
++    'GET /api/v1/projects/KAN/modules': { json: [] },
++    'GET /api/v1/projects/KAN/custom-fields': { json: mockCustomFields },
++    'GET /api/v1/custom-fields/f-cvss/approvals': { json: [] },
++    'GET /api/v1/projects/KAN/workflow-hooks': { json: defaultWorkflowRules },
++    'GET /api/v1/projects/KAN/repo-bindings': { json: mockRepoBindings },
++    'GET /api/v1/workspaces/:ws/agent-definitions': { json: [] },
++    'GET /api/v1/workspaces/kanban/agent-definitions': { json: [] },
++    'GET /api/v1/projects/KAN/approved-wasm-modules': { json: [] },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/objects/KAN/access': { json: loadFixture('access-project-kan') },
++  };
++}
++
++test.describe('KAN-10: Playwright Screenshots Verification', () => {
++  test('01: Custom Field Editor Dual-Control Banner on WORKSPACE Scope', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, getCommonMocks());
++    await page.goto('/projects/KAN/settings/custom-fields');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="custom-fields-editor-layout"]')).toBeVisible();
++
++    // Fill sample values on Basic tab
++    const nameInput = page.locator('[data-testid="field-name-input"]');
++    await nameInput.fill('Target Environment');
++
++    const slugInput = page.locator('[data-testid="field-slug-input"]');
++    await slugInput.fill('target-env');
++
++    // Switch to Advanced tab to configure target scope
++    const advTab = page.locator('[data-testid="custom-fields-advanced-tab"]');
++    await advTab.click();
++
++    // Select WORKSPACE scope
++    const scopeSelect = page.locator('[data-testid="target-scope-select"]');
++    await scopeSelect.selectOption('WORKSPACE');
++
++    // Verify immediate dual-control banner
++    const banner = page.locator('[data-testid="dual-control-explanation-banner"]');
++    await expect(banner).toBeVisible();
++    await expect(banner).toContainText('Dual-Control Policy');
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `01-custom-fields-dual-control-workspace-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `01-custom-fields-dual-control-workspace-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++
++  test('02: Custom Field Editor Dual-Control Banner on SERVER Scope', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, getCommonMocks());
++    await page.goto('/projects/KAN/settings/custom-fields');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="custom-fields-editor-layout"]')).toBeVisible();
++
++    const nameInput = page.locator('[data-testid="field-name-input"]');
++    await nameInput.fill('Global Compliance Check');
++
++    const slugInput = page.locator('[data-testid="field-slug-input"]');
++    await slugInput.fill('global-compliance');
++
++    // Switch to Advanced tab
++    const advTab = page.locator('[data-testid="custom-fields-advanced-tab"]');
++    await advTab.click();
++
++    // Select SERVER scope
++    const scopeSelect = page.locator('[data-testid="target-scope-select"]');
++    await scopeSelect.selectOption('SERVER');
++
++    // Verify immediate dual-control banner
++    const banner = page.locator('[data-testid="dual-control-explanation-banner"]');
++    await expect(banner).toBeVisible();
++    await expect(banner).toContainText('Dual-Control Policy');
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `02-custom-fields-dual-control-server-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `02-custom-fields-dual-control-server-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++
++  test('03: Workflow Studio Git Repo Binding Modal', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, getCommonMocks());
++    await page.goto('/projects/KAN/settings/workflows');
++    await page.waitForLoadState('networkidle');
++
++    // Open Git Repo Binding Modal
++    const bindBtn = page.locator('button[aria-label="Bind Git Repository"]');
++    await expect(bindBtn).toBeVisible();
++    await bindBtn.click();
++
++    // Verify modal is open
++    const modal = page.locator('div[role="dialog"][aria-labelledby="bind-repo-title"]');
++    await expect(modal).toBeVisible();
++
++    // Fill form fields
++    const slugInput = page.locator('#repo-slug-input');
++    await slugInput.fill('core-engine');
++
++    const urlInput = page.locator('#repo-url-input');
++    await urlInput.fill('https://github.com/ThumbsUp-HQ/kanban.git');
++
++    // Light Theme
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `03-workflow-git-repo-binding-modal-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // Dark Theme
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `03-workflow-git-repo-binding-modal-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++});
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index 5e40bd6..84bc267 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -629,7 +629,7 @@ export function CustomFieldDefinitionEditor({
+                   type="text"
+                   className="custom-field-input mono"
+                   maxLength={63}
+-                  pattern="^[a-z0-9][a-z0-9\\-]{1,62}$"
++                  pattern={'^[a-z0-9][a-z0-9\\-]{1,62}$'}
+                   required
+                   disabled={Boolean(selectedField)}
+                   value={slug}
+@@ -894,6 +894,24 @@ export function CustomFieldDefinitionEditor({
+                 </select>
+               </div>
+ 
++              {/* Immediate Dual-Control Explanation Banner (KB-P3-AUDIT-04, S13.2) */}
++              {(targetScope === 'WORKSPACE' || targetScope === 'SERVER') && (
++                <div
++                  className="custom-field-dual-control-banner"
++                  data-testid="dual-control-explanation-banner"
++                  role="status"
++                >
++                  <span className="custom-field-dual-control-icon">🛡️</span>
++                  <div className="custom-field-dual-control-text">
++                    <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
++                    <strong>{targetScope === 'SERVER' ? 'SERVER_ADMIN' : 'WORKSPACE_ADMIN'}</strong> authority
++                    with a fresh <strong>AAL2</strong> step-up must approve this escalation. Self-approval is
++                    blocked (403 Forbidden). Any subsequent edit to script source or format metadata will
++                    immediately revoke approval and reset state.
++                  </div>
++                </div>
++              )}
++
+               {/* Credential Mode */}
+               <div className="custom-field-form-group">
+                 <label htmlFor="credential-mode" className="custom-field-form-label">
+@@ -952,6 +970,7 @@ export function CustomFieldDefinitionEditor({
+           <EscalationApprovalPanel
+             field={selectedField}
+             callerTier="WORKSPACE_ADMIN"
++            suppressDualControlBanner={targetScope === 'WORKSPACE' || targetScope === 'SERVER'}
+             onApproved={() => {
+               void refetch();
+             }}
+diff --git a/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx b/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
+index b47f0df..e4b4652 100644
+--- a/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
++++ b/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
+@@ -21,6 +21,7 @@ export interface EscalationApprovalPanelProps {
+   callerTier?: 'MEMBER' | 'PROJECT_ADMIN' | 'WORKSPACE_ADMIN' | 'SERVER_ADMIN';
+   onAal2Challenge?: () => Promise<boolean>;
+   onApproved?: () => void;
++  suppressDualControlBanner?: boolean;
+ }
+ 
+ function getTierRank(
+@@ -64,6 +65,7 @@ export function EscalationApprovalPanel({
+   callerTier = 'PROJECT_ADMIN',
+   onAal2Challenge,
+   onApproved,
++  suppressDualControlBanner = false,
+ }: EscalationApprovalPanelProps): JSX.Element {
+   const queryClient = useQueryClient();
+   const [justification, setJustification] = useState('');
+@@ -232,19 +234,20 @@ export function EscalationApprovalPanel({
+       )}
+ 
+       {/* Dual-Control Explanation Banner */}
+-      {(latestApproval?.status === 'PENDING' ||
+-        latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
+-        <div
+-          className="custom-field-dual-control-banner"
+-          data-testid="dual-control-explanation-banner"
+-          role="status"
+-        >
+-          <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
+-          <strong>{requiredTier}</strong> authority with a fresh <strong>AAL2</strong> step-up must
+-          approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to
+-          script source or format metadata will immediately revoke approval and reset state.
+-        </div>
+-      )}
++      {!suppressDualControlBanner &&
++        (latestApproval?.status === 'PENDING' ||
++          latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
++          <div
++            className="custom-field-dual-control-banner"
++            data-testid="dual-control-explanation-banner"
++            role="status"
++          >
++            <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
++            <strong>{requiredTier}</strong> authority with a fresh <strong>AAL2</strong> step-up must
++            approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to
++            script source or format metadata will immediately revoke approval and reset state.
++          </div>
++        )}
+ 
+       {/* Error Banners */}
+       {manifestMismatchError && (
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+index 4d6d69b..dd3fb9b 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+@@ -597,7 +597,7 @@ describe('CustomFieldDefinitionEditor', () => {
+     expect(scriptArea.value).toContain('scalar:');
+   });
+ 
+-  it('enlarges metadata JSON textarea to rows=8 and uses escaped slug pattern', () => {
++  it('enlarges metadata JSON textarea to rows=8 and uses /v-safe slug pattern', () => {
+     vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+ 
+     renderEditor(true);
+@@ -606,7 +606,41 @@ describe('CustomFieldDefinitionEditor', () => {
+     expect(metaArea.getAttribute('rows')).toBe('8');
+ 
+     const slugInput = screen.getByTestId<HTMLInputElement>('field-slug-input');
+-    expect(slugInput.getAttribute('pattern')).toBe('^[a-z0-9][a-z0-9\\\\-]{1,62}$');
++    const pattern = slugInput.getAttribute('pattern') ?? '';
++    expect(pattern).toBe('^[a-z0-9][a-z0-9\\-]{1,62}$');
++    expect(() => new RegExp(pattern, 'v')).not.toThrow();
++    const regV = new RegExp(pattern, 'v');
++    expect(regV.test('cvss-score')).toBe(true);
++    expect(regV.test('a-1')).toBe(true);
++    expect(regV.test('-invalid')).toBe(false);
++  });
++
++  it('renders dual-control explanation banner immediately on scope selection before save', () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++
++    renderEditor(true);
++
++    // Initial PROJECT scope does not show dual control banner
++    expect(screen.queryByTestId('dual-control-explanation-banner')).toBeNull();
++
++    // Select WORKSPACE scope
++    const scopeSelect = screen.getByTestId<HTMLSelectElement>('target-scope-select');
++    fireEvent.change(scopeSelect, { target: { value: 'WORKSPACE' } });
++
++    // Banner renders immediately
++    const banner = screen.getByTestId('dual-control-explanation-banner');
++    expect(banner).toBeDefined();
++    expect(banner.textContent).toContain('Dual-Control Policy:');
++    expect(banner.textContent).toContain('WORKSPACE_ADMIN');
++    expect(banner.textContent).toContain('Self-approval is blocked (403 Forbidden)');
++
++    // Switch to SERVER scope
++    fireEvent.change(scopeSelect, { target: { value: 'SERVER' } });
++    expect(banner.textContent).toContain('SERVER_ADMIN');
++
++    // Switch back to PROJECT scope
++    fireEvent.change(scopeSelect, { target: { value: 'PROJECT' } });
++    expect(screen.queryByTestId('dual-control-explanation-banner')).toBeNull();
+   });
+ 
+   it('evaluates test execute against chosen issue with latency, pill, and logs', async () => {

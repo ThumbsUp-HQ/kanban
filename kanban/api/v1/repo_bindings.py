@@ -306,7 +306,7 @@ async def create_repo_binding(  # noqa: PLR0913, PLR0917
                 resolver=dns_resolver,
                 pinned_ip=validated.pinned_ip,
             )
-        except (RuntimeError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
+        except (RuntimeError, OSError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
             logger.warning("Initial mirror clone failed: %s", exc)
 
         await session.flush()
@@ -376,7 +376,7 @@ async def refresh_repo_binding(
                 air_gap_mode=air_gap_mode,
                 resolver=dns_resolver,
             )
-        except (RuntimeError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
+        except (RuntimeError, OSError, MirrorSizeLimitError, MirrorTimeoutError) as exc:
             logger.warning("Repository refresh failed: %s", exc)
 
         await session.flush()
