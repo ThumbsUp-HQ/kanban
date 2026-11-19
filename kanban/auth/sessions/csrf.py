@@ -46,6 +46,7 @@ __all__ = [
     "extract_csrf_cookie",
     "generate_csrf_token",
     "validate_csrf_token",
+    "verify_same_origin_request",
 ]
 
 CSRF_COOKIE_NAME: Final[str] = "__Host-kb_csrf"
@@ -176,6 +177,10 @@ def _get_allowed_origins(request: Request, public_origin: str | None) -> set[str
         allowed.add(f"{request.url.scheme}://{clean_host}")
         allowed.add(f"https://{clean_host}")
         allowed.add(f"http://{clean_host}")
+    elif hasattr(request, "base_url"):
+        base_origin = str(request.base_url).rstrip("/")
+        if base_origin:
+            allowed.add(base_origin)
     return allowed
 
 
@@ -208,6 +213,28 @@ def _check_referer_header(
             return "Referer does not match configured public origin"
         return "Referer does not match request host"
     return None
+
+
+def verify_same_origin_request(request: Request) -> bool:
+    """Validate Sec-Fetch-Site and Origin/Referer headers against permitted origins."""
+    sec_fetch_site = request.headers.get("sec-fetch-site")
+    if sec_fetch_site and sec_fetch_site.strip().lower() not in ("same-origin", "none"):
+        return False
+
+    public_origin = _resolve_public_origin()
+    allowed_origins = _get_allowed_origins(request, public_origin)
+    origin = request.headers.get("origin")
+    if origin:
+        clean_origin = origin.strip().rstrip("/")
+        if not allowed_origins or clean_origin not in allowed_origins:
+            return False
+    else:
+        referer = request.headers.get("referer")
+        if referer:
+            err = _check_referer_header(referer, allowed_origins, public_origin)
+            if err:
+                return False
+    return True
 
 
 class CsrfMiddleware(BaseHTTPMiddleware):

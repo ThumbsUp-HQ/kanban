@@ -15,6 +15,7 @@ import {
   type ScopeTier,
 } from './settingsApi';
 import { McpConfigSnippetModal } from './McpConfigSnippetModal';
+import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
 import { ApiProblem } from '../../api/problem';
@@ -172,6 +173,7 @@ export function McpAccessStudio({
   const [keys, setKeys] = useState<McpApiKeyItem[]>([]);
   const [connectedApps, setConnectedApps] = useState<OAuthConnectedApp[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [showConnectOAuthModal, setShowConnectOAuthModal] = useState<boolean>(false);
 
   // Mint modal state
   const [showMintModal, setShowMintModal] = useState<boolean>(false);
@@ -749,9 +751,30 @@ export function McpAccessStudio({
       {/* Connected OAuth Apps Section (in mine view) */}
       {activeView === 'mine' && (
         <section className="kb-mcp-studio-section" data-testid="connected-apps-section">
-          <h2 className="kb-mcp-section-title">
-            <EmojiHint kind="restricted" /> Connected OAuth Apps
-          </h2>
+          <div className="kb-mcp-section-header">
+            <h2 className="kb-mcp-section-title">
+              <EmojiHint kind="restricted" /> Connected OAuth Apps
+            </h2>
+            <div className="kb-mcp-header-actions">
+              <button
+                type="button"
+                className="kb-mcp-connect-btn"
+                data-testid="connect-oauth-app-btn"
+                onClick={() => {
+                  setShowConnectOAuthModal(true);
+                }}
+              >
+                + Connect OAuth App
+              </button>
+              <Link
+                to="/oauth/device"
+                className="kb-mcp-enter-device-code-btn"
+                data-testid="enter-device-code-btn"
+              >
+                Enter Device Code
+              </Link>
+            </div>
+          </div>
           <div className="kb-mcp-table-wrap">
             <table className="kb-mcp-table" data-testid="connected-apps-table">
               <thead>
@@ -767,7 +790,28 @@ export function McpAccessStudio({
                 {connectedApps.length === 0 && !loading && (
                   <tr>
                     <td colSpan={5} className="kb-mcp-empty-state">
-                      No external OAuth applications currently connected.
+                      <div className="kb-mcp-empty-content">
+                        <p>No external OAuth applications currently connected.</p>
+                        <div className="kb-mcp-empty-actions">
+                          <button
+                            type="button"
+                            className="kb-mcp-connect-btn"
+                            data-testid="empty-connect-oauth-app-btn"
+                            onClick={() => {
+                              setShowConnectOAuthModal(true);
+                            }}
+                          >
+                            + Connect OAuth App
+                          </button>
+                          <Link
+                            to="/oauth/device"
+                            className="kb-mcp-enter-device-code-btn"
+                            data-testid="empty-enter-device-code-btn"
+                          >
+                            Enter Device Code
+                          </Link>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -1129,6 +1173,15 @@ export function McpAccessStudio({
             </div>
           </div>
         </div>
+      )}
+      {showConnectOAuthModal && (
+        <ConnectOAuthAppModal
+          user={propUser ?? fetchedUser}
+          projectKey={selectedProject}
+          onClose={() => {
+            setShowConnectOAuthModal(false);
+          }}
+        />
       )}
     </div>
   );

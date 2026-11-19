@@ -9,6 +9,7 @@ import {
   fetchAdminOAuthClients,
   patchAdminOAuthClient,
   deleteAdminOAuthClient,
+  registerAdminOAuthClient,
 } from '../oauthApi';
 
 describe('oauthApi', () => {
@@ -76,5 +77,34 @@ describe('oauthApi', () => {
     expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/oauth-clients/{client_id}', {
       params: { client_id: 'c1' },
     });
+  });
+
+  it('registerAdminOAuthClient calls POST /api/v1/admin/oauth-clients', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+      client_id: 'client_new',
+      client_name: 'Custom App',
+      client_type: 'public',
+      status: 'active',
+      redirect_uris: ['http://127.0.0.1:9090/cb'],
+      token_endpoint_auth_method: 'none',
+    });
+
+    const res = await registerAdminOAuthClient({
+      client_name: 'Custom App',
+      redirect_uris: ['http://127.0.0.1:9090/cb'],
+      client_type: 'public',
+      token_endpoint_auth_method: 'none',
+    });
+
+    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/oauth-clients', {
+      body: JSON.stringify({
+        client_name: 'Custom App',
+        redirect_uris: ['http://127.0.0.1:9090/cb'],
+        client_type: 'public',
+        token_endpoint_auth_method: 'none',
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.client_id).toBe('client_new');
   });
 });

@@ -224,6 +224,36 @@ describe('routes and AppShell integration', () => {
     expect(router.state).toBeDefined();
   });
 
+  it('redirects legacy alias routes /settings/mcp-keys and /admin/oauth-clients', () => {
+    const routerMcp = createAppRouter(['/settings/mcp-keys']);
+    const { unmount: u1 } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <RouterProvider router={routerMcp} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    expect(routerMcp.state.location.pathname).toBe('/settings/mcp');
+    u1();
+
+    queryClient.setQueryData(qk.me(), {
+      is_server_admin: true,
+      is_workspace_admin: true,
+      auth_aal: 'aal2',
+      aal_level: 2,
+    });
+    const routerOAuth = createAppRouter(['/admin/oauth-clients']);
+    const { unmount: u2 } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <RouterProvider router={routerOAuth} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    expect(routerOAuth.state.location.pathname).toBe('/admin/oauth');
+    u2();
+  });
+
   it('fetches project metadata and applies modules_enabled', async () => {
     const getRequestUrl = (input: RequestInfo | URL): string => {
       if (typeof input === 'string') return input;

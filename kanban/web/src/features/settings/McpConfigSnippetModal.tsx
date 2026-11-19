@@ -13,7 +13,7 @@ export interface McpConfigSnippetModalProps {
   onClose: () => void;
 }
 
-type ClientTab = 'claude' | 'cursor' | 'gemini' | 'antigravity' | 'codex';
+type ClientTab = 'claude' | 'cursor' | 'gemini' | 'antigravity' | 'codex' | 'oauth';
 type UrlScope = 'global' | 'workspace' | 'project';
 
 export function McpConfigSnippetModal({
@@ -102,7 +102,7 @@ export function McpConfigSnippetModal({
     );
     const agyCmd = `agy mcp add --header "Authorization: Bearer ${effectiveKey}" kanban ${endpointUrl}`;
     snippet = `${agyJson}\n\n# Or add via agy CLI:\n${agyCmd}`;
-  } else {
+  } else if (activeTab === 'codex') {
     const codexJson = JSON.stringify(
       {
         mcpServers: {
@@ -119,6 +119,30 @@ export function McpConfigSnippetModal({
     );
     const codexCmd = `codex mcp add kanban ${endpointUrl} --header "Authorization: Bearer ${effectiveKey}"`;
     snippet = `${codexJson}\n\n# Or add via OpenAI Codex CLI:\n${codexCmd}`;
+  } else {
+    const rfc8414Url = `${origin}/.well-known/oauth-authorization-server`;
+    snippet = `# OAuth 2.1 + PKCE S256 Connect
+# RFC 8414 Authorization Server Discovery:
+# ${rfc8414Url}
+# Target Resource Indicator:
+# ${endpointUrl}
+
+# Claude Code CLI:
+claude mcp add --transport http kanban ${endpointUrl}
+
+# Cursor / VS Code Configuration:
+{
+  "mcpServers": {
+    "kanban": {
+      "url": "${endpointUrl}",
+      "auth": "oauth"
+    }
+  }
+}
+
+# Codex / Antigravity CLI:
+codex mcp add kanban ${endpointUrl} --auth oauth
+agy mcp add kanban ${endpointUrl} --auth oauth`;
   }
 
   const handleCopy = async (text: string, isKey: boolean): Promise<void> => {
@@ -275,6 +299,18 @@ export function McpConfigSnippetModal({
             }}
           >
             OpenAI Codex
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'oauth'}
+            className={`kb-snippet-tab-btn ${activeTab === 'oauth' ? 'kb-snippet-tab-active' : ''}`}
+            data-testid="tab-oauth"
+            onClick={() => {
+              setActiveTab('oauth');
+            }}
+          >
+            OAuth 2.1
           </button>
         </div>
 

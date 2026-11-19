@@ -35,6 +35,7 @@ from database.models.projects import Project
 from kanban.api.deps import DenyAllResolver, PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.auth.sessions.csrf import verify_same_origin_request
 from kanban.oauth.device import (
     activate_device_code,
     create_device_authorization,
@@ -53,6 +54,7 @@ from kanban.oauth.server import (
     SURFACE_SCOPES,
     OAuth2Error,
     check_registration_rate_limit,
+    generate_consent_csrf_token,
     hash_token,
     parse_surface_from_resource,
     render_consent_screen,
@@ -60,8 +62,10 @@ from kanban.oauth.server import (
     revoke_grant_family,
     validate_redirect_uri,
     validate_registration_redirect_uris,
+    verify_consent_csrf_token,
     verify_pkce_s256,
 )
+from kanban.services.activity import ActivityEventType, record_activity
 
 
 def _check_no_token_in_query(request: Request) -> None:
@@ -217,6 +221,40 @@ class OAuthGrantResponse(BaseModel):
     allowed_projects: list[uuid.UUID] | None = None
     created_at: datetime
     revoked_at: datetime | None = None
+
+
+class AdminOAuthClientCreateRequest(BaseModel):
+    """Payload for administrative registration of an OAuth 2.1 client (AAL2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    client_name: str = Field(
+        default="MCP Client",
+        max_length=128,
+        description="Human-readable client application name",
+    )
+    redirect_uris: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description="List of redirect URIs using HTTPS or loopback HTTP",
+    )
+    client_type: str = Field(
+        default="public",
+        description="OAuth 2.1 client type (public)",
+    )
+    token_endpoint_auth_method: str = Field(
+        default="none",
+        description="Authentication method: 'none' or 'private_key_jwt'",
+    )
+    grant_types: list[str] | None = Field(
+        default=None,
+        description="Optional allowed grant types",
+    )
+    response_types: list[str] | None = Field(
+        default=None,
+        description="Optional allowed response types",
+    )
 
 
 class OAuthClientPatchRequest(BaseModel):
@@ -579,7 +617,23 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     p_name = (await session.execute(stmt_user, {"p_id": caller.principal_id})).scalar_one_or_none()
     principal_display = p_name or str(caller.principal_id)
 
-    csrf_token = secrets.token_urlsafe(32)
+    key_material = getattr(request.app.state, "key_material", None)
+    session_service = getattr(request.app.state, "session_service", None)
+    session_hmac_key = (
+        key_material.session_hmac_key
+        if key_material is not None
+        else (session_service.session_hmac_key if session_service is not None else b"\x00" * 32)
+    )
+
+    csrf_token = generate_consent_csrf_token(
+        session_hmac_key=session_hmac_key,
+        session_id=caller.session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
 
     return render_consent_screen(
         client_name=client_record.client_name,
@@ -601,7 +655,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     "/oauth/authorize/decision",
     summary="Process OAuth 2.1 Consent Decision",
 )
-async def oauth_authorize_decision(
+async def oauth_authorize_decision(  # noqa: C901, PLR0915
     request: Request,
     caller: Caller,
     session: Session,
@@ -616,6 +670,7 @@ async def oauth_authorize_decision(
     code_challenge_method = str(form.get("code_challenge_method", ""))
     state = str(form.get("state", ""))
     action = str(form.get("action", ""))
+    csrf_token = str(form.get("csrf_token", ""))
     scopes_val = form.get("scopes")
     if isinstance(scopes_val, list):
         selected_scopes = [str(s) for s in scopes_val]
@@ -625,7 +680,46 @@ async def oauth_authorize_decision(
         selected_scopes = []
     allowed_project_id = str(form.get("allowed_project_id", "__ALL__"))
 
-    # 1. Lookup client
+    # 1. Same-origin Sec-Fetch-Site and Origin verification (403 CSRF_INVALID on mismatch)
+    if not verify_same_origin_request(request):
+        raise ProblemException(
+            code="CSRF_INVALID",
+            status=403,
+            title="CSRF Validation Failed",
+            detail="Cross-origin OAuth consent submission rejected.",
+        )
+
+    # 2. Surface resolution
+    base_url = resolve_public_base_url(request)
+    surface = parse_surface_from_resource(resource, base_url)
+
+    # 3. HMAC-SHA256 CSRF verification bound to caller session and OAuth parameters
+    key_material = getattr(request.app.state, "key_material", None)
+    session_service = getattr(request.app.state, "session_service", None)
+    session_hmac_key = (
+        key_material.session_hmac_key
+        if key_material is not None
+        else (session_service.session_hmac_key if session_service is not None else b"\x00" * 32)
+    )
+
+    if not verify_consent_csrf_token(
+        token=csrf_token,
+        session_hmac_key=session_hmac_key,
+        session_id=caller.session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    ):
+        raise ProblemException(
+            code="CSRF_INVALID",
+            status=403,
+            title="CSRF Validation Failed",
+            detail="OAuth consent CSRF token is invalid, expired, or tampered.",
+        )
+
+    # 4. Lookup client and validate redirect URI exact string match
     stmt_client = select(OAuthClient).where(OAuthClient.client_id == client_id)
     client_record = (await session.execute(stmt_client)).scalar_one_or_none()
     if client_record is None or not validate_redirect_uri(
@@ -635,7 +729,25 @@ async def oauth_authorize_decision(
         desc = "Invalid client or redirect URI"
         raise OAuth2Error(err, desc, 400)
 
-    # 2. Handle User Deny
+    # 5. Re-verify client approval status (client must be active)
+    if client_record.status != "active":
+        params = {
+            "error": "unauthorized_client",
+            "error_description": f"client_{client_record.status}",
+            "state": state,
+        }
+        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+
+    # 6. Admin surface requires AAL2
+    if surface == "admin" and caller.aal_level < _REQUIRED_AAL_LEVEL:
+        params = {
+            "error": "access_denied",
+            "error_description": "aal2_required",
+            "state": state,
+        }
+        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+
+    # 7. Handle User Deny
     if action.lower() != "approve":
         params = {
             "error": "access_denied",
@@ -644,13 +756,16 @@ async def oauth_authorize_decision(
         }
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
-    # 3. Surface & scopes validation
-    base_url = resolve_public_base_url(request)
-    surface = parse_surface_from_resource(resource, base_url)
+    # 8. Scope validation and rejection of empty approved scopes
     allowed_surface_scopes = SURFACE_SCOPES[surface]
     approved_scopes = [s for s in selected_scopes if s in allowed_surface_scopes]
     if not approved_scopes:
-        approved_scopes = [allowed_surface_scopes[0]]
+        params = {
+            "error": "invalid_scope",
+            "error_description": "At least one valid scope must be approved",
+            "state": state,
+        }
+        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
     # 4. Project narrowing
     allowed_projects: list[uuid.UUID] | None = None
@@ -1119,6 +1234,97 @@ async def admin_revoke_oauth_grant(
     )
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@oauth_v1_router.post(
+    "/admin/oauth-clients",
+    status_code=status.HTTP_201_CREATED,
+    summary="Admin register OAuth 2.1 client (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
+)
+@oauth_v1_router.post(
+    "/oauth/admin/oauth-clients",
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+    dependencies=[Depends(require_admin_aal2)],
+)
+async def admin_register_oauth_client(
+    payload: AdminOAuthClientCreateRequest,
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """Workspace Admin registration of an OAuth 2.1 client requiring AAL2."""
+    await _require_admin_aal2(caller, session)
+
+    # 1. Strict redirect URI validation allowing https:// or loopback http://
+    validate_registration_redirect_uris(payload.redirect_uris)
+
+    # 2. Token endpoint auth method must be 'none' or 'private_key_jwt'
+    if payload.token_endpoint_auth_method not in ("none", "private_key_jwt"):
+        raise ProblemException(
+            code="INVALID_CLIENT_METADATA",
+            status=400,
+            title="Invalid Client Metadata",
+            detail="token_endpoint_auth_method must be 'none' or 'private_key_jwt'.",
+        )
+
+    # 3. Client type validation
+    if payload.client_type != "public":
+        raise ProblemException(
+            code="INVALID_CLIENT_METADATA",
+            status=400,
+            title="Invalid Client Metadata",
+            detail="client_type must be 'public'.",
+        )
+
+    eff_client_name = (
+        payload.client_name.strip()
+        if payload.client_name and payload.client_name.strip()
+        else "MCP Client"
+    )
+
+    client_id = f"client_{secrets.token_urlsafe(16)}"
+    client_record = OAuthClient(
+        client_id=client_id,
+        client_name=eff_client_name,
+        client_type="public",
+        redirect_uris=payload.redirect_uris,
+        status="active",
+        workspace_id=caller.workspace_id,
+        created_by_id=caller.principal_id,
+    )
+    session.add(client_record)
+    await session.flush()
+
+    # 4. Record audit activity event
+    await record_activity(
+        session=session,
+        workspace_id=caller.workspace_id,
+        actor_principal_id=caller.principal_id,
+        event_type=ActivityEventType.OAUTH_CLIENT_REGISTERED,
+        payload={
+            "client_id": client_record.client_id,
+            "client_name": client_record.client_name,
+            "redirect_uris": client_record.redirect_uris,
+            "token_endpoint_auth_method": payload.token_endpoint_auth_method,
+        },
+    )
+
+    await session.commit()
+
+    return JSONResponse(
+        {
+            "client_id": client_record.client_id,
+            "client_name": client_record.client_name,
+            "client_type": client_record.client_type,
+            "token_endpoint_auth_method": payload.token_endpoint_auth_method,
+            "redirect_uris": client_record.redirect_uris,
+            "status": client_record.status,
+            "created_at": client_record.created_at.isoformat(),
+            "updated_at": client_record.updated_at.isoformat(),
+        },
+        status_code=status.HTTP_201_CREATED,
+    )
 
 
 @oauth_v1_router.get(

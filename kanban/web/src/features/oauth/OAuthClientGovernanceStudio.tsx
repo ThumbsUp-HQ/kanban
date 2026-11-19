@@ -1,14 +1,16 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, type JSX } from 'react';
+import React, { useState, useEffect, useRef, useCallback, type JSX } from 'react';
 import { Link } from 'react-router';
 import {
   fetchAdminOAuthClients,
   patchAdminOAuthClient,
   deleteAdminOAuthClient,
+  registerAdminOAuthClient,
   type OAuthClientItem,
 } from './oauthApi';
+import { copyToClipboard } from '../../utils/clipboard';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import './OAuthClientGovernanceStudio.css';
 
@@ -19,48 +21,68 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [inspectClient, setInspectClient] = useState<OAuthClientItem | null>(null);
+  const [showRegisterModal, setShowRegisterModal] = useState<boolean>(false);
+  const [registerName, setRegisterName] = useState<string>('');
+  const [registerUris, setRegisterUris] = useState<string>('');
+  const [registerAuthMethod, setRegisterAuthMethod] = useState<'none' | 'private_key_jwt'>('none');
+  const [registerSubmitting, setRegisterSubmitting] = useState<boolean>(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registeredClient, setRegisteredClient] = useState<OAuthClientItem | null>(null);
+  const [copiedClientId, setCopiedClientId] = useState<boolean>(false);
+
+  const isMounted = useRef<boolean>(true);
+
+  const loadClients = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAdminOAuthClients();
+      if (isMounted.current) {
+        setClients(data);
+      }
+    } catch (err: unknown) {
+      if (isMounted.current) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Failed to load registered OAuth clients.');
+        }
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    const isMounted = { current: true };
-    void (async () => {
+    isMounted.current = true;
+    let active = true;
+    void Promise.resolve().then(async () => {
       try {
         const data = await fetchAdminOAuthClients();
-        if (isMounted.current) {
+        if (active && isMounted.current) {
           setClients(data);
-          setLoading(false);
         }
       } catch (err: unknown) {
-        if (isMounted.current) {
+        if (active && isMounted.current) {
           if (err instanceof Error) {
             setError(err.message);
           } else {
             setError('Failed to load registered OAuth clients.');
           }
+        }
+      } finally {
+        if (active && isMounted.current) {
           setLoading(false);
         }
       }
-    })();
+    });
     return () => {
+      active = false;
       isMounted.current = false;
     };
   }, []);
-
-  const loadClients = async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchAdminOAuthClients();
-      setClients(data);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Failed to load registered OAuth clients.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleApprove = async (clientId: string): Promise<void> => {
     setError(null);
@@ -115,6 +137,59 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       }
     } finally {
       setConfirmRevokeId(null);
+    }
+  };
+
+  const handleOpenRegister = (): void => {
+    setRegisterName('');
+    setRegisterUris('');
+    setRegisterAuthMethod('none');
+    setRegisterError(null);
+    setRegisteredClient(null);
+    setCopiedClientId(false);
+    setShowRegisterModal(true);
+  };
+
+  const handleRegisterSubmit = async (e: React.SyntheticEvent): Promise<void> => {
+    e.preventDefault();
+    setRegisterError(null);
+    const uris = registerUris
+      .split(/[\n,]/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (uris.length === 0) {
+      setRegisterError('At least one redirect URI is required.');
+      return;
+    }
+    setRegisterSubmitting(true);
+    try {
+      const created = await registerAdminOAuthClient({
+        client_name: registerName.trim() || 'MCP Client',
+        redirect_uris: uris,
+        client_type: 'public',
+        token_endpoint_auth_method: registerAuthMethod,
+      });
+      setRegisteredClient(created);
+      setClients((prev) => [created, ...prev]);
+      setSuccessMsg(`Client "${created.client_name ?? 'Client'}" registered successfully.`);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setRegisterError(err.message);
+      } else {
+        setRegisterError('Failed to register OAuth client.');
+      }
+    } finally {
+      setRegisterSubmitting(false);
+    }
+  };
+
+  const handleCopyClientId = async (clientId: string): Promise<void> => {
+    const success = await copyToClipboard(clientId);
+    if (success) {
+      setCopiedClientId(true);
+      setTimeout(() => {
+        setCopiedClientId(false);
+      }, 2000);
     }
   };
 
@@ -225,6 +300,14 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
           <h2 className="kb-oauth-gov-section-title">
             <EmojiHint kind="access" /> Registered OAuth 2.1 Clients
           </h2>
+          <button
+            type="button"
+            className="kb-oauth-gov-register-btn"
+            data-testid="register-client-btn"
+            onClick={handleOpenRegister}
+          >
+            + Register OAuth Client
+          </button>
         </div>
 
         <div className="kb-oauth-gov-table-wrap">
@@ -451,6 +534,193 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {showRegisterModal && (
+        <div
+          className="kb-oauth-modal-backdrop"
+          data-testid="register-modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !registerSubmitting) {
+              setShowRegisterModal(false);
+            }
+          }}
+        >
+          <div
+            className="kb-oauth-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="register-client-modal-title"
+            data-testid="register-client-modal"
+          >
+            <div className="kb-oauth-modal-header">
+              <h3 id="register-client-modal-title" className="kb-oauth-modal-title">
+                {registeredClient ? 'OAuth Client Registered' : 'Register OAuth 2.1 Client'}
+              </h3>
+              <button
+                type="button"
+                className="kb-oauth-modal-close"
+                aria-label="Close modal"
+                data-testid="close-register-modal-btn"
+                onClick={() => {
+                  setShowRegisterModal(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {registeredClient ? (
+              <div className="kb-oauth-modal-body" data-testid="register-success-view">
+                <p className="kb-oauth-modal-desc">
+                  The client application has been registered with status <strong>active</strong>.
+                  Copy the assigned Client ID below.
+                </p>
+                <div className="kb-oauth-detail-row">
+                  <span className="kb-oauth-detail-label">Client ID</span>
+                  <div className="kb-oauth-copy-row">
+                    <code className="kb-oauth-id-code" data-testid="registered-client-id">
+                      {registeredClient.client_id}
+                    </code>
+                    <button
+                      type="button"
+                      className="kb-oauth-copy-btn"
+                      data-testid="copy-client-id-btn"
+                      onClick={() => {
+                        void handleCopyClientId(registeredClient.client_id);
+                      }}
+                    >
+                      {copiedClientId ? 'Copied!' : 'Copy Client ID'}
+                    </button>
+                  </div>
+                </div>
+                <div className="kb-oauth-detail-row">
+                  <span className="kb-oauth-detail-label">Client Name</span>
+                  <span className="kb-oauth-detail-value">{registeredClient.client_name}</span>
+                </div>
+                <div className="kb-oauth-detail-row">
+                  <span className="kb-oauth-detail-label">Redirect URIs</span>
+                  <div className="kb-oauth-gov-uri-list">
+                    {registeredClient.redirect_uris.map((uri) => (
+                      <code key={uri} className="kb-oauth-gov-uri-code">
+                        {uri}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+                <div className="kb-oauth-modal-footer">
+                  <button
+                    type="button"
+                    className="kb-oauth-gov-btn kb-oauth-gov-btn-primary"
+                    data-testid="done-register-btn"
+                    onClick={() => {
+                      setShowRegisterModal(false);
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  void handleRegisterSubmit(e);
+                }}
+                data-testid="register-client-form"
+              >
+                <div className="kb-oauth-modal-body">
+                  {registerError && (
+                    <div
+                      className="kb-oauth-gov-alert kb-oauth-gov-alert-error"
+                      role="alert"
+                      data-testid="register-error-alert"
+                    >
+                      {registerError}
+                    </div>
+                  )}
+                  <div className="kb-oauth-form-field">
+                    <label htmlFor="reg-client-name" className="kb-oauth-form-label">
+                      Application Name
+                    </label>
+                    <input
+                      id="reg-client-name"
+                      type="text"
+                      className="kb-oauth-form-input"
+                      data-testid="input-client-name"
+                      placeholder="e.g. Claude Code or IDE Plugin"
+                      value={registerName}
+                      onChange={(e) => {
+                        setRegisterName(e.target.value);
+                      }}
+                      disabled={registerSubmitting}
+                    />
+                  </div>
+
+                  <div className="kb-oauth-form-field">
+                    <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
+                      Redirect URIs (one per line, HTTPS or loopback HTTP)
+                    </label>
+                    <textarea
+                      id="reg-redirect-uris"
+                      className="kb-oauth-form-textarea"
+                      data-testid="input-redirect-uris"
+                      rows={3}
+                      placeholder="https://my-app.example.com/oauth/callback&#10;http://127.0.0.1:8080/callback"
+                      value={registerUris}
+                      onChange={(e) => {
+                        setRegisterUris(e.target.value);
+                      }}
+                      required
+                      disabled={registerSubmitting}
+                    />
+                  </div>
+
+                  <div className="kb-oauth-form-field">
+                    <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
+                      Token Endpoint Authentication Method
+                    </label>
+                    <select
+                      id="reg-auth-method"
+                      className="kb-oauth-form-select"
+                      data-testid="select-auth-method"
+                      value={registerAuthMethod}
+                      onChange={(e) => {
+                        setRegisterAuthMethod(e.target.value as 'none' | 'private_key_jwt');
+                      }}
+                      disabled={registerSubmitting}
+                    >
+                      <option value="none">none (Public client with PKCE S256)</option>
+                      <option value="private_key_jwt">
+                        private_key_jwt (Asymmetric client authentication)
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="kb-oauth-modal-footer">
+                  <button
+                    type="button"
+                    className="kb-oauth-gov-btn"
+                    data-testid="cancel-register-btn"
+                    disabled={registerSubmitting}
+                    onClick={() => {
+                      setShowRegisterModal(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="kb-oauth-gov-btn kb-oauth-gov-btn-primary"
+                    data-testid="submit-register-btn"
+                    disabled={registerSubmitting}
+                  >
+                    {registerSubmitting ? 'Registering...' : 'Register Client'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

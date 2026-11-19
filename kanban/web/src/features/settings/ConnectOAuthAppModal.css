@@ -1,0 +1,275 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+.kb-connect-oauth-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+}
+
+.kb-connect-oauth-card {
+  background-color: var(--kb-color-bg-surface, #161b22);
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-connect-oauth-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kb-connect-oauth-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.kb-connect-oauth-close {
+  background: none;
+  border: none;
+  color: var(--kb-color-text-secondary, #8b949e);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.kb-connect-oauth-close:hover {
+  background-color: var(--bg-hover, #21262d);
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-connect-oauth-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kb-connect-oauth-desc {
+  font-size: 0.875rem;
+  color: var(--kb-color-text-secondary, #8b949e);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.kb-connect-oauth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-connect-oauth-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-connect-oauth-select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background-color: #0d1117;
+  color: var(--kb-color-text-primary, #f0f6fc);
+  font-size: 0.875rem;
+}
+
+.kb-connect-oauth-select:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.kb-connect-oauth-scopes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-connect-oauth-scope-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: #0d1117;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.kb-connect-oauth-endpoints {
+  background-color: #0d1117;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kb-connect-oauth-endpoint-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kb-connect-oauth-endpoint-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--kb-color-text-secondary, #8b949e);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kb-connect-oauth-copy-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kb-connect-oauth-url {
+  font-family: monospace;
+  font-size: 0.8125rem;
+  color: #58a6ff;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.kb-connect-oauth-copy-btn {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  background-color: var(--kb-color-bg-surface-raised, #21262d);
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  color: var(--kb-color-text-primary, #f0f6fc);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-connect-oauth-copy-btn:hover {
+  background-color: var(--bg-hover, #30363d);
+}
+
+.kb-connect-oauth-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
+  overflow-x: auto;
+}
+
+.kb-connect-oauth-tab {
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--kb-color-text-secondary, #8b949e);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-connect-oauth-tab:hover {
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-connect-oauth-tab-active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+  font-weight: 600;
+}
+
+.kb-connect-oauth-snippet-wrap {
+  position: relative;
+  background-color: #0d1117;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.kb-connect-oauth-snippet {
+  margin: 0;
+  font-family: monospace;
+  font-size: 0.8125rem;
+  color: #e6edf3;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.kb-connect-oauth-snippet-copy {
+  margin-top: 10px;
+  padding: 6px 12px;
+  background-color: var(--kb-color-primary, #238636);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kb-connect-oauth-snippet-copy:hover {
+  background-color: #2ea043;
+}
+
+.kb-connect-oauth-headless-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background-color: rgba(56, 139, 253, 0.1);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.kb-connect-oauth-device-link {
+  color: #58a6ff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.kb-connect-oauth-device-link:hover {
+  text-decoration: underline;
+}
+
+.kb-connect-oauth-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--kb-color-border-subtle, #30363d);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kb-connect-oauth-btn {
+  padding: 8px 16px;
+  background-color: var(--kb-color-bg-surface-raised, #21262d);
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  color: var(--kb-color-text-primary, #f0f6fc);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.kb-connect-oauth-btn:hover {
+  background-color: var(--bg-hover, #30363d);
+}

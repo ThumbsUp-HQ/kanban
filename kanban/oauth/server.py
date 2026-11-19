@@ -23,6 +23,7 @@ from database.models.oauth import (
     OAuthGrant,
     OAuthRefreshToken,
 )
+from kanban.security.keys import derive_subkey
 from kanban.services.activity import ActivityEventType, record_activity
 
 if TYPE_CHECKING:
@@ -43,6 +44,197 @@ SURFACE_SCOPES: Final[dict[str, list[str]]] = {
     "docs": ["docs:read", "docs:write"],
     "admin": ["admin:read", "admin:write", "admin:destructive"],
 }
+
+OAUTH_CONSENT_CSRF_PURPOSE: Final[str] = "oauth/consent-csrf"
+OAUTH_CONSENT_CSRF_MAX_TTL: Final[int] = 600
+
+CONSENT_STYLE_CSS: Final[str] = """:root {
+  --bg: #0f172a;
+  --card-bg: #1e293b;
+  --border: #334155;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --badge-bg: #1e3a8a;
+  --badge-text: #93c5fd;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+.consent-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 480px;
+  width: 100%;
+  padding: 2rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+.header { text-align: center; margin-bottom: 1.5rem; }
+.app-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
+.host-badge {
+  display: inline-block;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  background: #090d16;
+  padding: 0.25rem 0.625rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.user-badge {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+.user-badge strong {
+  color: var(--text);
+}
+.surface-banner {
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.section-title {
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  background: #151f30;
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+.scope-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.scope-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.scope-name { font-family: monospace; color: #cbd5e1; font-weight: 600; }
+.scope-desc { font-size: 0.75rem; color: var(--text-muted); }
+.project-selector { margin-bottom: 1.5rem; }
+.project-selector select {
+  width: 100%;
+  padding: 0.5rem;
+  background: #151f30;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+.actions { display: flex; gap: 0.75rem; }
+.btn {
+  flex: 1;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  border: none;
+  text-align: center;
+  text-decoration: none;
+}
+.btn-approve { background: var(--primary); color: white; }
+.btn-approve:hover { background: var(--primary-hover); }
+.btn-deny { background: #334155; color: var(--text); }
+.btn-deny:hover { background: #475569; }"""
+
+CONSENT_STYLE_SHA256: Final[str] = base64.b64encode(
+    hashlib.sha256(CONSENT_STYLE_CSS.encode("utf-8")).digest()
+).decode("ascii")
+
+
+def generate_consent_csrf_token(  # noqa: PLR0913, PLR0917
+    session_hmac_key: bytes,
+    session_id: uuid.UUID | str | None,
+    client_id: str,
+    redirect_uri: str,
+    code_challenge: str,
+    state: str,
+    surface: str,
+    ttl_seconds: int = OAUTH_CONSENT_CSRF_MAX_TTL,
+    now: float | None = None,
+) -> str:
+    """Generate short-TTL HMAC-SHA256 token binding caller session and authorization parameters."""
+    current_time = int(time.time() if now is None else now)
+    effective_ttl = min(max(ttl_seconds, 1), OAUTH_CONSENT_CSRF_MAX_TTL)
+    exp = current_time + effective_ttl
+    sess_str = str(session_id or "")
+
+    subkey = derive_subkey(session_hmac_key, OAUTH_CONSENT_CSRF_PURPOSE)
+    msg = (
+        f"v1|{sess_str}|{client_id}|{redirect_uri}|{code_challenge}|{state}|{surface}|{exp}"
+    ).encode()
+    raw_sig = hmac.new(subkey, msg, "sha256").digest()
+    sig = base64.urlsafe_b64encode(raw_sig).decode("ascii").rstrip("=")
+    return f"{exp}.{sig}"
+
+
+def verify_consent_csrf_token(  # noqa: PLR0913, PLR0917
+    token: str,
+    session_hmac_key: bytes,
+    session_id: uuid.UUID | str | None,
+    client_id: str,
+    redirect_uri: str,
+    code_challenge: str,
+    state: str,
+    surface: str,
+    now: float | None = None,
+) -> bool:
+    """Cryptographically verify authenticity and expiration of OAuth consent CSRF token."""
+    if not token or "." not in token:
+        return False
+    parts = token.split(".", 1)
+    if len(parts) != 2:  # noqa: PLR2004
+        return False
+    try:
+        exp = int(parts[0])
+    except ValueError:
+        return False
+
+    current_time = int(time.time() if now is None else now)
+    if current_time > exp:
+        return False
+
+    sess_str = str(session_id or "")
+    subkey = derive_subkey(session_hmac_key, OAUTH_CONSENT_CSRF_PURPOSE)
+    msg = (
+        f"v1|{sess_str}|{client_id}|{redirect_uri}|{code_challenge}|{state}|{surface}|{exp}"
+    ).encode()
+    raw_sig = hmac.new(subkey, msg, "sha256").digest()
+    expected_sig = base64.urlsafe_b64encode(raw_sig).decode("ascii").rstrip("=")
+    return hmac.compare_digest(expected_sig, parts[1].strip().rstrip("="))
 
 
 class OAuth2Error(Exception):
@@ -374,129 +566,7 @@ def render_consent_screen(  # noqa: PLR0913
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Authorize {safe_client_name} - Kanban</title>
-  <style>
-    :root {{
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --border: #334155;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --danger: #ef4444;
-      --danger-hover: #dc2626;
-      --badge-bg: #1e3a8a;
-      --badge-text: #93c5fd;
-    }}
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 1rem;
-    }}
-    .consent-card {{
-      background-color: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      max-width: 480px;
-      width: 100%;
-      padding: 2rem;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-    }}
-    .header {{ text-align: center; margin-bottom: 1.5rem; }}
-    .app-title {{ font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }}
-    .host-badge {{
-      display: inline-block;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      background: #090d16;
-      padding: 0.25rem 0.625rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }}
-    .user-badge {{
-      text-align: center;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      margin-top: 0.5rem;
-    }}
-    .user-badge strong {{
-      color: var(--text);
-    }}
-    .surface-banner {{
-      background: var(--badge-bg);
-      color: var(--badge-text);
-      padding: 0.5rem 0.75rem;
-      border-radius: 6px;
-      font-size: 0.875rem;
-      font-weight: 600;
-      margin-bottom: 1.25rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }}
-    .section-title {{
-      font-size: 0.875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 0.5rem;
-    }}
-    .scope-list {{
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 1.25rem;
-      background: #151f30;
-      padding: 0.75rem;
-      border-radius: 8px;
-    }}
-    .scope-item {{
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5rem;
-      font-size: 0.875rem;
-      cursor: pointer;
-    }}
-    .scope-info {{
-      display: flex;
-      flex-direction: column;
-      gap: 0.125rem;
-    }}
-    .scope-name {{ font-family: monospace; color: #cbd5e1; font-weight: 600; }}
-    .scope-desc {{ font-size: 0.75rem; color: var(--text-muted); }}
-    .project-selector {{ margin-bottom: 1.5rem; }}
-    .project-selector select {{
-      width: 100%;
-      padding: 0.5rem;
-      background: #151f30;
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.875rem;
-    }}
-    .actions {{ display: flex; gap: 0.75rem; }}
-    .btn {{
-      flex: 1;
-      padding: 0.75rem;
-      border-radius: 6px;
-      font-weight: 600;
-      font-size: 0.9375rem;
-      cursor: pointer;
-      border: none;
-      text-align: center;
-      text-decoration: none;
-    }}
-    .btn-approve {{ background: var(--primary); color: white; }}
-    .btn-approve:hover {{ background: var(--primary-hover); }}
-    .btn-deny {{ background: #334155; color: var(--text); }}
-    .btn-deny:hover {{ background: #475569; }}
-  </style>
+  <style>{CONSENT_STYLE_CSS}</style>
 </head>
 <body>
   <div class="consent-card">
@@ -549,7 +619,7 @@ def render_consent_screen(  # noqa: PLR0913
             "Pragma": "no-cache",
             "Content-Security-Policy": (
                 "default-src 'none'; "
-                "style-src 'self' 'unsafe-inline'; "
+                f"style-src 'self' 'sha256-{CONSENT_STYLE_SHA256}'; "
                 "img-src 'self' data:; "
                 "form-action 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* https:; "
                 "frame-ancestors 'none'; "
