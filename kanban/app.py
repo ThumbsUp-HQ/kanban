@@ -293,12 +293,10 @@ def _mount_sparkle_router(app: FastAPI) -> None:
     try:
         sparkle_mod = importlib.import_module("agent.sparkle.router")
         sparkle_router = getattr(sparkle_mod, "router", None)
-        if sparkle_router is not None:
-            if not any(
-                getattr(route, "path", "").startswith("/api/v1/sparkle")
-                for route in app.routes
-            ):
-                app.include_router(sparkle_router)
+        if sparkle_router is not None and not any(
+            getattr(route, "path", "").startswith("/api/v1/sparkle") for route in app.routes
+        ):
+            app.include_router(sparkle_router)
     except Exception:
         logger.debug("Automatic live sparkle router mounting skipped", exc_info=True)
 

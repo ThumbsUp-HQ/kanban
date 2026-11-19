@@ -35,11 +35,9 @@ def create_agent_app(settings: Settings | None = None) -> FastAPI:
     """
     app = create_app(settings)
 
-    # Position sparkle_router ahead of the fallback catch-all /api/{full_path:path} route if not already mounted
-    if not any(
-        getattr(route, "path", "").startswith("/api/v1/sparkle")
-        for route in app.routes
-    ):
+    # Position sparkle_router ahead of the fallback catch-all /api/{full_path:path} route
+    # if not already mounted
+    if not any(getattr(route, "path", "").startswith("/api/v1/sparkle") for route in app.routes):
         fallback_idx = None
         for i, route in enumerate(app.router.routes):
             orig = getattr(route, "original_router", None)
