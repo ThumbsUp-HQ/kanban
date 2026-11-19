@@ -344,6 +344,108 @@
   font-weight: 500;
 }
 
+/* Scope Filter Pills & Governance View Switch */
+.kb-mcp-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.kb-mcp-pills-group {
+  display: inline-flex;
+  gap: 6px;
+  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #161b22));
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
+}
+
+.kb-mcp-filter-pill {
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-mcp-filter-pill:hover {
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+  background-color: rgba(110, 118, 129, 0.1);
+}
+
+.kb-mcp-filter-pill-active {
+  background-color: var(--brand-primary, #1f6feb) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.kb-mcp-project-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.kb-mcp-project-selector label {
+  font-weight: 500;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+}
+
+.kb-mcp-view-toggle {
+  display: inline-flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
+  margin-bottom: 20px;
+  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #161b22));
+}
+
+.kb-mcp-view-btn {
+  padding: 8px 18px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-mcp-view-btn:hover {
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+}
+
+.kb-mcp-view-btn-active {
+  background-color: var(--brand-primary, #238636) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.kb-mcp-explainer-card {
+  margin-bottom: 20px;
+  background-color: var(--bg-surface-raised, rgba(56, 139, 253, 0.05));
+  border: 1px solid var(--kb-color-border-subtle, rgba(56, 139, 253, 0.2));
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+}
+
+.kb-mcp-explainer-item strong {
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+}
+
 /* Mobile Responsiveness (<= 768px, KANBA-213) */
 @media (max-width: 768px) {
   .kb-mcp-studio-container {

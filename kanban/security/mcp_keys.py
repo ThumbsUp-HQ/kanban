@@ -30,6 +30,7 @@ from kanban.api.request_id import (
     register_mcp_key_revocation_listener,
 )
 from kanban.security.keys import derive_subkey, load_key_material
+from kanban.security.permissions import Capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.settings import get_settings
 
@@ -263,7 +264,7 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
     created_by_id: uuid.UUID,
     expires_at: datetime | None = None,
     expires_in_days: int | None = None,
-    scope_tier: Literal["global", "workspace", "project"] = "workspace",
+    scope_tier: Literal["global", "workspace", "project", "server"] = "workspace",
     owner_kind: Literal["personal_user", "service_bot"] = "service_bot",
     project_id: uuid.UUID | None = None,
     allowed_workspace_ids: list[uuid.UUID] | None = None,
@@ -296,8 +297,30 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
             detail=f"Scopes {invalid_scopes} not allowed for surface {surface!r}.",
         )
 
-    # Check admin:destructive capability
+    # Normalize scope_tier alias ("server" -> "global")
+    if scope_tier == "server":
+        scope_tier = "global"
+
+    # Resolve effective AAL level early for privilege and scope checks
+    if caller_aal_level is None:
+        try:
+            stmt_aal = text("SELECT NULLIF(current_setting('app.aal_level', true), '')::integer")
+            sess_aal = (await session.execute(stmt_aal)).scalar_one_or_none()
+            effective_aal = sess_aal if sess_aal is not None else REQUIRED_SERVICE_BOT_AAL
+        except SQLAlchemyError:
+            effective_aal = REQUIRED_SERVICE_BOT_AAL
+    else:
+        effective_aal = caller_aal_level
+
+    # Check admin:destructive capability (strictly requires SERVER_ADMIN + fresh AAL2)
     if "admin:destructive" in scopes:
+        if effective_aal < REQUIRED_SERVICE_BOT_AAL:
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Required",
+                detail="admin:destructive scope requires fresh AAL2 authentication.",
+            )
         stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
         is_server_admin = (await session.execute(stmt)).scalar_one()
         if not is_server_admin:
@@ -345,17 +368,6 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
             allowed_project_ids = [project_id]
         elif project_id not in allowed_project_ids:
             allowed_project_ids = [*allowed_project_ids, project_id]
-
-    # Resolve effective AAL level
-    if caller_aal_level is None:
-        try:
-            stmt_aal = text("SELECT NULLIF(current_setting('app.aal_level', true), '')::integer")
-            sess_aal = (await session.execute(stmt_aal)).scalar_one_or_none()
-            effective_aal = sess_aal if sess_aal is not None else REQUIRED_SERVICE_BOT_AAL
-        except SQLAlchemyError:
-            effective_aal = REQUIRED_SERVICE_BOT_AAL
-    else:
-        effective_aal = caller_aal_level
 
     # 2. Authorization and Privilege Checks
     if owner_kind == "service_bot":
@@ -412,16 +424,75 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 title="Forbidden",
                 detail="Personal user keys cannot be minted for another user.",
             )
-        if (
-            surface == "admin" or (capability_mask & 8)
-        ) and effective_aal < REQUIRED_SERVICE_BOT_AAL:
+        # Check delete capability bitmask (Capability.DELETE is 128 / bit 7, not 8 / TRANSITION)
+        has_delete_cap = bool(capability_mask & int(Capability.DELETE.value))
+        if (surface == "admin" or has_delete_cap) and effective_aal < REQUIRED_SERVICE_BOT_AAL:
             raise ProblemException(
                 code="AAL2_REQUIRED",
                 status=403,
                 title="AAL2 Required",
                 detail="Minting admin surface or delete capability personal keys requires AAL2.",
             )
-        if scope_tier == "workspace":
+        # Surface == "admin" requires tier-matched admin role + AAL2
+        if surface == "admin":
+            if scope_tier == "global":
+                stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+                if not bool((await session.execute(stmt_sa)).scalar_one()):
+                    raise ProblemException(
+                        code="INSUFFICIENT_CAPABILITY",
+                        status=403,
+                        title="Insufficient Capability",
+                        detail="Minting admin surface global keys requires SERVER_ADMIN role.",
+                    )
+            elif scope_tier == "workspace":
+                stmt_wa = text(
+                    "SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])"
+                )
+                if not bool((await session.execute(stmt_wa)).scalar_one()):
+                    raise ProblemException(
+                        code="INSUFFICIENT_CAPABILITY",
+                        status=403,
+                        title="Insufficient Capability",
+                        detail=(
+                            "Minting admin surface workspace keys requires "
+                            "WORKSPACE_ADMIN or SERVER_ADMIN role."
+                        ),
+                    )
+            elif scope_tier == "project":
+                stmt_pa = text(
+                    "SELECT app_principal_has_role("
+                    ":p_id, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
+                )
+                if not bool((await session.execute(stmt_pa, {"p_id": project_id})).scalar_one()):
+                    raise ProblemException(
+                        code="INSUFFICIENT_CAPABILITY",
+                        status=403,
+                        title="Insufficient Capability",
+                        detail=(
+                            "Minting admin surface project keys requires "
+                            "PROJECT_ADMIN, WORKSPACE_ADMIN, or SERVER_ADMIN role."
+                        ),
+                    )
+
+        # Global tier privilege escalation guard: personal user global keys
+        # strictly require SERVER_ADMIN + fresh AAL2
+        if scope_tier == "global":
+            if effective_aal < REQUIRED_SERVICE_BOT_AAL:
+                raise ProblemException(
+                    code="AAL2_REQUIRED",
+                    status=403,
+                    title="AAL2 Required",
+                    detail="Minting global personal keys requires fresh AAL2 authentication.",
+                )
+            stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+            if not bool((await session.execute(stmt_sa)).scalar_one()):
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail="Minting global personal user keys requires SERVER_ADMIN role.",
+                )
+        elif scope_tier == "workspace":
             stmt_ws_view = text(
                 "SELECT app_has_object_capability(:ws_id, 1) OR "
                 "app_principal_has_role(NULL, "

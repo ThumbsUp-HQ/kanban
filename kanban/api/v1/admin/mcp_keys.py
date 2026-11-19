@@ -41,7 +41,7 @@ class McpApiKeyMintRequest(BaseModel):
     principal_id: uuid.UUID | None = None
     expires_in_days: int | None = Field(default=None, ge=1, le=365)
     expires_at: datetime | None = None
-    scope_tier: Literal["global", "workspace", "project"] = "workspace"
+    scope_tier: Literal["global", "workspace", "project", "server"] = "workspace"
     owner_kind: Literal["service_bot", "personal_user"] = "service_bot"
     project_id: uuid.UUID | None = None
     allowed_workspace_ids: list[uuid.UUID] | None = None
@@ -128,8 +128,9 @@ async def mint_key(
     response: Response,
 ) -> McpApiKeyMintResponse:
     """Mint a surface-bound MCP API key and return plaintext token once."""
+    resolved_scope_tier = "global" if body.scope_tier in ("global", "server") else body.scope_tier
     target_principal_id = body.principal_id or caller.principal_id
-    target_workspace_id = None if body.scope_tier == "global" else caller.workspace_id
+    target_workspace_id = None if resolved_scope_tier == "global" else caller.workspace_id
 
     allowed_project_ids = list(body.allowed_project_ids or [])
     if body.allowed_projects:
@@ -152,7 +153,7 @@ async def mint_key(
                     pass
 
     target_project_id = body.project_id
-    if target_project_id is None and body.scope_tier == "project" and allowed_project_ids:
+    if target_project_id is None and resolved_scope_tier == "project" and allowed_project_ids:
         target_project_id = allowed_project_ids[0]
 
     key_record, plaintext_token = await mint_mcp_api_key(
@@ -164,7 +165,7 @@ async def mint_key(
         created_by_id=caller.principal_id,
         expires_at=body.expires_at,
         expires_in_days=body.expires_in_days,
-        scope_tier=body.scope_tier,
+        scope_tier=resolved_scope_tier,
         owner_kind=body.owner_kind,
         project_id=target_project_id,
         allowed_workspace_ids=body.allowed_workspace_ids,
@@ -267,6 +268,10 @@ async def list_keys(
     """List metadata for MCP API keys belonging to the workspace or global scope."""
     stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
     is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
+    stmt_wa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    is_workspace_admin = bool((await session.execute(stmt_wa)).scalar_one())
+
+    normalized_scope_tier = "global" if scope_tier in ("global", "server") else scope_tier
 
     stmt = select(McpApiKey)
     if is_server_admin:
@@ -276,13 +281,38 @@ async def list_keys(
                 McpApiKey.workspace_id.is_(None),
             )
         )
-    else:
+    elif is_workspace_admin:
         stmt = stmt.where(McpApiKey.workspace_id == caller.workspace_id)
+    else:
+        # PROJECT_ADMIN only: strictly restricted to scope_tier == "project" targeting projects
+        # where the caller holds Capability.ADMIN (never workspace-wide or other projects' keys)
+        if normalized_scope_tier is not None and normalized_scope_tier != "project":
+            return []
+
+        stmt_admin_projs = select(Project.id).where(
+            Project.workspace_id == caller.workspace_id,
+            or_(
+                text("app_has_object_capability(projects.id, 64)"),
+                text(
+                    "app_principal_has_role(projects.id, "
+                    "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
+                ),
+            ),
+        )
+        admin_proj_ids = list((await session.execute(stmt_admin_projs)).scalars().all())
+        if not admin_proj_ids:
+            return []
+
+        stmt = stmt.where(
+            McpApiKey.workspace_id == caller.workspace_id,
+            McpApiKey.scope_tier == "project",
+            McpApiKey.project_id.in_(admin_proj_ids),
+        )
 
     if surface:
         stmt = stmt.where(McpApiKey.surface == surface)
-    if scope_tier:
-        stmt = stmt.where(McpApiKey.scope_tier == scope_tier)
+    if normalized_scope_tier:
+        stmt = stmt.where(McpApiKey.scope_tier == normalized_scope_tier)
     stmt = stmt.order_by(McpApiKey.created_at.desc())
 
     result = await session.execute(stmt)
@@ -342,13 +372,37 @@ async def revoke_key(
     if key is None:
         not_found()
 
-    if key.workspace_id is None:
-        stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
-        is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
-        if not is_server_admin:
+    stmt_sa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+    is_server_admin = bool((await session.execute(stmt_sa)).scalar_one())
+    stmt_wa = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    is_workspace_admin = bool((await session.execute(stmt_wa)).scalar_one())
+
+    if is_server_admin:
+        if key.workspace_id is not None and key.workspace_id != caller.workspace_id:
             not_found()
-    elif key.workspace_id != caller.workspace_id:
-        not_found()
+    elif is_workspace_admin:
+        if key.workspace_id != caller.workspace_id:
+            not_found()
+    else:
+        # PROJECT_ADMIN only: strictly restricted to scope_tier == "project" targeting
+        # projects where caller holds Capability.ADMIN
+        if (
+            key.scope_tier != "project"
+            or key.workspace_id != caller.workspace_id
+            or key.project_id is None
+        ):
+            not_found()
+
+        stmt_can_admin = text(
+            "SELECT app_has_object_capability(:p_id, 64) OR "
+            "app_principal_has_role(:p_id, "
+            "ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"
+        )
+        can_admin = bool(
+            (await session.execute(stmt_can_admin, {"p_id": key.project_id})).scalar_one()
+        )
+        if not can_admin:
+            not_found()
 
     await revoke_mcp_api_key(
         session,

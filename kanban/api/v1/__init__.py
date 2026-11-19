@@ -54,6 +54,7 @@ from kanban.api.v1.issue_trees import router as issue_trees_router
 from kanban.api.v1.issue_workflow import router as issue_workflow_router
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.links import router as links_router
+from kanban.api.v1.mcp_keys import router as mcp_keys_router
 from kanban.api.v1.media_proxy import router as media_proxy_router
 from kanban.api.v1.modules import router as modules_router
 from kanban.api.v1.notifications import router as notifications_router
@@ -107,6 +108,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(auth_identities_router)
     v1.include_router(auth_local_router)
     v1.include_router(auth_mcp_keys_router)
+    v1.include_router(mcp_keys_router)
     v1.include_router(auth_oidc_router)
     v1.include_router(auth_mfa_router)
     v1.include_router(auth_ldap_router)

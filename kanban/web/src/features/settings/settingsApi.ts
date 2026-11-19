@@ -73,6 +73,45 @@ function normalizeMcpKeyItem(
   };
 }
 
+export interface FetchMcpKeysOptions {
+  view?: 'mine' | 'governance' | undefined;
+  scope_tier?: string | undefined;
+  project_ref?: string | undefined;
+  surface?: string | undefined;
+}
+
+export async function fetchUnifiedMcpKeys(options?: FetchMcpKeysOptions): Promise<McpApiKeyItem[]> {
+  const query = new URLSearchParams();
+  if (options?.view) query.set('view', options.view);
+  if (options?.scope_tier && options.scope_tier !== 'all') {
+    query.set('scope_tier', options.scope_tier);
+  }
+  if (options?.project_ref) query.set('project_ref', options.project_ref);
+  if (options?.surface) query.set('surface', options.surface);
+
+  const qs = query.toString();
+  const endpoint = `/api/v1/mcp-keys${qs ? `?${qs}` : ''}`;
+  const res = (await apiFetch('GET', endpoint as never)) as
+    | McpKeyListResponse
+    | McpApiKeyItem[];
+  const items = Array.isArray(res) ? res : res.keys;
+  return items.map((item) => normalizeMcpKeyItem(item));
+}
+
+export async function mintUnifiedMcpKey(payload: MintMcpKeyRequest): Promise<McpApiKeyItem> {
+  const created = (await apiFetch('POST', '/api/v1/mcp-keys' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as McpApiKeyItem;
+  return normalizeMcpKeyItem(created, payload.label);
+}
+
+export async function revokeUnifiedMcpKey(keyId: string): Promise<void> {
+  await apiFetch('DELETE', '/api/v1/mcp-keys/{key_id}' as never, {
+    params: { key_id: keyId },
+  });
+}
+
 export async function fetchPersonalMcpKeys(tier?: string): Promise<McpApiKeyItem[]> {
   const endpoint = tier === 'global' ? '/api/v1/admin/mcp-keys' : '/api/v1/auth/mcp-keys';
   const res = (await apiFetch('GET', endpoint as never)) as

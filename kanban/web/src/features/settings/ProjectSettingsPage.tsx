@@ -1678,7 +1678,7 @@ export function ProjectSettingsPage(): JSX.Element {
             </Link>
 
             <Link
-              to={`/projects/${projectKey}/settings/mcp`}
+              to={`/settings/mcp?scope=project&project=${projectKey}`}
               className="kb-integration-card"
               data-testid="integration-mcp-card"
             >

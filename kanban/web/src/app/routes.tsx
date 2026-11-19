@@ -1825,6 +1825,37 @@ export function RootShellLayout(): JSX.Element {
   return <AppShell projectKey={undefined} projectId={undefined} />;
 }
 
+export function ProjectMcpRedirect(): JSX.Element {
+  const { projectKey } = useParams<{ projectKey?: string }>();
+  const [searchParams] = useSearchParams();
+  const nextParams = new URLSearchParams(searchParams);
+  if (!nextParams.has('scope')) {
+    nextParams.set('scope', 'project');
+  }
+  if (projectKey && !nextParams.has('project')) {
+    nextParams.set('project', projectKey);
+  }
+  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
+}
+
+export function WorkspaceMcpRedirect(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const nextParams = new URLSearchParams(searchParams);
+  if (!nextParams.has('scope')) {
+    nextParams.set('scope', 'workspace');
+  }
+  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
+}
+
+export function AdminMcpRedirect(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const nextParams = new URLSearchParams(searchParams);
+  if (!nextParams.has('scope')) {
+    nextParams.set('scope', 'server');
+  }
+  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
+}
+
 const projectRouteChildren: RouteObject[] = [
   {
     path: 'issues',
@@ -1860,7 +1891,7 @@ const projectRouteChildren: RouteObject[] = [
   },
   {
     path: 'settings/mcp',
-    element: <McpAccessStudio tier="project" />,
+    element: <ProjectMcpRedirect />,
   },
   {
     path: 'settings/custom-fields',
@@ -1928,7 +1959,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'settings/mcp',
-            element: <McpAccessStudio tier="personal" />,
+            element: <McpAccessStudio />,
           },
           {
             path: 'workspaces/settings',
@@ -1936,7 +1967,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'workspaces/settings/mcp',
-            element: <McpAccessStudio tier="workspace" />,
+            element: <WorkspaceMcpRedirect />,
           },
           {
             path: 'workspaces/settings/ai',
@@ -1952,7 +1983,11 @@ export const appRoutes: RouteObject[] = [
               },
               {
                 path: 'mcp',
-                element: <McpAccessStudio tier="global" />,
+                element: <AdminMcpRedirect />,
+              },
+              {
+                path: 'mcp-keys',
+                element: <AdminMcpRedirect />,
               },
               {
                 path: 'oauth',
