@@ -5,14 +5,14 @@ Configured timing floor: 25.0 ms
 
 Group A (Non-existent object UUID):
   Count:  100
-  Median: 30.97 ms
-  P95:    34.85 ms
+  Median: 34.16 ms
+  P95:    39.85 ms
 
 Group B (Existing object, unreadable under PostgreSQL RLS):
   Count:  100
-  Median: 30.80 ms
-  P95:    35.67 ms
+  Median: 34.25 ms
+  P95:    39.65 ms
 
-Absolute Median Delta: 0.17 ms
+Absolute Median Delta: 0.09 ms
 Requirement: abs(median(a) - median(b)) <= 5.0 ms
-Status: PASS (Delta 0.17 ms <= 5.0 ms threshold)
+Status: PASS (Delta 0.09 ms <= 5.0 ms threshold)
