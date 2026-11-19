@@ -328,4 +328,27 @@ describe('TableView', () => {
     expect(screen.getByText('📦 Module')).toBeDefined();
     expect(screen.getByText('📦 Auth Core')).toBeDefined();
   });
+
+  it('renders named module pills when issue has populated modules list', () => {
+    const base = FIXTURE_12_ISSUES[0]!;
+    const issueWithModules: IssueItem = {
+      ...base,
+      key: base.key ?? 'KAN-140',
+      summary: base.summary ?? 'Evaluate Postgres RLS',
+      id: 'iss-mod-test',
+      module_ids: ['m-auth'],
+      modules: [{ id: 'm-auth', name: 'Authentication Engine' }],
+    };
+
+    render(
+      <TableView
+        issues={[issueWithModules]}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />
+    );
+
+    expect(screen.getByText(/📦 Authentication Engine/)).toBeDefined();
+  });
+  });
 });

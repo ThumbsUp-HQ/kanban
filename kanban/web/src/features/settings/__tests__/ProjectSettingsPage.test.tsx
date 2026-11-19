@@ -712,4 +712,51 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Failed to execute project deletion.')).toBeDefined();
     });
   });
+
+  it('covers inspect effective access button and request delete failure', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      if (path.includes('/api/v1/projects/KAN/members')) {
+        return Promise.resolve([]);
+      }
+      if (path.includes('/api/v1/projects/KAN')) {
+        return Promise.resolve({
+          id: 'prj-1',
+          identifier: 'KAN',
+          name: 'Project KAN',
+          is_project_admin: true,
+          capabilities: ['ADMIN', 'PROJECT_ADMIN'],
+        });
+      }
+      if (path.includes('/destructive:request')) {
+        return Promise.reject(new Error('Destructive request rejected'));
+      }
+      return Promise.resolve({});
+    });
+
+    const accessEventSpy = vi.fn();
+    window.addEventListener('kb:open-access-inspector', accessEventSpy);
+
+    renderComponent('KAN');
+
+    // 1. Members tab -> inspect effective access
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    const inspectBtn = await screen.findByTestId('inspect-access-btn');
+    fireEvent.click(inspectBtn);
+    expect(accessEventSpy).toHaveBeenCalled();
+
+    // 2. Danger tab -> request delete error
+    const dangerTab = screen.getByTestId('tab-danger');
+    fireEvent.click(dangerTab);
+
+    const requestBtn = await screen.findByTestId('request-delete-btn');
+    fireEvent.click(requestBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Destructive request rejected')).toBeDefined();
+    });
+
+    window.removeEventListener('kb:open-access-inspector', accessEventSpy);
+  });
 });

@@ -16,6 +16,7 @@ import './SanitizedPastePill.css';
 export interface SanitizedPastePillProps {
   prunedHiddenNodes?: number;
   onDismiss: () => void;
+  onRevert?: () => void;
   autoDismissMs?: number;
   testId?: string;
 }
@@ -33,6 +34,7 @@ export function getSanitizedTooltipText(prunedHiddenNodes?: number): string {
 export function SanitizedPastePill({
   prunedHiddenNodes = 0,
   onDismiss,
+  onRevert,
   autoDismissMs = 4000,
   testId = 'sanitized-paste-pill',
 }: SanitizedPastePillProps): JSX.Element {
@@ -100,6 +102,10 @@ export function SanitizedPastePill({
     if (e.key === 'Escape') {
       e.stopPropagation();
       onDismiss();
+    } else if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.stopPropagation();
+      onRevert?.();
+      onDismiss();
     }
   };
 
@@ -120,8 +126,23 @@ export function SanitizedPastePill({
         aria-live="polite"
       >
         <span className="sanitized-paste-pill__label" data-testid={`${testId}-label`}>
-          Converted to Markdown
+          🧼 Auto-cleaned formatted paste (Converted to Markdown)
         </span>
+        {onRevert && (
+          <button
+            type="button"
+            className="sanitized-paste-pill__revert-btn"
+            data-testid={`${testId}-revert-btn`}
+            aria-label="Revert formatted paste (Cmd+Z)"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRevert();
+              onDismiss();
+            }}
+          >
+            Revert
+          </button>
+        )}
         <EmojiHint
           kind="sanitized"
           label="Converted to Markdown"

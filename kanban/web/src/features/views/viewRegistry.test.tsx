@@ -878,6 +878,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10, wip_hard: 5 },
         { id: '01931234-5678-7000-8000-000000000002', name: 'To Do', group: 'unstarted', sort_order: 20, wip_soft: 3 },
         { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
+        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
       ];
       const liveIssues = [
         {
@@ -932,14 +933,29 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         expect(screen.getByText('Live Alias Issue')).toBeDefined();
       });
 
-      // Quick field state update to Backlog
+      // Quick field state update to Backlog and live priority & state branches
       fireEvent.keyDown(window, { key: 'j' });
-      await waitFor(() => {
-        fireEvent.keyDown(window, { key: 's' });
-        expect(screen.getByRole('dialog', { name: /Quick State Picker/i })).toBeDefined();
-      });
-      const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop = await screen.findByRole('dialog', { name: /Quick State Picker/i });
       fireEvent.click(within(statePop).getByText('Backlog'));
+
+      // Live priority update
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i });
+      fireEvent.click(within(prioPop).getByText('Urgent'));
+
+      // Live state updates: In Progress, Todo, Done
+      fireEvent.keyDown(window, { key: 's' });
+      const statePopProg = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePopProg).getByText('In Progress'));
+
+      fireEvent.keyDown(window, { key: 's' });
+      const statePopTodo = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePopTodo).getByText('Todo'));
+
+      fireEvent.keyDown(window, { key: 's' });
+      const statePopDone = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePopDone).getByText('Done'));
 
       // Dispatch kb:create-issue to open QuickCreateIssueModal and submit
       fireEvent(window, new CustomEvent('kb:create-issue'));

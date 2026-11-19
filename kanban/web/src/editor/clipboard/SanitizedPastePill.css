@@ -33,6 +33,24 @@
   white-space: nowrap;
 }
 
+.sanitized-paste-pill__revert-btn {
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, #30363d);
+  color: var(--accent-primary, #58a6ff);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.sanitized-paste-pill__revert-btn:hover {
+  background: var(--bg-hover);
+  text-decoration: underline;
+}
+
 @keyframes sanitized-pill-fade-in {
   from {
     opacity: 0;

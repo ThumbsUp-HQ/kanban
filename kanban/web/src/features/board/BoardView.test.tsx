@@ -1010,11 +1010,13 @@ describe('BoardView Component', () => {
     ];
 
     const { unmount } = renderWithClient(
-      <BoardView projectKey="" states={mockStates} issues={issues} />,
+      <BoardView projectKey="" states={mockStates} issues={issues} currentUserCapabilities={['ADMIN']} />,
     );
 
     expect(screen.getByText('Equal 1')).toBeDefined();
     expect(screen.getByText('Equal 2')).toBeDefined();
+    expect(screen.getByTestId('board-canvas')).toBeDefined();
     unmount();
+  });
   });
 });

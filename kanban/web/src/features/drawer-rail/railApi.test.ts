@@ -273,53 +273,67 @@ describe('railApi', () => {
     expect(res.name).toBe('frontend');
   });
 
-  it('covers project key guards and label creation options', async () => {
-    // Guards on undefined / empty projectKey
+  it('covers defensive checks for empty/undefined projectKey across all endpoints and createProjectLabel options', async () => {
+    // 1. fetchProjectMetadata empty or undefined
+    expect(await fetchProjectMetadata('')).toEqual({ key: '', name: '' });
+    expect(await fetchProjectMetadata('undefined')).toEqual({ key: 'undefined', name: 'undefined' });
+
+    // 2. fetchProjectPriorities empty or undefined
     expect(await fetchProjectPriorities('')).toEqual([]);
     expect(await fetchProjectPriorities('undefined')).toEqual([]);
-    expect(await fetchAssigneeSuggestions('', 'query')).toEqual([]);
-    expect(await fetchAssigneeSuggestions('undefined', 'query')).toEqual([]);
+
+    // 3. fetchAssigneeSuggestions empty or undefined
+    expect(await fetchAssigneeSuggestions('', 'test')).toEqual([]);
+    expect(await fetchAssigneeSuggestions('undefined', 'test')).toEqual([]);
+
+    // 4. fetchProjectModules empty or undefined
     expect(await fetchProjectModules('')).toEqual([]);
     expect(await fetchProjectModules('undefined')).toEqual([]);
+
+    // 5. fetchProjectCycles empty or undefined
     expect(await fetchProjectCycles('')).toEqual([]);
     expect(await fetchProjectCycles('undefined')).toEqual([]);
+
+    // 6. fetchProjectLabels empty or undefined
     expect(await fetchProjectLabels('')).toEqual([]);
     expect(await fetchProjectLabels('undefined')).toEqual([]);
 
-    await expect(createProjectLabel('', { name: 'test' })).rejects.toThrow(
+    // 7. createProjectLabel empty or undefined throws error
+    await expect(createProjectLabel('', { name: 'label' })).rejects.toThrow(
       'Project key is required to create a label',
     );
-    await expect(createProjectLabel('undefined', { name: 'test' })).rejects.toThrow(
+    await expect(createProjectLabel('undefined', { name: 'label' })).rejects.toThrow(
       'Project key is required to create a label',
     );
 
-    // createProjectLabel with color, color_hex, and exclusive_group
-    vi.mocked(client.apiFetch).mockResolvedValueOnce({ id: 'l2', name: 'colored' });
+    // 8. createProjectLabel with color and color_hex and exclusive_group
+    vi.mocked(client.apiFetch).mockResolvedValueOnce({ id: 'l2', name: 'label2' });
     await createProjectLabel('KAN', {
-      name: 'colored',
+      name: 'label2',
       color: '#ff0000',
       exclusive_group: 'team',
     });
-    expect(client.apiFetch).toHaveBeenLastCalledWith(
+    expect(client.apiFetch).toHaveBeenCalledWith(
       'POST',
       '/api/v1/projects/{project_ref}/labels',
       {
         params: { project_ref: 'KAN' },
-        body: { name: 'colored', color_hex: '#ff0000', exclusive_group: 'team' },
+        body: { name: 'label2', color_hex: '#ff0000', exclusive_group: 'team' },
       },
     );
 
-    vi.mocked(client.apiFetch).mockResolvedValueOnce({ id: 'l3', name: 'hex_only' });
+    vi.mocked(client.apiFetch).mockResolvedValueOnce({ id: 'l3', name: 'label3' });
     await createProjectLabel('KAN', {
-      name: 'hex_only',
+      name: 'label3',
       color_hex: '#00ff00',
+      exclusive_group: null,
     });
-    expect(client.apiFetch).toHaveBeenLastCalledWith(
+    expect(client.apiFetch).toHaveBeenCalledWith(
       'POST',
       '/api/v1/projects/{project_ref}/labels',
       {
         params: { project_ref: 'KAN' },
-        body: { name: 'hex_only', color_hex: '#00ff00' },
+        body: { name: 'label3', color_hex: '#00ff00', exclusive_group: null },
       },
     );
   });

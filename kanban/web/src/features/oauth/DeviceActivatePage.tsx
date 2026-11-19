@@ -37,6 +37,7 @@ export function DeviceActivatePage(): JSX.Element {
   const [completionStatus, setCompletionStatus] = useState<'approved' | 'denied' | null>(null);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [invalidCharNotice, setInvalidCharNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const codeParam = searchParams.get('user_code');
@@ -105,7 +106,16 @@ export function DeviceActivatePage(): JSX.Element {
   };
 
   const handleCodeChange = (e: ChangeEvent<HTMLInputElement>): void => {
-    const formatted = formatUserCodeInput(e.target.value);
+    const raw = e.target.value;
+    const hasVowelsOrDigits = /[AEIOU0-9]/i.test(raw);
+    if (hasVowelsOrDigits) {
+      setInvalidCharNotice(
+        'Vowels (A, E, I, O, U) and numbers are not used in device codes. Only consonants are accepted.',
+      );
+    } else {
+      setInvalidCharNotice(null);
+    }
+    const formatted = formatUserCodeInput(raw);
     setUserCode(formatted);
     setErrorMessage(null);
   };
@@ -206,6 +216,19 @@ export function DeviceActivatePage(): JSX.Element {
               autoComplete="off"
               autoFocus
             />
+            <p className="kb-device-helper-caption" data-testid="user-code-helper">
+              Device codes consist of 8 consonants (BCDFGHJKLMNPQRSTVWXZ) in XXXX-XXXX format. Vowels and digits are excluded to avoid ambiguity.
+            </p>
+            {invalidCharNotice && (
+              <div
+                className="kb-device-input-notice"
+                role="status"
+                aria-live="polite"
+                data-testid="user-code-input-notice"
+              >
+                {invalidCharNotice}
+              </div>
+            )}
             <button
               type="button"
               className="kb-device-lookup-button"

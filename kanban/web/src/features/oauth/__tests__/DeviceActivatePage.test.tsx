@@ -93,6 +93,31 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     });
   });
 
+  it('displays consonant-only helper caption and non-destructive feedback on vowel/digit entry', () => {
+    render(
+      <MemoryRouter initialEntries={['/activate']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+
+    // Verify helper caption
+    const helper = screen.getByTestId('user-code-helper');
+    expect(helper.textContent).toContain('BCDFGHJKLMNPQRSTVWXZ');
+
+    const input = screen.getByTestId<HTMLInputElement>('user-code-input');
+
+    // Type a vowel or digit
+    fireEvent.change(input, { target: { value: 'A1E' } });
+    expect(screen.getByTestId('user-code-input-notice').textContent).toContain(
+      'Vowels (A, E, I, O, U) and numbers are not used',
+    );
+
+    // Type valid consonants
+    fireEvent.change(input, { target: { value: 'BCDF' } });
+    expect(screen.queryByTestId('user-code-input-notice')).toBeNull();
+    expect(input.value).toBe('BCDF');
+  });
+
   it('auto-loads device info when pre-filled via query parameter', async () => {
     const mockInfo: oauthApi.DeviceCodeInfoResponse = {
       user_code: 'BCDF-GHJK',

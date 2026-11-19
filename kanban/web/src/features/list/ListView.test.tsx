@@ -420,9 +420,11 @@ describe('ListView', () => {
   it('groups by cycle and module with real summaries and fallback labels', () => {
     const firstIssue = FIXTURE_12_ISSUES[0];
     const secondIssue = FIXTURE_12_ISSUES[1];
+    const thirdIssue = FIXTURE_12_ISSUES[2];
     expect(firstIssue).toBeDefined();
     expect(secondIssue).toBeDefined();
-    if (!firstIssue || !secondIssue) {
+    expect(thirdIssue).toBeDefined();
+    if (!firstIssue || !secondIssue || !thirdIssue) {
       throw new Error('Missing fixtures');
     }
 
@@ -443,6 +445,15 @@ describe('ListView', () => {
         cycle: null,
         module_ids: ['mod-fallback-123'],
       },
+      {
+        ...thirdIssue,
+        id: 'iss-c3',
+        key: 'KAN-C3',
+        cycle_id: null,
+        cycle: null,
+        modules: [],
+        module_ids: [],
+      },
     ];
 
     render(
@@ -458,10 +469,12 @@ describe('ListView', () => {
     fireEvent.change(groupSelect, { target: { value: 'cycle' } });
     expect(screen.getByText('Sprint Alpha')).toBeDefined();
     expect(screen.getByText('Cycle cycle-')).toBeDefined();
+    expect(screen.getByText('No Cycle')).toBeDefined();
 
     // Group by Module
     fireEvent.change(groupSelect, { target: { value: 'module' } });
     expect(screen.getByText('Core Engine')).toBeDefined();
     expect(screen.getByText('Module mod-fa')).toBeDefined();
+    expect(screen.getByText('No Module')).toBeDefined();
   });
 });

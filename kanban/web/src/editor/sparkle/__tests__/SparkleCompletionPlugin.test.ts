@@ -336,4 +336,28 @@ describe('SparkleCompletionPlugin Unit Tests', () => {
     v.dispatch(tr2);
     expect(acceptSparkleSuggestion(v)).toBe(false);
   });
+
+  it('covers createSparkleCompletionPlugin default options, missing plugin state, and selection guards', () => {
+    // 1. Default options
+    const defaultPlugin = createSparkleCompletionPlugin();
+    expect(defaultPlugin).toBeDefined();
+
+    // 2. View without Sparkle plugin for handleTextInput guard
+    const bareDoc = editorSchema.nodes.doc.create(null, [
+      editorSchema.nodes.paragraph.create(null, [editorSchema.text('Bare')]),
+    ]);
+    const bareState = EditorState.create({ schema: editorSchema, doc: bareDoc });
+    const bareView = new EditorView(container, { state: bareState });
+
+    // Call handleTextInput from defaultPlugin on bareView
+    const textHandled = (defaultPlugin.props.handleTextInput as any)?.(bareView, 1, 1, 'x', () => bareState.tr);
+    expect(textHandled).toBe(false);
+
+    // Call handleDOMEvents.contextmenu on bareView
+    const evt = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    const ctxHandled = (defaultPlugin.props.handleDOMEvents?.contextmenu as any)?.(bareView, evt);
+    expect(ctxHandled).toBe(false);
+
+    bareView.destroy();
+  });
 });

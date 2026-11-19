@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
-import { WorkspaceSettingsPage } from '../WorkspaceSettingsPage';
+import { WorkspaceSettingsPage, formatHandle } from '../WorkspaceSettingsPage';
 import * as clientModule from '../../../api/client';
 import * as sessionGuardModule from '../../auth/useSessionGuard';
 
@@ -1151,10 +1151,17 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
         csrfTokensRecorded.push(headers['X-CSRF-Token']);
       }
 
+=======
+  it('covers member role update and member removal with success and error', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      const url = path;
+      const m = method.toUpperCase();
+>>>>>>> 09c2fbb (feat(editor): wire rich markdown toolbar, raw toggle, paste sanitization, media uploads, and sparkle fim (KANBA-222))
       if (url.includes('/api/v1/auth/me')) {
         return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
       }
       if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+<<<<<<< HEAD
         return Promise.resolve({ name: 'WS', slug: 'ws', trash_retention_days: 30 });
       }
       if (url.includes('/api/v1/admin/principals') && m === 'GET') {
@@ -1225,5 +1232,80 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     });
 
     unmount();
+  });
+
+  it('covers role update / member remove in members tab', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ id: 'admin-1', is_server_admin: true, is_workspace_admin: true, workspace_role: 'SERVER_ADMIN' });
+      }
+      if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return Promise.resolve([
+          { id: 'usr-bob', type: 'USER', handle: '@bob', display_name: 'Bob Ross', role: 'WORKSPACE_MEMBER' },
+          { id: 'usr-charlie', type: 'USER', handle: '@charlie', display_name: 'Charlie', role: 'WORKSPACE_GUEST' },
+        ]);
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'POST') {
+        return Promise.resolve({ ok: true });
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'DELETE') {
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.resolve({});
+    });
+
+    renderComponent();
+
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // 1. Role update success
+    const roleSelect = await screen.findByTestId('role-select-usr-bob');
+    fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+    expect(await screen.findByText('Member role updated.')).toBeDefined();
+
+    // 2. Member remove success
+    const removeBtn = screen.getByTestId('remove-member-btn-usr-bob');
+    fireEvent.click(removeBtn);
+    expect(await screen.findByText('Member removed from workspace.')).toBeDefined();
+
+    // 3. Role update error
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      if (path.includes('/api/v1/admin/role-bindings')) {
+        return Promise.reject(new Error('Failed to update member role.'));
+      }
+      return Promise.resolve({});
+    });
+    const charlieRoleSelect = screen.getByTestId('role-select-usr-charlie');
+    fireEvent.change(charlieRoleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+    expect(await screen.findByText('Failed to update member role.')).toBeDefined();
+
+    // 4. Member remove error
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      if (path.includes('/api/v1/admin/role-bindings')) {
+        return Promise.reject(new Error('Failed to remove workspace member.'));
+      }
+      return Promise.resolve({});
+    });
+    const charlieRemoveBtn = screen.getByTestId('remove-member-btn-usr-charlie');
+    fireEvent.click(charlieRemoveBtn);
+    expect(await screen.findByText('Failed to remove workspace member.')).toBeDefined();
+  });
+
+  it('covers formatHandle edge cases', () => {
+    expect(formatHandle(null)).toBe('');
+    expect(formatHandle(undefined)).toBe('');
+    expect(formatHandle('')).toBe('');
+    expect(formatHandle('@')).toBe('');
+    expect(formatHandle('@@@')).toBe('');
+    expect(formatHandle('alice')).toBe('@alice');
+    expect(formatHandle('@bob')).toBe('@bob');
+    expect(formatHandle('@@charlie')).toBe('@charlie');
   });
 });

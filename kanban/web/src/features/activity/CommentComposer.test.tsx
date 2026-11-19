@@ -11,6 +11,7 @@ import {
 } from './CommentComposer';
 import * as activityApi from './activityApi';
 import { ApiProblem } from '../../api/problem';
+import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
 
 vi.mock('./activityApi', async () => {
   const actual = await vi.importActual<typeof import('./activityApi')>('./activityApi');
@@ -272,6 +273,17 @@ describe('CommentComposer', () => {
         expect(textarea.value).toBe('Hey @adam ');
       });
 
+      // Select via Tab key
+      mockFetchAssigneeSuggestions.mockResolvedValueOnce({
+        items: [{ id: 'u2', handle: 'alex', display_name: 'Alex' }],
+      });
+      fireEvent.change(textarea, { target: { value: 'Hey @alex and @al', selectionStart: 18, selectionEnd: 18 } });
+      await screen.findByRole('option', { name: /@alex/ });
+      fireEvent.keyDown(textarea, { key: 'Tab' });
+      await waitFor(() => {
+        expect(textarea.value).toContain('@alex ');
+      });
+
       // Now trigger autocomplete again and press Escape to dismiss
       mockFetchAssigneeSuggestions.mockResolvedValueOnce({
         items: [{ id: 'u1', handle: 'adam', display_name: 'Adam Outler' }],
@@ -474,6 +486,257 @@ describe('CommentComposer', () => {
 
       const alert = await screen.findByRole('alert');
       expect(alert.textContent).toBe('Failed to submit comment.');
+    });
+
+    it('connects tasklist, raw/preview toggle (📝) and Cmd+Shift+M shortcut', () => {
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+
+      // Click tasklist button
+      const tasklistBtn = screen.getByRole('button', { name: 'Insert tasklist' });
+      fireEvent.click(tasklistBtn);
+      expect(textarea.value).toContain('- [ ] task item');
+
+      // Click Raw/Preview toggle button
+      const rawBtn = screen.getByTestId('comment-tool-raw');
+      fireEvent.click(rawBtn);
+      expect(screen.getByTestId('comment-preview')).toBeDefined();
+
+      // Click toggle button again to switch back
+      fireEvent.click(rawBtn);
+      expect(screen.getByRole('textbox', { name: 'Write a comment' })).toBeDefined();
+
+      // Toggle via Cmd+Shift+M
+      const textareaAfter = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+      fireEvent.keyDown(textareaAfter, { key: 'm', metaKey: true, shiftKey: true });
+      expect(screen.getByTestId('comment-preview')).toBeDefined();
+    });
+
+    it('handles file input attachment upload, oversized file check, and upload error', async () => {
+      const uploadSpy = vi
+        .spyOn(autoConvertPasteMod, 'defaultUploadAttachment')
+        .mockResolvedValueOnce({ markdownUri: 'attachment://comm_att_1', id: 'comm_att_1' })
+        .mockRejectedValueOnce(new Error('Upload error'))
+        .mockResolvedValueOnce({ markdownUri: '', id: 'fallback_att_2' });
+
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const fileInput = screen.getByTestId<HTMLInputElement>('comment-file-input');
+      const validFile = new File(['valid'], 'chart.png', { type: 'image/png' });
+
+      // 1. Oversized file (>25 MB)
+      const hugeFile = new File(['huge'], 'huge.png', { type: 'image/png' });
+      Object.defineProperty(hugeFile, 'size', { value: 26 * 1024 * 1024 });
+      fireEvent.change(fileInput, { target: { files: [hugeFile] } });
+      expect(screen.getByRole('alert').textContent).toBe('Attachment exceeds 25 MB limit');
+
+      // 2. Empty files list
+      fireEvent.change(fileInput, { target: { files: [] } });
+
+      // 3. Successful upload
+      fireEvent.change(fileInput, { target: { files: [validFile] } });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+        expect(textarea.value).toContain('![chart.png](attachment://comm_att_1)');
+      });
+
+      // 4. Failed upload
+      fireEvent.change(fileInput, { target: { files: [validFile] } });
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('Attachment upload failed');
+      });
+
+      // 5. Fallback URI when markdownUri is empty
+      fireEvent.change(fileInput, { target: { files: [validFile] } });
+      await waitFor(() => {
+        const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+        expect(textarea.value).toContain('![chart.png](attachment://fallback_att_2)');
+      });
+      uploadSpy.mockRestore();
+    });
+
+    it('handles drag and drop for image attachments including bounds and errors', async () => {
+      const uploadSpy = vi
+        .spyOn(autoConvertPasteMod, 'defaultUploadAttachment')
+        .mockResolvedValueOnce({ markdownUri: 'attachment://drop_1', id: 'drop_1' })
+        .mockRejectedValueOnce(new Error('Network drop error'));
+
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const wrapper = screen.getByRole('textbox', { name: 'Write a comment' }).parentElement!;
+
+      // Drag over
+      fireEvent.dragOver(wrapper);
+
+      // Empty drop
+      fireEvent.drop(wrapper, { dataTransfer: { files: [] } });
+
+      // Non-image file drop
+      const txtFile = new File(['txt'], 'doc.txt', { type: 'text/plain' });
+      fireEvent.drop(wrapper, { dataTransfer: { files: [txtFile] } });
+
+      // Oversized drop
+      const hugeFile = new File(['huge'], 'huge.png', { type: 'image/png' });
+      Object.defineProperty(hugeFile, 'size', { value: 26 * 1024 * 1024 });
+      fireEvent.drop(wrapper, { dataTransfer: { files: [hugeFile] } });
+      expect(screen.getByRole('alert').textContent).toBe('Attachment exceeds 25 MB limit');
+
+      // Valid image drop
+      const validImg = new File(['img'], 'photo.png', { type: 'image/png' });
+      fireEvent.drop(wrapper, { dataTransfer: { files: [validImg] } });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+        expect(textarea.value).toContain('![photo.png](attachment://drop_1)');
+      });
+
+      // Failed drop upload
+      fireEvent.drop(wrapper, { dataTransfer: { files: [validImg] } });
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('Attachment upload failed');
+      });
+      uploadSpy.mockRestore();
+    });
+
+    it('handles clipboard paste of images and rich HTML with 1-click revert', async () => {
+      const uploadSpy = vi
+        .spyOn(autoConvertPasteMod, 'defaultUploadAttachment')
+        .mockResolvedValueOnce({ markdownUri: 'attachment://paste_1', id: 'paste_1' })
+        .mockRejectedValueOnce(new Error('Fail'));
+
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+
+      // 1. Oversized image paste
+      const hugeFile = new File(['huge'], 'huge.png', { type: 'image/png' });
+      Object.defineProperty(hugeFile, 'size', { value: 26 * 1024 * 1024 });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [hugeFile],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      expect(screen.getByRole('alert').textContent).toBe('Attachment exceeds 25 MB limit');
+
+      // 2. Successful image paste
+      const validImg = new File(['img'], 'paste.png', { type: 'image/png' });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [validImg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        expect(textarea.value).toContain('![paste.png](attachment://paste_1)');
+      });
+
+      // 3. Failed image paste
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [validImg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('Attachment upload failed');
+      });
+
+      // 4. Image paste with fallback markdownUri
+      uploadSpy.mockResolvedValueOnce({ markdownUri: '', id: 'paste_fallback_9' });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [validImg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(textarea.value).toContain('![paste.png](attachment://paste_fallback_9)');
+      });
+
+      // 5. Rich HTML paste with SanitizedPastePill and 1-click revert
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: ['text/html'],
+          getData: (type: string) => (type === 'text/html' ? '<h3>Title</h3><p>Hello world</p>' : ''),
+        },
+      });
+
+      const pill = await screen.findByTestId('comment-sanitized-pill');
+      expect(pill).toBeDefined();
+      expect(textarea.value).toContain('Title');
+
+      // Click revert on pill
+      const revertBtn = screen.getByTestId('comment-sanitized-pill-revert-btn');
+      fireEvent.click(revertBtn);
+      expect(screen.queryByTestId('comment-sanitized-pill')).toBeNull();
+
+      // Dismiss pill via onDismiss
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: ['text/html'],
+          getData: (type: string) => (type === 'text/html' ? '<p>Second paste</p>' : ''),
+        },
+      });
+      const pill2 = await screen.findByTestId('comment-sanitized-pill');
+      fireEvent.keyDown(pill2, { key: 'Escape' });
+      expect(screen.queryByTestId('comment-sanitized-pill')).toBeNull();
+      uploadSpy.mockRestore();
+    });
+
+    it('renders ACL badge for bot/agent in mention suggestions', async () => {
+      mockFetchAssigneeSuggestions.mockResolvedValueOnce({
+        items: [
+          { id: 'bot-1', handle: 'agent-audit', display_name: 'Audit Bot', is_agent: true },
+          { id: 'usr-1', handle: 'human-dev', display_name: 'Human Dev', is_agent: false },
+        ],
+      });
+
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+      fireEvent.change(textarea, { target: { value: '@ag', selectionStart: 3, selectionEnd: 3 } });
+
+      const agentOpt = await screen.findByRole('option', { name: /🤖 Agent/ });
+      expect(agentOpt).toBeDefined();
+
+      const memberOpt = await screen.findByRole('option', { name: /👤 Member/ });
+      expect(memberOpt).toBeDefined();
+    });
+
+    it('renders Reply button when parentCommentId is provided, and handles suggestion fetch errors', async () => {
+      // 1. Reply button
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" parentCommentId="parent-123" />);
+      expect(screen.getByRole('button', { name: 'Reply' })).toBeDefined();
+
+      // 2. Suggestion fetch error
+      mockFetchAssigneeSuggestions.mockRejectedValueOnce(new Error('Network error'));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+      fireEvent.change(textarea, { target: { value: '@error', selectionStart: 6, selectionEnd: 6 } });
+      await waitFor(() => {
+        expect(mockFetchAssigneeSuggestions).toHaveBeenCalledWith('KAN', 'error');
+        expect(screen.queryByRole('listbox')).toBeNull();
+      });
+
+      // 3. Non-image file paste falling through
+      const nonImageFile = new File(['text content'], 'notes.txt', { type: 'text/plain' });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [nonImageFile],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+
+      // 4. Empty draft preview mode
+      fireEvent.change(textarea, { target: { value: '' } });
+      const rawBtn = screen.getByTestId('comment-tool-raw');
+      fireEvent.click(rawBtn);
+      expect(screen.getByText('No comment content')).toBeDefined();
     });
   });
 });

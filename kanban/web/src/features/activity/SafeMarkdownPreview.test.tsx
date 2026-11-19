@@ -122,5 +122,45 @@ describe('SafeMarkdownPreview', () => {
       expect(screen.queryByTestId('custom-rendered')).toBeNull();
       expect(screen.getByText(/CUSTOM:Hello Custom 2/)).toBeDefined();
     });
+
+    it('renders Markdown images via MediaViewport and disarms unsafe image urls', () => {
+      const markdown = 'Here is a photo: ![Sample Photo](https://example.com/photo.png) and unsafe: ![Evil](javascript:alert(1)) and no alt: ![](https://example.com/empty.png) and unsafe no alt: ![](javascript:void(0))';
+      const { container } = render(<SafeMarkdownPreview markdown={markdown} />);
+
+      // MediaViewport should be rendered for safe URL
+      const mediaViewport = container.querySelector('.media-viewport');
+      expect(mediaViewport).not.toBeNull();
+
+      // Unsafe image scheme is converted to alt text
+      expect(container.textContent).toContain('Evil');
+
+      // Whitespace only lines before code block
+      const wsBeforeBlock = '   \n   \n```\ncode\n```\n   ';
+      const { container: wsContainer } = render(<SafeMarkdownPreview markdown={wsBeforeBlock} />);
+      expect(wsContainer.querySelector('pre')).not.toBeNull();
+    });
+
+    it('renders fenced svg code blocks via MediaViewport and handles unclosed code blocks', () => {
+      const svgMarkdown = '```svg\n<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="5"/></svg>\n```';
+      const { container: svgContainer } = render(<SafeMarkdownPreview markdown={svgMarkdown} />);
+      expect(svgContainer.querySelector('.media-viewport')).not.toBeNull();
+
+      // Code block without language tag
+      const noLangMarkdown = '```\nplain code block\n```';
+      const { container: noLangContainer } = render(<SafeMarkdownPreview markdown={noLangMarkdown} />);
+      const codeEl = noLangContainer.querySelector('code');
+      expect(codeEl).not.toBeNull();
+      expect(codeEl?.className).toBe('');
+
+      // Unclosed code block with and without language
+      const unclosedMarkdown = '```python\nprint("hello")';
+      const { container: unclosedContainer } = render(<SafeMarkdownPreview markdown={unclosedMarkdown} />);
+      expect(unclosedContainer.querySelector('pre')).not.toBeNull();
+      expect(unclosedContainer.textContent).toContain('print("hello")');
+
+      const unclosedNoLang = '```\nprint("unclosed no lang")';
+      const { container: unclosedNoLangContainer } = render(<SafeMarkdownPreview markdown={unclosedNoLang} />);
+      expect(unclosedNoLangContainer.querySelector('pre')).not.toBeNull();
+    });
   });
 });

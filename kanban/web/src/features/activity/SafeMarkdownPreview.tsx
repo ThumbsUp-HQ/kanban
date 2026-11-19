@@ -5,6 +5,7 @@
  */
 
 import React, { type JSX, type ReactNode } from 'react';
+import { MediaViewport } from '../../editor/media/MediaViewport';
 
 export type CommentBodyRenderer = (markdown: string) => ReactNode;
 
@@ -25,13 +26,22 @@ interface SafeMarkdownPreviewProps {
 
 function isSafeUrl(url: string): boolean {
   const lower = url.trim().toLowerCase();
-  return lower.startsWith('https://') || lower.startsWith('http://') || lower.startsWith('mailto:');
+  return (
+    lower.startsWith('https://') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('attachment://') ||
+    lower.startsWith('/api/') ||
+    lower.startsWith('/')
+  );
 }
 
 export function renderInlineContent(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  // Tokenize code spans `...`, links [text](url), bold **...**, italic *...*
-  const pattern = /(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
+  // Tokenize images ![alt](url), code spans `...`, links [text](url), bold **...**, italic *...*
+  const pattern =
+    /(!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\))|(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let tokenIdx = 0;
@@ -41,9 +51,35 @@ export function renderInlineContent(text: string, keyPrefix: string): ReactNode[
       nodes.push(text.slice(lastIndex, match.index));
     }
 
-    const [, codeSpan, linkMatch, linkText, linkUrl, , boldText, , italicText] = match;
+    const [
+      ,
+      imgMatch,
+      imgAlt,
+      imgUrl,
+      codeSpan,
+      linkMatch,
+      linkText,
+      linkUrl,
+      ,
+      boldText,
+      ,
+      italicText,
+    ] = match;
 
-    if (codeSpan) {
+    if (imgMatch && imgUrl) {
+      if (isSafeUrl(imgUrl)) {
+        nodes.push(
+          <MediaViewport
+            key={`${keyPrefix}-media-${String(tokenIdx)}`}
+            src={imgUrl}
+            alt={imgAlt ?? ''}
+            testId={`${keyPrefix}-media-${String(tokenIdx)}`}
+          />,
+        );
+      } else {
+        nodes.push(imgAlt ?? '');
+      }
+    } else if (codeSpan) {
       nodes.push(
         <code key={`${keyPrefix}-code-${String(tokenIdx)}`} className="safe-md__inline-code">
           {codeSpan.slice(1, -1)}
@@ -136,12 +172,20 @@ export function SafeMarkdownPreview({
       );
     } else {
       // Split into paragraphs by blank lines
-      const paragraphs = text.split(/\n\s*\n/);
+      const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim() !== '');
       paragraphs.forEach((p, pIdx) => {
-        if (p.trim()) {
+        const content = renderInlineContent(p.trim(), `p-${String(blockIdx)}-${String(pIdx)}`);
+        const hasMedia = p.includes('![');
+        if (hasMedia) {
+          blocks.push(
+            <div key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="safe-md__p safe-md__media-block">
+              {content}
+            </div>,
+          );
+        } else {
           blocks.push(
             <p key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="safe-md__p">
-              {renderInlineContent(p.trim(), `p-${String(blockIdx)}-${String(pIdx)}`)}
+              {content}
             </p>,
           );
         }
@@ -155,13 +199,26 @@ export function SafeMarkdownPreview({
     if (trimmed.startsWith('```')) {
       if (inCodeBlock) {
         // Closing code block
-        blocks.push(
-          <pre key={`code-${String(blockIdx++)}`} className="safe-md__code-block">
-            <code className={codeLang ? `language-${codeLang}` : undefined}>
-              {codeLines.join('\n')}
-            </code>
-          </pre>,
-        );
+        if (codeLang === 'svg') {
+          const rawSvg = codeLines.join('\n');
+          const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
+          blocks.push(
+            <MediaViewport
+              key={`svg-${String(blockIdx++)}`}
+              src={dataUri}
+              rawSource={rawSvg}
+              testId={`safe-md-svg-${String(blockIdx)}`}
+            />,
+          );
+        } else {
+          blocks.push(
+            <pre key={`code-${String(blockIdx++)}`} className="safe-md__code-block">
+              <code className={codeLang ? `language-${codeLang}` : undefined}>
+                {codeLines.join('\n')}
+              </code>
+            </pre>,
+          );
+        }
         inCodeBlock = false;
         codeLang = '';
         codeLines = [];

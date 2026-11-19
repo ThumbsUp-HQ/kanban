@@ -146,8 +146,10 @@ describe('DocsTreeNav', () => {
     });
 
     // Should have expanded down to PKCE Flow
-    expect(screen.getByText('Auth Studio')).toBeDefined();
-    expect(screen.getByText('PKCE Flow')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText('Auth Studio')).toBeDefined();
+      expect(screen.getByText('PKCE Flow')).toBeDefined();
+    });
   });
 
   it('supports WAI-ARIA keyboard tree navigation', async () => {
@@ -182,6 +184,13 @@ describe('DocsTreeNav', () => {
 
     // ArrowLeft collapses or moves up
     fireEvent.keyDown(authItem, { key: 'ArrowLeft' });
+
+    // ArrowRight on already expanded archItem
+    fireEvent.keyDown(archItem, { key: 'ArrowRight' });
+    // ArrowLeft on archItem collapses it
+    fireEvent.keyDown(archItem, { key: 'ArrowLeft' });
+    // ArrowUp on archItem
+    fireEvent.keyDown(archItem, { key: 'ArrowUp' });
   });
 
   it('enforces max_depth <= 10 by disabling + Sub-page button at depth 10', async () => {

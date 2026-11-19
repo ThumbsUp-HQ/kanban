@@ -288,6 +288,21 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
     app.mount("/mcp", proxy)
 
 
+def _mount_sparkle_router(app: FastAPI) -> None:
+    """Mount the agent Sparkle FIM completion router if available."""
+    try:
+        sparkle_mod = importlib.import_module("agent.sparkle.router")
+        sparkle_router = getattr(sparkle_mod, "router", None)
+        if sparkle_router is not None:
+            if not any(
+                getattr(route, "path", "").startswith("/api/v1/sparkle")
+                for route in app.routes
+            ):
+                app.include_router(sparkle_router)
+    except Exception:
+        logger.debug("Automatic live sparkle router mounting skipped", exc_info=True)
+
+
 def create_app(
     settings: Settings | None = None,
     mcp_settings: McpSettings | None = None,
@@ -353,6 +368,9 @@ def create_app(
 
     # Mount OpenAPI redirect, web manifest, and interactive API documentation routes
     _mount_api_docs_and_manifest(app)
+
+    # Mount agent sparkle FIM completion router if available
+    _mount_sparkle_router(app)
 
     # Fallback API router for legacy/subpath 404s
     api_router = APIRouter(prefix="/api")

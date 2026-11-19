@@ -786,4 +786,24 @@ describe('CalendarView', () => {
     fireEvent.click(closeBtn);
     expect(screen.queryByRole('dialog', { name: 'Issues on 2026-11-30' })).toBeNull();
   });
+
+  it('covers drag-drop with unknown issue key returning early', () => {
+    const { container } = render(
+      <CalendarView
+        issues={TEST_ISSUES}
+        projectKey="KAN"
+        today="2026-11-18"
+      />
+    );
+
+    const cell = container.querySelector('[data-date="2026-11-20"]');
+    expect(cell).toBeTruthy();
+    if (cell) {
+      fireEvent.drop(cell, {
+        dataTransfer: {
+          getData: (type: string) => (type === 'application/x-kb-issue-key' ? 'KAN-UNKNOWN' : ''),
+        },
+      });
+    }
+  });
 });

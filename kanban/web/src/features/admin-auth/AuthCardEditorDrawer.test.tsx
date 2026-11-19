@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { AuthCardEditorDrawer, type AuthCardEditorDrawerProps } from './AuthCardEditorDrawer';
 import type { AdminAuthCard, CreateAuthCardPayload } from './adminAuthApi';
+import * as adminAuthApi from './adminAuthApi';
 
 describe('AuthCardEditorDrawer (KB-P3-36)', () => {
   beforeEach(() => {
@@ -1684,6 +1685,88 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       await waitFor(() => {
         expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('FAILED: Network offline');
       });
+    });
+
+    it('covers default testAuthCardHandshake and testDraftAuthCardHandshake with fallback messages', async () => {
+      vi.spyOn(adminAuthApi, 'testAuthCardHandshake').mockResolvedValue({
+        last_health_status: 'HEALTHY',
+        latency_ms: 42,
+        check_summary: null as never,
+      });
+      vi.spyOn(adminAuthApi, 'testDraftAuthCardHandshake').mockResolvedValue({
+        last_health_status: 'FAILED',
+        latency_ms: 120,
+        check_summary: undefined as never,
+      });
+
+      // 1. Existing card with card.id
+      const { unmount: u1 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('drawer-test-handshake-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('HEALTHY: Handshake healthy');
+      });
+      u1();
+
+      // 2. Draft card (card is null)
+      const { unmount: u2 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('drawer-test-handshake-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('FAILED: Handshake probe failed');
+      });
+      u2();
+    });
+
+    it('covers initial restricted accessPolicyMode for admin_allowlist or user_allowlist', () => {
+      // Admin allowlist
+      const cardWithAdminAllow: AdminAuthCard = {
+        ...existingOidcCard,
+        public_config: {
+          admin_allowlist: ['alice@corp.com'],
+        },
+      };
+      const { unmount: u1 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={cardWithAdminAllow}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+      expect((screen.getByLabelText<HTMLSelectElement>(/Access Policy/i)).value).toBe('restricted');
+      expect(screen.getByLabelText(/Admin Allowlist/i)).toBeDefined();
+      u1();
+
+      // User allowlist
+      const cardWithUserAllow: AdminAuthCard = {
+        ...existingOidcCard,
+        public_config: {
+          user_allowlist: ['bob@corp.com'],
+        },
+      };
+      const { unmount: u2 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={cardWithUserAllow}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+      expect((screen.getByLabelText<HTMLSelectElement>(/Access Policy/i)).value).toBe('restricted');
+      u2();
     });
   });
 });

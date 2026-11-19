@@ -287,6 +287,29 @@ def foo(): pass
       const res = computeLineDiff(oldText, newText);
       expect(res.addedCount).toBe(2);
       expect(res.removedCount).toBe(1);
+
+      // Additions at start, replacements in middle, removals at end
+      const res2 = computeLineDiff('A\nB\nC\nD', 'X\nA\nB-mod\nD');
+      expect(res2.addedCount).toBe(2);
+      expect(res2.removedCount).toBe(2);
+
+      // Completely different texts
+      const res3 = computeLineDiff('Alpha\nBeta', 'Gamma\nDelta\nEpsilon');
+      expect(res3.addedCount).toBe(3);
+      expect(res3.removedCount).toBe(2);
+
+      // Empty old text
+      const res4 = computeLineDiff('', 'Line 1\nLine 2');
+      expect(res4.addedCount).toBe(2);
+
+      // Empty new text
+      const res5 = computeLineDiff('Line 1\nLine 2', '');
+      expect(res5.removedCount).toBe(2);
+
+      // Leading/trailing removals where rowCurr < rowPrev
+      const res6 = computeLineDiff('DeleteMe\nKeepMe', 'KeepMe');
+      expect(res6.removedCount).toBe(1);
+      expect(res6.addedCount).toBe(0);
     });
   });
 

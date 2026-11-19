@@ -1214,4 +1214,75 @@ describe('PersonalSettingsPage', () => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
     });
   });
+
+  it('covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 1,
+      recovery_codes_remaining: 10,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('enable-totp-btn')).toBeDefined();
+    });
+
+    // 1. enrollTotp error
+    vi.mocked(api.enrollTotp).mockRejectedValueOnce(new Error('TOTP setup error'));
+    fireEvent.click(screen.getByTestId('enable-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('TOTP setup error')).toBeDefined();
+    });
+
+    // 2. confirmTotp error
+    vi.mocked(api.enrollTotp).mockResolvedValueOnce({
+      secret: 'SECRET123',
+      provisioning_uri: 'otpauth://totp/test',
+    });
+    vi.mocked(api.confirmTotp).mockRejectedValueOnce(new Error('Invalid TOTP code.'));
+    fireEvent.click(screen.getByTestId('enable-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('totp-verification-input')).toBeDefined();
+    });
+    fireEvent.change(screen.getByTestId('totp-verification-input'), { target: { value: '000000' } });
+    fireEvent.click(screen.getByTestId('confirm-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Invalid TOTP code.')).toBeDefined();
+    });
+
+    // 3. deleteTotp error
+    vi.mocked(api.deleteTotp).mockRejectedValueOnce(new Error('Failed to disable TOTP.'));
+    const disableTotpBtn = screen.queryByTestId('disable-totp-btn');
+    if (disableTotpBtn) {
+      fireEvent.click(disableTotpBtn);
+      await waitFor(() => {
+        expect(screen.getByText('Failed to disable TOTP.')).toBeDefined();
+      });
+    }
+
+    // 4. renamePasskey error
+    const editPasskeyBtns = screen.queryAllByRole('button', { name: /Edit/i });
+    if (editPasskeyBtns[0]) {
+      vi.mocked(api.renamePasskey).mockRejectedValueOnce(new Error('Failed to rename passkey.'));
+      fireEvent.click(editPasskeyBtns[0]);
+      const saveNicknameBtn = screen.getByRole('button', { name: /Save/i });
+      fireEvent.click(saveNicknameBtn);
+      await waitFor(() => {
+        expect(screen.getByText('Failed to rename passkey.')).toBeDefined();
+      });
+    }
+
+    // 5. deletePasskey error
+    const deletePasskeyBtns = screen.queryAllByRole('button', { name: /Delete/i });
+    if (deletePasskeyBtns[0]) {
+      vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Error('Failed to delete passkey.'));
+      fireEvent.click(deletePasskeyBtns[0]);
+      await waitFor(() => {
+        expect(screen.getByText('Failed to delete passkey.')).toBeDefined();
+      });
+    }
+  });
+  });
 });

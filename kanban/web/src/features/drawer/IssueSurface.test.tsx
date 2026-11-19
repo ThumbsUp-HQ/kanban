@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
-import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate, createMemoryRouter, RouterProvider, type NavigateFunction } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { IssueSurface, IssueSurfaceRoot, normalizeIssueDetail } from './IssueSurface';
 import { setOpenerElement } from './IssueKeyLink';
@@ -9,6 +9,8 @@ import { apiClient } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
 import * as breakpoints from '../../styles/breakpoints';
+import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
+import * as hiddenDomPrunerMod from '../../editor/clipboard/hiddenDomPruner';
 
 const validIssue: IssueDetail = {
   key: 'KAN-142',
@@ -750,6 +752,410 @@ describe('IssueSurface', () => {
         summary: 'Hyphen start key',
       } as never, null);
       expect(normHyphenStart.project_key).toBe('');
+
+      const normalized3 = normalizeIssueDetail({
+        key: 123 as unknown as string,
+        labels: [{ id: 'lbl-1', name: 'Bug' }],
+        project_name: null as unknown as string,
+      } as unknown as IssueDetail, 'KAN');
+      expect(normalized3.project_key).toBe('KAN');
+      expect(normalized3.label_ids).toEqual(['lbl-1']);
+    });
+
+    it('covers handleClose focusing fallback card in DOM, project metadata fallbacks', async () => {
+      const card = document.createElement('div');
+      card.setAttribute('data-testid', 'board-card-KAN-142');
+      document.body.appendChild(card);
+      const cardFocus = vi.spyOn(card, 'focus');
+
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        project_name: undefined,
+        description_markdown: undefined,
+      });
+
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <IssueSurfaceRoot mode="drawer" issueKey="KAN-142" projectKey="KAN" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Close issue panel' })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close issue panel' }));
+      expect(cardFocus).toHaveBeenCalled();
+      card.remove();
+    });
+
+    it('connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const uploadSpy = vi.spyOn(autoConvertPasteMod, 'defaultUploadAttachment');
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+      });
+
+      // Enter edit mode
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+
+      // Click toolbar buttons
+      fireEvent.click(screen.getByRole('button', { name: 'Bold text' }));
+      expect(textarea.value).toContain('**bold text**');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Italic text' }));
+      expect(textarea.value).toContain('*italic text*');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Insert code' }));
+      expect(textarea.value).toContain('`code`');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Insert link' }));
+      expect(textarea.value).toContain('[link text](https://example.com)');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Insert tasklist' }));
+      expect(textarea.value).toContain('- [ ] task item');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Insert Mermaid diagram' }));
+      expect(textarea.value).toContain('```mermaid');
+
+      // Test clicking the attach button directly
+      const fileInput = screen.getByTestId<HTMLInputElement>('desc-file-input');
+      const attachBtn = screen.getByRole('button', { name: 'Attach media or SVG' });
+      const clickSpy = vi.spyOn(fileInput, 'click');
+      fireEvent.click(attachBtn);
+      expect(clickSpy).toHaveBeenCalled();
+
+      // Test file input with empty files
+      fireEvent.change(fileInput, { target: { files: [] } });
+
+      // Test file input with oversized file (>25 MiB)
+      const oversizedFile = new File(['x'.repeat(100)], 'huge.png', { type: 'image/png' });
+      Object.defineProperty(oversizedFile, 'size', { value: 26 * 1024 * 1024 });
+      fireEvent.change(fileInput, { target: { files: [oversizedFile] } });
+      expect(uploadSpy).toHaveBeenCalledTimes(0);
+
+      // Test file input with custom markdownUri
+      uploadSpy.mockResolvedValueOnce({
+        id: 'desc_att_2',
+        markdownUri: 'https://cdn.example.com/vector.svg',
+      });
+      const svgFile = new File(['<svg></svg>'], 'vector.svg', { type: 'image/svg+xml' });
+      fireEvent.change(fileInput, { target: { files: [svgFile] } });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        expect(textarea.value).toContain('![vector.svg](https://cdn.example.com/vector.svg)');
+      });
+
+      // Test paste with image file
+      uploadSpy.mockResolvedValueOnce({
+        id: 'desc_att_3',
+        markdownUri: '',
+      });
+      const pastedImg = new File(['content'], 'pasted.png', { type: 'image/png' });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [pastedImg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledTimes(2);
+        expect(textarea.value).toContain('![pasted.png](attachment://desc_att_3)');
+      });
+
+      // Test paste with oversized image file
+      const pastedHugeImg = new File(['content'], 'huge_paste.png', { type: 'image/png' });
+      Object.defineProperty(pastedHugeImg, 'size', { value: 26 * 1024 * 1024 });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [pastedHugeImg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      expect(uploadSpy).toHaveBeenCalledTimes(2);
+
+      // Test paste with SVG file
+      uploadSpy.mockResolvedValueOnce({
+        id: 'desc_att_4',
+        markdownUri: '/api/v1/attachments/desc_att_4',
+      });
+      const pastedSvg = new File(['<svg></svg>'], 'pasted.svg', { type: 'image/svg+xml' });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [pastedSvg],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledTimes(3);
+      });
+
+      // Test paste with non-HTML plain text
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: ['text/plain'],
+          getData: () => '',
+        },
+      });
+
+      // Test paste with HTML containing 0 hidden nodes
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: ['text/html'],
+          getData: (format: string) => (format === 'text/html' ? '<p>Plain HTML</p>' : ''),
+        },
+      });
+
+      // Test rich HTML paste and sanitized pill revert
+      vi.spyOn(hiddenDomPrunerMod, 'pruneHiddenDom').mockReturnValueOnce({
+        prunedHtml: '<p>Sanitized</p>',
+        prunedHiddenNodes: 3,
+      });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [],
+          types: ['text/html'],
+          getData: (format: string) => (format === 'text/html' ? '<p>Pasted description</p>' : ''),
+        },
+      });
+
+      const pill = await screen.findByTestId('desc-sanitized-pill');
+      expect(pill).toBeDefined();
+
+      const revertBtn = screen.getByTestId('desc-sanitized-pill-revert-btn');
+      fireEvent.click(revertBtn);
+      expect(screen.queryByTestId('desc-sanitized-pill')).toBeNull();
+
+      // Test raw / preview toggle button and Cmd+Shift+M
+      const rawBtn = screen.getByTestId('description-editor-tool-raw');
+      fireEvent.click(rawBtn);
+      expect(screen.getByTestId('desc-preview')).toBeDefined();
+
+      fireEvent.click(rawBtn);
+      expect(screen.getByRole('textbox', { name: 'Description' })).toBeDefined();
+
+      const textareaAfter = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+      fireEvent.keyDown(textareaAfter, { key: 'a' });
+      fireEvent.keyDown(textareaAfter, { key: 'm', metaKey: false });
+      fireEvent.keyDown(textareaAfter, { key: 'm', metaKey: true, shiftKey: false });
+      fireEvent.keyDown(textareaAfter, { key: 'm', metaKey: true, shiftKey: true });
+      expect(screen.getByTestId('desc-preview')).toBeDefined();
+
+      uploadSpy.mockRestore();
+    });
+
+    it('covers conflict banner actions: reload, overwrite, overwrite failure, and discard', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      vi.spyOn(apiClient, 'patch').mockRejectedValueOnce(
+        new ApiProblem(412, { title: 'Precondition Failed', status: 412 }),
+      );
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole('textbox', { name: 'Description' });
+      fireEvent.change(textarea, { target: { value: 'Conflict draft' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+
+      // Reload Latest action
+      const reloadBtn = screen.getByRole('button', { name: 'Reload Latest' });
+      fireEvent.click(reloadBtn);
+      await waitFor(() => {
+        expect(screen.queryByTestId('conflict-banner')).toBeNull();
+      });
+
+      // Trigger conflict again for Overwrite
+      vi.spyOn(apiClient, 'patch').mockRejectedValueOnce(
+        new ApiProblem(412, { title: 'Precondition Failed', status: 412 }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+
+      // Overwrite failure
+      vi.spyOn(apiClient, 'patch').mockRejectedValueOnce(new Error('Network error'));
+      const overwriteBtn = screen.getByRole('button', { name: 'Overwrite' });
+      fireEvent.click(overwriteBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+
+      // Overwrite success
+      vi.spyOn(apiClient, 'patch').mockResolvedValueOnce({
+        ...validIssue,
+        description_markdown: 'Conflict draft',
+      });
+      fireEvent.click(overwriteBtn);
+      await waitFor(() => {
+        expect(screen.queryByTestId('conflict-banner')).toBeNull();
+      });
+
+      // Trigger conflict again for Discard Draft
+      vi.spyOn(apiClient, 'patch').mockRejectedValueOnce(
+        new ApiProblem(412, { title: 'Precondition Failed', status: 412 }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+      const discardBtn = screen.getByRole('button', { name: 'Discard Draft' });
+      fireEvent.click(discardBtn);
+      expect(screen.queryByTestId('conflict-banner')).toBeNull();
+    });
+
+    it('covers selected text formatting, 428 precondition, network errors, and full mode toggle', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        etag: undefined,
+      });
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+      textarea.value = 'hello world';
+      textarea.selectionStart = 0;
+      textarea.selectionEnd = 5;
+
+      // Wrap selected text
+      fireEvent.click(screen.getByRole('button', { name: 'Bold text' }));
+      expect(textarea.value).toContain('**hello**');
+
+      // Test 428 Precondition Required
+      vi.spyOn(apiClient, 'patch').mockRejectedValueOnce(
+        new ApiProblem(428, { title: 'Precondition Required', status: 428 }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+        expect(screen.getByText(/428/)).toBeDefined();
+      });
+
+      // Clear conflict banner via Discard Draft
+      fireEvent.click(screen.getByRole('button', { name: 'Discard Draft' }));
+      expect(screen.queryByTestId('conflict-banner')).toBeNull();
+
+      // Test network error save (offline mode)
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      vi.spyOn(apiClient, 'patch').mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('conflict-banner')).toBeNull();
+      });
+
+      // Test IssueSurfaceRoot with empty issueKey
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <IssueSurfaceRoot mode="split" issueKey="" projectKey="KAN" />
+        </QueryClientProvider>,
+      );
+    });
+
+    it('covers split mode nav toggling, view-only capability, and fullscreen close navigation', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        capabilities: ['VIEW'],
+      });
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const router = createMemoryRouter(
+        [
+          {
+            path: '/projects/:project_key/issues/:issue_key',
+            element: <IssueSurfaceRoot mode="split" issueKey="KAN-142" projectKey="KAN" />,
+          },
+        ],
+        { initialEntries: ['/projects/KAN/issues/KAN-142'] },
+      );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Detailed description of the auth hardening task.')).toBeDefined();
+      });
+
+      // Edit description button is hidden due to capabilities: ['VIEW']
+      expect(screen.queryByRole('button', { name: 'Edit description' })).toBeNull();
+
+      // Test nav toggle button in split mode
+      const navBtn = screen.getByRole('button', { name: 'Hide Nav' });
+      fireEvent.click(navBtn);
+      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
+      fireEvent.click(screen.getByRole('button', { name: 'Show Nav' }));
+      expect(screen.getByRole('button', { name: 'Hide Nav' })).toBeDefined();
+    });
+
+    it('covers opener element capture, full mode toggle, non-image paste, and without router assign', async () => {
+      const openerBtn = document.createElement('button');
+      openerBtn.textContent = 'Opener';
+      document.body.appendChild(openerBtn);
+      openerBtn.focus();
+
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-142']}>
+            <IssueSurfaceRoot mode="full" issueKey="KAN-142" projectKey="KAN" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Return to side panel' })).toBeDefined();
+      });
+
+      // Toggle from full mode back to peek
+      fireEvent.click(screen.getByRole('button', { name: 'Return to side panel' }));
+
+      // Test paste with text file (neither image nor svg)
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+      const txtFile = new File(['text'], 'notes.txt', { type: 'text/plain' });
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [txtFile],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+
+      unmount();
+      openerBtn.remove();
     });
   });
 });

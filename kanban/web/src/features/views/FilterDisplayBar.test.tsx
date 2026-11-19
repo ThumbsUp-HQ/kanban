@@ -331,4 +331,53 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
       expect(screen.getByRole('button', { name: /Telemetry/i })).toBeDefined();
     });
   });
+
+  it('covers dynamic facet edge cases: fallback labels, unmount in flight, and chip removal fallbacks', async () => {
+    // 1. Assignee without display_name, custom cycle, custom module
+    const { unmount: u1 } = render(
+      <FilterDisplayBar
+        projectKey="KAN"
+        modulesEnabled={true}
+        issues={[
+          {
+            id: 'iss-custom',
+            assignees: [
+              {
+                id: 'asg-1',
+                kind: 'principal',
+                principal: { id: 'u2', handle: '@johndoe', display_name: '' },
+              },
+            ],
+            labels: [{ id: 'lbl-c', name: 'CustomLabel' }],
+            cycle_id: 'cycle-custom-99',
+            module_ids: ['mod-custom-99'],
+          } as never,
+        ]}
+        activeFilters={{
+          empty_cat: undefined as never,
+          state: ['st-todo'],
+        }}
+        onFiltersChange={vi.fn()}
+      />
+    );
+
+    // Open filter popover
+    fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
+    expect(screen.getByRole('button', { name: /@johndoe/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /CustomLabel/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /cycle-custom-99/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /mod-custom-99/i })).toBeDefined();
+    u1();
+
+    // 2. Unmount while dynamic fetches are unresolved
+    let resolveSuggestions: (val: any) => void;
+    vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockImplementation(
+      () => new Promise((resolve) => { resolveSuggestions = resolve; }),
+    );
+    const { unmount: u2 } = render(
+      <FilterDisplayBar projectKey="KAN" modulesEnabled={true} />
+    );
+    u2();
+    resolveSuggestions!([{ id: 'u99', handle: 'late', display_name: 'Late' }]);
+  });
 });

@@ -277,6 +277,54 @@ async def create_signed_url(
 
 
 @router.get(
+    "/attachments/{attachment_id}",
+    summary="Retrieve attachment blob directly for authenticated caller",
+)
+async def get_attachment_direct(
+    attachment_id: uuid.UUID,
+    request: Request,
+    caller: Caller,
+    session: Session,
+) -> Response:
+    """Retrieve attachment content blob enforcing caller capability and .svg sandbox shield."""
+    async with timing_floor(floor_ms=25.0):
+        service = get_attachment_service(request)
+        attachment = await service.get_attachment_or_404(session, attachment_id)
+        target_resource = (
+            attachment.issue_id if attachment.issue_id is not None else attachment.project_id
+        )
+        await require_capability(session, caller, target_resource, Capability.VIEW)
+        blob_bytes = service.blob_store.read(attachment.storage_key)
+
+    headers: dict[str, str] = {
+        "X-Content-Type-Options": "nosniff",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "Cache-Control": "private, max-age=300",
+    }
+
+    safe_filename = sanitize_content_disposition_filename(
+        attachment.original_filename,
+        attachment.content_type,
+    )
+
+    if attachment.content_type == "image/svg+xml":
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        sec_dest = (request.headers.get("sec-fetch-dest") or "").strip().lower()
+        if sec_dest == "image":
+            headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+        else:
+            headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    else:
+        headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+
+    return Response(
+        content=blob_bytes,
+        media_type=attachment.content_type,
+        headers=headers,
+    )
+
+
+@router.get(
     "/attachments/{attachment_id}/content",
     summary="Retrieve attachment blob content",
 )

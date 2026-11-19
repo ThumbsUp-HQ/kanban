@@ -463,8 +463,13 @@ describe('Topbar', () => {
           handle: '01a1ede4-1234-5678-9abc-def012345678',
         }),
       ).toBe('@user');
+      // Empty cleaned handle falls back to @user
+      expect(resolveDisplayHandle({ handle: '@@@' })).toBe('@user');
+      // Fallback to user.id when non-uuid
+      expect(resolveDisplayHandle({ id: 'plain-id', handle: '' })).toBe('@plain-id');
       // Empty input
       expect(resolveDisplayHandle(null)).toBe('');
+      expect(resolveDisplayHandle(undefined)).toBe('');
     });
 
     it('renders user avatar img with testid and user profile card in menu', () => {
@@ -525,6 +530,85 @@ describe('Topbar', () => {
       const initialEl = screen.getByTestId('topbar-avatar-initial');
       expect(initialEl.textContent).toBe('B');
       expect(screen.queryByTestId('topbar-avatar-img')).toBeNull();
+    });
+
+    it('covers avatar menu keyboard navigation (ArrowDown, ArrowUp, Escape)', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'usr-nav',
+                    display_name: 'Nav User',
+                    email: 'nav@example.com',
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      fireEvent.click(avatarBtn);
+
+      const menu = screen.getByRole('menu');
+      expect(menu).toBeDefined();
+
+      // ArrowDown navigation
+      fireEvent.keyDown(menu, { key: 'ArrowDown' });
+      fireEvent.keyDown(menu, { key: 'ArrowDown' });
+
+      // ArrowUp navigation
+      fireEvent.keyDown(menu, { key: 'ArrowUp' });
+
+      // Escape key closes menu
+      fireEvent.keyDown(menu, { key: 'Escape' });
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('determines userInitial from email when display_name and handle are absent', () => {
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'u-email',
+                    email: 'xavier@example.com',
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('X')).toBeDefined();
+      unmount();
+    });
+
+    it('falls back to A when user has no display_name, handle, or email', () => {
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'u-empty',
+                    email: '',
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('A')).toBeDefined();
+      unmount();
     });
   });
 });

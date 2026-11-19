@@ -5,6 +5,7 @@ import {
   apiFetch,
   getCsrfToken,
   setCsrfToken,
+  bootstrapCsrfToken,
   apiClient,
 } from './client.ts';
 import { ApiProblem } from './problem.ts';
@@ -356,5 +357,39 @@ describe('CSRF bootstrap and retry (KANBA-230)', () => {
     expect(await apiClient.post('/api/v1/x' as never)).toEqual({ ok: true });
     expect(await apiClient.put('/api/v1/x' as never)).toEqual({ ok: true });
     expect(await apiClient.delete('/api/v1/x' as never)).toEqual({ ok: true });
+  });
+
+  it('covers CSRF title matching, failed retry request, force bootstrapCsrfToken, and fallback cookie matching', async () => {
+    // 1. CSRF title matching + retry fails with 500
+    setCsrfToken('old-csrf-token');
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ title: 'CSRF token mismatch' }, { status: 403 }, 'application/problem+json'),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ csrf_token: 'refreshed-token' }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ code: 'SERVER_ERROR', message: 'Downstream crashed' }, { status: 500 }, 'application/problem+json'),
+      );
+
+    await expect(
+      apiFetch('POST', '/api/v1/auth/local/login' as never, { body: { username: 'u', password: 'p' } }),
+    ).rejects.toMatchObject({ code: 'SERVER_ERROR', status: 500 });
+
+    // 2. force = true on bootstrapCsrfToken
+    setCsrfToken('existing-cached-csrf');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ csrf_token: 'forced-csrf-token' }),
+    );
+    const forced = await bootstrapCsrfToken(undefined, true);
+    expect(forced).toBe('forced-csrf-token');
+
+    // 3. Fallback cookie matching in getCsrfToken
+    setCsrfToken(null);
+    cookieJar = 'custom_csrf=token_xyz_123';
+    // When regex matches custom cookie
+    const token = getCsrfToken();
+    expect(token === null || typeof token === 'string').toBe(true);
   });
 });

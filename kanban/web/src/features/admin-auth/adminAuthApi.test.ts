@@ -11,6 +11,8 @@ import {
   parseGoogleOAuthJson,
   deleteAdminAuthCard,
   sanitizeAdminAuthCard,
+  fetchAdminPrincipals,
+  createLocalUser,
   type AdminAuthCard,
 } from './adminAuthApi';
 
@@ -213,5 +215,96 @@ describe('adminAuthApi (KB-P3-36)', () => {
       google_oauth_json: '{"web":{}}',
     });
     expect(googleRes.client_id).toBe('client-123');
+  });
+
+  it('covers testDraftAuthCardHandshake fallback status and check_summary branches', async () => {
+    const dummyPayload = {
+      provider_kind: 'OIDC' as const,
+      slug: 'test',
+      display_name: 'Test',
+      button_subtext: null,
+      icon_preset: 'key',
+      is_enabled: true,
+      auto_provision_users: false,
+      allowed_email_domains: [],
+      public_config: {},
+    };
+
+    // 1. status: 'OK', ok: undefined, check_summary undefined
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+      status: 'OK',
+    });
+    const res1 = await testDraftAuthCardHandshake(dummyPayload);
+    expect(res1.last_health_status).toBe('HEALTHY');
+    expect(res1.check_summary).toBe('Probe failed');
+
+    // 2. ok: true, check_summary undefined
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+      ok: true,
+    });
+    const res2 = await testDraftAuthCardHandshake(dummyPayload);
+    expect(res2.last_health_status).toBe('HEALTHY');
+    expect(res2.check_summary).toBe('Probe successful');
+
+    // 3. ok: false, error_code: 'CERT_EXPIRED', check_summary undefined
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+      ok: false,
+      error_code: 'CERT_EXPIRED',
+    });
+    const res3 = await testDraftAuthCardHandshake(dummyPayload);
+    expect(res3.last_health_status).toBe('FAILED');
+    expect(res3.check_summary).toBe('CERT_EXPIRED');
+
+    // 4. deleteAdminAuthCard with explicit confirmSlug
+    const deleteSpy = vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({});
+    await deleteAdminAuthCard('c-1', 'confirmed-c1');
+    expect(deleteSpy).toHaveBeenCalledWith(
+      'DELETE',
+      '/api/v1/admin/auth-cards/c-1',
+      { body: { confirm_slug: 'confirmed-c1' } },
+    );
+
+    // 5. fetchAdminPrincipals filter queries
+    const principalsSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue([]);
+    await fetchAdminPrincipals('USER');
+    expect(principalsSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?filter=USER&limit=100');
+
+    await fetchAdminPrincipals('ALL');
+    expect(principalsSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?limit=100');
+
+    await fetchAdminPrincipals();
+    expect(principalsSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?limit=100');
+
+    // 6. createLocalUser with and without optional fields
+    const createSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({ id: 'u-1' });
+    await createLocalUser({
+      handle: 'alice',
+      display_name: 'Alice',
+      email: 'alice@corp.com',
+      password: 'pwd',
+      role: 'ADMIN',
+    });
+    expect(createSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/principals', {
+      body: {
+        type: 'USER',
+        handle: 'alice',
+        display_name: 'Alice',
+        email: 'alice@corp.com',
+        password: 'pwd',
+        role: 'ADMIN',
+      },
+    });
+
+    await createLocalUser({
+      handle: 'bob',
+      display_name: 'Bob',
+    });
+    expect(createSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/principals', {
+      body: {
+        type: 'USER',
+        handle: 'bob',
+        display_name: 'Bob',
+      },
+    });
   });
 });

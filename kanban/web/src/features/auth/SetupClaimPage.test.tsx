@@ -909,4 +909,38 @@ describe('SetupClaimPage (KB-P3-35)', () => {
       );
     });
   });
+
+  it('renders Step 2 plain HTTP warning when accessing over http', async () => {
+    vi.spyOn(authApi, 'fetchSessionInfo').mockResolvedValueOnce({
+      authenticated: true,
+      mfa_pending: true,
+      session_id: 'sess-enr-http',
+    });
+
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        protocol: 'http:',
+        hostname: 'remote.corp.example',
+        search: '',
+        pathname: '/setup',
+      },
+    });
+
+    render(<SetupClaimPage initialToken={validToken43} />);
+    const passkeyTab = await screen.findByRole('tab', { name: /Passkey/i });
+    fireEvent.click(passkeyTab);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Passkeys require HTTPS/i)).toBeDefined();
+    });
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalLocation,
+    });
+  });
+    });
+  });
 });

@@ -155,4 +155,29 @@ describe('SanitizedPastePill', () => {
     fireEvent.mouseEnter(pill);
     fireEvent.focus(pill);
   });
+
+  it('triggers 1-click Revert and Cmd+Z keyboard revert', () => {
+    const handleDismiss = vi.fn();
+    const handleRevert = vi.fn();
+
+    render(
+      <SanitizedPastePill
+        onDismiss={handleDismiss}
+        onRevert={handleRevert}
+        testId="test-pill"
+      />,
+    );
+
+    const revertBtn = screen.getByTestId('test-pill-revert-btn');
+    expect(revertBtn).toBeDefined();
+    fireEvent.click(revertBtn);
+    expect(handleRevert).toHaveBeenCalledTimes(1);
+    expect(handleDismiss).toHaveBeenCalledTimes(1);
+
+    // Test Cmd+Z keyboard revert on pill container
+    const pill = screen.getByTestId('test-pill');
+    fireEvent.keyDown(pill, { key: 'z', metaKey: true });
+    expect(handleRevert).toHaveBeenCalledTimes(2);
+    expect(handleDismiss).toHaveBeenCalledTimes(2);
+  });
 });

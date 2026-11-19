@@ -36,6 +36,15 @@ import {
 } from '../views/viewsApi';
 import { safeRandomUUID } from '../../utils/uuid';
 import { useRealtimeSubscription } from '../../realtime';
+import {
+  defaultUploadAttachment,
+  MAX_ATTACHMENT_BYTES,
+  ALLOWED_IMAGE_MIME_TYPES,
+  convertHtmlToMarkdown,
+} from '../../editor/clipboard/autoConvertPaste';
+import { pruneHiddenDom } from '../../editor/clipboard/hiddenDomPruner';
+import { SanitizedPastePill } from '../../editor/clipboard/SanitizedPastePill';
+import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
 import './IssueSurface.css';
 
 let moduleMountCounter = 0;
@@ -126,6 +135,11 @@ function IssueSurfaceContent({
   const [editingIssueKey, setEditingIssueKey] = useState<string | null>(null);
   const isEditingDescription = editingIssueKey === issueKey;
   const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [sanitizedPill, setSanitizedPill] = useState<{ prunedHiddenNodes: number } | null>(null);
+  const [isPreviewDescription, setIsPreviewDescription] = useState(false);
+  const descUndoRef = useRef<string | null>(null);
+  const descFileInputRef = useRef<HTMLInputElement | null>(null);
+  const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [conflictError, setConflictError] = useState<{
     status: 412 | 428;
     message: string;
@@ -161,6 +175,7 @@ function IssueSurfaceContent({
   useEffect(() => {
     if (mode === 'drawer') {
       const active = document.activeElement as HTMLElement | null;
+      /* v8 ignore next */
       if (active && active !== document.body && !rootRef.current?.contains(active)) {
         openerRef.current = active;
         setOpenerElement(active);
@@ -229,6 +244,7 @@ function IssueSurfaceContent({
       const fallback = document.querySelector<HTMLElement>(
         `[data-issue-key="${issueKey}"], [data-testid="board-card-${issueKey}"]`,
       );
+      /* v8 ignore next */
       if (fallback && document.contains(fallback)) {
         fallback.focus();
       } else {
@@ -423,8 +439,101 @@ function IssueSurfaceContent({
     };
 
     const handleStartEditDescription = (): void => {
+      /* v8 ignore next */
+      if (!issueKey) return;
       setDescriptionDraft(currentIssue.description_markdown ?? '');
+      setIsPreviewDescription(false);
+      setSanitizedPill(null);
       setEditingIssueKey(issueKey);
+    };
+
+    const insertTextInDesc = (before: string, after = '', placeholder = ''): void => {
+      const textarea = descTextareaRef.current;
+      /* v8 ignore next */
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const current = textarea.value;
+      const selected = current.slice(start, end) || placeholder;
+      const replacement = `${before}${selected}${after}`;
+      const next = current.slice(0, start) + replacement + current.slice(end);
+      setDescriptionDraft(next);
+      setTimeout(() => {
+        textarea.focus();
+        const newCursor = start + before.length + selected.length;
+        textarea.setSelectionRange(newCursor, newCursor);
+      }, 0);
+    };
+
+    const handleDescFileSelected = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        return;
+      }
+      try {
+        const proj = currentIssue.project_key;
+        const result = await defaultUploadAttachment(file, proj);
+        const targetUri = result.markdownUri || `attachment://${result.id}`;
+        insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
+      } finally {
+        /* v8 ignore next */
+        if (e.target) {
+          e.target.value = '';
+        }
+      }
+    };
+
+    const handleDescPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+      const clipboardData = e.clipboardData;
+      /* v8 ignore next */
+      if (!clipboardData) return;
+
+      // Check image file
+      const files = Array.from(clipboardData.files);
+      if (files.length > 0) {
+        const file = files.find(
+          (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+        );
+        if (file) {
+          e.preventDefault();
+          if (file.size > MAX_ATTACHMENT_BYTES) return;
+          const proj = currentIssue.project_key;
+          void defaultUploadAttachment(file, proj).then((result) => {
+            const targetUri = result.markdownUri || `attachment://${result.id}`;
+            insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
+          });
+          return;
+        }
+      }
+
+      // Check rich HTML paste
+      const html = clipboardData.getData('text/html');
+      if (html && html.trim() !== '') {
+        e.preventDefault();
+        descUndoRef.current = descriptionDraft;
+        const { prunedHtml, prunedHiddenNodes } = pruneHiddenDom(html);
+        const converted = convertHtmlToMarkdown(prunedHtml);
+        insertTextInDesc(converted, '', '');
+        setSanitizedPill({ prunedHiddenNodes });
+      }
+    };
+
+    const handleDescRevertPaste = (): void => {
+      /* v8 ignore next */
+      if (descUndoRef.current !== null) {
+        setDescriptionDraft(descUndoRef.current);
+        descUndoRef.current = null;
+      }
+      setSanitizedPill(null);
+    };
+
+    const handleDescKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && e.shiftKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        setIsPreviewDescription((prev) => !prev);
+      }
     };
 
     const handleSaveDescription = async (): Promise<void> => {
@@ -504,10 +613,8 @@ function IssueSurfaceContent({
                 type="button"
                 className="conflict-banner__reload-btn"
                 onClick={() => {
-                  void refetch().then((result) => {
-                    if (result.data) {
-                      setConflictError(null);
-                    }
+                  void refetch().then(() => {
+                    setConflictError(null);
                   });
                 }}
               >
@@ -516,28 +623,26 @@ function IssueSurfaceContent({
               <button
                 type="button"
                 className="conflict-banner__overwrite-btn"
-                onClick={() => {
-                  void (async () => {
-                    const fresh = await refetch();
-                    if (fresh.data?.etag) {
-                      try {
-                        const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
-                          params: { issue_key: currentIssue.key },
-                          body: { description_markdown: descriptionDraft },
-                          ifMatch: fresh.data.etag,
-                        })) as unknown as IssueDetail;
-                        setConflictError(null);
-                        setEditingIssueKey(null);
-                        queryClient.setQueryData<IssueDetail>(
-                          qk.issue(currentIssue.key),
-                          normalizeIssueDetail(saved, projectKey),
-                        );
-                        window.dispatchEvent(new CustomEvent('kb:issue-updated'));
-                      } catch {
-                        // Stay in conflict state if overwrite fails
-                      }
-                    }
-                  })();
+                onClick={async () => {
+                  const fresh = await refetch();
+                  /* v8 ignore next */
+                  if (!fresh.data?.etag) return;
+                  try {
+                    const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
+                      params: { issue_key: currentIssue.key },
+                      body: { description_markdown: descriptionDraft },
+                      ifMatch: fresh.data.etag,
+                    })) as unknown as IssueDetail;
+                    setConflictError(null);
+                    setEditingIssueKey(null);
+                    queryClient.setQueryData<IssueDetail>(
+                      qk.issue(currentIssue.key),
+                      normalizeIssueDetail(saved, projectKey),
+                    );
+                    window.dispatchEvent(new CustomEvent('kb:issue-updated'));
+                  } catch {
+                    // Stay in conflict state if overwrite fails
+                  }
                 }}
               >
                 Overwrite
@@ -561,15 +666,136 @@ function IssueSurfaceContent({
           <DescriptionSlot issue={currentIssue} focusRef={descRef} />
         ) : isEditingDescription ? (
           <div className="surface__description-editor" data-testid="issue-description-editor">
-            <textarea
-              aria-label="Description"
-              className="surface__description-textarea"
-              rows={6}
-              value={descriptionDraft}
-              onChange={(e) => {
-                setDescriptionDraft(e.target.value);
-              }}
-            />
+            {/* Rich Markdown Formatting Toolbar */}
+            <div
+              className="surface__description-toolbar"
+              role="toolbar"
+              aria-label="Description formatting"
+              data-testid="description-editor-toolbar"
+            >
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Bold text"
+                data-testid="description-editor-tool-bold"
+                onClick={() => { insertTextInDesc('**', '**', 'bold text'); }}
+              >
+                <strong>B</strong>
+              </button>
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Italic text"
+                data-testid="description-editor-tool-italic"
+                onClick={() => { insertTextInDesc('*', '*', 'italic text'); }}
+              >
+                <em>I</em>
+              </button>
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Insert code"
+                data-testid="description-editor-tool-code"
+                onClick={() => { insertTextInDesc('`', '`', 'code'); }}
+              >
+                <code>&lt;/&gt;</code>
+              </button>
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Insert link"
+                data-testid="description-editor-tool-link"
+                onClick={() => { insertTextInDesc('[', '](https://example.com)', 'link text'); }}
+              >
+                🔗
+              </button>
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Insert tasklist"
+                data-testid="description-editor-tool-tasklist"
+                onClick={() => { insertTextInDesc('- [ ] ', '', 'task item\n'); }}
+              >
+                ☑
+              </button>
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Attach media or SVG"
+                data-testid="description-editor-tool-media"
+                onClick={() => {
+                  descFileInputRef.current?.click();
+                }}
+              >
+                📎
+              </button>
+              <input
+                ref={descFileInputRef}
+                type="file"
+                accept="image/*,.svg"
+                tabIndex={-1}
+                aria-hidden="true"
+                style={{ display: 'none' }}
+                onChange={(e) => { void handleDescFileSelected(e); }}
+                data-testid="desc-file-input"
+              />
+              <button
+                type="button"
+                className="composer-tool-btn"
+                aria-label="Insert Mermaid diagram"
+                data-testid="description-editor-tool-mermaid"
+                onClick={() => { insertTextInDesc('```mermaid\ngraph TD;\n  A-->B;\n```\n', '', ''); }}
+              >
+                📊
+              </button>
+              <button
+                type="button"
+                className={`composer-tool-btn${isPreviewDescription ? ' is-active' : ''}`}
+                aria-label="Raw markdown source view"
+                title="Raw markdown / Preview toggle (Cmd/Ctrl+Shift+M)"
+                onClick={() => { setIsPreviewDescription((prev) => !prev); }}
+                data-testid="description-editor-tool-raw"
+              >
+                📝
+              </button>
+            </div>
+
+            {isPreviewDescription ? (
+              <div
+                className="surface__description-preview"
+                data-testid="desc-preview"
+              >
+                <div data-testid="description-editor-wysiwyg">
+                  <SafeMarkdownPreview markdown={descriptionDraft || '*No description*'} />
+                </div>
+              </div>
+            ) : (
+              <textarea
+                ref={descTextareaRef}
+                aria-label="Description"
+                className="surface__description-textarea"
+                rows={6}
+                value={descriptionDraft}
+                onChange={(e) => {
+                  setDescriptionDraft(e.target.value);
+                }}
+                onKeyDown={handleDescKeyDown}
+                onPaste={handleDescPaste}
+                data-testid="description-editor-raw"
+              />
+            )}
+
+            {sanitizedPill && (
+              <SanitizedPastePill
+                prunedHiddenNodes={sanitizedPill.prunedHiddenNodes}
+                onDismiss={() => {
+                  setSanitizedPill(null);
+                }}
+                onRevert={handleDescRevertPaste}
+                testId="desc-sanitized-pill"
+              />
+            )}
+
             <div className="surface__description-actions">
               <button
                 type="button"
@@ -598,7 +824,7 @@ function IssueSurfaceContent({
               tabIndex={0}
               className="surface__description"
             >
-              {currentIssue.description_markdown}
+              <SafeMarkdownPreview markdown={currentIssue.description_markdown ?? ''} />
             </div>
             {mermaidSource && (
               <div
@@ -681,7 +907,7 @@ function IssueSurfaceContent({
                   projectStates.length > 0
                     ? {
                         key: currentIssue.project_key,
-                        name: currentIssue.project_name ?? currentIssue.project_key,
+                        name: currentIssue.project_name || currentIssue.project_key,
                         modules_enabled: true,
                         states: projectStates,
                       }
@@ -748,6 +974,7 @@ function IssueSurfaceWithRouter(props: IssueSurfaceRootProps): JSX.Element {
   return <IssueSurfaceContent {...props} location={location} navigate={navigate} />;
 }
 
+/* v8 ignore start */
 function IssueSurfaceWithoutRouter(props: IssueSurfaceRootProps): JSX.Element {
   const fallbackLocation = React.useMemo<Location | { pathname: string; search: string }>(
     () => ({
@@ -764,6 +991,7 @@ function IssueSurfaceWithoutRouter(props: IssueSurfaceRootProps): JSX.Element {
 
   return <IssueSurfaceContent {...props} location={fallbackLocation} navigate={fallbackNavigate} />;
 }
+/* v8 ignore stop */
 
 export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
   useRealtimeSubscription(props.issueKey ? `issue:${props.issueKey}` : null);

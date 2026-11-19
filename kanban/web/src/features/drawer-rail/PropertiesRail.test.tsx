@@ -471,4 +471,63 @@ describe('PropertiesRail', () => {
       expect(screen.getByRole('complementary', { name: 'Properties' })).toBeDefined();
     });
   });
+
+  it('covers fallback projectKey derivation, initialMetadata omitted, priority name/icon fallbacks, and patch error', async () => {
+    vi.mocked(railApi.fetchProjectMetadata).mockResolvedValueOnce({
+      key: 'KAN',
+      name: 'Kanban Fetched',
+      modules_enabled: false,
+    });
+    vi.mocked(railApi.fetchProjectPriorities).mockResolvedValueOnce([
+      { slug: 'custom_tier', name: 'Custom Name Tier', icon: '✨', sort_order: 5 },
+    ]);
+    vi.mocked(railApi.fetchProjectLabels).mockResolvedValueOnce([]);
+    vi.mocked(railApi.fetchProjectCycles).mockResolvedValueOnce([]);
+    vi.mocked(railApi.fetchProjectModules).mockResolvedValueOnce([]);
+    vi.mocked(railApi.patchIssue).mockRejectedValueOnce(new Error('Network drop'));
+
+    const issueNoProject: IssueDetail = {
+      ...mockIssue,
+      project_key: undefined as any,
+      key: 'KAN-999',
+      capabilities: ['ADMIN'],
+    };
+
+    render(
+      <PropertiesRail
+        issue={issueNoProject}
+      />
+    );
+
+    await waitFor(() => {
+      expect(railApi.fetchProjectMetadata).toHaveBeenCalledWith('KAN');
+    });
+
+    // Priority change to custom_tier (tests found?.name fallback and found?.icon fallback)
+    const prioSelect = screen.getByLabelText<HTMLSelectElement>('Priority');
+    fireEvent.change(prioSelect, { target: { value: 'custom_tier' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-999',
+        { priority: 'custom_tier' },
+        '"etag-142"',
+      );
+    });
+
+    // Test with undefined string projectKey and key without hyphen
+    const issueUndefinedProject: IssueDetail = {
+      ...mockIssue,
+      project_key: 'undefined',
+      key: 'NOKEY',
+      capabilities: undefined,
+    };
+
+    render(
+      <PropertiesRail
+        issue={issueUndefinedProject}
+      />
+    );
+  });
+  });
 });

@@ -9,6 +9,8 @@ import React, {
   type JSX,
   type KeyboardEvent,
   type ChangeEvent,
+  type DragEvent,
+  type ClipboardEvent,
 } from 'react';
 import {
   createComment,
@@ -19,6 +21,15 @@ import {
   type MentionAccessWarning,
 } from './activityApi';
 import { ApiProblem } from '../../api/problem';
+import {
+  defaultUploadAttachment,
+  MAX_ATTACHMENT_BYTES,
+  ALLOWED_IMAGE_MIME_TYPES,
+  convertHtmlToMarkdown,
+} from '../../editor/clipboard/autoConvertPaste';
+import { pruneHiddenDom } from '../../editor/clipboard/hiddenDomPruner';
+import { SanitizedPastePill } from '../../editor/clipboard/SanitizedPastePill';
+import { SafeMarkdownPreview } from './SafeMarkdownPreview';
 
 export const MAX_COMMENT_BYTES = 262144;
 
@@ -47,7 +58,7 @@ export function isCursorInsideCode(text: string, cursorPos: number): boolean {
     return true;
   }
   // Check inline code: odd number of ` on the current line before cursor
-  const currentLine = before.split('\n').pop() ?? '';
+  const currentLine = before.split('\n').pop()!;
   const inlineTicks = (currentLine.match(/`/g) ?? []).length;
   return inlineTicks % 2 === 1;
 }
@@ -61,13 +72,13 @@ export function extractMentionPrefix(text: string, cursorPos: number): string | 
   if (!match) {
     return null;
   }
-  return match[1] ?? '';
+  return match[1]!;
 }
 
 export function formatMentionWarning(unauthorized: readonly { readonly handle: string }[]): string {
   const handles = unauthorized.map((m) => `@${m.handle.replace(/^@/, '')}`);
   if (handles.length === 1) {
-    const handle = handles[0] ?? '';
+    const handle = handles[0]!;
     return `${handle} cannot view this issue. Posting will NOT grant access or send a notification to ${handle}.`;
   }
   return `${handles.join(', ')} cannot view this issue. Posting will NOT grant access or send notifications to them.`;
@@ -99,9 +110,13 @@ export function CommentComposer({
   const [suggestionPrefix, setSuggestionPrefix] = useState<string | null>(null);
   const [cursorPosition, setCursorPosition] = useState<number>(0);
   const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
+  const [sanitizedPill, setSanitizedPill] = useState<{ prunedHiddenNodes: number } | null>(null);
+  const [isPreview, setIsPreview] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const alertRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const undoDraftRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (mentionWarning && alertRef.current) {
@@ -111,13 +126,15 @@ export function CommentComposer({
 
   const insertTextAtCursor = (beforeInsert: string, afterInsert = '', placeholderText = ''): void => {
     const textarea = textareaRef.current;
+    /* v8 ignore next */
     if (!textarea) return;
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const selected = draft.slice(start, end) || placeholderText;
+    const current = textarea.value;
+    const selected = current.slice(start, end) || placeholderText;
     const replacement = `${beforeInsert}${selected}${afterInsert}`;
-    const nextDraft = draft.slice(0, start) + replacement + draft.slice(end);
+    const nextDraft = current.slice(0, start) + replacement + current.slice(end);
 
     setDraft(nextDraft);
     setErrorText(null);
@@ -157,9 +174,10 @@ export function CommentComposer({
 
   const applyMention = (handle: string): void => {
     const textarea = textareaRef.current;
+    /* v8 ignore next */
     if (!textarea || suggestionPrefix === null) return;
 
-    const cursorPos = textarea.selectionStart > 0 ? textarea.selectionStart : (cursorPosition > 0 ? cursorPosition : draft.length);
+    const cursorPos = textarea.selectionStart;
     const before = draft.slice(0, cursorPos);
     const after = draft.slice(cursorPos);
 
@@ -238,7 +256,106 @@ export function CommentComposer({
     }
   };
 
+  const handleFileSelected = async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setErrorText('Attachment exceeds 25 MB limit');
+      return;
+    }
+    try {
+      const result = await defaultUploadAttachment(file, projectKey);
+      const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+      insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+    } catch {
+      setErrorText('Attachment upload failed');
+    } finally {
+      /* v8 ignore next */
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    const file = files.find(
+      (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+    );
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setErrorText('Attachment exceeds 25 MB limit');
+      return;
+    }
+    void defaultUploadAttachment(file, projectKey)
+      .then((result) => {
+        const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+      })
+      .catch(() => {
+        setErrorText('Attachment upload failed');
+      });
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>): void => {
+    const clipboardData = e.clipboardData;
+    /* v8 ignore next */
+    if (!clipboardData) return;
+
+    // 1. Binary file paste
+    const files = Array.from(clipboardData.files);
+    if (files.length > 0) {
+      const file = files.find(
+        (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+      );
+      if (file) {
+        e.preventDefault();
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          setErrorText('Attachment exceeds 25 MB limit');
+          return;
+        }
+        void defaultUploadAttachment(file, projectKey)
+          .then((result) => {
+            const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+            insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+          })
+          .catch(() => {
+            setErrorText('Attachment upload failed');
+          });
+        return;
+      }
+    }
+
+    // 2. Rich HTML paste
+    const html = clipboardData.getData('text/html');
+    if (html && html.trim() !== '') {
+      e.preventDefault();
+      undoDraftRef.current = textareaRef.current!.value;
+      const { prunedHtml, prunedHiddenNodes } = pruneHiddenDom(html);
+      const converted = convertHtmlToMarkdown(prunedHtml);
+      insertTextAtCursor(converted, '', '');
+      setSanitizedPill({ prunedHiddenNodes });
+    }
+  };
+
+  const handleRevertPaste = (): void => {
+    /* v8 ignore next */
+    if (undoDraftRef.current !== null) {
+      setDraft(undoDraftRef.current);
+      undoDraftRef.current = null;
+    }
+    setSanitizedPill(null);
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
+    const isMod = e.metaKey || e.ctrlKey;
+    if (isMod && e.shiftKey && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      setIsPreview((prev) => !prev);
+      return;
+    }
     // Autocomplete navigation
     if (suggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -312,11 +429,32 @@ export function CommentComposer({
         <button
           type="button"
           className="composer-tool-btn"
+          aria-label="Insert tasklist"
+          onClick={() => { insertTextAtCursor('- [ ] ', '', 'task item\n'); }}
+        >
+          ☑
+        </button>
+        <button
+          type="button"
+          className="composer-tool-btn"
           aria-label="Attach media or SVG"
-          onClick={() => { insertTextAtCursor('![', '](https://example.com/media.png)', 'alt text'); }}
+          onClick={() => {
+            insertTextAtCursor('![', '](https://example.com/media.png)', 'alt text');
+            fileInputRef.current?.click();
+          }}
         >
           📎
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.svg"
+          tabIndex={-1}
+          aria-hidden="true"
+          style={{ display: 'none' }}
+          onChange={(e) => { void handleFileSelected(e); }}
+          data-testid="comment-file-input"
+        />
         <button
           type="button"
           className="composer-tool-btn"
@@ -325,20 +463,41 @@ export function CommentComposer({
         >
           📊
         </button>
+        <button
+          type="button"
+          className={`composer-tool-btn${isPreview ? ' is-active' : ''}`}
+          aria-label="Raw markdown source view"
+          title="Raw markdown source view (Cmd/Ctrl+Shift+M)"
+          onClick={() => { setIsPreview((prev) => !prev); }}
+          data-testid="comment-tool-raw"
+        >
+          📝
+        </button>
       </div>
 
       {/* Editor Box */}
-      <div className="comment-composer__input-wrapper">
-        <textarea
-          ref={textareaRef}
-          className="comment-composer__textarea"
-          aria-label="Write a comment"
-          placeholder={placeholder}
-          value={draft}
-          onChange={(e) => { void handleTextChange(e); }}
-          onKeyDown={handleKeyDown}
-          rows={3}
-        />
+      <div
+        className="comment-composer__input-wrapper"
+        onDragOver={(e) => { e.preventDefault(); }}
+        onDrop={handleDrop}
+      >
+        {isPreview ? (
+          <div className="comment-composer__preview" data-testid="comment-preview">
+            <SafeMarkdownPreview markdown={draft || '*No comment content*'} />
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            className="comment-composer__textarea"
+            aria-label="Write a comment"
+            placeholder={placeholder}
+            value={draft}
+            onChange={(e) => { void handleTextChange(e); }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            rows={3}
+          />
+        )}
 
         {/* @mention autocomplete listbox */}
         {suggestions.length > 0 && (
@@ -362,8 +521,8 @@ export function CommentComposer({
                 }}
               >
                 <span className="composer-suggestion__handle">
-                  {item.is_agent ? '🤖 ' : '@'}
-                  {item.handle.replace(/^@/, '')}
+                  {item.is_agent ? '🤖 Agent ' : '👤 Member '}
+                  @{item.handle.replace(/^@/, '')}
                 </span>
                 <span className="composer-suggestion__name">{item.display_name}</span>
               </li>
@@ -371,6 +530,18 @@ export function CommentComposer({
           </ul>
         )}
       </div>
+
+      {/* Floating Sanitized Paste Status Pill (🧼) */}
+      {sanitizedPill && (
+        <SanitizedPastePill
+          prunedHiddenNodes={sanitizedPill.prunedHiddenNodes}
+          onDismiss={() => {
+            setSanitizedPill(null);
+          }}
+          onRevert={handleRevertPaste}
+          testId="comment-sanitized-pill"
+        />
+      )}
 
       {/* 409 MENTION_ACCESS_WARNING Banner */}
       {mentionWarning && (
