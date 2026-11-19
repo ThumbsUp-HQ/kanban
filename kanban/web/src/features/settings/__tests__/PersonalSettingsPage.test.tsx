@@ -1284,5 +1284,4 @@ describe('PersonalSettingsPage', () => {
       });
     }
   });
-  });
 });

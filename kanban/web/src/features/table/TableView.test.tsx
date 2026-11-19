@@ -350,5 +350,4 @@ describe('TableView', () => {
 
     expect(screen.getByText(/📦 Authentication Engine/)).toBeDefined();
   });
-  });
 });

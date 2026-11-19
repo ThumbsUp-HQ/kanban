@@ -1018,5 +1018,4 @@ describe('BoardView Component', () => {
     expect(screen.getByTestId('board-canvas')).toBeDefined();
     unmount();
   });
-  });
 });

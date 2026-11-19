@@ -963,6 +963,4 @@ describe('SetupClaimPage (KB-P3-35)', () => {
       expect(screen.getByText('Sign-in is unavailable right now.')).toBeDefined();
     });
   });
-    });
-  });
 });

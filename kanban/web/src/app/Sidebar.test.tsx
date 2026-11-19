@@ -894,5 +894,4 @@ describe('Sidebar', () => {
 
     unmount();
   });
-  });
 });
