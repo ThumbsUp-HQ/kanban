@@ -597,7 +597,7 @@ describe('CustomFieldDefinitionEditor', () => {
     expect(scriptArea.value).toContain('scalar:');
   });
 
-  it('enlarges metadata JSON textarea to rows=8 and uses escaped slug pattern', () => {
+  it('enlarges metadata JSON textarea to rows=8 and uses /v-safe slug pattern', () => {
     vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
 
     renderEditor(true);
@@ -606,7 +606,41 @@ describe('CustomFieldDefinitionEditor', () => {
     expect(metaArea.getAttribute('rows')).toBe('8');
 
     const slugInput = screen.getByTestId<HTMLInputElement>('field-slug-input');
-    expect(slugInput.getAttribute('pattern')).toBe('^[a-z0-9][a-z0-9\\\\-]{1,62}$');
+    const pattern = slugInput.getAttribute('pattern') ?? '';
+    expect(pattern).toBe('^[a-z0-9][a-z0-9\\-]{1,62}$');
+    expect(() => new RegExp(pattern, 'v')).not.toThrow();
+    const regV = new RegExp(pattern, 'v');
+    expect(regV.test('cvss-score')).toBe(true);
+    expect(regV.test('a-1')).toBe(true);
+    expect(regV.test('-invalid')).toBe(false);
+  });
+
+  it('renders dual-control explanation banner immediately on scope selection before save', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+
+    renderEditor(true);
+
+    // Initial PROJECT scope does not show dual control banner
+    expect(screen.queryByTestId('dual-control-explanation-banner')).toBeNull();
+
+    // Select WORKSPACE scope
+    const scopeSelect = screen.getByTestId<HTMLSelectElement>('target-scope-select');
+    fireEvent.change(scopeSelect, { target: { value: 'WORKSPACE' } });
+
+    // Banner renders immediately
+    const banner = screen.getByTestId('dual-control-explanation-banner');
+    expect(banner).toBeDefined();
+    expect(banner.textContent).toContain('Dual-Control Policy:');
+    expect(banner.textContent).toContain('WORKSPACE_ADMIN');
+    expect(banner.textContent).toContain('Self-approval is blocked (403 Forbidden)');
+
+    // Switch to SERVER scope
+    fireEvent.change(scopeSelect, { target: { value: 'SERVER' } });
+    expect(banner.textContent).toContain('SERVER_ADMIN');
+
+    // Switch back to PROJECT scope
+    fireEvent.change(scopeSelect, { target: { value: 'PROJECT' } });
+    expect(screen.queryByTestId('dual-control-explanation-banner')).toBeNull();
   });
 
   it('evaluates test execute against chosen issue with latency, pill, and logs', async () => {

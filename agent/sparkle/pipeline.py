@@ -16,11 +16,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, Literal
-from uuid import UUID  # noqa: TC003  # Required at runtime by Pydantic model fields
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -69,7 +70,7 @@ class SparkleRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    project_id: UUID
+    project_id: UUID | str | None = None
     object_id: UUID | None = None
     surface: Literal["summary", "description", "comment", "sticky", "doc"]
     prefix: str = Field(..., max_length=6000)
@@ -151,9 +152,16 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
     # Step 4: Context retrieval under app_rls_reader (18ms budget)
     snippets: list[str] = []
     ret_status: RetrievalStatus = "skipped"
-    if query_vector and session_factory is not None:
+    resolved_proj_uuid: UUID | None = None
+    if isinstance(req.project_id, UUID):
+        resolved_proj_uuid = req.project_id
+    elif isinstance(req.project_id, str):
+        with contextlib.suppress(ValueError):
+            resolved_proj_uuid = UUID(req.project_id)
+
+    if query_vector and session_factory is not None and resolved_proj_uuid is not None:
         snippets, ret_status = await retrieve_context(
-            project_id=req.project_id,
+            project_id=resolved_proj_uuid,
             query_vector=query_vector,
             principal_ctx=principal_ctx,
             session_factory=session_factory,

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid  # noqa: TC003
 from datetime import datetime  # noqa: TC003
 from pathlib import Path
@@ -82,4 +83,10 @@ class ProjectRepoBinding(Base):
     @property
     def mirror_path(self) -> Path:
         """Derived filesystem path for the bare mirror repository."""
-        return Path(f"/var/lib/kanban/git-mirrors/{self.workspace_id}/{self.id}.git")
+        base = (
+            os.environ.get("KANBAN_REPO_MIRROR_DIR")
+            or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
+            or (f"{os.environ['KB_DATA_DIR']}/git-mirrors" if "KB_DATA_DIR" in os.environ else None)
+            or "/var/lib/kanban/git-mirrors"
+        )
+        return Path(f"{base}/{self.workspace_id}/{self.id}.git")

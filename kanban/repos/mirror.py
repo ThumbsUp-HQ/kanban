@@ -11,7 +11,7 @@ import re
 import shutil
 import signal
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, NamedTuple, Protocol
 
@@ -41,14 +41,73 @@ __all__ = [
     "MirrorPolicy",
     "MirrorSizeLimitError",
     "MirrorTimeoutError",
+    "is_dir_writable",
+    "resolve_mirror_base_dir",
 ]
 
 _MAX_MIRROR_SIZE_BYTES: Final[int] = 2 * 1024 * 1024 * 1024  # 2 GiB
 _DEFAULT_TIMEOUT_SECONDS: Final[float] = 120.0
-_DEFAULT_BASE_DIR: Final[Path] = Path(
-    os.environ.get("KANBAN_GIT_MIRRORS_DIR", "/var/lib/kanban/git-mirrors")
-)
 _COMMIT_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+
+
+def is_dir_writable(path: Path) -> bool:
+    """Test whether path can be created and written to by the current process UID."""
+    try:
+        path.mkdir(parents=True, exist_ok=True, mode=0o750)
+        test_probe = path / f".probe_write_{os.getpid()}"
+        test_probe.touch(exist_ok=True)
+        test_probe.unlink(missing_ok=True)
+    except (OSError, PermissionError):
+        return False
+    else:
+        return True
+
+
+def resolve_mirror_base_dir(override: Path | None = None) -> Path:
+    """Derive default bare git mirror root with writable runtime fallback (KB-P3-AUDIT-04).
+
+    Priority:
+    1. Explicit override passed by caller.
+    2. Explicit environment variables KANBAN_REPO_MIRROR_DIR or KANBAN_GIT_MIRRORS_DIR.
+    3. Derived from KB_DATA_DIR / 'git-mirrors'.
+    4. /var/lib/kanban/data/git-mirrors (writable volume mounted for UID 65532).
+    5. /var/lib/kanban/git-mirrors (if /var/lib/kanban is writable).
+    6. Runtime writable fallback: <tempdir>/kanban-git-mirrors.
+    """
+    if override is not None:
+        return override
+
+    env_dir = os.environ.get("KANBAN_REPO_MIRROR_DIR") or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
+    if env_dir:
+        env_path = Path(env_dir)
+        if is_dir_writable(env_path):
+            return env_path
+
+    kb_data = os.environ.get("KB_DATA_DIR")
+    if kb_data:
+        data_mirror = Path(kb_data) / "git-mirrors"
+        if is_dir_writable(data_mirror):
+            return data_mirror
+
+    container_data_dir = Path("/var/lib/kanban/data/git-mirrors")
+    if is_dir_writable(container_data_dir):
+        return container_data_dir
+
+    standard_dir = Path("/var/lib/kanban/git-mirrors")
+    if is_dir_writable(standard_dir):
+        return standard_dir
+
+    fallback = Path(tempfile.gettempdir()) / "kanban-git-mirrors"
+    fallback.mkdir(parents=True, exist_ok=True, mode=0o750)
+    return fallback
+
+
+_DEFAULT_BASE_DIR: Final[Path] = Path(
+    os.environ.get("KANBAN_REPO_MIRROR_DIR")
+    or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
+    or (f"{os.environ['KB_DATA_DIR']}/git-mirrors" if "KB_DATA_DIR" in os.environ else None)
+    or "/var/lib/kanban/git-mirrors"
+)
 
 
 class GitResult(NamedTuple):
@@ -168,7 +227,7 @@ class GitExecutionError(RuntimeError):
 class MirrorManager:
     """Manages hardened read-only bare Git mirrors for projects (KB-P5-19b, S14.3)."""
 
-    base_dir: Path = _DEFAULT_BASE_DIR
+    base_dir: Path = field(default_factory=resolve_mirror_base_dir)
     policy: MirrorPolicy | None = None
     runner: GitCommandRunner | None = None
     kek_provider: KekProvider | None = None
@@ -247,9 +306,18 @@ class MirrorManager:
             )
 
         target_path = self.mirror_path(binding)
-        target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
-        with contextlib.suppress(OSError):
-            target_path.parent.chmod(0o750)
+        try:
+            target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+            with contextlib.suppress(OSError):
+                target_path.parent.chmod(0o750)
+        except (OSError, PermissionError):
+            fallback_base = Path(tempfile.gettempdir()) / "kanban-git-mirrors"
+            fallback_base.mkdir(parents=True, exist_ok=True, mode=0o750)
+            self.base_dir = fallback_base
+            target_path = self.mirror_path(binding)
+            target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+            with contextlib.suppress(OSError):
+                target_path.parent.chmod(0o750)
 
         # Decrypt credential if present into a mutable bytearray
         decrypted_ba: bytearray | None = None
