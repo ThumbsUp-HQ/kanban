@@ -16,6 +16,9 @@
   position: relative;
   color: var(--fg-secondary, #64748b);
   transition: all 120ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .kb-notif-bell-btn:hover {
@@ -25,6 +28,9 @@
 
 .kb-notif-bell-icon {
   font-size: 1.125rem;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .kb-notif-badge {
@@ -44,6 +50,9 @@
   justify-content: center;
   line-height: 1;
   box-shadow: 0 0 0 2px var(--bg-surface, #ffffff);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .kb-notif-tray {

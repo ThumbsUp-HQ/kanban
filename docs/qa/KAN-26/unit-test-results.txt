@@ -1,0 +1,44 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan26-bec6d2bf/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/personalSettingsApi.test.ts (17 tests) 25ms
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > renders NotFoundView when standard user navigates to workspace or admin mcp
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/app/Topbar.test.tsx (19 tests) 1260ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (15 tests) 1002ms
+ ✓ src/components/error/AppErrorModal.test.tsx (14 tests) 2221ms
+   ✓ AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary (14)
+     ✓ AppErrorModal (7)
+       ✓ resets copied state after 2 seconds 2023ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (42 tests) 4313ms
+   ✓ PersonalSettingsPage (42)
+     ✓ regenerates recovery codes and displays modal 2081ms
+
+ Test Files  5 passed (5)
+      Tests  107 passed (107)
+   Start at  12:22:57
+   Duration  5.66s (tests 61%, environment 25%, import 8%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.56 |    96.15 |     100 |   99.77 |                   
+ components/error  |     100 |    97.91 |     100 |     100 |                   
+  ...rrorModal.tsx |     100 |    97.91 |     100 |     100 | 65                
+ features/settings |   99.49 |    95.86 |     100 |   99.73 |                   
+  ...essStudio.tsx |   99.32 |    95.04 |     100 |   99.29 | 227               
+  ...tingsPage.tsx |   99.55 |    96.36 |     100 |     100 | ...83,249,263,290 
+  ...ettingsApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -181,7 +181,20 @@ describe('personalSettingsApi', () => {
   });
 
   it('fetchExternalIdentities returns identities on success and empty array on error', async () => {
-    const mockData = { identities: [{ id: 'i-1', card_slug: 'github', provider_type: 'oauth', subject_id: 'sub-1', created_at: '2026-01-01' }] };
+    const mockData = {
+      identities: [
+        {
+          id: 'i-1',
+          card_slug: 'github',
+          card_display_name: 'GitHub Enterprise',
+          provider_kind: 'oauth2',
+          subject_email_at_link: 'user@example.com',
+          immutable_subject_id: 'sub-1',
+          created_at: '2026-01-01T00:00:00Z',
+          last_login_at: '2026-01-01T12:00:00Z',
+        },
+      ],
+    };
     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockData);
 
     const res1 = await fetchExternalIdentities();

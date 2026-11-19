@@ -272,6 +272,7 @@ export function Topbar({
                 alt={user.display_name ?? 'User avatar'}
                 className="kb-avatar-img"
                 data-testid="topbar-avatar-img"
+                draggable={false}
               />
             ) : (
               <span data-testid="topbar-avatar-initial">{userInitial}</span>
@@ -295,6 +296,7 @@ export function Topbar({
                           src={user.avatar_url}
                           alt={user.display_name ?? 'User avatar'}
                           className="kb-avatar-img"
+                          draggable={false}
                         />
                       ) : (
                         <span className="kb-avatar-fallback">{userInitial}</span>

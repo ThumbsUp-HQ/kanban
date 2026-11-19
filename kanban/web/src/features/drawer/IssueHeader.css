@@ -92,3 +92,13 @@
     min-height: var(--tap-min);
   }
 }
+
+.issue-header__avatar,
+.issue-avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  clip-path: circle(50%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}

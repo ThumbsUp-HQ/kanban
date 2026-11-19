@@ -1,5 +1,15 @@
 /* Activity & Comments Styling (KB-P3-44, S7.1, S6.1, S7.2 8j/8k) */
 
+.comment-card__avatar,
+.comment-author-avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  clip-path: circle(50%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
 .activity-section {
   display: flex;
   flex-direction: column;

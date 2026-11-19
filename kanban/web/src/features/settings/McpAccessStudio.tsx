@@ -394,7 +394,7 @@ export function McpAccessStudio({
                       </code>
                     </td>
                     <td className="kb-mcp-td">{getTierBadge(k.scope_tier, k.allowed_projects)}</td>
-                    <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
+                    <td className="kb-mcp-td">{((k.surface as string | undefined) ?? '').toUpperCase()}</td>
                     <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
                       {k.expires_at ? (
                         new Date(k.expires_at).toLocaleDateString()
@@ -497,7 +497,7 @@ export function McpAccessStudio({
                     <td className="kb-mcp-td">
                       <code>{app.client_id}</code>
                     </td>
-                    <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
+                    <td className="kb-mcp-td">{((app.surface as string | undefined) ?? '').toUpperCase()}</td>
                     <td className="kb-mcp-td">
                       {new Date(app.created_at).toLocaleDateString()}
                     </td>

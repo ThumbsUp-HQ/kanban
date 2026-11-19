@@ -40,8 +40,6 @@ export function AppErrorModal({
   let stackTrace = 'No stack trace available.';
   if (error instanceof Error && error.stack) {
     stackTrace = error.stack;
-  } else if (typeof error === 'object' && error !== null) {
-    stackTrace = JSON.stringify(error, null, 2);
   } else if (typeof error === 'string') {
     stackTrace = error;
   } else if (
@@ -50,6 +48,8 @@ export function AppErrorModal({
     typeof error === 'bigint'
   ) {
     stackTrace = error.toString();
+  } else if (typeof error === 'object' && error !== null) {
+    stackTrace = JSON.stringify(error, null, 2);
   }
 
   const componentStack = errorInfo?.componentStack ?? '';
@@ -57,8 +57,7 @@ export function AppErrorModal({
     ? `${stackTrace}\n\nComponent Stack:\n${componentStack}`
     : stackTrace;
 
-  const currentUrl =
-    typeof window !== 'undefined' ? window.location.href : 'Unknown URL';
+  const currentUrl = window.location.href;
 
   const handleCopy = useCallback(async (): Promise<void> => {
     const textToCopy = `Error: ${errorMessage}\nURL: ${currentUrl}\n\nTraceback:\n${fullTrace}`;
@@ -72,20 +71,21 @@ export function AppErrorModal({
   }, [errorMessage, currentUrl, fullTrace]);
 
   const handleDismiss = useCallback((): void => {
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      if (url.searchParams.has('peek')) {
-        url.searchParams.delete('peek');
-        window.history.replaceState({}, '', url.toString());
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('peek')) {
+      url.searchParams.delete('peek');
+      window.history.replaceState({}, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
     onDismiss?.();
   }, [onDismiss]);
 
   const reportTitle = `[Bug]: Application Error: ${errorMessage.slice(0, 80)}`;
   const reportBody = `### Application Error Detected\n\n**URL:** ${currentUrl}\n**Error:** ${errorMessage}\n\n\`\`\`\n${fullTrace}\n\`\`\``;
-  const reportUrl = `https://github.com/ThumbsUp-HQ/thumbs-up-kanban/issues/new?title=${encodeURIComponent(reportTitle)}&body=${encodeURIComponent(reportBody)}`;
+  const baseUrl =
+    (import.meta.env.VITE_ISSUE_REPORT_URL as string | undefined) ??
+    'https://github.com/ThumbsUp-HQ/kanban/issues/new';
+  const reportUrl = `${baseUrl}?title=${encodeURIComponent(reportTitle)}&body=${encodeURIComponent(reportBody)}`;
 
   return (
     <div
@@ -95,7 +95,7 @@ export function AppErrorModal({
       aria-labelledby="app-error-title"
       aria-describedby="app-error-message"
     >
-      <div className="app-error-modal">
+      <div className="app-error-modal" data-testid="app-error-modal">
         <header className="app-error-modal__header">
           <span className="app-error-modal__icon" aria-hidden="true">
             🚨
@@ -219,7 +219,7 @@ export class GlobalErrorBoundary extends Component<
   override componentDidCatch(error: unknown, errorInfo: ErrorInfo): void {
     this.setState({
       error,
-      errorInfo: { componentStack: errorInfo.componentStack ?? null },
+      errorInfo: { componentStack: errorInfo.componentStack },
     });
   }
 

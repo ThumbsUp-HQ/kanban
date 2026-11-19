@@ -20,6 +20,17 @@
   flex-direction: column;
 }
 
+.board-card-avatar,
+.board-card__avatar,
+.assignee-chip-avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  clip-path: circle(50%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
 .board-canvas {
   height: 100%;
   box-sizing: border-box;
