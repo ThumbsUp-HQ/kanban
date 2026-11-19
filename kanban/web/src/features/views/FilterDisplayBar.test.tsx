@@ -370,7 +370,7 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     u1();
 
     // 2. Unmount while dynamic fetches are unresolved
-    let resolveSuggestions: ((val: unknown) => void) | undefined;
+    let resolveSuggestions: ((val: Awaited<ReturnType<typeof railApi.fetchAssigneeSuggestions>>) => void) | undefined;
     vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockImplementation(
       () => new Promise((resolve) => { resolveSuggestions = resolve; }),
     );
@@ -378,7 +378,7 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
       <FilterDisplayBar projectKey="KAN" modulesEnabled={true} />
     );
     u2();
-    resolveSuggestions?.([{ id: 'u99', handle: 'late', display_name: 'Late' }]);
+    resolveSuggestions?.([{ id: 'u99', handle: 'late', display_name: 'Late', type: 'USER' }]);
   });
 
   it('derives dynamic facets from issues collection when live facets are empty', () => {

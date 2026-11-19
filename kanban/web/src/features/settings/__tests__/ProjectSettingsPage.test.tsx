@@ -41,7 +41,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('renders project settings page tabs and switches between them', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       if (url.includes('/api/v1/projects/KAN/members')) {
         return [
           {
@@ -120,7 +120,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
@@ -191,7 +191,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -286,7 +286,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('handles 2-stage project deletion with blast radius confirmation and cancellation', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -387,7 +387,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('handles PATCH error and null auto_archive_days when saving general settings', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
       if (url.includes('/api/v1/projects/KAN/members')) {
         return [];
@@ -426,7 +426,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('handles empty input, add member error, and remove member error on members tab', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
       if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
         return [
@@ -493,7 +493,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     let stage = 1;
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
       if (
         (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
@@ -553,7 +553,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
       if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
         return [
@@ -792,7 +792,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('handles permanent purge flow for server admin with custom reason and string blast summary', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -900,7 +900,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
@@ -1024,7 +1024,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/projects/KAN/priorities') && m === 'GET') {
@@ -1110,7 +1110,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/projects/KAN/labels') && m === 'GET') {
@@ -1183,7 +1183,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('supports searchable principal picker autocomplete and selection', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/admin/principals') && m === 'GET') {
@@ -1253,7 +1253,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/projects/KAN/modules') && m === 'GET') {
@@ -1384,7 +1384,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (url.includes('/api/v1/projects/KAN/trash-items') && m === 'GET') {
@@ -1464,7 +1464,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('handles error states on workflow states, priorities, labels, and trash restore', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -1619,7 +1619,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     let callCount = 0;
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -1680,7 +1680,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('covers all remaining corner cases, null fallbacks, and boundary conditions', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -1853,7 +1853,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('covers fallback error messages when error object has no message property', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       const m = method.toUpperCase();
 
       if (
@@ -1994,7 +1994,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   it('handles principal list response wrapped in items object and filters autocomplete', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
-      const url = path;
+      const url: string = path;
       if (url.includes('/api/v1/admin/principals')) {
         return {
           items: [

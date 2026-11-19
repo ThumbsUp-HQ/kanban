@@ -244,8 +244,8 @@ describe('routesDeepCoverage', () => {
             id: 'c-9',
             name: body.name ?? '',
             status: 'upcoming',
-            start_date: body.start_date ?? null,
-            end_date: body.end_date ?? null,
+            start_date: body.start_date ?? '2026-06-01',
+            end_date: body.end_date ?? '2026-06-30',
           };
           cycleItems.push(newCycle);
           return Promise.resolve(jsonResponse(newCycle, 201));
@@ -388,8 +388,8 @@ describe('routesDeepCoverage', () => {
             id: 'm-2',
             name: body.name ?? '',
             status: body.status ?? 'planned',
-            start_date: body.start_date ?? null,
-            target_date: body.target_date ?? null,
+            start_date: body.start_date ?? '2026-06-01',
+            target_date: body.target_date ?? '2026-06-30',
             description_markdown: body.description_markdown ?? '',
           };
           moduleItems.push(newMod);
