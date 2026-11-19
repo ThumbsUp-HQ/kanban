@@ -316,11 +316,13 @@ describe('TableView', () => {
       },
     ];
 
+    localStorage.clear();
     render(
       <TableView
         issues={issuesWithFallbacks}
-        projectKey="KAN"
+        projectKey="FALLBACK_CYCLE"
         modulesEnabled={true}
+        capabilities={['VIEWER']}
       />,
     );
 
@@ -352,7 +354,7 @@ describe('TableView', () => {
     expect(screen.getByText(/📦 Authentication Engine/)).toBeDefined();
   });
 
-  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', async () => {
+  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', () => {
     const onUpdateIssue = vi.fn();
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
@@ -391,7 +393,7 @@ describe('TableView', () => {
     const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-99' });
     fireEvent.change(stateSelect, { target: { value: 'In Progress' } });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
-      state: expect.objectContaining({ name: 'In Progress', group: 'started' }),
+      state: expect.objectContaining({ name: 'In Progress', group: 'started' }) as unknown as Record<string, unknown>,
     }));
     expect(dispatchSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
 
@@ -399,7 +401,7 @@ describe('TableView', () => {
     const prioSelect = screen.getByRole('combobox', { name: 'Edit priority for KAN-99' });
     fireEvent.change(prioSelect, { target: { value: 'urgent' } });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
-      priority: expect.objectContaining({ slug: 'urgent', label: 'Urgent' }),
+      priority: expect.objectContaining({ slug: 'urgent', label: 'Urgent' }) as unknown as Record<string, unknown>,
     }));
 
     // 3. Due date inline edit
@@ -438,7 +440,7 @@ describe('TableView', () => {
     const assignBtn = screen.getByRole('button', { name: 'Assign issue KAN-99' });
     fireEvent.click(assignBtn);
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
-      assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]),
+      assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]) as unknown as Record<string, unknown>[],
     }));
 
     // 7. VIEWER capability gates out inline editing
@@ -457,6 +459,5 @@ describe('TableView', () => {
     expect(screen.queryByRole('button', { name: 'Assign issue KAN-99' })).toBeNull();
 
     dispatchSpy.mockRestore();
-  });
   });
 });

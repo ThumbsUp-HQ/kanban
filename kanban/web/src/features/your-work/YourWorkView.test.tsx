@@ -118,6 +118,7 @@ describe('YourWorkView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockApiFetch.mockImplementation(async (method, path) => {
+      await Promise.resolve();
       const p = path as string;
       if (p === '/api/v1/auth/me') return mockUser;
       if (p === '/api/v1/projects') return mockProjects;
@@ -215,8 +216,8 @@ describe('YourWorkView', () => {
     expect(peekListener).toHaveBeenCalled();
     const firstCall = peekListener.mock.calls[0];
     expect(firstCall).toBeDefined();
-    const eventDetail = (firstCall![0] as CustomEvent).detail;
-    expect(eventDetail.issueKey).toBe('KAN-101');
+    const eventDetail = (firstCall?.[0] as CustomEvent<{ issueKey: string }> | undefined)?.detail;
+    expect(eventDetail?.issueKey).toBe('KAN-101');
 
     // Also clicking card directly
     fireEvent.click(screen.getByTestId('your-work-item-KAN-101'));
@@ -227,6 +228,7 @@ describe('YourWorkView', () => {
 
   it('handles empty state when no items exist in accessible projects', async () => {
     mockApiFetch.mockImplementation(async (method, path) => {
+      await Promise.resolve();
       const p = path as string;
       if (p === '/api/v1/auth/me') return mockUser;
       if (p === '/api/v1/projects') return [];

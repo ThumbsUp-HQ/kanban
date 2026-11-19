@@ -302,7 +302,7 @@ export function TimelineView({
         if (dayNum === '01') {
           const monthNum = parseInt(d.slice(5, 7), 10);
           const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          label = monthNames[monthNum]!;
+          label = monthNames[monthNum] ?? '';
         } else if (parseInt(dayNum, 10) % 7 === 1) {
           label = dayNum;
         } else {

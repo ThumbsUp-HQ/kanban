@@ -423,9 +423,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Esc Test Key' } });
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('mcp-snippet-modal')).not.toBeNull();
-    });
+    await screen.findByTestId('mcp-snippet-modal');
+    await new Promise((r) => setTimeout(r, 50));
 
     // Close via Escape key press
     act(() => {

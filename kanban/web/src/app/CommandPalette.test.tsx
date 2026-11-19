@@ -698,7 +698,7 @@ describe('CommandPalette', () => {
   });
 
   it('covers query length truncation, arrow navigation with empty options, and non-admin user', () => {
-    const { container } = renderWithProviders(
+    renderWithProviders(
       <CommandPalette
         isOpen={true}
         onClose={noop}
@@ -740,8 +740,8 @@ describe('CommandPalette', () => {
     );
 
     // Backdrop click
-    const backdrop = container.querySelector('.kb-palette-scrim')!;
-    fireEvent.click(backdrop);
+    const backdrop = container.querySelector('.kb-palette-scrim');
+    if (backdrop) fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalled();
 
     // Select commands

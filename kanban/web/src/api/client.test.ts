@@ -6,7 +6,6 @@ import {
   bootstrapCsrfToken,
   getCsrfToken,
   setCsrfToken,
-  bootstrapCsrfToken,
   apiClient,
 } from './client.ts';
 import { ApiProblem } from './problem.ts';

@@ -718,6 +718,5 @@ describe('Topbar', () => {
       fireEvent.keyDown(menu, { key: 'ArrowDown' });
       fireEvent.keyDown(menu, { key: 'ArrowUp' });
     });
-    });
   });
 });

@@ -115,8 +115,8 @@ describe('NotificationsBell & Feed Tray', () => {
     expect(peekListener).toHaveBeenCalled();
     const firstCall = peekListener.mock.calls[0];
     expect(firstCall).toBeDefined();
-    const detail = (firstCall![0] as CustomEvent).detail;
-    expect(detail.issueKey).toBe('KAN-101');
+    const evt = firstCall?.[0] as CustomEvent<{ issueKey: string }> | undefined;
+    expect(evt?.detail.issueKey).toBe('KAN-101');
 
     // Tray closes after navigation
     expect(screen.queryByTestId('notifications-tray')).toBeNull();
@@ -125,6 +125,7 @@ describe('NotificationsBell & Feed Tray', () => {
 
   it('marks individual notification as read on checkmark click', async () => {
     mockApiFetch.mockImplementation(async (method, path) => {
+      await Promise.resolve();
       if (path.includes('/read')) return {};
       return mockNotifications;
     });
@@ -144,6 +145,7 @@ describe('NotificationsBell & Feed Tray', () => {
 
   it('marks all notifications as read on Mark all read click', async () => {
     mockApiFetch.mockImplementation(async (method, path) => {
+      await Promise.resolve();
       if (path === '/api/v1/notifications/read-all') return { marked: 2 };
       return mockNotifications;
     });
@@ -206,8 +208,8 @@ describe('NotificationsBell & Feed Tray', () => {
 
   it('covers >99 unread badge, nodash key deep link, and toggle close without refetch', async () => {
     const manyUnread = Array.from({ length: 105 }, (_, i) => ({
-      id: `notif-${i}`,
-      issue: { id: `iss-${i}`, key: 'NODASHKEY', summary: `Item ${i}` },
+      id: `notif-${String(i)}`,
+      issue: { id: `iss-${String(i)}`, key: 'NODASHKEY', summary: `Item ${String(i)}` },
       event_type: 'COMMENT_MENTION',
       actor: i === 0 ? { handle: 'charlie' } : {},
       created_at: new Date().toISOString(),
@@ -226,7 +228,8 @@ describe('NotificationsBell & Feed Tray', () => {
 
     // Click item with nodash key
     const links = screen.getAllByText('NODASHKEY');
-    fireEvent.click(links[0]!);
+    const firstLink = links[0];
+    if (firstLink) fireEvent.click(firstLink);
     expect(screen.queryByTestId('notifications-tray')).toBeNull();
 
     // Reopen and click bell again to close

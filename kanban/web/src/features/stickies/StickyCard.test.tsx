@@ -516,7 +516,7 @@ describe('StickyCard', () => {
         />,
       );
 
-      const rawToggle = screen.getByRole('button', { name: 'Raw markdown source view' });
+      const rawToggle = screen.getByTestId('sticky-editor-sticky-1-raw-toggle');
       fireEvent.click(rawToggle);
       const rawTextarea = screen.getByTestId('sticky-editor-sticky-1-raw');
       fireEvent.change(rawTextarea, { target: { value: 'Changed text on blur' } });

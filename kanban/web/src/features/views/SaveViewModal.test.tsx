@@ -72,8 +72,8 @@ describe('SaveViewModal (KANBA-221)', () => {
       </QueryClientProvider>,
     );
 
-    const form = screen.getByRole('dialog').querySelector('form')!;
-    fireEvent.submit(form);
+    const form = screen.getByRole('dialog').querySelector('form');
+    if (form) fireEvent.submit(form);
 
     expect(await screen.findByRole('alert')).toBeDefined();
     expect(screen.getByRole('alert').textContent).toContain('View name is required');
@@ -105,6 +105,7 @@ describe('SaveViewModal (KANBA-221)', () => {
         'POST',
         '/api/v1/projects/KAN/views',
         {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           body: expect.objectContaining({
             name: 'My Custom Board',
             description_markdown: 'High priority bugs',
@@ -112,6 +113,7 @@ describe('SaveViewModal (KANBA-221)', () => {
             group_by: 'priority',
             sub_group_by: 'state',
             is_shared: true,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             filters: expect.objectContaining({
               state_ids: ['state-1'],
               priority_ids: ['high'],
@@ -165,7 +167,7 @@ describe('SaveViewModal (KANBA-221)', () => {
   });
 
   it('displays saving state while mutation is pending', async () => {
-    let resolvePromise: (val: unknown) => void = () => {};
+    let resolvePromise: ((val: unknown) => void) | undefined;
     vi.mocked(clientModule.apiFetch).mockReturnValue(
       new Promise((resolve) => {
         resolvePromise = resolve;
@@ -180,12 +182,13 @@ describe('SaveViewModal (KANBA-221)', () => {
     fireEvent.change(screen.getByTestId('save-view-name-input'), {
       target: { value: 'My View' },
     });
-    fireEvent.submit(screen.getByRole('dialog').querySelector('form')!);
+    const form = screen.getByRole('dialog').querySelector('form');
+    if (form) fireEvent.submit(form);
 
     await waitFor(() => {
       expect(screen.getByTestId('save-view-submit-btn').textContent).toBe('Saving...');
     });
-    resolvePromise({ id: 'v-new' });
+    resolvePromise?.({ id: 'v-new' });
     await waitFor(() => {
       expect(defaultProps.onSaved).toHaveBeenCalled();
     });

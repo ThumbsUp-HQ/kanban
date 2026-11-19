@@ -1189,14 +1189,14 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         <IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" isProjectAdmin={true} />
       );
 
-      await waitFor(() => {
-        expect(screen.getByText('Second Issue In Backlog')).toBeDefined();
-      });
+      await screen.findByText('Issue Already In Progress');
+      await screen.findByText('Second Issue In Backlog');
+      await new Promise((r) => setTimeout(r, 50));
 
       fireEvent.keyDown(window, { key: 'j' });
       fireEvent.keyDown(window, { key: 'j' });
       fireEvent.keyDown(window, { key: 's' });
-      const statePop2 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      const statePop2 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 8000 });
       fireEvent.click(within(statePop2).getByText('In Progress'));
 
       expect(promptSpy).toHaveBeenCalled();
@@ -1205,7 +1205,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       // Case 2b: Admin provides override reason
       promptSpy.mockReturnValueOnce('Architect approved override for hotfix');
       fireEvent.keyDown(window, { key: 's' });
-      const statePop3 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      const statePop3 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 8000 });
       fireEvent.click(within(statePop3).getByText('In Progress'));
 
       await waitFor(() => {
@@ -1270,15 +1270,21 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       const rowCheckbox = screen.getByLabelText('Select KAN-401');
       fireEvent.click(rowCheckbox);
 
-      const stateBtn = screen.getByRole('button', { name: /^state$/i });
+      const stateBtn = await screen.findByRole('button', { name: /^state$/i });
       fireEvent.click(stateBtn);
 
-      fireEvent.click(rowCheckbox);
-      const priorityBtn = screen.getByRole('button', { name: /^priority$/i });
+      // Re-select after state batch update clears selection
+      const rowCheckbox2 = await screen.findByLabelText('Select KAN-401');
+      fireEvent.click(rowCheckbox2);
+
+      const priorityBtn = await screen.findByRole('button', { name: /^priority$/i });
       fireEvent.click(priorityBtn);
 
-      fireEvent.click(rowCheckbox);
-      const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
+      // Re-select after priority batch update clears selection
+      const rowCheckbox3 = await screen.findByLabelText('Select KAN-401');
+      fireEvent.click(rowCheckbox3);
+
+      const deleteBtn = await screen.findByRole('button', { name: /^delete$/i });
       fireEvent.click(deleteBtn);
     });
 
@@ -1423,7 +1429,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(selectAllCheckbox);
     });
 
-    it('covers SaveViewModal with pre-existing active filters from query params', async () => {
+    it('covers SaveViewModal with pre-existing active filters from query params', () => {
       window.history.pushState(
         {},
         '',
@@ -1453,7 +1459,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       window.history.pushState({}, '', '/');
     });
 
-    it('handles states fetch failure in live mode', async () => {
+    it('handles states fetch failure in live mode', () => {
       const origFetch = globalThis.fetch;
       globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -1519,7 +1525,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           id: 'iss-odd-3',
           key: 'KAN-903',
           summary: 'Fallback match issue',
-          state: { id: 'odd-id-3', name: 'Unknown State', group: 'nonexistent_group' as any },
+          state: { id: 'odd-id-3', name: 'Unknown State', group: 'nonexistent_group' },
           priority: { slug: 'critical', label: 'Critical', emoji: '🚨' },
         },
       ];

@@ -33,7 +33,7 @@ export interface NotificationItem {
   read?: boolean | undefined;
 }
 
-export function formatEventBadge(eventType?: string | null | undefined): { label: string; className: string } {
+export function formatEventBadge(eventType?: string | null  ): { label: string; className: string } {
   const t = (eventType ?? '').toUpperCase();
   if (t.includes('MENTION')) {
     return { label: '@mention', className: 'notif-badge--mention' };
@@ -141,7 +141,7 @@ export function NotificationsBell(): JSX.Element {
 
   const handleDeepLink = (issueKey: string): void => {
     setIsOpen(false);
-    const pKey = issueKey.includes('-') ? issueKey.split('-')[0] : 'KAN';
+    const pKey = issueKey.includes('-') ? (issueKey.split('-')[0] ?? 'KAN') : 'KAN';
     void navigate(`/projects/${pKey}/issues?peek=${encodeURIComponent(issueKey)}`);
     window.dispatchEvent(
       new CustomEvent('kb:open-issue-peek', {

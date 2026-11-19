@@ -639,7 +639,6 @@ function IssueSurfaceContent({
                     } catch {
                       // Stay in conflict state if overwrite fails
                     }
-                    }
                   })();
                 }}
               >

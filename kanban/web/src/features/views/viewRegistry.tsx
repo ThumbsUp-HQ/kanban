@@ -886,7 +886,7 @@ export function IssuesWorkspaceRoute({
         groupBy={groupBy}
         subGroupBy={subGroupBy}
         activeFilters={activeFilters}
-        onSaved={(_savedId) => {
+        onSaved={() => {
           setIsSaveViewModalOpen(false);
         }}
       />

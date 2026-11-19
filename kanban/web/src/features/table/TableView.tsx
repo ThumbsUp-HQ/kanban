@@ -349,9 +349,10 @@ export function TableView({
               {activeColumns
                 .filter((id) => id !== 'key')
                 .map((colId) => {
-                  const def = colDefMap.get(colId)!;
+                  const def = colDefMap.get(colId);
+                  if (!def) return null;
                   const label = def.label;
-                  const isSortable = def?.sortable;
+                  const isSortable = def.sortable;
                   const isCurrentSort = sortField === colId;
                   let ariaSort: 'none' | 'ascending' | 'descending' = 'none';
                   if (isCurrentSort) {

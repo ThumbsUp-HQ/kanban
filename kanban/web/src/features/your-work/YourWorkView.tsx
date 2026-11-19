@@ -98,7 +98,7 @@ export function YourWorkViewInner(): JSX.Element {
       if (n.issue?.key) {
         keys.add(n.issue.key);
       } else if (n.link) {
-        const match = n.link.match(/peek=([A-Z0-9_-]+)/i);
+        const match = /peek=([A-Z0-9_-]+)/i.exec(n.link);
         if (match?.[1]) {
           keys.add(match[1]);
         }
@@ -154,10 +154,10 @@ export function YourWorkViewInner(): JSX.Element {
         };
         if (userId && (a.id === userId || a.principal?.id === userId)) return true;
         if (userHandle) {
-          const rawHandle = a.principal?.handle || a.free_text;
-          if (rawHandle && rawHandle.toLowerCase().replace(/^@+/, '') === userHandle) return true;
+          const rawHandle = a.principal?.handle ?? a.free_text;
+          if (rawHandle?.toLowerCase().replace(/^@+/, '') === userHandle) return true;
         }
-        if (userEmail && a.principal?.email && a.principal.email.toLowerCase() === userEmail) return true;
+        if (userEmail && a.principal?.email?.toLowerCase() === userEmail) return true;
         return false;
       });
       if (isAssigned) {
@@ -322,14 +322,14 @@ export function YourWorkViewInner(): JSX.Element {
               const priority = (issue as Partial<IssueItem>).priority;
               const state = (issue as Partial<IssueItem>).state;
               let priorityKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' = 'priorityMedium';
-              const pSlug = priority?.slug?.toLowerCase() ?? '';
+              const pSlug = priority?.slug ? priority.slug.toLowerCase() : '';
               if (pSlug === 'urgent') priorityKind = 'priorityUrgent';
               else if (pSlug === 'high') priorityKind = 'priorityHigh';
               else if (pSlug === 'low') priorityKind = 'priorityLow';
 
               const projectKey =
                 (issue as { project_key?: string }).project_key ??
-                (issue.key.includes('-') ? issue.key.split('-')[0] : 'KAN');
+                (issue.key.includes('-') ? (issue.key.split('-')[0] ?? 'KAN') : 'KAN');
 
               return (
                 <article
@@ -359,7 +359,7 @@ export function YourWorkViewInner(): JSX.Element {
                       <span className="your-work-priority-cell">
                         <EmojiHint kind={priorityKind} />
                         <span className="your-work-priority-label">
-                          {priority.label ?? priority.slug}
+                          {(priority as { label?: string | null }).label ?? priority.slug}
                         </span>
                       </span>
                     )}
