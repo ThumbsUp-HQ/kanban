@@ -205,6 +205,14 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     ).toBe('Server error (Request ID: req-abc-123). Please contact your administrator.');
 
     expect(
+      formatAuthError(new ApiProblem(500, { code: 'INTERNAL_ERROR', requestId: 'req-camel-123' })).message,
+    ).toBe('Server error (Request ID: req-camel-123). Please contact your administrator.');
+
+    expect(
+      formatAuthError(new ApiProblem(429, { code: 'RATE_LIMITED', retryAfter: 45 })).retryAfterSeconds,
+    ).toBe(45);
+
+    expect(
       formatAuthError(new ApiProblem(500, { code: 'CUSTOM_GATE_REJECTED' })).message,
     ).toBe('Server error. Please contact your administrator.');
 
@@ -225,5 +233,30 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     expect(parseRetryAfter(0)).toBe(1);
     expect(parseRetryAfter(5000)).toBe(3600);
     expect(parseRetryAfter(45.6)).toBe(45);
+  });
+
+  it('covers submitLocalAdminLogin MFA fallback branches', async () => {
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+      status: 'mfa_required',
+      session_id: 'sess-ch-1',
+    });
+    const resMfa = await submitLocalAdminLogin({ username: 'admin', password: 'pwd' });
+    expect(resMfa.status).toBe('mfa_required');
+    if (resMfa.status === 'mfa_required') {
+      expect(resMfa.challenge_id).toBe('sess-ch-1');
+      expect(resMfa.methods).toEqual(['totp', 'webauthn', 'recovery']);
+    }
+
+    // when result.mfa_pending is true
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+      mfa_pending: true,
+      session_id: 'sess-ch-2',
+    });
+    const resPending = await submitLocalAdminLogin({ username: 'admin', password: 'pwd' });
+    expect(resPending.status).toBe('mfa_required');
+    if (resPending.status === 'mfa_required') {
+      expect(resPending.challenge_id).toBe('sess-ch-2');
+      expect(resPending.methods).toEqual(['totp', 'webauthn', 'recovery']);
+    }
   });
 });

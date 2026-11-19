@@ -820,4 +820,79 @@ describe('Sidebar', () => {
       });
     }
   });
+
+  it('covers no-projects empty state, custom events, and project expand toggle', async () => {
+    let mockProjects: Array<{ identifier: string; name: string; modules_enabled?: boolean }> = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/v1/workspaces') && !url.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify([{ id: 'ws-out', name: 'Outside WS' }]), { status: 200 }));
+      }
+      if (url.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'csrf-outside' }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(new Response(JSON.stringify(mockProjects), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="" projectName="" modulesEnabled={false} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar-no-projects')).toBeDefined();
+    });
+
+    // Test workspace switch
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    fireEvent.click(switcherBtn);
+    const menuItems = screen.getAllByRole('menuitem');
+    const firstWs = menuItems[0];
+    if (firstWs) {
+      act(() => {
+        fireEvent.click(firstWs);
+      });
+    }
+
+    // 2. Dispatch custom events
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
+    });
+    expect(screen.getByTestId('create-project-modal')).toBeDefined();
+
+    mockProjects = [{ identifier: 'EVT-PRJ', name: 'Event Project', modules_enabled: false }];
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:project-created', {
+          detail: { identifier: 'EVT-PRJ', name: 'Event Project', modules_enabled: false },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Event Project')).toBeDefined();
+    });
+
+    // 3. Toggle expand / collapse project
+    const expandBtn = await screen.findByRole('button', { name: 'Project: Event Project' });
+    expect(expandBtn.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(expandBtn);
+    expect(expandBtn.getAttribute('aria-expanded')).toBe('false');
+
+    // 4. Dispatch kb:workspace-created event
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:workspace-created', {
+          detail: { id: 'ws-new-created', name: 'New Created Workspace' },
+        }),
+      );
+    });
+
+    unmount();
+  });
+  });
 });

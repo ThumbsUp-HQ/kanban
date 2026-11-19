@@ -340,6 +340,10 @@ describe('ListView', () => {
         summary: 'Custom priority item',
         state: { id: 's-in-prog', name: 'In Progress', group: 'started' },
         priority: { slug: 'custom_tier', label: 'Custom Tier', emoji: '✨' },
+        cycle: { id: 'c-1', name: 'Sprint Alpha' },
+        cycle_id: 'c-1',
+        modules: [{ id: 'm-1', name: 'Auth & Permissions' }],
+        module_ids: ['m-1'],
       },
       {
         ...FIXTURE_12_ISSUES[0],
@@ -415,6 +419,17 @@ describe('ListView', () => {
     // 5. Outside click closes the popover
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
+
+    // 6. Group by "cycle" and "module"
+    const filterBtn2 = screen.getByRole('button', { name: 'Filter & Group' });
+    fireEvent.click(filterBtn2);
+    const popover2 = screen.getByRole('dialog', { name: 'Filter and Group options' });
+    const groupSelect2 = within(popover2).getByLabelText(/Group By/i);
+    fireEvent.change(groupSelect2, { target: { value: 'cycle' } });
+    expect(screen.getByText('Sprint Alpha')).toBeDefined();
+
+    fireEvent.change(groupSelect2, { target: { value: 'module' } });
+    expect(screen.getByText('Auth & Permissions')).toBeDefined();
   });
 
   it('groups by cycle and module with real summaries and fallback labels', () => {

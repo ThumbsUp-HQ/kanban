@@ -529,5 +529,109 @@ describe('PropertiesRail', () => {
       />
     );
   });
+
+  it('handles patch and module update rejections gracefully and updates etag when returned', async () => {
+    vi.mocked(railApi.patchIssue).mockRejectedValueOnce(new Error('Network failure'));
+    vi.mocked(railApi.updateIssueModules).mockRejectedValueOnce(new Error('Module link failure'));
+
+    render(<PropertiesRail issue={mockIssue} />);
+
+    // Trigger state change failure
+    const stateSelect = screen.getByLabelText<HTMLSelectElement>('State');
+    fireEvent.change(stateSelect, { target: { value: 's-done' } });
+
+    // Trigger module update failure
+    const moduleSelect = screen.getByLabelText('Modules');
+    fireEvent.change(moduleSelect, { target: { value: 'mod-1' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalled();
+      expect(railApi.updateIssueModules).toHaveBeenCalled();
+    });
+
+    // Now test etag return
+    vi.mocked(railApi.patchIssue).mockResolvedValue({
+      key: 'KAN-142',
+      etag: '"etag-refreshed-999"',
+    } as unknown as IssueDetail);
+
+    // Update cycle
+    const cycleSelect = screen.getByLabelText<HTMLSelectElement>('Cycle');
+    fireEvent.change(cycleSelect, { target: { value: 'cyc-1' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-142',
+        { cycle_id: 'cyc-1' },
+        expect.any(String),
+      );
+    });
+
+    // Update dates with etag update
+    const startInput = screen.getByLabelText('Start date');
+    fireEvent.change(startInput, { target: { value: '2026-11-15' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-142',
+        expect.objectContaining({ start_date: '2026-11-15' }),
+        expect.any(String),
+      );
+    });
+  });
+
+  it('clears parent when clear button is clicked', async () => {
+    render(<PropertiesRail issue={mockIssue} />);
+
+    // Click Clear parent button
+    const clearParentBtn = screen.getByRole('button', { name: 'Clear' });
+    fireEvent.click(clearParentBtn);
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-142',
+        { parent: null },
+        '"etag-142"',
+      );
+    });
+  });
+
+  it('handles initialIssue prop change and projectKey resolution edge cases', async () => {
+    const handleUpdate = vi.fn();
+    const { rerender } = render(
+      <PropertiesRail issue={mockIssue} onIssueUpdate={handleUpdate} />
+    );
+
+    // Rerender with new initialIssue (exercises lines 44-47)
+    const updatedIssue = { ...mockIssue, summary: 'Updated Summary Title' };
+    rerender(
+      <PropertiesRail issue={updatedIssue} onIssueUpdate={handleUpdate} />
+    );
+
+    // Test projectKey resolution fallbacks
+    // 1. project_key is undefined, key has hyphen -> resolves to 'FALLBACK'
+    const noProjectKeyIssue = {
+      ...mockIssue,
+      key: 'FALLBACK-55',
+      project_key: undefined,
+    } as unknown as IssueDetail;
+    const { unmount: unmount1 } = render(<PropertiesRail issue={noProjectKeyIssue} />);
+    unmount1();
+
+    // 2. project_key is 'undefined', key has no hyphen -> resolves to '' and triggers loadAux early return
+    const undefinedProjectKeyIssue = {
+      ...mockIssue,
+      key: 'NOHYPHEN',
+      project_key: 'undefined',
+    } as unknown as IssueDetail;
+    const { unmount: unmount2 } = render(<PropertiesRail issue={undefinedProjectKeyIssue} />);
+    unmount2();
+
+    // 3. Empty return from fetchProjectPriorities, fetchProjectLabels, fetchProjectCycles
+    vi.mocked(railApi.fetchProjectPriorities).mockResolvedValueOnce([]);
+    vi.mocked(railApi.fetchProjectLabels).mockResolvedValueOnce([]);
+    vi.mocked(railApi.fetchProjectCycles).mockResolvedValueOnce([]);
+    const { unmount: unmount3 } = render(<PropertiesRail issue={mockIssue} />);
+    unmount3();
   });
 });

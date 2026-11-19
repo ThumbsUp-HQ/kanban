@@ -6,6 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   createSafeSvgBlobUrl,
   MAX_CLIENT_SVG_BYTES,
+  toTrustedScriptUrl,
   _resetPolicyForTesting,
 } from './safeSvg';
 
@@ -369,6 +370,27 @@ describe('safeSvg Sanitizer & DAG Guard', () => {
 
       const resFallback = createSafeSvgBlobUrl('<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>');
       expect(resFallback.ok).toBe(true);
+
+      // Test toTrustedScriptUrl with URL and string under policy and fallback
+      expect(toTrustedScriptUrl('https://example.com/lib.js')).toBe('https://example.com/lib.js');
+      expect(toTrustedScriptUrl(new URL('https://example.com/lib.js'))).toBe('https://example.com/lib.js');
+    } finally {
+      (window as unknown as { trustedTypes: unknown }).trustedTypes = originalTrustedTypes;
+      _resetPolicyForTesting();
+    }
+
+    // Now test with policy that supports createScriptURL
+    const policyWithScriptUrl = {
+      createPolicy: vi.fn((_name: string, rules: { createHTML: (s: string) => string; createScriptURL: (u: string) => string }) => ({
+        createHTML: rules.createHTML,
+        createScriptURL: (u: string) => `trusted-url-${u}`,
+      })),
+    };
+    (window as unknown as { trustedTypes: unknown }).trustedTypes = policyWithScriptUrl;
+    _resetPolicyForTesting();
+    try {
+      expect(toTrustedScriptUrl('https://example.com/script.js')).toBe('trusted-url-https://example.com/script.js');
+      expect(toTrustedScriptUrl(new URL('https://example.com/worker.js'))).toBe('trusted-url-https://example.com/worker.js');
     } finally {
       (window as unknown as { trustedTypes: unknown }).trustedTypes = originalTrustedTypes;
       _resetPolicyForTesting();

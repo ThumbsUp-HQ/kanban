@@ -760,6 +760,25 @@ describe('IssueSurface', () => {
       } as unknown as IssueDetail, 'KAN');
       expect(normalized3.project_key).toBe('KAN');
       expect(normalized3.label_ids).toEqual(['lbl-1']);
+
+      // Candidate already fully shaped with project_key, object_id, and etag
+      const completeCandidate = {
+        key: 'KAN-99',
+        project_key: 'KAN',
+        object_id: 'obj-99',
+        etag: '"etag-99"',
+        summary: 'Full candidate',
+      };
+      expect(normalizeIssueDetail(completeCandidate as never, null)).toBe(completeCandidate);
+
+      // candidate with object labels and fallbackProjectKey
+      const normalizedWithObjLabels = normalizeIssueDetail({
+        key: 'PLAIN',
+        summary: 'Plain',
+        labels: [{ id: 'lbl-uuid-1', name: 'Bug' }],
+      } as never, 'FALLBACK_PRJ');
+      expect(normalizedWithObjLabels.project_key).toBe('FALLBACK_PRJ');
+      expect(normalizedWithObjLabels.label_ids).toEqual(['lbl-uuid-1']);
     });
 
     it('covers handleClose focusing fallback card in DOM, project metadata fallbacks', async () => {
@@ -1156,6 +1175,39 @@ describe('IssueSurface', () => {
 
       unmount();
       openerBtn.remove();
+    });
+
+    it('covers focus restoration fallbacks and localStorage error branch', async () => {
+      // 1. localStorage throwing in useState initializer
+      const originalGetItem = localStorage.getItem;
+      localStorage.getItem = vi.fn().mockImplementation(() => {
+        throw new Error('SecurityError: LocalStorage denied');
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <div id="main-content">
+              <main id="kb-main" tabIndex={-1}>Main Content</main>
+              <div id="kb-issue-surface-host">
+                <IssueSurface />
+              </div>
+            </div>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+      });
+
+      // Close drawer when opener is NOT in document: exercises focus fallback to #kb-main
+      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
+      fireEvent.click(closeBtn);
+
+      unmount();
+      localStorage.getItem = originalGetItem;
     });
   });
 });

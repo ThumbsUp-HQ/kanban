@@ -1685,6 +1685,118 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       await waitFor(() => {
         expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('FAILED: Network offline');
       });
+
+      // Handshake with check_summary undefined (fallbacks)
+      mockTestHandshake.mockResolvedValueOnce({
+        last_health_status: 'HEALTHY',
+      });
+      fireEvent.click(testBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('Handshake healthy');
+      });
+
+      mockTestHandshake.mockResolvedValueOnce({
+        last_health_status: 'FAILED',
+      });
+      fireEvent.click(testBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('Handshake probe failed');
+      });
+    });
+
+    it('covers access mode restricted, google json error, and unchecking secret', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const restrictedCard: AdminAuthCard = {
+        ...existingOidcCard,
+        public_config: {
+          access_mode: 'group_restricted',
+          admin_allowlist: ['admin@example.com'],
+          user_allowlist: ['user@example.com'],
+        },
+      };
+
+      const { unmount } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={restrictedCard}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />,
+      );
+
+      // Check replace secret and uncheck it
+      const replaceCheckbox = screen.getByRole('checkbox', { name: /Replace Stored Secret/i });
+      fireEvent.click(replaceCheckbox);
+      const secretInput = screen.getByLabelText(/Client Secret/i);
+      fireEvent.change(secretInput, { target: { value: 'temp-secret' } });
+      fireEvent.click(replaceCheckbox); // uncheck -> sets secretInput to ''
+
+      // Google JSON paste invalid JSON
+      const jsonArea = screen.queryByLabelText(/Paste Google Client JSON/i);
+      if (jsonArea) {
+        fireEvent.change(jsonArea, { target: { value: 'invalid{json' } });
+      }
+
+      // Save
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+      unmount();
+    });
+
+    it('covers access policy defaults from allowlists and default handshake functions', async () => {
+      // 1. Initialized with admin_allowlist only
+      const adminOnlyCard: AdminAuthCard = {
+        ...existingOidcCard,
+        public_config: {
+          admin_allowlist: ['adm@corp.com'],
+        },
+      };
+      const { unmount: u1 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={adminOnlyCard}
+          onClose={vi.fn()}
+          onSave={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+      expect((screen.getByLabelText('Access Policy') as HTMLSelectElement).value).toBe('restricted');
+      expect(screen.getByLabelText(/Admin Allowlist/i)).toBeDefined();
+      u1();
+
+      // 2. Initialized with user_allowlist only
+      const userOnlyCard: AdminAuthCard = {
+        ...existingOidcCard,
+        public_config: {
+          user_allowlist: ['usr@corp.com'],
+        },
+      };
+      const { unmount: u2 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={userOnlyCard}
+          onClose={vi.fn()}
+          onSave={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+      expect((screen.getByLabelText('Access Policy') as HTMLSelectElement).value).toBe('restricted');
+      expect(screen.getByLabelText(/User Allowlist/i)).toBeDefined();
+      u2();
+
+      // 3. Test handshake with non-Error rejection
+      const mockTestHandshake = vi.fn().mockRejectedValueOnce('Network timeout string');
+      const { unmount: u3 } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn().mockResolvedValue(undefined)}
+          onTestHandshake={mockTestHandshake}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Test Handshake/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-handshake-result').textContent).toContain('Handshake test failed');
+      });
+      u3();
     });
 
     it('covers default testAuthCardHandshake and testDraftAuthCardHandshake with fallback messages', async () => {

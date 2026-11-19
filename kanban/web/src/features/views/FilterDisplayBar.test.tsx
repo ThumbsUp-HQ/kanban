@@ -380,4 +380,115 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     u2();
     resolveSuggestions!([{ id: 'u99', handle: 'late', display_name: 'Late' }]);
   });
+
+  it('derives dynamic facets from issues collection when live facets are empty', () => {
+    const handleFiltersChange = vi.fn();
+    const mockIssues = [
+      {
+        id: 'iss-1',
+        assignees: [
+          {
+            kind: 'principal' as const,
+            principal: { id: 'u1', handle: '@alice', display_name: 'Alice Cooper' },
+          },
+          {
+            kind: 'principal' as const,
+            principal: { id: 'u2', handle: 'bob', display_name: '' },
+          },
+          {
+            kind: 'agent' as const,
+            agent_id: 'bot-1',
+          },
+        ],
+        labels: [{ id: 'l1', name: 'Frontend' }],
+        cycle_id: 'cycle-1',
+        module_ids: ['mod-1', 'mod-2', 'mod-custom'],
+      },
+      {
+        id: 'iss-2',
+        assignees: [],
+        labels: [{ id: 'l2', name: 'Backend' }],
+        cycle_id: 'cycle-2',
+        module_ids: [],
+      },
+    ] as unknown as Parameters<typeof FilterDisplayBar>[0]['issues'];
+
+    render(
+      <FilterDisplayBar
+        issues={mockIssues as never}
+        modulesEnabled={true}
+        onFiltersChange={handleFiltersChange}
+      />
+    );
+
+    // Open filter facets popover
+    fireEvent.click(screen.getByRole('button', { name: /open filter facets popover/i }));
+
+    // Derived assignees
+    expect(screen.getByRole('button', { name: /Alice Cooper/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /bob/i })).toBeDefined();
+
+    // Derived labels
+    expect(screen.getByRole('button', { name: /Frontend/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Backend/i })).toBeDefined();
+
+    // Derived cycles
+    expect(screen.getByRole('button', { name: /Cycle 1/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /cycle-2/i })).toBeDefined();
+
+    // Derived modules
+    expect(screen.getByRole('button', { name: /Auth Core/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Kanban Board/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /mod-custom/i })).toBeDefined();
+
+    // Toggle a derived module
+    fireEvent.click(screen.getByRole('button', { name: /Auth Core/i }));
+    expect(handleFiltersChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        module: ['mod-1'],
+      })
+    );
+  });
+
+  it('triggers onSaveView and closes popover from Display settings', () => {
+    const handleSaveView = vi.fn();
+
+    render(
+      <FilterDisplayBar
+        modulesEnabled={true}
+        onSaveView={handleSaveView}
+      />
+    );
+
+    // Open Display popover
+    fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+    expect(screen.getByRole('dialog', { name: /display options/i })).toBeDefined();
+
+    // Click Save as view
+    fireEvent.click(screen.getByRole('button', { name: /save as view/i }));
+    expect(handleSaveView).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: /display options/i })).toBeNull();
+  });
+
+  it('handles "/" keyboard shortcut to open filter popover unless input is active', async () => {
+    render(
+      <div>
+        <input data-testid="dummy-input" />
+        <FilterDisplayBar modulesEnabled={true} />
+      </div>
+    );
+
+    // Pressing / inside input should NOT open popover
+    const input = screen.getByTestId('dummy-input');
+    input.focus();
+    fireEvent.keyDown(input, { key: '/' });
+    expect(screen.queryByRole('dialog', { name: /filter facets/i })).toBeNull();
+
+    // Pressing / outside input opens popover
+    input.blur();
+    fireEvent.keyDown(window, { key: '/' });
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /filter facets/i })).toBeDefined();
+    });
+  });
 });

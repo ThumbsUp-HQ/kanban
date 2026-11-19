@@ -45,7 +45,8 @@ export function IssueOverflowMenu({
   const stateGroup = (issue.state && typeof issue.state.group === 'string')
     ? issue.state.group.toLowerCase()
     : '';
-  const isArchiveEligible = stateGroup === 'completed' || stateGroup === 'cancelled';
+  const isArchiveEligible =
+    stateGroup === 'completed' || stateGroup === 'cancelled' || stateGroup === 'done';
   const isArchived = Boolean(issue.archived_at);
 
   // Close menu on Escape or click outside

@@ -1150,18 +1150,10 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       if (headers?.['X-CSRF-Token']) {
         csrfTokensRecorded.push(headers['X-CSRF-Token']);
       }
-
-=======
-  it('covers member role update and member removal with success and error', async () => {
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
-      const url = path;
-      const m = method.toUpperCase();
->>>>>>> 09c2fbb (feat(editor): wire rich markdown toolbar, raw toggle, paste sanitization, media uploads, and sparkle fim (KANBA-222))
       if (url.includes('/api/v1/auth/me')) {
         return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
       }
       if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
-<<<<<<< HEAD
         return Promise.resolve({ name: 'WS', slug: 'ws', trash_retention_days: 30 });
       }
       if (url.includes('/api/v1/admin/principals') && m === 'GET') {

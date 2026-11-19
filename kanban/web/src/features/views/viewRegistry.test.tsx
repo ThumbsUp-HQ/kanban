@@ -766,12 +766,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(within(statePop).getByText('Done'));
 
       // Bulk update State, Priority, and Delete in live mode
+      fireEvent.keyDown(window, { key: 'j' });
       fireEvent.keyDown(window, { key: 'x' });
       fireEvent.click(screen.getByRole('button', { name: /^state$/i }));
 
+      fireEvent.keyDown(window, { key: 'j' });
       fireEvent.keyDown(window, { key: 'x' });
       fireEvent.click(screen.getByRole('button', { name: /^priority$/i }));
 
+      fireEvent.keyDown(window, { key: 'j' });
       fireEvent.keyDown(window, { key: 'x' });
       fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
@@ -1064,6 +1067,252 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       );
       expect(screen.getByRole('table')).toBeDefined();
       unmount4();
+
+      // Admin via capabilities
+      const { unmount: unmountAdmin } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          capabilities={['ADMIN']}
+          isProjectAdmin={false}
+        />,
+      );
+      unmountAdmin();
+    });
+
+    it('enforces Hard WIP limits on state transition: blocks standard member with snapback, prompts admin for override', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+
+      const liveStatesWithLimits = [
+        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10 },
+        { id: '01931234-5678-7000-8000-000000000002', name: 'In Progress', group: 'started', sort_order: 20, wip_hard_limit: 1 },
+      ];
+      const liveIssues = [
+        {
+          id: '01931234-5678-7000-8000-000000000301',
+          key: 'KAN-301',
+          summary: 'Issue Already In Progress',
+          state: { id: '01931234-5678-7000-8000-000000000002', name: 'In Progress', group: 'started' },
+          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        },
+        {
+          id: '01931234-5678-7000-8000-000000000302',
+          key: 'KAN-302',
+          summary: 'Second Issue In Backlog',
+          state: { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
+          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        },
+      ];
+
+      let patchedPayload: Record<string, unknown> | null = null;
+      const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/states')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: liveStatesWithLimits }),
+          });
+        }
+        if (method === 'PATCH') {
+          patchedPayload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(liveIssues[1]),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: liveIssues, next_cursor: null, total: 2 }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      // 1. As Member (isProjectAdmin=false)
+      const { unmount } = render(
+        <IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" isProjectAdmin={false} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Second Issue In Backlog')).toBeDefined();
+      });
+
+      // Focus second issue (KAN-302 in Backlog)
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'j' });
+
+      // Press 's' to change state to In Progress (which has reached limit of 1)
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop1 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      fireEvent.click(within(statePop1).getByText('In Progress'));
+
+      // Member is blocked: patch was NOT called
+      expect(patchedPayload).toBeNull();
+
+      unmount();
+
+      // 2. As Admin (isProjectAdmin=true)
+      const promptSpy = vi.spyOn(window, 'prompt');
+
+      // Case 2a: Admin cancels prompt
+      promptSpy.mockReturnValueOnce(null);
+      const { unmount: unmountAdmin } = render(
+        <IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" isProjectAdmin={true} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Second Issue In Backlog')).toBeDefined();
+      });
+
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop2 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      fireEvent.click(within(statePop2).getByText('In Progress'));
+
+      expect(promptSpy).toHaveBeenCalled();
+      expect(patchedPayload).toBeNull();
+
+      // Case 2b: Admin provides override reason
+      promptSpy.mockReturnValueOnce('Architect approved override for hotfix');
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop3 = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      fireEvent.click(within(statePop3).getByText('In Progress'));
+
+      await waitFor(() => {
+        expect(patchedPayload).toEqual({
+          state_id: '01931234-5678-7000-8000-000000000002',
+          override_wip: true,
+          wip_override_reason: 'Architect approved override for hotfix',
+        });
+      });
+
+      unmountAdmin();
+    });
+
+    it('handles live mode patch failure and state fetch failure gracefully', async () => {
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/states')) {
+          return Promise.reject(new Error('State fetch error'));
+        }
+        if (method === 'PATCH' || method === 'DELETE') {
+          return Promise.reject(new Error('Operation error'));
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: [
+                {
+                  id: '01931234-5678-7000-8000-000000000401',
+                  key: 'KAN-401',
+                  summary: 'Live Error Issue',
+                  state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+                  priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+                },
+              ],
+              next_cursor: null,
+              total: 1,
+            }),
+        });
+      });
+
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Live Error Issue')).toBeDefined();
+      });
+
+      // Quick priority update (exercises patchProjectIssue catch block)
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 5000 });
+      fireEvent.click(within(prioPop).getByText('High'));
+
+      // Quick state update (exercises patchProjectIssue catch block)
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      fireEvent.click(within(statePop).getByText('Done'));
+
+      // Select issue and exercise batch update state, priority, and delete catch blocks
+      const rowCheckbox = screen.getByLabelText('Select KAN-401');
+      fireEvent.click(rowCheckbox);
+
+      const stateBtn = screen.getByRole('button', { name: /^state$/i });
+      fireEvent.click(stateBtn);
+
+      fireEvent.click(rowCheckbox);
+      const priorityBtn = screen.getByRole('button', { name: /^priority$/i });
+      fireEvent.click(priorityBtn);
+
+      fireEvent.click(rowCheckbox);
+      const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
+      fireEvent.click(deleteBtn);
+    });
+
+    it('covers board state aliases, fallback group, fallback issue state, and create empty fallbacks', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
+
+      const customProjectStates = [
+        { id: 'state-in-review', name: 'Review', group: 'started' },
+        { id: 'state-in-progress', name: 'Progress', group: 'started' },
+        { id: 'state-custom-grp', name: 'Custom Grp', group: 'nonstandard_group' as never },
+      ];
+      const customIssues = [
+        {
+          id: 'i-alien',
+          key: 'KAN-9999',
+          summary: 'Issue with Alien State',
+          state: { id: 'state-totally-unknown', name: 'Unknown State', group: 'unknown_group' },
+          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        },
+      ];
+
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.endsWith('/states')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: customProjectStates }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: customIssues, next_cursor: null, total: 1 }),
+        });
+      });
+
+      const { unmount: unmountBoard } = render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Review lane, 1 issues')).toBeDefined();
+      });
+      unmountBoard();
+
+      // Quick priority to None in List view where rows are fully rendered in JSDOM
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      const { unmount: unmountList } = render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
+      await waitFor(() => {
+        expect(screen.getByText('Issue with Alien State')).toBeDefined();
+      });
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 5000 });
+      fireEvent.click(within(prioPop).getByText('None'));
+      unmountList();
+
+      // Non-live create modal with empty fields fallback
+      const { unmount } = render(
+        <IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" initialIssues={FIXTURE_12_ISSUES} />
+      );
+      fireEvent.keyDown(window, { key: 'c' });
+      const createModal = await screen.findByRole('dialog', { name: /create work item/i }, { timeout: 5000 });
+      expect(createModal).toBeDefined();
+
+      unmount();
     });
   });
 });

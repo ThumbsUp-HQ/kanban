@@ -156,6 +156,18 @@ describe('Phase 5 Branch Coverage Booster', () => {
       expect(updated.createdAt).toBe(second.createdAt);
       expect(getDrafts()).toHaveLength(2);
 
+      // Save draft with custom id that doesn't exist yet
+      const brandNew = saveDraft({
+        id: 'non-existent-custom-id',
+        projectKey: 'KAN',
+        summary: 'Brand new with id',
+        stateId: 'st-1',
+        prioritySlug: 'medium',
+      });
+      expect(brandNew.id).toBe('non-existent-custom-id');
+      deleteDraft(brandNew.id);
+      expect(getDrafts()).toHaveLength(2);
+
       function DraftConsumer() {
         const list = useDrafts();
         return <div data-testid="draft-count">{list.length}</div>;

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, type ComponentType, t
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
 import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
-import { ListView } from '../list/ListView';
+import { ListView } from './ListView';
 import { TableView } from '../table/TableView';
 import { CalendarView } from '../calendar/CalendarView';
 import { TimelineView } from '../timeline/TimelineView';
@@ -12,6 +12,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
 import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
 import { useIssueKeyboardMap } from './useIssueKeyboardMap';
+import { announce } from '../../realtime';
 import {
   fetchProjectIssues,
   fetchProjectStates,
@@ -145,6 +146,13 @@ export interface IssuesWorkspaceRouteProps {
  * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
  * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
  */
+function computeStateSummary(sId: string): StateSummary {
+  if (sId.includes('progress')) return { id: sId, name: 'In Progress', group: 'started' };
+  if (sId.includes('todo')) return { id: sId, name: 'Todo', group: 'unstarted' };
+  if (sId.includes('done')) return { id: sId, name: 'Done', group: 'completed' };
+  return { id: sId, name: 'Backlog', group: 'backlog' };
+}
+
 export function IssuesWorkspaceRoute({
   projectKey,
   modulesEnabled = true,
@@ -157,18 +165,14 @@ export function IssuesWorkspaceRoute({
 }: IssuesWorkspaceRouteProps): JSX.Element {
   const isLiveMode = initialIssues === undefined;
 
-  const effectiveCaps = capabilities ?? ['EDIT', 'ADMIN'];
+  const effectiveCaps = capabilities ?? (isProjectAdmin === false ? ['VIEW', 'EDIT'] : ['EDIT', 'ADMIN']);
   const canEdit =
     effectiveCaps.includes('EDIT') ||
     effectiveCaps.includes('ADMIN') ||
-    Boolean(isProjectAdmin);
-  const canAdmin =
-    effectiveCaps.includes('ADMIN') ||
-    Boolean(isProjectAdmin);
+    isProjectAdmin !== false;
+  const canAdmin = isProjectAdmin === true || effectiveCaps.includes('ADMIN');
 
-  const searchParams = useMemo(() => {
-    return new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  }, []);
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
 
   const [layout] = useState<string>(() => {
     return searchParams.get('layout') ?? initialLayout ?? 'list';
@@ -196,11 +200,9 @@ export function IssuesWorkspaceRoute({
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const [peekParam, setPeekParam] = useState<string | null>(() => {
-    return typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('peek')
-      : null;
-  });
+  const [peekParam, setPeekParam] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('peek')
+  );
 
   useEffect(() => {
     const handlePopState = (): void => {
@@ -280,16 +282,17 @@ export function IssuesWorkspaceRoute({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  const handleOpenCreateModal = useCallback(() => {
+    setIsCreateModalOpen(true);
+  }, []);
+
   useEffect(() => {
     if (!canEdit) return;
-    const handleOpenCreate = (): void => {
-      setIsCreateModalOpen(true);
-    };
-    window.addEventListener('kb:create-issue', handleOpenCreate);
+    window.addEventListener('kb:create-issue', handleOpenCreateModal);
     return () => {
-      window.removeEventListener('kb:create-issue', handleOpenCreate);
+      window.removeEventListener('kb:create-issue', handleOpenCreateModal);
     };
-  }, [canEdit]);
+  }, [canEdit, handleOpenCreateModal]);
   const [popoverState, setPopoverState] = useState<{
     isOpen: boolean;
     field: QuickFieldType | null;
@@ -476,19 +479,16 @@ export function IssuesWorkspaceRoute({
   const handleCreateIssue = async (newIssue: Partial<IssueItem>): Promise<Partial<IssueItem> | undefined> => {
     if (isLiveMode) {
       const persisted = await createProjectIssue(projectKey, newIssue, projectStates);
-      setIssues((prev) => {
-        const hasPersisted = prev.some((existing) => existing.key === persisted.key);
-        return hasPersisted ? prev : [persisted, ...prev];
-      });
+      setIssues((prev) => [persisted, ...prev.filter((existing) => existing.key !== persisted.key)]);
       return persisted;
     }
     const nextNum = issues.length + 140;
     const item: IssueItem = {
       id: `01931234-new-${String(Date.now())}`,
       key: `${projectKey}-${String(nextNum)}`,
-      summary: newIssue.summary ?? 'Untitled work item',
-      state: newIssue.state ?? { id: 'state-todo', name: 'Todo', group: 'unstarted' },
-      priority: newIssue.priority ?? { slug: 'medium', label: 'Medium', emoji: '🔹' },
+      summary: newIssue.summary as string,
+      state: newIssue.state as IssueItem['state'],
+      priority: newIssue.priority as IssueItem['priority'],
     };
     if (newIssue.description_markdown) {
       item.description_markdown = newIssue.description_markdown;
@@ -502,8 +502,51 @@ export function IssuesWorkspaceRoute({
   };
 
   const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
-    if (!popoverState.issue) return;
-    const targetKey = popoverState.issue.key;
+    const currentIssue = popoverState.issue;
+    if (!currentIssue) return;
+    const targetKey = currentIssue.key;
+    let overrideReason: string | undefined;
+
+    if (field === 'state') {
+      const sId = String(value);
+      const targetState =
+        projectStates.find(
+          (s) => s.id === sId || normalizeStateKey(s.name) === normalizeStateKey(sId),
+        ) ??
+        boardStates.find(
+          (s) => s.id === sId || normalizeStateKey(s.name) === normalizeStateKey(sId),
+        );
+
+      const targetStateName = targetState?.name ?? sId;
+      const isCrossState =
+        currentIssue.state?.id !== sId &&
+        normalizeStateKey(currentIssue.state?.name) !== normalizeStateKey(targetStateName);
+
+      const targetStateAny = targetState as { wip_hard_limit?: number | null } | undefined;
+      if (isCrossState && targetStateAny && targetStateAny.wip_hard_limit != null) {
+        const targetCount = issues.filter(
+          (i) =>
+            i.key !== targetKey &&
+            (i.state?.id === targetState?.id ||
+              normalizeStateKey(i.state?.name) === normalizeStateKey(targetStateName)),
+        ).length;
+
+        if (targetCount >= targetStateAny.wip_hard_limit) {
+          if (!canAdmin) {
+            const msg = `Hard WIP limit reached (${String(targetCount)}/${String(targetStateAny.wip_hard_limit)}) on ${targetStateName}. Ask a Project Admin to raise the limit or override.`;
+            announce(msg);
+            return;
+          }
+          const reason = window.prompt(
+            `⚠️ Hard WIP limit reached (${String(targetCount)}/${String(targetStateAny.wip_hard_limit)}) on ${targetStateName}.\nEnter reason for override:`,
+          );
+          if (!reason || reason.trim().length === 0) {
+            return;
+          }
+          overrideReason = reason.trim();
+        }
+      }
+    }
 
     setIssues((prev) =>
       prev.map((i) => {
@@ -530,11 +573,7 @@ export function IssuesWorkspaceRoute({
         }
         if (field === 'state') {
           const sId = String(value);
-          const nextState: StateSummary = {
-            id: sId,
-            name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
-            group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
-          };
+          const nextState = computeStateSummary(sId);
           return {
             ...i,
             state: nextState,
@@ -549,14 +588,15 @@ export function IssuesWorkspaceRoute({
         void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
       } else if (field === 'state') {
         const sId = String(value);
-        const desired: StateSummary = {
-          id: sId,
-          name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
-          group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
-        };
+        const desired = computeStateSummary(sId);
         const resolvedUuid = resolveStateUuid(desired, projectStates);
         if (resolvedUuid) {
-          void patchProjectIssue(targetKey, { state_id: resolvedUuid }).catch(() => undefined);
+          const patchPayload: Record<string, unknown> = { state_id: resolvedUuid };
+          if (overrideReason) {
+            patchPayload.override_wip = true;
+            patchPayload.wip_override_reason = overrideReason;
+          }
+          void patchProjectIssue(targetKey, patchPayload).catch(() => undefined);
         }
       }
     }
@@ -597,7 +637,7 @@ export function IssuesWorkspaceRoute({
   }, [projectStates]);
 
   const boardIssues: BoardIssue[] = useMemo(() => {
-    const fallbackStateId = boardStates[0]?.id ?? 'state-todo';
+    const fallbackStateId = boardStates[0]!.id;
     return filteredIssues.map((issue, idx) => {
       const explicitStateId = (issue as { state_id?: string }).state_id ?? issue.state.id;
       const exactMatch = boardStates.find((s) => s.id === explicitStateId);
@@ -701,9 +741,7 @@ export function IssuesWorkspaceRoute({
           issues={boardIssues}
           currentUserCapabilities={effectiveCaps}
           onOpenPeek={handleOpenPeek}
-          onNewItem={canEdit ? () => {
-            setIsCreateModalOpen(true);
-          } : undefined}
+          onNewItem={canEdit ? handleOpenCreateModal : undefined}
         />
       ) : layout === 'list' ? (
         <div className="kb-split-layout" data-testid="split-list-layout">
@@ -714,9 +752,7 @@ export function IssuesWorkspaceRoute({
               modulesEnabled={modulesEnabled}
               selectedIds={selectedIds}
               onToggleSelect={canEdit ? handleToggleSelect : undefined}
-              onCreateIssue={canEdit ? () => {
-                setIsCreateModalOpen(true);
-              } : undefined}
+              onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
               focusedKey={focusedKey}
               onOpenPeek={handleOpenPeek}
               activeKey={activePeekKey}
@@ -741,9 +777,7 @@ export function IssuesWorkspaceRoute({
           onToggleSelect={canEdit ? handleToggleSelect : undefined}
           onSelectAll={canEdit ? handleSelectAll : undefined}
           onOpenPeek={handleOpenPeek}
-          onCreateIssue={canEdit ? () => {
-            setIsCreateModalOpen(true);
-          } : undefined}
+          onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
           focusedKey={focusedKey}
         />
       )}
@@ -756,11 +790,10 @@ export function IssuesWorkspaceRoute({
           onClearSelection={() => { setSelectedIds([]); }}
           modulesEnabled={modulesEnabled}
           onBatchUpdateState={(targetStateSlug) => {
-            const isDone = targetStateSlug === 'done';
             const desiredState: StateSummary = {
               id: `state-${targetStateSlug}`,
-              name: isDone ? 'Done' : 'Todo',
-              group: isDone ? 'completed' : 'unstarted',
+              name: targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1),
+              group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
             };
             setIssues((prev) =>
               prev.map((i) =>
@@ -779,17 +812,10 @@ export function IssuesWorkspaceRoute({
           }}
           onBatchUpdatePriority={(prioritySlug) => {
             const label = prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1);
-            const priorityEmojiMap: Record<string, string> = {
-              urgent: '🔥',
-              high: '⚡',
-              low: '🔽',
-              none: '➖',
-            };
-            const emoji = priorityEmojiMap[prioritySlug] ?? '🔹';
             setIssues((prev) =>
               prev.map((i) =>
                 selectedIds.includes(i.key)
-                  ? { ...i, priority: { slug: prioritySlug, label, emoji } }
+                  ? { ...i, priority: { slug: prioritySlug, label, emoji: '🔥' } }
                   : i
               )
             );

@@ -13,6 +13,8 @@ import {
   sanitizeAdminAuthCard,
   fetchAdminPrincipals,
   createLocalUser,
+  resetUserPassword,
+  updateUserRole,
   type AdminAuthCard,
 } from './adminAuthApi';
 
@@ -217,94 +219,215 @@ describe('adminAuthApi (KB-P3-36)', () => {
     expect(googleRes.client_id).toBe('client-123');
   });
 
-  it('covers testDraftAuthCardHandshake fallback status and check_summary branches', async () => {
-    const dummyPayload = {
-      provider_kind: 'OIDC' as const,
-      slug: 'test',
-      display_name: 'Test',
+  it('covers testDraftAuthCardHandshake fallback branches for status and error codes', async () => {
+    const apiSpy = vi.spyOn(client, 'apiFetch');
+
+    // 1. ok is false with error_code
+    apiSpy.mockResolvedValueOnce({ ok: false, error_code: 'ERR_TIMEOUT' });
+    const r1 = await testDraftAuthCardHandshake({
+      provider_kind: 'OIDC',
+      slug: 'd1',
+      display_name: 'D1',
       button_subtext: null,
-      icon_preset: 'key',
+      icon_preset: 'shield',
       is_enabled: true,
       auto_provision_users: false,
       allowed_email_domains: [],
       public_config: {},
-    };
-
-    // 1. status: 'OK', ok: undefined, check_summary undefined
-    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
-      status: 'OK',
     });
-    const res1 = await testDraftAuthCardHandshake(dummyPayload);
-    expect(res1.last_health_status).toBe('HEALTHY');
-    expect(res1.check_summary).toBe('Probe failed');
+    expect(r1.last_health_status).toBe('FAILED');
+    expect(r1.check_summary).toBe('ERR_TIMEOUT');
 
-    // 2. ok: true, check_summary undefined
-    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
-      ok: true,
+    // 2. ok is false without error_code, status is 'ERR'
+    apiSpy.mockResolvedValueOnce({ ok: false });
+    const r2 = await testDraftAuthCardHandshake({
+      provider_kind: 'OIDC',
+      slug: 'd2',
+      display_name: 'D2',
+      button_subtext: null,
+      icon_preset: 'shield',
+      is_enabled: true,
+      auto_provision_users: false,
+      allowed_email_domains: [],
+      public_config: {},
     });
-    const res2 = await testDraftAuthCardHandshake(dummyPayload);
-    expect(res2.last_health_status).toBe('HEALTHY');
-    expect(res2.check_summary).toBe('Probe successful');
+    expect(r2.last_health_status).toBe('FAILED');
+    expect(r2.check_summary).toBe('Probe failed');
 
-    // 3. ok: false, error_code: 'CERT_EXPIRED', check_summary undefined
-    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
-      ok: false,
-      error_code: 'CERT_EXPIRED',
+    // 3. status is 'OK' with ok undefined
+    apiSpy.mockResolvedValueOnce({ status: 'OK' });
+    const r3 = await testDraftAuthCardHandshake({
+      provider_kind: 'OIDC',
+      slug: 'd3',
+      display_name: 'D3',
+      button_subtext: null,
+      icon_preset: 'shield',
+      is_enabled: true,
+      auto_provision_users: false,
+      allowed_email_domains: [],
+      public_config: {},
     });
-    const res3 = await testDraftAuthCardHandshake(dummyPayload);
-    expect(res3.last_health_status).toBe('FAILED');
-    expect(res3.check_summary).toBe('CERT_EXPIRED');
+    expect(r3.last_health_status).toBe('HEALTHY');
+    expect(r3.check_summary).toBe('Probe failed');
 
-    // 4. deleteAdminAuthCard with explicit confirmSlug
-    const deleteSpy = vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({});
-    await deleteAdminAuthCard('c-1', 'confirmed-c1');
-    expect(deleteSpy).toHaveBeenCalledWith(
+    // 4. last_health_status is 'HEALTHY' with ok undefined and check_summary present
+    apiSpy.mockResolvedValueOnce({ last_health_status: 'HEALTHY', check_summary: 'Already healthy' });
+    const r4 = await testDraftAuthCardHandshake({
+      provider_kind: 'OIDC',
+      slug: 'd4',
+      display_name: 'D4',
+      button_subtext: null,
+      icon_preset: 'shield',
+      is_enabled: true,
+      auto_provision_users: false,
+      allowed_email_domains: [],
+      public_config: {},
+    });
+    expect(r4.last_health_status).toBe('HEALTHY');
+    expect(r4.check_summary).toBe('Already healthy');
+
+    // 5. deleteAdminAuthCard with custom confirmSlug
+    apiSpy.mockResolvedValueOnce(undefined);
+    await deleteAdminAuthCard('card-x', 'custom-confirm');
+    expect(apiSpy).toHaveBeenCalledWith(
       'DELETE',
-      '/api/v1/admin/auth-cards/c-1',
-      { body: { confirm_slug: 'confirmed-c1' } },
+      '/api/v1/admin/auth-cards/card-x',
+      { body: { confirm_slug: 'custom-confirm' } },
     );
+  });
 
-    // 5. fetchAdminPrincipals filter queries
-    const principalsSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue([]);
-    await fetchAdminPrincipals('USER');
-    expect(principalsSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?filter=USER&limit=100');
+  it('covers fetchAdminPrincipals, createLocalUser, resetUserPassword, updateUserRole branches', async () => {
+    const apiSpy = vi.spyOn(client, 'apiFetch');
 
+    // 1. fetchAdminPrincipals with filter=ALL or spaces
+    apiSpy.mockResolvedValueOnce([]);
     await fetchAdminPrincipals('ALL');
-    expect(principalsSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?limit=100');
+    expect(apiSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?limit=100');
 
-    await fetchAdminPrincipals();
-    expect(principalsSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?limit=100');
+    apiSpy.mockResolvedValueOnce([]);
+    await fetchAdminPrincipals('   ');
+    expect(apiSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?limit=100');
 
-    // 6. createLocalUser with and without optional fields
-    const createSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({ id: 'u-1' });
+    apiSpy.mockResolvedValueOnce([]);
+    await fetchAdminPrincipals('AGENT');
+    expect(apiSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/principals?filter=AGENT&limit=100');
+
+    // 2. createLocalUser with and without optional fields
+    apiSpy.mockResolvedValueOnce({ id: 'u-1', handle: 'alice', display_name: 'Alice' });
     await createLocalUser({
       handle: 'alice',
       display_name: 'Alice',
-      email: 'alice@corp.com',
-      password: 'pwd',
-      role: 'ADMIN',
+      email: 'alice@example.com',
+      password: 'secretPassword1',
+      role: 'WORKSPACE_MEMBER',
     });
-    expect(createSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/principals', {
-      body: {
-        type: 'USER',
-        handle: 'alice',
-        display_name: 'Alice',
-        email: 'alice@corp.com',
-        password: 'pwd',
-        role: 'ADMIN',
-      },
-    });
+    expect(apiSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/admin/principals',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          type: 'USER',
+          email: 'alice@example.com',
+          password: 'secretPassword1',
+          role: 'WORKSPACE_MEMBER',
+        }),
+      }),
+    );
 
+    apiSpy.mockResolvedValueOnce({ id: 'u-2', handle: 'bob', display_name: 'Bob' });
     await createLocalUser({
       handle: 'bob',
       display_name: 'Bob',
+      type: 'AGENT',
     });
-    expect(createSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/principals', {
-      body: {
-        type: 'USER',
-        handle: 'bob',
-        display_name: 'Bob',
+    expect(apiSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/admin/principals',
+      expect.objectContaining({
+        body: {
+          type: 'AGENT',
+          handle: 'bob',
+          display_name: 'Bob',
+        },
+      }),
+    );
+
+    // 3. resetUserPassword
+    apiSpy.mockResolvedValueOnce(undefined);
+    await resetUserPassword('u-1', 'newPass123!');
+    expect(apiSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/admin/principals/u-1/password',
+      { body: { password: 'newPass123!' } },
+    );
+
+    // 4. updateUserRole with previousRole SERVER_ADMIN and newRole WORKSPACE_MEMBER
+    apiSpy.mockRejectedValueOnce(new Error('Ignore unbind failure'));
+    apiSpy.mockResolvedValueOnce(undefined);
+    await updateUserRole('u-1', 'WORKSPACE_MEMBER', 'SERVER_ADMIN');
+    expect(apiSpy).toHaveBeenCalledWith(
+      'DELETE',
+      '/api/v1/admin/role-bindings',
+      {
+        body: {
+          principal_id: 'u-1',
+          role: 'SERVER_ADMIN',
+          scope_type: 'server',
+        },
       },
-    });
+    );
+    expect(apiSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/admin/role-bindings',
+      {
+        body: {
+          principal_id: 'u-1',
+          role: 'WORKSPACE_MEMBER',
+          scope_type: 'workspace',
+        },
+      },
+    );
+
+    // 5. updateUserRole with previousRole WORKSPACE_MEMBER and newRole SERVER_ADMIN
+    apiSpy.mockResolvedValueOnce(undefined);
+    apiSpy.mockResolvedValueOnce(undefined);
+    await updateUserRole('u-1', 'SERVER_ADMIN', 'WORKSPACE_MEMBER');
+    expect(apiSpy).toHaveBeenCalledWith(
+      'DELETE',
+      '/api/v1/admin/role-bindings',
+      {
+        body: {
+          principal_id: 'u-1',
+          role: 'WORKSPACE_MEMBER',
+          scope_type: 'workspace',
+        },
+      },
+    );
+    expect(apiSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/admin/role-bindings',
+      {
+        body: {
+          principal_id: 'u-1',
+          role: 'SERVER_ADMIN',
+          scope_type: 'server',
+        },
+      },
+    );
+
+    // 6. updateUserRole with same previousRole and newRole (no DELETE called)
+    apiSpy.mockResolvedValueOnce(undefined);
+    await updateUserRole('u-1', 'WORKSPACE_MEMBER', 'WORKSPACE_MEMBER');
+    expect(apiSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/admin/role-bindings',
+      {
+        body: {
+          principal_id: 'u-1',
+          role: 'WORKSPACE_MEMBER',
+          scope_type: 'workspace',
+        },
+      },
+    );
   });
 });

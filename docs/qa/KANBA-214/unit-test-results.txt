@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w5-proj-67abd6ad
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+collected 8 items
+
+kanban/tests/api/test_issue_delete.py ........                           [100%]
+
+============================== 8 passed in 8.52s ===============================
+
+============================= vitest unit test summary ==============================
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w5-proj-67abd6ad/kanban/web
+> vitest run --coverage
+
+Test Files  188 passed (188)
+     Tests  2254 passed (2254)
+  Duration  46.40s
+
+Coverage Summary:
+Statements   : 98.90% ( 17420/17613 )
+Branches     : 95.12% ( 12222/12849 )
+Functions    : 98.47% ( 2955/3001 )
+Lines        : 99.39% ( 16892/16995 )
+
+Touched Files Coverage:
+ProjectSettingsPage.tsx : Statements 100% | Branches 97.04% | Functions 100% | Lines 100%
+IssueOverflowMenu.tsx   : Statements 100% | Branches 96.66% | Functions 100% | Lines 100%
+viewRegistry.tsx        : Statements 99.04% | Branches 96.79% | Functions 97.61% | Lines 100%

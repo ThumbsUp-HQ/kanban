@@ -68,3 +68,27 @@ class TrashedIssueList(BaseModel):
 
     items: list[TrashedIssueItem]
     next_cursor: str | None = None
+
+
+class TrashedObjectItem(BaseModel):
+    """Unified representation of any soft-deleted entity in project trash."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: uuid.UUID
+    key: str
+    kind: str
+    title: str
+    deleted_at: datetime
+    purge_after: datetime
+    remaining_days: int
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class TrashedObjectList(BaseModel):
+    """Listing of all soft-deleted objects in project trash."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    items: list[TrashedObjectItem]
+    retention_days: int

@@ -239,5 +239,20 @@ describe('activityApi', () => {
 
       await expect(fetchAssigneeSuggestions('KAN', 'ada')).rejects.toThrow(ApiProblem);
     });
+
+    it('covers preflight fallback response with body error when mutation returns undefined', async () => {
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/csrf-preflight')) {
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            json: () => Promise.reject(new Error('Preflight json parse error')),
+          });
+        }
+        return Promise.resolve(undefined);
+      });
+
+      await expect(createComment('KAN-1', { body_markdown: 'hello' })).rejects.toThrow(ApiProblem);
+    });
   });
 });

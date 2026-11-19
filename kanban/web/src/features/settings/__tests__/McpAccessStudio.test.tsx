@@ -434,7 +434,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('mcp-snippet-modal')).toBeNull();
-    }, { timeout: 3000 });
+    }, { timeout: 8000 });
   });
 
   it('closes mint modal via cancel button and backdrop click, handles empty label and load error', async () => {

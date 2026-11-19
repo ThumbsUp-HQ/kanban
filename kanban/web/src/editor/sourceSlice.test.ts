@@ -678,6 +678,12 @@ plain code without lang
     });
     expect(bareOrderedList).not.toBeNull();
 
+    // 20. convertTopLevelNode with heading without depth or children
+    const bareHeading = convertTopLevelNode({
+      type: 'heading',
+    });
+    expect(bareHeading).not.toBeNull();
+
     // 20. convertInlines edge cases (empty text, empty inlineCode, missing children on emphasis, strong, delete, link)
     const moreInlines = convertInlines([
       { type: 'text', value: '' },

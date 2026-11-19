@@ -19,6 +19,7 @@ import {
   DraftsWorkspaceView,
   AdminRouteGuard,
   DraftsWorkspaceRouteGuard,
+  NotFoundView,
 } from './routes';
 import { saveDraft } from '../features/drafts/draftsStore';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -491,7 +492,12 @@ describe('IssuesWorkspaceRoute', () => {
     const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.spyOn(client, 'apiFetch').mockImplementation((method: string, path: string) => {
       if (method === 'GET' && path.includes('cycles')) {
-        return Promise.resolve([{ id: 'cyc-1', name: 'Sprint 1', start_date: '2026-01-01', end_date: '2026-01-14' }]);
+        return Promise.resolve([
+          { id: 'cyc-1', name: 'Sprint 1', status: 'upcoming', start_date: '2026-01-01', end_date: '2026-01-14' },
+          { id: 'cyc-2', name: 'Sprint Backlog', status: 'backlog' },
+          { id: 'cyc-3', name: 'Sprint Paused', status: 'paused' },
+          { id: 'cyc-4', name: 'Sprint Cancelled', status: 'cancelled' },
+        ]);
       }
       if (method === 'POST' && path.includes('cycles')) {
         return Promise.reject(new Error('Cycle creation rejected'));
@@ -511,14 +517,26 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-cycles-view')).toBeDefined();
       expect(screen.getByText(/2026-01-01/)).toBeDefined();
+      expect(screen.getByText('Sprint Backlog')).toBeDefined();
+      expect(screen.getByText('Sprint Paused')).toBeDefined();
+      expect(screen.getByText('Sprint Cancelled')).toBeDefined();
     });
 
     const input = screen.getByTestId('new-cycle-name-input');
     fireEvent.change(input, { target: { value: 'Sprint Fail' } });
+
+    // Test endDate < startDate validation branch
+    fireEvent.change(screen.getByTestId('new-cycle-start-input'), { target: { value: '2026-05-10' } });
+    fireEvent.change(screen.getByTestId('new-cycle-end-input'), { target: { value: '2026-05-01' } });
+    const createBtn = screen.getByTestId('create-cycle-btn');
+    fireEvent.click(createBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('cycle-error-banner').textContent).toContain('End date cannot be earlier than start date');
+    });
+
+    // Valid dates, rejected by server
     fireEvent.change(screen.getByTestId('new-cycle-start-input'), { target: { value: '2026-02-01' } });
     fireEvent.change(screen.getByTestId('new-cycle-end-input'), { target: { value: '2026-02-14' } });
-
-    const createBtn = screen.getByTestId('create-cycle-btn');
     fireEvent.click(createBtn);
 
     await waitFor(() => {
@@ -530,7 +548,11 @@ describe('IssuesWorkspaceRoute', () => {
     const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.spyOn(client, 'apiFetch').mockImplementation((method: string, path: string) => {
       if (method === 'GET' && path.includes('modules')) {
-        return Promise.resolve([{ id: 'mod-1', name: 'Core', description_markdown: 'Core architecture module' }]);
+        return Promise.resolve([
+          { id: 'mod-1', name: 'Core', status: 'planned', description_markdown: 'Core architecture module' },
+          { id: 'mod-2', name: 'Paused Mod', status: 'paused' },
+          { id: 'mod-3', name: 'Cancelled Mod', status: 'cancelled' },
+        ]);
       }
       if (method === 'POST' && path.includes('modules')) {
         return Promise.reject(new Error('Module creation rejected'));
@@ -550,13 +572,25 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-modules-view')).toBeDefined();
       expect(screen.getByText('Core architecture module')).toBeDefined();
+      expect(screen.getByText('Paused Mod')).toBeDefined();
+      expect(screen.getByText('Cancelled Mod')).toBeDefined();
     });
 
     const input = screen.getByTestId('new-module-name-input');
     fireEvent.change(input, { target: { value: 'Fail Mod' } });
-    fireEvent.change(screen.getByTestId('new-module-desc-input'), { target: { value: 'Some description' } });
 
+    // Test targetDate < startDate validation
+    fireEvent.change(screen.getByTestId('new-module-start-input'), { target: { value: '2026-06-15' } });
+    fireEvent.change(screen.getByTestId('new-module-target-input'), { target: { value: '2026-06-01' } });
     const createBtn = screen.getByTestId('create-module-btn');
+    fireEvent.click(createBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('module-error-banner').textContent).toContain('Target date cannot be earlier than start date');
+    });
+
+    fireEvent.change(screen.getByTestId('new-module-start-input'), { target: { value: '2026-06-01' } });
+    fireEvent.change(screen.getByTestId('new-module-target-input'), { target: { value: '2026-06-15' } });
+    fireEvent.change(screen.getByTestId('new-module-desc-input'), { target: { value: 'Some description' } });
     fireEvent.click(createBtn);
 
     await waitFor(() => {
@@ -1476,7 +1510,7 @@ describe('IssuesWorkspaceRoute', () => {
       const { unmount: u3 } = render(
         <QueryClientProvider client={editClient}>
           <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
-            <ProjectCyclesView capabilities={['VIEW', 'EDIT']} />
+            <ProjectCyclesView capabilities={['VIEW', 'EDIT', 'PROJECT_ADMIN']} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -1488,18 +1522,47 @@ describe('IssuesWorkspaceRoute', () => {
       fireEvent.click(screen.getByTestId('cancel-edit-cycle-btn'));
       expect(screen.queryByTestId('edit-cycle-modal')).toBeNull();
 
+      // Open edit cycle, test date order validation, and submit valid save
+      fireEvent.click(screen.getByTestId('edit-cycle-btn-c-cancel'));
+      fireEvent.change(screen.getByTestId('edit-cycle-name-input'), { target: { value: 'Sprint Edited' } });
+      fireEvent.change(screen.getByTestId('edit-cycle-start-input'), { target: { value: '2026-11-20' } });
+      fireEvent.change(screen.getByTestId('edit-cycle-end-input'), { target: { value: '2026-11-10' } });
+      fireEvent.click(screen.getByTestId('save-edit-cycle-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-cycle-error')).toBeDefined();
+      });
+
+      // Fix date order and save successfully
+      fireEvent.change(screen.getByTestId('edit-cycle-start-input'), { target: { value: '2026-11-10' } });
+      fireEvent.click(screen.getByTestId('save-edit-cycle-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('edit-cycle-modal')).toBeNull();
+      });
+
       // Open and cancel complete cycle
       fireEvent.click(screen.getByTestId('complete-cycle-btn-c-cancel'));
       expect(screen.getByTestId('complete-cycle-modal')).toBeDefined();
       fireEvent.click(screen.getByTestId('cancel-complete-cycle-btn'));
       expect(screen.queryByTestId('complete-cycle-modal')).toBeNull();
+
+      // Open complete cycle and submit complete mutation
+      fireEvent.click(screen.getByTestId('complete-cycle-btn-c-cancel'));
+      fireEvent.click(screen.getByTestId('confirm-complete-cycle-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('complete-cycle-modal')).toBeNull();
+      });
+
+      // Delete cycle
+      fireEvent.click(screen.getByTestId('delete-cycle-btn-c-cancel'));
+
       u3();
 
       // Open and cancel edit module
       const { unmount: u4 } = render(
         <QueryClientProvider client={editClient}>
           <MemoryRouter initialEntries={['/projects/KAN/modules']}>
-            <ProjectModulesView capabilities={['VIEW', 'EDIT']} />
+            <ProjectModulesView capabilities={['VIEW', 'EDIT', 'PROJECT_ADMIN']} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -1508,7 +1571,44 @@ describe('IssuesWorkspaceRoute', () => {
       expect(screen.getByTestId('edit-module-modal')).toBeDefined();
       fireEvent.click(screen.getByTestId('cancel-edit-module-btn'));
       expect(screen.queryByTestId('edit-module-modal')).toBeNull();
+
+      // Open edit module, test date order validation, and submit valid save
+      fireEvent.click(screen.getByTestId('edit-module-btn-m-cancel'));
+      fireEvent.change(screen.getByTestId('edit-module-name-input'), { target: { value: 'Module Edited' } });
+      fireEvent.change(screen.getByTestId('edit-module-start-input'), { target: { value: '2026-11-20' } });
+      fireEvent.change(screen.getByTestId('edit-module-target-input'), { target: { value: '2026-11-10' } });
+      fireEvent.click(screen.getByTestId('save-edit-module-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-module-error')).toBeDefined();
+      });
+
+      // Fix date order and save module successfully
+      fireEvent.change(screen.getByTestId('edit-module-start-input'), { target: { value: '2026-11-10' } });
+      fireEvent.click(screen.getByTestId('save-edit-module-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('edit-module-modal')).toBeNull();
+      });
+
+      // Delete module
+      fireEvent.click(screen.getByTestId('delete-module-btn-m-cancel'));
+
       u4();
+
+      // Test NotFoundView inside and outside router
+      const { unmount: uNotFound1 } = render(
+        <MemoryRouter initialEntries={['/some/unknown/path']}>
+          <NotFoundView />
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId('not-found-path')).toBeDefined();
+      fireEvent.click(screen.getByTestId('return-workspace-btn'));
+      uNotFound1();
+
+      const { unmount: uNotFound2 } = render(<NotFoundView />);
+      expect(screen.getByTestId('not-found-path')).toBeDefined();
+      fireEvent.click(screen.getByTestId('return-workspace-btn'));
+      uNotFound2();
 
       // AdminRouteGuard catch
       const adminRejectClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1554,6 +1654,7 @@ describe('IssuesWorkspaceRoute', () => {
 
       // Open Edit module and test description change + patch error
       fireEvent.click(screen.getByTestId('edit-module-btn-m-err'));
+      fireEvent.change(screen.getByTestId('edit-module-status-select'), { target: { value: 'in_progress' } });
       fireEvent.change(screen.getByTestId('edit-module-desc-input'), { target: { value: 'Edited desc' } });
       fireEvent.click(screen.getByTestId('save-edit-module-btn'));
       expect(await screen.findByTestId('edit-module-error')).toBeDefined();
@@ -1566,6 +1667,48 @@ describe('IssuesWorkspaceRoute', () => {
         expect(screen.getByTestId('module-error-banner').textContent).toContain('Delete module failed');
       });
       u5();
+
+      // 5. Cycle delete and complete errors in ProjectCyclesView
+      const errorCycleClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+        const m = method.toUpperCase();
+        const url = path;
+        if (url.includes('/cycles') && m === 'GET') {
+          return Promise.resolve([{ id: 'c-err', name: 'Cycle Err', status: 'active' }]);
+        }
+        if (url.includes('/complete') && m === 'POST') {
+          throw new Error('Cycle completion rejected');
+        }
+        if (url.includes('/cycles') && m === 'DELETE') {
+          throw new Error('Cycle delete rejected');
+        }
+        return Promise.resolve({});
+      });
+
+      const { unmount: u6 } = render(
+        <QueryClientProvider client={errorCycleClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/cycles']}>
+            <ProjectCyclesView capabilities={['VIEW', 'EDIT', 'PROJECT_ADMIN']} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('Cycle Err')).toBeDefined();
+
+      // Complete cycle error
+      fireEvent.click(screen.getByTestId('complete-cycle-btn-c-err'));
+      fireEvent.click(screen.getByTestId('confirm-complete-cycle-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('complete-cycle-error').textContent).toContain('Cycle completion rejected');
+      });
+      fireEvent.click(screen.getByTestId('cancel-complete-cycle-btn'));
+
+      // Delete cycle error
+      fireEvent.click(screen.getByTestId('delete-cycle-btn-c-err'));
+      await waitFor(() => {
+        expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Cycle delete rejected');
+      });
+      u6();
     });
   });
 });

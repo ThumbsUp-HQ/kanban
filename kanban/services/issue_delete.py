@@ -12,6 +12,7 @@ from sqlalchemy import select, text
 
 from database.models import (
     Issue,
+    ObjectKind,
     ObjectRecord,
     Project,
     ProjectPriority,
@@ -22,6 +23,8 @@ from kanban.api.v1.schemas.issue_delete import (
     IssueDeleteResponse,
     TrashedIssueItem,
     TrashedIssueList,
+    TrashedObjectItem,
+    TrashedObjectList,
 )
 from kanban.api.v1.schemas.issues import IssueResponse, PrioritySummary, StateSummary
 from kanban.security.permissions import (
@@ -47,6 +50,7 @@ __all__ = [
     "BlastRadius",
     "compute_blast_radius",
     "list_trash",
+    "list_trash_items",
     "restore_issue",
     "trash_issue",
 ]
@@ -385,3 +389,61 @@ async def restore_issue(
     resp = await serialize_issue(session, caller, issue)
     resp.note = "sub-issues remain unparented"
     return resp
+
+
+async def list_trash_items(
+    session: AsyncSession,
+    caller: PrincipalContext,
+    project_ref: str,
+    *,
+    kind: str | None = None,
+) -> TrashedObjectList:
+    """List all soft-deleted entities (issues, cycles, modules, stickies, docs, pages, project)."""
+    project = await get_project_or_404(session, caller, project_ref)
+    await require_capability(session, caller, project.id, Capability.VIEW)
+
+    retention_days = get_settings().trash_retention_days
+    now_ts = datetime.now(UTC)
+
+    stmt = (
+        select(ObjectRecord)
+        .where(
+            ObjectRecord.workspace_id == caller.workspace_id,
+            (ObjectRecord.project_id == project.id) | (ObjectRecord.id == project.id),
+            ObjectRecord.deleted_at.is_not(None),
+        )
+        .order_by(ObjectRecord.deleted_at.desc())
+        .limit(200)
+    )
+    if kind and kind.lower() != "all":
+        kind_clean = kind.lower().strip()
+        matching_kinds = [k for k in ObjectKind if k.value.lower() == kind_clean]
+        if matching_kinds:
+            stmt = stmt.where(ObjectRecord.object_type == matching_kinds[0])
+
+    rows = (await session.execute(stmt)).scalars().all()
+
+    items: list[TrashedObjectItem] = []
+    for obj in rows:
+        if obj.deleted_at is None:
+            continue
+        caps = await evaluate_capabilities(session, caller, obj.id)
+        if Capability.DELETE not in caps and Capability.ADMIN not in caps:
+            continue
+        deleted_at = obj.deleted_at
+        purge_after = deleted_at + timedelta(days=retention_days)
+        remaining_sec = (purge_after - now_ts).total_seconds()
+        remaining_days = max(0, int(remaining_sec // 86400))
+        items.append(
+            TrashedObjectItem(
+                id=obj.id,
+                key=obj.canonical_key or str(obj.id),
+                kind=obj.object_type.value.lower(),
+                title=obj.display_title or obj.canonical_key or str(obj.id),
+                deleted_at=deleted_at,
+                purge_after=purge_after,
+                remaining_days=remaining_days,
+                capabilities=capabilities_to_names(caps),
+            )
+        )
+    return TrashedObjectList(items=items, retention_days=retention_days)

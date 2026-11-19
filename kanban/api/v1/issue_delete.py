@@ -13,6 +13,7 @@ from kanban.api.v1.schemas.issue_delete import (
     BlastRadiusResponse,
     IssueDeleteResponse,
     TrashedIssueList,
+    TrashedObjectList,
 )
 from kanban.api.v1.schemas.issues import IssueResponse
 from kanban.security.permissions import Capability, require_capability
@@ -92,6 +93,25 @@ async def list_trash(
     """List soft-deleted issues in project trash where caller has DELETE capability."""
     async with timing_floor(floor_ms=25.0):
         return await svc.list_trash(session, caller, project_ref, cursor=cursor, limit=limit)
+
+
+@router.get(
+    "/projects/{project_ref}/trash-items",
+    response_model=TrashedObjectList,
+    summary="List all soft-deleted objects in project trash",
+)
+async def list_trash_items(
+    project_ref: str,
+    caller: Caller,
+    session: Session,
+    kind: Annotated[
+        str | None,
+        Query(description="Filter by kind: issue, cycle, module, sticky, doc, project, all"),
+    ] = None,
+) -> TrashedObjectList:
+    """List all soft-deleted objects in project trash with retention days."""
+    async with timing_floor(floor_ms=25.0):
+        return await svc.list_trash_items(session, caller, project_ref, kind=kind)
 
 
 @router.post(

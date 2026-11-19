@@ -535,3 +535,177 @@
   font-size: 0.95rem;
   color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
 }
+
+/* Principal Picker Autocomplete Styles */
+.kb-principal-picker {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.kb-principal-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #cbd5e1));
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+  margin-top: 4px;
+}
+
+.kb-principal-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #f1f5f9));
+  font-size: 0.875rem;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
+}
+
+.kb-principal-item:last-child {
+  border-bottom: none;
+}
+
+.kb-principal-item:hover, .kb-principal-item:focus {
+  background: var(--bg-surface-raised, #f8fafc);
+}
+
+.kb-principal-name {
+  font-weight: 600;
+}
+
+.kb-principal-handle {
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
+  font-size: 0.75rem;
+}
+
+/* Default Modules Checklist */
+.kb-default-modules-box {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+  border-radius: 6px;
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
+}
+
+.kb-modules-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Workflow States & WIP Limits */
+.kb-color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.kb-wip-pill {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--bg-secondary, #f1f5f9);
+  color: var(--text-secondary, #475569);
+}
+
+.kb-error-text {
+  color: var(--text-danger, #dc2626);
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.kb-exclusive-pill {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+/* Trash & Retention Tab */
+.kb-trash-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.kb-trash-filter-btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #cbd5e1));
+  background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.kb-trash-filter-btn:hover {
+  background: var(--bg-surface-raised, #f8fafc);
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
+}
+
+.kb-trash-filter-btn-active {
+  background: var(--brand-primary, #2563eb);
+  color: #ffffff;
+  border-color: var(--brand-primary, #2563eb);
+}
+
+.kb-retention-pill {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.kb-retention-pill-expired {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.kb-trash-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
+  font-size: 0.95rem;
+}
+
+/* Permanent Purge Button */
+.kb-btn-purge {
+  background: #991b1b;
+  color: #ffffff;
+}
+
+.kb-btn-purge:hover:not(:disabled) {
+  background: #7f1d1d;
+}
+
+.kb-danger-buttons-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+

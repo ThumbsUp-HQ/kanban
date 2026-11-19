@@ -1617,6 +1617,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce('Raw string error');
 
       render(<AuthStudioPage />);
+
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
       });
@@ -1633,6 +1634,40 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       fireEvent.click(screen.getByTestId('filter-user'));
       await waitFor(() => {
         expect(screen.getByText('Not found or no access')).toBeDefined();
+      });
+    });
+
+    it('tests handshake from inside drawer for existing card', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        return {};
+      });
+
+      const testSpy = vi.spyOn(adminAuthApi, 'testAuthCardHandshake').mockResolvedValue({
+        last_health_status: 'HEALTHY',
+        latency_ms: 22,
+        check_summary: 'Probe OK',
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      const editBtns = screen.getAllByRole('button', { name: /^Edit$/i });
+      fireEvent.click(editBtns[0]!);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-handshake-btn')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-handshake-btn'));
+
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith('c-okta');
       });
     });
   });

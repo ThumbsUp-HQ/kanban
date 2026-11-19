@@ -941,6 +941,28 @@ describe('SetupClaimPage (KB-P3-35)', () => {
       value: originalLocation,
     });
   });
+
+  it('handles totp enrollment failure in Step 2', async () => {
+    vi.spyOn(authApi, 'fetchSessionInfo').mockResolvedValueOnce({
+      authenticated: true,
+      mfa_pending: true,
+      session_id: 'sess-enr-direct',
+    });
+    vi.spyOn(authApi, 'enrollTotp').mockRejectedValueOnce(new Error('TOTP service unavailable'));
+
+    render(<SetupClaimPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Step 2 of 3')).toBeDefined();
+    });
+
+    const totpTab = screen.getByRole('tab', { name: /Authenticator App/i });
+    fireEvent.click(totpTab);
+
+    await waitFor(() => {
+      expect(screen.getByText('Sign-in is unavailable right now.')).toBeDefined();
+    });
+  });
     });
   });
 });

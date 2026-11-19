@@ -42,6 +42,8 @@ describe('ApiProblem', () => {
         { path: ['items', 0, null, true], message: 'Invalid item' },
         { path: '', message: 'blank path ignored' },
         { path: 'empty_msg', message: '' },
+        { path: 'invalid_m', message: {} },
+        { path: ['x'], message: false },
         null,
         'string entry',
         { other: 'prop' },

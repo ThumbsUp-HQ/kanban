@@ -634,3 +634,42 @@ async def test_compute_blast_radius_and_restore_error_branches(
     with pytest.raises(ProblemException) as exc_info2:
         await compute_blast_radius(api_env.seed, err_id)
     assert exc_info2.value.status == 404
+
+
+async def test_list_trash_items_endpoint(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test GET /api/v1/projects/{project_ref}/trash-items returns all soft-deleted items."""
+    admin = await make_user("tr_items_admin", workspace_role="WORKSPACE_ADMIN")
+    await make_project("TITM", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    # 1. Create an issue and soft delete it
+    r_issue = await client.post("/api/v1/projects/TITM/issues", json={"summary": "Item for Trash"})
+    assert r_issue.status_code == 201
+    issue_key = r_issue.json()["key"]
+
+    prev = (await client.get(f"/api/v1/issues/{issue_key}/delete-preview")).json()
+    del_r = await client.delete(
+        f"/api/v1/issues/{issue_key}", headers={"Kb-Blast-Hash": prev["blast_hash"]}
+    )
+    assert del_r.status_code == 200
+
+    # 2. Query trash items
+    resp = await client.get("/api/v1/projects/TITM/trash-items")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "retention_days" in data
+    assert any(item["key"] == issue_key for item in data["items"])
+
+    # 3. Query with kind filter
+    resp_filtered = await client.get("/api/v1/projects/TITM/trash-items?kind=issue")
+    assert resp_filtered.status_code == 200
+    assert any(item["key"] == issue_key for item in resp_filtered.json()["items"])
+
+    resp_other = await client.get("/api/v1/projects/TITM/trash-items?kind=cycle")
+    assert resp_other.status_code == 200
+    assert len(resp_other.json()["items"]) == 0

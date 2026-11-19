@@ -453,7 +453,7 @@ describe('StickyCard', () => {
     }
   });
 
-  it('handles promote button, confirm promote error, and access click event', () => {
+  it('handles promote button, confirm promote error, and access click event', async () => {
     vi.useRealTimers();
     try {
       const accessSpy = vi.fn();
@@ -482,12 +482,49 @@ describe('StickyCard', () => {
       // Modal should be mounted
       expect(screen.getByTestId('sticky-promote-preview-modal')).toBeDefined();
 
+      // Submit promote modal to trigger onPromote rejection (covers lines 202-203)
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-promote-btn')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('confirm-promote-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sticky-error-sticky-1')).toBeDefined();
+      });
+
       // Access badge click
       const accessBtn = screen.getByRole('button', { name: /access/i });
       fireEvent.click(accessBtn);
       expect(accessSpy).toHaveBeenCalled();
 
       window.removeEventListener('kb:open-access-inspector', accessSpy);
+    } finally {
+      vi.useFakeTimers();
+    }
+  });
+
+  it('handles body blur update rejection and sets inline error', async () => {
+    vi.useRealTimers();
+    try {
+      const onUpdateFail = vi.fn().mockRejectedValueOnce(new Error('Update failed on wire'));
+      render(
+        <StickyCard
+          sticky={baseSticky}
+          onUpdate={onUpdateFail}
+          onDelete={vi.fn()}
+          onPromote={vi.fn()}
+        />,
+      );
+
+      const rawToggle = screen.getByRole('button', { name: 'Raw markdown source view' });
+      fireEvent.click(rawToggle);
+      const rawTextarea = screen.getByTestId('sticky-editor-sticky-1-raw');
+      fireEvent.change(rawTextarea, { target: { value: 'Changed text on blur' } });
+      fireEvent.blur(rawTextarea);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sticky-error-sticky-1')).toBeDefined();
+      });
     } finally {
       vi.useFakeTimers();
     }

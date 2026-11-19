@@ -431,4 +431,113 @@ def foo(): pass
       expect(screen.getByTestId('link-issue-error').textContent).toContain('Link collision');
     });
   });
+
+  it('covers stripInlineMarkdown and computeLineDiff edge cases', () => {
+    // stripInlineMarkdown
+    expect(stripInlineMarkdown('![alt text](https://img.png)')).toBe('alt text');
+    expect(stripInlineMarkdown('[link text](https://link.com)')).toBe('link text');
+    expect(stripInlineMarkdown('![]()')).toBe('');
+    expect(stripInlineMarkdown('Plain string')).toBe('Plain string');
+
+    // computeLineDiff
+    const diffIdentical = computeLineDiff('alpha\nbeta', 'alpha\nbeta');
+    expect(diffIdentical.addedCount).toBe(0);
+    expect(diffIdentical.removedCount).toBe(0);
+
+    const diffAddOnly = computeLineDiff('alpha', 'alpha\nbeta\ngamma');
+    expect(diffAddOnly.addedCount).toBe(2);
+
+    const diffRemoveOnly = computeLineDiff('alpha\nbeta\ngamma', 'alpha');
+    expect(diffRemoveOnly.removedCount).toBe(2);
+
+    const diffReplace = computeLineDiff('alpha\nbeta', 'gamma\ndelta');
+    expect(diffReplace.addedCount).toBe(2);
+    expect(diffReplace.removedCount).toBe(2);
+
+    const diffEmpty = computeLineDiff('', '');
+    expect(diffEmpty.addedCount).toBe(0);
+
+    const diffEmptyOld = computeLineDiff('', 'alpha\nbeta');
+    expect(diffEmptyOld.addedCount).toBe(2);
+
+    const diffEmptyNew = computeLineDiff('alpha\nbeta', '');
+    expect(diffEmptyNew.removedCount).toBe(2);
+
+    const diffInterleaved = computeLineDiff('line1\nline2\nline3\nline4', 'line1\nline2_mod\nline3\nline5');
+    expect(diffInterleaved.lines.length).toBeGreaterThan(0);
+  });
+
+  it('handles non-Error rejection in link picker and empty search results', async () => {
+    vi.spyOn(docsApi, 'fetchProjectIssues').mockResolvedValue([]);
+    vi.spyOn(docsApi, 'createLink').mockRejectedValue('Generic string rejection');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OutlineAndVersionsRail
+          pageId="page-auth-studio"
+          projectKey="KAN"
+          page={mockPageData}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('open-link-issue-picker-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('link-issue-empty')).toBeDefined();
+    });
+
+    // Cancel link picker
+    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByTestId('link-issue-empty')).toBeNull();
+  });
+
+  it('handles empty versions list and version without body_sha256', async () => {
+    vi.spyOn(docsApi, 'fetchPageVersions').mockResolvedValue([]);
+
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <OutlineAndVersionsRail
+          pageId="page-auth-studio"
+          projectKey="KAN"
+          page={mockPageData}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('rail-tab-history'));
+    await waitFor(() => {
+      expect(screen.getByText('No prior versions recorded.')).toBeDefined();
+    });
+    unmount();
+
+    // Render with version having empty body_sha256
+    const versionsWithEmptyDigest: docsApi.PageVersionResponse[] = [
+      {
+        page_id: 'page-auth-studio',
+        version_seq: 1,
+        title: 'Initial',
+        body_markdown: 'Initial body',
+        body_sha256: '',
+        created_by_id: 'bob',
+        created_at: '2026-11-01T00:00:00Z',
+      },
+    ];
+    vi.spyOn(docsApi, 'fetchPageVersions').mockResolvedValue(versionsWithEmptyDigest);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OutlineAndVersionsRail
+          pageId="page-auth-studio"
+          projectKey="KAN"
+          page={mockPageData}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('rail-tab-history'));
+    await waitFor(() => {
+      expect(screen.getByText(/unknown/)).toBeDefined();
+    });
+  });
 });
