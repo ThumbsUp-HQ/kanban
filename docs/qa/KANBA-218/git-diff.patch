@@ -1,0 +1,4477 @@
+diff --git a/kanban/api/internal/mcp_introspect.py b/kanban/api/internal/mcp_introspect.py
+index 0d57820..92ccd2b 100644
+--- a/kanban/api/internal/mcp_introspect.py
++++ b/kanban/api/internal/mcp_introspect.py
+@@ -40,6 +40,7 @@ class McpIntrospectResponse(BaseModel):
+     model_config = ConfigDict(extra="ignore")
+ 
+     active: bool
++    key_id: uuid.UUID | None = None
+     principal_id: uuid.UUID | None = None
+     agent_principal_id: uuid.UUID | None = None
+     workspace_id: uuid.UUID | None = None
+@@ -136,6 +137,7 @@ async def introspect_token(
+         )
+     return McpIntrospectResponse(
+         active=result.active,
++        key_id=result.key_id,
+         principal_id=result.principal_id,
+         agent_principal_id=result.agent_principal_id,
+         workspace_id=result.workspace_id,
+diff --git a/kanban/api/v1/admin/imports.py b/kanban/api/v1/admin/imports.py
+index d3a012a..0f8263b 100644
+--- a/kanban/api/v1/admin/imports.py
++++ b/kanban/api/v1/admin/imports.py
+@@ -8,7 +8,7 @@ import logging
+ import os
+ import re
+ from pathlib import Path
+-from typing import Annotated
++from typing import Annotated, Any
+ 
+ from fastapi import APIRouter, Depends, status
+ from pydantic import BaseModel, Field
+@@ -36,10 +36,14 @@ router = APIRouter(
+ class AdminPlaneImportRequest(BaseModel):
+     """Payload requesting execution or preview of a Plane export import."""
+ 
+-    bundle_name: str = Field(
+-        ...,
++    bundle_name: str | None = Field(
++        default=None,
+         description="Name of bundle folder in imports storage (alphanumeric/dash/underscore)",
+     )
++    bundle_data: dict[str, Any] | None = Field(
++        default=None,
++        description="Direct JSON bundle payload for upload/paste import",
++    )
+     dry_run: bool = Field(
+         default=False,
+         description="Simulate import and return diff report without persisting database changes",
+@@ -164,11 +168,20 @@ async def import_plane_bundle(
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> ImportDiffReport:
+     """Import a validated Plane bundle into the workspace with sequence continuity."""
+-    bundle_dir = _resolve_bundle_path(req.bundle_name)
+-
+     client = PlaneClient()
+     try:
+-        bundle = client.load_bundle_from_dir(bundle_dir)
++        if req.bundle_data is not None:
++            bundle = client.load_bundle_from_dict(req.bundle_data)
++        elif req.bundle_name is not None:
++            bundle_dir = _resolve_bundle_path(req.bundle_name)
++            bundle = client.load_bundle_from_dir(bundle_dir)
++        else:
++            raise ProblemException(
++                code="BUNDLE_REQUIRED",
++                status=status.HTTP_422_UNPROCESSABLE_CONTENT,
++                title="Bundle Required",
++                detail="Either bundle_name or bundle_data must be provided.",
++            )
+     except PlaneClientError as exc:
+         raise ProblemException(
+             code="BUNDLE_INVALID",
+diff --git a/kanban/api/v1/admin/mcp_keys.py b/kanban/api/v1/admin/mcp_keys.py
+index d54a7e4..6b7928b 100644
+--- a/kanban/api/v1/admin/mcp_keys.py
++++ b/kanban/api/v1/admin/mcp_keys.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import contextlib
+ import uuid
+ from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
+ from typing import Annotated, Literal
+@@ -14,6 +15,7 @@ from sqlalchemy import or_, select, text
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from database.models.mcp_api_key import McpApiKey
++from database.models.projects import Project
+ from kanban.api.deps import PrincipalContext, get_rls_session
+ from kanban.api.problems import not_found
+ from kanban.auth.mfa.policy import require_admin_aal2
+@@ -226,6 +228,31 @@ async def mint_key(
+     )
+ 
+ 
++async def _resolve_admin_project_id_to_key_map(
++    session: Session,
++    project_ids: set[uuid.UUID],
++) -> dict[uuid.UUID, str]:
++    if not project_ids:
++        return {}
++    with contextlib.suppress(Exception):
++        stmt = select(Project.id, Project.identifier).where(Project.id.in_(project_ids))
++        rows = (await session.execute(stmt)).all()
++        return {row[0]: row[1] for row in rows}
++    return {}
++
++
++def _resolve_admin_key_project_list(
++    key_item: McpApiKey,
++    id_to_key: dict[uuid.UUID, str],
++) -> list[str] | None:
++    if key_item.allowed_project_ids:
++        res = [id_to_key.get(p, str(p)) for p in key_item.allowed_project_ids]
++        return res or None
++    if key_item.project_id:
++        return [id_to_key.get(key_item.project_id, str(key_item.project_id))]
++    return None
++
++
+ @router.get(
+     "/admin/mcp-keys",
+     response_model=list[McpApiKeyResponse],
+@@ -261,6 +288,15 @@ async def list_keys(
+     result = await session.execute(stmt)
+     records = result.scalars().all()
+ 
++    all_proj_ids: set[uuid.UUID] = set()
++    for k in records:
++        if k.allowed_project_ids:
++            all_proj_ids.update(k.allowed_project_ids)
++        if k.project_id:
++            all_proj_ids.add(k.project_id)
++
++    id_to_key = await _resolve_admin_project_id_to_key_map(session, all_proj_ids)
++
+     return [
+         McpApiKeyResponse(
+             id=k.id,
+@@ -281,9 +317,7 @@ async def list_keys(
+             project_id=k.project_id,
+             allowed_workspace_ids=k.allowed_workspace_ids,
+             allowed_project_ids=k.allowed_project_ids,
+-            allowed_projects=(
+-                [str(p) for p in k.allowed_project_ids] if k.allowed_project_ids else None
+-            ),
++            allowed_projects=_resolve_admin_key_project_list(k, id_to_key),
+             capability_mask=k.capability_mask,
+             allowed_tools=k.allowed_tools,
+             disabled_tools=list(k.disabled_tools or []),
+@@ -321,3 +355,8 @@ async def revoke_key(
+         key_id=key_id,
+         caller_principal_id=caller.principal_id,
+     )
++
++    with contextlib.suppress(Exception):
++        from mcp.auth import get_default_cache  # noqa: PLC0415
++
++        get_default_cache().evict_by_key_id(key_id)
+diff --git a/kanban/api/v1/auth_mcp_keys.py b/kanban/api/v1/auth_mcp_keys.py
+index c8c1dee..cc395b7 100644
+--- a/kanban/api/v1/auth_mcp_keys.py
++++ b/kanban/api/v1/auth_mcp_keys.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import contextlib
+ import uuid
+ from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
+ from typing import Annotated, Literal
+@@ -14,6 +15,7 @@ from sqlalchemy import select, text
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from database.models.mcp_api_key import McpApiKey
++from database.models.projects import Project
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import not_found
+ from kanban.security.mcp_keys import (
+@@ -219,6 +221,31 @@ async def mint_personal_key(
+     )
+ 
+ 
++async def _resolve_project_id_to_key_map(
++    session: Session,
++    project_ids: set[uuid.UUID],
++) -> dict[uuid.UUID, str]:
++    if not project_ids:
++        return {}
++    with contextlib.suppress(Exception):
++        stmt = select(Project.id, Project.identifier).where(Project.id.in_(project_ids))
++        rows = (await session.execute(stmt)).all()
++        return {row[0]: row[1] for row in rows}
++    return {}
++
++
++def _resolve_key_project_list(
++    key_item: McpApiKey,
++    id_to_key: dict[uuid.UUID, str],
++) -> list[str] | None:
++    if key_item.allowed_project_ids:
++        res = [id_to_key.get(p, str(p)) for p in key_item.allowed_project_ids]
++        return res or None
++    if key_item.project_id:
++        return [id_to_key.get(key_item.project_id, str(key_item.project_id))]
++    return None
++
++
+ @router.get(
+     "",
+     response_model=PersonalMcpKeyListResponse,
+@@ -239,6 +266,15 @@ async def list_personal_keys(
+     )
+     records = (await session.execute(stmt)).scalars().all()
+ 
++    all_proj_ids: set[uuid.UUID] = set()
++    for k in records:
++        if k.allowed_project_ids:
++            all_proj_ids.update(k.allowed_project_ids)
++        if k.project_id:
++            all_proj_ids.add(k.project_id)
++
++    id_to_key = await _resolve_project_id_to_key_map(session, all_proj_ids)
++
+     return PersonalMcpKeyListResponse(
+         keys=[
+             PersonalMcpKeyItem(
+@@ -256,9 +292,7 @@ async def list_personal_keys(
+                 owner_kind=k.owner_kind,
+                 workspace_id=k.workspace_id,
+                 project_id=k.project_id,
+-                allowed_projects=(
+-                    [str(p) for p in k.allowed_project_ids] if k.allowed_project_ids else None
+-                ),
++                allowed_projects=_resolve_key_project_list(k, id_to_key),
+                 allowed_tools=k.allowed_tools,
+                 disabled_tools=list(k.disabled_tools or []),
+                 allowed_cidrs=([str(c) for c in k.allowed_cidrs] if k.allowed_cidrs else None),
+@@ -289,3 +323,8 @@ async def revoke_personal_key(
+         key_id=key_id,
+         caller_principal_id=caller.principal_id,
+     )
++
++    with contextlib.suppress(Exception):
++        from mcp.auth import get_default_cache  # noqa: PLC0415
++
++        get_default_cache().evict_by_key_id(key_id)
+diff --git a/kanban/api/v1/oauth.py b/kanban/api/v1/oauth.py
+index 3f8bb26..023c741 100644
+--- a/kanban/api/v1/oauth.py
++++ b/kanban/api/v1/oauth.py
+@@ -222,9 +222,11 @@ class OAuthGrantResponse(BaseModel):
+ class OAuthClientPatchRequest(BaseModel):
+     """Admin patch request for client approval."""
+ 
+-    model_config = ConfigDict(extra="forbid")
++    model_config = ConfigDict(extra="ignore")
+ 
+-    status: Literal["active", "disabled"]
++    status: Literal["active", "disabled", "suspended", "revoked"] | None = None
++    redirect_uris: list[str] | None = None
++    client_name: str | None = None
+ 
+ 
+ # =========================================================================
+@@ -1119,11 +1121,52 @@ async def admin_revoke_oauth_grant(
+     return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
++@oauth_v1_router.get(
++    "/admin/oauth-clients",
++    summary="Admin list registered OAuth 2.1 clients (AAL2)",
++    dependencies=[Depends(require_admin_aal2)],
++)
++@oauth_v1_router.get(
++    "/oauth/admin/oauth-clients",
++    include_in_schema=False,
++    dependencies=[Depends(require_admin_aal2)],
++)
++async def admin_list_oauth_clients(
++    caller: Caller,
++    session: Session,
++) -> JSONResponse:
++    """Workspace/Server Admin list of all dynamically registered OAuth clients."""
++    await _require_admin_aal2(caller, session)
++
++    stmt = select(OAuthClient).order_by(OAuthClient.created_at.desc())
++    records = (await session.execute(stmt)).scalars().all()
++
++    return JSONResponse(
++        [
++            {
++                "client_id": c.client_id,
++                "client_name": c.client_name,
++                "client_type": c.client_type,
++                "redirect_uris": c.redirect_uris,
++                "status": c.status,
++                "created_at": c.created_at.isoformat(),
++                "updated_at": c.updated_at.isoformat(),
++            }
++            for c in records
++        ]
++    )
++
++
+ @oauth_v1_router.patch(
+     "/admin/oauth-clients/{client_id}",
+     summary="Admin approve or disable OAuth client (AAL2)",
+     dependencies=[Depends(require_admin_aal2)],
+ )
++@oauth_v1_router.patch(
++    "/oauth/admin/oauth-clients/{client_id}",
++    include_in_schema=False,
++    dependencies=[Depends(require_admin_aal2)],
++)
+ async def admin_patch_oauth_client(
+     client_id: str,
+     payload: OAuthClientPatchRequest,
+@@ -1138,7 +1181,22 @@ async def admin_patch_oauth_client(
+     if client_record is None:
+         not_found()
+ 
+-    client_record.status = payload.status
++    if payload.redirect_uris is not None:
++        validate_registration_redirect_uris(payload.redirect_uris)
++        client_record.redirect_uris = payload.redirect_uris
++    if payload.client_name is not None:
++        client_record.client_name = payload.client_name
++    if payload.status is not None:
++        client_record.status = payload.status
++        if payload.status in ("disabled", "suspended", "revoked"):
++            stmt_g = select(OAuthGrant).where(
++                OAuthGrant.client_id == client_record.id,
++                OAuthGrant.revoked_at.is_(None),
++            )
++            grants = (await session.execute(stmt_g)).scalars().all()
++            for g in grants:
++                await revoke_grant_family(session, g.id, g.workspace_id)
++
+     client_record.updated_at = datetime.now(UTC)
+     await session.commit()
+ 
+@@ -1147,11 +1205,52 @@ async def admin_patch_oauth_client(
+             "client_id": client_record.client_id,
+             "client_name": client_record.client_name,
+             "status": client_record.status,
++            "redirect_uris": client_record.redirect_uris,
+             "updated_at": client_record.updated_at.isoformat(),
+         }
+     )
+ 
+ 
++@oauth_v1_router.delete(
++    "/admin/oauth-clients/{client_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Admin revoke or delete OAuth client (AAL2)",
++    dependencies=[Depends(require_admin_aal2)],
++)
++@oauth_v1_router.delete(
++    "/oauth/admin/oauth-clients/{client_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    include_in_schema=False,
++    dependencies=[Depends(require_admin_aal2)],
++)
++async def admin_delete_oauth_client(
++    client_id: str,
++    caller: Caller,
++    session: Session,
++) -> Response:
++    """Admin revocation of OAuth client and all issued grants."""
++    await _require_admin_aal2(caller, session)
++
++    stmt = select(OAuthClient).where(OAuthClient.client_id == client_id)
++    client_record = (await session.execute(stmt)).scalar_one_or_none()
++    if client_record is None:
++        not_found()
++
++    stmt_g = select(OAuthGrant).where(
++        OAuthGrant.client_id == client_record.id,
++        OAuthGrant.revoked_at.is_(None),
++    )
++    grants = (await session.execute(stmt_g)).scalars().all()
++    for g in grants:
++        await revoke_grant_family(session, g.id, g.workspace_id)
++
++    client_record.status = "revoked"
++    client_record.updated_at = datetime.now(UTC)
++    await session.commit()
++
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
+ # =========================================================================
+ # RFC 8628 Device Flow Activation & Personal MCP Keys
+ # =========================================================================
+diff --git a/kanban/importer/plane_client.py b/kanban/importer/plane_client.py
+index a428203..dbfdea1 100644
+--- a/kanban/importer/plane_client.py
++++ b/kanban/importer/plane_client.py
+@@ -346,6 +346,36 @@ class PlaneClient:
+             attachments=self._load_attachments(dir_path),
+         )
+ 
++    def load_bundle_from_dict(self, data: object) -> PlaneBundle:
++        """Load and validate all Plane JSON entities from in-memory dictionary or upload."""
++        if not isinstance(data, dict):
++            msg = "Plane bundle data must be a JSON object dictionary"
++            raise PlaneClientError(msg)
++
++        def _parse_list(key: str, model_cls: type[T]) -> list[T]:
++            raw = data.get(key) or []
++            if isinstance(raw, dict):
++                raw = list(raw.values())
++            if not isinstance(raw, list):
++                return []
++            return [model_cls.model_validate(item) for item in raw if isinstance(item, dict)]
++
++        proj_list = _parse_list("projects", PlaneProject) or _parse_list("project", PlaneProject)
++        link_list = _parse_list("relations", PlaneRelation) or _parse_list("links", PlaneRelation)
++
++        return PlaneBundle(
++            projects=proj_list,
++            states=_parse_list("states", PlaneState),
++            labels=_parse_list("labels", PlaneLabel),
++            cycles=_parse_list("cycles", PlaneCycle),
++            modules=_parse_list("modules", PlaneModule),
++            issues=_parse_list("issues", PlaneIssue),
++            comments=_parse_list("comments", PlaneComment),
++            relations=link_list,
++            members=_parse_list("members", PlaneMember),
++            attachments={},
++        )
++
+     def _read_json_file(self, file_path: Path) -> object:
+         """Read and decode JSON from file enforcing size limits."""
+         if file_path.stat().st_size > MAX_PAGE_BYTES:
+diff --git a/kanban/oauth/server.py b/kanban/oauth/server.py
+index 5918d2d..f7c23ef 100644
+--- a/kanban/oauth/server.py
++++ b/kanban/oauth/server.py
+@@ -99,6 +99,18 @@ def validate_registration_redirect_uris(uris: list[str]) -> None:
+ 
+     for uri in uris:
+         parsed = urlparse(uri)
++        has_wildcard = (
++            "*" in uri
++            or "*" in (parsed.hostname or "")
++            or "*" in parsed.netloc
++            or "*" in parsed.path
++        )
++        if has_wildcard:
++            raise OAuth2Error(
++                err,
++                f"Redirect URI {uri!r} must not contain wildcard characters (*)",
++                status_code=422,
++            )
+         if parsed.fragment:
+             raise OAuth2Error(err, f"Redirect URI {uri!r} must not contain a fragment", 400)
+         if parsed.username or parsed.password:
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index b1310c3..ee5f1aa 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -85,6 +85,7 @@ class McpIntrospectionResult:
+     """Introspection payload returned to MCP protocol handlers and gateways."""
+ 
+     active: bool
++    key_id: uuid.UUID | None = None
+     principal_id: uuid.UUID | None = None
+     agent_principal_id: uuid.UUID | None = None
+     workspace_id: uuid.UUID | None = None
+@@ -130,6 +131,9 @@ class McpIntrospectionResult:
+         }
+         if self.workspace_slug is not None:
+             payload["workspace_slug"] = self.workspace_slug
++        if self.key_id is not None:
++            payload["key_id"] = str(self.key_id)
++            payload["id"] = str(self.key_id)
+         if self.agent_principal_id is not None:
+             payload["agent_principal_id"] = str(self.agent_principal_id)
+         if self.project_id is not None:
+@@ -598,6 +602,11 @@ async def revoke_mcp_api_key(
+         key.revoked_at = datetime.now(UTC)
+         await session.flush()
+ 
++        with contextlib.suppress(Exception):
++            from mcp.auth import get_default_cache  # noqa: PLC0415
++
++            get_default_cache().evict_by_key_id(key.id)
++
+         ws_target = key.workspace_id
+         if ws_target is None and key.principal_id is not None:
+             principal = await session.get(Principal, key.principal_id)
+@@ -884,6 +893,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+ 
+     return McpIntrospectionResult(
+         active=True,
++        key_id=_key_id,
+         principal_id=principal_id,
+         workspace_id=workspace_id,
+         workspace_slug=workspace_slug,
+diff --git a/kanban/tests/api/test_admin_imports.py b/kanban/tests/api/test_admin_imports.py
+index 4072a75..b287175 100644
+--- a/kanban/tests/api/test_admin_imports.py
++++ b/kanban/tests/api/test_admin_imports.py
+@@ -9,16 +9,13 @@ from __future__ import annotations
+ import shutil
+ import uuid
+ from pathlib import Path
+-from typing import TYPE_CHECKING
+ from unittest.mock import patch
+ 
+ import httpx
+ import pytest
+ from fastapi import FastAPI
+ from sqlalchemy import text
+-
+-if TYPE_CHECKING:
+-    from sqlalchemy.ext.asyncio import AsyncEngine
++from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+ 
+ from database.session import RLSContext, RLSSessionFactory
+ from kanban.api.problems import ProblemException, problem_exception_handler
+@@ -53,12 +50,11 @@ def key_material() -> KeyMaterial:
+ 
+ 
+ async def _setup_workspace_and_principals(
+-    factory: RLSSessionFactory,
++    engine: AsyncEngine,
+ ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+     """Provision workspace, SERVER_ADMIN, and WORKSPACE_ADMIN principals with enrolled TOTP."""
+     ws_id = uuid.uuid4()
+-    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
+-    async with factory.session(anon_ctx) as session:
++    async with AsyncSession(engine) as session:
+         await session.execute(
+             text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
+             {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "Admin Imports WS"},
+@@ -161,6 +157,7 @@ async def _setup_workspace_and_principals(
+     return ws_id, server_admin_id, workspace_admin_id
+ 
+ 
++@pytest.mark.committed_db
+ @pytest.mark.asyncio
+ async def test_admin_imports_security_and_execution(
+     pg_worker_db: AsyncEngine,
+@@ -170,7 +167,7 @@ async def test_admin_imports_security_and_execution(
+ ) -> None:
+     """Test Case 4 & API: AAL2 enforcement, SERVER_ADMIN gate, path traversal, dry-run & live apply."""
+     factory = RLSSessionFactory(pg_worker_db)
+-    ws_id, server_admin_id, workspace_admin_id = await _setup_workspace_and_principals(factory)
++    ws_id, server_admin_id, workspace_admin_id = await _setup_workspace_and_principals(pg_worker_db)
+ 
+     imports_dir = tmp_path / "imports_storage"
+     imports_dir.mkdir(parents=True, exist_ok=True)
+@@ -384,7 +381,28 @@ async def test_admin_imports_security_and_execution(
+         assert res_corrupt.status_code == 422
+         assert res_corrupt.json()["code"] == "BUNDLE_INVALID"
+ 
+-        # 4j. ImportIntegrityError -> 422 IMPORT_INTEGRITY_FAILED
++        # 4k. Direct bundle_data JSON dictionary payload -> 200
++        sample_bundle = {
++            "projects": [{"id": str(uuid.uuid4()), "identifier": "IMP", "name": "Imported"}],
++            "states": [{"id": str(uuid.uuid4()), "name": "Backlog", "group": "backlog"}],
++            "issues": [],
++        }
++        res_data = await client.post(
++            "/api/v1/admin/imports/plane",
++            json={"bundle_data": sample_bundle, "dry_run": True},
++        )
++        assert res_data.status_code == 200
++        assert res_data.json()["to_create"] >= 0
++
++        # 4l. Missing both bundle_name and bundle_data -> 422 BUNDLE_REQUIRED
++        res_none = await client.post(
++            "/api/v1/admin/imports/plane",
++            json={"dry_run": True},
++        )
++        assert res_none.status_code == 422
++        assert res_none.json()["code"] == "BUNDLE_REQUIRED"
++
++        # 4m. ImportIntegrityError -> 422 IMPORT_INTEGRITY_FAILED
+         with patch(
+             "kanban.api.v1.admin.imports.PlaneImporter.run_import",
+             side_effect=ImportIntegrityError("Integrity breached"),
+diff --git a/kanban/tests/oauth/test_oauth_unit.py b/kanban/tests/oauth/test_oauth_unit.py
+index 229bbdf..8971fd0 100644
+--- a/kanban/tests/oauth/test_oauth_unit.py
++++ b/kanban/tests/oauth/test_oauth_unit.py
+@@ -98,6 +98,18 @@ def test_validate_registration_redirect_uris_errors() -> None:
+         validate_registration_redirect_uris(["ftp://127.0.0.1/cb"])
+     assert exc_ftp.value.status_code == 400
+ 
++    # Verify rejection of wildcard in hostname with 422
++    with pytest.raises(OAuth2Error) as exc_wild_host:
++        validate_registration_redirect_uris(["https://*.evil.example/callback"])
++    assert exc_wild_host.value.status_code == 422
++    assert "wildcard" in exc_wild_host.value.description
++
++    # Verify rejection of wildcard in path with 422
++    with pytest.raises(OAuth2Error) as exc_wild_path:
++        validate_registration_redirect_uris(["https://example.com/*/callback"])
++    assert exc_wild_path.value.status_code == 422
++    assert "wildcard" in exc_wild_path.value.description
++
+ 
+ def test_registration_rate_limiter() -> None:
+     """Rate limiter enforces sliding window per IP."""
+diff --git a/kanban/web/e2e/mcp/kanba-218-screenshots.spec.ts b/kanban/web/e2e/mcp/kanba-218-screenshots.spec.ts
+new file mode 100644
+index 0000000..d2cb24f
+--- /dev/null
++++ b/kanban/web/e2e/mcp/kanba-218-screenshots.spec.ts
+@@ -0,0 +1,363 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KANBA-218/screenshots',
++);
++
++process.env.QA_TICKET_ID = 'KANBA-218';
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++const mockAdminUser = {
++  id: 'usr-admin-1',
++  handle: 'adam_architect',
++  display_name: 'Adam Architect',
++  email: 'adam@example.com',
++  workspace_role: 'WORKSPACE_ADMIN',
++  is_workspace_admin: true,
++  is_server_admin: true,
++  aal_level: 2,
++};
++
++const mockProject = {
++  id: 'proj-qaadm-1',
++  identifier: 'QAADM',
++  name: 'QA Administration',
++  modules_enabled: true,
++  capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'PROJECT_ADMIN'],
++  is_project_admin: true,
++  project_role: 'ADMIN',
++};
++
++const mockMcpKeys = [
++  {
++    id: 'key-qaadm-1',
++    label: 'QAADM Bot Runner Key',
++    display_hint: '9f2a',
++    surface: 'agent',
++    scope_tier: 'project',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: ['QAADM'],
++    created_at: '2026-03-01T10:00:00Z',
++    expires_at: null,
++    last_used_at: '2026-03-02T14:30:00Z',
++    revoked_at: null,
++  },
++  {
++    id: 'key-ws-1',
++    label: 'Workspace Agent Key',
++    display_hint: '4b1c',
++    surface: 'docs',
++    scope_tier: 'workspace',
++    scopes: ['docs:read', 'docs:write'],
++    allowed_projects: null,
++    created_at: '2026-03-01T11:00:00Z',
++    expires_at: '2026-06-01T11:00:00Z',
++    last_used_at: null,
++    revoked_at: null,
++  },
++];
++
++const mockConnectedApps = [
++  {
++    id: 'grant-claude-1',
++    client_id: 'client_claude_code',
++    client_name: 'Claude Code Agent',
++    surface: 'agent',
++    scopes: ['agent:read', 'agent:write'],
++    allowed_projects: ['QAADM'],
++    created_at: '2026-03-01T12:00:00Z',
++    revoked_at: null,
++  },
++];
++
++const mockOAuthClients = [
++  {
++    client_id: 'client_cursor_ide',
++    client_name: 'Cursor IDE Assistant',
++    client_type: 'confidential',
++    redirect_uris: ['https://cursor.com/callback', 'http://127.0.0.1:4567/callback'],
++    status: 'active',
++    created_at: '2026-02-15T08:00:00Z',
++    updated_at: '2026-02-15T08:00:00Z',
++  },
++  {
++    client_id: 'client_claude_cli',
++    client_name: 'Claude Code CLI',
++    client_type: 'public',
++    redirect_uris: ['http://127.0.0.1:8920/oauth/callback'],
++    status: 'suspended',
++    created_at: '2026-02-20T10:00:00Z',
++    updated_at: '2026-02-20T10:00:00Z',
++  },
++  {
++    client_id: 'client_codex_cli',
++    client_name: 'OpenAI Codex Headless Runner',
++    client_type: 'public',
++    redirect_uris: ['http://127.0.0.1:9099/callback'],
++    status: 'active',
++    created_at: '2026-02-25T14:00:00Z',
++    updated_at: '2026-02-25T14:00:00Z',
++  },
++];
++
++const mockImportReport = {
++  to_create: 14,
++  to_update: 2,
++  unchanged: 1,
++  sequence_high_water_mark: 17,
++  unmapped_members: ['plane-usr-legacy-99'],
++  rewritten_attachments: 3,
++  invalid_link_count: 0,
++  warnings: [
++    'Attachment files proxied through local storage directory.',
++    'State "Done" mapped to canonical state group "completed".',
++  ],
++};
++
++function getCommonMocks(): MockHandlers {
++  return {
++    'GET /api/v1/auth/me': { json: mockAdminUser },
++    'GET /api/v1/me': { json: mockAdminUser },
++    'GET /api/v1/users/me': { json: mockAdminUser },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 2,
++        csrf_token: 'csrf-test-token',
++        user: mockAdminUser,
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'csrf-test-token' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/system/status': { json: { allow_unlimited_mcp_keys: true } },
++    'GET /api/v1/workspaces': {
++      json: [{ id: 'ws-default', name: 'Primary Workspace', slug: 'kanban', is_current: true }],
++    },
++    'GET /api/v1/workspaces/current': {
++      json: { id: 'ws-default', name: 'Primary Workspace', slug: 'kanban' },
++    },
++    'GET /api/v1/projects': { json: [mockProject] },
++    'GET /api/v1/projects/QAADM': { json: mockProject },
++    'GET /api/v1/projects/KAN': { json: mockProject },
++    'GET /api/v1/notifications': { json: [] },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/auth/mcp-keys': { json: mockMcpKeys },
++    'POST /api/v1/auth/mcp-keys': {
++      json: {
++        id: 'key-newly-minted',
++        label: 'Ephemeral Agent Mint',
++        display_hint: 'e1a2',
++        surface: 'agent',
++        scope_tier: 'project',
++        scopes: ['agent:read', 'agent:write'],
++        allowed_projects: ['QAADM'],
++        created_at: new Date().toISOString(),
++        expires_at: null,
++        last_used_at: null,
++        revoked_at: null,
++        raw_key: 'kb_agt_ephemeral_plaintext_token_test_123',
++      },
++    },
++    'GET /api/v1/admin/mcp-keys': { json: mockMcpKeys },
++    'GET /api/v1/auth/oauth-grants': { json: mockConnectedApps },
++    'GET /api/v1/admin/oauth-clients': { json: mockOAuthClients },
++    'POST /api/v1/admin/imports/plane': { json: mockImportReport },
++  };
++}
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++test.describe('KANBA-218 MCP Key Project Scope Badge, Client Snippets, OAuth Governance & Plane Import Studio QA Proofs', () => {
++  test('01: MCP Access Studio with Fixed Project Scope Badge (Project: QAADM)', async ({ page }, testInfo) => {
++    await mockApi(page, getCommonMocks());
++    await page.goto('/settings/mcp');
++    await page.waitForSelector('[data-testid="mcp-access-studio"]', { state: 'visible' });
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `01-mcp-access-studio-scope-badge-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="tier-badge-project"]',
++            label: 'Fixed MCP Project Scope Badge showing Project: QAADM (fixing hardcoded KANBA bug)',
++          },
++          {
++            selector: '[data-testid="mcp-keys-table"]',
++            label: 'Active MCP Keys table displaying scope tiers, hints, and one-click revocation',
++          },
++          {
++            selector: '[data-testid="connected-apps-section"]',
++            label: 'Connected OAuth Applications section with clean user revocation',
++          },
++        ],
++      });
++    }
++  });
++
++  test('02: Aligned MCP Mint & Client Config Snippet Modal (Claude, Cursor, Gemini, Antigravity, Codex)', async ({ page }, testInfo) => {
++    await mockApi(page, getCommonMocks());
++    await page.goto('/settings/mcp');
++    await page.waitForSelector('[data-testid="mcp-access-studio"]', { state: 'visible' });
++
++    // Open mint modal and mint key
++    await page.click('[data-testid="mint-key-button"]');
++    await page.waitForSelector('[data-testid="mint-modal-card"]', { state: 'visible' });
++    await page.fill('[data-testid="mint-label-input"]', 'Ephemeral Agent Mint');
++    await page.click('[data-testid="mint-submit-btn"]');
++
++    // Wait for snippet modal to open
++    await page.waitForSelector('[data-testid="mcp-snippet-modal"]', { state: 'visible' });
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `02-mcp-mint-client-snippets-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="mcp-snippet-modal"]',
++            label: 'Aligned MCP Client Config Snippet Modal displaying ephemeral secret',
++          },
++          {
++            selector: '[data-testid="tab-cursor"]',
++            label: 'Cursor IDE configuration snippet tab with command line and JSON schema',
++          },
++          {
++            selector: '[data-testid="tab-codex"]',
++            label: 'OpenAI Codex headless agent runner configuration tab',
++          },
++        ],
++      });
++    }
++  });
++
++  test('03: Admin OAuth 2.1 + PKCE Client Governance Studio (/admin/oauth)', async ({ page }, testInfo) => {
++    await mockApi(page, getCommonMocks());
++    await page.goto('/admin/oauth');
++    await page.waitForSelector('[data-testid="oauth-client-governance-studio"]', { state: 'visible' });
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `03-oauth-client-governance-studio-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="oauth-clients-section"]',
++            label: 'Registered OAuth 2.1 clients table with client IDs, types, and redirect URIs',
++          },
++          {
++            selector: '[data-testid="status-badge-active"]',
++            label: 'Status indicators with Activate, Suspend, and Revoke controls',
++          },
++          {
++            selector: '[data-testid="tab-admin-oauth"]',
++            label: 'Integrated Admin Subnav linking Bot API Keys, OAuth 2.1 Clients, and Plane Imports',
++          },
++        ],
++      });
++    }
++  });
++
++  test('04: Admin Plane Migration Import Studio (/admin/imports) - Step 1 Bundle Input', async ({ page }, testInfo) => {
++    await mockApi(page, getCommonMocks());
++    await page.goto('/admin/imports');
++    await page.waitForSelector('[data-testid="plane-import-studio"]', { state: 'visible' });
++
++    // Switch to paste mode and paste sample Plane bundle
++    await page.click('[data-testid="mode-paste-btn"]');
++    await page.fill(
++      '[data-testid="paste-textarea"]',
++      JSON.stringify(
++        {
++          projects: [{ id: 'p1', name: 'Plane Export Project' }],
++          states: [{ id: 's1', name: 'In Progress' }],
++          issues: [{ id: 'i1', sequence_id: 1, name: 'Sample Issue' }],
++          cycles: [{ id: 'c1', name: 'Sprint 1' }],
++          modules: [{ id: 'm1', name: 'Auth Module' }],
++          issue_comments: [{ id: 'cm1' }],
++          members: [{ id: 'u1' }],
++        },
++        null,
++        2,
++      ),
++    );
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `04-plane-migration-studio-step1-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="paste-textarea"]',
++            label: 'Plane export JSON bundle input with real-time format validation',
++          },
++          {
++            selector: '[data-testid="entity-metrics-preview"]',
++            label: 'Detected Plane entity metrics cards (Projects, States, Issues, Cycles, Modules)',
++          },
++          {
++            selector: '[data-testid="run-dry-run-btn"]',
++            label: 'Stage 1 Dry-Run Simulation trigger button',
++          },
++        ],
++      });
++    }
++  });
++
++  test('05: Admin Plane Migration Import Studio (/admin/imports) - Stage 1 Dry-Run Preview', async ({ page }, testInfo) => {
++    await mockApi(page, getCommonMocks());
++    await page.goto('/admin/imports');
++    await page.waitForSelector('[data-testid="plane-import-studio"]', { state: 'visible' });
++
++    // Paste sample bundle and trigger dry run
++    await page.click('[data-testid="mode-paste-btn"]');
++    await page.fill(
++      '[data-testid="paste-textarea"]',
++      JSON.stringify({ projects: [{ id: 'p1' }], issues: [{ id: 'i1' }] }),
++    );
++    await page.click('[data-testid="run-dry-run-btn"]');
++
++    // Wait for preview section
++    await page.waitForSelector('[data-testid="dry-run-preview-section"]', { state: 'visible' });
++
++    for (const theme of ['light', 'dark'] as const) {
++      await applyTheme(page, theme);
++      await annotatedScreenshot(page, testInfo, {
++        name: `05-plane-migration-studio-dry-run-${theme}`,
++        annotations: [
++          {
++            selector: '[data-testid="dry-run-preview-section"]',
++            label: 'Stage 1 Dry-Run Simulation Preview with zero database mutations',
++          },
++          {
++            selector: '[data-testid="diff-to-create"]',
++            label: 'Diff impact cards showing issues to create, update, and sequence watermark',
++          },
++          {
++            selector: '[data-testid="warnings-box"]',
++            label: 'Forensic warnings report detailing state mappings and attachment rewrites',
++          },
++          {
++            selector: '[data-testid="execute-import-btn"]',
++            label: 'Stage 2: Execute Live Import button with transactional database execution',
++          },
++        ],
++      });
++    }
++  });
++});
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 4f46e31..95552c9 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -57,6 +57,8 @@ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
++import { OAuthClientGovernanceStudio } from '../features/oauth/OAuthClientGovernanceStudio';
++import { PlaneImportStudio } from '../features/admin-imports/PlaneImportStudio';
+ import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
+ import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+@@ -1744,9 +1746,10 @@ export function ProjectRouteContainer(): JSX.Element {
+   );
+ }
+ 
+-export function AdminRouteGuard(): JSX.Element {
++export function AdminRouteGuard({ children }: { children?: React.ReactNode } = {}): JSX.Element {
+   const { data: user, isLoading } = useQuery<{
+     is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
+     aal_level?: number | string;
+     auth_aal?: string;
+   } | null>({
+@@ -1755,6 +1758,7 @@ export function AdminRouteGuard(): JSX.Element {
+       try {
+         return (await apiFetch('GET', '/api/v1/auth/me')) as {
+           is_server_admin?: boolean;
++          is_workspace_admin?: boolean;
+           aal_level?: number | string;
+           auth_aal?: string;
+         };
+@@ -1770,14 +1774,16 @@ export function AdminRouteGuard(): JSX.Element {
+   }
+ 
+   const isServerAdmin = Boolean(user?.is_server_admin);
++  const isWorkspaceAdmin = Boolean(user?.is_workspace_admin);
++  const isAdmin = isServerAdmin || isWorkspaceAdmin;
+   const aal = user?.aal_level;
+   const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
+ 
+-  if (!isServerAdmin || !isAal2) {
++  if (!isAdmin || !isAal2) {
+     return <NotFoundView />;
+   }
+ 
+-  return <Outlet />;
++  return <>{children ?? <Outlet />}</>;
+ }
+ 
+ export function DraftsWorkspaceRouteGuard(): JSX.Element {
+@@ -1934,6 +1940,14 @@ export const appRoutes: RouteObject[] = [
+                 path: 'mcp',
+                 element: <McpAccessStudio tier="global" />,
+               },
++              {
++                path: 'oauth',
++                element: <OAuthClientGovernanceStudio />,
++              },
++              {
++                path: 'imports',
++                element: <PlaneImportStudio />,
++              },
+               {
+                 path: 'auth',
+                 element: <AuthStudioPage />,
+diff --git a/kanban/web/src/app/routesDeepCoverage.test.tsx b/kanban/web/src/app/routesDeepCoverage.test.tsx
+index 49b94dd..53cc287 100644
+--- a/kanban/web/src/app/routesDeepCoverage.test.tsx
++++ b/kanban/web/src/app/routesDeepCoverage.test.tsx
+@@ -952,5 +952,81 @@ describe('routesDeepCoverage', () => {
+       unmount();
+     });
+   });
++
++  describe('targeted branch coverage boosters for routes.tsx', () => {
++    it('covers NotFoundView rendered outside router context', () => {
++      render(<NotFoundView />);
++      expect(screen.getByText(/Page Not Found/)).toBeDefined();
++      fireEvent.click(screen.getByText('Return to Workspace'));
++    });
++
++    it('covers WorkspaceHomeView non-admin role and empty wrapped items fallback', async () => {
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : (input as Request).url;
++        if (url.includes('/api/v1/auth/me')) {
++          return Promise.resolve(
++            jsonResponse({
++              id: 'u-user',
++              workspace_role: 'GUEST_CONTRIBUTOR',
++              is_workspace_admin: false,
++              is_server_admin: false,
++            }),
++          );
++        }
++        if (url.includes('/api/v1/projects')) {
++          return Promise.resolve(jsonResponse({}));
++        }
++        return Promise.resolve(jsonResponse({ ok: true }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/']}>
++          <WorkspaceHomeView />
++        </MemoryRouter>,
++      );
++      await waitFor(() => {
++        expect(screen.getByTestId('route-placeholder')).toBeDefined();
++      });
++    });
++
++    it('covers AdminRouteGuard access denied for non-admin user', async () => {
++      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : (input as Request).url;
++        if (url.includes('/api/v1/auth/me') || url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            jsonResponse({
++              id: 'u-std',
++              is_server_admin: false,
++              is_workspace_admin: false,
++              aal_level: 1,
++            }),
++          );
++        }
++        return Promise.resolve(jsonResponse({ ok: true }));
++      });
++
++      render(
++        <QueryClientProvider client={qc}>
++          <MemoryRouter initialEntries={['/admin/oauth']}>
++            <Routes>
++              <Route
++                path="/admin/oauth"
++                element={
++                  <AdminRouteGuard>
++                    <div data-testid="admin-content">Secret</div>
++                  </AdminRouteGuard>
++                }
++              />
++              <Route path="/" element={<div data-testid="home-fallback">Home</div>} />
++            </Routes>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++      await waitFor(() => {
++        expect(screen.getByTestId('not-found-view')).toBeDefined();
++      });
++    });
++  });
+ });
+ 
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.css b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+new file mode 100644
+index 0000000..ff5ae74
+--- /dev/null
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+@@ -0,0 +1,341 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++.kb-plane-import-container {
++  padding: var(--prose-pad);
++  max-width: 1100px;
++  margin: 0 auto;
++  color: var(--kb-color-text-primary, var(--fg-primary));
++  font-family: var(--font-sans);
++}
++
++.kb-plane-import-header {
++  margin-bottom: var(--section-gap);
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 20px;
++  flex-wrap: wrap;
++}
++
++.kb-plane-import-title {
++  font-size: 1.75rem;
++  font-weight: 600;
++  margin: 0 0 8px;
++  color: var(--kb-color-text-primary, var(--fg-primary));
++}
++
++.kb-plane-import-subtitle {
++  font-size: var(--text-body);
++  line-height: var(--leading-prose);
++  color: var(--kb-color-text-secondary, var(--fg-secondary));
++  margin: 0;
++}
++
++.kb-plane-section {
++  margin-bottom: var(--section-gap);
++  background-color: var(--kb-color-bg-surface, var(--bg-surface));
++  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  border-radius: 8px;
++  padding: 24px 32px;
++}
++
++.kb-plane-section-title {
++  font-size: 1.125rem;
++  font-weight: 600;
++  margin: 0 0 16px;
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.kb-plane-mode-row {
++  display: flex;
++  gap: 12px;
++  margin-bottom: 20px;
++}
++
++.kb-plane-mode-btn {
++  padding: 8px 16px;
++  min-height: 44px;
++  border-radius: 6px;
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  color: var(--kb-color-text-secondary, #8b949e);
++  cursor: pointer;
++  font-weight: 500;
++  font-size: 0.875rem;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-plane-mode-btn:hover {
++  color: var(--kb-color-text-primary, #f0f6fc);
++  background-color: var(--bg-hover);
++}
++
++.kb-plane-mode-active {
++  background-color: rgba(56, 139, 253, 0.15);
++  border-color: #388bfd;
++  color: #58a6ff;
++  font-weight: 600;
++}
++
++.kb-plane-dropzone {
++  border: 2px dashed var(--kb-color-border-subtle, #30363d);
++  border-radius: 8px;
++  padding: 36px 20px;
++  text-align: center;
++  background-color: rgba(110, 118, 129, 0.04);
++  cursor: pointer;
++  transition: all 0.2s ease;
++}
++
++.kb-plane-dropzone:hover,
++.kb-plane-dropzone-active {
++  border-color: #58a6ff;
++  background-color: rgba(56, 139, 253, 0.08);
++}
++
++.kb-plane-dropzone-text {
++  font-size: 0.95rem;
++  color: var(--kb-color-text-primary, #f0f6fc);
++  margin-bottom: 8px;
++}
++
++.kb-plane-dropzone-hint {
++  font-size: 0.8rem;
++  color: var(--kb-color-text-secondary, #8b949e);
++}
++
++.kb-plane-file-input {
++  display: none;
++}
++
++.kb-plane-textarea {
++  width: 100%;
++  min-height: 220px;
++  font-family: var(--font-mono);
++  font-size: 0.825rem;
++  padding: 12px;
++  background-color: var(--kb-color-bg-surface-raised, #0d1117);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  border-radius: 6px;
++  color: var(--kb-color-text-primary, #f0f6fc);
++  resize: vertical;
++  line-height: 1.4;
++}
++
++.kb-plane-textarea:focus {
++  outline: none;
++  border-color: #58a6ff;
++  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
++}
++
++.kb-plane-stats-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
++  gap: 12px;
++  margin: 16px 0;
++}
++
++.kb-plane-stat-card {
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  border-radius: 6px;
++  padding: 12px;
++  text-align: center;
++}
++
++.kb-plane-stat-val {
++  font-size: 1.35rem;
++  font-weight: 700;
++  color: var(--kb-color-text-primary, #f0f6fc);
++  margin-bottom: 4px;
++}
++
++.kb-plane-stat-label {
++  font-size: 0.75rem;
++  text-transform: uppercase;
++  font-weight: 600;
++  color: var(--kb-color-text-secondary, #8b949e);
++}
++
++.kb-plane-diff-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
++  gap: 16px;
++  margin: 16px 0;
++}
++
++.kb-plane-diff-card {
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  border-radius: 6px;
++  padding: 16px;
++}
++
++.kb-plane-diff-card-create {
++  border-left: 4px solid #3fb950;
++}
++
++.kb-plane-diff-card-update {
++  border-left: 4px solid #58a6ff;
++}
++
++.kb-plane-diff-card-unchanged {
++  border-left: 4px solid #8b949e;
++}
++
++.kb-plane-diff-card-sequence {
++  border-left: 4px solid #bc8cff;
++}
++
++.kb-plane-diff-val {
++  font-size: 1.6rem;
++  font-weight: 700;
++  color: var(--kb-color-text-primary, #f0f6fc);
++  margin-bottom: 4px;
++}
++
++.kb-plane-diff-label {
++  font-size: 0.8rem;
++  font-weight: 600;
++  color: var(--kb-color-text-secondary, #8b949e);
++}
++
++.kb-plane-warnings-box {
++  background-color: rgba(210, 153, 34, 0.12);
++  border: 1px solid rgba(210, 153, 34, 0.4);
++  border-radius: 6px;
++  padding: 16px;
++  margin: 16px 0;
++}
++
++.kb-plane-warnings-title {
++  font-size: 0.875rem;
++  font-weight: 600;
++  color: #d29922;
++  margin-bottom: 8px;
++}
++
++.kb-plane-warnings-list {
++  margin: 0;
++  padding-left: 20px;
++  font-size: 0.825rem;
++  color: var(--kb-color-text-primary, #f0f6fc);
++}
++
++.kb-plane-alert {
++  padding: 12px 16px;
++  margin-bottom: 16px;
++  border-radius: 6px;
++  font-size: 0.875rem;
++}
++
++.kb-plane-alert-error {
++  background-color: rgba(248, 81, 73, 0.15);
++  border: 1px solid rgba(248, 81, 73, 0.4);
++  color: #f85149;
++}
++
++.kb-plane-alert-success {
++  background-color: rgba(35, 134, 54, 0.15);
++  border: 1px solid rgba(63, 185, 80, 0.4);
++  color: #3fb950;
++}
++
++.kb-plane-btn-row {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  flex-wrap: wrap;
++  margin-top: 20px;
++}
++
++.kb-plane-btn {
++  padding: 10px 20px;
++  min-height: 44px;
++  font-size: 0.875rem;
++  font-weight: 600;
++  border-radius: 6px;
++  cursor: pointer;
++  transition: all 0.15s ease-in-out;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++}
++
++.kb-plane-btn-primary {
++  background-color: #238636;
++  border: 1px solid rgba(240, 246, 252, 0.1);
++  color: #ffffff;
++}
++
++.kb-plane-btn-primary:hover:not(:disabled) {
++  background-color: #2ea043;
++}
++
++.kb-plane-btn-execute {
++  background-color: #1f6feb;
++  border: 1px solid rgba(240, 246, 252, 0.1);
++  color: #ffffff;
++}
++
++.kb-plane-btn-execute:hover:not(:disabled) {
++  background-color: #388bfd;
++}
++
++.kb-plane-btn-secondary {
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  color: var(--kb-color-text-primary, #f0f6fc);
++}
++
++.kb-plane-btn-secondary:hover:not(:disabled) {
++  background-color: var(--bg-hover);
++}
++
++.kb-plane-btn:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++
++.kb-plane-progress-wrap {
++  width: 100%;
++  height: 8px;
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  border-radius: 4px;
++  overflow: hidden;
++  margin: 16px 0;
++}
++
++.kb-plane-progress-bar {
++  height: 100%;
++  width: 100%;
++  background: linear-gradient(90deg, #1f6feb, #388bfd, #58a6ff);
++  background-size: 200% 100%;
++  animation: kb-plane-pulse 1.5s infinite linear;
++}
++
++@keyframes kb-plane-pulse {
++  0% {
++    background-position: 100% 0;
++  }
++  100% {
++    background-position: -100% 0;
++  }
++}
++
++@media (max-width: 768px) {
++  .kb-plane-import-header {
++    flex-direction: column;
++    align-items: stretch;
++  }
++  .kb-plane-section {
++    padding: 16px;
++  }
++  .kb-plane-diff-grid {
++    grid-template-columns: 1fr;
++  }
++}
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+new file mode 100644
+index 0000000..a01ca2e
+--- /dev/null
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -0,0 +1,525 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useRef, type JSX } from 'react';
++import { Link } from 'react-router';
++import {
++  submitPlaneImport,
++  type ImportDiffReport,
++} from './planeImportApi';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
++import './PlaneImportStudio.css';
++
++export interface EntityCounts {
++  projects: number;
++  states: number;
++  issues: number;
++  cycles: number;
++  modules: number;
++  comments: number;
++  members: number;
++}
++
++export function extractEntityCounts(bundle: Record<string, unknown> | null): EntityCounts | null {
++  if (!bundle) return null;
++  return {
++    projects: Array.isArray(bundle.projects) ? bundle.projects.length : 0,
++    states: Array.isArray(bundle.states) ? bundle.states.length : 0,
++    issues: Array.isArray(bundle.issues) ? bundle.issues.length : 0,
++    cycles: Array.isArray(bundle.cycles) ? bundle.cycles.length : 0,
++    modules: Array.isArray(bundle.modules) ? bundle.modules.length : 0,
++    comments: Array.isArray(bundle.issue_comments) ? bundle.issue_comments.length : 0,
++    members: Array.isArray(bundle.members) ? bundle.members.length : 0,
++  };
++}
++
++export function PlaneImportStudio(): JSX.Element {
++  const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
++  const [rawJson, setRawJson] = useState<string>('');
++  const [bundleData, setBundleData] = useState<Record<string, unknown> | null>(null);
++  const [fileName, setFileName] = useState<string | null>(null);
++  const [workspaceSlug, setWorkspaceSlug] = useState<string>('');
++
++  const [stage, setStage] = useState<'input' | 'preview' | 'executing' | 'done'>('input');
++  const [diffReport, setDiffReport] = useState<ImportDiffReport | null>(null);
++  const [loading, setLoading] = useState<boolean>(false);
++  const [error, setError] = useState<string | null>(null);
++  const [isDragOver, setIsDragOver] = useState<boolean>(false);
++
++  const fileInputRef = useRef<HTMLInputElement>(null);
++
++  const parseAndSetBundle = (jsonStr: string, name?: string): boolean => {
++    setError(null);
++    try {
++      const parsed = JSON.parse(jsonStr) as unknown;
++      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
++        throw new Error('Plane export bundle must be a JSON object with entity arrays.');
++      }
++      setBundleData(parsed as Record<string, unknown>);
++      if (name) {
++        setFileName(name);
++      }
++      return true;
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(`Invalid JSON: ${err.message}`);
++      } else {
++        setError('Failed to parse JSON export bundle.');
++      }
++      setBundleData(null);
++      return false;
++    }
++  };
++
++  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
++    const file = e.target.files?.[0];
++    if (!file) return;
++
++    const reader = new FileReader();
++    reader.onload = (event) => {
++      const content = event.target?.result as string;
++      parseAndSetBundle(content, file.name);
++    };
++    reader.onerror = () => {
++      setError('Failed to read uploaded file.');
++    };
++    reader.readAsText(file);
++  };
++
++  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
++    e.preventDefault();
++    setIsDragOver(false);
++    const file = e.dataTransfer.files[0];
++    if (!file) return;
++
++    const reader = new FileReader();
++    reader.onload = (event) => {
++      const content = event.target?.result as string;
++      parseAndSetBundle(content, file.name);
++    };
++    reader.onerror = () => {
++      setError('Failed to read dropped file.');
++    };
++    reader.readAsText(file);
++  };
++
++  const handlePasteChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
++    const val = e.target.value;
++    setRawJson(val);
++    if (!val.trim()) {
++      setBundleData(null);
++      setError(null);
++      return;
++    }
++    parseAndSetBundle(val);
++  };
++
++  const handleRunDryRun = async (): Promise<void> => {
++    if (!bundleData) {
++      setError('Please upload or paste a valid Plane JSON export bundle.');
++      return;
++    }
++    setLoading(true);
++    setError(null);
++    try {
++      const report = await submitPlaneImport({
++        bundle_data: bundleData,
++        dry_run: true,
++        workspace_slug: workspaceSlug.trim() || undefined,
++      });
++      setDiffReport(report);
++      setStage('preview');
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError('Failed to execute Plane dry-run simulation.');
++      }
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  const handleExecuteImport = async (): Promise<void> => {
++    if (!bundleData) return;
++    setLoading(true);
++    setStage('executing');
++    setError(null);
++    try {
++      const report = await submitPlaneImport({
++        bundle_data: bundleData,
++        dry_run: false,
++        workspace_slug: workspaceSlug.trim() || undefined,
++      });
++      setDiffReport(report);
++      setStage('done');
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError('Plane live import execution failed.');
++      }
++      setStage('preview');
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  const handleReset = (): void => {
++    setStage('input');
++    setDiffReport(null);
++    setError(null);
++  };
++
++  const entityCounts = extractEntityCounts(bundleData);
++
++  return (
++    <div className="kb-plane-import-container" data-testid="plane-import-studio">
++      <header className="kb-plane-import-header">
++        <div>
++          <h1 className="kb-plane-import-title" data-testid="studio-title">
++            Plane Migration Import Studio
++          </h1>
++          <p className="kb-plane-import-subtitle">
++            Upload or paste Plane export JSON bundles, inspect entity counts, simulate state
++            mappings and idempotency diffs in dry-run, and execute live workspace migrations.
++          </p>
++        </div>
++      </header>
++
++      <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
++        <Link to="/admin/mcp" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-mcp">
++          Bot API Keys
++        </Link>
++        <Link to="/admin/oauth" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-oauth">
++          OAuth 2.1 Clients
++        </Link>
++        <Link
++          to="/admin/imports"
++          className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
++          data-testid="tab-admin-imports"
++        >
++          Plane Migration Studio
++        </Link>
++      </nav>
++
++      {error !== null && (
++        <div className="kb-plane-alert kb-plane-alert-error" role="alert" data-testid="error-alert">
++          {error}
++        </div>
++      )}
++
++      {/* Stage 0: Input Bundle Selection */}
++      {stage === 'input' && (
++        <section className="kb-plane-section" data-testid="import-input-section">
++          <h2 className="kb-plane-section-title">
++            <EmojiHint kind="rawMarkdown" /> Step 1: Select Plane Export Bundle
++          </h2>
++
++          <div className="kb-plane-mode-row">
++            <button
++              type="button"
++              className={`kb-plane-mode-btn ${inputMode === 'upload' ? 'kb-plane-mode-active' : ''}`}
++              data-testid="mode-upload-btn"
++              onClick={() => {
++                setInputMode('upload');
++              }}
++            >
++              Upload Export JSON File
++            </button>
++            <button
++              type="button"
++              className={`kb-plane-mode-btn ${inputMode === 'paste' ? 'kb-plane-mode-active' : ''}`}
++              data-testid="mode-paste-btn"
++              onClick={() => {
++                setInputMode('paste');
++              }}
++            >
++              Paste Raw JSON
++            </button>
++          </div>
++
++          {inputMode === 'upload' ? (
++            <div
++              className={`kb-plane-dropzone ${isDragOver ? 'kb-plane-dropzone-active' : ''}`}
++              data-testid="dropzone-area"
++              onDragOver={(e) => {
++                e.preventDefault();
++                setIsDragOver(true);
++              }}
++              onDragLeave={() => {
++                setIsDragOver(false);
++              }}
++              onDrop={handleDrop}
++              onClick={() => {
++                fileInputRef.current?.click();
++              }}
++            >
++              <input
++                ref={fileInputRef}
++                type="file"
++                accept=".json,application/json"
++                className="kb-plane-file-input"
++                data-testid="file-input"
++                onChange={handleFileChange}
++              />
++              <div className="kb-plane-dropzone-text">
++                {fileName ? (
++                  <strong>Loaded: {fileName}</strong>
++                ) : (
++                  'Drag and drop Plane export JSON file here, or click to browse'
++                )}
++              </div>
++              <div className="kb-plane-dropzone-hint">
++                Supports single-file Plane JSON export bundles containing projects, states, issues,
++                and cycles.
++              </div>
++            </div>
++          ) : (
++            <div>
++              <textarea
++                className="kb-plane-textarea"
++                data-testid="paste-textarea"
++                placeholder='Paste raw Plane export JSON here... e.g. { "projects": [...], "issues": [...] }'
++                value={rawJson}
++                onChange={handlePasteChange}
++              />
++            </div>
++          )}
++
++          {/* Parsed Entity Metrics Preview */}
++          {entityCounts !== null && (
++            <div data-testid="entity-metrics-preview">
++              <h3 className="kb-plane-section-title" style={{ marginTop: 24 }}>
++                Detected Bundle Entities
++              </h3>
++              <div className="kb-plane-stats-grid">
++                <div className="kb-plane-stat-card" data-testid="stat-projects">
++                  <div className="kb-plane-stat-val">{entityCounts.projects}</div>
++                  <div className="kb-plane-stat-label">Projects</div>
++                </div>
++                <div className="kb-plane-stat-card" data-testid="stat-states">
++                  <div className="kb-plane-stat-val">{entityCounts.states}</div>
++                  <div className="kb-plane-stat-label">States</div>
++                </div>
++                <div className="kb-plane-stat-card" data-testid="stat-issues">
++                  <div className="kb-plane-stat-val">{entityCounts.issues}</div>
++                  <div className="kb-plane-stat-label">Issues</div>
++                </div>
++                <div className="kb-plane-stat-card" data-testid="stat-cycles">
++                  <div className="kb-plane-stat-val">{entityCounts.cycles}</div>
++                  <div className="kb-plane-stat-label">Cycles</div>
++                </div>
++                <div className="kb-plane-stat-card" data-testid="stat-modules">
++                  <div className="kb-plane-stat-val">{entityCounts.modules}</div>
++                  <div className="kb-plane-stat-label">Modules</div>
++                </div>
++                <div className="kb-plane-stat-card" data-testid="stat-comments">
++                  <div className="kb-plane-stat-val">{entityCounts.comments}</div>
++                  <div className="kb-plane-stat-label">Comments</div>
++                </div>
++                <div className="kb-plane-stat-card" data-testid="stat-members">
++                  <div className="kb-plane-stat-val">{entityCounts.members}</div>
++                  <div className="kb-plane-stat-label">Members</div>
++                </div>
++              </div>
++            </div>
++          )}
++
++          <div style={{ marginTop: 20 }}>
++            <label
++              htmlFor="target-ws-slug"
++              style={{
++                display: 'block',
++                fontSize: '0.825rem',
++                fontWeight: 600,
++                marginBottom: 6,
++                color: 'var(--kb-color-text-secondary)',
++              }}
++            >
++              Target Workspace Slug (Optional, defaults to active workspace):
++            </label>
++            <input
++              id="target-ws-slug"
++              type="text"
++              className="kb-plane-textarea"
++              style={{ minHeight: 40, height: 40, width: '100%', maxWidth: 360 }}
++              data-testid="target-ws-slug-input"
++              placeholder="e.g. my-workspace"
++              value={workspaceSlug}
++              onChange={(e) => {
++                setWorkspaceSlug(e.target.value);
++              }}
++            />
++          </div>
++
++          <div className="kb-plane-btn-row">
++            <button
++              type="button"
++              className="kb-plane-btn kb-plane-btn-primary"
++              data-testid="run-dry-run-btn"
++              disabled={loading}
++              onClick={() => {
++                void handleRunDryRun();
++              }}
++            >
++              {loading ? 'Simulating Dry-Run...' : 'Stage 1: Preview Dry-Run Diff'}
++            </button>
++          </div>
++        </section>
++      )}
++
++      {/* Stage 1: Dry-Run Preview */}
++      {stage === 'preview' && diffReport !== null && (
++        <section className="kb-plane-section" data-testid="dry-run-preview-section">
++          <h2 className="kb-plane-section-title">
++            <EmojiHint kind="sparkle" /> Stage 1: Dry-Run Simulation Preview
++          </h2>
++          <p className="kb-plane-import-subtitle">
++            Simulation completed with zero database mutations. Review the diff impact and warnings
++            below before executing live transaction migration.
++          </p>
++
++          <div className="kb-plane-diff-grid">
++            <div className="kb-plane-diff-card kb-plane-diff-card-create" data-testid="diff-to-create">
++              <div className="kb-plane-diff-val">{diffReport.to_create}</div>
++              <div className="kb-plane-diff-label">Issues To Create</div>
++            </div>
++            <div className="kb-plane-diff-card kb-plane-diff-card-update" data-testid="diff-to-update">
++              <div className="kb-plane-diff-val">{diffReport.to_update}</div>
++              <div className="kb-plane-diff-label">Issues To Update</div>
++            </div>
++            <div
++              className="kb-plane-diff-card kb-plane-diff-card-unchanged"
++              data-testid="diff-unchanged"
++            >
++              <div className="kb-plane-diff-val">{diffReport.unchanged}</div>
++              <div className="kb-plane-diff-label">Issues Unchanged</div>
++            </div>
++            <div
++              className="kb-plane-diff-card kb-plane-diff-card-sequence"
++              data-testid="diff-sequence"
++            >
++              <div className="kb-plane-diff-val">{diffReport.sequence_high_water_mark}</div>
++              <div className="kb-plane-diff-label">Sequence Watermark</div>
++            </div>
++          </div>
++
++          {diffReport.warnings.length > 0 && (
++            <div className="kb-plane-warnings-box" data-testid="warnings-box">
++              <div className="kb-plane-warnings-title">
++                Warnings ({diffReport.warnings.length}):
++              </div>
++              <ul className="kb-plane-warnings-list">
++                {diffReport.warnings.map((warn, i) => (
++                  <li key={i}>{warn}</li>
++                ))}
++              </ul>
++            </div>
++          )}
++
++          {diffReport.unmapped_members.length > 0 && (
++            <div className="kb-plane-warnings-box" data-testid="unmapped-members-box">
++              <div className="kb-plane-warnings-title">
++                Unmapped Member IDs ({diffReport.unmapped_members.length}):
++              </div>
++              <ul className="kb-plane-warnings-list">
++                {diffReport.unmapped_members.map((mem, i) => (
++                  <li key={i}>{mem}</li>
++                ))}
++              </ul>
++            </div>
++          )}
++
++          <div className="kb-plane-btn-row">
++            <button
++              type="button"
++              className="kb-plane-btn kb-plane-btn-secondary"
++              data-testid="back-to-input-btn"
++              onClick={handleReset}
++            >
++              Back to Input
++            </button>
++            <button
++              type="button"
++              className="kb-plane-btn kb-plane-btn-execute"
++              data-testid="execute-import-btn"
++              disabled={loading}
++              onClick={() => {
++                void handleExecuteImport();
++              }}
++            >
++              Stage 2: Execute Live Import
++            </button>
++          </div>
++        </section>
++      )}
++
++      {/* Stage 2: Executing Progress */}
++      {stage === 'executing' && (
++        <section className="kb-plane-section" data-testid="executing-section">
++          <h2 className="kb-plane-section-title">
++            <EmojiHint kind="sparkle" /> Executing Live Migration...
++          </h2>
++          <p className="kb-plane-import-subtitle">
++            Applying Plane entities, mapping states, creating object links, and updating sequence
++            counters inside an isolated transaction. Please wait.
++          </p>
++          <div className="kb-plane-progress-wrap" data-testid="progress-bar">
++            <div className="kb-plane-progress-bar" />
++          </div>
++        </section>
++      )}
++
++      {/* Stage 3: Done Summary */}
++      {stage === 'done' && diffReport !== null && (
++        <section className="kb-plane-section" data-testid="import-done-section">
++          <div className="kb-plane-alert kb-plane-alert-success" role="status" data-testid="success-banner">
++            Plane export migration completed successfully!
++          </div>
++
++          <h2 className="kb-plane-section-title">
++            <EmojiHint kind="gateApproved" /> Migration Execution Summary
++          </h2>
++
++          <div className="kb-plane-diff-grid">
++            <div className="kb-plane-diff-card kb-plane-diff-card-create">
++              <div className="kb-plane-diff-val">{diffReport.to_create}</div>
++              <div className="kb-plane-diff-label">Created Issues</div>
++            </div>
++            <div className="kb-plane-diff-card kb-plane-diff-card-update">
++              <div className="kb-plane-diff-val">{diffReport.to_update}</div>
++              <div className="kb-plane-diff-label">Updated Issues</div>
++            </div>
++            <div className="kb-plane-diff-card kb-plane-diff-card-unchanged">
++              <div className="kb-plane-diff-val">{diffReport.unchanged}</div>
++              <div className="kb-plane-diff-label">Unchanged Issues</div>
++            </div>
++            <div className="kb-plane-diff-card kb-plane-diff-card-sequence">
++              <div className="kb-plane-diff-val">{diffReport.sequence_high_water_mark}</div>
++              <div className="kb-plane-diff-label">Sequence Watermark</div>
++            </div>
++          </div>
++
++          <div className="kb-plane-btn-row">
++            <button
++              type="button"
++              className="kb-plane-btn kb-plane-btn-primary"
++              data-testid="import-another-btn"
++              onClick={handleReset}
++            >
++              Import Another Bundle
++            </button>
++            <Link
++              to="/admin/mcp"
++              className="kb-plane-btn kb-plane-btn-secondary"
++              data-testid="return-admin-btn"
++            >
++              Return to MCP & Governance
++            </Link>
++          </div>
++        </section>
++      )}
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+new file mode 100644
+index 0000000..8799005
+--- /dev/null
++++ b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+@@ -0,0 +1,299 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { MemoryRouter } from 'react-router';
++import { PlaneImportStudio, extractEntityCounts } from '../PlaneImportStudio';
++import * as planeImportApi from '../planeImportApi';
++
++const sampleBundle = {
++  projects: [{ id: 'p1', identifier: 'KB', name: 'Kanban Project' }],
++  states: [{ id: 's1', name: 'Backlog', group: 'backlog' }],
++  issues: [
++    { id: 'i1', sequence_id: 1, name: 'First Issue', state: 's1' },
++    { id: 'i2', sequence_id: 2, name: 'Second Issue', state: 's1' },
++  ],
++  cycles: [{ id: 'c1', name: 'Sprint 1' }],
++  modules: [{ id: 'm1', name: 'Module A' }],
++  issue_comments: [{ id: 'cm1', comment_html: '<p>Hello</p>' }],
++  members: [{ id: 'u1', email: 'test@example.com' }],
++};
++
++const sampleReport: planeImportApi.ImportDiffReport = {
++  to_create: 2,
++  to_update: 0,
++  unchanged: 0,
++  sequence_high_water_mark: 2,
++  unmapped_members: ['unknown-user-id'],
++  rewritten_attachments: 0,
++  invalid_link_count: 0,
++  warnings: ['Attachment rewrites not supported in offline mock'],
++};
++
++describe('PlaneImportStudio & extractEntityCounts', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('extractEntityCounts returns null for empty/null bundle, and counts arrays correctly', () => {
++    expect(extractEntityCounts(null)).toBeNull();
++    expect(extractEntityCounts({})).toEqual({
++      projects: 0,
++      states: 0,
++      issues: 0,
++      cycles: 0,
++      modules: 0,
++      comments: 0,
++      members: 0,
++    });
++    const counts = extractEntityCounts(sampleBundle);
++    expect(counts).toEqual({
++      projects: 1,
++      states: 1,
++      issues: 2,
++      cycles: 1,
++      modules: 1,
++      comments: 1,
++      members: 1,
++    });
++  });
++
++  it('renders Step 1 with upload and paste modes', () => {
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    expect(screen.getByTestId('studio-title').textContent).toContain(
++      'Plane Migration Import Studio',
++    );
++    expect(screen.getByTestId('dropzone-area')).toBeDefined();
++
++    // Trigger dry-run without bundle
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++    expect(screen.getByTestId('error-alert').textContent).toContain(
++      'Please upload or paste a valid Plane JSON export bundle.',
++    );
++
++    // Switch to paste mode
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    expect(screen.getByTestId('paste-textarea')).toBeDefined();
++
++    // Switch back to upload mode
++    fireEvent.click(screen.getByTestId('mode-upload-btn'));
++    expect(screen.getByTestId('dropzone-area')).toBeDefined();
++  });
++
++  it('parses pasted JSON and displays detected entity metrics', async () => {
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    const textarea = screen.getByTestId('paste-textarea');
++
++    // Invalid JSON
++    fireEvent.change(textarea, { target: { value: '{ invalid json ' } });
++    expect(screen.getByTestId('error-alert')).toBeDefined();
++
++    // Valid JSON but array instead of object
++    fireEvent.change(textarea, { target: { value: '[]' } });
++    expect(screen.getByTestId('error-alert').textContent).toContain(
++      'Plane export bundle must be a JSON object with entity arrays.',
++    );
++
++    // Valid JSON
++    fireEvent.change(textarea, { target: { value: JSON.stringify(sampleBundle) } });
++    expect(screen.queryByTestId('error-alert')).toBeNull();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('entity-metrics-preview')).toBeDefined();
++      expect(screen.getByTestId('stat-issues').textContent).toContain('2');
++      expect(screen.getByTestId('stat-projects').textContent).toContain('1');
++    });
++
++    // Empty string resets preview
++    fireEvent.change(textarea, { target: { value: '' } });
++    expect(screen.queryByTestId('entity-metrics-preview')).toBeNull();
++  });
++
++  it('executes dry-run preview and navigates back to input', async () => {
++    const importSpy = vi
++      .spyOn(planeImportApi, 'submitPlaneImport')
++      .mockResolvedValue(sampleReport);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    const textarea = screen.getByTestId('paste-textarea');
++    fireEvent.change(textarea, { target: { value: JSON.stringify(sampleBundle) } });
++
++    // Optional workspace slug
++    fireEvent.change(screen.getByTestId('target-ws-slug-input'), {
++      target: { value: 'custom-ws' },
++    });
++
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++
++    await waitFor(() => {
++      expect(importSpy).toHaveBeenCalledWith({
++        bundle_data: sampleBundle,
++        dry_run: true,
++        workspace_slug: 'custom-ws',
++      });
++      expect(screen.getByTestId('dry-run-preview-section')).toBeDefined();
++      expect(screen.getByTestId('diff-to-create').textContent).toContain('2');
++      expect(screen.getByTestId('warnings-box')).toBeDefined();
++      expect(screen.getByTestId('unmapped-members-box')).toBeDefined();
++    });
++
++    // Click back to input
++    fireEvent.click(screen.getByTestId('back-to-input-btn'));
++    expect(screen.getByTestId('import-input-section')).toBeDefined();
++  });
++
++  it('executes live import to completion with progress and summary', async () => {
++    vi.spyOn(planeImportApi, 'submitPlaneImport')
++      .mockResolvedValueOnce(sampleReport) // Dry-run
++      .mockResolvedValueOnce(sampleReport); // Live run
++
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    fireEvent.change(screen.getByTestId('paste-textarea'), {
++      target: { value: JSON.stringify(sampleBundle) },
++    });
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('execute-import-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('execute-import-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('import-done-section')).toBeDefined();
++      expect(screen.getByTestId('success-banner')).toBeDefined();
++    });
++
++    // Click import another
++    fireEvent.click(screen.getByTestId('import-another-btn'));
++    expect(screen.getByTestId('import-input-section')).toBeDefined();
++  });
++
++  it('handles dry-run and live import execution errors cleanly', async () => {
++    vi.spyOn(planeImportApi, 'submitPlaneImport')
++      .mockRejectedValueOnce(new Error('Dry-run network failure'))
++      .mockResolvedValueOnce(sampleReport) // for next dry-run
++      .mockRejectedValueOnce(new Error('Transaction lock timeout')); // for live run
++
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    fireEvent.change(screen.getByTestId('paste-textarea'), {
++      target: { value: JSON.stringify(sampleBundle) },
++    });
++
++    // Dry-run failure
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain('Dry-run network failure');
++    });
++
++    // Successful dry-run
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('execute-import-btn')).toBeDefined();
++    });
++
++    // Live run failure
++    fireEvent.click(screen.getByTestId('execute-import-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain('Transaction lock timeout');
++      expect(screen.getByTestId('dry-run-preview-section')).toBeDefined();
++    });
++
++    // Non-Error failure fallback
++    fireEvent.click(screen.getByTestId('back-to-input-btn'));
++    vi.spyOn(planeImportApi, 'submitPlaneImport')
++      .mockRejectedValueOnce('Raw dry-run error')
++      .mockResolvedValueOnce(sampleReport)
++      .mockRejectedValueOnce('Raw execute error');
++
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain(
++        'Failed to execute Plane dry-run simulation.',
++      );
++    });
++
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('execute-import-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('execute-import-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain(
++        'Plane live import execution failed.',
++      );
++    });
++  });
++
++  it('handles drag over, drag leave, and drop events', async () => {
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    const dropzone = screen.getByTestId('dropzone-area');
++    fireEvent.dragOver(dropzone);
++    expect(dropzone.className).toContain('kb-plane-dropzone-active');
++
++    fireEvent.dragLeave(dropzone);
++    expect(dropzone.className).not.toContain('kb-plane-dropzone-active');
++
++    // Empty drop
++    fireEvent.drop(dropzone, {
++      dataTransfer: {
++        files: [],
++      },
++    });
++
++    // File input with no files
++    const fileInput = screen.getByTestId('file-input');
++    fireEvent.change(fileInput, { target: { files: [] } });
++
++    const file = new File([JSON.stringify(sampleBundle)], 'export.json', {
++      type: 'application/json',
++    });
++
++    fireEvent.drop(dropzone, {
++      dataTransfer: {
++        files: [file],
++      },
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/export\.json/)).toBeDefined();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts b/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts
+new file mode 100644
+index 0000000..d44dee6
+--- /dev/null
++++ b/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts
+@@ -0,0 +1,40 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import * as clientModule from '../../../api/client';
++import { submitPlaneImport } from '../planeImportApi';
++
++describe('planeImportApi', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('submitPlaneImport calls POST /api/v1/admin/imports/plane with payload', async () => {
++    const mockReport = {
++      to_create: 10,
++      to_update: 2,
++      unchanged: 1,
++      sequence_high_water_mark: 13,
++      unmapped_members: [],
++      rewritten_attachments: 0,
++      invalid_link_count: 0,
++      warnings: [],
++    };
++    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce(mockReport);
++
++    const res = await submitPlaneImport({
++      dry_run: true,
++      bundle_data: { projects: [] },
++    });
++
++    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/imports/plane', {
++      body: JSON.stringify({
++        dry_run: true,
++        bundle_data: { projects: [] },
++      }),
++      headers: { 'Content-Type': 'application/json' },
++    });
++    expect(res).toEqual(mockReport);
++  });
++});
+diff --git a/kanban/web/src/features/admin-imports/planeImportApi.ts b/kanban/web/src/features/admin-imports/planeImportApi.ts
+new file mode 100644
+index 0000000..76b033e
+--- /dev/null
++++ b/kanban/web/src/features/admin-imports/planeImportApi.ts
+@@ -0,0 +1,32 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { apiFetch } from '../../api/client';
++
++export interface PlaneImportRequest {
++  bundle_name?: string | null | undefined;
++  bundle_data?: Record<string, unknown> | null | undefined;
++  dry_run: boolean;
++  user_map?: Record<string, string> | undefined;
++  workspace_slug?: string | null | undefined;
++}
++
++export interface ImportDiffReport {
++  to_create: number;
++  to_update: number;
++  unchanged: number;
++  sequence_high_water_mark: number;
++  unmapped_members: string[];
++  rewritten_attachments: number;
++  invalid_link_count: number;
++  warnings: string[];
++}
++
++export async function submitPlaneImport(
++  payload: PlaneImportRequest,
++): Promise<ImportDiffReport> {
++  return (await apiFetch('POST', '/api/v1/admin/imports/plane' as never, {
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  })) as ImportDiffReport;
++}
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
+new file mode 100644
+index 0000000..00f0f26
+--- /dev/null
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
+@@ -0,0 +1,362 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++.kb-oauth-gov-container {
++  padding: var(--prose-pad);
++  max-width: 1100px;
++  margin: 0 auto;
++  color: var(--kb-color-text-primary, var(--fg-primary));
++  font-family: var(--font-sans);
++}
++
++.kb-oauth-gov-header {
++  margin-bottom: var(--section-gap);
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 20px;
++  flex-wrap: wrap;
++}
++
++.kb-oauth-gov-title {
++  font-size: 1.75rem;
++  font-weight: 600;
++  margin: 0 0 8px;
++  color: var(--kb-color-text-primary, var(--fg-primary));
++}
++
++.kb-oauth-gov-subtitle {
++  font-size: var(--text-body);
++  line-height: var(--leading-prose);
++  color: var(--kb-color-text-secondary, var(--fg-secondary));
++  margin: 0;
++}
++
++.kb-oauth-gov-refresh-btn {
++  height: var(--prop-row-h);
++  padding: 0 16px;
++  min-height: 44px;
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  color: var(--kb-color-text-primary, #f0f6fc);
++  border-radius: 6px;
++  font-weight: 500;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-oauth-gov-refresh-btn:hover {
++  background-color: var(--bg-hover);
++}
++
++.kb-oauth-gov-section {
++  margin-bottom: var(--section-gap);
++  background-color: var(--kb-color-bg-surface, var(--bg-surface));
++  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  border-radius: 8px;
++  padding: 24px 32px;
++}
++
++.kb-oauth-gov-section-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 16px;
++}
++
++.kb-oauth-gov-section-title {
++  font-size: 1.125rem;
++  font-weight: 600;
++  margin: 0;
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.kb-oauth-gov-table-wrap {
++  overflow-x: auto;
++  margin: 0 -32px;
++  padding: 0 32px;
++}
++
++.kb-oauth-gov-table {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: 0.875rem;
++  text-align: left;
++}
++
++.kb-oauth-gov-th {
++  padding: 12px 16px;
++  border-bottom: 2px solid var(--kb-color-border-subtle, #30363d);
++  color: var(--kb-color-text-secondary, #8b949e);
++  font-weight: 600;
++  white-space: nowrap;
++}
++
++.kb-oauth-gov-td {
++  padding: 14px 16px;
++  border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
++  vertical-align: middle;
++}
++
++.kb-oauth-gov-tr:hover {
++  background-color: var(--bg-hover);
++}
++
++.kb-oauth-gov-client-name {
++  font-weight: 600;
++  color: var(--kb-color-text-primary, #f0f6fc);
++  margin-bottom: 4px;
++}
++
++.kb-oauth-gov-client-id {
++  font-family: var(--font-mono);
++  font-size: 0.8rem;
++  color: var(--kb-color-text-secondary, #8b949e);
++  background-color: rgba(110, 118, 129, 0.1);
++  padding: 2px 6px;
++  border-radius: 4px;
++}
++
++.kb-oauth-gov-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  padding: 3px 8px;
++  border-radius: 12px;
++  font-size: 0.75rem;
++  font-weight: 600;
++  text-transform: uppercase;
++}
++
++.kb-oauth-gov-badge-active {
++  background-color: rgba(35, 134, 54, 0.2);
++  color: #3fb950;
++  border: 1px solid rgba(63, 185, 80, 0.3);
++}
++
++.kb-oauth-gov-badge-suspended {
++  background-color: rgba(210, 153, 34, 0.2);
++  color: #d29922;
++  border: 1px solid rgba(210, 153, 34, 0.3);
++}
++
++.kb-oauth-gov-badge-disabled {
++  background-color: rgba(139, 148, 158, 0.2);
++  color: #8b949e;
++  border: 1px solid rgba(139, 148, 158, 0.3);
++}
++
++.kb-oauth-gov-badge-revoked {
++  background-color: rgba(248, 81, 73, 0.2);
++  color: #f85149;
++  border: 1px solid rgba(248, 81, 73, 0.3);
++}
++
++.kb-oauth-gov-uri-list {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  max-width: 280px;
++}
++
++.kb-oauth-gov-uri-code {
++  font-family: var(--font-mono);
++  font-size: 0.75rem;
++  color: var(--kb-color-text-secondary, #8b949e);
++  background-color: rgba(110, 118, 129, 0.1);
++  padding: 2px 6px;
++  border-radius: 4px;
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  max-width: 260px;
++  display: inline-block;
++}
++
++.kb-oauth-gov-btn-group {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-wrap: wrap;
++}
++
++.kb-oauth-gov-btn {
++  padding: 4px 10px;
++  min-height: 36px;
++  font-size: 0.8rem;
++  font-weight: 500;
++  border-radius: 6px;
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  background: var(--kb-color-bg-surface-raised, #21262d);
++  color: var(--kb-color-text-primary, #f0f6fc);
++  cursor: pointer;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-oauth-gov-btn:hover {
++  background-color: var(--bg-hover);
++}
++
++.kb-oauth-gov-btn-approve {
++  border-color: rgba(63, 185, 80, 0.4);
++  color: #3fb950;
++}
++
++.kb-oauth-gov-btn-approve:hover {
++  background-color: rgba(35, 134, 54, 0.2);
++}
++
++.kb-oauth-gov-btn-suspend {
++  border-color: rgba(210, 153, 34, 0.4);
++  color: #d29922;
++}
++
++.kb-oauth-gov-btn-suspend:hover {
++  background-color: rgba(210, 153, 34, 0.2);
++}
++
++.kb-oauth-gov-btn-revoke {
++  border-color: rgba(248, 81, 73, 0.4);
++  color: #f85149;
++}
++
++.kb-oauth-gov-btn-revoke:hover {
++  background-color: rgba(248, 81, 73, 0.2);
++}
++
++.kb-oauth-gov-confirm-bar {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++}
++
++.kb-oauth-gov-confirm-revoke-btn {
++  padding: 4px 8px;
++  min-height: 36px;
++  background-color: #da3633;
++  color: #ffffff;
++  border: 1px solid transparent;
++  border-radius: 6px;
++  font-size: 0.75rem;
++  font-weight: 600;
++  cursor: pointer;
++}
++
++.kb-oauth-gov-cancel-btn {
++  padding: 4px 8px;
++  min-height: 36px;
++  background: transparent;
++  color: var(--kb-color-text-secondary, #8b949e);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  border-radius: 6px;
++  font-size: 0.75rem;
++  cursor: pointer;
++}
++
++.kb-oauth-gov-alert {
++  padding: 12px 16px;
++  margin-bottom: 16px;
++  border-radius: 6px;
++  font-size: 0.875rem;
++}
++
++.kb-oauth-gov-alert-error {
++  background-color: rgba(248, 81, 73, 0.15);
++  border: 1px solid rgba(248, 81, 73, 0.4);
++  color: #f85149;
++}
++
++.kb-oauth-gov-alert-success {
++  background-color: rgba(35, 134, 54, 0.15);
++  border: 1px solid rgba(63, 185, 80, 0.4);
++  color: #3fb950;
++}
++
++.kb-oauth-gov-empty-state {
++  text-align: center;
++  padding: 32px 16px;
++  color: var(--kb-color-text-secondary, #8b949e);
++  font-style: italic;
++}
++
++/* Modal details */
++.kb-oauth-modal-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.65);
++  backdrop-filter: blur(2px);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++  padding: 16px;
++}
++
++.kb-oauth-modal-card {
++  background-color: var(--kb-color-bg-surface, #161b22);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  border-radius: 10px;
++  width: 100%;
++  max-width: 600px;
++  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
++  display: flex;
++  flex-direction: column;
++  max-height: calc(100vh - 64px);
++}
++
++.kb-oauth-modal-header {
++  padding: 16px 20px;
++  border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.kb-oauth-modal-body {
++  padding: 20px;
++  overflow-y: auto;
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.kb-oauth-modal-footer {
++  padding: 12px 20px;
++  border-top: 1px solid var(--kb-color-border-subtle, #30363d);
++  display: flex;
++  justify-content: flex-end;
++}
++
++.kb-oauth-detail-row {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.kb-oauth-detail-label {
++  font-size: 0.75rem;
++  font-weight: 600;
++  text-transform: uppercase;
++  color: var(--kb-color-text-secondary, #8b949e);
++}
++
++.kb-oauth-detail-value {
++  font-size: 0.875rem;
++  color: var(--kb-color-text-primary, #f0f6fc);
++}
++
++@media (max-width: 768px) {
++  .kb-oauth-gov-header {
++    flex-direction: column;
++    align-items: stretch;
++  }
++  .kb-oauth-gov-table-wrap {
++    margin: 0 -16px;
++    padding: 0 16px;
++  }
++}
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+new file mode 100644
+index 0000000..de15977
+--- /dev/null
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -0,0 +1,459 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useEffect, type JSX } from 'react';
++import { Link } from 'react-router';
++import {
++  fetchAdminOAuthClients,
++  patchAdminOAuthClient,
++  deleteAdminOAuthClient,
++  type OAuthClientItem,
++} from './oauthApi';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
++import './OAuthClientGovernanceStudio.css';
++
++export function OAuthClientGovernanceStudio(): JSX.Element {
++  const [clients, setClients] = useState<OAuthClientItem[]>([]);
++  const [loading, setLoading] = useState<boolean>(true);
++  const [error, setError] = useState<string | null>(null);
++  const [successMsg, setSuccessMsg] = useState<string | null>(null);
++  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
++  const [inspectClient, setInspectClient] = useState<OAuthClientItem | null>(null);
++
++  useEffect(() => {
++    const isMounted = { current: true };
++    void (async () => {
++      try {
++        const data = await fetchAdminOAuthClients();
++        if (isMounted.current) {
++          setClients(data);
++          setLoading(false);
++        }
++      } catch (err: unknown) {
++        if (isMounted.current) {
++          if (err instanceof Error) {
++            setError(err.message);
++          } else {
++            setError('Failed to load registered OAuth clients.');
++          }
++          setLoading(false);
++        }
++      }
++    })();
++    return () => {
++      isMounted.current = false;
++    };
++  }, []);
++
++  const loadClients = async (): Promise<void> => {
++    setLoading(true);
++    setError(null);
++    try {
++      const data = await fetchAdminOAuthClients();
++      setClients(data);
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError('Failed to load registered OAuth clients.');
++      }
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  const handleApprove = async (clientId: string): Promise<void> => {
++    setError(null);
++    setSuccessMsg(null);
++    try {
++      await patchAdminOAuthClient(clientId, { status: 'active' });
++      setClients((prev) =>
++        prev.map((c) => (c.client_id === clientId ? { ...c, status: 'active' } : c)),
++      );
++      setSuccessMsg(`Client ${clientId} activated successfully.`);
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError(`Failed to activate client ${clientId}.`);
++      }
++    }
++  };
++
++  const handleSuspend = async (clientId: string): Promise<void> => {
++    setError(null);
++    setSuccessMsg(null);
++    try {
++      await patchAdminOAuthClient(clientId, { status: 'suspended' });
++      setClients((prev) =>
++        prev.map((c) => (c.client_id === clientId ? { ...c, status: 'suspended' } : c)),
++      );
++      setSuccessMsg(`Client ${clientId} suspended and active grants revoked.`);
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError(`Failed to suspend client ${clientId}.`);
++      }
++    }
++  };
++
++  const handleConfirmRevoke = async (clientId: string): Promise<void> => {
++    setError(null);
++    setSuccessMsg(null);
++    try {
++      await deleteAdminOAuthClient(clientId);
++      setClients((prev) =>
++        prev.map((c) => (c.client_id === clientId ? { ...c, status: 'revoked' } : c)),
++      );
++      setSuccessMsg(`Client ${clientId} revoked permanently.`);
++    } catch (err: unknown) {
++      if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError(`Failed to revoke client ${clientId}.`);
++      }
++    } finally {
++      setConfirmRevokeId(null);
++    }
++  };
++
++  const getStatusBadge = (status: string): JSX.Element => {
++    switch (status) {
++      case 'active':
++        return (
++          <span
++            className="kb-oauth-gov-badge kb-oauth-gov-badge-active"
++            data-testid="status-badge-active"
++          >
++            Active
++          </span>
++        );
++      case 'suspended':
++        return (
++          <span
++            className="kb-oauth-gov-badge kb-oauth-gov-badge-suspended"
++            data-testid="status-badge-suspended"
++          >
++            Suspended
++          </span>
++        );
++      case 'disabled':
++        return (
++          <span
++            className="kb-oauth-gov-badge kb-oauth-gov-badge-disabled"
++            data-testid="status-badge-disabled"
++          >
++            Disabled
++          </span>
++        );
++      case 'revoked':
++      default:
++        return (
++          <span
++            className="kb-oauth-gov-badge kb-oauth-gov-badge-revoked"
++            data-testid="status-badge-revoked"
++          >
++            Revoked
++          </span>
++        );
++    }
++  };
++
++  return (
++    <div className="kb-oauth-gov-container" data-testid="oauth-client-governance-studio">
++      <header className="kb-oauth-gov-header">
++        <div>
++          <h1 className="kb-oauth-gov-title" data-testid="studio-title">
++            OAuth 2.1 + PKCE Client Governance
++          </h1>
++          <p className="kb-oauth-gov-subtitle">
++            Administer registered OAuth 2.1 clients, redirect URIs, and authorization grants
++            with zero-trust administrative approval and revocation.
++          </p>
++        </div>
++        <button
++          type="button"
++          className="kb-oauth-gov-refresh-btn"
++          data-testid="refresh-clients-btn"
++          onClick={() => {
++            void loadClients();
++          }}
++        >
++          <span aria-hidden="true">🔄</span> Refresh
++        </button>
++      </header>
++
++      <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
++        <Link to="/admin/mcp" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-mcp">
++          Bot API Keys
++        </Link>
++        <Link
++          to="/admin/oauth"
++          className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
++          data-testid="tab-admin-oauth"
++        >
++          OAuth 2.1 Clients
++        </Link>
++        <Link
++          to="/admin/imports"
++          className="kb-mcp-admin-subnav-link"
++          data-testid="tab-admin-imports"
++        >
++          Plane Migration Studio
++        </Link>
++      </nav>
++
++      {error !== null && (
++        <div className="kb-oauth-gov-alert kb-oauth-gov-alert-error" role="alert" data-testid="error-alert">
++          {error}
++        </div>
++      )}
++
++      {successMsg !== null && (
++        <div
++          className="kb-oauth-gov-alert kb-oauth-gov-alert-success"
++          role="status"
++          data-testid="success-alert"
++        >
++          {successMsg}
++        </div>
++      )}
++
++      <section className="kb-oauth-gov-section" data-testid="oauth-clients-section">
++        <div className="kb-oauth-gov-section-header">
++          <h2 className="kb-oauth-gov-section-title">
++            <EmojiHint kind="access" /> Registered OAuth 2.1 Clients
++          </h2>
++        </div>
++
++        <div className="kb-oauth-gov-table-wrap">
++          <table className="kb-oauth-gov-table" data-testid="clients-table">
++            <thead>
++              <tr>
++                <th className="kb-oauth-gov-th">Application / Client ID</th>
++                <th className="kb-oauth-gov-th">Type</th>
++                <th className="kb-oauth-gov-th">Status</th>
++                <th className="kb-oauth-gov-th">Redirect URIs</th>
++                <th className="kb-oauth-gov-th">Registered</th>
++                <th className="kb-oauth-gov-th">Actions</th>
++              </tr>
++            </thead>
++            <tbody>
++              {clients.length === 0 && !loading && (
++                <tr>
++                  <td colSpan={6} className="kb-oauth-gov-empty-state" data-testid="empty-clients">
++                    No OAuth 2.1 clients registered. Dynamic client registration (RFC 7591)
++                    is available via POST /oauth/register.
++                  </td>
++                </tr>
++              )}
++              {clients.map((client) => {
++                const isConfirming = confirmRevokeId === client.client_id;
++                const isRevoked = client.status === 'revoked';
++
++                return (
++                  <tr
++                    key={client.client_id}
++                    className="kb-oauth-gov-tr"
++                    data-testid={`client-row-${client.client_id}`}
++                  >
++                    <td className="kb-oauth-gov-td">
++                      <div className="kb-oauth-gov-client-name" data-testid={`client-name-${client.client_id}`}>
++                        {client.client_name ?? client.client_id}
++                      </div>
++                      <code className="kb-oauth-gov-client-id">{client.client_id}</code>
++                    </td>
++                    <td className="kb-oauth-gov-td">
++                      <span>{client.client_type}</span>
++                    </td>
++                    <td className="kb-oauth-gov-td" data-testid={`client-status-${client.client_id}`}>
++                      {getStatusBadge(client.status)}
++                    </td>
++                    <td className="kb-oauth-gov-td">
++                      <div className="kb-oauth-gov-uri-list">
++                        {client.redirect_uris.slice(0, 2).map((uri) => (
++                          <span key={uri} className="kb-oauth-gov-uri-code" title={uri}>
++                            {uri}
++                          </span>
++                        ))}
++                        {client.redirect_uris.length > 2 && (
++                          <span className="kb-oauth-gov-uri-code">
++                            +{client.redirect_uris.length - 2} more
++                          </span>
++                        )}
++                      </div>
++                    </td>
++                    <td className="kb-oauth-gov-td">
++                      {client.created_at ? new Date(client.created_at).toLocaleDateString() : '-'}
++                    </td>
++                    <td className="kb-oauth-gov-td">
++                      <div className="kb-oauth-gov-btn-group">
++                        <button
++                          type="button"
++                          className="kb-oauth-gov-btn"
++                          data-testid={`inspect-btn-${client.client_id}`}
++                          onClick={() => {
++                            setInspectClient(client);
++                          }}
++                        >
++                          Inspect
++                        </button>
++
++                        {client.status !== 'active' && !isRevoked && (
++                          <button
++                            type="button"
++                            className="kb-oauth-gov-btn kb-oauth-gov-btn-approve"
++                            data-testid={`approve-btn-${client.client_id}`}
++                            onClick={() => {
++                              void handleApprove(client.client_id);
++                            }}
++                          >
++                            Activate
++                          </button>
++                        )}
++
++                        {client.status === 'active' && (
++                          <button
++                            type="button"
++                            className="kb-oauth-gov-btn kb-oauth-gov-btn-suspend"
++                            data-testid={`suspend-btn-${client.client_id}`}
++                            onClick={() => {
++                              void handleSuspend(client.client_id);
++                            }}
++                          >
++                            Suspend
++                          </button>
++                        )}
++
++                        {!isRevoked && (
++                          <>
++                            {isConfirming ? (
++                              <div
++                                className="kb-oauth-gov-confirm-bar"
++                                data-testid={`confirm-revoke-bar-${client.client_id}`}
++                              >
++                                <button
++                                  type="button"
++                                  className="kb-oauth-gov-cancel-btn"
++                                  data-testid={`cancel-revoke-${client.client_id}`}
++                                  autoFocus
++                                  onClick={() => {
++                                    setConfirmRevokeId(null);
++                                  }}
++                                >
++                                  Cancel
++                                </button>
++                                <button
++                                  type="button"
++                                  className="kb-oauth-gov-confirm-revoke-btn"
++                                  data-testid={`confirm-revoke-${client.client_id}`}
++                                  onClick={() => {
++                                    void handleConfirmRevoke(client.client_id);
++                                  }}
++                                >
++                                  Confirm Revoke
++                                </button>
++                              </div>
++                            ) : (
++                              <button
++                                type="button"
++                                className="kb-oauth-gov-btn kb-oauth-gov-btn-revoke"
++                                data-testid={`revoke-btn-${client.client_id}`}
++                                onClick={() => {
++                                  setConfirmRevokeId(client.client_id);
++                                }}
++                              >
++                                Revoke
++                              </button>
++                            )}
++                          </>
++                        )}
++                      </div>
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      </section>
++
++      {/* Inspect Client Modal */}
++      {inspectClient !== null && (
++        <div
++          className="kb-oauth-modal-backdrop"
++          data-testid="inspect-modal-backdrop"
++          onClick={() => {
++            setInspectClient(null);
++          }}
++        >
++          <div
++            className="kb-oauth-modal-card"
++            data-testid="inspect-modal-card"
++            onClick={(e) => {
++              e.stopPropagation();
++            }}
++          >
++            <div className="kb-oauth-modal-header">
++              <h3 className="kb-oauth-section-title">
++                OAuth Client Details: {inspectClient.client_name ?? inspectClient.client_id}
++              </h3>
++              <button
++                type="button"
++                className="kb-oauth-gov-btn"
++                data-testid="close-inspect-btn"
++                onClick={() => {
++                  setInspectClient(null);
++                }}
++              >
++                Close
++              </button>
++            </div>
++            <div className="kb-oauth-modal-body">
++              <div className="kb-oauth-detail-row">
++                <span className="kb-oauth-detail-label">Client ID</span>
++                <code className="kb-oauth-detail-value">{inspectClient.client_id}</code>
++              </div>
++              <div className="kb-oauth-detail-row">
++                <span className="kb-oauth-detail-label">Client Type</span>
++                <span className="kb-oauth-detail-value">{inspectClient.client_type}</span>
++              </div>
++              <div className="kb-oauth-detail-row">
++                <span className="kb-oauth-detail-label">Status</span>
++                <span className="kb-oauth-detail-value">{getStatusBadge(inspectClient.status)}</span>
++              </div>
++              <div className="kb-oauth-detail-row">
++                <span className="kb-oauth-detail-label">Security Controls</span>
++                <span className="kb-oauth-detail-value">
++                  PKCE S256 Mandatory - Wildcard Redirects Prohibited (RFC 9700)
++                </span>
++              </div>
++              <div className="kb-oauth-detail-row">
++                <span className="kb-oauth-detail-label">Registered Redirect URIs</span>
++                <div className="kb-oauth-gov-uri-list">
++                  {inspectClient.redirect_uris.map((uri) => (
++                    <code key={uri} className="kb-oauth-gov-uri-code">
++                      {uri}
++                    </code>
++                  ))}
++                </div>
++              </div>
++            </div>
++            <div className="kb-oauth-modal-footer">
++              <button
++                type="button"
++                className="kb-oauth-gov-btn"
++                onClick={() => {
++                  setInspectClient(null);
++                }}
++              >
++                Done
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+new file mode 100644
+index 0000000..17c8a42
+--- /dev/null
++++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+@@ -0,0 +1,319 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { MemoryRouter } from 'react-router';
++import { OAuthClientGovernanceStudio } from '../OAuthClientGovernanceStudio';
++import * as oauthApi from '../oauthApi';
++
++const mockClients: oauthApi.OAuthClientItem[] = [
++  {
++    client_id: 'client_active_app',
++    client_name: 'Cursor IDE Assistant',
++    client_type: 'confidential',
++    redirect_uris: [
++      'https://cursor.com/callback',
++      'http://127.0.0.1:4567/callback',
++      'http://127.0.0.1:4568/callback',
++    ],
++    status: 'active',
++    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
++  },
++  {
++    client_id: 'client_pending_app',
++    client_name: 'Claude Code Agent',
++    client_type: 'public',
++    redirect_uris: ['http://127.0.0.1:8920/oauth/callback'],
++    status: 'suspended',
++    created_at: new Date('2026-02-01T00:00:00Z').toISOString(),
++  },
++  {
++    client_id: 'client_disabled_app',
++    client_name: null,
++    client_type: 'public',
++    redirect_uris: ['http://127.0.0.1:9999/callback'],
++    status: 'disabled',
++    created_at: '',
++  },
++  {
++    client_id: 'client_revoked_app',
++    client_name: 'Evil Compromised Client',
++    client_type: 'public',
++    redirect_uris: ['https://evil.example.com/callback'],
++    status: 'revoked',
++    created_at: new Date('2026-04-01T00:00:00Z').toISOString(),
++  },
++];
++
++describe('OAuthClientGovernanceStudio', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('renders title, subnav, and client rows', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('studio-title').textContent).toContain(
++        'OAuth 2.1 + PKCE Client Governance',
++      );
++      expect(screen.getByTestId('tab-admin-mcp')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-oauth')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-imports')).toBeDefined();
++      expect(screen.getByTestId('client-name-client_active_app').textContent).toContain(
++        'Cursor IDE Assistant',
++      );
++      expect(screen.getByTestId('client-name-client_disabled_app').textContent).toContain(
++        'client_disabled_app',
++      );
++    });
++  });
++
++  it('handles empty clients state cleanly', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue([]);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('empty-clients')).toBeDefined();
++    });
++  });
++
++  it('inspects client details in modal and closes modal', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('inspect-btn-client_active_app')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('inspect-btn-client_active_app'));
++    expect(screen.getByTestId('inspect-modal-card')).toBeDefined();
++    expect(screen.getByText('PKCE S256 Mandatory - Wildcard Redirects Prohibited (RFC 9700)')).toBeDefined();
++
++    // Close modal via close button
++    fireEvent.click(screen.getByTestId('close-inspect-btn'));
++    expect(screen.queryByTestId('inspect-modal-card')).toBeNull();
++
++    // Open again and click backdrop to close
++    fireEvent.click(screen.getByTestId('inspect-btn-client_active_app'));
++    expect(screen.getByTestId('inspect-modal-backdrop')).toBeDefined();
++    fireEvent.click(screen.getByTestId('inspect-modal-backdrop'));
++    expect(screen.queryByTestId('inspect-modal-card')).toBeNull();
++
++    // Inspect client with null client_name and null updated_at
++    fireEvent.click(screen.getByTestId('inspect-btn-client_disabled_app'));
++    expect(screen.getByTestId('inspect-modal-card').textContent).toContain('client_disabled_app');
++    fireEvent.click(screen.getByTestId('close-inspect-btn'));
++  });
++
++  it('approves / activates a suspended or disabled client', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++    const patchSpy = vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockResolvedValue(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('approve-btn-client_pending_app')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('approve-btn-client_pending_app'));
++
++    await waitFor(() => {
++      expect(patchSpy).toHaveBeenCalledWith('client_pending_app', { status: 'active' });
++      expect(screen.getByTestId('success-alert').textContent).toContain(
++        'Client client_pending_app activated successfully.',
++      );
++    });
++  });
++
++  it('suspends an active client', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++    const patchSpy = vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockResolvedValue(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('suspend-btn-client_active_app')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
++
++    await waitFor(() => {
++      expect(patchSpy).toHaveBeenCalledWith('client_active_app', { status: 'suspended' });
++      expect(screen.getByTestId('success-alert').textContent).toContain(
++        'Client client_active_app suspended',
++      );
++    });
++  });
++
++  it('performs 2-step inline revocation with cancel and confirm', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++    const deleteSpy = vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockResolvedValue(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('revoke-btn-client_active_app')).toBeDefined();
++    });
++
++    // Step 1: click revoke
++    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
++    expect(screen.getByTestId('confirm-revoke-bar-client_active_app')).toBeDefined();
++
++    // Cancel
++    fireEvent.click(screen.getByTestId('cancel-revoke-client_active_app'));
++    expect(screen.queryByTestId('confirm-revoke-bar-client_active_app')).toBeNull();
++
++    // Re-open and confirm
++    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
++    fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
++
++    await waitFor(() => {
++      expect(deleteSpy).toHaveBeenCalledWith('client_active_app');
++      expect(screen.getByTestId('success-alert').textContent).toContain('revoked permanently');
++    });
++  });
++
++  it('handles load and action errors with role="alert"', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockRejectedValueOnce(new Error('Network offline'));
++
++    const { unmount } = render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain('Network offline');
++    });
++    unmount();
++
++    // Load error with non-Error fallback
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockRejectedValueOnce('Raw failure');
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain(
++        'Failed to load registered OAuth clients.',
++      );
++    });
++  });
++
++  it('handles action patch and delete error branches', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce(new Error('Patch failed'));
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('approve-btn-client_pending_app')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('approve-btn-client_pending_app'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain('Patch failed');
++    });
++
++    // Patch error with non-Error fallback
++    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('Unknown string error');
++    fireEvent.click(screen.getByTestId('approve-btn-client_pending_app'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain(
++        'Failed to activate client client_pending_app.',
++      );
++    });
++
++    // Suspend error with Error and non-Error fallback
++    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce(new Error('Suspend rejected'));
++    fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain('Suspend rejected');
++    });
++
++    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('Suspend raw string');
++    fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain(
++        'Failed to suspend client client_active_app.',
++      );
++    });
++
++    // Delete error with Error and non-Error fallback
++    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValueOnce(new Error('Delete rejected'));
++    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
++    fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain('Delete rejected');
++    });
++
++    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValueOnce('Delete raw string');
++    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
++    fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
++    await waitFor(() => {
++      expect(screen.getByTestId('error-alert').textContent).toContain(
++        'Failed to revoke client client_active_app.',
++      );
++    });
++  });
++
++  it('handles refresh button click', async () => {
++    const fetchSpy = vi
++      .spyOn(oauthApi, 'fetchAdminOAuthClients')
++      .mockResolvedValueOnce([])
++      .mockResolvedValueOnce(mockClients);
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(fetchSpy).toHaveBeenCalledTimes(1);
++    });
++
++    fireEvent.click(screen.getByTestId('refresh-clients-btn'));
++
++    await waitFor(() => {
++      expect(fetchSpy).toHaveBeenCalledTimes(2);
++    });
++  });
++});
+diff --git a/kanban/web/src/features/oauth/__tests__/oauthApi.test.ts b/kanban/web/src/features/oauth/__tests__/oauthApi.test.ts
+new file mode 100644
+index 0000000..70c0e89
+--- /dev/null
++++ b/kanban/web/src/features/oauth/__tests__/oauthApi.test.ts
+@@ -0,0 +1,80 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import * as clientModule from '../../../api/client';
++import {
++  fetchDeviceCodeInfo,
++  submitDeviceActivation,
++  fetchAdminOAuthClients,
++  patchAdminOAuthClient,
++  deleteAdminOAuthClient,
++} from '../oauthApi';
++
++describe('oauthApi', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('fetchDeviceCodeInfo calls GET /api/v1/oauth/device/info with query', async () => {
++    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
++      user_code: 'WDJB-MJHT',
++      client_name: 'Cursor IDE',
++    });
++
++    const res = await fetchDeviceCodeInfo('WDJB-MJHT');
++    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/oauth/device/info', {
++      query: { user_code: 'WDJB-MJHT' },
++    });
++    expect(res.user_code).toBe('WDJB-MJHT');
++  });
++
++  it('submitDeviceActivation calls POST /api/v1/oauth/device/activate', async () => {
++    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
++      status: 'approved',
++      grant_id: 'grant-123',
++    });
++
++    const res = await submitDeviceActivation({
++      user_code: 'WDJB-MJHT',
++      approved: true,
++      scopes: ['agent:read'],
++    });
++
++    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/oauth/device/activate', {
++      body: JSON.stringify({
++        user_code: 'WDJB-MJHT',
++        approved: true,
++        scopes: ['agent:read'],
++      }),
++      headers: { 'Content-Type': 'application/json' },
++    });
++    expect(res.status).toBe('approved');
++  });
++
++  it('fetchAdminOAuthClients calls GET /api/v1/admin/oauth-clients', async () => {
++    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce([
++      { client_id: 'c1', client_type: 'confidential', status: 'active' },
++    ]);
++
++    const res = await fetchAdminOAuthClients();
++    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/admin/oauth-clients');
++    expect(res).toHaveLength(1);
++  });
++
++  it('patchAdminOAuthClient and deleteAdminOAuthClient call expected routes', async () => {
++    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({});
++
++    await patchAdminOAuthClient('c1', { status: 'suspended' });
++    expect(spy).toHaveBeenCalledWith('PATCH', '/api/v1/admin/oauth-clients/{client_id}', {
++      params: { client_id: 'c1' },
++      body: JSON.stringify({ status: 'suspended' }),
++      headers: { 'Content-Type': 'application/json' },
++    });
++
++    await deleteAdminOAuthClient('c1');
++    expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/oauth-clients/{client_id}', {
++      params: { client_id: 'c1' },
++    });
++  });
++});
+diff --git a/kanban/web/src/features/oauth/oauthApi.ts b/kanban/web/src/features/oauth/oauthApi.ts
+index 9991cad..34b6466 100644
+--- a/kanban/web/src/features/oauth/oauthApi.ts
++++ b/kanban/web/src/features/oauth/oauthApi.ts
+@@ -40,3 +40,42 @@ export async function submitDeviceActivation(
+     headers: { 'Content-Type': 'application/json' },
+   })) as DeviceActivateResponse;
+ }
++
++export type OAuthClientStatus = 'active' | 'suspended' | 'disabled' | 'revoked';
++
++export interface OAuthClientItem {
++  client_id: string;
++  client_name?: string | null | undefined;
++  client_type: 'confidential' | 'public';
++  redirect_uris: string[];
++  status: OAuthClientStatus;
++  created_at: string;
++  updated_at?: string | null | undefined;
++}
++
++export interface PatchOAuthClientRequest {
++  status?: OAuthClientStatus | undefined;
++  client_name?: string | undefined;
++  redirect_uris?: string[] | undefined;
++}
++
++export async function fetchAdminOAuthClients(): Promise<OAuthClientItem[]> {
++  return (await apiFetch('GET', '/api/v1/admin/oauth-clients' as never)) as OAuthClientItem[];
++}
++
++export async function patchAdminOAuthClient(
++  clientId: string,
++  payload: PatchOAuthClientRequest,
++): Promise<void> {
++  await apiFetch('PATCH', '/api/v1/admin/oauth-clients/{client_id}' as never, {
++    params: { client_id: clientId },
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  });
++}
++
++export async function deleteAdminOAuthClient(clientId: string): Promise<void> {
++  await apiFetch('DELETE', '/api/v1/admin/oauth-clients/{client_id}' as never, {
++    params: { client_id: clientId },
++  });
++}
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index f45795d..185201a 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -47,6 +47,39 @@
+   background-color: #2ea043;
+ }
+ 
++.kb-mcp-admin-subnav {
++  display: flex;
++  gap: 12px;
++  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  margin-bottom: 24px;
++  padding-bottom: 4px;
++}
++
++.kb-mcp-admin-subnav-link {
++  display: inline-flex;
++  align-items: center;
++  padding: 8px 16px;
++  min-height: 44px;
++  border-radius: 6px 6px 0 0;
++  text-decoration: none;
++  font-size: 0.95rem;
++  font-weight: 500;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  border-bottom: 2px solid transparent;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-mcp-admin-subnav-link:hover {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++  border-bottom-color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++.kb-mcp-admin-subnav-active {
++  color: #58a6ff !important;
++  border-bottom-color: #58a6ff !important;
++  font-weight: 600;
++}
++
+ .kb-mcp-studio-section {
+   margin-bottom: var(--section-gap);
+   background-color: var(--kb-color-bg-surface, var(--bg-surface));
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 13ebf33..30817b9 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -2,7 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React, { useState, useEffect, type JSX } from 'react';
+-import { useParams } from 'react-router';
++import { useParams, Link } from 'react-router';
+ import {
+   fetchPersonalMcpKeys,
+   mintPersonalMcpKey,
+@@ -153,7 +153,7 @@ export function McpAccessStudio({
+     void (async () => {
+       try {
+         const [fetchedKeys, fetchedApps] = await Promise.all([
+-          fetchPersonalMcpKeys(),
++          tier === 'global' ? fetchPersonalMcpKeys('global') : fetchPersonalMcpKeys(),
+           fetchConnectedApps(),
+         ]);
+         if (isMounted.current) {
+@@ -188,7 +188,8 @@ export function McpAccessStudio({
+         label: newKeyLabel.trim(),
+         surface: newKeySurface,
+         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
+-        scope_tier: tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
++        scope_tier:
++          tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
+         ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
+         ...(isUnlimited
+           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
+@@ -222,7 +223,11 @@ export function McpAccessStudio({
+ 
+   const handleConfirmRevokeKey = async (keyId: string): Promise<void> => {
+     try {
+-      await revokePersonalMcpKey(keyId);
++      if (tier === 'global') {
++        await revokePersonalMcpKey(keyId, 'global');
++      } else {
++        await revokePersonalMcpKey(keyId);
++      }
+       setKeys((prev) =>
+         prev.map((k) =>
+           k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k,
+@@ -246,7 +251,10 @@ export function McpAccessStudio({
+     }
+   };
+ 
+-  const getTierBadge = (keyTier: ScopeTier): JSX.Element => {
++  const getTierBadge = (
++    keyTier: ScopeTier,
++    allowedProjects?: string[] | null,
++  ): JSX.Element => {
+     if (keyTier === 'global') {
+       return (
+         <span className="kb-mcp-tier-badge kb-mcp-tier-global" data-testid="tier-badge-global">
+@@ -262,9 +270,13 @@ export function McpAccessStudio({
+       );
+     }
+     if (keyTier === 'project') {
++      const projLabel =
++        allowedProjects && allowedProjects.length > 0
++          ? allowedProjects.join(', ')
++          : projectKey;
+       return (
+         <span className="kb-mcp-tier-badge kb-mcp-tier-project" data-testid="tier-badge-project">
+-          <EmojiHint kind="access" /> Project: {projectKey}
++          <EmojiHint kind="access" /> Project: {projLabel}
+         </span>
+       );
+     }
+@@ -314,6 +326,32 @@ export function McpAccessStudio({
+         </button>
+       </header>
+ 
++      {tier === 'global' && (
++        <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
++          <Link
++            to="/admin/mcp"
++            className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
++            data-testid="tab-admin-mcp"
++          >
++            Bot API Keys
++          </Link>
++          <Link
++            to="/admin/oauth"
++            className="kb-mcp-admin-subnav-link"
++            data-testid="tab-admin-oauth"
++          >
++            OAuth 2.1 Clients
++          </Link>
++          <Link
++            to="/admin/imports"
++            className="kb-mcp-admin-subnav-link"
++            data-testid="tab-admin-imports"
++          >
++            Plane Migration Studio
++          </Link>
++        </nav>
++      )}
++
+       {/* MCP Keys Table Section */}
+       <section className="kb-mcp-studio-section" data-testid="mcp-keys-section">
+         <h2 className="kb-mcp-section-title">
+@@ -355,7 +393,7 @@ export function McpAccessStudio({
+                         {prefix}...{k.display_hint}
+                       </code>
+                     </td>
+-                    <td className="kb-mcp-td">{getTierBadge(k.scope_tier)}</td>
++                    <td className="kb-mcp-td">{getTierBadge(k.scope_tier, k.allowed_projects)}</td>
+                     <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
+                     <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
+                       {k.expires_at ? (
+@@ -525,6 +563,7 @@ export function McpAccessStudio({
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="mint-modal-title"
++            data-testid="mint-modal-card"
+           >
+             <div className="kb-snippet-modal-header">
+               <h2 id="mint-modal-title" className="kb-snippet-modal-title">Mint New MCP Access Key</h2>
+diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.tsx b/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
+index 73d1f0a..6ab66ab 100644
+--- a/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
++++ b/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
+@@ -13,7 +13,7 @@ export interface McpConfigSnippetModalProps {
+   onClose: () => void;
+ }
+ 
+-type ClientTab = 'gemini' | 'antigravity' | 'claude';
++type ClientTab = 'claude' | 'cursor' | 'gemini' | 'antigravity' | 'codex';
+ type UrlScope = 'global' | 'workspace' | 'project';
+ 
+ export function McpConfigSnippetModal({
+@@ -23,7 +23,7 @@ export function McpConfigSnippetModal({
+   projectKey = 'KANBA',
+   onClose,
+ }: McpConfigSnippetModalProps): JSX.Element {
+-  const [activeTab, setActiveTab] = useState<ClientTab>('gemini');
++  const [activeTab, setActiveTab] = useState<ClientTab>('claude');
+   const [urlScope, setUrlScope] = useState<UrlScope>('project');
+   const [keyCopied, setKeyCopied] = useState<boolean>(false);
+   const [snippetCopied, setSnippetCopied] = useState<boolean>(false);
+@@ -52,7 +52,25 @@ export function McpConfigSnippetModal({
+   const effectiveKey = rawKey ?? '<your-mcp-key>';
+ 
+   let snippet = '';
+-  if (activeTab === 'gemini') {
++  if (activeTab === 'claude') {
++    const claudeJson = JSON.stringify(
++      {
++        mcpServers: {
++          kanban: {
++            type: 'sse',
++            url: endpointUrl,
++            headers: {
++              Authorization: `Bearer ${effectiveKey}`,
++            },
++          },
++        },
++      },
++      null,
++      2,
++    );
++    const claudeCmd = `claude mcp add kanban ${endpointUrl} --header "Authorization: Bearer ${effectiveKey}"`;
++    snippet = `${claudeJson}\n\n# Or add via Claude Code CLI:\n${claudeCmd}`;
++  } else if (activeTab === 'cursor') {
+     snippet = JSON.stringify(
+       {
+         mcpServers: {
+@@ -67,7 +85,7 @@ export function McpConfigSnippetModal({
+       null,
+       2,
+     );
+-  } else if (activeTab === 'antigravity') {
++  } else if (activeTab === 'gemini' || activeTab === 'antigravity') {
+     const agyJson = JSON.stringify(
+       {
+         mcpServers: {
+@@ -85,7 +103,7 @@ export function McpConfigSnippetModal({
+     const agyCmd = `agy mcp add --header "Authorization: Bearer ${effectiveKey}" kanban ${endpointUrl}`;
+     snippet = `${agyJson}\n\n# Or add via agy CLI:\n${agyCmd}`;
+   } else {
+-    snippet = JSON.stringify(
++    const codexJson = JSON.stringify(
+       {
+         mcpServers: {
+           kanban: {
+@@ -99,6 +117,8 @@ export function McpConfigSnippetModal({
+       null,
+       2,
+     );
++    const codexCmd = `codex mcp add kanban ${endpointUrl} --header "Authorization: Bearer ${effectiveKey}"`;
++    snippet = `${codexJson}\n\n# Or add via OpenAI Codex CLI:\n${codexCmd}`;
+   }
+ 
+   const handleCopy = async (text: string, isKey: boolean): Promise<void> => {
+@@ -196,6 +216,30 @@ export function McpConfigSnippetModal({
+         </div>
+ 
+         <div className="kb-snippet-tabs-row" role="tablist">
++          <button
++            type="button"
++            role="tab"
++            aria-selected={activeTab === 'claude'}
++            className={`kb-snippet-tab-btn ${activeTab === 'claude' ? 'kb-snippet-tab-active' : ''}`}
++            data-testid="tab-claude"
++            onClick={() => {
++              setActiveTab('claude');
++            }}
++          >
++            Claude Code
++          </button>
++          <button
++            type="button"
++            role="tab"
++            aria-selected={activeTab === 'cursor'}
++            className={`kb-snippet-tab-btn ${activeTab === 'cursor' ? 'kb-snippet-tab-active' : ''}`}
++            data-testid="tab-cursor"
++            onClick={() => {
++              setActiveTab('cursor');
++            }}
++          >
++            Cursor
++          </button>
+           <button
+             type="button"
+             role="tab"
+@@ -206,7 +250,7 @@ export function McpConfigSnippetModal({
+               setActiveTab('gemini');
+             }}
+           >
+-            Gemini CLI (.gemini/settings.json)
++            Gemini CLI
+           </button>
+           <button
+             type="button"
+@@ -218,19 +262,19 @@ export function McpConfigSnippetModal({
+               setActiveTab('antigravity');
+             }}
+           >
+-            Antigravity (mcp_config.json)
++            Antigravity
+           </button>
+           <button
+             type="button"
+             role="tab"
+-            aria-selected={activeTab === 'claude'}
+-            className={`kb-snippet-tab-btn ${activeTab === 'claude' ? 'kb-snippet-tab-active' : ''}`}
+-            data-testid="tab-claude"
++            aria-selected={activeTab === 'codex'}
++            className={`kb-snippet-tab-btn ${activeTab === 'codex' ? 'kb-snippet-tab-active' : ''}`}
++            data-testid="tab-codex"
+             onClick={() => {
+-              setActiveTab('claude');
++              setActiveTab('codex');
+             }}
+           >
+-            Claude Code / Codex
++            OpenAI Codex
+           </button>
+         </div>
+ 
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 15d0f62..09aaac8 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -932,7 +932,9 @@ export function ProjectSettingsPage(): JSX.Element {
+   return (
+     <div data-testid="project-settings-page" className="kb-settings-container">
+       <header className="kb-settings-header">
+-        <h1 className="kb-settings-title">Project Settings: {project?.name || projectKey}</h1>
++        <h1 className="kb-settings-title">
++          Project Settings: {project?.name && project.name.trim().length > 0 ? project.name : projectKey}
++        </h1>
+         <p className="kb-settings-subtitle">
+           Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
+           and lifecycle.
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index 571f391..c344ced 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -172,6 +172,40 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+     await waitFor(() => {
+       expect(screen.getByTestId('studio-title').textContent).toContain('Global Cross-Workspace Bot Keys');
++      expect(screen.getByTestId('tab-admin-mcp')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-oauth')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-imports')).toBeDefined();
++    });
++  });
++
++  it('renders Project: QAADM badge when key has allowed_projects set to QAADM across settings surfaces (KANBA-218)', async () => {
++    const qaadmKey: settingsApi.McpApiKeyItem = {
++      id: 'key-qaadm',
++      label: 'QA Admin Key',
++      display_hint: '99aa',
++      surface: 'agent',
++      scope_tier: 'project',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: ['QAADM'],
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    };
++
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([qaadmKey]);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      const badge = screen.getByTestId('tier-badge-project');
++      expect(badge.textContent).toContain('Project: QAADM');
++      expect(badge.textContent).not.toContain('Project: KANBA');
+     });
+   });
+ 
+@@ -799,4 +833,75 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       );
+     });
+   });
++
++  it('covers tier badge edge cases, viewer tool narrowing, and non-Error rejections', async () => {
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([
++      {
++        id: 'key-edge-1',
++        label: 'Edge Tier Key',
++        display_hint: 'e1e1',
++        surface: 'agent',
++        scope_tier: 'project',
++        scopes: [],
++        allowed_projects: [],
++        created_at: new Date().toISOString(),
++        expires_at: null,
++        last_used_at: null,
++        revoked_at: null,
++      },
++      {
++        id: 'key-edge-2',
++        label: 'Custom Tier Key',
++        display_hint: 'e2e2',
++        surface: 'agent',
++        scope_tier: 'custom_tier' as never,
++        scopes: [],
++        allowed_projects: null,
++        created_at: new Date().toISOString(),
++        expires_at: null,
++        last_used_at: null,
++        revoked_at: null,
++      },
++    ]);
++
++    // Mock viewer role
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
++      id: 'u-viewer',
++      handle: 'viewer_user',
++      workspace_role: 'VIEWER',
++      is_workspace_admin: false,
++      is_server_admin: false,
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByText(/Project: KANBA/)).toBeDefined();
++      expect(screen.getByTestId('revoke-btn-key-edge-1')).toBeDefined();
++    });
++
++    // Revoke failure with non-Error string
++    vi.spyOn(settingsApi, 'revokePersonalMcpKey').mockRejectedValueOnce('Plain revoke failure');
++    fireEvent.click(screen.getByTestId('revoke-btn-key-edge-1'));
++    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('confirm-revoke-bar')).toBeNull();
++    });
++
++    // Mint modal with viewer role and non-Error mint rejection
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('Plain mint failure');
++    fireEvent.change(screen.getByTestId('mint-label-input'), {
++      target: { value: 'Viewer Key' },
++    });
++    fireEvent.click(screen.getByTestId('mint-submit-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-error-banner').textContent).toContain('Failed to mint MCP key.');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx b/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
+index 55df896..16930c9 100644
+--- a/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
+@@ -86,7 +86,16 @@ describe('McpConfigSnippetModal direct unit tests', () => {
+     expect(snippetBox.textContent).toContain('agy mcp add --header');
+ 
+     fireEvent.click(screen.getByTestId('tab-claude'));
++    expect(screen.getByTestId('snippet-code-box').textContent).toContain('claude mcp add');
++
++    fireEvent.click(screen.getByTestId('tab-cursor'));
++    expect(screen.getByTestId('snippet-code-box').textContent).toContain('"url":');
++
+     fireEvent.click(screen.getByTestId('tab-gemini'));
++    expect(screen.getByTestId('snippet-code-box').textContent).toContain('serverUrl');
++
++    fireEvent.click(screen.getByTestId('tab-codex'));
++    expect(screen.getByTestId('snippet-code-box').textContent).toContain('codex mcp add');
+ 
+     // Switch url scope
+     const urlSelect = screen.getByTestId('url-scope-select');
+diff --git a/kanban/web/src/features/settings/settingsApi.test.ts b/kanban/web/src/features/settings/settingsApi.test.ts
+index e30e38f..2fd980b 100644
+--- a/kanban/web/src/features/settings/settingsApi.test.ts
++++ b/kanban/web/src/features/settings/settingsApi.test.ts
+@@ -95,4 +95,29 @@ describe('settingsApi', () => {
+       params: { grant_id: 'g-77' },
+     });
+   });
++
++  it('supports global tier for fetchPersonalMcpKeys, mintPersonalMcpKey, and revokePersonalMcpKey', async () => {
++    const spy = vi.spyOn(clientModule, 'apiFetch');
++    spy.mockResolvedValueOnce({
++      keys: [{ id: 'k-glob', surface: 'agent', display_hint: 'glob123' }],
++    });
++
++    const res = await fetchPersonalMcpKeys('global');
++    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/admin/mcp-keys');
++    expect(res[0]?.id).toBe('k-glob');
++
++    spy.mockResolvedValueOnce({ id: 'k-glob-2', surface: 'admin', raw_key: 'raw_secret' });
++    const minted = await mintPersonalMcpKey(
++      { label: 'Global Server Key', surface: 'admin', scopes: [] },
++      'global',
++    );
++    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/mcp-keys', expect.any(Object));
++    expect(minted.id).toBe('k-glob-2');
++
++    spy.mockResolvedValueOnce({});
++    await revokePersonalMcpKey('k-glob-2', 'global');
++    expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/mcp-keys/{key_id}', {
++      params: { key_id: 'k-glob-2' },
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/settings/settingsApi.ts b/kanban/web/src/features/settings/settingsApi.ts
+index e2f026b..4649ef1 100644
+--- a/kanban/web/src/features/settings/settingsApi.ts
++++ b/kanban/web/src/features/settings/settingsApi.ts
+@@ -73,8 +73,9 @@ function normalizeMcpKeyItem(
+   };
+ }
+ 
+-export async function fetchPersonalMcpKeys(): Promise<McpApiKeyItem[]> {
+-  const res = (await apiFetch('GET', '/api/v1/auth/mcp-keys' as never)) as
++export async function fetchPersonalMcpKeys(tier?: string): Promise<McpApiKeyItem[]> {
++  const endpoint = tier === 'global' ? '/api/v1/admin/mcp-keys' : '/api/v1/auth/mcp-keys';
++  const res = (await apiFetch('GET', endpoint as never)) as
+     | McpKeyListResponse
+     | McpApiKeyItem[];
+   const items = Array.isArray(res) ? res : res.keys;
+@@ -83,16 +84,22 @@ export async function fetchPersonalMcpKeys(): Promise<McpApiKeyItem[]> {
+ 
+ export async function mintPersonalMcpKey(
+   payload: MintMcpKeyRequest,
++  tier?: string,
+ ): Promise<McpApiKeyItem> {
+-  const created = (await apiFetch('POST', '/api/v1/auth/mcp-keys' as never, {
++  const endpoint = tier === 'global' ? '/api/v1/admin/mcp-keys' : '/api/v1/auth/mcp-keys';
++  const created = (await apiFetch('POST', endpoint as never, {
+     body: JSON.stringify(payload),
+     headers: { 'Content-Type': 'application/json' },
+   })) as McpApiKeyItem;
+   return normalizeMcpKeyItem(created, payload.label);
+ }
+ 
+-export async function revokePersonalMcpKey(keyId: string): Promise<void> {
+-  await apiFetch('DELETE', '/api/v1/auth/mcp-keys/{key_id}' as never, {
++export async function revokePersonalMcpKey(keyId: string, tier?: string): Promise<void> {
++  const endpoint =
++    tier === 'global'
++      ? '/api/v1/admin/mcp-keys/{key_id}'
++      : '/api/v1/auth/mcp-keys/{key_id}';
++  await apiFetch('DELETE', endpoint as never, {
+     params: { key_id: keyId },
+   });
+ }
+diff --git a/kanban/web/vitest.config.ts b/kanban/web/vitest.config.ts
+index 18e7f46..e728fcd 100644
+--- a/kanban/web/vitest.config.ts
++++ b/kanban/web/vitest.config.ts
+@@ -7,8 +7,8 @@ export default defineConfig({
+     environment: 'jsdom',
+     globals: true,
+     // Coverage instrumentation on a shared CI runner makes the heaviest jsdom route tests
+-    // exceed the 5s default (observed 5.1s alone, 13s under load); 30s avoids flaky reds.
+-    testTimeout: 30000,
++    // exceed the 5s default (observed 5.1s alone, 13s under load); 45s avoids flaky reds.
++    testTimeout: 45000,
+     include: [
+       'src/**/*.{test,spec}.{ts,tsx}',
+       'build/**/*.{test,spec}.ts',
+diff --git a/mcp/auth.py b/mcp/auth.py
+index c6a0a25..fc6072b 100644
+--- a/mcp/auth.py
++++ b/mcp/auth.py
+@@ -22,6 +22,7 @@ from mcp.registry import Surface
+ from mcp.settings import McpSettings
+ 
+ if TYPE_CHECKING:
++    import uuid
+     from collections.abc import Callable
+ 
+     from starlette.types import ASGIApp, Receive, Scope, Send
+@@ -189,6 +190,18 @@ class IntrospectionCache:
+         """Evict a specific entry from the cache."""
+         self._entries.pop((surface, digest), None)
+ 
++    def evict_by_key_id(self, key_id: str | uuid.UUID) -> int:
++        """Immediately evict all cached introspection entries matching key_id."""
++        target_str = str(key_id)
++        to_evict = [
++            k
++            for k, (_, res) in self._entries.items()
++            if str(res.get("key_id", "")) == target_str or str(res.get("id", "")) == target_str
++        ]
++        for k in to_evict:
++            self._entries.pop(k, None)
++        return len(to_evict)
++
+     def clear(self) -> None:
+         """Clear all cached introspection entries."""
+         self._entries.clear()
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index d87c643..4e6beeb 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -606,12 +606,19 @@ class McpProtocolHandler:
+ 
+         tool_name, arguments = validated
+ 
++        spec = self.registry.get(tool_name)
++
+         # Enforce connection scope boundary constraints & auto-population
+         if connection_scope is not None:
+             from mcp.scoping import enforce_connection_scope_on_tool_call  # noqa: PLC0415
+ 
+             try:
+-                enforce_connection_scope_on_tool_call(tool_name, arguments, connection_scope)
++                enforce_connection_scope_on_tool_call(
++                    tool_name,
++                    arguments,
++                    connection_scope,
++                    tool_spec=spec,
++                )
+             except KbMcpError as scope_violation_err:
+                 return JSONResponse(
+                     {
+@@ -624,7 +631,6 @@ class McpProtocolHandler:
+                     }
+                 )
+ 
+-        spec = self.registry.get(tool_name)
+         if spec is None:
+             not_found_err = KbMcpError(
+                 code=McpErrorCode.NOT_FOUND,
+diff --git a/mcp/scoping.py b/mcp/scoping.py
+index 4848e27..c1cdf6d 100644
+--- a/mcp/scoping.py
++++ b/mcp/scoping.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import contextlib
+ import hashlib
+ import re
+ from dataclasses import dataclass
+@@ -267,10 +268,36 @@ def compute_session_fingerprint(
+     return hashlib.sha256(token_sha256 + b"\x00" + ws_bytes + b"\x00" + proj_bytes).digest()
+ 
+ 
++def _tool_accepts_project(
++    tool_name: str,
++    tool_spec: object | None,
++    input_schema: dict[str, Any] | None,
++) -> bool:
++    schema = input_schema
++    if schema is None and tool_spec is not None:
++        schema = getattr(tool_spec, "input_schema", None)
++    if schema is None:
++        with contextlib.suppress(Exception):
++            from mcp.surfaces.agent import create_agent_registry  # noqa: PLC0415
++
++            t = create_agent_registry().get(tool_name)
++            if t is not None:
++                schema = t.input_schema
++
++    if isinstance(schema, dict):
++        properties = schema.get("properties", {})
++        add_props = schema.get("additionalProperties", True)
++        if "project" not in properties and add_props is False:
++            return False
++    return True
++
++
+ def enforce_connection_scope_on_tool_call(
+     tool_name: str,
+     arguments: dict[str, Any],
+     scope: ConnectionScope,
++    tool_spec: object | None = None,
++    input_schema: dict[str, Any] | None = None,
+ ) -> None:
+     """Auto-fill project in Mode C (Project-Scoped) and reject cross-project mutations.
+ 
+@@ -281,34 +308,33 @@ def enforce_connection_scope_on_tool_call(
+     if not scope.is_project or not scope.project_key:
+         return
+ 
+-    # Auto-fill or validate project parameter
+-    if (
+-        "project" not in arguments
+-        or arguments.get("project") is None
+-        or arguments.get("project") == ""
+-    ):
+-        arguments["project"] = scope.project_key
+-    elif str(arguments["project"]).upper() != scope.project_key:
+-        attempted = str(arguments["project"])
+-        msg = (
+-            f"Connection is strictly pinned to project '{scope.project_key}'. "
+-            f"Mutation targeting foreign project '{attempted}' was blocked."
+-        )
+-        raise KbMcpError(
+-            McpErrorCode.CONNECTION_SCOPE_VIOLATION,
+-            msg,
+-            extra={
+-                "pinned_scope": {
+-                    "workspace": scope.workspace_slug,
+-                    "project": scope.project_key,
++    val = arguments.get("project")
++    if val is not None and str(val).strip() != "":
++        if str(val).upper() != scope.project_key:
++            attempted = str(val)
++            msg = (
++                f"Connection is strictly pinned to project '{scope.project_key}'. "
++                f"Mutation targeting foreign project '{attempted}' was blocked."
++            )
++            raise KbMcpError(
++                McpErrorCode.CONNECTION_SCOPE_VIOLATION,
++                msg,
++                extra={
++                    "pinned_scope": {
++                        "workspace": scope.workspace_slug,
++                        "project": scope.project_key,
++                    },
++                    "attempted_target": attempted,
+                 },
+-                "attempted_target": attempted,
+-            },
+-            hint=(
+-                f"Connect to /mcp/agent/w/{scope.workspace_slug}/p/{attempted} "
+-                "or run in Global mode (/mcp/agent) to operate across projects."
+-            ),
+-        )
++                hint=(
++                    f"Connect to /mcp/agent/w/{scope.workspace_slug}/p/{attempted} "
++                    "or run in Global mode (/mcp/agent) to operate across projects."
++                ),
++            )
++        return
++
++    if _tool_accepts_project(tool_name, tool_spec, input_schema):
++        arguments["project"] = scope.project_key
+ 
+     # Check issue key identifier for mutating tools
+     mutating_tools: Final[frozenset[str]] = frozenset(
+diff --git a/mcp/tests/test_auth.py b/mcp/tests/test_auth.py
+index e4aaa91..a3ab3d7 100644
+--- a/mcp/tests/test_auth.py
++++ b/mcp/tests/test_auth.py
+@@ -7,6 +7,7 @@ from __future__ import annotations
+ import base64
+ import json
+ import os
++import uuid
+ from collections.abc import MutableMapping  # noqa: TC003
+ from pathlib import Path  # noqa: TC003
+ from typing import Any
+@@ -499,6 +500,14 @@ async def test_introspection_cache_methods() -> None:
+     cache.clear()
+     assert cache.get("agent", digest) is None
+ 
++    # Test evict_by_key_id for 0s immediate cache eviction
++    key_uuid = uuid.uuid4()
++    cache.set("agent", digest, {"active": True, "key_id": str(key_uuid)})
++    assert cache.get("agent", digest) is not None
++    evicted_count = cache.evict_by_key_id(key_uuid)
++    assert evicted_count == 1
++    assert cache.get("agent", digest) is None
++
+     def_cache = get_default_cache()
+     assert isinstance(def_cache, IntrospectionCache)
+ 
+diff --git a/mcp/tests/test_connection_scoping.py b/mcp/tests/test_connection_scoping.py
+index ad6cb9a..3518271 100644
+--- a/mcp/tests/test_connection_scoping.py
++++ b/mcp/tests/test_connection_scoping.py
+@@ -1030,3 +1030,24 @@ async def test_bare_mcp_routing_and_unauthorized_metadata() -> None:
+         '.well-known/oauth-protected-resource/mcp/agent/w/kanban/p/KANBA"'
+     )
+     assert expected_proj in auth_proj
++
++
++@pytest.mark.asyncio
++async def test_path_pinned_tool_argument_no_project_collision() -> None:
++    """Verify path-pinned connections do not inject project into tools with no project param."""
++    scope = ConnectionScope(ScopeMode.PROJECT, workspace_slug="kanban", project_key="KANBA")
++
++    # read_ticket has additionalProperties: False and no project parameter
++    args_read = {"identifier": "KANBA-1"}
++    enforce_connection_scope_on_tool_call("read_ticket", args_read, scope)
++    assert "project" not in args_read
++
++    # add_comment has additionalProperties: False and no project parameter
++    args_comment = {"identifier": "KANBA-1", "comment": "Note"}
++    enforce_connection_scope_on_tool_call("add_comment", args_comment, scope)
++    assert "project" not in args_comment
++
++    # create_ticket accepts project parameter -> auto-filled
++    args_create = {"title": "New issue"}
++    enforce_connection_scope_on_tool_call("create_ticket", args_create, scope)
++    assert args_create["project"] == "KANBA"

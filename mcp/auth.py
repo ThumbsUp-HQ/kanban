@@ -16,12 +16,18 @@ from typing import TYPE_CHECKING, Any, Final
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
 
-from kanban.api.request_id import format_log_actor, reset_log_user, set_log_user
+from kanban.api.request_id import (
+    format_log_actor,
+    register_mcp_key_revocation_listener,
+    reset_log_user,
+    set_log_user,
+)
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.registry import Surface
 from mcp.settings import McpSettings
 
 if TYPE_CHECKING:
+    import uuid
     from collections.abc import Callable
 
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -189,6 +195,18 @@ class IntrospectionCache:
         """Evict a specific entry from the cache."""
         self._entries.pop((surface, digest), None)
 
+    def evict_by_key_id(self, key_id: str | uuid.UUID) -> int:
+        """Immediately evict all cached introspection entries matching key_id."""
+        target_str = str(key_id)
+        to_evict = [
+            k
+            for k, (_, res) in self._entries.items()
+            if str(res.get("key_id", "")) == target_str or str(res.get("id", "")) == target_str
+        ]
+        for k in to_evict:
+            self._entries.pop(k, None)
+        return len(to_evict)
+
     def clear(self) -> None:
         """Clear all cached introspection entries."""
         self._entries.clear()
@@ -203,6 +221,9 @@ def get_default_cache() -> IntrospectionCache:
     if _global_cache is None:
         _global_cache = IntrospectionCache()
     return _global_cache
+
+
+register_mcp_key_revocation_listener(lambda key_id: get_default_cache().evict_by_key_id(key_id))
 
 
 class McpAuthMiddleware:

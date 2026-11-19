@@ -40,6 +40,7 @@ class McpIntrospectResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     active: bool
+    key_id: uuid.UUID | None = None
     principal_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
@@ -136,6 +137,7 @@ async def introspect_token(
         )
     return McpIntrospectResponse(
         active=result.active,
+        key_id=result.key_id,
         principal_id=result.principal_id,
         agent_principal_id=result.agent_principal_id,
         workspace_id=result.workspace_id,

@@ -10,9 +10,25 @@ from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping
+    from collections.abc import Callable, MutableMapping
 
     from starlette.types import ASGIApp, Receive, Scope, Send
+
+_key_revocation_listeners: list[Callable[[uuid.UUID], Any]] = []
+
+
+def register_mcp_key_revocation_listener(listener: Callable[[uuid.UUID], Any]) -> None:
+    """Register an in-process listener invoked when an MCP key is revoked."""
+    if listener not in _key_revocation_listeners:
+        _key_revocation_listeners.append(listener)
+
+
+def notify_mcp_key_revoked(key_id: uuid.UUID) -> None:
+    """Notify registered in-process listeners to evict a revoked MCP key."""
+    for listener in _key_revocation_listeners:
+        with contextlib.suppress(Exception):
+            listener(key_id)
+
 
 _REQUEST_ID_REGEX = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 _ACTOR_SAFE_CHARS_REGEX = re.compile(r"[^A-Za-z0-9_.:@+-]")

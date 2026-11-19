@@ -47,6 +47,39 @@
   background-color: #2ea043;
 }
 
+.kb-mcp-admin-subnav {
+  display: flex;
+  gap: 12px;
+  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
+  margin-bottom: 24px;
+  padding-bottom: 4px;
+}
+
+.kb-mcp-admin-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  min-height: 44px;
+  border-radius: 6px 6px 0 0;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-mcp-admin-subnav-link:hover {
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+  border-bottom-color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+}
+
+.kb-mcp-admin-subnav-active {
+  color: #58a6ff !important;
+  border-bottom-color: #58a6ff !important;
+  font-weight: 600;
+}
+
 .kb-mcp-studio-section {
   margin-bottom: var(--section-gap);
   background-color: var(--kb-color-bg-surface, var(--bg-surface));

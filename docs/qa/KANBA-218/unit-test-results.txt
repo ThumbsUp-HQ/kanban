@@ -1,0 +1,78 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-mcp-63bbe5f0/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-mcp-63bbe5f0
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 41 items
+
+kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [  2%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [  4%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [  7%]
+kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [  9%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 12%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 14%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 17%]
+kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 19%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_fragments_and_userinfo PASSED [ 21%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_resource_target_scenarios PASSED [ 24%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_descriptions_and_principal PASSED [ 26%]
+kanban/tests/oauth/test_oauth_unit.py::test_auth_card_config_normalizers PASSED [ 29%]
+kanban/tests/oauth/test_oauth_unit.py::test_format_validation_error PASSED [ 31%]
+kanban/tests/api/test_admin_imports.py::test_admin_imports_security_and_execution PASSED [ 34%]
+kanban/tests/api/test_admin_imports.py::test_resolve_bundle_path_escape PASSED [ 36%]
+mcp/tests/test_auth.py::test_401_challenge_missing_and_blank_bearer PASSED [ 39%]
+mcp/tests/test_auth.py::test_prefix_precheck_local_rejection_zero_network_call PASSED [ 41%]
+mcp/tests/test_auth.py::test_introspection_cache_positive_only_and_ttl PASSED [ 43%]
+mcp/tests/test_auth.py::test_tools_list_filtering_and_tools_call_insufficient_scope PASSED [ 46%]
+mcp/tests/test_auth.py::test_session_token_binding_mismatch_returns_404 PASSED [ 48%]
+mcp/tests/test_auth.py::test_transcript_generation PASSED                [ 51%]
+mcp/tests/test_auth.py::test_introspection_cache_methods PASSED          [ 53%]
+mcp/tests/test_auth.py::test_tool_scope_requirements_registration PASSED [ 56%]
+mcp/tests/test_auth.py::test_auth_disabled_and_non_http_scope PASSED     [ 58%]
+mcp/tests/test_auth.py::test_surface_resolution_from_path PASSED         [ 60%]
+mcp/tests/test_auth.py::test_upstream_client_unavailable_503 PASSED      [ 63%]
+mcp/tests/test_auth.py::test_upstream_introspection_error_paths PASSED   [ 65%]
+mcp/tests/test_auth.py::test_authorization_bearer_whitespace_handling PASSED [ 68%]
+mcp/tests/test_connection_scoping.py::test_case_1_positive_global_meatloaf_bot_flow PASSED [ 70%]
+mcp/tests/test_connection_scoping.py::test_case_2_positive_ambiguous_global_key_disambiguation PASSED [ 73%]
+mcp/tests/test_connection_scoping.py::test_case_3_positive_project_pinned_repo_config PASSED [ 75%]
+mcp/tests/test_connection_scoping.py::test_case_4_security_monotonic_narrowing_and_cross_project_block PASSED [ 78%]
+mcp/tests/test_connection_scoping.py::test_case_5_security_conflicting_headers_and_session_replay PASSED [ 80%]
+mcp/tests/test_connection_scoping.py::test_scoping_header_path_project_mismatch PASSED [ 82%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_token_inheritance PASSED [ 85%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_violations PASSED [ 87%]
+mcp/tests/test_connection_scoping.py::test_enforce_connection_scope_auto_fill_and_parent_identifier PASSED [ 90%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_workspace_valid PASSED [ 92%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_slug_vs_uuid_matching PASSED [ 95%]
+mcp/tests/test_connection_scoping.py::test_bare_mcp_routing_and_unauthorized_metadata PASSED [ 97%]
+mcp/tests/test_connection_scoping.py::test_path_pinned_tool_argument_no_project_collision PASSED [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/api/test_admin_imports.py::test_admin_imports_security_and_execution
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-mcp-63bbe5f0/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 41 passed, 1 warning in 1.06s =========================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-mcp-63bbe5f0/kanban/web
+
+ ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (1 test) 10ms
+ ✓ src/features/oauth/__tests__/oauthApi.test.ts (4 tests) 16ms
+ ✓ src/features/settings/settingsApi.test.ts (4 tests) 18ms
+ ✓ src/features/settings/__tests__/McpConfigSnippetModal.test.tsx (3 tests) 125ms
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (7 tests) 304ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (9 tests) 412ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (24 tests) 1486ms
+ ✓ src/app/routesDeepCoverage.test.tsx (19 tests) 907ms
+   ✓ routesDeepCoverage (19)
+     ✓ Placeholders and misc views (12)
+       ✓ covers DevStoryRoute for all developer story paths and fallback 353ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (15 tests) 914ms
+
+ Test Files  9 passed (9)
+      Tests  86 passed (86)
+   Start at  00:07:31
+   Duration  2.87s (environment 54%, tests 28%, import 14%, transform 3%, worker 1%)
+

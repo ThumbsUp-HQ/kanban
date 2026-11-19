@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import uuid
 from collections.abc import MutableMapping  # noqa: TC003
 from pathlib import Path  # noqa: TC003
 from typing import Any
@@ -497,6 +498,14 @@ async def test_introspection_cache_methods() -> None:
     cache.set("agent", digest, {"active": True})
     assert cache.get("agent", digest) is not None
     cache.clear()
+    assert cache.get("agent", digest) is None
+
+    # Test evict_by_key_id for 0s immediate cache eviction
+    key_uuid = uuid.uuid4()
+    cache.set("agent", digest, {"active": True, "key_id": str(key_uuid)})
+    assert cache.get("agent", digest) is not None
+    evicted_count = cache.evict_by_key_id(key_uuid)
+    assert evicted_count == 1
     assert cache.get("agent", digest) is None
 
     def_cache = get_default_cache()

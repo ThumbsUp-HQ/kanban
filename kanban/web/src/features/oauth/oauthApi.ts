@@ -40,3 +40,42 @@ export async function submitDeviceActivation(
     headers: { 'Content-Type': 'application/json' },
   })) as DeviceActivateResponse;
 }
+
+export type OAuthClientStatus = 'active' | 'suspended' | 'disabled' | 'revoked';
+
+export interface OAuthClientItem {
+  client_id: string;
+  client_name?: string | null | undefined;
+  client_type: 'confidential' | 'public';
+  redirect_uris: string[];
+  status: OAuthClientStatus;
+  created_at: string;
+  updated_at?: string | null | undefined;
+}
+
+export interface PatchOAuthClientRequest {
+  status?: OAuthClientStatus | undefined;
+  client_name?: string | undefined;
+  redirect_uris?: string[] | undefined;
+}
+
+export async function fetchAdminOAuthClients(): Promise<OAuthClientItem[]> {
+  return (await apiFetch('GET', '/api/v1/admin/oauth-clients' as never)) as OAuthClientItem[];
+}
+
+export async function patchAdminOAuthClient(
+  clientId: string,
+  payload: PatchOAuthClientRequest,
+): Promise<void> {
+  await apiFetch('PATCH', '/api/v1/admin/oauth-clients/{client_id}' as never, {
+    params: { client_id: clientId },
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function deleteAdminOAuthClient(clientId: string): Promise<void> {
+  await apiFetch('DELETE', '/api/v1/admin/oauth-clients/{client_id}' as never, {
+    params: { client_id: clientId },
+  });
+}

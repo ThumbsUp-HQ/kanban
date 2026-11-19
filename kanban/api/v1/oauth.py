@@ -222,9 +222,11 @@ class OAuthGrantResponse(BaseModel):
 class OAuthClientPatchRequest(BaseModel):
     """Admin patch request for client approval."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
-    status: Literal["active", "disabled"]
+    status: Literal["active", "disabled", "suspended", "revoked"] | None = None
+    redirect_uris: list[str] | None = None
+    client_name: str | None = None
 
 
 # =========================================================================
@@ -1119,9 +1121,50 @@ async def admin_revoke_oauth_grant(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@oauth_v1_router.get(
+    "/admin/oauth-clients",
+    summary="Admin list registered OAuth 2.1 clients (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
+)
+@oauth_v1_router.get(
+    "/oauth/admin/oauth-clients",
+    include_in_schema=False,
+    dependencies=[Depends(require_admin_aal2)],
+)
+async def admin_list_oauth_clients(
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """Workspace/Server Admin list of all dynamically registered OAuth clients."""
+    await _require_admin_aal2(caller, session)
+
+    stmt = select(OAuthClient).order_by(OAuthClient.created_at.desc())
+    records = (await session.execute(stmt)).scalars().all()
+
+    return JSONResponse(
+        [
+            {
+                "client_id": c.client_id,
+                "client_name": c.client_name,
+                "client_type": c.client_type,
+                "redirect_uris": c.redirect_uris,
+                "status": c.status,
+                "created_at": c.created_at.isoformat(),
+                "updated_at": c.updated_at.isoformat(),
+            }
+            for c in records
+        ]
+    )
+
+
 @oauth_v1_router.patch(
     "/admin/oauth-clients/{client_id}",
     summary="Admin approve or disable OAuth client (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
+)
+@oauth_v1_router.patch(
+    "/oauth/admin/oauth-clients/{client_id}",
+    include_in_schema=False,
     dependencies=[Depends(require_admin_aal2)],
 )
 async def admin_patch_oauth_client(
@@ -1138,7 +1181,22 @@ async def admin_patch_oauth_client(
     if client_record is None:
         not_found()
 
-    client_record.status = payload.status
+    if payload.redirect_uris is not None:
+        validate_registration_redirect_uris(payload.redirect_uris)
+        client_record.redirect_uris = payload.redirect_uris
+    if payload.client_name is not None:
+        client_record.client_name = payload.client_name
+    if payload.status is not None:
+        client_record.status = payload.status
+        if payload.status in ("disabled", "suspended", "revoked"):
+            stmt_g = select(OAuthGrant).where(
+                OAuthGrant.client_id == client_record.id,
+                OAuthGrant.revoked_at.is_(None),
+            )
+            grants = (await session.execute(stmt_g)).scalars().all()
+            for g in grants:
+                await revoke_grant_family(session, g.id, g.workspace_id)
+
     client_record.updated_at = datetime.now(UTC)
     await session.commit()
 
@@ -1147,9 +1205,50 @@ async def admin_patch_oauth_client(
             "client_id": client_record.client_id,
             "client_name": client_record.client_name,
             "status": client_record.status,
+            "redirect_uris": client_record.redirect_uris,
             "updated_at": client_record.updated_at.isoformat(),
         }
     )
+
+
+@oauth_v1_router.delete(
+    "/admin/oauth-clients/{client_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Admin revoke or delete OAuth client (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
+)
+@oauth_v1_router.delete(
+    "/oauth/admin/oauth-clients/{client_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    include_in_schema=False,
+    dependencies=[Depends(require_admin_aal2)],
+)
+async def admin_delete_oauth_client(
+    client_id: str,
+    caller: Caller,
+    session: Session,
+) -> Response:
+    """Admin revocation of OAuth client and all issued grants."""
+    await _require_admin_aal2(caller, session)
+
+    stmt = select(OAuthClient).where(OAuthClient.client_id == client_id)
+    client_record = (await session.execute(stmt)).scalar_one_or_none()
+    if client_record is None:
+        not_found()
+
+    stmt_g = select(OAuthGrant).where(
+        OAuthGrant.client_id == client_record.id,
+        OAuthGrant.revoked_at.is_(None),
+    )
+    grants = (await session.execute(stmt_g)).scalars().all()
+    for g in grants:
+        await revoke_grant_family(session, g.id, g.workspace_id)
+
+    client_record.status = "revoked"
+    client_record.updated_at = datetime.now(UTC)
+    await session.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # =========================================================================

@@ -98,6 +98,18 @@ def test_validate_registration_redirect_uris_errors() -> None:
         validate_registration_redirect_uris(["ftp://127.0.0.1/cb"])
     assert exc_ftp.value.status_code == 400
 
+    # Verify rejection of wildcard in hostname with 422
+    with pytest.raises(OAuth2Error) as exc_wild_host:
+        validate_registration_redirect_uris(["https://*.evil.example/callback"])
+    assert exc_wild_host.value.status_code == 422
+    assert "wildcard" in exc_wild_host.value.description
+
+    # Verify rejection of wildcard in path with 422
+    with pytest.raises(OAuth2Error) as exc_wild_path:
+        validate_registration_redirect_uris(["https://example.com/*/callback"])
+    assert exc_wild_path.value.status_code == 422
+    assert "wildcard" in exc_wild_path.value.description
+
 
 def test_registration_rate_limiter() -> None:
     """Rate limiter enforces sliding window per IP."""

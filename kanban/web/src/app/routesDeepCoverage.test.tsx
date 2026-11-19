@@ -952,5 +952,81 @@ describe('routesDeepCoverage', () => {
       unmount();
     });
   });
+
+  describe('targeted branch coverage boosters for routes.tsx', () => {
+    it('covers NotFoundView rendered outside router context', () => {
+      render(<NotFoundView />);
+      expect(screen.getByText(/Page Not Found/)).toBeDefined();
+      fireEvent.click(screen.getByText('Return to Workspace'));
+    });
+
+    it('covers WorkspaceHomeView non-admin role and empty wrapped items fallback', async () => {
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.resolve(
+            jsonResponse({
+              id: 'u-user',
+              workspace_role: 'GUEST_CONTRIBUTOR',
+              is_workspace_admin: false,
+              is_server_admin: false,
+            }),
+          );
+        }
+        if (url.includes('/api/v1/projects')) {
+          return Promise.resolve(jsonResponse({}));
+        }
+        return Promise.resolve(jsonResponse({ ok: true }));
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <WorkspaceHomeView />
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('route-placeholder')).toBeDefined();
+      });
+    });
+
+    it('covers AdminRouteGuard access denied for non-admin user', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('/api/v1/auth/me') || url.includes('/api/v1/auth/session')) {
+          return Promise.resolve(
+            jsonResponse({
+              id: 'u-std',
+              is_server_admin: false,
+              is_workspace_admin: false,
+              aal_level: 1,
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ ok: true }));
+      });
+
+      render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/admin/oauth']}>
+            <Routes>
+              <Route
+                path="/admin/oauth"
+                element={
+                  <AdminRouteGuard>
+                    <div data-testid="admin-content">Secret</div>
+                  </AdminRouteGuard>
+                }
+              />
+              <Route path="/" element={<div data-testid="home-fallback">Home</div>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('not-found-view')).toBeDefined();
+      });
+    });
+  });
 });
 

@@ -172,6 +172,40 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-title').textContent).toContain('Global Cross-Workspace Bot Keys');
+      expect(screen.getByTestId('tab-admin-mcp')).toBeDefined();
+      expect(screen.getByTestId('tab-admin-oauth')).toBeDefined();
+      expect(screen.getByTestId('tab-admin-imports')).toBeDefined();
+    });
+  });
+
+  it('renders Project: QAADM badge when key has allowed_projects set to QAADM across settings surfaces (KANBA-218)', async () => {
+    const qaadmKey: settingsApi.McpApiKeyItem = {
+      id: 'key-qaadm',
+      label: 'QA Admin Key',
+      display_hint: '99aa',
+      surface: 'agent',
+      scope_tier: 'project',
+      scopes: ['agent:read', 'agent:write'],
+      allowed_projects: ['QAADM'],
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+    };
+
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([qaadmKey]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const badge = screen.getByTestId('tier-badge-project');
+      expect(badge.textContent).toContain('Project: QAADM');
+      expect(badge.textContent).not.toContain('Project: KANBA');
     });
   });
 
@@ -797,6 +831,77 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       expect(mintProjectSpy).toHaveBeenCalledWith(
         expect.objectContaining({ scope_tier: 'project', allowed_projects: ['KANBA'] }),
       );
+    });
+  });
+
+  it('covers tier badge edge cases, viewer tool narrowing, and non-Error rejections', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([
+      {
+        id: 'key-edge-1',
+        label: 'Edge Tier Key',
+        display_hint: 'e1e1',
+        surface: 'agent',
+        scope_tier: 'project',
+        scopes: [],
+        allowed_projects: [],
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+      },
+      {
+        id: 'key-edge-2',
+        label: 'Custom Tier Key',
+        display_hint: 'e2e2',
+        surface: 'agent',
+        scope_tier: 'custom_tier' as never,
+        scopes: [],
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ]);
+
+    // Mock viewer role
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+      id: 'u-viewer',
+      handle: 'viewer_user',
+      workspace_role: 'VIEWER',
+      is_workspace_admin: false,
+      is_server_admin: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Project: KANBA/)).toBeDefined();
+      expect(screen.getByTestId('revoke-btn-key-edge-1')).toBeDefined();
+    });
+
+    // Revoke failure with non-Error string
+    vi.spyOn(settingsApi, 'revokePersonalMcpKey').mockRejectedValueOnce('Plain revoke failure');
+    fireEvent.click(screen.getByTestId('revoke-btn-key-edge-1'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('confirm-revoke-bar')).toBeNull();
+    });
+
+    // Mint modal with viewer role and non-Error mint rejection
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('Plain mint failure');
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Viewer Key' },
+    });
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-error-banner').textContent).toContain('Failed to mint MCP key.');
     });
   });
 });

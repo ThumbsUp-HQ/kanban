@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import re
 from dataclasses import dataclass
@@ -267,10 +268,36 @@ def compute_session_fingerprint(
     return hashlib.sha256(token_sha256 + b"\x00" + ws_bytes + b"\x00" + proj_bytes).digest()
 
 
+def _tool_accepts_project(
+    tool_name: str,
+    tool_spec: object | None,
+    input_schema: dict[str, Any] | None,
+) -> bool:
+    schema = input_schema
+    if schema is None and tool_spec is not None:
+        schema = getattr(tool_spec, "input_schema", None)
+    if schema is None:
+        with contextlib.suppress(Exception):
+            from mcp.surfaces.agent import create_agent_registry  # noqa: PLC0415
+
+            t = create_agent_registry().get(tool_name)
+            if t is not None:
+                schema = t.input_schema
+
+    if isinstance(schema, dict):
+        properties = schema.get("properties", {})
+        add_props = schema.get("additionalProperties", True)
+        if "project" not in properties and add_props is False:
+            return False
+    return True
+
+
 def enforce_connection_scope_on_tool_call(
     tool_name: str,
     arguments: dict[str, Any],
     scope: ConnectionScope,
+    tool_spec: object | None = None,
+    input_schema: dict[str, Any] | None = None,
 ) -> None:
     """Auto-fill project in Mode C (Project-Scoped) and reject cross-project mutations.
 
@@ -281,34 +308,33 @@ def enforce_connection_scope_on_tool_call(
     if not scope.is_project or not scope.project_key:
         return
 
-    # Auto-fill or validate project parameter
-    if (
-        "project" not in arguments
-        or arguments.get("project") is None
-        or arguments.get("project") == ""
-    ):
-        arguments["project"] = scope.project_key
-    elif str(arguments["project"]).upper() != scope.project_key:
-        attempted = str(arguments["project"])
-        msg = (
-            f"Connection is strictly pinned to project '{scope.project_key}'. "
-            f"Mutation targeting foreign project '{attempted}' was blocked."
-        )
-        raise KbMcpError(
-            McpErrorCode.CONNECTION_SCOPE_VIOLATION,
-            msg,
-            extra={
-                "pinned_scope": {
-                    "workspace": scope.workspace_slug,
-                    "project": scope.project_key,
+    val = arguments.get("project")
+    if val is not None and str(val).strip() != "":
+        if str(val).upper() != scope.project_key:
+            attempted = str(val)
+            msg = (
+                f"Connection is strictly pinned to project '{scope.project_key}'. "
+                f"Mutation targeting foreign project '{attempted}' was blocked."
+            )
+            raise KbMcpError(
+                McpErrorCode.CONNECTION_SCOPE_VIOLATION,
+                msg,
+                extra={
+                    "pinned_scope": {
+                        "workspace": scope.workspace_slug,
+                        "project": scope.project_key,
+                    },
+                    "attempted_target": attempted,
                 },
-                "attempted_target": attempted,
-            },
-            hint=(
-                f"Connect to /mcp/agent/w/{scope.workspace_slug}/p/{attempted} "
-                "or run in Global mode (/mcp/agent) to operate across projects."
-            ),
-        )
+                hint=(
+                    f"Connect to /mcp/agent/w/{scope.workspace_slug}/p/{attempted} "
+                    "or run in Global mode (/mcp/agent) to operate across projects."
+                ),
+            )
+        return
+
+    if _tool_accepts_project(tool_name, tool_spec, input_schema):
+        arguments["project"] = scope.project_key
 
     # Check issue key identifier for mutating tools
     mutating_tools: Final[frozenset[str]] = frozenset(

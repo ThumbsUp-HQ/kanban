@@ -25,6 +25,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from database.models.mcp_api_key import McpApiKey
 from database.models.principals import Principal
 from kanban.api.problems import ProblemException, not_found
+from kanban.api.request_id import (
+    notify_mcp_key_revoked,
+    register_mcp_key_revocation_listener,
+)
 from kanban.security.keys import derive_subkey, load_key_material
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.settings import get_settings
@@ -49,9 +53,12 @@ __all__ = [
     "hash_mcp_api_key",
     "introspect_subject_token",
     "mint_mcp_api_key",
+    "notify_mcp_key_revoked",
+    "register_mcp_key_revocation_listener",
     "revoke_mcp_api_key",
     "verify_internal_mcp_auth_header",
 ]
+
 
 ALLOWED_SURFACES: Final[frozenset[str]] = frozenset({"agent", "docs", "admin"})
 
@@ -85,6 +92,7 @@ class McpIntrospectionResult:
     """Introspection payload returned to MCP protocol handlers and gateways."""
 
     active: bool
+    key_id: uuid.UUID | None = None
     principal_id: uuid.UUID | None = None
     agent_principal_id: uuid.UUID | None = None
     workspace_id: uuid.UUID | None = None
@@ -130,6 +138,9 @@ class McpIntrospectionResult:
         }
         if self.workspace_slug is not None:
             payload["workspace_slug"] = self.workspace_slug
+        if self.key_id is not None:
+            payload["key_id"] = str(self.key_id)
+            payload["id"] = str(self.key_id)
         if self.agent_principal_id is not None:
             payload["agent_principal_id"] = str(self.agent_principal_id)
         if self.project_id is not None:
@@ -598,6 +609,8 @@ async def revoke_mcp_api_key(
         key.revoked_at = datetime.now(UTC)
         await session.flush()
 
+        notify_mcp_key_revoked(key.id)
+
         ws_target = key.workspace_id
         if ws_target is None and key.principal_id is not None:
             principal = await session.get(Principal, key.principal_id)
@@ -884,6 +897,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     return McpIntrospectionResult(
         active=True,
+        key_id=_key_id,
         principal_id=principal_id,
         workspace_id=workspace_id,
         workspace_slug=workspace_slug,

@@ -95,4 +95,29 @@ describe('settingsApi', () => {
       params: { grant_id: 'g-77' },
     });
   });
+
+  it('supports global tier for fetchPersonalMcpKeys, mintPersonalMcpKey, and revokePersonalMcpKey', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch');
+    spy.mockResolvedValueOnce({
+      keys: [{ id: 'k-glob', surface: 'agent', display_hint: 'glob123' }],
+    });
+
+    const res = await fetchPersonalMcpKeys('global');
+    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/admin/mcp-keys');
+    expect(res[0]?.id).toBe('k-glob');
+
+    spy.mockResolvedValueOnce({ id: 'k-glob-2', surface: 'admin', raw_key: 'raw_secret' });
+    const minted = await mintPersonalMcpKey(
+      { label: 'Global Server Key', surface: 'admin', scopes: [] },
+      'global',
+    );
+    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/mcp-keys', expect.any(Object));
+    expect(minted.id).toBe('k-glob-2');
+
+    spy.mockResolvedValueOnce({});
+    await revokePersonalMcpKey('k-glob-2', 'global');
+    expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/mcp-keys/{key_id}', {
+      params: { key_id: 'k-glob-2' },
+    });
+  });
 });

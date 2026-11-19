@@ -606,12 +606,19 @@ class McpProtocolHandler:
 
         tool_name, arguments = validated
 
+        spec = self.registry.get(tool_name)
+
         # Enforce connection scope boundary constraints & auto-population
         if connection_scope is not None:
             from mcp.scoping import enforce_connection_scope_on_tool_call  # noqa: PLC0415
 
             try:
-                enforce_connection_scope_on_tool_call(tool_name, arguments, connection_scope)
+                enforce_connection_scope_on_tool_call(
+                    tool_name,
+                    arguments,
+                    connection_scope,
+                    tool_spec=spec,
+                )
             except KbMcpError as scope_violation_err:
                 return JSONResponse(
                     {
@@ -624,7 +631,6 @@ class McpProtocolHandler:
                     }
                 )
 
-        spec = self.registry.get(tool_name)
         if spec is None:
             not_found_err = KbMcpError(
                 code=McpErrorCode.NOT_FOUND,

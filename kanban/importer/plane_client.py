@@ -346,6 +346,36 @@ class PlaneClient:
             attachments=self._load_attachments(dir_path),
         )
 
+    def load_bundle_from_dict(self, data: object) -> PlaneBundle:
+        """Load and validate all Plane JSON entities from in-memory dictionary or upload."""
+        if not isinstance(data, dict):
+            msg = "Plane bundle data must be a JSON object dictionary"
+            raise PlaneClientError(msg)
+
+        def _parse_list(key: str, model_cls: type[T]) -> list[T]:
+            raw = data.get(key) or []
+            if isinstance(raw, dict):
+                raw = list(raw.values())
+            if not isinstance(raw, list):
+                return []
+            return [model_cls.model_validate(item) for item in raw if isinstance(item, dict)]
+
+        proj_list = _parse_list("projects", PlaneProject) or _parse_list("project", PlaneProject)
+        link_list = _parse_list("relations", PlaneRelation) or _parse_list("links", PlaneRelation)
+
+        return PlaneBundle(
+            projects=proj_list,
+            states=_parse_list("states", PlaneState),
+            labels=_parse_list("labels", PlaneLabel),
+            cycles=_parse_list("cycles", PlaneCycle),
+            modules=_parse_list("modules", PlaneModule),
+            issues=_parse_list("issues", PlaneIssue),
+            comments=_parse_list("comments", PlaneComment),
+            relations=link_list,
+            members=_parse_list("members", PlaneMember),
+            attachments={},
+        )
+
     def _read_json_file(self, file_path: Path) -> object:
         """Read and decode JSON from file enforcing size limits."""
         if file_path.stat().st_size > MAX_PAGE_BYTES:

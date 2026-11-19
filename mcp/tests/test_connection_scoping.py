@@ -1030,3 +1030,24 @@ async def test_bare_mcp_routing_and_unauthorized_metadata() -> None:
         '.well-known/oauth-protected-resource/mcp/agent/w/kanban/p/KANBA"'
     )
     assert expected_proj in auth_proj
+
+
+@pytest.mark.asyncio
+async def test_path_pinned_tool_argument_no_project_collision() -> None:
+    """Verify path-pinned connections do not inject project into tools with no project param."""
+    scope = ConnectionScope(ScopeMode.PROJECT, workspace_slug="kanban", project_key="KANBA")
+
+    # read_ticket has additionalProperties: False and no project parameter
+    args_read = {"identifier": "KANBA-1"}
+    enforce_connection_scope_on_tool_call("read_ticket", args_read, scope)
+    assert "project" not in args_read
+
+    # add_comment has additionalProperties: False and no project parameter
+    args_comment = {"identifier": "KANBA-1", "comment": "Note"}
+    enforce_connection_scope_on_tool_call("add_comment", args_comment, scope)
+    assert "project" not in args_comment
+
+    # create_ticket accepts project parameter -> auto-filled
+    args_create = {"title": "New issue"}
+    enforce_connection_scope_on_tool_call("create_ticket", args_create, scope)
+    assert args_create["project"] == "KANBA"

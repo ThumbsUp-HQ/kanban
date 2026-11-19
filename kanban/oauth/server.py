@@ -99,6 +99,18 @@ def validate_registration_redirect_uris(uris: list[str]) -> None:
 
     for uri in uris:
         parsed = urlparse(uri)
+        has_wildcard = (
+            "*" in uri
+            or "*" in (parsed.hostname or "")
+            or "*" in parsed.netloc
+            or "*" in parsed.path
+        )
+        if has_wildcard:
+            raise OAuth2Error(
+                err,
+                f"Redirect URI {uri!r} must not contain wildcard characters (*)",
+                status_code=422,
+            )
         if parsed.fragment:
             raise OAuth2Error(err, f"Redirect URI {uri!r} must not contain a fragment", 400)
         if parsed.username or parsed.password:

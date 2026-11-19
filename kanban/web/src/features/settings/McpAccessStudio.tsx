@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useEffect, type JSX } from 'react';
-import { useParams } from 'react-router';
+import { useParams, Link } from 'react-router';
 import {
   fetchPersonalMcpKeys,
   mintPersonalMcpKey,
@@ -153,7 +153,7 @@ export function McpAccessStudio({
     void (async () => {
       try {
         const [fetchedKeys, fetchedApps] = await Promise.all([
-          fetchPersonalMcpKeys(),
+          tier === 'global' ? fetchPersonalMcpKeys('global') : fetchPersonalMcpKeys(),
           fetchConnectedApps(),
         ]);
         if (isMounted.current) {
@@ -188,7 +188,8 @@ export function McpAccessStudio({
         label: newKeyLabel.trim(),
         surface: newKeySurface,
         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
-        scope_tier: tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
+        scope_tier:
+          tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
         ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
         ...(isUnlimited
           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
@@ -222,7 +223,11 @@ export function McpAccessStudio({
 
   const handleConfirmRevokeKey = async (keyId: string): Promise<void> => {
     try {
-      await revokePersonalMcpKey(keyId);
+      if (tier === 'global') {
+        await revokePersonalMcpKey(keyId, 'global');
+      } else {
+        await revokePersonalMcpKey(keyId);
+      }
       setKeys((prev) =>
         prev.map((k) =>
           k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k,
@@ -246,7 +251,10 @@ export function McpAccessStudio({
     }
   };
 
-  const getTierBadge = (keyTier: ScopeTier): JSX.Element => {
+  const getTierBadge = (
+    keyTier: ScopeTier,
+    allowedProjects?: string[] | null,
+  ): JSX.Element => {
     if (keyTier === 'global') {
       return (
         <span className="kb-mcp-tier-badge kb-mcp-tier-global" data-testid="tier-badge-global">
@@ -262,9 +270,13 @@ export function McpAccessStudio({
       );
     }
     if (keyTier === 'project') {
+      const projLabel =
+        allowedProjects && allowedProjects.length > 0
+          ? allowedProjects.join(', ')
+          : projectKey;
       return (
         <span className="kb-mcp-tier-badge kb-mcp-tier-project" data-testid="tier-badge-project">
-          <EmojiHint kind="access" /> Project: {projectKey}
+          <EmojiHint kind="access" /> Project: {projLabel}
         </span>
       );
     }
@@ -314,6 +326,32 @@ export function McpAccessStudio({
         </button>
       </header>
 
+      {tier === 'global' && (
+        <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
+          <Link
+            to="/admin/mcp"
+            className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
+            data-testid="tab-admin-mcp"
+          >
+            Bot API Keys
+          </Link>
+          <Link
+            to="/admin/oauth"
+            className="kb-mcp-admin-subnav-link"
+            data-testid="tab-admin-oauth"
+          >
+            OAuth 2.1 Clients
+          </Link>
+          <Link
+            to="/admin/imports"
+            className="kb-mcp-admin-subnav-link"
+            data-testid="tab-admin-imports"
+          >
+            Plane Migration Studio
+          </Link>
+        </nav>
+      )}
+
       {/* MCP Keys Table Section */}
       <section className="kb-mcp-studio-section" data-testid="mcp-keys-section">
         <h2 className="kb-mcp-section-title">
@@ -355,7 +393,7 @@ export function McpAccessStudio({
                         {prefix}...{k.display_hint}
                       </code>
                     </td>
-                    <td className="kb-mcp-td">{getTierBadge(k.scope_tier)}</td>
+                    <td className="kb-mcp-td">{getTierBadge(k.scope_tier, k.allowed_projects)}</td>
                     <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
                     <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
                       {k.expires_at ? (
@@ -525,6 +563,7 @@ export function McpAccessStudio({
             role="dialog"
             aria-modal="true"
             aria-labelledby="mint-modal-title"
+            data-testid="mint-modal-card"
           >
             <div className="kb-snippet-modal-header">
               <h2 id="mint-modal-title" className="kb-snippet-modal-title">Mint New MCP Access Key</h2>

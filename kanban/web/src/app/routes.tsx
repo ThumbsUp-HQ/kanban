@@ -61,6 +61,8 @@ import { RunnerStudioPage } from '../features/admin-runners/RunnerStudioPage';
 import { LinkAuditorStudio } from '../features/admin/LinkAuditorStudio';
 import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
 import { McpAccessStudio } from '../features/settings/McpAccessStudio';
+import { OAuthClientGovernanceStudio } from '../features/oauth/OAuthClientGovernanceStudio';
+import { PlaneImportStudio } from '../features/admin-imports/PlaneImportStudio';
 import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
 import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
@@ -1748,7 +1750,7 @@ export function ProjectRouteContainer(): JSX.Element {
   );
 }
 
-export function AdminRouteGuard(): JSX.Element {
+export function AdminRouteGuard({ children }: { children?: React.ReactNode } = {}): JSX.Element {
   const { data: user, isLoading } = useQuery<{
     is_server_admin?: boolean;
     is_workspace_admin?: boolean;
@@ -1778,7 +1780,8 @@ export function AdminRouteGuard(): JSX.Element {
   }
 
   const isServerAdmin = Boolean(user?.is_server_admin);
-  const isWorkspaceAdmin = Boolean(user?.is_workspace_admin) || user?.workspace_role === 'WORKSPACE_ADMIN';
+  const isWorkspaceAdmin =
+    Boolean(user?.is_workspace_admin) || user?.workspace_role === 'WORKSPACE_ADMIN';
   const aal = user?.aal_level;
   const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
 
@@ -1786,7 +1789,7 @@ export function AdminRouteGuard(): JSX.Element {
     return <NotFoundView />;
   }
 
-  return <Outlet />;
+  return <>{children ?? <Outlet />}</>;
 }
 
 export function DraftsWorkspaceRouteGuard(): JSX.Element {
@@ -1950,6 +1953,14 @@ export const appRoutes: RouteObject[] = [
               {
                 path: 'mcp',
                 element: <McpAccessStudio tier="global" />,
+              },
+              {
+                path: 'oauth',
+                element: <OAuthClientGovernanceStudio />,
+              },
+              {
+                path: 'imports',
+                element: <PlaneImportStudio />,
               },
               {
                 path: 'auth',

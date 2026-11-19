@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
 from typing import Annotated, Literal
@@ -14,6 +15,7 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.mcp_api_key import McpApiKey
+from database.models.projects import Project
 from kanban.api.deps import PrincipalContext, get_rls_session
 from kanban.api.problems import not_found
 from kanban.auth.mfa.policy import require_admin_aal2
@@ -226,6 +228,31 @@ async def mint_key(
     )
 
 
+async def _resolve_admin_project_id_to_key_map(
+    session: Session,
+    project_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, str]:
+    if not project_ids:
+        return {}
+    with contextlib.suppress(Exception):
+        stmt = select(Project.id, Project.identifier).where(Project.id.in_(project_ids))
+        rows = (await session.execute(stmt)).all()
+        return {row[0]: row[1] for row in rows}
+    return {}
+
+
+def _resolve_admin_key_project_list(
+    key_item: McpApiKey,
+    id_to_key: dict[uuid.UUID, str],
+) -> list[str] | None:
+    if key_item.allowed_project_ids:
+        res = [id_to_key.get(p, str(p)) for p in key_item.allowed_project_ids]
+        return res or None
+    if key_item.project_id:
+        return [id_to_key.get(key_item.project_id, str(key_item.project_id))]
+    return None
+
+
 @router.get(
     "/admin/mcp-keys",
     response_model=list[McpApiKeyResponse],
@@ -261,6 +288,15 @@ async def list_keys(
     result = await session.execute(stmt)
     records = result.scalars().all()
 
+    all_proj_ids: set[uuid.UUID] = set()
+    for k in records:
+        if k.allowed_project_ids:
+            all_proj_ids.update(k.allowed_project_ids)
+        if k.project_id:
+            all_proj_ids.add(k.project_id)
+
+    id_to_key = await _resolve_admin_project_id_to_key_map(session, all_proj_ids)
+
     return [
         McpApiKeyResponse(
             id=k.id,
@@ -281,9 +317,7 @@ async def list_keys(
             project_id=k.project_id,
             allowed_workspace_ids=k.allowed_workspace_ids,
             allowed_project_ids=k.allowed_project_ids,
-            allowed_projects=(
-                [str(p) for p in k.allowed_project_ids] if k.allowed_project_ids else None
-            ),
+            allowed_projects=_resolve_admin_key_project_list(k, id_to_key),
             capability_mask=k.capability_mask,
             allowed_tools=k.allowed_tools,
             disabled_tools=list(k.disabled_tools or []),

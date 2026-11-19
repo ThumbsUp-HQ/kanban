@@ -73,8 +73,9 @@ function normalizeMcpKeyItem(
   };
 }
 
-export async function fetchPersonalMcpKeys(): Promise<McpApiKeyItem[]> {
-  const res = (await apiFetch('GET', '/api/v1/auth/mcp-keys' as never)) as
+export async function fetchPersonalMcpKeys(tier?: string): Promise<McpApiKeyItem[]> {
+  const endpoint = tier === 'global' ? '/api/v1/admin/mcp-keys' : '/api/v1/auth/mcp-keys';
+  const res = (await apiFetch('GET', endpoint as never)) as
     | McpKeyListResponse
     | McpApiKeyItem[];
   const items = Array.isArray(res) ? res : res.keys;
@@ -83,16 +84,22 @@ export async function fetchPersonalMcpKeys(): Promise<McpApiKeyItem[]> {
 
 export async function mintPersonalMcpKey(
   payload: MintMcpKeyRequest,
+  tier?: string,
 ): Promise<McpApiKeyItem> {
-  const created = (await apiFetch('POST', '/api/v1/auth/mcp-keys' as never, {
+  const endpoint = tier === 'global' ? '/api/v1/admin/mcp-keys' : '/api/v1/auth/mcp-keys';
+  const created = (await apiFetch('POST', endpoint as never, {
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
   })) as McpApiKeyItem;
   return normalizeMcpKeyItem(created, payload.label);
 }
 
-export async function revokePersonalMcpKey(keyId: string): Promise<void> {
-  await apiFetch('DELETE', '/api/v1/auth/mcp-keys/{key_id}' as never, {
+export async function revokePersonalMcpKey(keyId: string, tier?: string): Promise<void> {
+  const endpoint =
+    tier === 'global'
+      ? '/api/v1/admin/mcp-keys/{key_id}'
+      : '/api/v1/auth/mcp-keys/{key_id}';
+  await apiFetch('DELETE', endpoint as never, {
     params: { key_id: keyId },
   });
 }

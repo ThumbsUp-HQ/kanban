@@ -8,7 +8,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
@@ -36,9 +36,13 @@ router = APIRouter(
 class AdminPlaneImportRequest(BaseModel):
     """Payload requesting execution or preview of a Plane export import."""
 
-    bundle_name: str = Field(
-        ...,
+    bundle_name: str | None = Field(
+        default=None,
         description="Name of bundle folder in imports storage (alphanumeric/dash/underscore)",
+    )
+    bundle_data: dict[str, Any] | None = Field(
+        default=None,
+        description="Direct JSON bundle payload for upload/paste import",
     )
     dry_run: bool = Field(
         default=False,
@@ -164,11 +168,20 @@ async def import_plane_bundle(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> ImportDiffReport:
     """Import a validated Plane bundle into the workspace with sequence continuity."""
-    bundle_dir = _resolve_bundle_path(req.bundle_name)
-
     client = PlaneClient()
     try:
-        bundle = client.load_bundle_from_dir(bundle_dir)
+        if req.bundle_data is not None:
+            bundle = client.load_bundle_from_dict(req.bundle_data)
+        elif req.bundle_name is not None:
+            bundle_dir = _resolve_bundle_path(req.bundle_name)
+            bundle = client.load_bundle_from_dir(bundle_dir)
+        else:
+            raise ProblemException(
+                code="BUNDLE_REQUIRED",
+                status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                title="Bundle Required",
+                detail="Either bundle_name or bundle_data must be provided.",
+            )
     except PlaneClientError as exc:
         raise ProblemException(
             code="BUNDLE_INVALID",

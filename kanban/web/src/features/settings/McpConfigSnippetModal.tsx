@@ -13,7 +13,7 @@ export interface McpConfigSnippetModalProps {
   onClose: () => void;
 }
 
-type ClientTab = 'gemini' | 'antigravity' | 'claude';
+type ClientTab = 'claude' | 'cursor' | 'gemini' | 'antigravity' | 'codex';
 type UrlScope = 'global' | 'workspace' | 'project';
 
 export function McpConfigSnippetModal({
@@ -23,7 +23,7 @@ export function McpConfigSnippetModal({
   projectKey = 'KANBA',
   onClose,
 }: McpConfigSnippetModalProps): JSX.Element {
-  const [activeTab, setActiveTab] = useState<ClientTab>('gemini');
+  const [activeTab, setActiveTab] = useState<ClientTab>('claude');
   const [urlScope, setUrlScope] = useState<UrlScope>('project');
   const [keyCopied, setKeyCopied] = useState<boolean>(false);
   const [snippetCopied, setSnippetCopied] = useState<boolean>(false);
@@ -52,7 +52,25 @@ export function McpConfigSnippetModal({
   const effectiveKey = rawKey ?? '<your-mcp-key>';
 
   let snippet = '';
-  if (activeTab === 'gemini') {
+  if (activeTab === 'claude') {
+    const claudeJson = JSON.stringify(
+      {
+        mcpServers: {
+          kanban: {
+            type: 'sse',
+            url: endpointUrl,
+            headers: {
+              Authorization: `Bearer ${effectiveKey}`,
+            },
+          },
+        },
+      },
+      null,
+      2,
+    );
+    const claudeCmd = `claude mcp add kanban ${endpointUrl} --header "Authorization: Bearer ${effectiveKey}"`;
+    snippet = `${claudeJson}\n\n# Or add via Claude Code CLI:\n${claudeCmd}`;
+  } else if (activeTab === 'cursor') {
     snippet = JSON.stringify(
       {
         mcpServers: {
@@ -67,7 +85,7 @@ export function McpConfigSnippetModal({
       null,
       2,
     );
-  } else if (activeTab === 'antigravity') {
+  } else if (activeTab === 'gemini' || activeTab === 'antigravity') {
     const agyJson = JSON.stringify(
       {
         mcpServers: {
@@ -85,7 +103,7 @@ export function McpConfigSnippetModal({
     const agyCmd = `agy mcp add --header "Authorization: Bearer ${effectiveKey}" kanban ${endpointUrl}`;
     snippet = `${agyJson}\n\n# Or add via agy CLI:\n${agyCmd}`;
   } else {
-    snippet = JSON.stringify(
+    const codexJson = JSON.stringify(
       {
         mcpServers: {
           kanban: {
@@ -99,6 +117,8 @@ export function McpConfigSnippetModal({
       null,
       2,
     );
+    const codexCmd = `codex mcp add kanban ${endpointUrl} --header "Authorization: Bearer ${effectiveKey}"`;
+    snippet = `${codexJson}\n\n# Or add via OpenAI Codex CLI:\n${codexCmd}`;
   }
 
   const handleCopy = async (text: string, isKey: boolean): Promise<void> => {
@@ -199,6 +219,30 @@ export function McpConfigSnippetModal({
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === 'claude'}
+            className={`kb-snippet-tab-btn ${activeTab === 'claude' ? 'kb-snippet-tab-active' : ''}`}
+            data-testid="tab-claude"
+            onClick={() => {
+              setActiveTab('claude');
+            }}
+          >
+            Claude Code
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'cursor'}
+            className={`kb-snippet-tab-btn ${activeTab === 'cursor' ? 'kb-snippet-tab-active' : ''}`}
+            data-testid="tab-cursor"
+            onClick={() => {
+              setActiveTab('cursor');
+            }}
+          >
+            Cursor
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === 'gemini'}
             className={`kb-snippet-tab-btn ${activeTab === 'gemini' ? 'kb-snippet-tab-active' : ''}`}
             data-testid="tab-gemini"
@@ -206,7 +250,7 @@ export function McpConfigSnippetModal({
               setActiveTab('gemini');
             }}
           >
-            Gemini CLI (.gemini/settings.json)
+            Gemini CLI
           </button>
           <button
             type="button"
@@ -218,19 +262,19 @@ export function McpConfigSnippetModal({
               setActiveTab('antigravity');
             }}
           >
-            Antigravity (mcp_config.json)
+            Antigravity
           </button>
           <button
             type="button"
             role="tab"
-            aria-selected={activeTab === 'claude'}
-            className={`kb-snippet-tab-btn ${activeTab === 'claude' ? 'kb-snippet-tab-active' : ''}`}
-            data-testid="tab-claude"
+            aria-selected={activeTab === 'codex'}
+            className={`kb-snippet-tab-btn ${activeTab === 'codex' ? 'kb-snippet-tab-active' : ''}`}
+            data-testid="tab-codex"
             onClick={() => {
-              setActiveTab('claude');
+              setActiveTab('codex');
             }}
           >
-            Claude Code / Codex
+            OpenAI Codex
           </button>
         </div>
 

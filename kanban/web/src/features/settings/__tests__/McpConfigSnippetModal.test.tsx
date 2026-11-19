@@ -86,7 +86,16 @@ describe('McpConfigSnippetModal direct unit tests', () => {
     expect(snippetBox.textContent).toContain('agy mcp add --header');
 
     fireEvent.click(screen.getByTestId('tab-claude'));
+    expect(screen.getByTestId('snippet-code-box').textContent).toContain('claude mcp add');
+
+    fireEvent.click(screen.getByTestId('tab-cursor'));
+    expect(screen.getByTestId('snippet-code-box').textContent).toContain('"url":');
+
     fireEvent.click(screen.getByTestId('tab-gemini'));
+    expect(screen.getByTestId('snippet-code-box').textContent).toContain('serverUrl');
+
+    fireEvent.click(screen.getByTestId('tab-codex'));
+    expect(screen.getByTestId('snippet-code-box').textContent).toContain('codex mcp add');
 
     // Switch url scope
     const urlSelect = screen.getByTestId('url-scope-select');

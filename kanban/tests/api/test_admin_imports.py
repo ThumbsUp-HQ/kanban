@@ -9,16 +9,13 @@ from __future__ import annotations
 import shutil
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import text
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from database.session import RLSContext, RLSSessionFactory
 from kanban.api.problems import ProblemException, problem_exception_handler
@@ -53,12 +50,11 @@ def key_material() -> KeyMaterial:
 
 
 async def _setup_workspace_and_principals(
-    factory: RLSSessionFactory,
+    engine: AsyncEngine,
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """Provision workspace, SERVER_ADMIN, and WORKSPACE_ADMIN principals with enrolled TOTP."""
     ws_id = uuid.uuid4()
-    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
-    async with factory.session(anon_ctx) as session:
+    async with AsyncSession(engine) as session:
         await session.execute(
             text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
             {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "Admin Imports WS"},
@@ -161,6 +157,7 @@ async def _setup_workspace_and_principals(
     return ws_id, server_admin_id, workspace_admin_id
 
 
+@pytest.mark.committed_db
 @pytest.mark.asyncio
 async def test_admin_imports_security_and_execution(
     pg_worker_db: AsyncEngine,
@@ -170,7 +167,7 @@ async def test_admin_imports_security_and_execution(
 ) -> None:
     """Test Case 4 & API: AAL2 enforcement, SERVER_ADMIN gate, path traversal, dry-run & live apply."""
     factory = RLSSessionFactory(pg_worker_db)
-    ws_id, server_admin_id, workspace_admin_id = await _setup_workspace_and_principals(factory)
+    ws_id, server_admin_id, workspace_admin_id = await _setup_workspace_and_principals(pg_worker_db)
 
     imports_dir = tmp_path / "imports_storage"
     imports_dir.mkdir(parents=True, exist_ok=True)
@@ -384,7 +381,28 @@ async def test_admin_imports_security_and_execution(
         assert res_corrupt.status_code == 422
         assert res_corrupt.json()["code"] == "BUNDLE_INVALID"
 
-        # 4j. ImportIntegrityError -> 422 IMPORT_INTEGRITY_FAILED
+        # 4k. Direct bundle_data JSON dictionary payload -> 200
+        sample_bundle = {
+            "projects": [{"id": str(uuid.uuid4()), "identifier": "IMP", "name": "Imported"}],
+            "states": [{"id": str(uuid.uuid4()), "name": "Backlog", "group": "backlog"}],
+            "issues": [],
+        }
+        res_data = await client.post(
+            "/api/v1/admin/imports/plane",
+            json={"bundle_data": sample_bundle, "dry_run": True},
+        )
+        assert res_data.status_code == 200
+        assert res_data.json()["to_create"] >= 0
+
+        # 4l. Missing both bundle_name and bundle_data -> 422 BUNDLE_REQUIRED
+        res_none = await client.post(
+            "/api/v1/admin/imports/plane",
+            json={"dry_run": True},
+        )
+        assert res_none.status_code == 422
+        assert res_none.json()["code"] == "BUNDLE_REQUIRED"
+
+        # 4m. ImportIntegrityError -> 422 IMPORT_INTEGRITY_FAILED
         with patch(
             "kanban.api.v1.admin.imports.PlaneImporter.run_import",
             side_effect=ImportIntegrityError("Integrity breached"),
