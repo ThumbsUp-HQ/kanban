@@ -5,6 +5,10 @@ import React, { useState, type JSX } from 'react';
 import {
   createAiProvider,
   updateAiProvider,
+  probeAiModels,
+  testAiConnection,
+  isLocalEndpoint,
+  inferResidencyTier,
   type ProviderConfigPublic,
   type ProviderConfigCreate,
   type ProviderConfigUpdate,
@@ -16,6 +20,12 @@ interface AiProviderEditorDrawerProps {
   provider: ProviderConfigPublic | null;
   airGapMode: boolean;
   onSaved: () => void;
+  providersCount?: number | undefined;
+}
+
+interface TestStatusState {
+  kind: 'idle' | 'loading' | 'success' | 'error';
+  message: string | null;
 }
 
 function AiProviderEditorContent({
@@ -23,11 +33,13 @@ function AiProviderEditorContent({
   provider,
   airGapMode,
   onSaved,
+  providersCount,
 }: {
   onClose: () => void;
   provider: ProviderConfigPublic | null;
   airGapMode: boolean;
   onSaved: () => void;
+  providersCount?: number | undefined;
 }): JSX.Element {
   const isEditing = provider !== null;
 
@@ -39,23 +51,35 @@ function AiProviderEditorContent({
     provider?.display_name ?? (airGapMode ? 'Local Ollama Runtime' : 'Enterprise OpenAI'),
   );
   const [baseUrl, setBaseUrl] = useState<string>(
-    provider?.base_url ?? (airGapMode ? 'http://localhost:11434' : ''),
+    provider?.base_url ?? (airGapMode ? 'http://127.0.0.1:11434' : ''),
   );
   const [modelAllowlist, setModelAllowlist] = useState<string>(
     provider?.model_allowlist.join(', ') ??
       (airGapMode ? 'qwen2.5-coder:7b, llama3.2:3b' : 'gpt-4o, gpt-4o-mini'),
   );
-  const [residencyTier, setResidencyTier] = useState<string>(
-    provider?.residency_tier ?? (airGapMode ? 'local' : 'default'),
-  );
-  const [priority, setPriority] = useState<number>(provider?.priority ?? 100);
+
+  const initialResidency = provider?.residency_tier ?? (airGapMode ? 'local_only' : 'cloud_standard');
+  const [residencyTier, setResidencyTier] = useState<string>(initialResidency);
+  const [residencyTierManual, setResidencyTierManual] = useState<boolean>(isEditing);
+
   const [apiKey, setApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
   const [clearExistingKey, setClearExistingKey] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Probe models state
+  const [isProbing, setIsProbing] = useState<boolean>(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
+  const [probedModels, setProbedModels] = useState<string[] | null>(null);
+  const [probedFilter, setProbedFilter] = useState<string>('');
+
+  // Connection test state
+  const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false);
+  const [testStatus, setTestStatus] = useState<TestStatusState>({ kind: 'idle', message: null });
+
   const isCloudKind = providerKind === 'openai' || providerKind === 'gemini';
+  const isLocal = isLocalEndpoint(providerKind, baseUrl);
 
   const handleKindChange = (newKind: string): void => {
     setProviderKind(newKind);
@@ -64,25 +88,123 @@ function AiProviderEditorContent({
     } else {
       setError(null);
     }
+
     if (!isEditing) {
       if (newKind === 'openai') {
-        setDisplayName('Enterprise OpenAI');
+        setDisplayName('OpenAI / OpenAI-Compatible');
         setModelAllowlist('gpt-4o, gpt-4o-mini');
-        setBaseUrl('');
+        setBaseUrl('https://api.openai.com/v1');
+        if (!residencyTierManual) {
+          setResidencyTier('cloud_standard');
+        }
       } else if (newKind === 'gemini') {
         setDisplayName('Google Gemini Workspace');
         setModelAllowlist('gemini-2.5-flash, gemini-2.5-pro');
-        setBaseUrl('');
+        setBaseUrl('https://generativelanguage.googleapis.com');
+        if (!residencyTierManual) {
+          setResidencyTier('cloud_standard');
+        }
       } else if (newKind === 'ollama') {
         setDisplayName('Local Ollama Runtime');
-        setBaseUrl('http://localhost:11434');
+        setBaseUrl('http://127.0.0.1:11434');
         setModelAllowlist('qwen2.5-coder:7b, llama3.2:3b');
-        setResidencyTier('local');
-      } else {
-        setDisplayName('Custom AI Provider');
-        setBaseUrl('');
-        setModelAllowlist('');
+        if (!residencyTierManual) {
+          setResidencyTier('local_only');
+        }
       }
+    }
+  };
+
+  const handleBaseUrlChange = (newUrl: string): void => {
+    setBaseUrl(newUrl);
+    if (!residencyTierManual) {
+      setResidencyTier(inferResidencyTier(providerKind, newUrl));
+    }
+  };
+
+  const getSelectedModelsList = (): string[] =>
+    modelAllowlist
+      .split(',')
+      .map((m) => m.trim())
+      .filter((m) => m.length > 0);
+
+  const toggleModel = (model: string): void => {
+    const current = getSelectedModelsList();
+    const exists = current.includes(model);
+    const next = exists ? current.filter((m) => m !== model) : [...current, model];
+    setModelAllowlist(next.join(', '));
+  };
+
+  const handleSelectAllProbed = (): void => {
+    if (!probedModels) return;
+    const current = new Set(getSelectedModelsList());
+    for (const m of probedModels) {
+      current.add(m);
+    }
+    setModelAllowlist(Array.from(current).join(', '));
+  };
+
+  const handleClearModels = (): void => {
+    setModelAllowlist('');
+  };
+
+  const handleProbeModels = async (): Promise<void> => {
+    try {
+      setIsProbing(true);
+      setProbeError(null);
+      const payload = provider
+        ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
+        : {
+            provider_kind: providerKind,
+            base_url: baseUrl.trim() || null,
+            api_key: apiKey.trim() || null,
+          };
+      const res = await probeAiModels(payload, provider?.id);
+      if (res.ok) {
+        setProbedModels(res.models);
+        if (res.models.length === 0) {
+          setProbeError('Connected successfully, but 0 models were discovered.');
+        }
+      } else {
+        setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
+      }
+    } catch (err: unknown) {
+      setProbeError(err instanceof Error ? err.message : 'Failed to probe models');
+    } finally {
+      setIsProbing(false);
+    }
+  };
+
+  const handleTestConnection = async (): Promise<void> => {
+    try {
+      setIsTestingConnection(true);
+      setTestStatus({ kind: 'loading', message: 'Testing connection...' });
+      const payload = provider
+        ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
+        : {
+            provider_kind: providerKind,
+            base_url: baseUrl.trim() || null,
+            api_key: apiKey.trim() || null,
+          };
+      const res = await testAiConnection(payload, provider?.id);
+      if (res.ok) {
+        setTestStatus({
+          kind: 'success',
+          message: `Connected in ${String(Math.round(res.latency_ms))}ms - ${String(res.model_count)} models available`,
+        });
+      } else {
+        setTestStatus({
+          kind: 'error',
+          message: `Connection failed: ${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`,
+        });
+      }
+    } catch (err: unknown) {
+      setTestStatus({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Connection test failed',
+      });
+    } finally {
+      setIsTestingConnection(false);
     }
   };
 
@@ -98,10 +220,7 @@ function AiProviderEditorContent({
       return;
     }
 
-    const models = modelAllowlist
-      .split(',')
-      .map((m) => m.trim())
-      .filter((m) => m.length > 0);
+    const models = getSelectedModelsList();
 
     try {
       setIsSaving(true);
@@ -113,7 +232,7 @@ function AiProviderEditorContent({
           model_allowlist: models,
           residency_tier: residencyTier,
           base_url: baseUrl.trim() || null,
-          priority,
+          priority: provider.priority,
         };
 
         if (clearExistingKey) {
@@ -124,13 +243,14 @@ function AiProviderEditorContent({
 
         await updateAiProvider(provider.id, payload);
       } else {
+        const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
         const payload: ProviderConfigCreate = {
           provider_kind: providerKind,
           display_name: displayName.trim(),
           model_allowlist: models,
           residency_tier: residencyTier,
           base_url: baseUrl.trim() || null,
-          priority,
+          priority: nextPriority,
           api_key: apiKey.trim() ? apiKey.trim() : null,
           is_enabled: true,
         };
@@ -146,6 +266,11 @@ function AiProviderEditorContent({
       setError(err instanceof Error ? err.message : 'Failed to save provider configuration');
     }
   };
+
+  const filteredProbedModels = (probedModels ?? []).filter((m) =>
+    probedFilter.trim() ? m.toLowerCase().includes(probedFilter.trim().toLowerCase()) : true,
+  );
+  const selectedModels = getSelectedModelsList();
 
   return (
     <div className="kb-modal-card">
@@ -177,7 +302,7 @@ function AiProviderEditorContent({
       )}
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444', margin: '12px 0' }} data-testid="provider-editor-error">
+        <div className="kb-form-error" data-testid="provider-editor-error">
           {error}
         </div>
       )}
@@ -185,7 +310,7 @@ function AiProviderEditorContent({
       <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
         <div className="kb-form-group">
           <label htmlFor="provider-kind-select" className="kb-form-label">
-            Provider Kind
+            Protocol & Provider Engine
           </label>
           <select
             id="provider-kind-select"
@@ -195,11 +320,18 @@ function AiProviderEditorContent({
             disabled={isEditing}
             data-testid="provider-kind-select"
           >
-            <option value="openai">OpenAI (Cloud)</option>
-            <option value="gemini">Google Gemini (Cloud)</option>
             <option value="ollama">Ollama (Local / Zero Egress)</option>
-            <option value="custom">Custom Compatible</option>
+            <option value="openai">OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM)</option>
+            <option value="gemini">Google Gemini (Cloud)</option>
           </select>
+          <span className="kb-form-hint">
+            {providerKind === 'ollama' &&
+              'Self-hosted Ollama runtime over loopback or local LAN. Zero external egress.'}
+            {providerKind === 'openai' &&
+              'OpenAI API or OpenAI-compatible local/remote engines (vLLM, LM Studio, llama.cpp, LiteLLM).'}
+            {providerKind === 'gemini' &&
+              'Google Gemini generative language API.'}
+          </span>
         </div>
 
         <div className="kb-form-group">
@@ -220,23 +352,114 @@ function AiProviderEditorContent({
 
         <div className="kb-form-group">
           <label htmlFor="provider-base-url-input" className="kb-form-label">
-            Custom HTTP Base URL {providerKind === 'ollama' && '(Required for Ollama)'}
+            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
           </label>
           <input
             id="provider-base-url-input"
             type="url"
             className="kb-form-input"
             value={baseUrl}
-            onChange={(e) => { setBaseUrl(e.target.value); }}
-            placeholder={providerKind === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'}
+            onChange={(e) => { handleBaseUrlChange(e.target.value); }}
+            placeholder={
+              providerKind === 'ollama'
+                ? 'http://127.0.0.1:11434'
+                : providerKind === 'gemini'
+                  ? 'https://generativelanguage.googleapis.com'
+                  : 'https://api.openai.com/v1'
+            }
             data-testid="provider-base-url-input"
           />
+          <span className="kb-form-hint">
+            {providerKind === 'ollama'
+              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
+              : providerKind === 'gemini'
+                ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
+                : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
+          </span>
         </div>
 
         <div className="kb-form-group">
-          <label htmlFor="provider-models-input" className="kb-form-label">
-            Model Allowlist (comma separated)
-          </label>
+          <div className="kb-model-allowlist-header">
+            <label htmlFor="provider-models-input" className="kb-form-label">
+              Model Allowlist (comma separated)
+            </label>
+            <button
+              type="button"
+              className="kb-btn kb-btn-secondary kb-probe-btn"
+              onClick={() => { void handleProbeModels(); }}
+              disabled={isProbing}
+              data-testid="probe-models-btn"
+            >
+              {isProbing ? '⏳ Probing...' : '🔍 Probe Models'}
+            </button>
+          </div>
+
+          {isProbing && (
+            <div className="kb-probe-status-message kb-probe-status-message--loading" data-testid="probe-loading">
+              Probing upstream models from endpoint...
+            </div>
+          )}
+
+          {probeError && (
+            <div className="kb-probe-status-message kb-probe-status-message--error" data-testid="probe-error">
+              {probeError}
+            </div>
+          )}
+
+          {probedModels !== null && (
+            <div className="kb-probed-models-picker" data-testid="probed-models-picker">
+              <div className="kb-probed-models-toolbar">
+                <input
+                  type="text"
+                  className="kb-probed-search-input"
+                  placeholder="Filter probed models..."
+                  value={probedFilter}
+                  onChange={(e) => { setProbedFilter(e.target.value); }}
+                  data-testid="probe-model-search-input"
+                />
+                <div className="kb-probed-actions">
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-probed-action-btn"
+                    onClick={handleSelectAllProbed}
+                    data-testid="probe-select-all-btn"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-probed-action-btn"
+                    onClick={handleClearModels}
+                    data-testid="probe-clear-all-btn"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="kb-probed-models-list" data-testid="probed-models-list">
+                {filteredProbedModels.length === 0 ? (
+                  <span className="kb-form-hint">No matching models found.</span>
+                ) : (
+                  filteredProbedModels.map((m) => {
+                    const isSelected = selectedModels.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`kb-probed-chip ${isSelected ? 'kb-probed-chip--selected' : ''}`}
+                        onClick={() => { toggleModel(m); }}
+                        data-testid={`probe-chip-${m}`}
+                      >
+                        {m} {isSelected ? '✓' : '+'}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
           <input
             id="provider-models-input"
             type="text"
@@ -251,45 +474,45 @@ function AiProviderEditorContent({
           </span>
         </div>
 
-        <div className="kb-form-group">
-          <label htmlFor="provider-residency-select" className="kb-form-label">
-            Data Residency Tier
-          </label>
-          <select
-            id="provider-residency-select"
-            className="kb-form-select"
-            value={residencyTier}
-            onChange={(e) => { setResidencyTier(e.target.value); }}
-            data-testid="provider-residency-select"
-          >
-            <option value="default">Default / Global</option>
-            <option value="local">Local Only (Zero Egress)</option>
-            <option value="us-east">US East</option>
-            <option value="eu-central">EU Central</option>
-          </select>
-        </div>
-
-        <div className="kb-form-group">
-          <label htmlFor="provider-priority-input" className="kb-form-label">
-            Priority Order (lower numbers evaluated first)
-          </label>
-          <input
-            id="provider-priority-input"
-            type="number"
-            min="1"
-            max="999"
-            className="kb-form-input"
-            value={priority}
-            onChange={(e) => { setPriority(parseInt(e.target.value, 10) || 100); }}
-            data-testid="provider-priority-input"
-          />
-        </div>
+        {/* Collapsible Advanced Settings */}
+        <details className="kb-advanced-settings" data-testid="advanced-settings-details">
+          <summary className="kb-advanced-settings-summary">
+            ▸ Advanced Settings
+          </summary>
+          <div className="kb-advanced-settings-body">
+            <div className="kb-form-group">
+              <label htmlFor="provider-residency-select" className="kb-form-label">
+                Data Residency Tier (Override)
+              </label>
+              <select
+                id="provider-residency-select"
+                className="kb-form-select"
+                value={residencyTier}
+                onChange={(e) => {
+                  setResidencyTier(e.target.value);
+                  setResidencyTierManual(true);
+                }}
+                data-testid="provider-residency-select"
+              >
+                <option value="local_only">Local Only (Zero Egress)</option>
+                <option value="cloud_standard">Cloud Standard</option>
+                <option value="default">Default / Global</option>
+                <option value="local">Local (Legacy)</option>
+                <option value="us-east">US East</option>
+                <option value="eu-central">EU Central</option>
+              </select>
+              <span className="kb-form-hint">
+                Auto-inferred as &quot;{inferResidencyTier(providerKind, baseUrl)}&quot; ({isLocal ? 'Local / Zero-Egress' : 'Cloud'}) based on protocol and address. Override only when routed through a regional proxy.
+              </span>
+            </div>
+          </div>
+        </details>
 
         <div className="kb-form-group">
           <label htmlFor="provider-key-input" className="kb-form-label">
-            API Secret Key (Write-Only Custody)
+            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key (Write-Only Custody)'}
           </label>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="kb-api-key-row">
             <input
               id="provider-key-input"
               type={showApiKey ? 'text' : 'password'}
@@ -299,14 +522,19 @@ function AiProviderEditorContent({
                 setApiKey(e.target.value);
                 setClearExistingKey(false);
               }}
-              placeholder={isEditing && provider.api_key_set ? '********' : 'Enter API secret key'}
+              placeholder={
+                isEditing && provider.api_key_set
+                  ? '********'
+                  : isLocal
+                    ? 'Optional for local runtime (leave blank if unauthenticated)'
+                    : 'Enter API secret key'
+              }
               disabled={clearExistingKey}
               data-testid="provider-key-input"
             />
             <button
               type="button"
-              className="kb-btn kb-btn-secondary"
-              style={{ minWidth: '44px', padding: '0 12px' }}
+              className="kb-btn kb-btn-secondary kb-api-key-toggle-btn"
               onClick={() => { setShowApiKey(!showApiKey); }}
               aria-label={showApiKey ? 'Hide secret key' : 'Show secret key'}
               data-testid="toggle-show-key-btn"
@@ -316,14 +544,16 @@ function AiProviderEditorContent({
           </div>
 
           <span className="kb-form-hint">
-            {isEditing && provider.api_key_set
-              ? 'API key is securely stored in write-only custody. Leave blank to preserve the existing key.'
-              : 'API keys are envelope-encrypted using master KEK and never returned in plaintext.'}
+            {isLocal
+              ? '🔓 No Key Required (Local). If your local proxy (vLLM, Ollama, llama.cpp) requires Bearer auth, you may supply one.'
+              : isEditing && provider.api_key_set
+                ? 'API key is securely stored in write-only custody. Leave blank to preserve the existing key.'
+                : 'API keys are envelope-encrypted using master KEK and never returned in plaintext.'}
           </span>
 
           {isEditing && provider.api_key_set && (
-            <div style={{ marginTop: '8px' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+            <div className="kb-clear-key-group">
+              <label className="kb-clear-key-label">
                 <input
                   type="checkbox"
                   checked={clearExistingKey}
@@ -339,7 +569,25 @@ function AiProviderEditorContent({
           )}
         </div>
 
+        {testStatus.kind !== 'idle' && testStatus.message && (
+          <div
+            className={`kb-drawer-test-status kb-drawer-test-status--${testStatus.kind}`}
+            data-testid="drawer-test-status"
+          >
+            {testStatus.message}
+          </div>
+        )}
+
         <div className="kb-modal-footer">
+          <button
+            type="button"
+            className="kb-btn kb-btn-secondary"
+            onClick={() => { void handleTestConnection(); }}
+            disabled={isTestingConnection}
+            data-testid="drawer-test-connection-btn"
+          >
+            {isTestingConnection ? 'Testing...' : 'Test Connection'}
+          </button>
           <button
             type="button"
             className="kb-btn kb-btn-secondary"
@@ -368,6 +616,7 @@ export function AiProviderEditorDrawer({
   provider,
   airGapMode,
   onSaved,
+  providersCount,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
   if (!isOpen) return null;
 
@@ -385,6 +634,7 @@ export function AiProviderEditorDrawer({
         provider={provider}
         airGapMode={airGapMode}
         onSaved={onSaved}
+        providersCount={providersCount}
       />
     </div>
   );

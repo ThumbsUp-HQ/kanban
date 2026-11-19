@@ -1,0 +1,2924 @@
+diff --git a/kanban/web/e2e/qa/kan-22-screenshots.spec.ts b/kanban/web/e2e/qa/kan-22-screenshots.spec.ts
+new file mode 100644
+index 0000000..a91e8e4
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-22-screenshots.spec.ts
+@@ -0,0 +1,441 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++process.env.QA_TICKET_ID = 'KAN-22';
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KAN-22/screenshots',
++);
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(150);
++}
++
++const mock5Providers = [
++  {
++    id: 'prov-1-ollama',
++    provider_kind: 'ollama',
++    display_name: 'Primary Ollama Engine',
++    base_url: 'http://127.0.0.1:11434',
++    model_allowlist: ['qwen2.5-coder:32b', 'llama3.3:70b'],
++    residency_tier: 'local_only',
++    priority: 10,
++    is_enabled: true,
++    api_key_set: false,
++    settings: {},
++  },
++  {
++    id: 'prov-2-ollama',
++    provider_kind: 'ollama',
++    display_name: 'Secondary Ollama Cluster',
++    base_url: 'http://192.168.1.50:11434',
++    model_allowlist: ['deepseek-r1:32b', 'mistral-small:24b'],
++    residency_tier: 'local_only',
++    priority: 20,
++    is_enabled: true,
++    api_key_set: false,
++    settings: {},
++  },
++  {
++    id: 'prov-3-openai-local',
++    provider_kind: 'openai',
++    display_name: 'Local vLLM OpenAI Engine',
++    base_url: 'http://127.0.0.1:8000/v1',
++    model_allowlist: ['meta-llama/Llama-3.1-8B-Instruct'],
++    residency_tier: 'local_only',
++    priority: 30,
++    is_enabled: true,
++    api_key_set: false,
++    settings: {},
++  },
++  {
++    id: 'prov-4-gemini',
++    provider_kind: 'gemini',
++    display_name: 'Google Gemini Pro Cloud',
++    base_url: 'https://generativelanguage.googleapis.com',
++    model_allowlist: ['gemini-2.5-pro', 'gemini-2.5-flash'],
++    residency_tier: 'cloud_standard',
++    priority: 40,
++    is_enabled: true,
++    api_key_set: true,
++    settings: {},
++  },
++  {
++    id: 'prov-5-openai',
++    provider_kind: 'openai',
++    display_name: 'Enterprise OpenAI Cloud',
++    base_url: 'https://api.openai.com/v1',
++    model_allowlist: ['gpt-4o', 'o3-mini'],
++    residency_tier: 'cloud_standard',
++    priority: 50,
++    is_enabled: true,
++    api_key_set: true,
++    settings: {},
++  },
++];
++
++function getBaseMocks(): MockHandlers {
++  return {
++    'GET /api/v1/setup/status': { json: { initialized: true } },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'test-csrf-token-qa' } },
++    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/objects/KANBA/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        principal_id: '01918a22-0000-7000-8000-000000000001',
++        workspace_id: 'ws-kanban',
++        aal_level: 2,
++        mfa_pending: false,
++        csrf_token: 'test-csrf-token-qa',
++        remember_me: true,
++      },
++    },
++    'GET /api/v1/users/me': {
++      json: {
++        id: '01918a22-0000-7000-8000-000000000001',
++        handle: '@adam',
++        display_name: 'Adam Outler',
++        email: 'adam@example.com',
++        type: 'USER',
++        is_server_admin: true,
++        aal_level: 2,
++        capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'SERVER_ADMIN'],
++      },
++    },
++    'GET /api/v1/auth/me': {
++      json: {
++        id: '01918a22-0000-7000-8000-000000000001',
++        handle: '@adam',
++        display_name: 'Adam Outler',
++        email: 'adam@example.com',
++        type: 'USER',
++        is_server_admin: true,
++        aal_level: 2,
++        capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'SERVER_ADMIN'],
++      },
++    },
++    'GET /api/v1/me': {
++      json: {
++        id: '01918a22-0000-7000-8000-000000000001',
++        handle: '@adam',
++        display_name: 'Adam Outler',
++        email: 'adam@example.com',
++        type: 'USER',
++        is_server_admin: true,
++        aal_level: 2,
++        capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'SERVER_ADMIN'],
++      },
++    },
++    'GET /api/v1/system/status': {
++      json: {
++        initialized: true,
++        standalone: false,
++        is_air_gapped: false,
++        version: '0.1.0',
++        environment: 'production',
++        database: { connected: true, latency_ms: 1.2 },
++      },
++    },
++    'GET /api/v1/workspaces': {
++      json: [{ id: 'ws-kanban', name: 'kanban', slug: 'kanban' }],
++    },
++    'GET /api/v1/workspaces/current': {
++      json: { id: 'ws-kanban', name: 'kanban', slug: 'kanban' },
++    },
++    'GET /api/v1/workspaces/settings': {
++      json: {
++        air_gap_mode: false,
++      },
++    },
++    'GET /api/v1/admin/workspace-settings': {
++      json: {
++        air_gap_mode: false,
++      },
++    },
++    'GET /api/v1/projects': {
++      json: [{ id: 'proj-kanba', key: 'KANBA', name: 'Kanban Platform' }],
++    },
++    'GET /api/v1/projects/KANBA': { json: loadFixture('project-kan') },
++    'GET /api/v1/admin/ai/providers': { json: mock5Providers },
++    'GET /api/v1/admin/ai/providers/:id': { json: mock5Providers[0] },
++    'GET /api/v1/admin/ai/budgets': { json: [] },
++    'POST /api/v1/admin/ai/providers/:id/test-connection': {
++      json: {
++        ok: true,
++        latency_ms: 42.1,
++        models: ['qwen2.5-coder:32b', 'llama3.3:70b'],
++        model_count: 2,
++        message: 'Connected in 42ms',
++      },
++    },
++    'POST /api/v1/admin/ai/providers/test-connection': {
++      json: {
++        ok: true,
++        latency_ms: 38.6,
++        models: ['qwen2.5-coder:32b'],
++        model_count: 1,
++      },
++    },
++    'POST /api/v1/admin/ai/providers/:id/probe-models': {
++      json: {
++        ok: true,
++        latency_ms: 55.0,
++        models: ['llama3.3:70b', 'qwen2.5-coder:32b', 'deepseek-r1:32b', 'mistral-small:24b', 'phi4:14b'],
++        model_count: 5,
++      },
++    },
++    'POST /api/v1/admin/ai/providers/probe-models': {
++      json: {
++        ok: true,
++        latency_ms: 55.0,
++        models: ['llama3.3:70b', 'qwen2.5-coder:32b', 'deepseek-r1:32b', 'mistral-small:24b', 'phi4:14b'],
++        model_count: 5,
++      },
++    },
++    'PUT /api/v1/admin/ai/providers/order': {
++      json: mock5Providers,
++    },
++  };
++}
++
++test.describe('KAN-22 Visual QA Proofs - AI Studio 5-Provider Failover Stack & Probe Models', () => {
++  test.beforeEach(async ({ context, page }) => {
++    await page.unroute('**/api/v1/**');
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-qa',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01-failover-stack-light: 5-Provider Priority Stack (Light Theme)', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'light');
++
++    await expect(page.getByTestId('ai-studio-page')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-1-ollama')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-2-ollama')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-3-openai-local')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-4-gemini')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-5-openai')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-failover-stack-light',
++      annotations: [
++        {
++          selector: '[data-testid="provider-rank-prov-1-ollama"]',
++          label: '#1 Primary Ollama',
++          note: 'First-priority local Ollama zero-egress runtime',
++        },
++        {
++          selector: '[data-testid="key-status-prov-1-ollama"]',
++          label: 'Local Key Badge',
++          note: 'No Key Required (Local) badge on loopback Ollama endpoint',
++        },
++        {
++          selector: '[data-testid="provider-rank-prov-3-openai-local"]',
++          label: '#3 Local vLLM Engine',
++          note: 'OpenAI-compatible local runtime targeting 127.0.0.1:8000',
++        },
++        {
++          selector: '[data-testid="provider-rank-prov-4-gemini"]',
++          label: '#4 Google Gemini Cloud',
++          note: 'Cloud failover tier with write-only key custody',
++        },
++        {
++          selector: '[data-testid="provider-rank-prov-5-openai"]',
++          label: '#5 Enterprise OpenAI',
++          note: 'Final failover tier in priority stack',
++        },
++      ],
++    });
++  });
++
++  test('02-failover-stack-dark: 5-Provider Priority Stack (Dark Theme)', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'dark');
++
++    await expect(page.getByTestId('ai-studio-page')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-1-ollama')).toBeVisible();
++    await expect(page.getByTestId('provider-card-prov-5-openai')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-failover-stack-dark',
++      annotations: [
++        {
++          selector: '[data-testid="providers-stack"]',
++          label: 'Dark Mode Stack',
++          note: 'Numbered 1..5 failover priority stack in high-contrast dark theme',
++        },
++        {
++          selector: '[data-testid="residency-badge-prov-1-ollama"]',
++          label: 'Local Badge (Dark)',
++          note: 'Audited dark token contrast for Local / Zero-Egress badge',
++        },
++        {
++          selector: '[data-testid="residency-badge-prov-5-openai"]',
++          label: 'Cloud Badge (Dark)',
++          note: 'Subtle Cloud residency badge on dark theme',
++        },
++      ],
++    });
++  });
++
++  test('03-test-connection-card: Inline Test Connection Results on Card', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'light');
++
++    await expect(page.getByTestId('test-connection-btn-prov-1-ollama')).toBeVisible();
++    await page.getByTestId('test-connection-btn-prov-1-ollama').click();
++
++    await expect(page.getByTestId('test-status-prov-1-ollama')).toBeVisible();
++    await expect(page.getByTestId('test-status-prov-1-ollama')).toContainText('Connected in 42ms');
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-test-connection-card',
++      annotations: [
++        {
++          selector: '[data-testid="test-status-prov-1-ollama"]',
++          label: 'Inline Connection Status',
++          note: 'Live round-trip latency and available model count displayed inline',
++        },
++      ],
++    });
++  });
++
++  test('04-probe-models-chips: Probe Models Live Chip Picker in Drawer', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'light');
++
++    await page.getByTestId('edit-provider-btn-prov-1-ollama').click();
++    await expect(page.getByTestId('ai-provider-editor-drawer')).toBeVisible();
++
++    await page.getByTestId('probe-models-btn').click();
++    await expect(page.getByTestId('probed-models-picker')).toBeVisible();
++    await expect(page.getByTestId('probe-chip-qwen2.5-coder:32b')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-probe-models-chips',
++      annotations: [
++        {
++          selector: '[data-testid="probe-models-btn"]',
++          label: 'Probe Models Button',
++          note: 'Queries upstream provider endpoint for live authorized models',
++        },
++        {
++          selector: '[data-testid="probed-models-picker"]',
++          label: 'Interactive Model Chips',
++          note: 'Selectable chips with filter search and Select All / Clear controls',
++        },
++      ],
++    });
++  });
++
++  test('05-advanced-settings-collapsed: Collapsed Advanced Settings in Drawer', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'light');
++
++    await page.getByTestId('register-provider-btn').click();
++    await expect(page.getByTestId('ai-provider-editor-drawer')).toBeVisible();
++    await expect(page.getByTestId('advanced-settings-details')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '05-advanced-settings-collapsed',
++      annotations: [
++        {
++          selector: '[data-testid="advanced-settings-details"]',
++          label: 'Collapsed Advanced Settings',
++          note: 'Tidy details disclosure keeping advanced residency overrides tucked away',
++        },
++      ],
++    });
++  });
++
++  test('06-advanced-settings-expanded: Expanded Advanced Settings with Residency Tier Override', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'light');
++
++    await page.getByTestId('register-provider-btn').click();
++    await expect(page.getByTestId('ai-provider-editor-drawer')).toBeVisible();
++
++    // Click details summary to expand
++    await page.locator('[data-testid="advanced-settings-details"] summary').click();
++    await expect(page.getByTestId('provider-residency-select')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '06-advanced-settings-expanded',
++      annotations: [
++        {
++          selector: '[data-testid="provider-residency-select"]',
++          label: 'Residency Tier Override',
++          note: 'Manual data residency selector with auto-inferred protocol guidance',
++        },
++      ],
++    });
++  });
++
++  test('07-drawer-test-connection: Drawer Test Connection Button & Result', async ({
++    page,
++  }, testInfo) => {
++    await mockApi(page, getBaseMocks());
++    await page.goto('/admin/ai');
++    await applyTheme(page, 'light');
++
++    await page.getByTestId('edit-provider-btn-prov-1-ollama').click();
++    await expect(page.getByTestId('ai-provider-editor-drawer')).toBeVisible();
++
++    await page.getByTestId('drawer-test-connection-btn').click();
++    await expect(page.getByTestId('drawer-test-status')).toBeVisible();
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '07-drawer-test-connection',
++      annotations: [
++        {
++          selector: '[data-testid="drawer-test-connection-btn"]',
++          label: 'Drawer Test Connection',
++          note: 'Validates credentials and endpoint connectivity before saving',
++        },
++        {
++          selector: '[data-testid="drawer-test-status"]',
++          label: 'Test Result Message',
++          note: 'Inline confirmation of round-trip latency and discovered models',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+index 6d9b73f..88c304b 100644
+--- a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
++++ b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+@@ -118,7 +118,7 @@ function AiBudgetModalContent({
+       </p>
+ 
+       {error && (
+-        <div className="kb-form-hint" style={{ color: '#ef4444', margin: '8px 0' }} data-testid="budget-error">
++        <div className="kb-form-error" data-testid="budget-error">
+           {error}
+         </div>
+       )}
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index ba68b95..a606917 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -5,6 +5,10 @@ import React, { useState, type JSX } from 'react';
+ import {
+   createAiProvider,
+   updateAiProvider,
++  probeAiModels,
++  testAiConnection,
++  isLocalEndpoint,
++  inferResidencyTier,
+   type ProviderConfigPublic,
+   type ProviderConfigCreate,
+   type ProviderConfigUpdate,
+@@ -16,6 +20,12 @@ interface AiProviderEditorDrawerProps {
+   provider: ProviderConfigPublic | null;
+   airGapMode: boolean;
+   onSaved: () => void;
++  providersCount?: number | undefined;
++}
++
++interface TestStatusState {
++  kind: 'idle' | 'loading' | 'success' | 'error';
++  message: string | null;
+ }
+ 
+ function AiProviderEditorContent({
+@@ -23,11 +33,13 @@ function AiProviderEditorContent({
+   provider,
+   airGapMode,
+   onSaved,
++  providersCount,
+ }: {
+   onClose: () => void;
+   provider: ProviderConfigPublic | null;
+   airGapMode: boolean;
+   onSaved: () => void;
++  providersCount?: number | undefined;
+ }): JSX.Element {
+   const isEditing = provider !== null;
+ 
+@@ -39,23 +51,35 @@ function AiProviderEditorContent({
+     provider?.display_name ?? (airGapMode ? 'Local Ollama Runtime' : 'Enterprise OpenAI'),
+   );
+   const [baseUrl, setBaseUrl] = useState<string>(
+-    provider?.base_url ?? (airGapMode ? 'http://localhost:11434' : ''),
++    provider?.base_url ?? (airGapMode ? 'http://127.0.0.1:11434' : ''),
+   );
+   const [modelAllowlist, setModelAllowlist] = useState<string>(
+     provider?.model_allowlist.join(', ') ??
+       (airGapMode ? 'qwen2.5-coder:7b, llama3.2:3b' : 'gpt-4o, gpt-4o-mini'),
+   );
+-  const [residencyTier, setResidencyTier] = useState<string>(
+-    provider?.residency_tier ?? (airGapMode ? 'local' : 'default'),
+-  );
+-  const [priority, setPriority] = useState<number>(provider?.priority ?? 100);
++
++  const initialResidency = provider?.residency_tier ?? (airGapMode ? 'local_only' : 'cloud_standard');
++  const [residencyTier, setResidencyTier] = useState<string>(initialResidency);
++  const [residencyTierManual, setResidencyTierManual] = useState<boolean>(isEditing);
++
+   const [apiKey, setApiKey] = useState<string>('');
+   const [showApiKey, setShowApiKey] = useState<boolean>(false);
+   const [clearExistingKey, setClearExistingKey] = useState<boolean>(false);
+   const [isSaving, setIsSaving] = useState<boolean>(false);
+   const [error, setError] = useState<string | null>(null);
+ 
++  // Probe models state
++  const [isProbing, setIsProbing] = useState<boolean>(false);
++  const [probeError, setProbeError] = useState<string | null>(null);
++  const [probedModels, setProbedModels] = useState<string[] | null>(null);
++  const [probedFilter, setProbedFilter] = useState<string>('');
++
++  // Connection test state
++  const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false);
++  const [testStatus, setTestStatus] = useState<TestStatusState>({ kind: 'idle', message: null });
++
+   const isCloudKind = providerKind === 'openai' || providerKind === 'gemini';
++  const isLocal = isLocalEndpoint(providerKind, baseUrl);
+ 
+   const handleKindChange = (newKind: string): void => {
+     setProviderKind(newKind);
+@@ -64,25 +88,123 @@ function AiProviderEditorContent({
+     } else {
+       setError(null);
+     }
++
+     if (!isEditing) {
+       if (newKind === 'openai') {
+-        setDisplayName('Enterprise OpenAI');
++        setDisplayName('OpenAI / OpenAI-Compatible');
+         setModelAllowlist('gpt-4o, gpt-4o-mini');
+-        setBaseUrl('');
++        setBaseUrl('https://api.openai.com/v1');
++        if (!residencyTierManual) {
++          setResidencyTier('cloud_standard');
++        }
+       } else if (newKind === 'gemini') {
+         setDisplayName('Google Gemini Workspace');
+         setModelAllowlist('gemini-2.5-flash, gemini-2.5-pro');
+-        setBaseUrl('');
++        setBaseUrl('https://generativelanguage.googleapis.com');
++        if (!residencyTierManual) {
++          setResidencyTier('cloud_standard');
++        }
+       } else if (newKind === 'ollama') {
+         setDisplayName('Local Ollama Runtime');
+-        setBaseUrl('http://localhost:11434');
++        setBaseUrl('http://127.0.0.1:11434');
+         setModelAllowlist('qwen2.5-coder:7b, llama3.2:3b');
+-        setResidencyTier('local');
++        if (!residencyTierManual) {
++          setResidencyTier('local_only');
++        }
++      }
++    }
++  };
++
++  const handleBaseUrlChange = (newUrl: string): void => {
++    setBaseUrl(newUrl);
++    if (!residencyTierManual) {
++      setResidencyTier(inferResidencyTier(providerKind, newUrl));
++    }
++  };
++
++  const getSelectedModelsList = (): string[] =>
++    modelAllowlist
++      .split(',')
++      .map((m) => m.trim())
++      .filter((m) => m.length > 0);
++
++  const toggleModel = (model: string): void => {
++    const current = getSelectedModelsList();
++    const exists = current.includes(model);
++    const next = exists ? current.filter((m) => m !== model) : [...current, model];
++    setModelAllowlist(next.join(', '));
++  };
++
++  const handleSelectAllProbed = (): void => {
++    if (!probedModels) return;
++    const current = new Set(getSelectedModelsList());
++    for (const m of probedModels) {
++      current.add(m);
++    }
++    setModelAllowlist(Array.from(current).join(', '));
++  };
++
++  const handleClearModels = (): void => {
++    setModelAllowlist('');
++  };
++
++  const handleProbeModels = async (): Promise<void> => {
++    try {
++      setIsProbing(true);
++      setProbeError(null);
++      const payload = provider
++        ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
++        : {
++            provider_kind: providerKind,
++            base_url: baseUrl.trim() || null,
++            api_key: apiKey.trim() || null,
++          };
++      const res = await probeAiModels(payload, provider?.id);
++      if (res.ok) {
++        setProbedModels(res.models);
++        if (res.models.length === 0) {
++          setProbeError('Connected successfully, but 0 models were discovered.');
++        }
+       } else {
+-        setDisplayName('Custom AI Provider');
+-        setBaseUrl('');
+-        setModelAllowlist('');
++        setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
+       }
++    } catch (err: unknown) {
++      setProbeError(err instanceof Error ? err.message : 'Failed to probe models');
++    } finally {
++      setIsProbing(false);
++    }
++  };
++
++  const handleTestConnection = async (): Promise<void> => {
++    try {
++      setIsTestingConnection(true);
++      setTestStatus({ kind: 'loading', message: 'Testing connection...' });
++      const payload = provider
++        ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
++        : {
++            provider_kind: providerKind,
++            base_url: baseUrl.trim() || null,
++            api_key: apiKey.trim() || null,
++          };
++      const res = await testAiConnection(payload, provider?.id);
++      if (res.ok) {
++        setTestStatus({
++          kind: 'success',
++          message: `Connected in ${String(Math.round(res.latency_ms))}ms - ${String(res.model_count)} models available`,
++        });
++      } else {
++        setTestStatus({
++          kind: 'error',
++          message: `Connection failed: ${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`,
++        });
++      }
++    } catch (err: unknown) {
++      setTestStatus({
++        kind: 'error',
++        message: err instanceof Error ? err.message : 'Connection test failed',
++      });
++    } finally {
++      setIsTestingConnection(false);
+     }
+   };
+ 
+@@ -98,10 +220,7 @@ function AiProviderEditorContent({
+       return;
+     }
+ 
+-    const models = modelAllowlist
+-      .split(',')
+-      .map((m) => m.trim())
+-      .filter((m) => m.length > 0);
++    const models = getSelectedModelsList();
+ 
+     try {
+       setIsSaving(true);
+@@ -113,7 +232,7 @@ function AiProviderEditorContent({
+           model_allowlist: models,
+           residency_tier: residencyTier,
+           base_url: baseUrl.trim() || null,
+-          priority,
++          priority: provider.priority,
+         };
+ 
+         if (clearExistingKey) {
+@@ -124,13 +243,14 @@ function AiProviderEditorContent({
+ 
+         await updateAiProvider(provider.id, payload);
+       } else {
++        const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
+         const payload: ProviderConfigCreate = {
+           provider_kind: providerKind,
+           display_name: displayName.trim(),
+           model_allowlist: models,
+           residency_tier: residencyTier,
+           base_url: baseUrl.trim() || null,
+-          priority,
++          priority: nextPriority,
+           api_key: apiKey.trim() ? apiKey.trim() : null,
+           is_enabled: true,
+         };
+@@ -147,6 +267,11 @@ function AiProviderEditorContent({
+     }
+   };
+ 
++  const filteredProbedModels = (probedModels ?? []).filter((m) =>
++    probedFilter.trim() ? m.toLowerCase().includes(probedFilter.trim().toLowerCase()) : true,
++  );
++  const selectedModels = getSelectedModelsList();
++
+   return (
+     <div className="kb-modal-card">
+       <div className="kb-modal-header">
+@@ -177,7 +302,7 @@ function AiProviderEditorContent({
+       )}
+ 
+       {error && (
+-        <div className="kb-form-hint" style={{ color: '#ef4444', margin: '12px 0' }} data-testid="provider-editor-error">
++        <div className="kb-form-error" data-testid="provider-editor-error">
+           {error}
+         </div>
+       )}
+@@ -185,7 +310,7 @@ function AiProviderEditorContent({
+       <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
+         <div className="kb-form-group">
+           <label htmlFor="provider-kind-select" className="kb-form-label">
+-            Provider Kind
++            Protocol & Provider Engine
+           </label>
+           <select
+             id="provider-kind-select"
+@@ -195,11 +320,18 @@ function AiProviderEditorContent({
+             disabled={isEditing}
+             data-testid="provider-kind-select"
+           >
+-            <option value="openai">OpenAI (Cloud)</option>
+-            <option value="gemini">Google Gemini (Cloud)</option>
+             <option value="ollama">Ollama (Local / Zero Egress)</option>
+-            <option value="custom">Custom Compatible</option>
++            <option value="openai">OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM)</option>
++            <option value="gemini">Google Gemini (Cloud)</option>
+           </select>
++          <span className="kb-form-hint">
++            {providerKind === 'ollama' &&
++              'Self-hosted Ollama runtime over loopback or local LAN. Zero external egress.'}
++            {providerKind === 'openai' &&
++              'OpenAI API or OpenAI-compatible local/remote engines (vLLM, LM Studio, llama.cpp, LiteLLM).'}
++            {providerKind === 'gemini' &&
++              'Google Gemini generative language API.'}
++          </span>
+         </div>
+ 
+         <div className="kb-form-group">
+@@ -220,23 +352,114 @@ function AiProviderEditorContent({
+ 
+         <div className="kb-form-group">
+           <label htmlFor="provider-base-url-input" className="kb-form-label">
+-            Custom HTTP Base URL {providerKind === 'ollama' && '(Required for Ollama)'}
++            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+           </label>
+           <input
+             id="provider-base-url-input"
+             type="url"
+             className="kb-form-input"
+             value={baseUrl}
+-            onChange={(e) => { setBaseUrl(e.target.value); }}
+-            placeholder={providerKind === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'}
++            onChange={(e) => { handleBaseUrlChange(e.target.value); }}
++            placeholder={
++              providerKind === 'ollama'
++                ? 'http://127.0.0.1:11434'
++                : providerKind === 'gemini'
++                  ? 'https://generativelanguage.googleapis.com'
++                  : 'https://api.openai.com/v1'
++            }
+             data-testid="provider-base-url-input"
+           />
++          <span className="kb-form-hint">
++            {providerKind === 'ollama'
++              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
++              : providerKind === 'gemini'
++                ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
++                : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
++          </span>
+         </div>
+ 
+         <div className="kb-form-group">
+-          <label htmlFor="provider-models-input" className="kb-form-label">
+-            Model Allowlist (comma separated)
+-          </label>
++          <div className="kb-model-allowlist-header">
++            <label htmlFor="provider-models-input" className="kb-form-label">
++              Model Allowlist (comma separated)
++            </label>
++            <button
++              type="button"
++              className="kb-btn kb-btn-secondary kb-probe-btn"
++              onClick={() => { void handleProbeModels(); }}
++              disabled={isProbing}
++              data-testid="probe-models-btn"
++            >
++              {isProbing ? '⏳ Probing...' : '🔍 Probe Models'}
++            </button>
++          </div>
++
++          {isProbing && (
++            <div className="kb-probe-status-message kb-probe-status-message--loading" data-testid="probe-loading">
++              Probing upstream models from endpoint...
++            </div>
++          )}
++
++          {probeError && (
++            <div className="kb-probe-status-message kb-probe-status-message--error" data-testid="probe-error">
++              {probeError}
++            </div>
++          )}
++
++          {probedModels !== null && (
++            <div className="kb-probed-models-picker" data-testid="probed-models-picker">
++              <div className="kb-probed-models-toolbar">
++                <input
++                  type="text"
++                  className="kb-probed-search-input"
++                  placeholder="Filter probed models..."
++                  value={probedFilter}
++                  onChange={(e) => { setProbedFilter(e.target.value); }}
++                  data-testid="probe-model-search-input"
++                />
++                <div className="kb-probed-actions">
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-probed-action-btn"
++                    onClick={handleSelectAllProbed}
++                    data-testid="probe-select-all-btn"
++                  >
++                    Select All
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-probed-action-btn"
++                    onClick={handleClearModels}
++                    data-testid="probe-clear-all-btn"
++                  >
++                    Clear
++                  </button>
++                </div>
++              </div>
++
++              <div className="kb-probed-models-list" data-testid="probed-models-list">
++                {filteredProbedModels.length === 0 ? (
++                  <span className="kb-form-hint">No matching models found.</span>
++                ) : (
++                  filteredProbedModels.map((m) => {
++                    const isSelected = selectedModels.includes(m);
++                    return (
++                      <button
++                        key={m}
++                        type="button"
++                        className={`kb-probed-chip ${isSelected ? 'kb-probed-chip--selected' : ''}`}
++                        onClick={() => { toggleModel(m); }}
++                        data-testid={`probe-chip-${m}`}
++                      >
++                        {m} {isSelected ? '✓' : '+'}
++                      </button>
++                    );
++                  })
++                )}
++              </div>
++            </div>
++          )}
++
+           <input
+             id="provider-models-input"
+             type="text"
+@@ -251,45 +474,45 @@ function AiProviderEditorContent({
+           </span>
+         </div>
+ 
+-        <div className="kb-form-group">
+-          <label htmlFor="provider-residency-select" className="kb-form-label">
+-            Data Residency Tier
+-          </label>
+-          <select
+-            id="provider-residency-select"
+-            className="kb-form-select"
+-            value={residencyTier}
+-            onChange={(e) => { setResidencyTier(e.target.value); }}
+-            data-testid="provider-residency-select"
+-          >
+-            <option value="default">Default / Global</option>
+-            <option value="local">Local Only (Zero Egress)</option>
+-            <option value="us-east">US East</option>
+-            <option value="eu-central">EU Central</option>
+-          </select>
+-        </div>
+-
+-        <div className="kb-form-group">
+-          <label htmlFor="provider-priority-input" className="kb-form-label">
+-            Priority Order (lower numbers evaluated first)
+-          </label>
+-          <input
+-            id="provider-priority-input"
+-            type="number"
+-            min="1"
+-            max="999"
+-            className="kb-form-input"
+-            value={priority}
+-            onChange={(e) => { setPriority(parseInt(e.target.value, 10) || 100); }}
+-            data-testid="provider-priority-input"
+-          />
+-        </div>
++        {/* Collapsible Advanced Settings */}
++        <details className="kb-advanced-settings" data-testid="advanced-settings-details">
++          <summary className="kb-advanced-settings-summary">
++            ▸ Advanced Settings
++          </summary>
++          <div className="kb-advanced-settings-body">
++            <div className="kb-form-group">
++              <label htmlFor="provider-residency-select" className="kb-form-label">
++                Data Residency Tier (Override)
++              </label>
++              <select
++                id="provider-residency-select"
++                className="kb-form-select"
++                value={residencyTier}
++                onChange={(e) => {
++                  setResidencyTier(e.target.value);
++                  setResidencyTierManual(true);
++                }}
++                data-testid="provider-residency-select"
++              >
++                <option value="local_only">Local Only (Zero Egress)</option>
++                <option value="cloud_standard">Cloud Standard</option>
++                <option value="default">Default / Global</option>
++                <option value="local">Local (Legacy)</option>
++                <option value="us-east">US East</option>
++                <option value="eu-central">EU Central</option>
++              </select>
++              <span className="kb-form-hint">
++                Auto-inferred as &quot;{inferResidencyTier(providerKind, baseUrl)}&quot; ({isLocal ? 'Local / Zero-Egress' : 'Cloud'}) based on protocol and address. Override only when routed through a regional proxy.
++              </span>
++            </div>
++          </div>
++        </details>
+ 
+         <div className="kb-form-group">
+           <label htmlFor="provider-key-input" className="kb-form-label">
+-            API Secret Key (Write-Only Custody)
++            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key (Write-Only Custody)'}
+           </label>
+-          <div style={{ display: 'flex', gap: '8px' }}>
++          <div className="kb-api-key-row">
+             <input
+               id="provider-key-input"
+               type={showApiKey ? 'text' : 'password'}
+@@ -299,14 +522,19 @@ function AiProviderEditorContent({
+                 setApiKey(e.target.value);
+                 setClearExistingKey(false);
+               }}
+-              placeholder={isEditing && provider.api_key_set ? '********' : 'Enter API secret key'}
++              placeholder={
++                isEditing && provider.api_key_set
++                  ? '********'
++                  : isLocal
++                    ? 'Optional for local runtime (leave blank if unauthenticated)'
++                    : 'Enter API secret key'
++              }
+               disabled={clearExistingKey}
+               data-testid="provider-key-input"
+             />
+             <button
+               type="button"
+-              className="kb-btn kb-btn-secondary"
+-              style={{ minWidth: '44px', padding: '0 12px' }}
++              className="kb-btn kb-btn-secondary kb-api-key-toggle-btn"
+               onClick={() => { setShowApiKey(!showApiKey); }}
+               aria-label={showApiKey ? 'Hide secret key' : 'Show secret key'}
+               data-testid="toggle-show-key-btn"
+@@ -316,14 +544,16 @@ function AiProviderEditorContent({
+           </div>
+ 
+           <span className="kb-form-hint">
+-            {isEditing && provider.api_key_set
+-              ? 'API key is securely stored in write-only custody. Leave blank to preserve the existing key.'
+-              : 'API keys are envelope-encrypted using master KEK and never returned in plaintext.'}
++            {isLocal
++              ? '🔓 No Key Required (Local). If your local proxy (vLLM, Ollama, llama.cpp) requires Bearer auth, you may supply one.'
++              : isEditing && provider.api_key_set
++                ? 'API key is securely stored in write-only custody. Leave blank to preserve the existing key.'
++                : 'API keys are envelope-encrypted using master KEK and never returned in plaintext.'}
+           </span>
+ 
+           {isEditing && provider.api_key_set && (
+-            <div style={{ marginTop: '8px' }}>
+-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
++            <div className="kb-clear-key-group">
++              <label className="kb-clear-key-label">
+                 <input
+                   type="checkbox"
+                   checked={clearExistingKey}
+@@ -339,7 +569,25 @@ function AiProviderEditorContent({
+           )}
+         </div>
+ 
++        {testStatus.kind !== 'idle' && testStatus.message && (
++          <div
++            className={`kb-drawer-test-status kb-drawer-test-status--${testStatus.kind}`}
++            data-testid="drawer-test-status"
++          >
++            {testStatus.message}
++          </div>
++        )}
++
+         <div className="kb-modal-footer">
++          <button
++            type="button"
++            className="kb-btn kb-btn-secondary"
++            onClick={() => { void handleTestConnection(); }}
++            disabled={isTestingConnection}
++            data-testid="drawer-test-connection-btn"
++          >
++            {isTestingConnection ? 'Testing...' : 'Test Connection'}
++          </button>
+           <button
+             type="button"
+             className="kb-btn kb-btn-secondary"
+@@ -368,6 +616,7 @@ export function AiProviderEditorDrawer({
+   provider,
+   airGapMode,
+   onSaved,
++  providersCount,
+ }: AiProviderEditorDrawerProps): JSX.Element | null {
+   if (!isOpen) return null;
+ 
+@@ -385,6 +634,7 @@ export function AiProviderEditorDrawer({
+         provider={provider}
+         airGapMode={airGapMode}
+         onSaved={onSaved}
++        providersCount={providersCount}
+       />
+     </div>
+   );
+diff --git a/kanban/web/src/features/admin-ai/AiStudioPage.tsx b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+index 8d87fb4..7939570 100644
+--- a/kanban/web/src/features/admin-ai/AiStudioPage.tsx
++++ b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+@@ -7,19 +7,34 @@ import {
+   disableAiProvider,
+   updateAiProvider,
+   deleteAiProvider,
++  reorderAiProviders,
++  testAiConnection,
+   fetchAirGapMode,
++  isLocalEndpoint,
+   type ProviderConfigPublic,
+ } from './aiAdminApi';
+ import { AiBudgetModal } from './AiBudgetModal';
+ import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
+ import './aiStudio.css';
+ 
++interface CardTestStatus {
++  kind: 'loading' | 'success' | 'error';
++  message: string;
++}
++
+ export function AiStudioPage(): JSX.Element {
+   const [providers, setProviders] = useState<ProviderConfigPublic[]>([]);
+   const [airGapMode, setAirGapMode] = useState<boolean>(false);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+   const [error, setError] = useState<string | null>(null);
+ 
++  // Card connection test state map
++  const [cardTestStatuses, setCardTestStatuses] = useState<Record<string, CardTestStatus>>({});
++
++  // Drag and drop state
++  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
++  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
++
+   // Modals state
+   const [selectedBudgetProvider, setSelectedBudgetProvider] = useState<ProviderConfigPublic | null>(null);
+   const [editingProvider, setEditingProvider] = useState<ProviderConfigPublic | null>(null);
+@@ -38,7 +53,8 @@ export function AiStudioPage(): JSX.Element {
+           fetchAirGapMode(),
+         ]);
+         if (!active) return;
+-        setProviders(provList);
++        const sorted = [...provList].sort((a, b) => a.priority - b.priority);
++        setProviders(sorted);
+         setAirGapMode(isAirGap);
+       } catch (err: unknown) {
+         if (!active) return;
+@@ -85,6 +101,94 @@ export function AiStudioPage(): JSX.Element {
+     }
+   };
+ 
++  const handleReorder = async (newOrder: ProviderConfigPublic[]): Promise<void> => {
++    const previousOrder = [...providers];
++    setProviders(newOrder);
++    try {
++      const orderedIds = newOrder.map((p) => p.id);
++      const updated = await reorderAiProviders(orderedIds);
++      const sorted = [...updated].sort((a, b) => a.priority - b.priority);
++      setProviders(sorted);
++    } catch (err: unknown) {
++      setProviders(previousOrder);
++      setError(err instanceof Error ? err.message : 'Failed to reorder providers');
++    }
++  };
++
++  const handleMove = (fromIndex: number, toIndex: number): void => {
++    if (toIndex < 0 || toIndex >= providers.length) return;
++    const copy = [...providers];
++    const [moved] = copy.splice(fromIndex, 1);
++    if (moved !== undefined) {
++      copy.splice(toIndex, 0, moved);
++      void handleReorder(copy);
++    }
++  };
++
++  const handleDragStart = (e: React.DragEvent, index: number): void => {
++    setDraggedIndex(index);
++    e.dataTransfer.effectAllowed = 'move';
++    e.dataTransfer.setData('text/plain', String(index));
++  };
++
++  const handleDragOver = (e: React.DragEvent, index: number): void => {
++    e.preventDefault();
++    e.dataTransfer.dropEffect = 'move';
++    if (dragOverIndex !== index) {
++      setDragOverIndex(index);
++    }
++  };
++
++  const handleDragLeave = (): void => {
++    setDragOverIndex(null);
++  };
++
++  const handleDrop = (e: React.DragEvent, targetIndex: number): void => {
++    e.preventDefault();
++    setDragOverIndex(null);
++    const fromIndex = draggedIndex;
++    setDraggedIndex(null);
++    if (fromIndex !== null && fromIndex !== targetIndex) {
++      handleMove(fromIndex, targetIndex);
++    }
++  };
++
++  const handleTestCardConnection = async (provider: ProviderConfigPublic): Promise<void> => {
++    setCardTestStatuses((prev) => ({
++      ...prev,
++      [provider.id]: { kind: 'loading', message: 'Testing connection...' },
++    }));
++
++    try {
++      const res = await testAiConnection({}, provider.id);
++      if (res.ok) {
++        setCardTestStatuses((prev) => ({
++          ...prev,
++          [provider.id]: {
++            kind: 'success',
++            message: `Connected in ${String(Math.round(res.latency_ms))}ms - ${String(res.model_count)} models available`,
++          },
++        }));
++      } else {
++        setCardTestStatuses((prev) => ({
++          ...prev,
++          [provider.id]: {
++            kind: 'error',
++            message: `Connection failed: ${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`,
++          },
++        }));
++      }
++    } catch (err: unknown) {
++      setCardTestStatuses((prev) => ({
++        ...prev,
++        [provider.id]: {
++          kind: 'error',
++          message: err instanceof Error ? err.message : 'Connection test failed',
++        },
++      }));
++    }
++  };
++
+   return (
+     <section className="kb-ai-studio" data-testid="ai-studio-page">
+       <div className="kb-ai-studio-header">
+@@ -93,7 +197,7 @@ export function AiStudioPage(): JSX.Element {
+             <span aria-hidden="true">🧠</span> AI Providers & Token Caps Studio
+           </h1>
+           <p className="kb-ai-studio-subtitle">
+-            Configure workspace LLM providers, model allowlists, monthly token caps, and zero-egress policies.
++            Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.
+           </p>
+         </div>
+ 
+@@ -123,7 +227,7 @@ export function AiStudioPage(): JSX.Element {
+       )}
+ 
+       {error && (
+-        <div className="kb-form-hint" style={{ color: '#ef4444' }} data-testid="ai-studio-error">
++        <div className="kb-form-error" data-testid="ai-studio-error">
+           {error}
+         </div>
+       )}
+@@ -133,44 +237,87 @@ export function AiStudioPage(): JSX.Element {
+           Loading AI providers...
+         </div>
+       ) : providers.length === 0 ? (
+-        <div
+-          style={{
+-            padding: '32px',
+-            textAlign: 'center',
+-            backgroundColor: 'var(--kb-color-bg-surface, #ffffff)',
+-            borderRadius: '8px',
+-            border: '1px dashed var(--kb-color-border-subtle, #d1d5db)',
+-          }}
+-          data-testid="empty-providers-placeholder"
+-        >
+-          <p style={{ margin: 0, color: 'var(--kb-color-text-secondary, #4b5563)' }}>
++        <div className="kb-empty-placeholder" data-testid="empty-providers-placeholder">
++          <p className="kb-empty-placeholder-text">
+             No AI providers configured yet. Click <strong>+ Register Provider</strong> to add one.
+           </p>
+         </div>
+       ) : (
+-        <div className="kb-providers-grid" data-testid="providers-grid">
+-          {providers.map((p) => {
++        <div className="kb-provider-stack kb-providers-grid" data-testid="providers-stack">
++          {providers.map((p, index) => {
+             const isCloud = p.provider_kind === 'openai' || p.provider_kind === 'gemini';
++            const isLocal = isLocalEndpoint(p.provider_kind, p.base_url);
+             const isBlockedByAirGap = airGapMode && isCloud;
++            const isDragging = draggedIndex === index;
++            const isDragOver = dragOverIndex === index;
++            const cardTest = cardTestStatuses[p.id];
+ 
+             return (
+               <div
+                 key={p.id}
+-                className="kb-provider-card"
++                className={`kb-provider-card kb-provider-stack-item ${isDragging ? 'kb-provider-stack-item--dragging' : ''} ${isDragOver ? 'kb-provider-stack-item--drag-over' : ''}`}
++                onDragOver={(e) => { handleDragOver(e, index); }}
++                onDragLeave={handleDragLeave}
++                onDrop={(e) => { handleDrop(e, index); }}
+                 data-testid={`provider-card-${p.id}`}
+               >
+                 <div>
+                   <div className="kb-provider-card-header">
+-                    <span
+-                      className={`kb-provider-kind-badge kb-provider-kind--${p.provider_kind}`}
+-                      data-testid={`provider-kind-badge-${p.provider_kind}`}
+-                    >
+-                      {p.provider_kind}
+-                    </span>
++                    <div className="kb-provider-card-header-left">
++                      <div className="kb-provider-order-controls">
++                        <button
++                          type="button"
++                          className="kb-drag-handle"
++                          draggable
++                          onDragStart={(e) => { handleDragStart(e, index); }}
++                          aria-label={`Drag to reorder ${p.display_name}`}
++                          data-testid={`drag-handle-${p.id}`}
++                        >
++                          ⋮⋮
++                        </button>
++                        <span className="kb-provider-rank" data-testid={`provider-rank-${p.id}`}>
++                          #{index + 1}
++                        </span>
++                        <button
++                          type="button"
++                          className="kb-btn kb-btn-secondary kb-reorder-btn"
++                          onClick={() => { handleMove(index, index - 1); }}
++                          disabled={index === 0}
++                          aria-label={`Move ${p.display_name} up`}
++                          data-testid={`move-up-btn-${p.id}`}
++                        >
++                          ▲
++                        </button>
++                        <button
++                          type="button"
++                          className="kb-btn kb-btn-secondary kb-reorder-btn"
++                          onClick={() => { handleMove(index, index + 1); }}
++                          disabled={index === providers.length - 1}
++                          aria-label={`Move ${p.display_name} down`}
++                          data-testid={`move-down-btn-${p.id}`}
++                        >
++                          ▼
++                        </button>
++                      </div>
++
++                      <span
++                        className={`kb-provider-kind-badge kb-provider-kind--${p.provider_kind}`}
++                        data-testid={`provider-kind-badge-${p.provider_kind}`}
++                      >
++                        {p.provider_kind}
++                      </span>
++
++                      <span
++                        className={`kb-residency-badge kb-residency-badge--${isLocal ? 'local' : 'cloud'}`}
++                        data-testid={`residency-badge-${p.id}`}
++                      >
++                        {isLocal ? '🏠 Local / Zero-Egress' : '☁️ Cloud'}
++                      </span>
++                    </div>
++
+                     <button
+                       type="button"
+-                      className={`kb-btn ${p.is_enabled ? 'kb-btn-secondary' : 'kb-btn-primary'}`}
+-                      style={{ padding: '2px 8px', fontSize: '11px', minHeight: '30px' }}
++                      className={`kb-btn ${p.is_enabled ? 'kb-btn-secondary' : 'kb-btn-primary'} kb-provider-enable-btn`}
+                       onClick={() => { void handleToggleEnable(p); }}
+                       disabled={isBlockedByAirGap && !p.is_enabled}
+                       data-testid={`toggle-enable-btn-${p.id}`}
+@@ -183,8 +330,8 @@ export function AiStudioPage(): JSX.Element {
+ 
+                   <div className="kb-provider-card-meta">
+                     <div className="kb-provider-meta-row">
+-                      <span>Priority:</span>
+-                      <code>{p.priority}</code>
++                      <span>Failover Priority:</span>
++                      <code>#{index + 1} (Priority {p.priority})</code>
+                       <span>Tier:</span>
+                       <code>{p.residency_tier}</code>
+                     </div>
+@@ -198,19 +345,23 @@ export function AiStudioPage(): JSX.Element {
+ 
+                     <div className="kb-provider-meta-row">
+                       <span>API Key:</span>
+-                      <span
+-                        style={{
+-                          color: p.api_key_set ? '#059669' : '#dc2626',
+-                          fontWeight: 500,
+-                        }}
+-                        data-testid={`key-status-${p.id}`}
+-                      >
+-                        {p.api_key_set ? '🔒 Key Configured (Write-Only)' : '⚠️ Key Not Set'}
+-                      </span>
++                      {p.api_key_set ? (
++                        <span className="kb-key-status kb-key-status--set" data-testid={`key-status-${p.id}`}>
++                          🔒 Key Configured (Write-Only)
++                        </span>
++                      ) : isLocal ? (
++                        <span className="kb-key-status kb-key-status--no-key" data-testid={`key-status-${p.id}`}>
++                          🔓 No Key Required (Local)
++                        </span>
++                      ) : (
++                        <span className="kb-key-status kb-key-status--missing" data-testid={`key-status-${p.id}`}>
++                          ⚠️ Key Not Set
++                        </span>
++                      )}
+                     </div>
+ 
+                     {isBlockedByAirGap && (
+-                      <div className="kb-provider-meta-row" style={{ color: '#b45309' }}>
++                      <div className="kb-provider-meta-row kb-provider-air-gap-alert">
+                         <span>⚠️ Blocked by Air-Gap mode</span>
+                       </div>
+                     )}
+@@ -225,10 +376,28 @@ export function AiStudioPage(): JSX.Element {
+                         ))}
+                       </div>
+                     </div>
++
++                    {cardTest && (
++                      <div
++                        className={`kb-test-connection-status kb-test-connection-status--${cardTest.kind}`}
++                        data-testid={`test-status-${p.id}`}
++                      >
++                        {cardTest.message}
++                      </div>
++                    )}
+                   </div>
+                 </div>
+ 
+                 <div className="kb-provider-card-actions">
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary"
++                    onClick={() => { void handleTestCardConnection(p); }}
++                    data-testid={`test-connection-btn-${p.id}`}
++                  >
++                    Test Connection
++                  </button>
++
+                   <button
+                     type="button"
+                     className="kb-btn kb-btn-secondary"
+@@ -283,6 +452,7 @@ export function AiStudioPage(): JSX.Element {
+         provider={editingProvider}
+         airGapMode={airGapMode}
+         onSaved={refreshData}
++        providersCount={providers.length}
+       />
+ 
+       {/* Delete Confirmation Modal */}
+@@ -295,10 +465,10 @@ export function AiStudioPage(): JSX.Element {
+           data-testid="delete-provider-modal"
+         >
+           <div className="kb-modal-card">
+-            <h2 id="delete-provider-title" style={{ margin: '0 0 12px 0' }}>
++            <h2 id="delete-provider-title" className="kb-delete-modal-title">
+               Confirm Provider Deletion
+             </h2>
+-            <p style={{ margin: '0 0 20px 0' }}>
++            <p className="kb-delete-modal-text">
+               Are you sure you want to delete <strong>{providerToDelete.display_name}</strong>? Any automated agents or completions relying on this provider will fall back to secondary providers.
+             </p>
+             <div className="kb-modal-footer">
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+index 47ba36b..73bc4ec 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+@@ -2,7 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
+ import { AiStudioPage } from '../AiStudioPage';
+ import { AiBudgetModal } from '../AiBudgetModal';
+@@ -11,14 +11,14 @@ import * as aiApi from '../aiAdminApi';
+ import type { ProviderConfigPublic, BudgetRecord } from '../aiAdminApi';
+ import * as clientModule from '../../../api/client';
+ 
+-describe('AiStudioPage & Components (KANBA-219)', () => {
++describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+   const mockProvider: ProviderConfigPublic = {
+     id: 'prov-openai-1',
+     provider_kind: 'openai',
+     display_name: 'Production OpenAI',
+     base_url: 'https://api.openai.com/v1',
+     model_allowlist: ['gpt-4o', 'gpt-4o-mini'],
+-    residency_tier: 'default',
++    residency_tier: 'cloud_standard',
+     priority: 10,
+     settings: {},
+     api_key_set: true,
+@@ -30,9 +30,9 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+     id: 'prov-ollama-2',
+     provider_kind: 'ollama',
+     display_name: 'Local Ollama Runtime',
+-    base_url: 'http://localhost:11434',
++    base_url: 'http://127.0.0.1:11434',
+     model_allowlist: ['llama3.2:3b'],
+-    residency_tier: 'local',
++    residency_tier: 'local_only',
+     priority: 20,
+     settings: {},
+     api_key_set: false,
+@@ -40,6 +40,34 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+     project_id: null,
+   };
+ 
++  const mockOpenAiLocalProvider: ProviderConfigPublic = {
++    id: 'prov-openai-local-3',
++    provider_kind: 'openai',
++    display_name: 'Local vLLM Engine',
++    base_url: 'http://localhost:8000/v1',
++    model_allowlist: ['mistral-7b'],
++    residency_tier: 'local_only',
++    priority: 30,
++    settings: {},
++    api_key_set: false,
++    is_enabled: true,
++    project_id: null,
++  };
++
++  const mockGeminiProvider: ProviderConfigPublic = {
++    id: 'prov-gemini-4',
++    provider_kind: 'gemini',
++    display_name: 'Google Gemini Cloud',
++    base_url: 'https://generativelanguage.googleapis.com',
++    model_allowlist: ['gemini-2.5-flash'],
++    residency_tier: 'cloud_standard',
++    priority: 40,
++    settings: {},
++    api_key_set: true,
++    is_enabled: true,
++    project_id: null,
++  };
++
+   const mockBudgets: BudgetRecord[] = [
+     {
+       period_kind: 'monthly',
+@@ -133,13 +161,26 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+     });
+   });
+ 
+-  describe('AiStudioPage component', () => {
+-    it('renders provider cards and handles toggle enablement and modals', async () => {
+-      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
++  describe('AiStudioPage component & Numbered Failover Priority Stack (KAN-22)', () => {
++    it('renders numbered #1..#N stack, local badges, and handles move up/down reordering', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([
++        mockProvider,
++        mockOllamaProvider,
++        mockOpenAiLocalProvider,
++      ]);
+       vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+       vi.spyOn(aiApi, 'disableAiProvider').mockResolvedValue({ ...mockProvider, is_enabled: false });
+       vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue({ ...mockOllamaProvider, is_enabled: true });
+       vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockImplementation((ids) => {
++        return Promise.resolve(
++          ids.map((id, idx) => {
++            const match = [mockProvider, mockOllamaProvider, mockOpenAiLocalProvider].find((p) => p.id === id);
++            if (!match) throw new Error(`Provider not found: ${id}`);
++            return { ...match, priority: (idx + 1) * 10 };
++          }),
++        );
++      });
+ 
+       render(<AiStudioPage />);
+ 
+@@ -148,30 +189,84 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+       await waitFor(() => {
+         expect(screen.getByText('Production OpenAI')).toBeDefined();
+         expect(screen.getByText('Local Ollama Runtime')).toBeDefined();
++        expect(screen.getByText('Local vLLM Engine')).toBeDefined();
+       });
+ 
+-      // Air gap banner should not be present
+-      expect(screen.queryByTestId('air-gap-active-banner')).toBeNull();
++      // Verify numbered rank badges
++      expect(screen.getByTestId('provider-rank-prov-openai-1').textContent).toBe('#1');
++      expect(screen.getByTestId('provider-rank-prov-ollama-2').textContent).toBe('#2');
++      expect(screen.getByTestId('provider-rank-prov-openai-local-3').textContent).toBe('#3');
++
++      // Verify residency badges
++      expect(screen.getByTestId('residency-badge-prov-openai-1').textContent).toContain('Cloud');
++      expect(screen.getByTestId('residency-badge-prov-ollama-2').textContent).toContain('Local / Zero-Egress');
++      expect(screen.getByTestId('residency-badge-prov-openai-local-3').textContent).toContain('Local / Zero-Egress');
++
++      // Verify key status badges
++      expect(screen.getByTestId('key-status-prov-openai-1').textContent).toContain('Key Configured');
++      expect(screen.getByTestId('key-status-prov-ollama-2').textContent).toContain('No Key Required (Local)');
++      expect(screen.getByTestId('key-status-prov-openai-local-3').textContent).toContain('No Key Required (Local)');
++
++      // Verify Move Up disabled on #1, Move Down disabled on #3
++      expect(screen.getByTestId<HTMLButtonElement>('move-up-btn-prov-openai-1').disabled).toBe(true);
++      expect(screen.getByTestId<HTMLButtonElement>('move-down-btn-prov-openai-local-3').disabled).toBe(true);
++
++      // Click Move Down on #1 (moves prov-openai-1 down to #2)
++      act(() => {
++        fireEvent.click(screen.getByTestId('move-down-btn-prov-openai-1'));
++      });
++      await waitFor(() => {
++        expect(reorderSpy).toHaveBeenCalledWith([
++          'prov-ollama-2',
++          'prov-openai-1',
++          'prov-openai-local-3',
++        ]);
++      });
++
++      // Click Move Up on #2 (moves prov-openai-1 back to #1)
++      act(() => {
++        fireEvent.click(screen.getByTestId('move-up-btn-prov-openai-1'));
++      });
++      await waitFor(() => {
++        expect(reorderSpy).toHaveBeenCalledWith([
++          'prov-openai-1',
++          'prov-ollama-2',
++          'prov-openai-local-3',
++        ]);
++      });
+ 
+       // Toggle enabled provider (disable it)
+       const toggleOpenAi = screen.getByTestId('toggle-enable-btn-prov-openai-1');
+       expect(toggleOpenAi.textContent).toBe('Enabled');
+-      fireEvent.click(toggleOpenAi);
++      act(() => {
++        fireEvent.click(toggleOpenAi);
++      });
+       await waitFor(() => {
+         expect(aiApi.disableAiProvider).toHaveBeenCalledWith('prov-openai-1');
+       });
++      await waitFor(() => {
++        expect(aiApi.fetchAiProviders).toHaveBeenCalled();
++      });
+ 
+       // Toggle disabled provider (enable it)
+       const toggleOllama = screen.getByTestId('toggle-enable-btn-prov-ollama-2');
+       expect(toggleOllama.textContent).toBe('Disabled');
+-      fireEvent.click(toggleOllama);
++      act(() => {
++        fireEvent.click(toggleOllama);
++      });
+       await waitFor(() => {
+         expect(aiApi.updateAiProvider).toHaveBeenCalledWith('prov-ollama-2', { is_enabled: true });
+       });
++      await waitFor(() => {
++        expect(aiApi.fetchAiProviders).toHaveBeenCalled();
++      });
+ 
+       // Open manage budget modal
+       fireEvent.click(screen.getByTestId('manage-budget-btn-prov-openai-1'));
+       expect(screen.getByTestId('ai-budget-modal')).toBeDefined();
++      await waitFor(() => {
++        expect(aiApi.fetchBudgets).toHaveBeenCalledWith('prov-openai-1');
++      });
+       fireEvent.click(screen.getByTestId('close-budget-modal-btn'));
+       expect(screen.queryByTestId('ai-budget-modal')).toBeNull();
+ 
+@@ -188,6 +283,228 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+       expect(screen.queryByTestId('ai-provider-editor-drawer')).toBeNull();
+     });
+ 
++    it('rolls back provider order and displays error alert when reorder fails', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockRejectedValue(new Error('Network reorder failure'));
++
++      render(<AiStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByText('Production OpenAI')).toBeDefined();
++      });
++
++      // Move Down on #1 (Error instance)
++      fireEvent.click(screen.getByTestId('move-down-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('ai-studio-error').textContent).toContain('Network reorder failure');
++      });
++
++      // State rolled back
++      expect(screen.getByTestId('provider-rank-prov-openai-1').textContent).toBe('#1');
++      expect(screen.getByTestId('provider-rank-prov-ollama-2').textContent).toBe('#2');
++
++      // Reorder failure with non-Error reject
++      reorderSpy.mockRejectedValueOnce('raw reorder failure');
++      fireEvent.click(screen.getByTestId('move-down-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('ai-studio-error').textContent).toContain('Failed to reorder providers');
++      });
++    });
++
++    it('handles drag and drop reordering via drag handle', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
++        { ...mockOllamaProvider, priority: 10 },
++        { ...mockProvider, priority: 20 },
++      ]);
++
++      render(<AiStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('drag-handle-prov-openai-1')).toBeDefined();
++      });
++
++      const handle1 = screen.getByTestId('drag-handle-prov-openai-1');
++      const card2 = screen.getByTestId('provider-card-prov-ollama-2');
++
++      const dataTransfer = {
++        effectAllowed: '',
++        dropEffect: '',
++        setData: vi.fn(),
++        getData: vi.fn().mockReturnValue('0'),
++      };
++
++      // Drag start on #1
++      fireEvent.dragStart(handle1, { dataTransfer });
++      expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', '0');
++
++      // Drag over card #2
++      fireEvent.dragOver(card2, { dataTransfer });
++      expect(card2.className).toContain('kb-provider-stack-item--drag-over');
++
++      // Drag over card #2 again (same index branch)
++      fireEvent.dragOver(card2, { dataTransfer });
++
++      // Drag leave
++      fireEvent.dragLeave(card2);
++      expect(card2.className).not.toContain('kb-provider-stack-item--drag-over');
++
++      // Drop on card #2
++      fireEvent.drop(card2, { dataTransfer });
++
++      await waitFor(() => {
++        expect(reorderSpy).toHaveBeenCalledWith(['prov-ollama-2', 'prov-openai-1']);
++      });
++    });
++
++    it('executes Test Connection on provider card and displays latency and models', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
++        ok: true,
++        latency_ms: 124.7,
++        models: ['gpt-4o', 'gpt-4o-mini'],
++        model_count: 2,
++      });
++
++      render(<AiStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-connection-btn-prov-openai-1')).toBeDefined();
++      });
++
++      // Click Test Connection
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(testSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
++        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
++          'Connected in 125ms - 2 models available',
++        );
++      });
++
++      // Failed test connection with message
++      testSpy.mockResolvedValueOnce({
++        ok: false,
++        latency_ms: 50,
++        models: [],
++        model_count: 0,
++        error_code: 'AUTH_FAILED',
++        message: 'Invalid API secret key',
++      });
++
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
++          'Connection failed: AUTH_FAILED - Invalid API secret key',
++        );
++      });
++
++      // Failed test connection without message (error_code only)
++      testSpy.mockResolvedValueOnce({
++        ok: false,
++        latency_ms: 50,
++        models: [],
++        model_count: 0,
++        error_code: 'RATE_LIMIT',
++      });
++
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
++          'Connection failed: RATE_LIMIT',
++        );
++      });
++
++      // Failed test connection without message and without error_code
++      testSpy.mockResolvedValueOnce({
++        ok: false,
++        latency_ms: 50,
++        models: [],
++        model_count: 0,
++      });
++
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
++          'Connection failed: ERROR',
++        );
++      });
++
++      // Exception during test connection (Error instance)
++      testSpy.mockRejectedValueOnce(new Error('DNS resolution error'));
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
++          'DNS resolution error',
++        );
++      });
++
++      // Exception during test connection (non-Error instance)
++      testSpy.mockRejectedValueOnce('raw test error');
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
++          'Connection test failed',
++        );
++      });
++    });
++
++    it('covers boundary branches for move, drag drop on same card, and unconfigured key cards', async () => {
++      const mockCloudNoKey: ProviderConfigPublic = {
++        ...mockGeminiProvider,
++        id: 'prov-gemini-nokey',
++        api_key_set: false,
++        base_url: null,
++      };
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockCloudNoKey]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(true);
++      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
++        mockCloudNoKey,
++        mockProvider,
++      ]);
++
++      render(<AiStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('key-status-prov-gemini-nokey').textContent).toContain('Key Not Set');
++      });
++
++      // Drag and drop onto the exact same card (index 0 onto index 0 -> no reorder call)
++      const handle1 = screen.getByTestId('drag-handle-prov-openai-1');
++      const card1 = screen.getByTestId('provider-card-prov-openai-1');
++      const dataTransfer = {
++        effectAllowed: '',
++        dropEffect: '',
++        setData: vi.fn(),
++        getData: vi.fn(),
++      };
++      fireEvent.dragStart(handle1, { dataTransfer });
++      fireEvent.drop(card1, { dataTransfer });
++      expect(reorderSpy).not.toHaveBeenCalled();
++
++      // Drop when no dragStart was invoked (draggedIndex is null)
++      fireEvent.drop(card1, { dataTransfer });
++      expect(reorderSpy).not.toHaveBeenCalled();
++
++      // Drag start from index 0 then drop on card with invalid index
++      fireEvent.dragStart(handle1, { dataTransfer });
++      // Create a dummy event on drop with target index out of bounds
++      const outOfBoundsCard = document.createElement('div');
++      card1.parentElement?.appendChild(outOfBoundsCard);
++      // Even if drop occurs on card1 itself, if draggedIndex === targetIndex it's a no-op
++      expect(reorderSpy).not.toHaveBeenCalled();
++    });
++
+     it('renders air-gap banner and blocks cloud provider activation when air-gap mode is active', async () => {
+       vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
+       vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(true);
+@@ -261,10 +578,10 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+       });
+     });
+ 
+-    it('handles toggle enablement error with non-Error reject', async () => {
++    it('handles toggle enablement error with non-Error reject and Error reject', async () => {
+       vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
+       vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+-      vi.spyOn(aiApi, 'disableAiProvider').mockRejectedValue('raw string rejection');
++      const disableSpy = vi.spyOn(aiApi, 'disableAiProvider').mockRejectedValueOnce('raw string rejection');
+ 
+       render(<AiStudioPage />);
+ 
+@@ -279,6 +596,16 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+           'Failed to toggle provider enablement',
+         );
+       });
++
++      // Error instance
++      disableSpy.mockRejectedValueOnce(new Error('Permission denied on toggle'));
++      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-openai-1'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('ai-studio-error').textContent).toContain(
++          'Permission denied on toggle',
++        );
++      });
+     });
+ 
+     it('handles delete failure with non-Error reject', async () => {
+@@ -594,9 +921,22 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+     });
+   });
+ 
+-  describe('AiProviderEditorDrawer component', () => {
+-    it('creates a new AI provider with residency and priority inputs', async () => {
+-      vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockProvider);
++  describe('AiProviderEditorDrawer component & 3-Protocol Selector (KAN-22)', () => {
++    it('verifies 3 clean protocols, auto-inferred residency, and probe models flow', async () => {
++      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockProvider);
++      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
++        ok: true,
++        latency_ms: 45,
++        models: ['llama3.2:3b', 'qwen2.5-coder:7b', 'deepseek-r1:14b'],
++        model_count: 3,
++      });
++      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
++        ok: true,
++        latency_ms: 62.3,
++        models: ['llama3.2:3b'],
++        model_count: 1,
++      });
++
+       const onSaved = vi.fn();
+       const onClose = vi.fn();
+ 
+@@ -607,64 +947,128 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+           provider={null}
+           airGapMode={false}
+           onSaved={onSaved}
++          providersCount={3}
+         />,
+       );
+ 
+       expect(screen.getByText('Register AI Provider')).toBeDefined();
+ 
+-      // Change kind to gemini
+-      const kindSelect = screen.getByTestId('provider-kind-select');
+-      fireEvent.change(kindSelect, { target: { value: 'gemini' } });
++      const kindSelect = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
+ 
+-      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe(
+-        'Google Gemini Workspace',
+-      );
++      // Verify custom is NOT in options
++      const options = Array.from(kindSelect.querySelectorAll('option')).map((o) => o.value);
++      expect(options).toEqual(['ollama', 'openai', 'gemini']);
++      expect(options).not.toContain('custom');
+ 
+-      // Change kind to ollama
+-      fireEvent.change(kindSelect, { target: { value: 'ollama' } });
++      // Switch to Gemini
++      fireEvent.change(kindSelect, { target: { value: 'gemini' } });
++      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Google Gemini Workspace');
+       expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe(
+-        'http://localhost:11434',
++        'https://generativelanguage.googleapis.com',
+       );
+ 
+-      // Change kind to custom
+-      fireEvent.change(kindSelect, { target: { value: 'custom' } });
++      // Switch to Ollama
++      fireEvent.change(kindSelect, { target: { value: 'ollama' } });
++      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Local Ollama Runtime');
++      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('http://127.0.0.1:11434');
+ 
+-      // Enter details
+-      fireEvent.change(screen.getByTestId('provider-name-input'), {
+-        target: { value: 'Custom Endpoint' },
+-      });
++      // Check key hint for local Ollama
++      expect(screen.getByText(/No Key Required \(Local\)/)).toBeDefined();
++
++      // Switch to OpenAI
++      fireEvent.change(kindSelect, { target: { value: 'openai' } });
++      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('OpenAI / OpenAI-Compatible');
++      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('https://api.openai.com/v1');
++
++      // Type local URL into OpenAI base_url and check auto-inferred residency
+       fireEvent.change(screen.getByTestId('provider-base-url-input'), {
+-        target: { value: 'https://ai.example.com/v1' },
++        target: { value: 'http://localhost:8000/v1' },
+       });
+-      fireEvent.change(screen.getByTestId('provider-models-input'), {
+-        target: { value: 'custom-model-1, custom-model-2' },
++      expect(screen.getByText(/No Key Required \(Local\)/)).toBeDefined();
++
++      // Test Probe Models Button
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++
++      await waitFor(() => {
++        expect(probeSpy).toHaveBeenCalledWith(
++          {
++            provider_kind: 'openai',
++            base_url: 'http://localhost:8000/v1',
++            api_key: null,
++          },
++          undefined,
++        );
++        expect(screen.getByTestId('probed-models-picker')).toBeDefined();
+       });
+-      fireEvent.change(screen.getByTestId('provider-residency-select'), {
+-        target: { value: 'eu-central' },
++
++      // Check probed model chips rendered
++      expect(screen.getByTestId('probe-chip-llama3.2:3b')).toBeDefined();
++      expect(screen.getByTestId('probe-chip-qwen2.5-coder:7b')).toBeDefined();
++
++      // Click a chip to toggle it
++      fireEvent.click(screen.getByTestId('probe-chip-deepseek-r1:14b'));
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toContain('deepseek-r1:14b');
++
++      // Filter probed models
++      fireEvent.change(screen.getByTestId('probe-model-search-input'), {
++        target: { value: 'qwen' },
+       });
+-      fireEvent.change(screen.getByTestId('provider-priority-input'), {
+-        target: { value: '50' },
++      expect(screen.queryByTestId('probe-chip-llama3.2:3b')).toBeNull();
++      expect(screen.getByTestId('probe-chip-qwen2.5-coder:7b')).toBeDefined();
++
++      // Select All probed models
++      fireEvent.click(screen.getByTestId('probe-select-all-btn'));
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toContain('llama3.2:3b');
++
++      // Clear all models
++      fireEvent.click(screen.getByTestId('probe-clear-all-btn'));
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
++
++      // Add back one model
++      fireEvent.click(screen.getByTestId('probe-chip-qwen2.5-coder:7b'));
++
++      // Direct manual edit on provider-models-input fallback
++      fireEvent.change(screen.getByTestId('provider-models-input'), {
++        target: { value: 'qwen2.5-coder:7b, custom-extra:1b' },
+       });
+-      fireEvent.change(screen.getByTestId('provider-key-input'), {
+-        target: { value: 'secret-key-123' },
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe(
++        'qwen2.5-coder:7b, custom-extra:1b',
++      );
++
++      // Test Connection in Drawer footer
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++
++      await waitFor(() => {
++        expect(testSpy).toHaveBeenCalled();
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain(
++          'Connected in 62ms - 1 models available',
++        );
+       });
+ 
+-      // Toggle show key
++      // Expand Advanced Settings and override Residency Tier
++      const advDetails = screen.getByTestId('advanced-settings-details');
++      expect(advDetails).toBeDefined();
++      const residencySelect = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
++      fireEvent.change(residencySelect, { target: { value: 'eu-central' } });
++      expect(residencySelect.value).toBe('eu-central');
++
++      // Toggle show API key
++      fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'test-secret' } });
+       fireEvent.click(screen.getByTestId('toggle-show-key-btn'));
+       expect(screen.getByTestId<HTMLInputElement>('provider-key-input').type).toBe('text');
+ 
+-      // Submit
++      // Submit Form (create new provider, priority should be (3+1)*10 = 40)
+       fireEvent.click(screen.getByTestId('save-provider-btn'));
+ 
+       await waitFor(() => {
+-        expect(aiApi.createAiProvider).toHaveBeenCalledWith({
+-          provider_kind: 'custom',
+-          display_name: 'Custom Endpoint',
+-          base_url: 'https://ai.example.com/v1',
+-          model_allowlist: ['custom-model-1', 'custom-model-2'],
++        expect(createSpy).toHaveBeenCalledWith({
++          provider_kind: 'openai',
++          display_name: 'OpenAI / OpenAI-Compatible',
++          model_allowlist: ['qwen2.5-coder:7b', 'custom-extra:1b'],
+           residency_tier: 'eu-central',
+-          priority: 50,
+-          api_key: 'secret-key-123',
++          base_url: 'http://localhost:8000/v1',
++          priority: 40,
++          api_key: 'test-secret',
+           is_enabled: true,
+         });
+         expect(onSaved).toHaveBeenCalled();
+@@ -672,6 +1076,218 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+       });
+     });
+ 
++    it('handles probe error, zero models, and connection test failure in drawer', async () => {
++      vi.spyOn(aiApi, 'probeAiModels')
++        .mockResolvedValueOnce({
++          ok: false,
++          latency_ms: 10,
++          models: [],
++          model_count: 0,
++          error_code: 'CONNECTION_REFUSED',
++          message: 'Endpoint unreachable',
++        })
++        .mockResolvedValueOnce({
++          ok: false,
++          latency_ms: 10,
++          models: [],
++          model_count: 0,
++          error_code: 'RATE_LIMIT',
++        })
++        .mockResolvedValueOnce({
++          ok: false,
++          latency_ms: 10,
++          models: [],
++          model_count: 0,
++        })
++        .mockResolvedValueOnce({
++          ok: true,
++          latency_ms: 15,
++          models: [],
++          model_count: 0,
++        })
++        .mockRejectedValueOnce(new Error('DNS failure'))
++        .mockRejectedValueOnce('raw probe error');
++
++      vi.spyOn(aiApi, 'testAiConnection')
++        .mockResolvedValueOnce({
++          ok: false,
++          latency_ms: 20,
++          models: [],
++          model_count: 0,
++          error_code: 'TIMEOUT',
++        })
++        .mockResolvedValueOnce({
++          ok: false,
++          latency_ms: 20,
++          models: [],
++          model_count: 0,
++        })
++        .mockRejectedValueOnce(new Error('Network drop'))
++        .mockRejectedValueOnce('raw test error');
++
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      // Probe failure 1 (ok: false with message)
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('Endpoint unreachable');
++      });
++
++      // Probe failure 2 (ok: false with error_code only)
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('RATE_LIMIT');
++      });
++
++      // Probe failure 3 (ok: false with neither)
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('Model probing failed');
++      });
++
++      // Probe failure 4 (0 models)
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('0 models were discovered');
++      });
++
++      // Probe failure 5 (rejected with Error)
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('DNS failure');
++      });
++
++      // Probe failure 6 (rejected with non-Error)
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('Failed to probe models');
++      });
++
++      // Test Connection failure 1 (ok: false with error_code)
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection failed: TIMEOUT');
++      });
++
++      // Test Connection failure 2 (ok: false with neither)
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection failed: ERROR');
++      });
++
++      // Test Connection failure 3 (rejected with Error)
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Network drop');
++      });
++
++      // Test Connection failure 4 (rejected with non-Error)
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection test failed');
++      });
++    });
++
++    it('probes and tests connection on saved provider with and without override key', async () => {
++      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
++        ok: true,
++        latency_ms: 30,
++        models: ['gpt-4o'],
++        model_count: 1,
++      });
++      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
++        ok: true,
++        latency_ms: 25,
++        models: ['gpt-4o'],
++        model_count: 1,
++      });
++
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      // Probe without key input (calls with {})
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(probeSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
++      });
++
++      // Test connection without key input (calls with {})
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(testSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
++      });
++
++      // Type key and probe again (calls with { api_key: ... })
++      fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'temp-override-key' } });
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(probeSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
++      });
++
++      // Test connection with override key
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(testSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
++      });
++    });
++
++    it('preserves manual residency tier when switching protocols or changing baseUrl', () => {
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      // Manually change residency tier
++      fireEvent.change(screen.getByTestId('provider-residency-select'), {
++        target: { value: 'eu-central' },
++      });
++      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
++
++      // Change kind to ollama -> residency tier remains eu-central
++      fireEvent.change(screen.getByTestId('provider-kind-select'), {
++        target: { value: 'ollama' },
++      });
++      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
++
++      // Change kind to gemini -> residency tier remains eu-central
++      fireEvent.change(screen.getByTestId('provider-kind-select'), {
++        target: { value: 'gemini' },
++      });
++      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
++
++      // Change kind to openai -> residency tier remains eu-central
++      fireEvent.change(screen.getByTestId('provider-kind-select'), {
++        target: { value: 'openai' },
++      });
++      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
++
++      // Change baseUrl -> residency tier remains eu-central
++      fireEvent.change(screen.getByTestId('provider-base-url-input'), {
++        target: { value: 'http://127.0.0.1:9000/v1' },
++      });
++      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
++    });
++
+     it('updates an existing provider with write-only key custody and clear key checkbox', async () => {
+       vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockProvider);
+       const onSaved = vi.fn();
+@@ -708,7 +1324,7 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+         expect(aiApi.updateAiProvider).toHaveBeenCalledWith('prov-openai-1', {
+           display_name: 'Production OpenAI',
+           model_allowlist: ['gpt-4o', 'gpt-4o-mini'],
+-          residency_tier: 'default',
++          residency_tier: 'cloud_standard',
+           base_url: 'https://api.openai.com/v1',
+           priority: 10,
+           api_key: null,
+@@ -744,7 +1360,7 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+         expect(updateSpy).toHaveBeenCalledWith('prov-openai-1', {
+           display_name: 'Production OpenAI',
+           model_allowlist: ['gpt-4o', 'gpt-4o-mini'],
+-          residency_tier: 'default',
++          residency_tier: 'cloud_standard',
+           base_url: 'https://api.openai.com/v1',
+           priority: 10,
+           api_key: 'new-secret-key-999',
+@@ -774,11 +1390,7 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+         />,
+       );
+ 
+-      // Switch to custom (which is not disabled)
+-      fireEvent.change(screen.getByTestId('provider-kind-select'), {
+-        target: { value: 'custom' },
+-      });
+-      // Switch back to openai
++      // Switch to openai
+       fireEvent.change(screen.getByTestId('provider-kind-select'), {
+         target: { value: 'openai' },
+       });
+@@ -848,5 +1460,18 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
+         );
+       });
+     });
++
++    it('returns null when isOpen is false', () => {
++      const { container } = render(
++        <AiProviderEditorDrawer
++          isOpen={false}
++          onClose={vi.fn()}
++          provider={mockProvider}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++      expect(container.firstChild).toBeNull();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts b/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts
+index 30f5999..b1d87c7 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts
++++ b/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts
+@@ -11,6 +11,8 @@ import {
+   fetchAiProvider,
+   fetchAiProviders,
+   fetchBudgets,
++  inferResidencyTier,
++  isLocalEndpoint,
+   probeAiModels,
+   reorderAiProviders,
+   setBudget,
+@@ -206,4 +208,58 @@ describe('aiAdminApi tests (KAN-21)', () => {
+       body: { provider_config_id: 'prov-1', period_kind: 'daily', token_cap: 100000 },
+     });
+   });
++
++  describe('isLocalEndpoint and inferResidencyTier (KAN-22)', () => {
++    it('correctly classifies local vs cloud endpoints across protocols and addresses', () => {
++      // Ollama is always local
++      expect(isLocalEndpoint('ollama', null)).toBe(true);
++      expect(isLocalEndpoint('ollama', '')).toBe(true);
++      expect(isLocalEndpoint('ollama', 'http://127.0.0.1:11434')).toBe(true);
++      expect(isLocalEndpoint('ollama', 'https://remote-box.org:11434')).toBe(true);
++
++      // Loopback
++      expect(isLocalEndpoint('openai', 'http://localhost:8000/v1')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://127.0.0.1:11434')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://[::1]:8000/v1')).toBe(true);
++
++      // RFC 1918 IPv4
++      expect(isLocalEndpoint('openai', 'http://10.0.1.5:8000/v1')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://172.16.0.1:8000')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://172.31.255.255:8000')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://172.15.0.1:8000')).toBe(false);
++      expect(isLocalEndpoint('openai', 'http://172.32.0.1:8000')).toBe(false);
++      expect(isLocalEndpoint('openai', 'http://192.168.1.100:11434')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://169.254.10.10:8000')).toBe(true);
++
++      // LAN hostnames
++      expect(isLocalEndpoint('openai', 'http://gpu-rig.local:8000/v1')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://cluster.lan:8000')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://inference.internal:8000')).toBe(true);
++
++      // IPv6 ULA
++      expect(isLocalEndpoint('openai', 'http://[fc00::1]:8000/v1')).toBe(true);
++      expect(isLocalEndpoint('openai', 'http://[fd12:3456::1]:8000/v1')).toBe(true);
++
++      // Public / Cloud
++      expect(isLocalEndpoint('openai', 'https://api.openai.com/v1')).toBe(false);
++      expect(isLocalEndpoint('gemini', 'https://generativelanguage.googleapis.com')).toBe(false);
++      expect(isLocalEndpoint('openai', 'https://1.1.1.1:8000')).toBe(false);
++      expect(isLocalEndpoint('openai', null)).toBe(false);
++      expect(isLocalEndpoint('openai', '')).toBe(false);
++      expect(isLocalEndpoint('gemini', undefined)).toBe(false);
++
++      // Invalid URL fallback handling
++      expect(isLocalEndpoint('openai', 'not-a-valid-url-localhost-proxy')).toBe(true);
++      expect(isLocalEndpoint('openai', 'not-a-valid-url-remote')).toBe(false);
++    });
++
++    it('infers residency tier as local_only or cloud_standard', () => {
++      expect(inferResidencyTier('ollama', null)).toBe('local_only');
++      expect(inferResidencyTier('openai', 'http://127.0.0.1:8000/v1')).toBe('local_only');
++      expect(inferResidencyTier('openai', 'http://192.168.1.50:11434')).toBe('local_only');
++      expect(inferResidencyTier('openai', 'https://api.openai.com/v1')).toBe('cloud_standard');
++      expect(inferResidencyTier('gemini', 'https://generativelanguage.googleapis.com')).toBe('cloud_standard');
++      expect(inferResidencyTier('gemini', null)).toBe('cloud_standard');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-ai/aiAdminApi.ts b/kanban/web/src/features/admin-ai/aiAdminApi.ts
+index c67b212..b19b6af 100644
+--- a/kanban/web/src/features/admin-ai/aiAdminApi.ts
++++ b/kanban/web/src/features/admin-ai/aiAdminApi.ts
+@@ -108,12 +108,53 @@ export async function setBudget(payload: BudgetSetRequest): Promise<BudgetRecord
+ }
+ 
+ export interface ProviderProbeRequest {
+-  provider_kind: string;
++  provider_kind?: string;
+   base_url?: string | null;
+   api_key?: string | null;
+   settings_json?: Record<string, unknown> | null;
+ }
+ 
++export function isLocalEndpoint(providerKind: string, baseUrl?: string | null): boolean {
++  if (providerKind === 'ollama') return true;
++  if (!baseUrl?.trim()) return false;
++  try {
++    const parsed = new URL(baseUrl.trim());
++    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
++    if (
++      hostname === 'localhost' ||
++      hostname === '127.0.0.1' ||
++      hostname === '::1' ||
++      hostname.endsWith('.local') ||
++      hostname.endsWith('.lan') ||
++      hostname.endsWith('.internal')
++    ) {
++      return true;
++    }
++    const parts = hostname.split('.').map((p) => Number(p));
++    if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
++      if (parts[0] === 127) return true;
++      if (parts[0] === 10) return true;
++      if (parts[0] === 172 && parts[1] !== undefined && parts[1] >= 16 && parts[1] <= 31) return true;
++      if (parts[0] === 192 && parts[1] === 168) return true;
++      if (parts[0] === 169 && parts[1] === 254) return true;
++    }
++    if (hostname.startsWith('fc') || hostname.startsWith('fd') || hostname === '::1') {
++      return true;
++    }
++  } catch {
++    const raw = baseUrl.trim().toLowerCase();
++    if (raw.includes('localhost') || raw.includes('127.0.0.1')) return true;
++  }
++  return false;
++}
++
++export function inferResidencyTier(
++  providerKind: string,
++  baseUrl?: string | null,
++): 'local_only' | 'cloud_standard' {
++  return isLocalEndpoint(providerKind, baseUrl) ? 'local_only' : 'cloud_standard';
++}
++
+ export interface ProviderProbeResult {
+   ok: boolean;
+   latency_ms: number;
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index c27cf61..9499f5c 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -410,3 +410,456 @@
+     min-height: 44px;
+   }
+ }
++
++/* Form Helper & Strict CSP Classes */
++.kb-form-error {
++  color: var(--text-danger, #dc2626);
++  margin: var(--space-3, 12px) 0;
++  font-size: var(--text-sm, 14px);
++  background-color: var(--bg-danger-subtle, #ffe4e6);
++  border: 1px solid var(--border-danger, #d1d5db);
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  border-radius: var(--radius-md, 6px);
++}
++
++.kb-api-key-row {
++  display: flex;
++  gap: var(--space-2, 8px);
++}
++
++.kb-api-key-toggle-btn {
++  min-width: 44px;
++  padding: 0 var(--space-3, 12px);
++  min-height: 44px;
++}
++
++.kb-clear-key-group {
++  margin-top: var(--space-2, 8px);
++}
++
++.kb-clear-key-label {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  font-size: var(--text-sm, 14px);
++  color: var(--kb-color-text-secondary, #4b5563);
++  cursor: pointer;
++}
++
++/* Collapsible Advanced Settings */
++.kb-advanced-settings {
++  border: 1px solid var(--kb-color-border-subtle, #e5e7eb);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-3, 12px);
++  background-color: var(--bg-canvas, #f7f8fa);
++  margin: var(--space-4, 16px) 0;
++}
++
++[data-theme='dark'] .kb-advanced-settings {
++  background-color: #111827;
++  border-color: #374151;
++}
++
++.kb-advanced-settings-summary {
++  font-weight: 600;
++  font-size: var(--text-sm, 14px);
++  color: var(--kb-color-text-primary, #111827);
++  cursor: pointer;
++  user-select: none;
++  outline: none;
++}
++
++.kb-advanced-settings-summary:hover {
++  color: var(--brand-primary, #1d4ed8);
++}
++
++.kb-advanced-settings-body {
++  margin-top: var(--space-3, 12px);
++}
++
++/* Model Allowlist & Live Probe Models Picker */
++.kb-model-allowlist-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  margin-bottom: var(--space-1, 4px);
++}
++
++.kb-probe-btn {
++  padding: 4px 10px;
++  font-size: var(--text-xs, 12px);
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1, 4px);
++  min-height: 32px;
++}
++
++.kb-probed-models-picker {
++  border: 1px solid var(--kb-color-border-subtle, #e5e7eb);
++  border-radius: var(--radius-md, 6px);
++  padding: var(--space-3, 12px);
++  background-color: var(--bg-canvas, #f7f8fa);
++  margin-bottom: var(--space-3, 12px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2, 8px);
++}
++
++[data-theme='dark'] .kb-probed-models-picker {
++  background-color: #111827;
++  border-color: #374151;
++}
++
++.kb-probed-models-toolbar {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex-wrap: wrap;
++}
++
++.kb-probed-search-input {
++  flex: 1;
++  min-width: 160px;
++  max-width: 280px;
++  padding: 4px 8px;
++  font-size: var(--text-xs, 12px);
++  border: 1px solid var(--kb-color-border-subtle, #d1d5db);
++  border-radius: var(--radius-sm, 4px);
++  background-color: var(--kb-color-bg-surface, #ffffff);
++  color: var(--kb-color-text-primary, #111827);
++  min-height: 32px;
++}
++
++[data-theme='dark'] .kb-probed-search-input {
++  background-color: #374151;
++  border-color: #4b5563;
++  color: #f9fafb;
++}
++
++.kb-probed-actions {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++}
++
++.kb-probed-action-btn {
++  padding: 2px 8px;
++  font-size: var(--text-xs, 12px);
++  min-height: 28px;
++}
++
++.kb-probed-models-list {
++  display: flex;
++  flex-wrap: wrap;
++  gap: var(--space-1, 4px);
++  max-height: 160px;
++  overflow-y: auto;
++  padding: var(--space-1, 4px);
++}
++
++.kb-probed-chip {
++  padding: 3px 8px;
++  border-radius: var(--radius-sm, 4px);
++  border: 1px solid var(--kb-color-border-subtle, #d1d5db);
++  background-color: var(--kb-color-bg-surface, #ffffff);
++  color: var(--kb-color-text-primary, #111827);
++  font-size: 11px;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  user-select: none;
++  transition: all 0.15s ease;
++}
++
++[data-theme='dark'] .kb-probed-chip {
++  background-color: #374151;
++  border-color: #4b5563;
++  color: #f9fafb;
++}
++
++.kb-probed-chip:hover {
++  border-color: var(--brand-primary, #1d4ed8);
++}
++
++.kb-probed-chip--selected {
++  background-color: var(--brand-primary, #1d4ed8);
++  color: var(--accent-primary-fg, #ffffff);
++  border-color: var(--brand-primary, #1d4ed8);
++  font-weight: 600;
++}
++
++[data-theme='dark'] .kb-probed-chip--selected {
++  background-color: #2563eb;
++  border-color: #3b82f6;
++  color: #ffffff;
++}
++
++.kb-probe-status-message {
++  font-size: var(--text-xs, 12px);
++  padding: var(--space-2, 8px);
++  border-radius: var(--radius-sm, 4px);
++}
++
++.kb-probe-status-message--loading {
++  color: var(--kb-color-text-secondary, #4b5563);
++}
++
++.kb-probe-status-message--error {
++  background-color: var(--bg-danger-subtle, #ffe4e6);
++  color: var(--text-danger, #881337);
++  border: 1px solid var(--border-danger, #d1d5db);
++}
++
++/* Drawer Connection Test Status */
++.kb-drawer-test-status {
++  width: 100%;
++  font-size: var(--text-xs, 12px);
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  border-radius: var(--radius-sm, 4px);
++  box-sizing: border-box;
++  margin-top: var(--space-3, 12px);
++}
++
++.kb-drawer-test-status--success {
++  background-color: var(--bg-success-subtle, #f0fdf4);
++  color: var(--text-success, #059669);
++  border: 1px solid var(--border-success, #bbf7d0);
++}
++
++.kb-drawer-test-status--error {
++  background-color: var(--bg-danger-subtle, #ffe4e6);
++  color: var(--text-danger, #881337);
++  border: 1px solid var(--border-danger, #d1d5db);
++}
++
++.kb-drawer-test-status--loading {
++  background-color: var(--bg-secondary, #f1f3f5);
++  color: var(--kb-color-text-secondary, #4b5563);
++}
++
++/* Numbered Failover Priority Stack & Card Enhancements */
++.kb-provider-stack {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4, 16px);
++  width: 100%;
++}
++
++.kb-provider-stack-item {
++  position: relative;
++  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
++}
++
++.kb-provider-stack-item--dragging {
++  opacity: 0.4;
++  border-style: dashed;
++}
++
++.kb-provider-stack-item--drag-over {
++  border-color: var(--brand-primary, #1d4ed8);
++  box-shadow: 0 0 0 2px var(--brand-primary, #1d4ed8);
++}
++
++.kb-provider-card-header-left {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex-wrap: wrap;
++}
++
++.kb-provider-order-controls {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1, 4px);
++}
++
++.kb-drag-handle {
++  cursor: grab;
++  font-size: 16px;
++  line-height: 1;
++  padding: 4px;
++  background: transparent;
++  border: none;
++  color: var(--kb-color-text-secondary, #4b5563);
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  user-select: none;
++  border-radius: var(--radius-sm, 4px);
++}
++
++.kb-drag-handle:active {
++  cursor: grabbing;
++}
++
++.kb-drag-handle:hover {
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--kb-color-text-primary, #111827);
++}
++
++[data-theme='dark'] .kb-drag-handle:hover {
++  background-color: #374151;
++  color: #f9fafb;
++}
++
++.kb-provider-rank {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  font-size: var(--text-xs, 12px);
++  font-weight: 700;
++  padding: 2px 6px;
++  border-radius: var(--radius-sm, 4px);
++  background-color: var(--bg-secondary, #f1f3f5);
++  color: var(--kb-color-text-primary, #111827);
++  min-width: 28px;
++}
++
++[data-theme='dark'] .kb-provider-rank {
++  background-color: #374151;
++  color: #f9fafb;
++}
++
++.kb-reorder-btn {
++  padding: 2px 6px;
++  font-size: 10px;
++  min-height: 24px;
++  line-height: 1;
++}
++
++.kb-residency-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  padding: 2px 8px;
++  border-radius: var(--radius-full, 9999px);
++  font-size: 11px;
++  font-weight: 600;
++}
++
++.kb-residency-badge--local {
++  background-color: var(--bg-success-subtle, #f0fdf4);
++  color: var(--text-success, #059669);
++  border: 1px solid var(--border-success, #bbf7d0);
++}
++
++.kb-residency-badge--cloud {
++  background-color: var(--bg-secondary, #f1f3f5);
++  color: var(--kb-color-text-secondary, #4b5563);
++  border: 1px solid var(--kb-color-border-subtle, #e5e7eb);
++}
++
++[data-theme='dark'] .kb-residency-badge--local {
++  background-color: #064e3b;
++  color: #a7f3d0;
++  border-color: #047857;
++}
++
++[data-theme='dark'] .kb-residency-badge--cloud {
++  background-color: #374151;
++  color: #d1d5db;
++  border-color: #4b5563;
++}
++
++.kb-key-status {
++  font-weight: 500;
++  font-size: var(--text-xs, 12px);
++}
++
++.kb-key-status--set {
++  color: var(--text-success, #059669);
++}
++
++.kb-key-status--no-key {
++  color: var(--brand-primary, #1d4ed8);
++}
++
++.kb-key-status--missing {
++  color: var(--text-danger, #881337);
++}
++
++[data-theme='dark'] .kb-key-status--set {
++  color: #34d399;
++}
++
++[data-theme='dark'] .kb-key-status--no-key {
++  color: #60a5fa;
++}
++
++[data-theme='dark'] .kb-key-status--missing {
++  color: #f87171;
++}
++
++.kb-test-connection-status {
++  font-size: var(--text-xs, 12px);
++  padding: 4px 8px;
++  border-radius: var(--radius-sm, 4px);
++  margin-top: 4px;
++  width: 100%;
++  box-sizing: border-box;
++}
++
++.kb-test-connection-status--success {
++  background-color: var(--bg-success-subtle, #f0fdf4);
++  color: var(--text-success, #059669);
++  border: 1px solid var(--border-success, #bbf7d0);
++}
++
++.kb-test-connection-status--error {
++  background-color: var(--bg-danger-subtle, #ffe4e6);
++  color: var(--text-danger, #881337);
++  border: 1px solid var(--border-danger, #d1d5db);
++}
++
++.kb-test-connection-status--loading {
++  background-color: var(--bg-secondary, #f1f3f5);
++  color: var(--kb-color-text-secondary, #4b5563);
++}
++
++.kb-empty-placeholder {
++  padding: var(--space-8, 32px);
++  text-align: center;
++  background-color: var(--kb-color-bg-surface, #ffffff);
++  border-radius: var(--radius-lg, 8px);
++  border: 1px dashed var(--kb-color-border-subtle, #d1d5db);
++}
++
++[data-theme='dark'] .kb-empty-placeholder {
++  background-color: #1f2937;
++  border-color: #374151;
++}
++
++.kb-empty-placeholder-text {
++  margin: 0;
++  color: var(--kb-color-text-secondary, #4b5563);
++}
++
++[data-theme='dark'] .kb-empty-placeholder-text {
++  color: #9ca3af;
++}
++
++.kb-provider-enable-btn {
++  padding: 2px 8px;
++  font-size: 11px;
++  min-height: 30px;
++}
++
++.kb-delete-modal-title {
++  margin: 0 0 var(--space-3, 12px) 0;
++}
++
++.kb-delete-modal-text {
++  margin: 0 0 var(--space-5, 20px) 0;
++}
++
++.kb-provider-air-gap-alert {
++  color: var(--warn-fg, #78350f);
++}
++
++[data-theme='dark'] .kb-provider-air-gap-alert {
++  color: #fde68a;
++}
++

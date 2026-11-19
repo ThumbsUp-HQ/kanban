@@ -118,7 +118,7 @@ function AiBudgetModalContent({
       </p>
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444', margin: '8px 0' }} data-testid="budget-error">
+        <div className="kb-form-error" data-testid="budget-error">
           {error}
         </div>
       )}
