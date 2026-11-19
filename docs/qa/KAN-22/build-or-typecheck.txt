@@ -1,0 +1,26 @@
+=== TypeScript Typecheck (tsc -b --noEmit) ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan22-7fe98d51/kanban/web
+> tsc -b --noEmit
+
+
+=== ESLint (eslint . --max-warnings 0) ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan22-7fe98d51/kanban/web
+> eslint . --max-warnings 0
+
+
+=== CSS Tokens Audit (cssTokensAudit.test.ts) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan22-7fe98d51/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 12ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  16:36:06
+   Duration  908ms (environment 94%, import 2%, tests 2%, worker 1%, transform 1%)
+
+
+=== Check No Dashes (python3 -m scripts.check_no_dashes --all) ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan22-7fe98d51/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

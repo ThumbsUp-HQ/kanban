@@ -11,6 +11,8 @@ import {
   fetchAiProvider,
   fetchAiProviders,
   fetchBudgets,
+  inferResidencyTier,
+  isLocalEndpoint,
   probeAiModels,
   reorderAiProviders,
   setBudget,
@@ -204,6 +206,60 @@ describe('aiAdminApi tests (KAN-21)', () => {
     expect(await setBudget({ provider_config_id: 'prov-1', period_kind: 'daily', token_cap: 100000 })).toEqual(mockBudget);
     expect(fetchSpy).toHaveBeenCalledWith('PUT', '/api/v1/admin/ai/budgets', {
       body: { provider_config_id: 'prov-1', period_kind: 'daily', token_cap: 100000 },
+    });
+  });
+
+  describe('isLocalEndpoint and inferResidencyTier (KAN-22)', () => {
+    it('correctly classifies local vs cloud endpoints across protocols and addresses', () => {
+      // Ollama is always local
+      expect(isLocalEndpoint('ollama', null)).toBe(true);
+      expect(isLocalEndpoint('ollama', '')).toBe(true);
+      expect(isLocalEndpoint('ollama', 'http://127.0.0.1:11434')).toBe(true);
+      expect(isLocalEndpoint('ollama', 'https://remote-box.org:11434')).toBe(true);
+
+      // Loopback
+      expect(isLocalEndpoint('openai', 'http://localhost:8000/v1')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://127.0.0.1:11434')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://[::1]:8000/v1')).toBe(true);
+
+      // RFC 1918 IPv4
+      expect(isLocalEndpoint('openai', 'http://10.0.1.5:8000/v1')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://172.16.0.1:8000')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://172.31.255.255:8000')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://172.15.0.1:8000')).toBe(false);
+      expect(isLocalEndpoint('openai', 'http://172.32.0.1:8000')).toBe(false);
+      expect(isLocalEndpoint('openai', 'http://192.168.1.100:11434')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://169.254.10.10:8000')).toBe(true);
+
+      // LAN hostnames
+      expect(isLocalEndpoint('openai', 'http://gpu-rig.local:8000/v1')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://cluster.lan:8000')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://inference.internal:8000')).toBe(true);
+
+      // IPv6 ULA
+      expect(isLocalEndpoint('openai', 'http://[fc00::1]:8000/v1')).toBe(true);
+      expect(isLocalEndpoint('openai', 'http://[fd12:3456::1]:8000/v1')).toBe(true);
+
+      // Public / Cloud
+      expect(isLocalEndpoint('openai', 'https://api.openai.com/v1')).toBe(false);
+      expect(isLocalEndpoint('gemini', 'https://generativelanguage.googleapis.com')).toBe(false);
+      expect(isLocalEndpoint('openai', 'https://1.1.1.1:8000')).toBe(false);
+      expect(isLocalEndpoint('openai', null)).toBe(false);
+      expect(isLocalEndpoint('openai', '')).toBe(false);
+      expect(isLocalEndpoint('gemini', undefined)).toBe(false);
+
+      // Invalid URL fallback handling
+      expect(isLocalEndpoint('openai', 'not-a-valid-url-localhost-proxy')).toBe(true);
+      expect(isLocalEndpoint('openai', 'not-a-valid-url-remote')).toBe(false);
+    });
+
+    it('infers residency tier as local_only or cloud_standard', () => {
+      expect(inferResidencyTier('ollama', null)).toBe('local_only');
+      expect(inferResidencyTier('openai', 'http://127.0.0.1:8000/v1')).toBe('local_only');
+      expect(inferResidencyTier('openai', 'http://192.168.1.50:11434')).toBe('local_only');
+      expect(inferResidencyTier('openai', 'https://api.openai.com/v1')).toBe('cloud_standard');
+      expect(inferResidencyTier('gemini', 'https://generativelanguage.googleapis.com')).toBe('cloud_standard');
+      expect(inferResidencyTier('gemini', null)).toBe('cloud_standard');
     });
   });
 });

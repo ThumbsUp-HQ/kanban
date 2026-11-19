@@ -7,18 +7,33 @@ import {
   disableAiProvider,
   updateAiProvider,
   deleteAiProvider,
+  reorderAiProviders,
+  testAiConnection,
   fetchAirGapMode,
+  isLocalEndpoint,
   type ProviderConfigPublic,
 } from './aiAdminApi';
 import { AiBudgetModal } from './AiBudgetModal';
 import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
 import './aiStudio.css';
 
+interface CardTestStatus {
+  kind: 'loading' | 'success' | 'error';
+  message: string;
+}
+
 export function AiStudioPage(): JSX.Element {
   const [providers, setProviders] = useState<ProviderConfigPublic[]>([]);
   const [airGapMode, setAirGapMode] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Card connection test state map
+  const [cardTestStatuses, setCardTestStatuses] = useState<Record<string, CardTestStatus>>({});
+
+  // Drag and drop state
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Modals state
   const [selectedBudgetProvider, setSelectedBudgetProvider] = useState<ProviderConfigPublic | null>(null);
@@ -38,7 +53,8 @@ export function AiStudioPage(): JSX.Element {
           fetchAirGapMode(),
         ]);
         if (!active) return;
-        setProviders(provList);
+        const sorted = [...provList].sort((a, b) => a.priority - b.priority);
+        setProviders(sorted);
         setAirGapMode(isAirGap);
       } catch (err: unknown) {
         if (!active) return;
@@ -85,6 +101,94 @@ export function AiStudioPage(): JSX.Element {
     }
   };
 
+  const handleReorder = async (newOrder: ProviderConfigPublic[]): Promise<void> => {
+    const previousOrder = [...providers];
+    setProviders(newOrder);
+    try {
+      const orderedIds = newOrder.map((p) => p.id);
+      const updated = await reorderAiProviders(orderedIds);
+      const sorted = [...updated].sort((a, b) => a.priority - b.priority);
+      setProviders(sorted);
+    } catch (err: unknown) {
+      setProviders(previousOrder);
+      setError(err instanceof Error ? err.message : 'Failed to reorder providers');
+    }
+  };
+
+  const handleMove = (fromIndex: number, toIndex: number): void => {
+    if (toIndex < 0 || toIndex >= providers.length) return;
+    const copy = [...providers];
+    const [moved] = copy.splice(fromIndex, 1);
+    if (moved !== undefined) {
+      copy.splice(toIndex, 0, moved);
+      void handleReorder(copy);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number): void => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number): void => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (): void => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number): void => {
+    e.preventDefault();
+    setDragOverIndex(null);
+    const fromIndex = draggedIndex;
+    setDraggedIndex(null);
+    if (fromIndex !== null && fromIndex !== targetIndex) {
+      handleMove(fromIndex, targetIndex);
+    }
+  };
+
+  const handleTestCardConnection = async (provider: ProviderConfigPublic): Promise<void> => {
+    setCardTestStatuses((prev) => ({
+      ...prev,
+      [provider.id]: { kind: 'loading', message: 'Testing connection...' },
+    }));
+
+    try {
+      const res = await testAiConnection({}, provider.id);
+      if (res.ok) {
+        setCardTestStatuses((prev) => ({
+          ...prev,
+          [provider.id]: {
+            kind: 'success',
+            message: `Connected in ${String(Math.round(res.latency_ms))}ms - ${String(res.model_count)} models available`,
+          },
+        }));
+      } else {
+        setCardTestStatuses((prev) => ({
+          ...prev,
+          [provider.id]: {
+            kind: 'error',
+            message: `Connection failed: ${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`,
+          },
+        }));
+      }
+    } catch (err: unknown) {
+      setCardTestStatuses((prev) => ({
+        ...prev,
+        [provider.id]: {
+          kind: 'error',
+          message: err instanceof Error ? err.message : 'Connection test failed',
+        },
+      }));
+    }
+  };
+
   return (
     <section className="kb-ai-studio" data-testid="ai-studio-page">
       <div className="kb-ai-studio-header">
@@ -93,7 +197,7 @@ export function AiStudioPage(): JSX.Element {
             <span aria-hidden="true">🧠</span> AI Providers & Token Caps Studio
           </h1>
           <p className="kb-ai-studio-subtitle">
-            Configure workspace LLM providers, model allowlists, monthly token caps, and zero-egress policies.
+            Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.
           </p>
         </div>
 
@@ -123,7 +227,7 @@ export function AiStudioPage(): JSX.Element {
       )}
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444' }} data-testid="ai-studio-error">
+        <div className="kb-form-error" data-testid="ai-studio-error">
           {error}
         </div>
       )}
@@ -133,44 +237,87 @@ export function AiStudioPage(): JSX.Element {
           Loading AI providers...
         </div>
       ) : providers.length === 0 ? (
-        <div
-          style={{
-            padding: '32px',
-            textAlign: 'center',
-            backgroundColor: 'var(--kb-color-bg-surface, #ffffff)',
-            borderRadius: '8px',
-            border: '1px dashed var(--kb-color-border-subtle, #d1d5db)',
-          }}
-          data-testid="empty-providers-placeholder"
-        >
-          <p style={{ margin: 0, color: 'var(--kb-color-text-secondary, #4b5563)' }}>
+        <div className="kb-empty-placeholder" data-testid="empty-providers-placeholder">
+          <p className="kb-empty-placeholder-text">
             No AI providers configured yet. Click <strong>+ Register Provider</strong> to add one.
           </p>
         </div>
       ) : (
-        <div className="kb-providers-grid" data-testid="providers-grid">
-          {providers.map((p) => {
+        <div className="kb-provider-stack kb-providers-grid" data-testid="providers-stack">
+          {providers.map((p, index) => {
             const isCloud = p.provider_kind === 'openai' || p.provider_kind === 'gemini';
+            const isLocal = isLocalEndpoint(p.provider_kind, p.base_url);
             const isBlockedByAirGap = airGapMode && isCloud;
+            const isDragging = draggedIndex === index;
+            const isDragOver = dragOverIndex === index;
+            const cardTest = cardTestStatuses[p.id];
 
             return (
               <div
                 key={p.id}
-                className="kb-provider-card"
+                className={`kb-provider-card kb-provider-stack-item ${isDragging ? 'kb-provider-stack-item--dragging' : ''} ${isDragOver ? 'kb-provider-stack-item--drag-over' : ''}`}
+                onDragOver={(e) => { handleDragOver(e, index); }}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => { handleDrop(e, index); }}
                 data-testid={`provider-card-${p.id}`}
               >
                 <div>
                   <div className="kb-provider-card-header">
-                    <span
-                      className={`kb-provider-kind-badge kb-provider-kind--${p.provider_kind}`}
-                      data-testid={`provider-kind-badge-${p.provider_kind}`}
-                    >
-                      {p.provider_kind}
-                    </span>
+                    <div className="kb-provider-card-header-left">
+                      <div className="kb-provider-order-controls">
+                        <button
+                          type="button"
+                          className="kb-drag-handle"
+                          draggable
+                          onDragStart={(e) => { handleDragStart(e, index); }}
+                          aria-label={`Drag to reorder ${p.display_name}`}
+                          data-testid={`drag-handle-${p.id}`}
+                        >
+                          ⋮⋮
+                        </button>
+                        <span className="kb-provider-rank" data-testid={`provider-rank-${p.id}`}>
+                          #{index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          className="kb-btn kb-btn-secondary kb-reorder-btn"
+                          onClick={() => { handleMove(index, index - 1); }}
+                          disabled={index === 0}
+                          aria-label={`Move ${p.display_name} up`}
+                          data-testid={`move-up-btn-${p.id}`}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          className="kb-btn kb-btn-secondary kb-reorder-btn"
+                          onClick={() => { handleMove(index, index + 1); }}
+                          disabled={index === providers.length - 1}
+                          aria-label={`Move ${p.display_name} down`}
+                          data-testid={`move-down-btn-${p.id}`}
+                        >
+                          ▼
+                        </button>
+                      </div>
+
+                      <span
+                        className={`kb-provider-kind-badge kb-provider-kind--${p.provider_kind}`}
+                        data-testid={`provider-kind-badge-${p.provider_kind}`}
+                      >
+                        {p.provider_kind}
+                      </span>
+
+                      <span
+                        className={`kb-residency-badge kb-residency-badge--${isLocal ? 'local' : 'cloud'}`}
+                        data-testid={`residency-badge-${p.id}`}
+                      >
+                        {isLocal ? '🏠 Local / Zero-Egress' : '☁️ Cloud'}
+                      </span>
+                    </div>
+
                     <button
                       type="button"
-                      className={`kb-btn ${p.is_enabled ? 'kb-btn-secondary' : 'kb-btn-primary'}`}
-                      style={{ padding: '2px 8px', fontSize: '11px', minHeight: '30px' }}
+                      className={`kb-btn ${p.is_enabled ? 'kb-btn-secondary' : 'kb-btn-primary'} kb-provider-enable-btn`}
                       onClick={() => { void handleToggleEnable(p); }}
                       disabled={isBlockedByAirGap && !p.is_enabled}
                       data-testid={`toggle-enable-btn-${p.id}`}
@@ -183,8 +330,8 @@ export function AiStudioPage(): JSX.Element {
 
                   <div className="kb-provider-card-meta">
                     <div className="kb-provider-meta-row">
-                      <span>Priority:</span>
-                      <code>{p.priority}</code>
+                      <span>Failover Priority:</span>
+                      <code>#{index + 1} (Priority {p.priority})</code>
                       <span>Tier:</span>
                       <code>{p.residency_tier}</code>
                     </div>
@@ -198,19 +345,23 @@ export function AiStudioPage(): JSX.Element {
 
                     <div className="kb-provider-meta-row">
                       <span>API Key:</span>
-                      <span
-                        style={{
-                          color: p.api_key_set ? '#059669' : '#dc2626',
-                          fontWeight: 500,
-                        }}
-                        data-testid={`key-status-${p.id}`}
-                      >
-                        {p.api_key_set ? '🔒 Key Configured (Write-Only)' : '⚠️ Key Not Set'}
-                      </span>
+                      {p.api_key_set ? (
+                        <span className="kb-key-status kb-key-status--set" data-testid={`key-status-${p.id}`}>
+                          🔒 Key Configured (Write-Only)
+                        </span>
+                      ) : isLocal ? (
+                        <span className="kb-key-status kb-key-status--no-key" data-testid={`key-status-${p.id}`}>
+                          🔓 No Key Required (Local)
+                        </span>
+                      ) : (
+                        <span className="kb-key-status kb-key-status--missing" data-testid={`key-status-${p.id}`}>
+                          ⚠️ Key Not Set
+                        </span>
+                      )}
                     </div>
 
                     {isBlockedByAirGap && (
-                      <div className="kb-provider-meta-row" style={{ color: '#b45309' }}>
+                      <div className="kb-provider-meta-row kb-provider-air-gap-alert">
                         <span>⚠️ Blocked by Air-Gap mode</span>
                       </div>
                     )}
@@ -225,10 +376,28 @@ export function AiStudioPage(): JSX.Element {
                         ))}
                       </div>
                     </div>
+
+                    {cardTest && (
+                      <div
+                        className={`kb-test-connection-status kb-test-connection-status--${cardTest.kind}`}
+                        data-testid={`test-status-${p.id}`}
+                      >
+                        {cardTest.message}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="kb-provider-card-actions">
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary"
+                    onClick={() => { void handleTestCardConnection(p); }}
+                    data-testid={`test-connection-btn-${p.id}`}
+                  >
+                    Test Connection
+                  </button>
+
                   <button
                     type="button"
                     className="kb-btn kb-btn-secondary"
@@ -283,6 +452,7 @@ export function AiStudioPage(): JSX.Element {
         provider={editingProvider}
         airGapMode={airGapMode}
         onSaved={refreshData}
+        providersCount={providers.length}
       />
 
       {/* Delete Confirmation Modal */}
@@ -295,10 +465,10 @@ export function AiStudioPage(): JSX.Element {
           data-testid="delete-provider-modal"
         >
           <div className="kb-modal-card">
-            <h2 id="delete-provider-title" style={{ margin: '0 0 12px 0' }}>
+            <h2 id="delete-provider-title" className="kb-delete-modal-title">
               Confirm Provider Deletion
             </h2>
-            <p style={{ margin: '0 0 20px 0' }}>
+            <p className="kb-delete-modal-text">
               Are you sure you want to delete <strong>{providerToDelete.display_name}</strong>? Any automated agents or completions relying on this provider will fall back to secondary providers.
             </p>
             <div className="kb-modal-footer">

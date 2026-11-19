@@ -108,10 +108,51 @@ export async function setBudget(payload: BudgetSetRequest): Promise<BudgetRecord
 }
 
 export interface ProviderProbeRequest {
-  provider_kind: string;
+  provider_kind?: string;
   base_url?: string | null;
   api_key?: string | null;
   settings_json?: Record<string, unknown> | null;
+}
+
+export function isLocalEndpoint(providerKind: string, baseUrl?: string | null): boolean {
+  if (providerKind === 'ollama') return true;
+  if (!baseUrl?.trim()) return false;
+  try {
+    const parsed = new URL(baseUrl.trim());
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.lan') ||
+      hostname.endsWith('.internal')
+    ) {
+      return true;
+    }
+    const parts = hostname.split('.').map((p) => Number(p));
+    if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+      if (parts[0] === 127) return true;
+      if (parts[0] === 10) return true;
+      if (parts[0] === 172 && parts[1] !== undefined && parts[1] >= 16 && parts[1] <= 31) return true;
+      if (parts[0] === 192 && parts[1] === 168) return true;
+      if (parts[0] === 169 && parts[1] === 254) return true;
+    }
+    if (hostname.startsWith('fc') || hostname.startsWith('fd') || hostname === '::1') {
+      return true;
+    }
+  } catch {
+    const raw = baseUrl.trim().toLowerCase();
+    if (raw.includes('localhost') || raw.includes('127.0.0.1')) return true;
+  }
+  return false;
+}
+
+export function inferResidencyTier(
+  providerKind: string,
+  baseUrl?: string | null,
+): 'local_only' | 'cloud_standard' {
+  return isLocalEndpoint(providerKind, baseUrl) ? 'local_only' : 'cloud_standard';
 }
 
 export interface ProviderProbeResult {

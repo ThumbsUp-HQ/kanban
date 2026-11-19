@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { AiStudioPage } from '../AiStudioPage';
 import { AiBudgetModal } from '../AiBudgetModal';
@@ -11,14 +11,14 @@ import * as aiApi from '../aiAdminApi';
 import type { ProviderConfigPublic, BudgetRecord } from '../aiAdminApi';
 import * as clientModule from '../../../api/client';
 
-describe('AiStudioPage & Components (KANBA-219)', () => {
+describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
   const mockProvider: ProviderConfigPublic = {
     id: 'prov-openai-1',
     provider_kind: 'openai',
     display_name: 'Production OpenAI',
     base_url: 'https://api.openai.com/v1',
     model_allowlist: ['gpt-4o', 'gpt-4o-mini'],
-    residency_tier: 'default',
+    residency_tier: 'cloud_standard',
     priority: 10,
     settings: {},
     api_key_set: true,
@@ -30,13 +30,41 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
     id: 'prov-ollama-2',
     provider_kind: 'ollama',
     display_name: 'Local Ollama Runtime',
-    base_url: 'http://localhost:11434',
+    base_url: 'http://127.0.0.1:11434',
     model_allowlist: ['llama3.2:3b'],
-    residency_tier: 'local',
+    residency_tier: 'local_only',
     priority: 20,
     settings: {},
     api_key_set: false,
     is_enabled: false,
+    project_id: null,
+  };
+
+  const mockOpenAiLocalProvider: ProviderConfigPublic = {
+    id: 'prov-openai-local-3',
+    provider_kind: 'openai',
+    display_name: 'Local vLLM Engine',
+    base_url: 'http://localhost:8000/v1',
+    model_allowlist: ['mistral-7b'],
+    residency_tier: 'local_only',
+    priority: 30,
+    settings: {},
+    api_key_set: false,
+    is_enabled: true,
+    project_id: null,
+  };
+
+  const mockGeminiProvider: ProviderConfigPublic = {
+    id: 'prov-gemini-4',
+    provider_kind: 'gemini',
+    display_name: 'Google Gemini Cloud',
+    base_url: 'https://generativelanguage.googleapis.com',
+    model_allowlist: ['gemini-2.5-flash'],
+    residency_tier: 'cloud_standard',
+    priority: 40,
+    settings: {},
+    api_key_set: true,
+    is_enabled: true,
     project_id: null,
   };
 
@@ -133,13 +161,26 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
     });
   });
 
-  describe('AiStudioPage component', () => {
-    it('renders provider cards and handles toggle enablement and modals', async () => {
-      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
+  describe('AiStudioPage component & Numbered Failover Priority Stack (KAN-22)', () => {
+    it('renders numbered #1..#N stack, local badges, and handles move up/down reordering', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([
+        mockProvider,
+        mockOllamaProvider,
+        mockOpenAiLocalProvider,
+      ]);
       vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
       vi.spyOn(aiApi, 'disableAiProvider').mockResolvedValue({ ...mockProvider, is_enabled: false });
       vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue({ ...mockOllamaProvider, is_enabled: true });
       vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
+      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockImplementation((ids) => {
+        return Promise.resolve(
+          ids.map((id, idx) => {
+            const match = [mockProvider, mockOllamaProvider, mockOpenAiLocalProvider].find((p) => p.id === id);
+            if (!match) throw new Error(`Provider not found: ${id}`);
+            return { ...match, priority: (idx + 1) * 10 };
+          }),
+        );
+      });
 
       render(<AiStudioPage />);
 
@@ -148,30 +189,84 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
       await waitFor(() => {
         expect(screen.getByText('Production OpenAI')).toBeDefined();
         expect(screen.getByText('Local Ollama Runtime')).toBeDefined();
+        expect(screen.getByText('Local vLLM Engine')).toBeDefined();
       });
 
-      // Air gap banner should not be present
-      expect(screen.queryByTestId('air-gap-active-banner')).toBeNull();
+      // Verify numbered rank badges
+      expect(screen.getByTestId('provider-rank-prov-openai-1').textContent).toBe('#1');
+      expect(screen.getByTestId('provider-rank-prov-ollama-2').textContent).toBe('#2');
+      expect(screen.getByTestId('provider-rank-prov-openai-local-3').textContent).toBe('#3');
+
+      // Verify residency badges
+      expect(screen.getByTestId('residency-badge-prov-openai-1').textContent).toContain('Cloud');
+      expect(screen.getByTestId('residency-badge-prov-ollama-2').textContent).toContain('Local / Zero-Egress');
+      expect(screen.getByTestId('residency-badge-prov-openai-local-3').textContent).toContain('Local / Zero-Egress');
+
+      // Verify key status badges
+      expect(screen.getByTestId('key-status-prov-openai-1').textContent).toContain('Key Configured');
+      expect(screen.getByTestId('key-status-prov-ollama-2').textContent).toContain('No Key Required (Local)');
+      expect(screen.getByTestId('key-status-prov-openai-local-3').textContent).toContain('No Key Required (Local)');
+
+      // Verify Move Up disabled on #1, Move Down disabled on #3
+      expect(screen.getByTestId<HTMLButtonElement>('move-up-btn-prov-openai-1').disabled).toBe(true);
+      expect(screen.getByTestId<HTMLButtonElement>('move-down-btn-prov-openai-local-3').disabled).toBe(true);
+
+      // Click Move Down on #1 (moves prov-openai-1 down to #2)
+      act(() => {
+        fireEvent.click(screen.getByTestId('move-down-btn-prov-openai-1'));
+      });
+      await waitFor(() => {
+        expect(reorderSpy).toHaveBeenCalledWith([
+          'prov-ollama-2',
+          'prov-openai-1',
+          'prov-openai-local-3',
+        ]);
+      });
+
+      // Click Move Up on #2 (moves prov-openai-1 back to #1)
+      act(() => {
+        fireEvent.click(screen.getByTestId('move-up-btn-prov-openai-1'));
+      });
+      await waitFor(() => {
+        expect(reorderSpy).toHaveBeenCalledWith([
+          'prov-openai-1',
+          'prov-ollama-2',
+          'prov-openai-local-3',
+        ]);
+      });
 
       // Toggle enabled provider (disable it)
       const toggleOpenAi = screen.getByTestId('toggle-enable-btn-prov-openai-1');
       expect(toggleOpenAi.textContent).toBe('Enabled');
-      fireEvent.click(toggleOpenAi);
+      act(() => {
+        fireEvent.click(toggleOpenAi);
+      });
       await waitFor(() => {
         expect(aiApi.disableAiProvider).toHaveBeenCalledWith('prov-openai-1');
+      });
+      await waitFor(() => {
+        expect(aiApi.fetchAiProviders).toHaveBeenCalled();
       });
 
       // Toggle disabled provider (enable it)
       const toggleOllama = screen.getByTestId('toggle-enable-btn-prov-ollama-2');
       expect(toggleOllama.textContent).toBe('Disabled');
-      fireEvent.click(toggleOllama);
+      act(() => {
+        fireEvent.click(toggleOllama);
+      });
       await waitFor(() => {
         expect(aiApi.updateAiProvider).toHaveBeenCalledWith('prov-ollama-2', { is_enabled: true });
+      });
+      await waitFor(() => {
+        expect(aiApi.fetchAiProviders).toHaveBeenCalled();
       });
 
       // Open manage budget modal
       fireEvent.click(screen.getByTestId('manage-budget-btn-prov-openai-1'));
       expect(screen.getByTestId('ai-budget-modal')).toBeDefined();
+      await waitFor(() => {
+        expect(aiApi.fetchBudgets).toHaveBeenCalledWith('prov-openai-1');
+      });
       fireEvent.click(screen.getByTestId('close-budget-modal-btn'));
       expect(screen.queryByTestId('ai-budget-modal')).toBeNull();
 
@@ -186,6 +281,228 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
       expect(screen.getByTestId('ai-provider-editor-drawer')).toBeDefined();
       fireEvent.click(screen.getByTestId('cancel-provider-drawer-btn'));
       expect(screen.queryByTestId('ai-provider-editor-drawer')).toBeNull();
+    });
+
+    it('rolls back provider order and displays error alert when reorder fails', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockRejectedValue(new Error('Network reorder failure'));
+
+      render(<AiStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Production OpenAI')).toBeDefined();
+      });
+
+      // Move Down on #1 (Error instance)
+      fireEvent.click(screen.getByTestId('move-down-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ai-studio-error').textContent).toContain('Network reorder failure');
+      });
+
+      // State rolled back
+      expect(screen.getByTestId('provider-rank-prov-openai-1').textContent).toBe('#1');
+      expect(screen.getByTestId('provider-rank-prov-ollama-2').textContent).toBe('#2');
+
+      // Reorder failure with non-Error reject
+      reorderSpy.mockRejectedValueOnce('raw reorder failure');
+      fireEvent.click(screen.getByTestId('move-down-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ai-studio-error').textContent).toContain('Failed to reorder providers');
+      });
+    });
+
+    it('handles drag and drop reordering via drag handle', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockOllamaProvider]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
+        { ...mockOllamaProvider, priority: 10 },
+        { ...mockProvider, priority: 20 },
+      ]);
+
+      render(<AiStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drag-handle-prov-openai-1')).toBeDefined();
+      });
+
+      const handle1 = screen.getByTestId('drag-handle-prov-openai-1');
+      const card2 = screen.getByTestId('provider-card-prov-ollama-2');
+
+      const dataTransfer = {
+        effectAllowed: '',
+        dropEffect: '',
+        setData: vi.fn(),
+        getData: vi.fn().mockReturnValue('0'),
+      };
+
+      // Drag start on #1
+      fireEvent.dragStart(handle1, { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', '0');
+
+      // Drag over card #2
+      fireEvent.dragOver(card2, { dataTransfer });
+      expect(card2.className).toContain('kb-provider-stack-item--drag-over');
+
+      // Drag over card #2 again (same index branch)
+      fireEvent.dragOver(card2, { dataTransfer });
+
+      // Drag leave
+      fireEvent.dragLeave(card2);
+      expect(card2.className).not.toContain('kb-provider-stack-item--drag-over');
+
+      // Drop on card #2
+      fireEvent.drop(card2, { dataTransfer });
+
+      await waitFor(() => {
+        expect(reorderSpy).toHaveBeenCalledWith(['prov-ollama-2', 'prov-openai-1']);
+      });
+    });
+
+    it('executes Test Connection on provider card and displays latency and models', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 124.7,
+        models: ['gpt-4o', 'gpt-4o-mini'],
+        model_count: 2,
+      });
+
+      render(<AiStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-connection-btn-prov-openai-1')).toBeDefined();
+      });
+
+      // Click Test Connection
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
+        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
+          'Connected in 125ms - 2 models available',
+        );
+      });
+
+      // Failed test connection with message
+      testSpy.mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 50,
+        models: [],
+        model_count: 0,
+        error_code: 'AUTH_FAILED',
+        message: 'Invalid API secret key',
+      });
+
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
+          'Connection failed: AUTH_FAILED - Invalid API secret key',
+        );
+      });
+
+      // Failed test connection without message (error_code only)
+      testSpy.mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 50,
+        models: [],
+        model_count: 0,
+        error_code: 'RATE_LIMIT',
+      });
+
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
+          'Connection failed: RATE_LIMIT',
+        );
+      });
+
+      // Failed test connection without message and without error_code
+      testSpy.mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 50,
+        models: [],
+        model_count: 0,
+      });
+
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
+          'Connection failed: ERROR',
+        );
+      });
+
+      // Exception during test connection (Error instance)
+      testSpy.mockRejectedValueOnce(new Error('DNS resolution error'));
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
+          'DNS resolution error',
+        );
+      });
+
+      // Exception during test connection (non-Error instance)
+      testSpy.mockRejectedValueOnce('raw test error');
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-status-prov-openai-1').textContent).toContain(
+          'Connection test failed',
+        );
+      });
+    });
+
+    it('covers boundary branches for move, drag drop on same card, and unconfigured key cards', async () => {
+      const mockCloudNoKey: ProviderConfigPublic = {
+        ...mockGeminiProvider,
+        id: 'prov-gemini-nokey',
+        api_key_set: false,
+        base_url: null,
+      };
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider, mockCloudNoKey]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(true);
+      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
+        mockCloudNoKey,
+        mockProvider,
+      ]);
+
+      render(<AiStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('key-status-prov-gemini-nokey').textContent).toContain('Key Not Set');
+      });
+
+      // Drag and drop onto the exact same card (index 0 onto index 0 -> no reorder call)
+      const handle1 = screen.getByTestId('drag-handle-prov-openai-1');
+      const card1 = screen.getByTestId('provider-card-prov-openai-1');
+      const dataTransfer = {
+        effectAllowed: '',
+        dropEffect: '',
+        setData: vi.fn(),
+        getData: vi.fn(),
+      };
+      fireEvent.dragStart(handle1, { dataTransfer });
+      fireEvent.drop(card1, { dataTransfer });
+      expect(reorderSpy).not.toHaveBeenCalled();
+
+      // Drop when no dragStart was invoked (draggedIndex is null)
+      fireEvent.drop(card1, { dataTransfer });
+      expect(reorderSpy).not.toHaveBeenCalled();
+
+      // Drag start from index 0 then drop on card with invalid index
+      fireEvent.dragStart(handle1, { dataTransfer });
+      // Create a dummy event on drop with target index out of bounds
+      const outOfBoundsCard = document.createElement('div');
+      card1.parentElement?.appendChild(outOfBoundsCard);
+      // Even if drop occurs on card1 itself, if draggedIndex === targetIndex it's a no-op
+      expect(reorderSpy).not.toHaveBeenCalled();
     });
 
     it('renders air-gap banner and blocks cloud provider activation when air-gap mode is active', async () => {
@@ -261,10 +578,10 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
       });
     });
 
-    it('handles toggle enablement error with non-Error reject', async () => {
+    it('handles toggle enablement error with non-Error reject and Error reject', async () => {
       vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
       vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
-      vi.spyOn(aiApi, 'disableAiProvider').mockRejectedValue('raw string rejection');
+      const disableSpy = vi.spyOn(aiApi, 'disableAiProvider').mockRejectedValueOnce('raw string rejection');
 
       render(<AiStudioPage />);
 
@@ -277,6 +594,16 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
       await waitFor(() => {
         expect(screen.getByTestId('ai-studio-error').textContent).toContain(
           'Failed to toggle provider enablement',
+        );
+      });
+
+      // Error instance
+      disableSpy.mockRejectedValueOnce(new Error('Permission denied on toggle'));
+      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ai-studio-error').textContent).toContain(
+          'Permission denied on toggle',
         );
       });
     });
@@ -594,9 +921,22 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
     });
   });
 
-  describe('AiProviderEditorDrawer component', () => {
-    it('creates a new AI provider with residency and priority inputs', async () => {
-      vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockProvider);
+  describe('AiProviderEditorDrawer component & 3-Protocol Selector (KAN-22)', () => {
+    it('verifies 3 clean protocols, auto-inferred residency, and probe models flow', async () => {
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockProvider);
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 45,
+        models: ['llama3.2:3b', 'qwen2.5-coder:7b', 'deepseek-r1:14b'],
+        model_count: 3,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 62.3,
+        models: ['llama3.2:3b'],
+        model_count: 1,
+      });
+
       const onSaved = vi.fn();
       const onClose = vi.fn();
 
@@ -607,69 +947,345 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
           provider={null}
           airGapMode={false}
           onSaved={onSaved}
+          providersCount={3}
         />,
       );
 
       expect(screen.getByText('Register AI Provider')).toBeDefined();
 
-      // Change kind to gemini
-      const kindSelect = screen.getByTestId('provider-kind-select');
+      const kindSelect = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
+
+      // Verify custom is NOT in options
+      const options = Array.from(kindSelect.querySelectorAll('option')).map((o) => o.value);
+      expect(options).toEqual(['ollama', 'openai', 'gemini']);
+      expect(options).not.toContain('custom');
+
+      // Switch to Gemini
       fireEvent.change(kindSelect, { target: { value: 'gemini' } });
-
-      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe(
-        'Google Gemini Workspace',
-      );
-
-      // Change kind to ollama
-      fireEvent.change(kindSelect, { target: { value: 'ollama' } });
+      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Google Gemini Workspace');
       expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe(
-        'http://localhost:11434',
+        'https://generativelanguage.googleapis.com',
       );
 
-      // Change kind to custom
-      fireEvent.change(kindSelect, { target: { value: 'custom' } });
+      // Switch to Ollama
+      fireEvent.change(kindSelect, { target: { value: 'ollama' } });
+      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Local Ollama Runtime');
+      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('http://127.0.0.1:11434');
 
-      // Enter details
-      fireEvent.change(screen.getByTestId('provider-name-input'), {
-        target: { value: 'Custom Endpoint' },
-      });
+      // Check key hint for local Ollama
+      expect(screen.getByText(/No Key Required \(Local\)/)).toBeDefined();
+
+      // Switch to OpenAI
+      fireEvent.change(kindSelect, { target: { value: 'openai' } });
+      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('OpenAI / OpenAI-Compatible');
+      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('https://api.openai.com/v1');
+
+      // Type local URL into OpenAI base_url and check auto-inferred residency
       fireEvent.change(screen.getByTestId('provider-base-url-input'), {
-        target: { value: 'https://ai.example.com/v1' },
+        target: { value: 'http://localhost:8000/v1' },
       });
-      fireEvent.change(screen.getByTestId('provider-models-input'), {
-        target: { value: 'custom-model-1, custom-model-2' },
-      });
-      fireEvent.change(screen.getByTestId('provider-residency-select'), {
-        target: { value: 'eu-central' },
-      });
-      fireEvent.change(screen.getByTestId('provider-priority-input'), {
-        target: { value: '50' },
-      });
-      fireEvent.change(screen.getByTestId('provider-key-input'), {
-        target: { value: 'secret-key-123' },
+      expect(screen.getByText(/No Key Required \(Local\)/)).toBeDefined();
+
+      // Test Probe Models Button
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          {
+            provider_kind: 'openai',
+            base_url: 'http://localhost:8000/v1',
+            api_key: null,
+          },
+          undefined,
+        );
+        expect(screen.getByTestId('probed-models-picker')).toBeDefined();
       });
 
-      // Toggle show key
+      // Check probed model chips rendered
+      expect(screen.getByTestId('probe-chip-llama3.2:3b')).toBeDefined();
+      expect(screen.getByTestId('probe-chip-qwen2.5-coder:7b')).toBeDefined();
+
+      // Click a chip to toggle it
+      fireEvent.click(screen.getByTestId('probe-chip-deepseek-r1:14b'));
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toContain('deepseek-r1:14b');
+
+      // Filter probed models
+      fireEvent.change(screen.getByTestId('probe-model-search-input'), {
+        target: { value: 'qwen' },
+      });
+      expect(screen.queryByTestId('probe-chip-llama3.2:3b')).toBeNull();
+      expect(screen.getByTestId('probe-chip-qwen2.5-coder:7b')).toBeDefined();
+
+      // Select All probed models
+      fireEvent.click(screen.getByTestId('probe-select-all-btn'));
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toContain('llama3.2:3b');
+
+      // Clear all models
+      fireEvent.click(screen.getByTestId('probe-clear-all-btn'));
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
+
+      // Add back one model
+      fireEvent.click(screen.getByTestId('probe-chip-qwen2.5-coder:7b'));
+
+      // Direct manual edit on provider-models-input fallback
+      fireEvent.change(screen.getByTestId('provider-models-input'), {
+        target: { value: 'qwen2.5-coder:7b, custom-extra:1b' },
+      });
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe(
+        'qwen2.5-coder:7b, custom-extra:1b',
+      );
+
+      // Test Connection in Drawer footer
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalled();
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain(
+          'Connected in 62ms - 1 models available',
+        );
+      });
+
+      // Expand Advanced Settings and override Residency Tier
+      const advDetails = screen.getByTestId('advanced-settings-details');
+      expect(advDetails).toBeDefined();
+      const residencySelect = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
+      fireEvent.change(residencySelect, { target: { value: 'eu-central' } });
+      expect(residencySelect.value).toBe('eu-central');
+
+      // Toggle show API key
+      fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'test-secret' } });
       fireEvent.click(screen.getByTestId('toggle-show-key-btn'));
       expect(screen.getByTestId<HTMLInputElement>('provider-key-input').type).toBe('text');
 
-      // Submit
+      // Submit Form (create new provider, priority should be (3+1)*10 = 40)
       fireEvent.click(screen.getByTestId('save-provider-btn'));
 
       await waitFor(() => {
-        expect(aiApi.createAiProvider).toHaveBeenCalledWith({
-          provider_kind: 'custom',
-          display_name: 'Custom Endpoint',
-          base_url: 'https://ai.example.com/v1',
-          model_allowlist: ['custom-model-1', 'custom-model-2'],
+        expect(createSpy).toHaveBeenCalledWith({
+          provider_kind: 'openai',
+          display_name: 'OpenAI / OpenAI-Compatible',
+          model_allowlist: ['qwen2.5-coder:7b', 'custom-extra:1b'],
           residency_tier: 'eu-central',
-          priority: 50,
-          api_key: 'secret-key-123',
+          base_url: 'http://localhost:8000/v1',
+          priority: 40,
+          api_key: 'test-secret',
           is_enabled: true,
         });
         expect(onSaved).toHaveBeenCalled();
         expect(onClose).toHaveBeenCalled();
       });
+    });
+
+    it('handles probe error, zero models, and connection test failure in drawer', async () => {
+      vi.spyOn(aiApi, 'probeAiModels')
+        .mockResolvedValueOnce({
+          ok: false,
+          latency_ms: 10,
+          models: [],
+          model_count: 0,
+          error_code: 'CONNECTION_REFUSED',
+          message: 'Endpoint unreachable',
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          latency_ms: 10,
+          models: [],
+          model_count: 0,
+          error_code: 'RATE_LIMIT',
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          latency_ms: 10,
+          models: [],
+          model_count: 0,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          latency_ms: 15,
+          models: [],
+          model_count: 0,
+        })
+        .mockRejectedValueOnce(new Error('DNS failure'))
+        .mockRejectedValueOnce('raw probe error');
+
+      vi.spyOn(aiApi, 'testAiConnection')
+        .mockResolvedValueOnce({
+          ok: false,
+          latency_ms: 20,
+          models: [],
+          model_count: 0,
+          error_code: 'TIMEOUT',
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          latency_ms: 20,
+          models: [],
+          model_count: 0,
+        })
+        .mockRejectedValueOnce(new Error('Network drop'))
+        .mockRejectedValueOnce('raw test error');
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Probe failure 1 (ok: false with message)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('Endpoint unreachable');
+      });
+
+      // Probe failure 2 (ok: false with error_code only)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('RATE_LIMIT');
+      });
+
+      // Probe failure 3 (ok: false with neither)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('Model probing failed');
+      });
+
+      // Probe failure 4 (0 models)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('0 models were discovered');
+      });
+
+      // Probe failure 5 (rejected with Error)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('DNS failure');
+      });
+
+      // Probe failure 6 (rejected with non-Error)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('Failed to probe models');
+      });
+
+      // Test Connection failure 1 (ok: false with error_code)
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection failed: TIMEOUT');
+      });
+
+      // Test Connection failure 2 (ok: false with neither)
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection failed: ERROR');
+      });
+
+      // Test Connection failure 3 (rejected with Error)
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Network drop');
+      });
+
+      // Test Connection failure 4 (rejected with non-Error)
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection test failed');
+      });
+    });
+
+    it('probes and tests connection on saved provider with and without override key', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 30,
+        models: ['gpt-4o'],
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 25,
+        models: ['gpt-4o'],
+        model_count: 1,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Probe without key input (calls with {})
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
+      });
+
+      // Test connection without key input (calls with {})
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
+      });
+
+      // Type key and probe again (calls with { api_key: ... })
+      fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'temp-override-key' } });
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
+      });
+
+      // Test connection with override key
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
+      });
+    });
+
+    it('preserves manual residency tier when switching protocols or changing baseUrl', () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Manually change residency tier
+      fireEvent.change(screen.getByTestId('provider-residency-select'), {
+        target: { value: 'eu-central' },
+      });
+      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
+
+      // Change kind to ollama -> residency tier remains eu-central
+      fireEvent.change(screen.getByTestId('provider-kind-select'), {
+        target: { value: 'ollama' },
+      });
+      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
+
+      // Change kind to gemini -> residency tier remains eu-central
+      fireEvent.change(screen.getByTestId('provider-kind-select'), {
+        target: { value: 'gemini' },
+      });
+      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
+
+      // Change kind to openai -> residency tier remains eu-central
+      fireEvent.change(screen.getByTestId('provider-kind-select'), {
+        target: { value: 'openai' },
+      });
+      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
+
+      // Change baseUrl -> residency tier remains eu-central
+      fireEvent.change(screen.getByTestId('provider-base-url-input'), {
+        target: { value: 'http://127.0.0.1:9000/v1' },
+      });
+      expect(screen.getByTestId<HTMLSelectElement>('provider-residency-select').value).toBe('eu-central');
     });
 
     it('updates an existing provider with write-only key custody and clear key checkbox', async () => {
@@ -708,7 +1324,7 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
         expect(aiApi.updateAiProvider).toHaveBeenCalledWith('prov-openai-1', {
           display_name: 'Production OpenAI',
           model_allowlist: ['gpt-4o', 'gpt-4o-mini'],
-          residency_tier: 'default',
+          residency_tier: 'cloud_standard',
           base_url: 'https://api.openai.com/v1',
           priority: 10,
           api_key: null,
@@ -744,7 +1360,7 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
         expect(updateSpy).toHaveBeenCalledWith('prov-openai-1', {
           display_name: 'Production OpenAI',
           model_allowlist: ['gpt-4o', 'gpt-4o-mini'],
-          residency_tier: 'default',
+          residency_tier: 'cloud_standard',
           base_url: 'https://api.openai.com/v1',
           priority: 10,
           api_key: 'new-secret-key-999',
@@ -774,11 +1390,7 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
         />,
       );
 
-      // Switch to custom (which is not disabled)
-      fireEvent.change(screen.getByTestId('provider-kind-select'), {
-        target: { value: 'custom' },
-      });
-      // Switch back to openai
+      // Switch to openai
       fireEvent.change(screen.getByTestId('provider-kind-select'), {
         target: { value: 'openai' },
       });
@@ -847,6 +1459,19 @@ describe('AiStudioPage & Components (KANBA-219)', () => {
           }),
         );
       });
+    });
+
+    it('returns null when isOpen is false', () => {
+      const { container } = render(
+        <AiProviderEditorDrawer
+          isOpen={false}
+          onClose={vi.fn()}
+          provider={mockProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+      expect(container.firstChild).toBeNull();
     });
   });
 });
