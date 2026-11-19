@@ -350,12 +350,12 @@ describe('SparkleCompletionPlugin Unit Tests', () => {
     const bareView = new EditorView(container, { state: bareState });
 
     // Call handleTextInput from defaultPlugin on bareView
-    const textHandled = (defaultPlugin.props.handleTextInput as any)?.(bareView, 1, 1, 'x', () => bareState.tr);
+    const textHandled = defaultPlugin.props.handleTextInput?.(bareView, 1, 1, 'x');
     expect(textHandled).toBe(false);
 
     // Call handleDOMEvents.contextmenu on bareView
     const evt = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
-    const ctxHandled = (defaultPlugin.props.handleDOMEvents?.contextmenu as any)?.(bareView, evt);
+    const ctxHandled = defaultPlugin.props.handleDOMEvents?.contextmenu?.(bareView, evt);
     expect(ctxHandled).toBe(false);
 
     bareView.destroy();

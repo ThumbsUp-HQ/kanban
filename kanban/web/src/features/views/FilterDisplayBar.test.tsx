@@ -332,7 +332,7 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     });
   });
 
-  it('covers dynamic facet edge cases: fallback labels, unmount in flight, and chip removal fallbacks', async () => {
+  it('covers dynamic facet edge cases: fallback labels, unmount in flight, and chip removal fallbacks', () => {
     // 1. Assignee without display_name, custom cycle, custom module
     const { unmount: u1 } = render(
       <FilterDisplayBar
@@ -370,7 +370,7 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     u1();
 
     // 2. Unmount while dynamic fetches are unresolved
-    let resolveSuggestions: (val: any) => void;
+    let resolveSuggestions: ((val: unknown) => void) | undefined;
     vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockImplementation(
       () => new Promise((resolve) => { resolveSuggestions = resolve; }),
     );
@@ -378,7 +378,7 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
       <FilterDisplayBar projectKey="KAN" modulesEnabled={true} />
     );
     u2();
-    resolveSuggestions!([{ id: 'u99', handle: 'late', display_name: 'Late' }]);
+    resolveSuggestions?.([{ id: 'u99', handle: 'late', display_name: 'Late' }]);
   });
 
   it('derives dynamic facets from issues collection when live facets are empty', () => {

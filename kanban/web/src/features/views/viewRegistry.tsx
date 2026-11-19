@@ -401,6 +401,40 @@ export function IssuesWorkspaceRoute({
     });
   }, [issues, activeFilters, modulesEnabled]);
 
+  // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
+  const boardStates: BoardWorkflowState[] = useMemo(() => {
+    if (projectStates.length > 0) {
+      return projectStates.map((s, idx) => {
+        const sAny = s as {
+          wip_hard_limit?: number | null;
+          wip_hard?: number | null;
+          wip_soft_limit?: number | null;
+          wip_soft?: number | null;
+        };
+        const wipHard = sAny.wip_hard_limit ?? sAny.wip_hard ?? (s.id === 'state-in-review' ? 3 : undefined);
+        const wipSoft = sAny.wip_soft_limit ?? sAny.wip_soft ?? (s.id === 'state-in-progress' ? 3 : undefined);
+        return {
+          id: s.id,
+          name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
+          group: (['backlog', 'unstarted', 'started', 'completed', 'cancelled'].includes(s.group)
+            ? s.group
+            : 'unstarted') as BoardWorkflowState['group'],
+          sort_order: s.sort_order ?? idx + 1,
+          ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
+          ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
+        };
+      });
+    }
+    return [
+      { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
+      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
+      { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 3 },
+      { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4, wip_hard_limit: 3 },
+      { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
+      { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 6 },
+    ];
+  }, [projectStates]);
+
   // Single-key shortcut map
   const { focusedKey, handleRowClick } = useIssueKeyboardMap({
     issues: filteredIssues,
@@ -486,9 +520,9 @@ export function IssuesWorkspaceRoute({
     const item: IssueItem = {
       id: `01931234-new-${String(Date.now())}`,
       key: `${projectKey}-${String(nextNum)}`,
-      summary: newIssue.summary!,
-      state: newIssue.state!,
-      priority: newIssue.priority!,
+      summary: newIssue.summary ?? 'Untitled',
+      state: newIssue.state ?? { id: 'state-backlog', name: 'Backlog', group: 'backlog' },
+      priority: newIssue.priority ?? { slug: 'none', label: 'None', emoji: '⚪' },
     };
     if (newIssue.description_markdown) {
       item.description_markdown = newIssue.description_markdown;
@@ -519,16 +553,16 @@ export function IssuesWorkspaceRoute({
 
       const targetStateName = targetState?.name ?? sId;
       const isCrossState =
-        currentIssue.state?.id !== sId &&
-        normalizeStateKey(currentIssue.state?.name) !== normalizeStateKey(targetStateName);
+        currentIssue.state.id !== sId &&
+        normalizeStateKey(currentIssue.state.name) !== normalizeStateKey(targetStateName);
 
       const targetStateAny = targetState as { wip_hard_limit?: number | null } | undefined;
       if (isCrossState && targetStateAny?.wip_hard_limit != null) {
         const targetCount = issues.filter(
           (i) =>
             i.key !== targetKey &&
-            (i.state?.id === targetState?.id ||
-              normalizeStateKey(i.state?.name) === normalizeStateKey(targetStateName)),
+            (i.state.id === targetState?.id ||
+              normalizeStateKey(i.state.name) === normalizeStateKey(targetStateName)),
         ).length;
 
         if (targetCount >= targetStateAny.wip_hard_limit) {
@@ -602,42 +636,8 @@ export function IssuesWorkspaceRoute({
     }
   };
 
-  // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
-  const boardStates: BoardWorkflowState[] = useMemo(() => {
-    if (projectStates.length > 0) {
-      return projectStates.map((s, idx) => {
-        const sAny = s as {
-          wip_hard_limit?: number | null;
-          wip_hard?: number | null;
-          wip_soft_limit?: number | null;
-          wip_soft?: number | null;
-        };
-        const wipHard = sAny.wip_hard_limit ?? sAny.wip_hard ?? (s.id === 'state-in-review' ? 3 : undefined);
-        const wipSoft = sAny.wip_soft_limit ?? sAny.wip_soft ?? (s.id === 'state-in-progress' ? 3 : undefined);
-        return {
-          id: s.id,
-          name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
-          group: (['backlog', 'unstarted', 'started', 'completed', 'cancelled'].includes(s.group)
-            ? s.group
-            : 'unstarted') as BoardWorkflowState['group'],
-          sort_order: s.sort_order ?? idx + 1,
-          ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
-          ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
-        };
-      });
-    }
-    return [
-      { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
-      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
-      { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 3 },
-      { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4, wip_hard_limit: 3 },
-      { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
-      { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 6 },
-    ];
-  }, [projectStates]);
-
   const boardIssues: BoardIssue[] = useMemo(() => {
-    const fallbackStateId = boardStates[0]!.id;
+    const fallbackStateId = boardStates[0]?.id ?? 'state-backlog';
     return filteredIssues.map((issue, idx) => {
       const explicitStateId = (issue as { state_id?: string }).state_id ?? issue.state.id;
       const exactMatch = boardStates.find((s) => s.id === explicitStateId);

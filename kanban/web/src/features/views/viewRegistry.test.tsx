@@ -1115,7 +1115,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           });
         }
         if (method === 'PATCH') {
-          patchedPayload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          patchedPayload = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as Record<string, unknown>;
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve(liveIssues[1]),

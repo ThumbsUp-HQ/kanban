@@ -1704,7 +1704,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       });
     });
 
-    it('covers access mode restricted, google json error, and unchecking secret', async () => {
+    it('covers access mode restricted, google json error, and unchecking secret', () => {
       const onSave = vi.fn().mockResolvedValue(undefined);
       const restrictedCard: AdminAuthCard = {
         ...existingOidcCard,
@@ -1758,7 +1758,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
           onSave={vi.fn().mockResolvedValue(undefined)}
         />,
       );
-      expect((screen.getByLabelText('Access Policy') as HTMLSelectElement).value).toBe('restricted');
+      expect(screen.getByLabelText<HTMLSelectElement>('Access Policy').value).toBe('restricted');
       expect(screen.getByLabelText(/Admin Allowlist/i)).toBeDefined();
       u1();
 
@@ -1777,7 +1777,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
           onSave={vi.fn().mockResolvedValue(undefined)}
         />,
       );
-      expect((screen.getByLabelText('Access Policy') as HTMLSelectElement).value).toBe('restricted');
+      expect(screen.getByLabelText<HTMLSelectElement>('Access Policy').value).toBe('restricted');
       expect(screen.getByLabelText(/User Allowlist/i)).toBeDefined();
       u2();
 

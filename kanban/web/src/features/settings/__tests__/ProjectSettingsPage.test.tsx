@@ -11,7 +11,7 @@ import * as clientModule from '../../../api/client';
 
 let csrfToggle = false;
 vi.mock('../../auth/useSessionGuard', () => ({
-  ensureSessionCsrfToken: vi.fn().mockImplementation(async () => {
+  ensureSessionCsrfToken: vi.fn().mockImplementation(() => {
     csrfToggle = !csrfToggle;
     return csrfToggle ? 'csrf-mock-token-xyz' : null;
   }),
@@ -195,7 +195,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -290,7 +290,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -393,7 +393,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return [];
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -442,7 +442,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         ];
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -496,7 +496,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const url = path;
       const m = method.toUpperCase();
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return { id: 'p-1', identifier: 'KAN', name: 'Kanban Platform', is_project_admin: true };
@@ -569,7 +569,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         ];
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return { id: 'p-1', identifier: 'KAN', name: 'Kanban Platform', is_project_admin: true };
@@ -796,7 +796,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -935,7 +935,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return { ok: true };
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1048,7 +1048,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return { ok: true };
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1131,7 +1131,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return { ok: true };
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1212,7 +1212,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return [];
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1270,7 +1270,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return { ok: true };
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1299,8 +1299,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     expect(await screen.findByTestId('default-modules-section')).toBeDefined();
     expect(screen.getByText('🧩 Auth Module')).toBeDefined();
 
-    const mod1Checkbox = screen.getByTestId('default-module-mod-1') as HTMLInputElement;
-    const mod2Checkbox = screen.getByTestId('default-module-mod-2') as HTMLInputElement;
+    const mod1Checkbox = screen.getByTestId<HTMLInputElement>('default-module-mod-1');
+    const mod2Checkbox = screen.getByTestId<HTMLInputElement>('default-module-mod-2');
 
     expect(mod1Checkbox.checked).toBe(true);
     expect(mod2Checkbox.checked).toBe(false);
@@ -1401,7 +1401,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return { ok: true };
       }
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1468,7 +1468,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1623,7 +1623,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1684,7 +1684,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {
@@ -1782,7 +1782,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.change(groupSelect, { target: { value: 'completed' } });
 
     // Empty stateName submit guard
-    fireEvent.submit(screen.getByTestId('state-name-input').closest('form')!);
+    const stateForm = screen.getByTestId('state-name-input').closest('form');
+    if (stateForm) fireEvent.submit(stateForm);
     fireEvent.click(screen.getByTestId('create-state-btn'));
 
     // Boundary reorder: move top item up (targetIdx < 0)
@@ -1800,7 +1801,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     const prioritiesTab = screen.getByTestId('tab-priorities');
     fireEvent.click(prioritiesTab);
 
-    fireEvent.submit(screen.getByTestId('priority-slug-input').closest('form')!);
+    const prioForm = screen.getByTestId('priority-slug-input').closest('form');
+    if (prioForm) fireEvent.submit(prioForm);
     fireEvent.click(screen.getByTestId('create-priority-btn'));
     expect(screen.getByText('No Color Prio')).toBeDefined();
 
@@ -1808,7 +1810,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     const labelsTab = screen.getByTestId('tab-labels');
     fireEvent.click(labelsTab);
 
-    fireEvent.submit(screen.getByTestId('label-name-input').closest('form')!);
+    const labelForm = screen.getByTestId('label-name-input').closest('form');
+    if (labelForm) fireEvent.submit(labelForm);
     fireEvent.click(screen.getByTestId('create-label-btn'));
     expect(screen.getByText('No Color Label')).toBeDefined();
 
@@ -1816,7 +1819,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     const membersTab = screen.getByTestId('tab-members');
     fireEvent.click(membersTab);
 
-    fireEvent.submit(screen.getByTestId('member-principal-id-input').closest('form')!);
+    const memberForm = screen.getByTestId('member-principal-id-input').closest('form');
+    if (memberForm) fireEvent.submit(memberForm);
     expect(screen.getByText('No Id Member')).toBeDefined();
 
     // Principal picker onMouseDown preventDefault
@@ -1853,7 +1857,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const m = method.toUpperCase();
 
       if (
-        (String(url) === '/api/v1/projects/KAN' || String(url).endsWith('/api/v1/projects/KAN')) &&
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
         m === 'GET'
       ) {
         return {

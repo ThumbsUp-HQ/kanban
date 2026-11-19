@@ -562,7 +562,7 @@ describe('CommentComposer', () => {
         .mockRejectedValueOnce(new Error('Network drop error'));
 
       render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
-      const wrapper = screen.getByRole('textbox', { name: 'Write a comment' }).parentElement!;
+      const wrapper = screen.getByRole('textbox', { name: 'Write a comment' }).parentElement ?? document.body;
 
       // Drag over
       fireEvent.dragOver(wrapper);

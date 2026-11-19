@@ -488,7 +488,7 @@ describe('PropertiesRail', () => {
 
     const issueNoProject: IssueDetail = {
       ...mockIssue,
-      project_key: undefined as any,
+      project_key: undefined as unknown as string,
       key: 'KAN-999',
       capabilities: ['ADMIN'],
     };
@@ -596,7 +596,7 @@ describe('PropertiesRail', () => {
     });
   });
 
-  it('handles initialIssue prop change and projectKey resolution edge cases', async () => {
+  it('handles initialIssue prop change and projectKey resolution edge cases', () => {
     const handleUpdate = vi.fn();
     const { rerender } = render(
       <PropertiesRail issue={mockIssue} onIssueUpdate={handleUpdate} />

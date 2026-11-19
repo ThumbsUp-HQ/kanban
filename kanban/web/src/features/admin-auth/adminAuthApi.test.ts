@@ -330,7 +330,7 @@ describe('adminAuthApi (KB-P3-36)', () => {
           email: 'alice@example.com',
           password: 'secretPassword1',
           role: 'WORKSPACE_MEMBER',
-        }),
+        }) as Record<string, unknown>,
       }),
     );
 

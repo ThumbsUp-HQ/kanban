@@ -1658,7 +1658,10 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       });
 
       const editBtns = screen.getAllByRole('button', { name: /^Edit$/i });
-      fireEvent.click(editBtns[0]!);
+      const firstEditBtn = editBtns[0];
+      if (firstEditBtn) {
+        fireEvent.click(firstEditBtn);
+      }
 
       await waitFor(() => {
         expect(screen.getByTestId('drawer-test-handshake-btn')).toBeDefined();

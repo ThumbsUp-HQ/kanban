@@ -1179,7 +1179,7 @@ describe('IssueSurface', () => {
 
     it('covers focus restoration fallbacks and localStorage error branch', async () => {
       // 1. localStorage throwing in useState initializer
-      const originalGetItem = localStorage.getItem;
+      const originalGetItem = localStorage.getItem.bind(localStorage);
       localStorage.getItem = vi.fn().mockImplementation(() => {
         throw new Error('SecurityError: LocalStorage denied');
       });

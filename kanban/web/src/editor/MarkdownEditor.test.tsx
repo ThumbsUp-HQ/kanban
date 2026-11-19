@@ -319,7 +319,7 @@ This is a breathable technical description.
     }
   });
 
-  it('connects toolbar buttons (Bold, Italic, Code, Link, Tasklist, Mermaid, Media, Raw) in WYSIWYG and Raw modes', async () => {
+  it('connects toolbar buttons (Bold, Italic, Code, Link, Tasklist, Mermaid, Media, Raw) in WYSIWYG and Raw modes', () => {
     const handleChange = vi.fn();
     const handleAnnounce = vi.fn();
     render(
@@ -471,7 +471,7 @@ This is a breathable technical description.
 
     // Simulate HTML paste on ProseMirror element
     const wysiwyg = screen.getByTestId('pill-editor-wysiwyg');
-    const editorDom = wysiwyg.querySelector<HTMLElement>('.ProseMirror')!;
+    const editorDom = wysiwyg.querySelector<HTMLElement>('.ProseMirror');
     const dt = {
       files: [],
       types: ['text/html', 'text/plain'],
@@ -484,7 +484,7 @@ This is a breathable technical description.
 
     const pasteEvt = new Event('paste', { bubbles: true, cancelable: true });
     Object.defineProperty(pasteEvt, 'clipboardData', { value: dt });
-    editorDom.dispatchEvent(pasteEvt);
+    editorDom?.dispatchEvent(pasteEvt);
 
     // Verify pill is displayed
     const pill = await screen.findByTestId('pill-editor-sanitized-pill');
@@ -500,10 +500,10 @@ This is a breathable technical description.
     // Trigger paste again and dismiss via onDismiss
     const pasteEvt2 = new Event('paste', { bubbles: true, cancelable: true });
     Object.defineProperty(pasteEvt2, 'clipboardData', { value: dt });
-    editorDom.dispatchEvent(pasteEvt2);
+    editorDom?.dispatchEvent(pasteEvt2);
     const pill2 = await screen.findByTestId('pill-editor-sanitized-pill');
     const pillInner = pill2.querySelector<HTMLElement>('.sanitized-paste-pill');
-    fireEvent.keyDown(pillInner || pill2, { key: 'Escape' });
+    fireEvent.keyDown(pillInner ?? pill2, { key: 'Escape' });
     expect(screen.queryByTestId('pill-editor-sanitized-pill')).toBeNull();
   });
 
@@ -545,11 +545,11 @@ This is a breathable technical description.
     fireEvent.change(fileInput, { target: { files: [] } });
 
     // 3. Non-empty selection link in WYSIWYG
-    expect(capturedView).not.toBeNull();
-    if (capturedView) {
-      (capturedView as EditorView).dispatch(
-        (capturedView as EditorView).state.tr.setSelection(
-          TextSelection.create((capturedView as EditorView).state.doc, 1, 10),
+    const viewToSelect = capturedView as EditorView | null;
+    if (viewToSelect) {
+      viewToSelect.dispatch(
+        viewToSelect.state.tr.setSelection(
+          TextSelection.create(viewToSelect.state.doc, 1, 10),
         ),
       );
     }
@@ -635,5 +635,7 @@ This is a breathable technical description.
     const boldBtn = screen.getByTestId('edge-editor-tool-bold');
     fireEvent.click(boldBtn);
     expect(rawTextarea.value).toContain('**');
+
+    uploadSpy.mockRestore();
   });
 });

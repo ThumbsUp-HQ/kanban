@@ -58,7 +58,7 @@ export function isCursorInsideCode(text: string, cursorPos: number): boolean {
     return true;
   }
   // Check inline code: odd number of ` on the current line before cursor
-  const currentLine = before.split('\n').pop()!;
+  const currentLine = before.split('\n').pop() ?? '';
   const inlineTicks = (currentLine.match(/`/g) ?? []).length;
   return inlineTicks % 2 === 1;
 }
@@ -72,13 +72,13 @@ export function extractMentionPrefix(text: string, cursorPos: number): string | 
   if (!match) {
     return null;
   }
-  return match[1]!;
+  return match[1] ?? '';
 }
 
 export function formatMentionWarning(unauthorized: readonly { readonly handle: string }[]): string {
   const handles = unauthorized.map((m) => `@${m.handle.replace(/^@/, '')}`);
   if (handles.length === 1) {
-    const handle = handles[0]!;
+    const handle = handles[0] ?? '';
     return `${handle} cannot view this issue. Posting will NOT grant access or send a notification to ${handle}.`;
   }
   return `${handles.join(', ')} cannot view this issue. Posting will NOT grant access or send notifications to them.`;
@@ -108,7 +108,7 @@ export function CommentComposer({
   // @mention autocomplete state
   const [suggestions, setSuggestions] = useState<readonly AssigneeSuggestion[]>([]);
   const [suggestionPrefix, setSuggestionPrefix] = useState<string | null>(null);
-  const [cursorPosition, setCursorPosition] = useState<number>(0);
+  const [, setCursorPosition] = useState<number>(0);
   const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
   const [sanitizedPill, setSanitizedPill] = useState<{ prunedHiddenNodes: number } | null>(null);
   const [isPreview, setIsPreview] = useState(false);
@@ -270,10 +270,7 @@ export function CommentComposer({
     } catch {
       setErrorText('Attachment upload failed');
     } finally {
-      /* v8 ignore next */
-      if (e.target) {
-        e.target.value = '';
-      }
+      e.target.value = '';
     }
   };
 
@@ -301,8 +298,6 @@ export function CommentComposer({
 
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>): void => {
     const clipboardData = e.clipboardData;
-    /* v8 ignore next */
-    if (!clipboardData) return;
 
     // 1. Binary file paste
     const files = Array.from(clipboardData.files);
@@ -332,7 +327,7 @@ export function CommentComposer({
     const html = clipboardData.getData('text/html');
     if (html && html.trim() !== '') {
       e.preventDefault();
-      undoDraftRef.current = textareaRef.current!.value;
+      undoDraftRef.current = textareaRef.current?.value ?? '';
       const { prunedHtml, prunedHiddenNodes } = pruneHiddenDom(html);
       const converted = convertHtmlToMarkdown(prunedHtml);
       insertTextAtCursor(converted, '', '');

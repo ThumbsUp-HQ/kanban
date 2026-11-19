@@ -316,7 +316,7 @@ export function MarkdownEditor({
     /* v8 ignore next */
     if (!viewRef.current) return;
     const { state, dispatch } = viewRef.current;
-    const { from, to, empty } = state.selection;
+    const { empty } = state.selection;
     if (empty) {
       const linkMark = editorSchema.marks.link.create({ href: 'https://example.com' });
       const textNode = editorSchema.text('link text', [linkMark]);
@@ -392,10 +392,7 @@ export function MarkdownEditor({
       setLiveAnnouncement(msg);
       onAnnounceRef.current?.(msg);
     } finally {
-      /* v8 ignore next */
-      if (e.target) {
-        e.target.value = '';
-      }
+      e.target.value = '';
     }
   };
 
@@ -438,8 +435,6 @@ export function MarkdownEditor({
 
   const handleRawPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
     const clipboardData = e.clipboardData;
-    /* v8 ignore next */
-    if (!clipboardData) return;
 
     // Check image/svg files first
     const files = Array.from(clipboardData.files);

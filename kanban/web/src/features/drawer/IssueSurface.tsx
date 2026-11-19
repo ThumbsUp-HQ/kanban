@@ -474,20 +474,15 @@ function IssueSurfaceContent({
       try {
         const proj = currentIssue.project_key;
         const result = await defaultUploadAttachment(file, proj);
-        const targetUri = result.markdownUri || `attachment://${result.id}`;
+        const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
         insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
       } finally {
-        /* v8 ignore next */
-        if (e.target) {
-          e.target.value = '';
-        }
+        e.target.value = '';
       }
     };
 
     const handleDescPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
       const clipboardData = e.clipboardData;
-      /* v8 ignore next */
-      if (!clipboardData) return;
 
       // Check image file
       const files = Array.from(clipboardData.files);
@@ -623,26 +618,28 @@ function IssueSurfaceContent({
               <button
                 type="button"
                 className="conflict-banner__overwrite-btn"
-                onClick={async () => {
-                  const fresh = await refetch();
-                  /* v8 ignore next */
-                  if (!fresh.data?.etag) return;
-                  try {
-                    const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
-                      params: { issue_key: currentIssue.key },
-                      body: { description_markdown: descriptionDraft },
-                      ifMatch: fresh.data.etag,
-                    })) as unknown as IssueDetail;
-                    setConflictError(null);
-                    setEditingIssueKey(null);
-                    queryClient.setQueryData<IssueDetail>(
-                      qk.issue(currentIssue.key),
-                      normalizeIssueDetail(saved, projectKey),
-                    );
-                    window.dispatchEvent(new CustomEvent('kb:issue-updated'));
-                  } catch {
-                    // Stay in conflict state if overwrite fails
-                  }
+                onClick={() => {
+                  void (async () => {
+                    const fresh = await refetch();
+                    /* v8 ignore next */
+                    if (!fresh.data?.etag) return;
+                    try {
+                      const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
+                        params: { issue_key: currentIssue.key },
+                        body: { description_markdown: descriptionDraft },
+                        ifMatch: fresh.data.etag,
+                      })) as unknown as IssueDetail;
+                      setConflictError(null);
+                      setEditingIssueKey(null);
+                      queryClient.setQueryData<IssueDetail>(
+                        qk.issue(currentIssue.key),
+                        normalizeIssueDetail(saved, projectKey),
+                      );
+                      window.dispatchEvent(new CustomEvent('kb:issue-updated'));
+                    } catch {
+                      // Stay in conflict state if overwrite fails
+                    }
+                  })();
                 }}
               >
                 Overwrite
@@ -907,7 +904,7 @@ function IssueSurfaceContent({
                   projectStates.length > 0
                     ? {
                         key: currentIssue.project_key,
-                        name: currentIssue.project_name || currentIssue.project_key,
+                        name: currentIssue.project_name ?? currentIssue.project_key,
                         modules_enabled: true,
                         states: projectStates,
                       }

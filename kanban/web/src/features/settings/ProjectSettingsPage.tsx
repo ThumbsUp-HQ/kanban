@@ -211,7 +211,7 @@ export function ProjectSettingsPage(): JSX.Element {
         )) as ProjectDetail;
         if (active) {
           setProject(projRes);
-          setName(projRes.name ?? '');
+          setName(projRes.name);
           setDescription(projRes.description_markdown ?? '');
           setModulesEnabled(projRes.modules_enabled ?? true);
           setDefaultModuleIds(projRes.default_module_ids ?? []);
@@ -320,7 +320,7 @@ export function ProjectSettingsPage(): JSX.Element {
           const userRes = (await apiFetch('GET', '/api/v1/auth/me' as never)) as {
             is_server_admin?: boolean;
           };
-          if (active && userRes) {
+          if (active) {
             setIsServerAdmin(Boolean(userRes.is_server_admin));
           }
         } catch {
@@ -516,8 +516,8 @@ export function ProjectSettingsPage(): JSX.Element {
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (idx < 0 || targetIdx < 0 || targetIdx >= states.length) return;
 
-    const current = states[idx]!;
-    const target = states[targetIdx]!;
+    const target = states[targetIdx];
+    if (!target) return;
 
     const newOrder = target.sort_order;
     void (async () => {
@@ -858,7 +858,8 @@ export function ProjectSettingsPage(): JSX.Element {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
-        const token = destructiveToken!;
+        if (!destructiveToken) return;
+        const token = destructiveToken;
         const mode = token.mode === 'permanent_purge' ? 'permanent_purge' : 'trash';
         const defaultReason =
           mode === 'permanent_purge'
@@ -917,7 +918,7 @@ export function ProjectSettingsPage(): JSX.Element {
     const q = principalSearch.toLowerCase();
     return (
       p.display_name.toLowerCase().includes(q) ||
-      (p.handle?.toLowerCase().includes(q)) ||
+      (p.handle?.toLowerCase().includes(q) ?? false) ||
       p.id.toLowerCase().includes(q)
     );
   });
@@ -931,7 +932,7 @@ export function ProjectSettingsPage(): JSX.Element {
   return (
     <div data-testid="project-settings-page" className="kb-settings-container">
       <header className="kb-settings-header">
-        <h1 className="kb-settings-title">Project Settings: {project?.name || projectKey}</h1>
+        <h1 className="kb-settings-title">Project Settings: {project?.name ?? projectKey}</h1>
         <p className="kb-settings-subtitle">
           Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
           and lifecycle.
@@ -1391,7 +1392,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 {priorities.map((p) => (
                   <tr key={p.id} data-testid={`priority-row-${p.id}`}>
                     <td>{p.sort_order}</td>
-                    <td>{p.emoji || '-'}</td>
+                    <td>{p.emoji ?? '-'}</td>
                     <td>
                       <strong>{p.label}</strong>
                     </td>
@@ -1615,7 +1616,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   <tr key={m.id || m.principal_id}>
                     <td>
                       <div>
-                        <strong>{m.display_name || m.principal_id}</strong>
+                        <strong>{m.display_name ?? m.principal_id}</strong>
                         {m.handle && (
                           <span className="kb-principal-handle"> (@{m.handle})</span>
                         )}
@@ -1760,7 +1761,7 @@ export function ProjectSettingsPage(): JSX.Element {
                           className={`kb-retention-pill ${item.remaining_days <= 3 ? 'kb-retention-pill-expired' : ''}`}
                         >
                           {item.remaining_days > 0
-                            ? `${item.remaining_days} days remaining`
+                            ? `${String(item.remaining_days)} days remaining`
                             : 'Expires today'}
                         </span>
                       </td>
