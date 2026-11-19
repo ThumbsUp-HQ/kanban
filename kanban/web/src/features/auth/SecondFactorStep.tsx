@@ -158,7 +158,7 @@ export function SecondFactorStep({
   };
 
   return (
-    <div className="auth-second-factor-step">
+    <div className="auth-second-factor-step" data-testid="second-factor-step">
       <div className="auth-tablist" role="tablist" aria-label="Second factor methods">
         {activeMethods.map((m, index) => {
           const isSelected = selectedMethod === m;
@@ -301,7 +301,7 @@ export function SecondFactorStep({
                 id="recovery-code-input"
                 className="auth-input auth-mono"
                 type="text"
-                pattern="^[A-Za-z0-9-]{8,32}$"
+                pattern="[A-Za-z0-9\-]{8,32}"
                 maxLength={32}
                 value={recoveryCode}
                 onChange={(e) => { setRecoveryCode(e.target.value); }}

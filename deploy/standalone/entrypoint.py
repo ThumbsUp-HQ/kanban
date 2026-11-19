@@ -406,6 +406,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
     "KB_AIR_GAP_MODE",
     "KB_TRASH_RETENTION_DAYS",
     "KB_LOG_LEVEL",
+    "KB_SETUP_TOKEN_FILE",
 )
 
 
@@ -521,7 +522,7 @@ def _compute_migrations_digest() -> str:
     return ""
 
 
-def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Coordinate standalone single-container startup."""
     # 1. Mode selection
     database_url = os.environ.get("DATABASE_URL")
@@ -552,14 +553,23 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     data_dir.mkdir(parents=True, exist_ok=True)
     backups_dir = data_dir / "backups"
     backups_dir.mkdir(parents=True, exist_ok=True)
+    run_kanban_dir = Path("/run/kanban")
+    try:
+        run_kanban_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log_phase("init_dirs", f"Warning: mkdir /run/kanban failed: {exc}")
+
     if os.getuid() == 0:
         try:
             shutil.chown(str(data_dir), user=65532, group=65532)
             shutil.chown(str(backups_dir), user=65532, group=65532)
             data_dir.chmod(0o775)
             backups_dir.chmod(0o775)
+            if run_kanban_dir.is_dir():
+                shutil.chown(str(run_kanban_dir), user=65532, group=65532)
+                run_kanban_dir.chmod(0o775)
         except OSError as exc:
-            log_phase("init_dirs", f"Warning: chown data_dir failed: {exc}")
+            log_phase("init_dirs", f"Warning: chown failed: {exc}")
 
     keyring_path = Path(
         os.environ.get(
