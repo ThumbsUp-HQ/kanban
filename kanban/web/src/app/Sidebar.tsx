@@ -15,12 +15,12 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { registerShortcut } from './shortcuts';
 import { CreateProjectModal } from '../features/projects/CreateProjectModal';
 import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
 import { setCsrfToken } from '../api/client';
 import { QueryClientContext } from '@tanstack/react-query';
+import { WorkspaceBadge } from '../components/workspace/WorkspaceBadge';
 import {
   ListTodo,
   Kanban,
@@ -50,6 +50,7 @@ export interface ProjectNavData {
 export interface SidebarProps {
   isOpen?: boolean | undefined;
   onClose?: (() => void) | undefined;
+  isCollapsed?: boolean | undefined;
   onToggleCollapse?: (() => void) | undefined;
   projectKey?: string | undefined;
   projectName?: string | undefined;
@@ -145,6 +146,7 @@ async function fetchProjects(): Promise<ProjectNavData[]> {
 export function Sidebar({
   isOpen = true,
   onClose,
+  isCollapsed: isCollapsedProp,
   onToggleCollapse,
   projectKey,
   projectName,
@@ -168,9 +170,11 @@ export function Sidebar({
       const search = locationSearch || (typeof window !== 'undefined' ? window.location.search : '');
       const params = new URLSearchParams(search);
       return params.get('layout') ?? 'list';
+    /* v8 ignore start */
     } catch {
       return 'list';
     }
+    /* v8 ignore stop */
   }, [locationSearch]);
 
   let navigateFn: ((to: string) => void) | null = null;
@@ -185,8 +189,8 @@ export function Sidebar({
 
   const currentPath = activePathProp ?? locationPathname;
 
-  // Stored desktop collapse state
-  const [collapsed, setCollapsed] = useState<'open' | 'collapsed'>(() => {
+  // Stored desktop collapse state (fallback when unmanaged)
+  const [localCollapsed, setLocalCollapsed] = useState<'open' | 'collapsed'>(() => {
     try {
       const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
       return sanitizeSidebarState(stored);
@@ -194,6 +198,8 @@ export function Sidebar({
       return 'open';
     }
   });
+
+  const isDesktopCollapsed = isCollapsedProp ?? localCollapsed === 'collapsed';
 
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [fetchedProjects, setFetchedProjects] = useState<ProjectNavData[]>([]);
@@ -293,9 +299,11 @@ export function Sidebar({
             : '/';
         if (navigateFn) {
           navigateFn(targetRoute);
+        /* v8 ignore start */
         } else if (typeof window !== 'undefined') {
           window.location.assign(targetRoute);
         }
+        /* v8 ignore stop */
       }
     } catch {
       // Ignore
@@ -340,7 +348,7 @@ export function Sidebar({
     return (
       deduplicatedWorkspaces.find((w) => w.is_current) ?? {
         id: '',
-        name: '👍kanban',
+        name: 'kanban',
         slug: 'kanban',
       }
     );
@@ -436,44 +444,28 @@ export function Sidebar({
   const activeProjectKey = projectList[0]?.key ?? projectKey;
 
   // Toggle desktop collapsed state
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = prev === 'open' ? 'collapsed' : 'open';
-      try {
-        localStorage.setItem(SIDEBAR_STORAGE_KEY, next);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent('kb:sidebar-changed', {
-              detail: { collapsed: next },
-            }),
-          );
+  const handleToggleCollapse = useCallback(() => {
+    if (onToggleCollapse) {
+      onToggleCollapse();
+    } else {
+      setLocalCollapsed((prev) => {
+        const next = prev === 'open' ? 'collapsed' : 'open';
+        try {
+          localStorage.setItem(SIDEBAR_STORAGE_KEY, next);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('kb:sidebar-changed', {
+                detail: { collapsed: next },
+              }),
+            );
+          }
+        } catch {
+          // Ignore storage errors
         }
-      } catch {
-        // Ignore storage errors
-      }
-      return next;
-    });
-    onToggleCollapse?.();
+        return next;
+      });
+    }
   }, [onToggleCollapse]);
-
-  // Listen for external toggle events (e.g. from IssueSurface header Hide Nav / Show Nav)
-  useEffect(() => {
-    const handleExternalToggle = (): void => {
-      toggleCollapsed();
-    };
-    window.addEventListener('kb:toggle-sidebar', handleExternalToggle);
-    return () => {
-      window.removeEventListener('kb:toggle-sidebar', handleExternalToggle);
-    };
-  }, [toggleCollapsed]);
-
-  // Register '[' shortcut to toggle sidebar collapse
-  useEffect(() => {
-    const unregister = registerShortcut('[', () => {
-      toggleCollapsed();
-    });
-    return unregister;
-  }, [toggleCollapsed]);
 
   // Mobile overlay focus trap and Escape handler
   useEffect(() => {
@@ -526,8 +518,6 @@ export function Sidebar({
     }
   };
 
-  const isDesktopCollapsed = collapsed === 'collapsed';
-
   return (
     <>
       {/* Mobile Backdrop Scrim */}
@@ -559,78 +549,90 @@ export function Sidebar({
       >
         {/* Workspace Brand & Switcher & New Item Button */}
         <div className="kb-sidebar-header">
-          <div className="kb-workspace-switcher-wrapper" ref={workspaceSwitcherRef}>
-            <button
-              ref={firstItemRef}
-              type="button"
-              className="kb-workspace-switcher"
-              aria-label={`Workspace switcher: [👍] ${currentWorkspace.name}`}
-              aria-expanded={workspaceDropdownOpen}
-              aria-haspopup="true"
-              onClick={() => {
-                setWorkspaceDropdownOpen((prev) => !prev);
-              }}
-            >
-              <span className="kb-workspace-brand">
-                <span aria-hidden="true">[👍]</span>
-                <span>{currentWorkspace.name}</span>
-              </span>
-              <span aria-hidden="true">▾</span>
-            </button>
+          <div className="kb-sidebar-header-row">
+            <div className="kb-workspace-switcher-wrapper" ref={workspaceSwitcherRef}>
+              <button
+                ref={firstItemRef}
+                type="button"
+                className="kb-workspace-switcher"
+                aria-label={`Workspace switcher: ${currentWorkspace.name}`}
+                aria-expanded={workspaceDropdownOpen}
+                aria-haspopup="true"
+                onClick={() => {
+                  setWorkspaceDropdownOpen((prev) => !prev);
+                }}
+              >
+                <span className="kb-workspace-brand">
+                  <WorkspaceBadge name={currentWorkspace.name} />
+                  <span>{currentWorkspace.name}</span>
+                </span>
+                <span aria-hidden="true">▾</span>
+              </button>
 
-            {workspaceDropdownOpen && (
-              <div className="kb-workspace-dropdown" role="menu">
-                {deduplicatedWorkspaces.map((ws) => (
-                  <button
-                    key={ws.id}
-                    type="button"
-                    role="menuitem"
-                    className={`kb-workspace-dropdown-item ${
-                      ws.is_current ? 'kb-workspace-dropdown-item-active' : ''
-                    }`}
-                    onClick={() => void handleSwitchWorkspace(ws.id)}
-                  >
-                    <span className="kb-workspace-dropdown-name">
-                      <span aria-hidden="true">[👍]</span>
-                      <span>{ws.name}</span>
-                    </span>
-                    {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
-                  </button>
-                ))}
-                {deduplicatedWorkspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
-                {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
-                  <NavLink
-                    to="/workspaces/settings"
-                    role="menuitem"
-                    className="kb-workspace-dropdown-item"
-                    onClick={() => {
-                      setWorkspaceDropdownOpen(false);
-                    }}
-                  >
-                    <span className="kb-workspace-dropdown-name">
-                      <span className="kb-sidebar-icon" aria-hidden="true">
-                        ⚙️
+              {workspaceDropdownOpen && (
+                <div className="kb-workspace-dropdown" role="menu">
+                  {deduplicatedWorkspaces.map((ws) => (
+                    <button
+                      key={ws.id}
+                      type="button"
+                      role="menuitem"
+                      className={`kb-workspace-dropdown-item ${
+                        ws.is_current ? 'kb-workspace-dropdown-item-active' : ''
+                      }`}
+                      onClick={() => void handleSwitchWorkspace(ws.id)}
+                    >
+                      <span className="kb-workspace-dropdown-name">
+                        <WorkspaceBadge name={ws.name} size="sm" />
+                        <span>{ws.name}</span>
                       </span>
-                      <span>Workspace Settings</span>
-                    </span>
-                  </NavLink>
-                )}
-                {canCreateWorkspace && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="kb-workspace-dropdown-create-btn"
-                    onClick={() => {
-                      setWorkspaceDropdownOpen(false);
-                      setCreateWorkspaceOpen(true);
-                    }}
-                  >
-                    <span aria-hidden="true">+</span>
-                    <span>Create New Workspace</span>
-                  </button>
-                )}
-              </div>
-            )}
+                      {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
+                    </button>
+                  ))}
+                  {deduplicatedWorkspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
+                  {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
+                    <NavLink
+                      to="/workspaces/settings"
+                      role="menuitem"
+                      className="kb-workspace-dropdown-item"
+                      onClick={() => {
+                        setWorkspaceDropdownOpen(false);
+                      }}
+                    >
+                      <span className="kb-workspace-dropdown-name">
+                        <span className="kb-sidebar-icon" aria-hidden="true">
+                          ⚙️
+                        </span>
+                        <span>Workspace Settings</span>
+                      </span>
+                    </NavLink>
+                  )}
+                  {canCreateWorkspace && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="kb-workspace-dropdown-create-btn"
+                      onClick={() => {
+                        setWorkspaceDropdownOpen(false);
+                        setCreateWorkspaceOpen(true);
+                      }}
+                    >
+                      <span aria-hidden="true">+</span>
+                      <span>Create New Workspace</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="kb-sidebar-nav-close-btn"
+              aria-label="Collapse navigation sidebar"
+              title="Collapse sidebar ([)"
+              onClick={handleToggleCollapse}
+            >
+              <PanelLeftClose size={16} />
+            </button>
           </div>
 
           {canCreateWorkItem && (
@@ -984,22 +986,6 @@ export function Sidebar({
             )}
           </nav>
         </div>
-
-        {/* Footer Collapse Control */}
-        <div className="kb-sidebar-footer">
-          <button
-            type="button"
-            className="kb-sidebar-collapse-btn"
-            aria-label="Collapse sidebar (Hide Nav)"
-            onClick={toggleCollapsed}
-          >
-            <span aria-hidden="true">
-              <PanelLeftClose size={14} />
-            </span>
-            <span>Hide Nav</span>
-            <kbd className="kb-sidebar-collapse-kbd">[</kbd>
-          </button>
-        </div>
       </aside>
 
       <CreateProjectModal
@@ -1010,6 +996,7 @@ export function Sidebar({
         onCreated={(created) => {
           setFetchedProjects((prev) => {
             const exists = prev.some((p) => p.key === created.identifier);
+            /* v8 ignore next */
             if (exists) return prev;
             return [
               ...prev,

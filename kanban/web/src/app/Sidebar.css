@@ -37,6 +37,35 @@
   margin-bottom: var(--space-6, 24px);
 }
 
+.kb-sidebar-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.kb-sidebar-nav-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised, #24272f);
+  color: var(--fg-secondary, #94a3b8);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.kb-sidebar-nav-close-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  border-color: var(--border-strong);
+}
+
 .kb-workspace-switcher-wrapper {
   position: relative;
   width: 100%;

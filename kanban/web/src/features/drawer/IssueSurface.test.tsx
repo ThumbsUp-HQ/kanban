@@ -11,6 +11,7 @@ import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
 import * as breakpoints from '../../styles/breakpoints';
 import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
 import * as hiddenDomPrunerMod from '../../editor/clipboard/hiddenDomPruner';
+import * as viewsApi from '../views/viewsApi';
 
 const validIssue: IssueDetail = {
   key: 'KAN-142',
@@ -387,7 +388,7 @@ describe('IssueSurface', () => {
             body: { description_markdown: 'Updated markdown\n```mermaid\nflowchart LR\nX-->Y\n```' },
           }),
         );
-        expect(screen.getByTestId('issue-mermaid-diagram')).toBeDefined();
+        expect(screen.getByTestId('mermaid-block')).toBeDefined();
       });
     });
 
@@ -597,7 +598,7 @@ describe('IssueSurface', () => {
       expect(withCustomCaps.label_ids).toEqual(['label-string-1', 'label-string-2']);
     });
 
-    it('renders IssueSurfaceRoot in split mode with nav toggle and new tab link', async () => {
+    it('renders IssueSurfaceRoot in split mode with new tab link and key', async () => {
       vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -612,15 +613,8 @@ describe('IssueSurface', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('#KAN-142')).toBeDefined();
+        expect(screen.getByRole('link', { name: 'Open in new tab' })).toBeDefined();
       });
-
-      // Nav toggle button
-      const navToggle = screen.getByRole('button', { name: 'Hide Nav' });
-      expect(navToggle).toBeDefined();
-      fireEvent.click(navToggle);
-
-      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
 
       // Open in new tab link
       const newTabLink = screen.getByRole('link', { name: 'Open in new tab' });
@@ -643,7 +637,7 @@ describe('IssueSurface', () => {
       });
     });
 
-    it('covers split mode nav toggle in loading and error states', async () => {
+    it('covers split mode in loading and error states', async () => {
       // 1. Loading state
       let resolveFetch!: (v: unknown) => void;
       const pendingPromise = new Promise((resolve) => {
@@ -660,9 +654,7 @@ describe('IssueSurface', () => {
         </QueryClientProvider>,
       );
 
-      const loadingNavToggle = screen.getByRole('button', { name: 'Hide Nav' });
-      fireEvent.click(loadingNavToggle);
-      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
+      expect(screen.getByText('#KAN-999')).toBeDefined();
 
       resolveFetch(validIssue);
       unmount();
@@ -682,10 +674,6 @@ describe('IssueSurface', () => {
       await waitFor(() => {
         expect(screen.getByText('Could not load KAN-FAIL.')).toBeDefined();
       });
-
-      const errorNavToggle = screen.getByRole('button', { name: 'Hide Nav' });
-      fireEvent.click(errorNavToggle);
-      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
     });
 
     it('renders IssueSurfaceRoot outside Router context and handles fullscreen navigation fallback', async () => {
@@ -1128,13 +1116,6 @@ describe('IssueSurface', () => {
 
       // Edit description button is hidden due to capabilities: ['VIEW']
       expect(screen.queryByRole('button', { name: 'Edit description' })).toBeNull();
-
-      // Test nav toggle button in split mode
-      const navBtn = screen.getByRole('button', { name: 'Hide Nav' });
-      fireEvent.click(navBtn);
-      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
-      fireEvent.click(screen.getByRole('button', { name: 'Show Nav' }));
-      expect(screen.getByRole('button', { name: 'Hide Nav' })).toBeDefined();
     });
 
     it('covers opener element capture, full mode toggle, non-image paste, and without router assign', async () => {
@@ -1208,6 +1189,80 @@ describe('IssueSurface', () => {
 
       unmount();
       localStorage.getItem = originalGetItem;
+    });
+
+    it('covers escape with open popover, empty workflow states, empty markdownUri upload, and fence newlines', async () => {
+      vi.spyOn(viewsApi, 'fetchProjectStates').mockResolvedValue([]);
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const uploadSpy = vi.spyOn(autoConvertPasteMod, 'defaultUploadAttachment').mockResolvedValue({
+        id: 'att_fallback',
+        markdownUri: '',
+      });
+
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <IssueSurfaceSlotsContext.Provider value={{ rail: () => <div data-testid="test-rail" /> }}>
+          <QueryClientProvider client={qc}>
+            <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+              <IssueSurface />
+            </MemoryRouter>
+          </QueryClientProvider>
+        </IssueSurfaceSlotsContext.Provider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+      });
+
+      // 1. Escape with open hint popover
+      const popover = document.createElement('div');
+      popover.setAttribute('data-hint-open', 'true');
+      document.body.appendChild(popover);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+      popover.remove();
+
+      // 2. Escape with defaultPrevented = true
+      const ev = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+      ev.preventDefault();
+      window.dispatchEvent(ev);
+      expect(screen.getByText('Harden Multi-Card OIDC & LDAPS Auth Studio')).toBeDefined();
+
+      // 3. Edit description and test fence newline handling + empty markdownUri
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+
+      // Click Insert Mermaid diagram at end
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      fireEvent.click(screen.getByRole('button', { name: 'Insert Mermaid diagram' }));
+      expect(textarea.value).toContain('```mermaid');
+      expect(textarea.value).toContain('```\n');
+
+      // Repeated click of Mermaid button when cursor is at end
+      fireEvent.click(screen.getByRole('button', { name: 'Insert Mermaid diagram' }));
+
+      // Attach file with empty markdownUri
+      const fileInput = screen.getByTestId<HTMLInputElement>('desc-file-input');
+      const testFile = new File(['image bytes'], 'diagram.png', { type: 'image/png' });
+      fireEvent.change(fileInput, { target: { files: [testFile] } });
+      await waitFor(() => {
+        expect(textarea.value).toContain('![diagram.png](attachment://att_fallback)');
+      });
+
+      // Paste image with empty markdownUri
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [testFile],
+          types: ['Files'],
+          getData: () => '',
+        },
+      });
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalled();
+      });
+
+      uploadSpy.mockRestore();
+      unmount();
     });
   });
 });

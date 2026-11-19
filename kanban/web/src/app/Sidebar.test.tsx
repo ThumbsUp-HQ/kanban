@@ -15,6 +15,7 @@ describe('Sidebar', () => {
   });
 
   it('sanitizes hostile localStorage sidebar state to open', () => {
+    expect(SIDEBAR_STORAGE_KEY).toBe('kb.sidebar');
     expect(sanitizeSidebarState('open')).toBe('open');
     expect(sanitizeSidebarState('collapsed')).toBe('collapsed');
     expect(sanitizeSidebarState('evil')).toBe('open');
@@ -22,15 +23,17 @@ describe('Sidebar', () => {
     expect(sanitizeSidebarState('<script>alert(1)</script>')).toBe('open');
   });
 
-  it('renders sidebar navigation items in the specified order with [👍] 👍kanban branding', () => {
+  it('renders sidebar navigation items with WorkspaceBadge and workspace brand', () => {
     render(
       <MemoryRouter initialEntries={['/projects/KAN/issues']}>
         <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
       </MemoryRouter>,
     );
 
-    // Workspace branding
-    expect(screen.getByText(/👍kanban/)).toBeDefined();
+    // Workspace branding with WorkspaceBadge
+    expect(screen.getByTestId('workspace-badge')).toBeDefined();
+    expect(screen.queryByText('[👍]')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Collapse navigation sidebar' })).toBeDefined();
     expect(screen.getByText('+')).toBeDefined();
     expect(screen.getByText('New work item')).toBeDefined();
 
@@ -67,7 +70,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /Modules/ })).toBeNull();
   });
 
-  it('toggles collapse state via button and keyboard shortcut, persisting to localStorage', () => {
+  it('toggles collapse state via button next to workspace switcher, persisting to localStorage', () => {
     const onToggle = vi.fn();
     render(
       <MemoryRouter>
@@ -75,21 +78,12 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
 
-    const collapseBtn = screen.getByRole('button', { name: /Collapse sidebar/ });
+    const collapseBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
     act(() => {
       collapseBtn.click();
     });
 
-    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
     expect(onToggle).toHaveBeenCalledTimes(1);
-
-    // Trigger keyboard '['
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: '[' }));
-    });
-
-    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
-    expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
   it('handles mobile overlay dialog, focus trapping, and Escape closing', async () => {
@@ -252,9 +246,17 @@ describe('Sidebar', () => {
   });
 
   it('fetches dynamic projects from /api/v1/projects and opens CreateProjectModal via + Project button or custom event', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url.includes('/api/v1/projects')) {
+        if (init?.method === 'POST') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ identifier: 'NEW', name: 'New Project', modules_enabled: true }),
+              { status: 201, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -293,6 +295,19 @@ describe('Sidebar', () => {
       window.dispatchEvent(new CustomEvent('kb:open-create-project'));
     });
     expect(screen.getByTestId('create-project-modal')).toBeDefined();
+
+    document.cookie = 'csrf_token=test-csrf-token';
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    const idInput = screen.getByLabelText(/Identifier/i);
+    fireEvent.change(nameInput, { target: { value: 'New Project' } });
+    fireEvent.change(idInput, { target: { value: 'NEW' } });
+    const form = screen.getByTestId('create-project-submit').closest('form');
+    expect(form).not.toBeNull();
+    if (form) {
+      act(() => {
+        fireEvent.submit(form);
+      });
+    }
 
     act(() => {
       window.dispatchEvent(new CustomEvent('kb:project-created'));
@@ -437,7 +452,7 @@ describe('Sidebar', () => {
     expect(listViewLink.getAttribute('href')).toBe('/projects/KAN/issues?layout=list');
   });
 
-  it('toggles sidebar via kb:toggle-sidebar custom event and Hide Nav button (KANBA-174)', () => {
+  it('toggles sidebar collapse via header button next to workspace switcher', () => {
     const onToggle = vi.fn();
     render(
       <MemoryRouter>
@@ -445,22 +460,14 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
 
-    const hideNavBtn = screen.getByRole('button', { name: /Collapse sidebar \(Hide Nav\)/i });
-    expect(hideNavBtn).toBeDefined();
+    const collapseBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
+    expect(collapseBtn).toBeDefined();
 
     act(() => {
-      window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
+      collapseBtn.click();
     });
 
-    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
     expect(onToggle).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      window.dispatchEvent(new CustomEvent('kb:toggle-sidebar'));
-    });
-
-    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('open');
-    expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
   it('highlights table, calendar, timeline subnav items and custom fields page', () => {
@@ -893,5 +900,59 @@ describe('Sidebar', () => {
     });
 
     unmount();
+  });
+
+  it('covers remaining branches: outside click, escape key, mobile tab cycle, fetch fallbacks, and local collapse', () => {
+    // 1. fetchWorkspaces with non-array response & fetchProjects with error res
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (u.includes('/workspaces/current')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ notAnArray: true }) } as unknown as Response);
+      }
+      if (u.includes('/projects')) {
+        return Promise.resolve({ ok: false, status: 500 } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as unknown as Response);
+    });
+
+    // 2. Local collapse without onToggleCollapse prop
+    localStorage.removeItem('kb.sidebar');
+    const { unmount } = render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    const collapseBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
+    act(() => {
+      collapseBtn.click();
+    });
+    expect(localStorage.getItem('kb.sidebar')).toBe('collapsed');
+    act(() => {
+      collapseBtn.click();
+    });
+    expect(localStorage.getItem('kb.sidebar')).toBe('open');
+
+    // 3. Workspace dropdown escape key and outside click
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    act(() => {
+      switcherBtn.click();
+    });
+    expect(screen.getByRole('menu')).toBeDefined();
+
+    // Escape key
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    // Outside click
+    act(() => {
+      switcherBtn.click();
+    });
+    expect(screen.getByRole('menu')).toBeDefined();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    unmount();
+    fetchSpy.mockRestore();
   });
 });

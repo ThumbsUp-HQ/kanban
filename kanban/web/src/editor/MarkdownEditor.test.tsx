@@ -630,11 +630,18 @@ This is a breathable technical description.
     fireEvent.click(revertBtn);
     expect(screen.queryByTestId('edge-editor-sanitized-pill')).toBeNull();
 
-    // 5. Test raw mode text selection with bold/italic/code
+    // 5. Test raw mode text selection with bold/italic/code/mermaid
     rawTextarea.setSelectionRange(0, 6);
     const boldBtn = screen.getByTestId('edge-editor-tool-bold');
     fireEvent.click(boldBtn);
     expect(rawTextarea.value).toContain('**');
+
+    // Mermaid button in raw mode with start > 0 and no leading newline
+    fireEvent.change(rawTextarea, { target: { value: 'Leading text' } });
+    rawTextarea.setSelectionRange(12, 12);
+    const mermaidBtn = screen.getByTestId('edge-editor-tool-mermaid');
+    fireEvent.click(mermaidBtn);
+    expect(rawTextarea.value).toContain('\n```mermaid\n');
 
     uploadSpy.mockRestore();
   });

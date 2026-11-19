@@ -110,6 +110,26 @@ describe('AppShell', () => {
       });
     }
 
+    // Select Toggle sidebar from Command palette on mobile (innerWidth = 1024)
+    act(() => {
+      searchBtn.click();
+    });
+    const toggleSidebarOption = screen.getByText('Toggle sidebar');
+    act(() => {
+      toggleSidebarOption.click();
+    });
+    expect(screen.getByRole('dialog', { name: 'Sidebar navigation' })).toBeDefined();
+
+    // Test Toggle sidebar on desktop (innerWidth = 1440)
+    vi.stubGlobal('innerWidth', 1440);
+    act(() => {
+      searchBtn.click();
+    });
+    const toggleSidebarDesktop = screen.getByText('Toggle sidebar');
+    act(() => {
+      toggleSidebarDesktop.click();
+    });
+
     vi.unstubAllGlobals();
   });
 
@@ -196,5 +216,84 @@ describe('AppShell', () => {
         new CustomEvent('kb:open-manage-access', { detail: {} }),
       );
     });
+  });
+
+  it('toggles sidebar collapse state via [ shortcut and header buttons', () => {
+    localStorage.removeItem('kb.sidebar');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <AppShell projectKey="KAN" projectName="kanban" />
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const shell = document.querySelector('.kb-app-shell');
+    expect(shell).not.toBeNull();
+    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(false);
+
+    // Toggle collapse via [ shortcut
+    act(() => {
+      fireEvent.keyDown(window, { key: '[' });
+    });
+    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(true);
+    expect(localStorage.getItem('kb.sidebar')).toBe('collapsed');
+
+    // Toggle expand via [ shortcut
+    act(() => {
+      fireEvent.keyDown(window, { key: '[' });
+    });
+    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(false);
+    expect(localStorage.getItem('kb.sidebar')).toBe('open');
+
+    // Click collapse button in sidebar header
+    const collapseBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
+    act(() => {
+      collapseBtn.click();
+    });
+    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(true);
+
+    // Click expand button in topbar
+    const expandBtn = screen.getByRole('button', { name: 'Expand navigation sidebar' });
+    act(() => {
+      expandBtn.click();
+    });
+    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(false);
+
+    // Shortcuts modal via '?' and 'kb:open-shortcuts'
+    act(() => {
+      fireEvent.keyDown(window, { key: '?' });
+    });
+    expect(screen.getByRole('dialog', { name: /Keyboard Shortcuts/i })).toBeDefined();
+
+    // Close shortcuts modal via Escape
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' });
+    });
+
+    // Open via kb:open-shortcuts event
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-shortcuts'));
+    });
+    expect(screen.getByRole('dialog', { name: /Keyboard Shortcuts/i })).toBeDefined();
+
+    // Close via close button
+    const closeShortcutsBtn = screen.getByTestId('shortcuts-modal-close-btn');
+    act(() => {
+      closeShortcutsBtn.click();
+    });
+    expect(screen.queryByRole('dialog', { name: /Keyboard Shortcuts/i })).toBeNull();
+
+    // 'c' shortcut triggers kb:create-issue
+    const createIssueSpy = vi.fn();
+    window.addEventListener('kb:create-issue', createIssueSpy);
+    act(() => {
+      fireEvent.keyDown(window, { key: 'c' });
+    });
+    expect(createIssueSpy).toHaveBeenCalled();
+    window.removeEventListener('kb:create-issue', createIssueSpy);
   });
 });

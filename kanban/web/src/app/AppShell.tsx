@@ -12,7 +12,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { Sidebar } from './Sidebar';
+import { Sidebar, SIDEBAR_STORAGE_KEY, sanitizeSidebarState } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
 import { ShortcutsCheatSheetModal } from './ShortcutsCheatSheetModal';
@@ -147,9 +147,47 @@ export function AppShell({
   }, [activeProjectKey, navigate]);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+      return sanitizeSidebarState(stored) === 'collapsed';
+    /* v8 ignore next 3 */
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapse = useCallback(() => {
+    setIsSidebarCollapsed((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stateStr = isSidebarCollapsed ? 'collapsed' : 'open';
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, stateStr);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('kb:sidebar-changed', {
+            detail: { collapsed: stateStr },
+          }),
+        );
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [isSidebarCollapsed]);
+
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const handleToggleSidebar = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 1279) {
+      setMobileSidebarOpen((prev) => !prev);
+    } else {
+      toggleSidebarCollapse();
+    }
+  }, [toggleSidebarCollapse]);
 
   // Register global shortcuts: Mod+K, [, C, ?
   useEffect(() => {
@@ -166,7 +204,7 @@ export function AppShell({
       '[',
       (e) => {
         e.preventDefault();
-        setMobileSidebarOpen((prev) => !prev);
+        toggleSidebarCollapse();
       },
       { allowInInputs: false },
     );
@@ -203,7 +241,7 @@ export function AppShell({
       unregisterCheat();
       window.removeEventListener('kb:open-shortcuts', handleOpenShortcuts);
     };
-  }, []);
+  }, [toggleSidebarCollapse]);
 
   const toggleMobileSidebar = useCallback(() => {
     setMobileSidebarOpen((prev) => !prev);
@@ -219,7 +257,7 @@ export function AppShell({
 
   return (
     <ShellPanelsProvider>
-      <div className="kb-app-shell">
+      <div className={`kb-app-shell ${isSidebarCollapsed ? 'kb-app-shell--sidebar-collapsed' : ''}`}>
         {/* Skip to Content Link (A11y) */}
         <a
           href="#main"
@@ -233,6 +271,8 @@ export function AppShell({
         <Sidebar
           isOpen={mobileSidebarOpen}
           onClose={() => { setMobileSidebarOpen(false); }}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
           projectKey={isInsideProject ? activeProjectKey : undefined}
           projectName={isInsideProject ? projectName : undefined}
           modulesEnabled={modulesEnabled}
@@ -243,7 +283,9 @@ export function AppShell({
         {/* 52px Uncluttered Topbar Header */}
         <Topbar
           isSidebarOpen={mobileSidebarOpen}
+          isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={toggleMobileSidebar}
+          onToggleCollapse={toggleSidebarCollapse}
           onOpenPalette={() => { setPaletteOpen(true); }}
           workspaceName={isInsideProject ? 'kanban' : undefined}
           projectKey={isInsideProject ? activeProjectKey : undefined}
@@ -284,7 +326,7 @@ export function AppShell({
         <CommandPalette
           isOpen={paletteOpen}
           onClose={() => { setPaletteOpen(false); }}
-          onToggleSidebar={toggleMobileSidebar}
+          onToggleSidebar={handleToggleSidebar}
           projectKey={projectKey}
           cachedIssues={cachedIssues}
           user={currentUser}
