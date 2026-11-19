@@ -7,6 +7,10 @@ describe('qk', () => {
   it('builds the exact key tuples', () => {
     expect(qk.me()).toEqual(['me']);
     expect(qk.systemStatus()).toEqual(['system', 'status']);
+    expect(qk.projects()).toEqual(['projects']);
+    expect(qk.savedViews('KAN')).toEqual(['views', 'KAN']);
+    expect(qk.notifications()).toEqual(['notifications', false]);
+    expect(qk.notifications(true)).toEqual(['notifications', true]);
     expect(qk.project('KAN')).toEqual(['project', 'KAN']);
     expect(qk.issues('KAN', { state: 'open' })).toEqual(['issues', 'KAN', { state: 'open' }]);
     expect(qk.issue('KAN-1')).toEqual(['issue', 'KAN-1']);

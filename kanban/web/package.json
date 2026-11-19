@@ -10,6 +10,7 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint . --max-warnings 0",
     "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "gen:api": "node scripts/gen-api.mjs",
     "check:api": "node scripts/gen-api.mjs && git diff --exit-code src/api/schema.gen.ts openapi.json"

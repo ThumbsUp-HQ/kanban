@@ -1,0 +1,189 @@
+.kb-save-view-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-bg, rgba(0, 0, 0, 0.45));
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: var(--space-4, 16px);
+}
+
+.kb-save-view-dialog {
+  background: var(--bg-surface, #ffffff);
+  color: var(--fg-primary, #0f172a);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04));
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  animation: kb-save-view-pop 120ms ease-out;
+}
+
+@keyframes kb-save-view-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.kb-save-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+}
+
+.kb-save-view-heading {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--fg-primary, #0f172a);
+}
+
+.kb-save-view-close-btn {
+  background: none;
+  border: none;
+  color: var(--fg-muted, #64748b);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.kb-save-view-body {
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+.kb-save-view-error {
+  background: var(--danger-bg, #fef2f2);
+  color: var(--danger-fg, #b91c1c);
+  border: 1px solid var(--border-danger, #fecaca);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: var(--radius-md, 6px);
+  font-size: 0.8125rem;
+}
+
+.kb-save-view-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 6px);
+}
+
+.kb-save-view-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg-primary, #1e293b);
+}
+
+.kb-required-star {
+  color: var(--danger-fg, #ef4444);
+}
+
+.kb-save-view-input,
+.kb-save-view-textarea {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: 0.875rem;
+  color: var(--fg-primary, #0f172a);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.kb-save-view-input:focus,
+.kb-save-view-textarea:focus {
+  border-color: var(--accent-primary, #2563eb);
+}
+
+.kb-save-view-preview-box {
+  background: var(--bg-hover, #f8fafc);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-3, 12px);
+}
+
+.kb-save-view-preview-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--fg-muted, #64748b);
+  display: block;
+  margin-bottom: var(--space-2, 8px);
+}
+
+.kb-save-view-preview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 6px);
+}
+
+.kb-save-view-chip {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-secondary, #334155);
+}
+
+.kb-save-view-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: 0.875rem;
+  color: var(--fg-primary, #1e293b);
+  cursor: pointer;
+}
+
+.kb-save-view-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2, 8px);
+  padding: var(--space-3, 12px) var(--space-5, 20px);
+  border-top: 1px solid var(--border-subtle, #e2e8f0);
+  background: var(--bg-hover, #f8fafc);
+  border-bottom-left-radius: var(--radius-lg, 12px);
+  border-bottom-right-radius: var(--radius-lg, 12px);
+}
+
+.kb-save-view-cancel-btn {
+  background: none;
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-1, 6px) var(--space-3, 12px);
+  font-size: 0.875rem;
+  color: var(--fg-secondary, #475569);
+  cursor: pointer;
+}
+
+.kb-save-view-submit-btn {
+  background: var(--accent-primary, #2563eb);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-1, 6px) var(--space-4, 16px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.kb-save-view-submit-btn:hover {
+  opacity: 0.9;
+}

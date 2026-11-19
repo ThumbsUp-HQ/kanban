@@ -36,6 +36,13 @@ describe('shortcuts', () => {
     divAttr.setAttribute('contenteditable', 'true');
     expect(isEditableElement(divAttr)).toBe(true);
 
+    const pmContainer = document.createElement('div');
+    pmContainer.className = 'ProseMirror';
+    const p = document.createElement('p');
+    pmContainer.appendChild(p);
+    document.body.appendChild(pmContainer);
+    expect(isEditableElement(p)).toBe(true);
+
     const notAnEl = {} as Element;
     expect(isEditableElement(notAnEl)).toBe(false);
   });

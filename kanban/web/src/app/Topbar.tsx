@@ -16,6 +16,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { Breadcrumb } from './Breadcrumb';
 import { HeaderPills, type AccessManifestData } from './HeaderPills';
 import { LayoutSwitcher } from './LayoutSwitcher';
+import { NotificationsBell } from '../features/notifications/NotificationsBell';
 import { useTheme, type Theme } from '../theme/ThemeProvider';
 import { type SystemStatus } from './useSystemStatus';
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
@@ -250,6 +251,8 @@ export function Topbar({
         />
 
         {isIssuesRoute && <LayoutSwitcher />}
+
+        <NotificationsBell />
 
         <div ref={avatarRef} className="kb-avatar-wrapper">
           <button

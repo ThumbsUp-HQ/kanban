@@ -202,6 +202,8 @@ describe('ActivitySection', () => {
       await screen.findByRole('tab', { name: 'All' });
       await waitFor(() => {
         expect(scrollIntoViewMock).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(scrollIntoViewMock).toHaveBeenCalled();
       }, { timeout: 4000 });
     });
 

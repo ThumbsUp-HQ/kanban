@@ -5,6 +5,9 @@
 export const qk = {
   me: () => ['me'] as const,
   systemStatus: () => ['system', 'status'] as const,
+  projects: () => ['projects'] as const,
+  savedViews: (projectKey: string) => ['views', projectKey] as const,
+  notifications: (unreadOnly?: boolean) => ['notifications', Boolean(unreadOnly)] as const,
   project: (key: string) => ['project', key] as const,
   issues: (projectKey: string, filters: Readonly<Record<string, unknown>>) =>
     ['issues', projectKey, filters] as const,

@@ -707,6 +707,10 @@
   background: var(--warn-fg, #dc2626);
 }
 
+.timeline-bar--single-day {
+  min-width: 120px;
+}
+
 .timeline-bar-label {
   display: flex;
   align-items: center;
@@ -778,7 +782,7 @@
   top: 0;
   left: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
 }
 
 .gantt-arrow {
@@ -790,6 +794,14 @@
 .gantt-arrow--conflict {
   stroke: var(--warn-fg, #dc2626);
   stroke-dasharray: 4 4;
+}
+
+.timeline-arrowhead-path {
+  fill: var(--accent-primary);
+}
+
+.timeline-arrowhead-path--conflict {
+  fill: var(--warn-fg, #dc2626);
 }
 
 .calendar-error-banner,

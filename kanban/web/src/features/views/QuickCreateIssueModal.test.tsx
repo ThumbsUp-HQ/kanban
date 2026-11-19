@@ -510,4 +510,5 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
       }),
     );
   });
+  });
 });

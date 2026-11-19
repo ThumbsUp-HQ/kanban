@@ -492,4 +492,52 @@ describe('ListView', () => {
     expect(screen.getByText('Module mod-fa')).toBeDefined();
     expect(screen.getByText('No Module')).toBeDefined();
   });
+
+  it('groups by cycle and module with real summaries and fallback labels', () => {
+    const firstIssue = FIXTURE_12_ISSUES[0];
+    const secondIssue = FIXTURE_12_ISSUES[1];
+    expect(firstIssue).toBeDefined();
+    expect(secondIssue).toBeDefined();
+    if (!firstIssue || !secondIssue) {
+      throw new Error('Missing fixtures');
+    }
+
+    const issuesWithCycleAndMod: IssueItem[] = [
+      {
+        ...firstIssue,
+        id: 'iss-c1',
+        key: 'KAN-C1',
+        cycle_id: 'cycle-123456',
+        cycle: { id: 'cycle-123456', name: 'Sprint Alpha' },
+        modules: [{ id: 'mod-1', name: 'Core Engine' }],
+      },
+      {
+        ...secondIssue,
+        id: 'iss-c2',
+        key: 'KAN-C2',
+        cycle_id: 'cycle-654321',
+        cycle: null,
+        module_ids: ['mod-fallback-123'],
+      },
+    ];
+
+    render(
+      <ListView issues={issuesWithCycleAndMod} projectKey="KAN" modulesEnabled={true} />
+    );
+
+    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
+    fireEvent.click(filterBtn);
+    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
+    const groupSelect = within(popover).getByLabelText(/Group By/i);
+
+    // Group by Cycle
+    fireEvent.change(groupSelect, { target: { value: 'cycle' } });
+    expect(screen.getByText('Sprint Alpha')).toBeDefined();
+    expect(screen.getByText('Cycle cycle-')).toBeDefined();
+
+    // Group by Module
+    fireEvent.change(groupSelect, { target: { value: 'module' } });
+    expect(screen.getByText('Core Engine')).toBeDefined();
+    expect(screen.getByText('Module mod-fa')).toBeDefined();
+  });
 });

@@ -151,6 +151,7 @@ describe('PropertiesRail', () => {
     vi.mocked(railApi.fetchProjectLabels).mockRejectedValueOnce(new Error('Labels error'));
     vi.mocked(railApi.fetchProjectCycles).mockRejectedValueOnce(new Error('Cycles error'));
     render(<PropertiesRail issue={mockIssue} />);
+    render(<PropertiesRail issue={{ ...mockIssue, project_key: '' }} />);
 
     await waitFor(() => {
       expect(railApi.fetchProjectMetadata).toHaveBeenCalledWith('KAN');

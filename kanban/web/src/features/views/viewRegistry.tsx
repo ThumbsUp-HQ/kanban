@@ -10,6 +10,7 @@ import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
 import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
 import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
+import { SaveViewModal } from './SaveViewModal';
 import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
 import { useIssueKeyboardMap } from './useIssueKeyboardMap';
 import { announce } from '../../realtime';
@@ -34,6 +35,7 @@ export {
   SwimlaneBoardGrid,
   BulkActionBar,
   QuickCreateIssueModal,
+  SaveViewModal,
   QuickFieldPopover,
   useIssueKeyboardMap,
 };
@@ -92,6 +94,7 @@ export interface ViewComponentProps {
   isLoading?: boolean | undefined;
   focusedKey?: string | null | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
+  capabilities?: string[] | undefined;
 }
 
 export type ViewComponent = ComponentType<ViewComponentProps>;
@@ -280,6 +283,7 @@ export function IssuesWorkspaceRoute({
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const handleOpenCreateModal = useCallback(() => {
@@ -488,7 +492,7 @@ export function IssuesWorkspaceRoute({
         })
       );
     },
-    isPopoverOrModalOpen: isCreateModalOpen || popoverState.isOpen,
+    isPopoverOrModalOpen: isCreateModalOpen || isSaveViewModalOpen || popoverState.isOpen,
   });
 
   const handleToggleSelect = (key: string, selected: boolean) => {
@@ -719,6 +723,7 @@ export function IssuesWorkspaceRoute({
         onToggleFilterOpen={setIsFilterOpen}
         projectKey={projectKey}
         issues={issues}
+        onSaveView={() => { setIsSaveViewModalOpen(true); }}
       />
 
       {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
@@ -779,6 +784,7 @@ export function IssuesWorkspaceRoute({
           onOpenPeek={handleOpenPeek}
           onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
           focusedKey={focusedKey}
+          capabilities={effectiveCaps}
         />
       )}
 
@@ -869,6 +875,20 @@ export function IssuesWorkspaceRoute({
         onSelect={handleFieldSelect}
         modulesEnabled={modulesEnabled}
         states={boardStates}
+      />
+
+      {/* 6. Save View Modal */}
+      <SaveViewModal
+        isOpen={isSaveViewModalOpen}
+        onClose={() => { setIsSaveViewModalOpen(false); }}
+        projectKey={projectKey}
+        layout={layout}
+        groupBy={groupBy}
+        subGroupBy={subGroupBy}
+        activeFilters={activeFilters}
+        onSaved={(_savedId) => {
+          setIsSaveViewModalOpen(false);
+        }}
       />
     </div>
   </QueryClientProvider>

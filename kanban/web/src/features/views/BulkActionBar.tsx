@@ -90,7 +90,7 @@ export function BulkActionBar({
           type="button"
           className="bulk-btn"
           data-action="state"
-          onClick={(e) => onBatchUpdateState?.(e.shiftKey ? 'todo' : 'done')}
+          onClick={() => onBatchUpdateState?.(selectedIssues.every((i) => i.state.group === 'completed') ? 'todo' : 'done')}
         >
           State
         </button>
@@ -99,7 +99,7 @@ export function BulkActionBar({
           type="button"
           className="bulk-btn"
           data-action="priority"
-          onClick={(e) => onBatchUpdatePriority?.(e.shiftKey ? 'medium' : 'urgent')}
+          onClick={() => onBatchUpdatePriority?.(selectedIssues.some((i) => i.priority.slug === 'urgent') ? 'medium' : 'urgent')}
         >
           Priority
         </button>

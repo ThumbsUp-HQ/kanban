@@ -96,7 +96,13 @@ export function useIssueKeyboardMap({
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
-          target.isContentEditable)
+          target.isContentEditable ||
+          (typeof target.closest === 'function' &&
+            Boolean(
+              target.closest(
+                'input, textarea, select, [contenteditable="true"], .ProseMirror',
+              ),
+            )))
       ) {
         return;
       }
@@ -143,6 +149,15 @@ export function useIssueKeyboardMap({
       if (key === '/') {
         e.preventDefault();
         onOpenFilter?.();
+        return;
+      }
+
+      // Shortcut: '?' -> open shortcuts cheat sheet
+      if (key === '?' || (e.shiftKey && key === '/')) {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('kb:open-shortcuts', { bubbles: true }),
+        );
         return;
       }
 

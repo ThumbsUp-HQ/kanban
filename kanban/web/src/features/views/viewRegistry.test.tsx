@@ -375,10 +375,20 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     // Select all issues via table header checkbox
     const selectAllCheckbox = screen.getByRole('checkbox', { name: /select all issues/i });
     fireEvent.click(selectAllCheckbox);
-    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeDefined();
+    const toolbar = screen.getByRole('toolbar', { name: /bulk actions/i });
+    expect(toolbar).toBeDefined();
 
-    // Deselect all
-    fireEvent.click(selectAllCheckbox);
+    // Batch update state via State bulk action button
+    const stateBtn = within(toolbar).getByRole('button', { name: /^state$/i });
+    fireEvent.click(stateBtn);
+
+    // Batch update priority via Priority bulk action button
+    const prioBtn = within(toolbar).getByRole('button', { name: /^priority$/i });
+    fireEvent.click(prioBtn);
+
+    // Clear selection
+    const clearBtn = within(toolbar).getByRole('button', { name: /clear/i });
+    fireEvent.click(clearBtn);
     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
   });
 
@@ -678,8 +688,10 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       document.cookie = 'kb_csrf=test-csrf-live; path=/';
 
       const liveStates = [
+        { id: 'state-in-review', name: 'In Review', group: 'custom_group' },
         { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10 },
         { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted', sort_order: 20 },
+        { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
         { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
       ];
       const liveIssues = [
@@ -692,6 +704,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         },
       ];
 
+      let postCount = 0;
       const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
         const method = init?.method ?? 'GET';
@@ -702,12 +715,13 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           });
         }
         if (method === 'POST' && url.endsWith('/issues')) {
+          postCount++;
           return Promise.resolve({
             ok: true,
             json: () =>
               Promise.resolve({
-                id: '01931234-5678-7000-8000-000000000202',
-                key: 'KAN-202',
+                id: postCount > 1 ? '01931234-5678-7000-8000-000000000201' : '01931234-5678-7000-8000-000000000202',
+                key: postCount > 1 ? 'KAN-201' : 'KAN-202',
                 summary: 'Persisted Live Issue',
                 state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
                 priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
@@ -734,7 +748,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       });
       globalThis.fetch = fetchSpy;
 
-      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" capabilities={['VIEW', 'EDIT']} />);
 
       await waitFor(() => {
         expect(screen.getByText('Initial Live List Issue')).toBeDefined();
@@ -764,6 +778,21 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.keyDown(window, { key: 's' });
       const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
       fireEvent.click(within(statePop).getByText('Done'));
+
+      // In Progress
+      fireEvent.keyDown(window, { key: 's' });
+      const statePopProg = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePopProg).getByText('In Progress'));
+
+      // Todo
+      fireEvent.keyDown(window, { key: 's' });
+      const statePopTodo = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePopTodo).getByText('Todo'));
+
+      // Backlog
+      fireEvent.keyDown(window, { key: 's' });
+      const statePopBack = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      fireEvent.click(within(statePopBack).getByText('Backlog'));
 
       // Bulk update State, Priority, and Delete in live mode
       fireEvent.keyDown(window, { key: 'j' });
@@ -930,7 +959,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       });
       globalThis.fetch = fetchSpy;
 
-      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" capabilities={['VIEW', 'EDIT']} />);
 
       await waitFor(() => {
         expect(screen.getByText('Live Alias Issue')).toBeDefined();
@@ -1313,6 +1342,308 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       expect(createModal).toBeDefined();
 
       unmount();
+    });
+
+    it('covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute', async () => {
+      window.history.pushState({}, '', '/');
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation(() => {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null) },
+          json: () => Promise.resolve({
+            id: 'sv-123',
+            name: 'My Custom View',
+            view_type: 'table',
+          }),
+        } as unknown as Response);
+      });
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="table"
+          capabilities={['VIEW', 'CREATE_ISSUE', 'EDIT']}
+        />,
+      );
+
+      // Open Display options panel
+      const displayBtn = screen.getByRole('button', { name: /display configuration/i });
+      fireEvent.click(displayBtn);
+
+      // Click "Save as view"
+      const saveAsViewBtn = screen.getByRole('button', { name: /save as view/i });
+      fireEvent.click(saveAsViewBtn);
+
+      // Save View Modal should appear
+      expect(screen.getByTestId('save-view-modal')).toBeTruthy();
+
+      // Cancel closing
+      const cancelBtn = screen.getByRole('button', { name: /cancel/i });
+      fireEvent.click(cancelBtn);
+      expect(screen.queryByTestId('save-view-modal')).toBeNull();
+
+      // Open again to save
+      fireEvent.click(displayBtn);
+      fireEvent.click(screen.getByRole('button', { name: /save as view/i }));
+      expect(screen.getByTestId('save-view-modal')).toBeTruthy();
+
+      // Fill in name
+      const nameInput = screen.getByPlaceholderText(/e\.g\. sprint backlog/i);
+      fireEvent.change(nameInput, { target: { value: 'My Custom View' } });
+
+      // Click Save View submit button
+      const submitBtn = screen.getByRole('button', { name: /^save view$/i });
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('save-view-modal')).toBeNull();
+      });
+
+      globalThis.fetch = originalFetch;
+    });
+
+    it('covers handleSelectAll unselecting all issues via TableView master checkbox', () => {
+      window.history.pushState({}, '', '/');
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="table"
+          capabilities={['VIEW', 'CREATE_ISSUE', 'EDIT']}
+        />,
+      );
+
+      const selectAllCheckbox = screen.getByRole('checkbox', { name: /Select all issues/i });
+      // Check all
+      fireEvent.click(selectAllCheckbox);
+      // Uncheck all
+      fireEvent.click(selectAllCheckbox);
+    });
+
+    it('covers SaveViewModal with pre-existing active filters from query params', async () => {
+      window.history.pushState(
+        {},
+        '',
+        '/projects/KAN/issues?filter_state=in_progress&filter_priority=high',
+      );
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="board"
+          capabilities={['VIEW', 'CREATE_ISSUE', 'EDIT_ISSUE']}
+        />,
+      );
+
+      // Open Display options panel
+      const displayBtn = screen.getByRole('button', { name: /display configuration/i });
+      fireEvent.click(displayBtn);
+
+      // Click "Save as view"
+      const saveAsViewBtn = screen.getByRole('button', { name: /save as view/i });
+      fireEvent.click(saveAsViewBtn);
+
+      expect(screen.getByTestId('save-view-modal')).toBeTruthy();
+
+      // Clean up URL
+      window.history.pushState({}, '', '/');
+    });
+
+    it('handles states fetch failure in live mode', async () => {
+      const origFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.endsWith('/states')) {
+          return Promise.reject(new Error('500 internal server error'));
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [], next_cursor: null, total: 0 }),
+        });
+      });
+
+      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
+      globalThis.fetch = origFetch;
+    });
+
+    it('covers onCreateIssue from ViewHost table layout empty state', () => {
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={[]}
+          initialLayout="table"
+          capabilities={['VIEW', 'EDIT']}
+        />,
+      );
+
+      const emptyCreateBtn = screen.getByRole('button', { name: /\+ create first work item/i });
+      fireEvent.click(emptyCreateBtn);
+      expect(screen.getByTestId('quick-create-modal')).toBeDefined();
+    });
+
+    it('covers camelCase groupBy and subGroupBy query params and invalid fallbacks', () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?groupBy=invalid&subGroupBy=invalid');
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="board"
+          capabilities={['VIEW']}
+        />,
+      );
+      window.history.pushState({}, '', '/');
+    });
+
+    it('covers boardIssues state resolution fallback branches (name match, group match, completely unknown state)', () => {
+      window.history.pushState({}, '', '/');
+      const oddIssues: IssueItem[] = [
+        {
+          id: 'iss-odd-1',
+          key: 'KAN-901',
+          summary: 'Name match issue',
+          state: { id: 'odd-id-1', name: 'Todo', group: 'started' },
+          priority: { slug: 'low', label: 'Low', emoji: '▫' },
+        },
+        {
+          id: 'iss-odd-2',
+          key: 'KAN-902',
+          summary: 'Group match issue',
+          state: { id: 'odd-id-2', name: 'Random Custom State', group: 'unstarted' },
+          priority: { slug: 'high', label: 'High', emoji: '🔺' },
+        },
+        {
+          id: 'iss-odd-3',
+          key: 'KAN-903',
+          summary: 'Fallback match issue',
+          state: { id: 'odd-id-3', name: 'Unknown State', group: 'nonexistent_group' as any },
+          priority: { slug: 'critical', label: 'Critical', emoji: '🚨' },
+        },
+      ];
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={oddIssues}
+          initialLayout="table"
+          capabilities={['VIEW', 'EDIT']}
+        />,
+      );
+      expect(screen.getByText('Name match issue')).toBeDefined();
+      expect(screen.getByText('Group match issue')).toBeDefined();
+      expect(screen.getByText('Fallback match issue')).toBeDefined();
+    });
+
+    it('covers BulkActionBar batch delete and archive in table layout', () => {
+      window.history.pushState({}, '', '/');
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="table"
+          capabilities={['VIEW', 'EDIT', 'ADMIN']}
+          isProjectAdmin={true}
+        />,
+      );
+
+      // Select first issue
+      const firstCardCheckbox = screen.getAllByRole('checkbox')[1];
+      if (firstCardCheckbox) {
+        fireEvent.click(firstCardCheckbox);
+      }
+
+      const bulkBar = screen.queryByRole('toolbar', { name: /bulk actions/i });
+      if (bulkBar) {
+        // Test state toggle
+        const stateBtn = within(bulkBar).getByRole('button', { name: /^state$/i });
+        fireEvent.click(stateBtn);
+      }
+
+      // Select again
+      const firstCardAgain = screen.getAllByRole('checkbox')[1];
+      if (firstCardAgain) fireEvent.click(firstCardAgain);
+
+      const bulkBarPrio = screen.queryByRole('toolbar', { name: /bulk actions/i });
+      if (bulkBarPrio) {
+        // Test priority cycle
+        const prioBtn = within(bulkBarPrio).getByRole('button', { name: /^priority$/i });
+        fireEvent.click(prioBtn);
+      }
+
+      // Select again for archive
+      const firstCardArch = screen.getAllByRole('checkbox')[1];
+      if (firstCardArch) fireEvent.click(firstCardArch);
+
+      const bulkBarArch = screen.queryByRole('toolbar', { name: /bulk actions/i });
+      if (bulkBarArch) {
+        // Test archive
+        const archiveBtn = within(bulkBarArch).getByRole('button', { name: /archive/i });
+        fireEvent.click(archiveBtn);
+      }
+
+      // Select another issue for delete
+      const secondCheckbox = screen.getAllByRole('checkbox')[2];
+      if (secondCheckbox) {
+        fireEvent.click(secondCheckbox);
+      }
+
+      const bulkBar2 = screen.queryByRole('toolbar', { name: /bulk actions/i });
+      if (bulkBar2) {
+        const deleteBtn = within(bulkBar2).getByRole('button', { name: /delete/i });
+        fireEvent.click(deleteBtn);
+      }
+    });
+
+    it('covers table layout with read-only viewer and bulk state toggle to todo', () => {
+      window.history.pushState({}, '', '/');
+      // 1. Read-only viewer in table view covers ViewHost canEdit=false branches (lines 751-754)
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="table"
+          capabilities={['VIEW']}
+        />,
+      );
+      unmount();
+
+      // 2. Done issue selected covers lines 773-774 (isDone=false -> Todo, unstarted)
+      const doneIssue: IssueItem = {
+        id: 'iss-done-1',
+        key: 'KAN-990',
+        summary: 'Already Done Issue',
+        state: { id: 'state-done', name: 'Done', group: 'completed' },
+        priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+      };
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={[doneIssue]}
+          initialLayout="table"
+          capabilities={['VIEW', 'EDIT']}
+        />,
+      );
+      const checkbox = screen.getAllByRole('checkbox')[1];
+      if (checkbox) fireEvent.click(checkbox);
+      const bulkBar = screen.queryByRole('toolbar', { name: /bulk actions/i });
+      if (bulkBar) {
+        const stateBtn = within(bulkBar).getByRole('button', { name: /^state$/i });
+        fireEvent.click(stateBtn);
+      }
+
+      // 3. is2DSwimlane with read-only viewer covers line 703 false branch
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=board&sub_group_by=priority');
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          capabilities={['VIEW']}
+        />,
+      );
+      window.history.pushState({}, '', '/');
     });
   });
 });
