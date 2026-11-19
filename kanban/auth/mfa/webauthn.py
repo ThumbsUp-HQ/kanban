@@ -24,6 +24,7 @@ from webauthn import (
 from webauthn.helpers.cose import COSEAlgorithmIdentifier
 from webauthn.helpers.structs import (
     AttestationConveyancePreference,
+    AuthenticatorAttachment,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
     ResidentKeyRequirement,
@@ -187,7 +188,7 @@ class WebauthnService:
         self.rp_name = rp_name
         self.expected_origin = expected_origin.rstrip("/")
 
-    async def registration_options(
+    async def registration_options(  # noqa: PLR0913
         self,
         session: AsyncSession,
         *,
@@ -195,6 +196,7 @@ class WebauthnService:
         principal_id: uuid.UUID,
         username: str,
         display_name: str | None = None,
+        authenticator_attachment: AuthenticatorAttachment | str | None = None,
     ) -> dict[str, Any]:
         """Generate PublicKeyCredentialCreationOptions and store a single-use challenge."""
         creds_res = await session.execute(
@@ -221,6 +223,13 @@ class WebauthnService:
             },
         )
 
+        auth_attachment: AuthenticatorAttachment | None = None
+        if authenticator_attachment is not None:
+            if isinstance(authenticator_attachment, AuthenticatorAttachment):
+                auth_attachment = authenticator_attachment
+            else:
+                auth_attachment = AuthenticatorAttachment(str(authenticator_attachment))
+
         options = generate_registration_options(
             rp_id=self.rp_id,
             rp_name=self.rp_name,
@@ -231,7 +240,8 @@ class WebauthnService:
             timeout=300000,
             attestation=AttestationConveyancePreference.NONE,
             authenticator_selection=AuthenticatorSelectionCriteria(
-                user_verification=UserVerificationRequirement.REQUIRED,
+                authenticator_attachment=auth_attachment,
+                user_verification=UserVerificationRequirement.PREFERRED,
                 resident_key=ResidentKeyRequirement.PREFERRED,
             ),
             exclude_credentials=existing_creds or None,
@@ -291,7 +301,7 @@ class WebauthnService:
                 expected_challenge=challenge_bytes,
                 expected_rp_id=self.rp_id,
                 expected_origin=self.expected_origin,
-                require_user_verification=True,
+                require_user_verification=False,
                 supported_pub_key_algs=[
                     COSEAlgorithmIdentifier.ECDSA_SHA_256,
                     COSEAlgorithmIdentifier.EDDSA,
@@ -409,7 +419,7 @@ class WebauthnService:
             challenge=challenge_bytes,
             timeout=300000,
             allow_credentials=allowed_creds or None,
-            user_verification=UserVerificationRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.PREFERRED,
         )
 
         return json.loads(options_to_json(options))  # type: ignore[no-any-return]
@@ -483,7 +493,7 @@ class WebauthnService:
                 expected_origin=self.expected_origin,
                 credential_public_key=cred_row["public_key"],
                 credential_current_sign_count=0,
-                require_user_verification=True,
+                require_user_verification=False,
             )
         except Exception as exc:  # noqa: BLE001
             logger.info(

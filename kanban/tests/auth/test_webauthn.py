@@ -465,33 +465,18 @@ async def test_case_4_security_uv_missing(
                 "/api/v1/auth/webauthn/register/options", headers={CSRF_HEADER_NAME: csrf}
             )
         ).json()
-        # Create credential with UV=False
+        # Hardware key with UV=False, UP=True succeeds (KB-P3-AUDIT-18)
         no_uv_reg_cred = auth.create_credential(reg_opts, origin=ORIGIN, uv=False, up=True)
         reg_res = await client.post(
             "/api/v1/auth/webauthn/register/verify",
             headers={CSRF_HEADER_NAME: csrf},
             json={"credential": no_uv_reg_cred},
         )
-        assert reg_res.status_code == 401
-        assert reg_res.json()["code"] == "MFA_INVALID"
+        assert reg_res.status_code == 200
+        _sync_cookies(client, reg_res)
+        csrf = reg_res.json()["csrf_token"]
 
-        # Now register with UV=True
-        reg_opts_2 = (
-            await client.post(
-                "/api/v1/auth/webauthn/register/options", headers={CSRF_HEADER_NAME: csrf}
-            )
-        ).json()
-        valid_reg_cred = auth.create_credential(reg_opts_2, origin=ORIGIN, uv=True, up=True)
-        reg_ok = await client.post(
-            "/api/v1/auth/webauthn/register/verify",
-            headers={CSRF_HEADER_NAME: csrf},
-            json={"credential": valid_reg_cred},
-        )
-        assert reg_ok.status_code == 200
-        _sync_cookies(client, reg_ok)
-        csrf = reg_ok.json()["csrf_token"]
-
-        # Attempt assertion with UV=False
+        # Assertion with UV=False, UP=True succeeds
         auth_opts = (
             await client.post(
                 "/api/v1/auth/webauthn/authenticate/options", headers={CSRF_HEADER_NAME: csrf}
@@ -503,8 +488,24 @@ async def test_case_4_security_uv_missing(
             headers={CSRF_HEADER_NAME: csrf},
             json={"credential": no_uv_auth},
         )
-        assert auth_res.status_code == 401
-        assert auth_res.json()["code"] == "MFA_INVALID"
+        assert auth_res.status_code == 200
+        _sync_cookies(client, auth_res)
+        csrf = auth_res.json()["csrf_token"]
+
+        # Attempt registration with UP=False (user presence missing) -> 401 MFA_INVALID
+        reg_opts_no_up = (
+            await client.post(
+                "/api/v1/auth/webauthn/register/options", headers={CSRF_HEADER_NAME: csrf}
+            )
+        ).json()
+        no_up_cred = auth.create_credential(reg_opts_no_up, origin=ORIGIN, uv=False, up=False)
+        reg_no_up_res = await client.post(
+            "/api/v1/auth/webauthn/register/verify",
+            headers={CSRF_HEADER_NAME: csrf},
+            json={"credential": no_up_cred},
+        )
+        assert reg_no_up_res.status_code == 401
+        assert reg_no_up_res.json()["code"] == "MFA_INVALID"
 
 
 # --- 5. Security: Challenge Replay, Expiry, and Session Mismatch ---
@@ -1319,7 +1320,7 @@ async def test_auth_webauthn_authorization_and_validation_branches(
             mfa_pending=False,
         )
 
-    # 1. Non-mfa_pending AAL1 user attempting register_options -> 403 AAL2_REQUIRED
+    # 1. Non-mfa_pending AAL1 user with 0 factors can register first factor (KB-P3-AUDIT-18)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -1329,17 +1330,7 @@ async def test_auth_webauthn_authorization_and_validation_branches(
             "/api/v1/auth/webauthn/register/options",
             headers={CSRF_HEADER_NAME: issued_aal1.csrf_token},
         )
-        assert res_opts.status_code == 403
-        assert res_opts.json()["code"] == "AAL2_REQUIRED"
-
-        # Non-mfa_pending AAL1 user attempting register_verify -> 403 AAL2_REQUIRED
-        res_ver = await client.post(
-            "/api/v1/auth/webauthn/register/verify",
-            headers={CSRF_HEADER_NAME: issued_aal1.csrf_token},
-            json={"credential": {}},
-        )
-        assert res_ver.status_code == 403
-        assert res_ver.json()["code"] == "AAL2_REQUIRED"
+        assert res_opts.status_code == 200
 
     # 2. Display name fallback for principal without local_admin_credentials
     non_local_p_id = uuid.uuid4()
@@ -1373,7 +1364,7 @@ async def test_auth_webauthn_authorization_and_validation_branches(
         assert res.status_code == 200
         assert res.json()["user"]["name"] == "OAuth User"
 
-    # 3. Enrolled principal attempting 2nd factor while mfa_pending -> 403 AAL2_REQUIRED
+    # 3. Enrolled principal attempting 2nd factor while AAL1 or mfa_pending -> 403 AAL2_REQUIRED
     # Bob enrolls 1st credential:
     auth = SoftAuthenticator()
     async with httpx.AsyncClient(
@@ -1394,6 +1385,27 @@ async def test_auth_webauthn_authorization_and_validation_branches(
             json={"credential": cred},
         )
         assert reg.status_code == 200
+
+        # Now Bob attempts to register a 2nd factor with AAL1 session -> 403 AAL2_REQUIRED
+        client.cookies.set(SESSION_COOKIE_NAME, issued_aal1.cookie_val)
+        client.cookies.set(CSRF_COOKIE_NAME, issued_aal1.csrf_token)
+        res_opts_2 = await client.post(
+            "/api/v1/auth/webauthn/register/options",
+            headers={CSRF_HEADER_NAME: issued_aal1.csrf_token},
+        )
+        assert res_opts_2.status_code == 403
+        assert res_opts_2.json()["code"] == "AAL2_REQUIRED"
+        assert res_opts_2.json().get("methods") == ["webauthn"]
+
+        # Attempt register_verify with AAL1 session -> 403 AAL2_REQUIRED
+        res_ver_2 = await client.post(
+            "/api/v1/auth/webauthn/register/verify",
+            headers={CSRF_HEADER_NAME: issued_aal1.csrf_token},
+            json={"credential": {}},
+        )
+        assert res_ver_2.status_code == 403
+        assert res_ver_2.json()["code"] == "AAL2_REQUIRED"
+        assert res_ver_2.json().get("methods") == ["webauthn"]
 
         # Now Bob creates another mfa_pending session (e.g. logging in again)
         async with factory.session(

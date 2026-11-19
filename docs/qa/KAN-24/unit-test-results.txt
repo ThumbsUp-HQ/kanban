@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan24-5cab4be9
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 37 items
+
+kanban/tests/auth/test_webauthn.py ...............                       [ 40%]
+kanban/tests/auth/test_aal2_policy.py ...                                [ 48%]
+kanban/tests/auth/test_totp.py ...........                               [ 78%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py ........     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/api/v1/auth_webauthn.py     256      4     74      3    98%   151, 155, 287-288, 681->693
+kanban/auth/mfa/policy.py          103      2     50      3    97%   97, 193->195, 232
+kanban/auth/mfa/webauthn.py        194      6     48      0    98%   368-369, 536-537, 561-562
+----------------------------------------------------------------------------
+TOTAL                              553     12    172      6    98%
+============================= 37 passed in 17.61s ==============================

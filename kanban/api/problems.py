@@ -103,6 +103,10 @@ class Problem(BaseModel):
         default=None,
         description="Fresh blast radius preview when precondition 412 BLAST_RADIUS_CHANGED fails",
     )
+    methods: list[str] | None = Field(
+        default=None,
+        description="Available MFA methods for step-up elevation",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -128,6 +132,7 @@ class ProblemException(Exception):  # noqa: N818
         extra: dict[str, Any] | None = None,
         retry_after_seconds: int | None = None,
         current_preview: dict[str, Any] | None = None,
+        methods: list[str] | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -151,6 +156,7 @@ class ProblemException(Exception):  # noqa: N818
         self.extra = extra
         self.retry_after_seconds = retry_after_seconds
         self.current_preview = current_preview
+        self.methods = methods
 
 
 def not_found() -> NoReturn:
@@ -268,6 +274,7 @@ async def problem_exception_handler(
         hidden_open_count=exc.hidden_open_count,
         retry_after_seconds=exc.retry_after_seconds,
         current_preview=exc.current_preview,
+        methods=exc.methods or extra_fields.pop("methods", None),
         **extra_fields,
     )
     response_headers = {"x-request-id": req_id}

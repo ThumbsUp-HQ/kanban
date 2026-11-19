@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import uuid  # noqa: TC003  # Required at runtime by FastAPI path parameter reflection
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, cast
 
 from fastapi import APIRouter, Depends
@@ -39,7 +40,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/webauthn", tags=["auth", "webauthn"])
 
 AAL2_ELEVATED_LEVEL: Final[int] = 2
+AAL2_MAX_AGE_SECONDS: Final[int] = 900
 MAX_NICKNAME_LENGTH: Final[int] = 64
+
+
+class WebauthnRegisterOptionsRequest(BaseModel):
+    """Payload for requesting WebAuthn registration options."""
+
+    authenticator_attachment: Literal["platform", "cross-platform"] | None = Field(
+        default=None,
+        description="Optional attachment modality hint ('platform' or 'cross-platform')",
+    )
 
 
 class WebauthnRegisterVerifyRequest(BaseModel):
@@ -125,18 +136,7 @@ def _build_elevated_response(
 
 
 async def _assert_can_register(session: AsyncSession, principal: PrincipalContext) -> bool:
-    """Verify principal has AAL2 or is eligible for first-factor enrollment on mfa_pending."""
-    if principal.aal_level >= AAL2_ELEVATED_LEVEL:
-        return False
-
-    if not principal.mfa_pending:
-        raise ProblemException(
-            code="AAL2_REQUIRED",
-            status=403,
-            title="AAL2 Required",
-            detail="Registering WebAuthn credentials requires an active AAL2 session.",
-        )
-
+    """Verify principal has AAL2 or is eligible for first-factor enrollment."""
     status_res = await session.execute(
         text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
         {"p_id": principal.principal_id},
@@ -144,14 +144,53 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
     status_row = status_res.mappings().first()
     has_totp = bool(status_row["has_active_totp"]) if status_row else False
     webauthn_count = int(status_row["webauthn_credential_count"]) if status_row else 0
-    if has_totp or webauthn_count > 0:
+    unused_recovery = int(status_row["unused_recovery_codes"]) if status_row else 0
+
+    methods: list[str] = []
+    if has_totp:
+        methods.append("totp")
+    if webauthn_count > 0:
+        methods.append("webauthn")
+    if unused_recovery > 0:
+        methods.append("recovery")
+
+    if not has_totp and webauthn_count == 0:
+        return True
+
+    if principal.aal_level < AAL2_ELEVATED_LEVEL:
         raise ProblemException(
             code="AAL2_REQUIRED",
             status=403,
             title="AAL2 Required",
             detail="Registering additional factors requires an active AAL2 session.",
+            methods=methods,
         )
-    return True
+
+    verified_at = principal.aal2_verified_at
+    if verified_at is None:
+        raise ProblemException(
+            code="AAL2_STALE",
+            status=403,
+            title="AAL2 Session Stale",
+            detail="AAL2 verification timestamp is missing or stale.",
+            methods=methods,
+        )
+
+    now = datetime.now(UTC)
+    if verified_at.tzinfo is None:
+        verified_at = verified_at.replace(tzinfo=UTC)
+    age = (now - verified_at).total_seconds()
+    if age > AAL2_MAX_AGE_SECONDS:
+        detail_msg = f"AAL2 verification is stale ({int(age)}s > {AAL2_MAX_AGE_SECONDS}s)."
+        raise ProblemException(
+            code="AAL2_STALE",
+            status=403,
+            title="AAL2 Session Stale",
+            detail=detail_msg,
+            methods=methods,
+        )
+
+    return False
 
 
 async def _parse_credential_payload(
@@ -207,6 +246,7 @@ async def _parse_credential_payload(
 async def register_options(
     request: Request,
     principal: Annotated[PrincipalContext, Depends(get_principal)],
+    body: WebauthnRegisterOptionsRequest | None = None,
 ) -> JSONResponse:
     """Generate WebAuthn registration options. Requires AAL2 or first enrollment on mfa_pending."""
     if principal.session_id is None:
@@ -234,8 +274,9 @@ async def register_options(
     async with session_factory.session(rls_ctx) as session:
         await _assert_can_register(session, principal)
 
-        # Lookup username
+        # Lookup username and display_name
         username: str | None = None
+        display_name: str | None = None
         try:
             async with session.begin_nested():
                 user_res = await session.execute(
@@ -245,18 +286,24 @@ async def register_options(
                 username = user_res.scalar_one_or_none()
         except Exception:  # noqa: BLE001
             username = None
+
+        name_res = await session.execute(
+            text("SELECT display_name FROM principals WHERE id = :p_id"),
+            {"p_id": principal.principal_id},
+        )
+        display_name = name_res.scalar_one_or_none()
         if not username:
-            name_res = await session.execute(
-                text("SELECT display_name FROM principals WHERE id = :p_id"),
-                {"p_id": principal.principal_id},
-            )
-            username = name_res.scalar_one_or_none() or str(principal.principal_id)
+            username = display_name or str(principal.principal_id)
+
+        attachment_hint = body.authenticator_attachment if body else None
 
         options = await service.registration_options(
             session,
             session_id=principal.session_id,
             principal_id=principal.principal_id,
             username=username,
+            display_name=display_name,
+            authenticator_attachment=attachment_hint,
         )
 
     return JSONResponse(content=options)
@@ -532,7 +579,11 @@ async def list_credentials(
                 "id": str(r.id),
                 "nickname": r.nickname,
                 "sign_count": r.sign_count,
+                "aaguid": str(r.aaguid) if r.aaguid else None,
                 "transports": r.transports,
+                "suspect_clone_at": (
+                    r.suspect_clone_at.isoformat() if r.suspect_clone_at else None
+                ),
                 "created_at": r.created_at.isoformat(),
                 "last_used_at": r.last_used_at.isoformat() if r.last_used_at else None,
             }
@@ -553,6 +604,8 @@ async def rename_credential(
     if session_factory is None:
         msg = "Session factory is not configured on app.state.session_factory"
         raise RuntimeError(msg)
+
+    service = _get_webauthn_service(request)
 
     rls_ctx = RLSContext(
         principal_id=principal.principal_id,
@@ -579,10 +632,25 @@ async def rename_credential(
                 detail="WebAuthn credential was not found or not owned by principal.",
             )
 
+        records = await service.list_credentials(session, principal.principal_id)
+        matched = next((r for r in records if r.id == credential_id), None)
+
     return JSONResponse(
         content={
             "id": str(credential_id),
             "nickname": body.nickname.strip(),
+            "sign_count": matched.sign_count if matched else 0,
+            "aaguid": str(matched.aaguid) if (matched and matched.aaguid) else None,
+            "transports": matched.transports if matched else [],
+            "suspect_clone_at": (
+                matched.suspect_clone_at.isoformat()
+                if (matched and matched.suspect_clone_at)
+                else None
+            ),
+            "created_at": matched.created_at.isoformat() if matched else None,
+            "last_used_at": (
+                matched.last_used_at.isoformat() if (matched and matched.last_used_at) else None
+            ),
         }
     )
 
@@ -609,15 +677,18 @@ async def delete_credential(
     )
 
     async with session_factory.session(rls_ctx) as session:
-        admin_res = await session.execute(
-            text(
-                "SELECT 1 FROM role_bindings "
-                "WHERE principal_id = :p_id "
-                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
-            ),
-            {"p_id": principal.principal_id},
-        )
-        is_admin = admin_res.scalar_one_or_none() is not None
+        is_admin = bool(getattr(principal, "is_server_admin", False))
+        if not is_admin:
+            admin_res = await session.execute(
+                text(
+                    "SELECT 1 FROM role_bindings "
+                    "WHERE principal_id = :p_id "
+                    "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN') "
+                    "LIMIT 1"
+                ),
+                {"p_id": principal.principal_id},
+            )
+            is_admin = admin_res.scalar_one_or_none() is not None
 
         await service.delete_credential(
             session,

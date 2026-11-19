@@ -25,6 +25,38 @@ __all__ = [
 ]
 
 
+async def _get_enrolled_methods(
+    request: Request,
+    principal: PrincipalContext,
+) -> list[str]:
+    """Query enrolled confirmed MFA methods for the principal."""
+    session_factory = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        return []
+    rls_ctx = RLSContext(
+        principal_id=principal.principal_id,
+        workspace_id=principal.workspace_id,
+        token_scopes=principal.token_scopes,
+        aal_level=cast("Literal[1, 2]", principal.aal_level),
+    )
+    async with session_factory.session(rls_ctx) as db_session:
+        status_res = await db_session.execute(
+            text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
+            {"p_id": principal.principal_id},
+        )
+        status_row = status_res.mappings().first()
+        if not status_row:
+            return []
+        methods: list[str] = []
+        if bool(status_row.get("has_active_totp")):
+            methods.append("totp")
+        if int(status_row.get("webauthn_credential_count", 0)) > 0:
+            methods.append("webauthn")
+        if int(status_row.get("unused_recovery_codes", 0)) > 0:
+            methods.append("recovery")
+        return methods
+
+
 class _RequireAal2:
     """Callable dependency enforcing AAL2 status and maximum age freshness."""
 
@@ -34,26 +66,30 @@ class _RequireAal2:
 
     async def __call__(
         self,
-        request: Request,  # noqa: ARG002
+        request: Request,
         principal: Annotated[PrincipalContext, Depends(get_principal)],
     ) -> PrincipalContext:
         """Verify principal has AAL2 credentials and verification is fresh."""
         if principal.aal_level < AAL2_LEVEL:
+            methods = await _get_enrolled_methods(request, principal)
             raise ProblemException(
                 code="AAL2_REQUIRED",
                 status=403,
                 title="AAL2 Authentication Required",
                 detail="This operation requires multi-factor authentication (AAL2).",
+                methods=methods,
             )
 
         if self.max_age_seconds is not None:
             verified_at = principal.aal2_verified_at
             if verified_at is None:
+                methods = await _get_enrolled_methods(request, principal)
                 raise ProblemException(
                     code="AAL2_STALE",
                     status=403,
                     title="AAL2 Session Stale",
                     detail="AAL2 verification timestamp is missing or stale.",
+                    methods=methods,
                 )
 
             now = datetime.now(UTC)
@@ -61,12 +97,14 @@ class _RequireAal2:
                 verified_at = verified_at.replace(tzinfo=UTC)
             age = (now - verified_at).total_seconds()
             if age > self.max_age_seconds:
+                methods = await _get_enrolled_methods(request, principal)
                 detail_msg = f"AAL2 verification is stale ({int(age)}s > {self.max_age_seconds}s)."
                 raise ProblemException(
                     code="AAL2_STALE",
                     status=403,
                     title="AAL2 Session Stale",
                     detail=detail_msg,
+                    methods=methods,
                 )
 
         return principal
@@ -151,11 +189,19 @@ async def require_admin_aal2(
             )
 
     if principal.aal_level < AAL2_LEVEL:
+        admin_methods: list[str] = []
+        if has_active_totp:
+            admin_methods.append("totp")
+        if has_webauthn:
+            admin_methods.append("webauthn")
+        if unused_codes > 0:
+            admin_methods.append("recovery")
         raise ProblemException(
             code="AAL2_REQUIRED",
             status=403,
             title="AAL2 Authentication Required",
             detail="Administrative routes require multi-factor authentication (AAL2).",
+            methods=admin_methods,
         )
 
     return principal
