@@ -16,6 +16,8 @@ from kanban.api.problems import ProblemException
 from kanban.attachments.raster import (
     MAX_ANIMATED_FRAMES,
     _validate_image_dimensions,
+    sanitize_and_reencode_avatar,
+    sanitize_and_reencode_avatar_sync,
     sanitize_and_reencode_raster,
     sanitize_and_reencode_raster_sync,
 )
@@ -539,3 +541,106 @@ class TestStorageAndSigningEdgeCases:
         """Verify verify_attachment_url returns False on unexpected exceptions."""
         # Non-bytes key or bad params
         assert verify_attachment_url("att", "p", 9999999999, "sig", None) is False  # type: ignore[arg-type]
+
+
+class TestAvatarSanitization:
+    """Test avatar raster hardening, downscaling, single-frame guards, and bounds."""
+
+    @pytest.mark.asyncio
+    async def test_avatar_sanitization_png_and_jpeg(self) -> None:
+        """Verify static PNG and JPEG re-encoding with EXIF stripped."""
+        # PNG
+        im_png = Image.new("RGBA", (128, 128), color=(255, 0, 0, 255))
+        bio_png = io.BytesIO()
+        im_png.save(bio_png, format="PNG")
+        proc_png = await sanitize_and_reencode_avatar(bio_png.getvalue(), "image/png")
+        assert proc_png.content_type == "image/png"
+        assert proc_png.pixel_width == 128
+        assert proc_png.pixel_height == 128
+        assert len(proc_png.clean_bytes) > 0
+
+        # JPEG with EXIF
+        jpeg_bytes, _ = _create_jpeg_with_exif_and_polyglot()
+        proc_jpeg = await sanitize_and_reencode_avatar(jpeg_bytes, "image/jpeg")
+        assert proc_jpeg.content_type == "image/jpeg"
+        assert proc_jpeg.pixel_width == 64
+        assert proc_jpeg.pixel_height == 64
+        # Verify EXIF is stripped
+        clean_im = Image.open(io.BytesIO(proc_jpeg.clean_bytes))
+        assert not clean_im.getexif()
+
+    @pytest.mark.asyncio
+    async def test_avatar_downscales_oversized_images(self) -> None:
+        """Verify images exceeding 1024x1024 are proportionally downscaled."""
+        im_large = Image.new("RGB", (2048, 1536), color="green")
+        bio = io.BytesIO()
+        im_large.save(bio, format="JPEG", quality=90)
+        proc = await sanitize_and_reencode_avatar(bio.getvalue(), "image/jpeg")
+        assert proc.pixel_width is not None
+        assert proc.pixel_width <= 1024
+        assert proc.pixel_height is not None
+        assert proc.pixel_height <= 1024
+        # Check aspect ratio preserved: 2048/1536 = 1.333 -> 1024 / 768
+        assert proc.pixel_width == 1024
+        assert proc.pixel_height == 768
+
+    @pytest.mark.asyncio
+    async def test_avatar_webp_and_palette_modes(self) -> None:
+        """Verify WebP and P-mode palette avatars sanitize cleanly."""
+        # WebP
+        im_webp = Image.new("RGBA", (200, 200), color=(0, 255, 0, 128))
+        bio_webp = io.BytesIO()
+        im_webp.save(bio_webp, format="WEBP")
+        proc_webp = await sanitize_and_reencode_avatar(bio_webp.getvalue(), "image/webp")
+        assert proc_webp.content_type == "image/webp"
+        assert proc_webp.pixel_width == 200
+
+        # P-mode PNG
+        im_p = Image.new("P", (64, 64))
+        im_p.putpalette([255, 0, 0] + [0] * 765)
+        bio_p = io.BytesIO()
+        im_p.save(bio_p, format="PNG")
+        proc_p = await sanitize_and_reencode_avatar(bio_p.getvalue(), "image/png")
+        assert proc_p.pixel_width == 64
+
+        # CMYK JPEG mode converted to RGB
+        im_cmyk = Image.new("CMYK", (100, 100), color=(0, 255, 255, 0))
+        bio_cmyk = io.BytesIO()
+        im_cmyk.save(bio_cmyk, format="JPEG")
+        proc_cmyk = await sanitize_and_reencode_avatar(bio_cmyk.getvalue(), "image/jpeg")
+        assert proc_cmyk.content_type == "image/jpeg"
+        reopened = Image.open(io.BytesIO(proc_cmyk.clean_bytes))
+        assert reopened.mode == "RGB"
+
+    @pytest.mark.asyncio
+    async def test_avatar_animated_rejected(self) -> None:
+        """Verify animated/multi-frame media is rejected for avatars."""
+        im1 = Image.new("RGBA", (64, 64), color="blue")
+        im2 = Image.new("RGBA", (64, 64), color="red")
+        bio = io.BytesIO()
+        im1.save(bio, format="WEBP", save_all=True, append_images=[im2], duration=100, loop=0)
+        with pytest.raises(ProblemException) as exc_info:
+            await sanitize_and_reencode_avatar(bio.getvalue(), "image/webp")
+        assert exc_info.value.code == "ANIMATED_AVATAR_NOT_ALLOWED"
+        assert exc_info.value.status == 422
+
+    @pytest.mark.asyncio
+    async def test_avatar_dimension_and_pixel_bounds_exceeded(self) -> None:
+        """Verify dimensions exceeding 4096 px or 16 MP raise 422."""
+        header_png = _create_synthetic_png_header(5000, 100)
+        with pytest.raises(ProblemException) as exc_info:
+            await sanitize_and_reencode_avatar(header_png, "image/png")
+        assert exc_info.value.code == "IMAGE_DIMENSIONS_EXCEEDED"
+        assert exc_info.value.status == 422
+
+    def test_avatar_unsupported_type_and_corrupt_payload(self) -> None:
+        """Verify unsupported MIME and corrupt payloads raise appropriate exceptions."""
+        with pytest.raises(ProblemException) as exc_info:
+            sanitize_and_reencode_avatar_sync(b"data", "image/gif")
+        assert exc_info.value.code == "UNSUPPORTED_MEDIA_TYPE"
+        assert exc_info.value.status == 415
+
+        with pytest.raises(ProblemException) as exc_info2:
+            sanitize_and_reencode_avatar_sync(b"not-an-image", "image/png")
+        assert exc_info2.value.code == "MIME_MISMATCH_OR_UNSUPPORTED"
+        assert exc_info2.value.status == 415

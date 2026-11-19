@@ -10,13 +10,18 @@ from __future__ import annotations
 import base64
 import dataclasses
 import io
+import json
 import uuid
 from typing import TYPE_CHECKING
 
 import pytest
+from fastapi import FastAPI
 from PIL import Image
 from sqlalchemy import text
+from starlette.requests import Request
 
+from kanban.api.deps import PrincipalContext
+from kanban.api.v1.user_settings import _resolve_auth_pepper, build_me_response
 from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
 from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
 
@@ -38,7 +43,7 @@ def _create_sample_png_bytes(width: int = 64, height: int = 64) -> bytes:
     return bio.getvalue()
 
 
-async def test_user_personal_settings_profile_and_avatar_lifecycle(
+async def test_user_personal_settings_profile_and_avatar_lifecycle(  # noqa: PLR0915
     make_user: Callable[..., Awaitable[SeededUser]],
     as_principal: Callable[..., httpx.AsyncClient],
 ) -> None:
@@ -97,27 +102,45 @@ async def test_user_personal_settings_profile_and_avatar_lifecycle(
         files={"file": ("avatar.png", png_bytes, "image/png")},
     )
     assert png_res.status_code == 200
-    expected_url = f"/api/v1/users/{user.id}/avatar"
-    assert png_res.json()["avatar_url"] == expected_url
+    expected_url_prefix = f"/api/v1/users/{user.id}/avatar"
+    avatar_url = png_res.json()["avatar_url"]
+    assert avatar_url.startswith(expected_url_prefix)
+    assert "?v=" in avatar_url
+    assert len(avatar_url.split("?v=")[1]) == 12
+    # Verify canonical UserProfileResponse fields are present and display_name is preserved
+    assert png_res.json()["display_name"] == "Alice Developer"
+    assert png_res.json()["timezone"] == "America/New_York"
+    assert "workspace_role" in png_res.json()
+    assert "workspace_capabilities" in png_res.json()
 
     # Check me returns avatar_url
     me_res3 = await client.get("/api/v1/auth/me")
-    assert me_res3.json()["avatar_url"] == expected_url
+    assert me_res3.json()["avatar_url"] == avatar_url
+    assert me_res3.json()["display_name"] == "Alice Developer"
 
-    # 6. Retrieve avatar bytes
-    avatar_get = await client.get(expected_url)
+    # 6. Retrieve avatar bytes and verify CSP sandbox, nosniff, same-origin, and ETag
+    avatar_get = await client.get(avatar_url)
     assert avatar_get.status_code == 200
     assert avatar_get.headers["content-type"] == "image/png"
-    assert "default-src 'none'" in avatar_get.headers["content-security-policy"]
+    assert avatar_get.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    assert avatar_get.headers["x-content-type-options"] == "nosniff"
+    assert avatar_get.headers["cross-origin-resource-policy"] == "same-origin"
+    assert "etag" in avatar_get.headers
     assert len(avatar_get.content) > 0
+
+    # Conditional GET with If-None-Match returns 304 Not Modified
+    etag = avatar_get.headers["etag"]
+    avatar_cached = await client.get(avatar_url, headers={"If-None-Match": etag})
+    assert avatar_cached.status_code == 304
 
     # 7. Avatar Removal: DELETE /api/v1/auth/me/avatar
     del_res = await client.delete("/api/v1/auth/me/avatar")
     assert del_res.status_code == 200
     assert del_res.json()["avatar_url"] is None
+    assert del_res.json()["display_name"] == "Alice Developer"
 
     # Verify avatar is now 404
-    avatar_get2 = await client.get(expected_url)
+    avatar_get2 = await client.get(expected_url_prefix)
     assert avatar_get2.status_code == 404
     assert avatar_get2.json()["code"] == "AVATAR_NOT_FOUND"
 
@@ -315,3 +338,345 @@ async def test_admin_totp_last_factor_guard(
     del_res = await client.delete("/api/v1/auth/mfa/totp", headers=auth_headers)
     assert del_res.status_code == 409
     assert del_res.json()["code"] == "LAST_FACTOR"
+
+
+async def test_user_personal_settings_validation_errors(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test validation boundaries for display_name, empty avatar, and limits."""
+    user = await make_user("bob")
+    client = as_principal(user)
+
+    # Empty display name -> 422
+    res_empty_name = await client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "   ", "timezone": "UTC"},
+    )
+    assert res_empty_name.status_code == 422
+    assert res_empty_name.json()["code"] == "INVALID_DISPLAY_NAME"
+
+    # Oversized display name (> 120 chars) -> 422
+    res_long_name = await client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "A" * 121, "timezone": "UTC"},
+    )
+    assert res_long_name.status_code == 422
+
+    # Empty avatar payload -> 400
+    res_empty_avatar = await client.put(
+        "/api/v1/auth/me/avatar",
+        content=b"",
+        headers={"Content-Type": "image/png"},
+    )
+    assert res_empty_avatar.status_code == 400
+    assert res_empty_avatar.json()["code"] == "EMPTY_PAYLOAD"
+
+    # Oversized avatar stream payload (> 2 MiB + 65536) -> 413
+    res_huge_avatar = await client.put(
+        "/api/v1/auth/me/avatar",
+        content=b"x" * (2 * 1024 * 1024 + 70000),
+        headers={"Content-Type": "image/png"},
+    )
+    assert res_huge_avatar.status_code == 413
+    assert res_huge_avatar.json()["code"] == "PAYLOAD_TOO_LARGE"
+
+    # Unsupported avatar MIME type (e.g. GIF) -> 415
+    gif_bytes = (
+        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+        b"!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+    )
+    res_gif = await client.put(
+        "/api/v1/auth/me/avatar",
+        files={"file": ("test.gif", gif_bytes, "image/gif")},
+    )
+    assert res_gif.status_code == 415
+    assert res_gif.json()["code"] == "UNSUPPORTED_MEDIA_TYPE"
+
+    # Non-existent user avatar -> 404
+    res_missing = await client.get(f"/api/v1/users/{uuid.uuid4()}/avatar")
+    assert res_missing.status_code == 404
+    assert res_missing.json()["code"] == "AVATAR_NOT_FOUND"
+
+
+async def test_build_me_response_fallbacks(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test build_me_response fallback branches when hash is computed from blob store."""
+    user = await make_user("charlie")
+    client = as_principal(user)
+
+    # 1. Upload valid avatar
+    png_bytes = _create_sample_png_bytes(32, 32)
+    png_res = await client.put(
+        "/api/v1/auth/me/avatar",
+        files={"file": ("avatar.png", png_bytes, "image/png")},
+    )
+    assert png_res.status_code == 200
+
+    # 2. Null out avatar_sha256 in user_preferences to test dynamic hash calculation from blob store
+    await api_env.seed.execute(
+        text("UPDATE user_preferences SET avatar_sha256 = NULL WHERE principal_id = :p_id"),
+        {"p_id": user.id},
+    )
+    await api_env.seed.commit()
+
+    me_res = await client.get("/api/v1/auth/me")
+    assert me_res.status_code == 200
+    assert "?v=" in me_res.json()["avatar_url"]
+
+    # 3. Direct call with session_factory = None on app.state
+    mock_app = FastAPI()
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/auth/me",
+        "headers": [],
+        "app": mock_app,
+    }
+    req = Request(scope)
+
+    p_ctx = PrincipalContext(
+        principal_id=user.id,
+        workspace_id=uuid.uuid4(),
+        token_scopes=("session",),
+        aal_level=1,
+    )
+    resp = await build_me_response(req, p_ctx)
+    assert resp.status_code == 200
+    data = json.loads(bytes(resp.body).decode("utf-8"))
+    assert data["principal_id"] == str(user.id)
+    assert data["workspace_role"] == "WORKSPACE_MEMBER"
+
+
+async def test_user_settings_avatar_etag_and_blob_error(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test avatar ETag 304 handling and blob store error handling."""
+    user = await make_user("etag_user")
+    client = as_principal(user)
+
+    # 1. Upload valid avatar
+    png_bytes = _create_sample_png_bytes(32, 32)
+    png_res = await client.put(
+        "/api/v1/auth/me/avatar",
+        files={"file": ("avatar.png", png_bytes, "image/png")},
+    )
+    assert png_res.status_code == 200
+
+    # 2. Get avatar with ETag
+    get_res = await client.get(f"/api/v1/users/{user.id}/avatar")
+    assert get_res.status_code == 200
+    etag = get_res.headers.get("etag")
+    assert etag is not None
+
+    # 3. Request with matching If-None-Match -> 304 Not Modified
+    res_304 = await client.get(
+        f"/api/v1/users/{user.id}/avatar",
+        headers={"if-none-match": etag},
+    )
+    assert res_304.status_code == 304
+
+    # 4. Request with wildcard If-None-Match -> 304 Not Modified
+    res_304_wildcard = await client.get(
+        f"/api/v1/users/{user.id}/avatar",
+        headers={"if-none-match": "*"},
+    )
+    assert res_304_wildcard.status_code == 304
+
+    # 5. Non-matching If-None-Match -> 200
+    res_200 = await client.get(
+        f"/api/v1/users/{user.id}/avatar",
+        headers={"if-none-match": '"nonmatching"'},
+    )
+    assert res_200.status_code == 200
+
+    # 6. Blob storage file corrupted/missing -> 404
+    await api_env.seed.execute(
+        text(
+            "UPDATE user_preferences SET avatar_storage_key = 'missing_key_file' "
+            "WHERE principal_id = :p_id"
+        ),
+        {"p_id": user.id},
+    )
+    await api_env.seed.commit()
+
+    res_missing_blob = await client.get(f"/api/v1/users/{user.id}/avatar")
+    assert res_missing_blob.status_code == 404
+    assert res_missing_blob.json()["code"] == "AVATAR_NOT_FOUND"
+
+
+async def test_user_settings_password_change_branches(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test password change validation branches and credential creation."""
+    pepper_bytes = b"p" * 32
+    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
+    user = await make_user("pw_user")
+    current_session_id = uuid.uuid4()
+    client = as_principal(user, aal_level=1)
+    assert api_env.resolver.principal is not None
+    api_env.resolver.principal = dataclasses.replace(
+        api_env.resolver.principal, session_id=current_session_id
+    )
+
+    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
+    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
+    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
+
+    # 1. New password too short for normal user (< 12) -> 422
+    res_short = await client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "short"},
+        headers=auth_headers,
+    )
+    assert res_short.status_code == 422
+    assert res_short.json()["code"] == "PASSWORD_TOO_SHORT"
+
+    # 2. Identical password -> 422
+    res_identical = await client.post(
+        "/api/v1/auth/me/password",
+        json={"current_password": "ExistingPassword123!", "new_password": "ExistingPassword123!"},
+        headers=auth_headers,
+    )
+    assert res_identical.status_code == 422
+    assert res_identical.json()["code"] == "PASSWORD_UNCHANGED"
+
+    # Seed an existing local credential with valid lowercase username
+    current_pw = "CurrentSecret1234!"
+    pepper = get_auth_pepper()
+    pw_hash = hash_password_sync(current_pw, pepper)
+
+    await api_env.seed.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
+    await api_env.seed.execute(
+        text("SELECT kb_auth.local_admin_create(:p_id, 'pw-user', :hash)"),
+        {"p_id": user.id, "hash": pw_hash},
+    )
+    await api_env.seed.commit()
+
+    # 3. Missing current password when credential exists -> 422
+    res_missing_curr = await client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "AnotherBrandNewPassword123!"},
+        headers=auth_headers,
+    )
+    assert res_missing_curr.status_code == 422
+    assert res_missing_curr.json()["code"] == "CURRENT_PASSWORD_REQUIRED"
+
+    # 4. Wrong current password -> 401
+    res_wrong_curr = await client.post(
+        "/api/v1/auth/me/password",
+        json={
+            "current_password": "WrongPassword123!",
+            "new_password": "AnotherBrandNewPassword123!",
+        },
+        headers=auth_headers,
+    )
+    assert res_wrong_curr.status_code == 401
+    assert res_wrong_curr.json()["code"] == "INVALID_CREDENTIALS"
+
+    # 5. Correct current password -> 200
+    res_valid_pw = await client.post(
+        "/api/v1/auth/me/password",
+        json={"current_password": current_pw, "new_password": "AnotherBrandNewPassword123!"},
+        headers=auth_headers,
+    )
+    assert res_valid_pw.status_code == 200
+    assert res_valid_pw.json()["success"] is True
+
+    # 6. Admin user with AAL1 -> 403 AAL2_REQUIRED
+    admin = await make_user("admin_aal1", workspace_role="SERVER_ADMIN")
+    admin_session_id = uuid.uuid4()
+    admin_client = as_principal(admin, aal_level=1)
+    assert api_env.resolver.principal is not None
+    api_env.resolver.principal = dataclasses.replace(
+        api_env.resolver.principal, session_id=admin_session_id
+    )
+    admin_csrf = generate_csrf_token(admin_session_id, b"\x00" * 32)
+    admin_headers = {CSRF_HEADER_NAME: admin_csrf}
+    admin_client.cookies.set(CSRF_COOKIE_NAME, admin_csrf)
+
+    res_admin_aal1 = await admin_client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "AdminPasswordWith16Chars!"},
+        headers=admin_headers,
+    )
+    assert res_admin_aal1.status_code == 403
+    assert res_admin_aal1.json()["code"] == "AAL2_REQUIRED"
+
+    # 7. Admin password too short (< 16 chars)
+    admin_client_aal2 = as_principal(admin, aal_level=2)
+    assert api_env.resolver.principal is not None
+    api_env.resolver.principal = dataclasses.replace(
+        api_env.resolver.principal, session_id=admin_session_id
+    )
+    admin_client_aal2.cookies.set(CSRF_COOKIE_NAME, admin_csrf)
+    res_admin_short = await admin_client_aal2.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "Short1!"},
+        headers=admin_headers,
+    )
+    assert res_admin_short.status_code == 422
+    assert res_admin_short.json()["code"] == "PASSWORD_TOO_SHORT"
+
+
+async def test_user_settings_pepper_and_svg_rejection(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test SVG rejection and pepper resolution with key material."""
+    user = await make_user("svg_user")
+    client = as_principal(user)
+
+    # 1. Reject SVG avatar explicitly
+    svg_bytes = b"<svg xmlns='http://www.w3.org/2000/svg'><circle r='10'/></svg>"
+    res_svg = await client.put(
+        "/api/v1/auth/me/avatar",
+        files={"file": ("avatar.svg", svg_bytes, "image/svg+xml")},
+    )
+    assert res_svg.status_code == 415
+    assert "SVG avatars are not allowed" in res_svg.json()["detail"]
+
+    # 2. Test _resolve_auth_pepper with app.state.key_material
+    class DummyKeyMaterial:
+        auth_pepper = b"custom_pepper_12345"
+
+    app = FastAPI()
+    app.state.key_material = DummyKeyMaterial()
+    scope = {"type": "http", "method": "GET", "path": "/", "headers": [], "app": app}
+    req = Request(scope)
+    pepper = _resolve_auth_pepper(req)
+    assert pepper == b"custom_pepper_12345"
+
+
+async def test_user_settings_raw_binary_upload_and_delete_empty(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test raw binary upload branch and deleting avatar when none is set."""
+    user = await make_user("raw_user")
+    client = as_principal(user)
+
+    # 1. Delete avatar when no avatar exists -> 200 with avatar_url=None
+    del_res = await client.delete("/api/v1/auth/me/avatar")
+    assert del_res.status_code == 200
+    assert del_res.json()["avatar_url"] is None
+
+    # 2. Upload via raw binary with x-filename header
+    png_bytes = _create_sample_png_bytes(48, 48)
+    upload_res = await client.put(
+        "/api/v1/auth/me/avatar",
+        content=png_bytes,
+        headers={"Content-Type": "image/png", "X-Filename": "my_avatar.png"},
+    )
+    assert upload_res.status_code == 200
+    data = upload_res.json()
+    assert data["avatar_url"] is not None
+    assert "?v=" in data["avatar_url"]

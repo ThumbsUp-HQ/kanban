@@ -1,0 +1,3685 @@
+diff --git a/kanban/api/v1/auth_session.py b/kanban/api/v1/auth_session.py
+index 779cbca..8aa4e52 100644
+--- a/kanban/api/v1/auth_session.py
++++ b/kanban/api/v1/auth_session.py
+@@ -22,6 +22,7 @@ from kanban.api.v1.auth_mfa import (
+     enroll_totp,
+     verify_mfa,
+ )
++from kanban.api.v1.user_settings import build_me_response
+ from kanban.auth.sessions.cookies import (
+     build_clear_cookie_header,
+     build_clear_fallback_cookie_header,
+@@ -199,206 +200,12 @@ async def get_session_info(request: Request) -> JSONResponse:
+ 
+ 
+ @router.get("/me")
+-async def get_current_principal(  # noqa: C901, PLR0912, PLR0915
++async def get_current_principal(
+     request: Request,
+     principal: Annotated[PrincipalContext, Depends(get_principal)],
+ ) -> JSONResponse:
+     """Return profile and role summary for the currently authenticated principal."""
+-    session_factory = getattr(request.app.state, "session_factory", None)
+-    display_name: str | None = None
+-    username: str | None = None
+-    email: str | None = None
+-    is_server_admin = False
+-    is_workspace_admin = False
+-    is_project_admin = False
+-    workspace_role: Literal[
+-        "SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"
+-    ] = "WORKSPACE_MEMBER"
+-    workspace_capabilities: list[str] = ["CREATE_PROJECT"]
+-    timezone = "UTC"
+-    avatar_url: str | None = None
+-    has_local_password = False
+-
+-    if session_factory is not None:
+-        rls_ctx = RLSContext(
+-            principal_id=principal.principal_id,
+-            workspace_id=principal.workspace_id,
+-            token_scopes=principal.token_scopes,
+-            aal_level=cast("Literal[1, 2]", principal.aal_level),
+-        )
+-        async with session_factory.session(rls_ctx) as async_session:
+-            p_res = await async_session.execute(
+-                text("SELECT display_name FROM principals WHERE id = :p_id"),
+-                {"p_id": principal.principal_id},
+-            )
+-            display_name = p_res.scalar_one_or_none()
+-
+-            try:
+-                async with async_session.begin_nested():
+-                    u_res = await async_session.execute(
+-                        text(
+-                            "SELECT username FROM local_admin_credentials "
+-                            "WHERE principal_id = :p_id"
+-                        ),
+-                        {"p_id": principal.principal_id},
+-                    )
+-                    username = u_res.scalar_one_or_none()
+-            except Exception:  # noqa: BLE001
+-                username = None
+-
+-            has_local_password = username is not None
+-
+-            e_res = await async_session.execute(
+-                text("SELECT email FROM users WHERE id = :p_id"),
+-                {"p_id": principal.principal_id},
+-            )
+-            email = e_res.scalar_one_or_none()
+-
+-            admin_res = await async_session.execute(
+-                text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+-            )
+-            is_server_admin = bool(admin_res.scalar_one())
+-
+-            ws_admin_res = await async_session.execute(
+-                text(
+-                    "SELECT app_principal_has_role("
+-                    "  NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']"
+-                    ")"
+-                )
+-            )
+-            is_workspace_admin = bool(ws_admin_res.scalar_one())
+-
+-            if is_server_admin:
+-                workspace_role = "SERVER_ADMIN"
+-                workspace_capabilities = [
+-                    "CREATE_PROJECT",
+-                    "MANAGE_WORKSPACE_SETTINGS",
+-                    "MANAGE_WORKSPACE_MCP_KEYS",
+-                    "MANAGE_SERVER_ADMIN",
+-                    "ADMIN_AUTH_STUDIO",
+-                    "ADMIN_MCP_KEYS",
+-                    "SYSTEM_STORAGE",
+-                ]
+-            else:
+-                try:
+-                    async with async_session.begin_nested():
+-                        role_res = await async_session.execute(
+-                            text(
+-                                "SELECT role::text FROM role_bindings "
+-                                "WHERE principal_id = :p_id AND workspace_id = :ws_id "
+-                                "AND scope_type IN ('server', 'workspace') "
+-                                "ORDER BY CASE role "
+-                                "  WHEN 'SERVER_ADMIN' THEN 1 "
+-                                "  WHEN 'WORKSPACE_ADMIN' THEN 2 "
+-                                "  WHEN 'WORKSPACE_MEMBER' THEN 3 "
+-                                "  WHEN 'WORKSPACE_GUEST' THEN 4 "
+-                                "  ELSE 5 END ASC LIMIT 1"
+-                            ),
+-                            {"p_id": principal.principal_id, "ws_id": principal.workspace_id},
+-                        )
+-                        found_role = role_res.scalar_one_or_none()
+-                except Exception:  # noqa: BLE001
+-                    found_role = None
+-
+-                if is_workspace_admin or found_role == "WORKSPACE_ADMIN":
+-                    workspace_role = "WORKSPACE_ADMIN"
+-                    workspace_capabilities = [
+-                        "CREATE_PROJECT",
+-                        "MANAGE_WORKSPACE_SETTINGS",
+-                        "MANAGE_WORKSPACE_MCP_KEYS",
+-                    ]
+-                elif found_role == "WORKSPACE_GUEST":
+-                    workspace_role = "WORKSPACE_GUEST"
+-                    workspace_capabilities = []
+-                else:
+-                    workspace_role = "WORKSPACE_MEMBER"
+-                    workspace_capabilities = ["CREATE_PROJECT"]
+-
+-            is_project_admin = is_workspace_admin
+-            if not is_project_admin:
+-                try:
+-                    async with async_session.begin_nested():
+-                        pa_res = await async_session.execute(
+-                            text(
+-                                "SELECT 1 FROM role_bindings "
+-                                "WHERE principal_id = :p_id "
+-                                "  AND role IN "
+-                                "  ('PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN') "
+-                                "LIMIT 1"
+-                            ),
+-                            {"p_id": principal.principal_id},
+-                        )
+-                        is_project_admin = pa_res.scalar_one_or_none() is not None
+-                except Exception:  # noqa: BLE001
+-                    is_project_admin = False
+-
+-            try:
+-                async with async_session.begin_nested():
+-                    pref_res = await async_session.execute(
+-                        text(
+-                            "SELECT timezone, avatar_storage_key "
+-                            "FROM user_preferences WHERE principal_id = :p_id"
+-                        ),
+-                        {"p_id": principal.principal_id},
+-                    )
+-                    pref_row = pref_res.mappings().first()
+-                    if pref_row:
+-                        if pref_row["timezone"]:
+-                            timezone = pref_row["timezone"]
+-                        if pref_row["avatar_storage_key"]:
+-                            avatar_url = f"/api/v1/users/{principal.principal_id}/avatar"
+-            except Exception:  # noqa: BLE001, S110
+-                pass
+-    else:
+-        is_server_admin = getattr(principal, "is_server_admin", False)
+-        is_workspace_admin = getattr(principal, "is_workspace_admin", is_server_admin)
+-        is_project_admin = getattr(principal, "is_project_admin", is_workspace_admin)
+-        if is_server_admin:
+-            workspace_role = "SERVER_ADMIN"
+-            workspace_capabilities = [
+-                "CREATE_PROJECT",
+-                "MANAGE_WORKSPACE_SETTINGS",
+-                "MANAGE_WORKSPACE_MCP_KEYS",
+-                "MANAGE_SERVER_ADMIN",
+-                "ADMIN_AUTH_STUDIO",
+-                "ADMIN_MCP_KEYS",
+-                "SYSTEM_STORAGE",
+-            ]
+-        elif is_workspace_admin:
+-            workspace_role = "WORKSPACE_ADMIN"
+-            workspace_capabilities = [
+-                "CREATE_PROJECT",
+-                "MANAGE_WORKSPACE_SETTINGS",
+-                "MANAGE_WORKSPACE_MCP_KEYS",
+-            ]
+-        else:
+-            workspace_role = getattr(principal, "workspace_role", "WORKSPACE_MEMBER")
+-            workspace_capabilities = (
+-                ["CREATE_PROJECT"] if workspace_role != "WORKSPACE_GUEST" else []
+-            )
+-
+-    handle = username or display_name or str(principal.principal_id)
+-    return JSONResponse(
+-        content={
+-            "id": str(principal.principal_id),
+-            "principal_id": str(principal.principal_id),
+-            "workspace_id": str(principal.workspace_id),
+-            "handle": handle,
+-            "username": handle,
+-            "display_name": display_name or handle,
+-            "email": email,
+-            "is_server_admin": is_server_admin,
+-            "is_workspace_admin": is_workspace_admin,
+-            "is_project_admin": is_project_admin,
+-            "workspace_role": workspace_role,
+-            "workspace_capabilities": workspace_capabilities,
+-            "timezone": timezone,
+-            "avatar_url": avatar_url,
+-            "has_local_password": has_local_password,
+-            "aal_level": principal.aal_level,
+-            "mfa_pending": getattr(principal, "mfa_pending", False),
+-        }
+-    )
++    return await build_me_response(request, principal)
+ 
+ 
+ get_current_principal.allow_mfa_pending = True  # type: ignore[attr-defined]
+diff --git a/kanban/api/v1/user_settings.py b/kanban/api/v1/user_settings.py
+index 8e1bb99..2a56ffb 100644
+--- a/kanban/api/v1/user_settings.py
++++ b/kanban/api/v1/user_settings.py
+@@ -6,8 +6,10 @@ from __future__ import annotations
+ 
+ import email
+ import email.message
++import hashlib
+ import logging
+ import os
++import re
+ import uuid
+ import zoneinfo
+ from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
+@@ -21,7 +23,7 @@ from starlette.responses import JSONResponse
+ from database.session import RLSContext
+ from kanban.api.deps import PrincipalContext, get_principal
+ from kanban.api.problems import ProblemException
+-from kanban.attachments.raster import sanitize_and_reencode_raster
++from kanban.attachments.raster import sanitize_and_reencode_avatar
+ from kanban.attachments.sniff import sniff_media_type
+ from kanban.attachments.storage import LocalFilesystemBlobStore
+ from kanban.auth.local.hashing import get_auth_pepper, hash_password, verify_password
+@@ -39,6 +41,7 @@ MAX_DISPLAY_NAME_LENGTH: Final[int] = 120
+ AAL2_REQUIRED_LEVEL: Final[int] = 2
+ ADMIN_MIN_PASSWORD_LENGTH: Final[int] = 14
+ USER_MIN_PASSWORD_LENGTH: Final[int] = 12
++_MIN_AUTO_USERNAME_LENGTH: Final[int] = 3
+ ALLOWED_AVATAR_TYPES: Final[frozenset[str]] = frozenset({"image/png", "image/jpeg", "image/webp"})
+ 
+ 
+@@ -83,6 +86,224 @@ def _resolve_auth_pepper(request: Request) -> bytes:
+     return get_auth_pepper()
+ 
+ 
++async def build_me_response(  # noqa: C901, PLR0912, PLR0915
++    request: Request,
++    principal: PrincipalContext,
++) -> JSONResponse:
++    """Return canonical 16-field UserProfileResponse for the current principal."""
++    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
++    display_name: str | None = None
++    username: str | None = None
++    email: str | None = None
++    is_server_admin = False
++    is_workspace_admin = False
++    is_project_admin = False
++    workspace_role: Literal[
++        "SERVER_ADMIN", "WORKSPACE_ADMIN", "WORKSPACE_MEMBER", "WORKSPACE_GUEST"
++    ] = "WORKSPACE_MEMBER"
++    workspace_capabilities: list[str] = ["CREATE_PROJECT"]
++    timezone = "UTC"
++    avatar_url: str | None = None
++    has_local_password = False
++
++    if session_factory is not None:
++        rls_ctx = RLSContext(
++            principal_id=principal.principal_id,
++            workspace_id=principal.workspace_id,
++            token_scopes=principal.token_scopes,
++            aal_level=cast("Literal[1, 2]", principal.aal_level),
++        )
++        async with session_factory.session(rls_ctx) as async_session:
++            p_res = await async_session.execute(
++                text("SELECT display_name FROM principals WHERE id = :p_id"),
++                {"p_id": principal.principal_id},
++            )
++            display_name = p_res.scalar_one_or_none()
++
++            try:
++                async with async_session.begin_nested():
++                    u_res = await async_session.execute(
++                        text(
++                            "SELECT username FROM local_admin_credentials "
++                            "WHERE principal_id = :p_id"
++                        ),
++                        {"p_id": principal.principal_id},
++                    )
++                    username = u_res.scalar_one_or_none()
++            except Exception:  # noqa: BLE001
++                username = None
++
++            has_local_password = username is not None
++
++            e_res = await async_session.execute(
++                text("SELECT email FROM users WHERE id = :p_id"),
++                {"p_id": principal.principal_id},
++            )
++            email = e_res.scalar_one_or_none()
++
++            admin_res = await async_session.execute(
++                text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++            )
++            is_server_admin = bool(admin_res.scalar_one())
++
++            ws_admin_res = await async_session.execute(
++                text(
++                    "SELECT app_principal_has_role("
++                    "  NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN']"
++                    ")"
++                )
++            )
++            is_workspace_admin = bool(ws_admin_res.scalar_one())
++
++            if is_server_admin:
++                workspace_role = "SERVER_ADMIN"
++                workspace_capabilities = [
++                    "CREATE_PROJECT",
++                    "MANAGE_WORKSPACE_SETTINGS",
++                    "MANAGE_WORKSPACE_MCP_KEYS",
++                    "MANAGE_SERVER_ADMIN",
++                    "ADMIN_AUTH_STUDIO",
++                    "ADMIN_MCP_KEYS",
++                    "SYSTEM_STORAGE",
++                ]
++            else:
++                try:
++                    async with async_session.begin_nested():
++                        role_res = await async_session.execute(
++                            text(
++                                "SELECT role::text FROM role_bindings "
++                                "WHERE principal_id = :p_id AND workspace_id = :ws_id "
++                                "AND scope_type IN ('server', 'workspace') "
++                                "ORDER BY CASE role "
++                                "  WHEN 'SERVER_ADMIN' THEN 1 "
++                                "  WHEN 'WORKSPACE_ADMIN' THEN 2 "
++                                "  WHEN 'WORKSPACE_MEMBER' THEN 3 "
++                                "  WHEN 'WORKSPACE_GUEST' THEN 4 "
++                                "  ELSE 5 END ASC LIMIT 1"
++                            ),
++                            {"p_id": principal.principal_id, "ws_id": principal.workspace_id},
++                        )
++                        found_role = role_res.scalar_one_or_none()
++                except Exception:  # noqa: BLE001
++                    found_role = None
++
++                if is_workspace_admin or found_role == "WORKSPACE_ADMIN":
++                    workspace_role = "WORKSPACE_ADMIN"
++                    workspace_capabilities = [
++                        "CREATE_PROJECT",
++                        "MANAGE_WORKSPACE_SETTINGS",
++                        "MANAGE_WORKSPACE_MCP_KEYS",
++                    ]
++                elif found_role == "WORKSPACE_GUEST":
++                    workspace_role = "WORKSPACE_GUEST"
++                    workspace_capabilities = []
++                else:
++                    workspace_role = "WORKSPACE_MEMBER"
++                    workspace_capabilities = ["CREATE_PROJECT"]
++
++            is_project_admin = is_workspace_admin
++            if not is_project_admin:
++                try:
++                    async with async_session.begin_nested():
++                        pa_res = await async_session.execute(
++                            text(
++                                "SELECT 1 FROM role_bindings "
++                                "WHERE principal_id = :p_id "
++                                "  AND role IN "
++                                "  ('PROJECT_ADMIN', 'WORKSPACE_ADMIN', 'SERVER_ADMIN') "
++                                "LIMIT 1"
++                            ),
++                            {"p_id": principal.principal_id},
++                        )
++                        is_project_admin = pa_res.scalar_one_or_none() is not None
++                except Exception:  # noqa: BLE001
++                    is_project_admin = False
++
++            try:
++                async with async_session.begin_nested():
++                    pref_res = await async_session.execute(
++                        text(
++                            "SELECT timezone, avatar_storage_key, avatar_sha256 "
++                            "FROM user_preferences WHERE principal_id = :p_id"
++                        ),
++                        {"p_id": principal.principal_id},
++                    )
++                    pref_row = pref_res.mappings().first()
++                    if pref_row:
++                        if pref_row["timezone"]:
++                            timezone = pref_row["timezone"]
++                        if pref_row["avatar_storage_key"]:
++                            p_id = principal.principal_id
++                            sha_val = pref_row.get("avatar_sha256")
++                            if sha_val is not None:
++                                sha_hex = (
++                                    sha_val.hex()
++                                    if isinstance(sha_val, (bytes, bytearray, memoryview))
++                                    else str(sha_val)
++                                )
++                                avatar_url = f"/api/v1/users/{p_id}/avatar?v={sha_hex[:12]}"
++                            else:
++                                try:
++                                    blob_store = _get_blob_store(request)
++                                    bdata = blob_store.read(pref_row["avatar_storage_key"])
++                                    c_sha = hashlib.sha256(bdata).hexdigest()
++                                    avatar_url = f"/api/v1/users/{p_id}/avatar?v={c_sha[:12]}"
++                                except Exception:  # noqa: BLE001
++                                    avatar_url = f"/api/v1/users/{p_id}/avatar"
++            except Exception:  # noqa: BLE001, S110
++                pass
++    else:
++        is_server_admin = getattr(principal, "is_server_admin", False)
++        is_workspace_admin = getattr(principal, "is_workspace_admin", is_server_admin)
++        is_project_admin = getattr(principal, "is_project_admin", is_workspace_admin)
++        if is_server_admin:
++            workspace_role = "SERVER_ADMIN"
++            workspace_capabilities = [
++                "CREATE_PROJECT",
++                "MANAGE_WORKSPACE_SETTINGS",
++                "MANAGE_WORKSPACE_MCP_KEYS",
++                "MANAGE_SERVER_ADMIN",
++                "ADMIN_AUTH_STUDIO",
++                "ADMIN_MCP_KEYS",
++                "SYSTEM_STORAGE",
++            ]
++        elif is_workspace_admin:
++            workspace_role = "WORKSPACE_ADMIN"
++            workspace_capabilities = [
++                "CREATE_PROJECT",
++                "MANAGE_WORKSPACE_SETTINGS",
++                "MANAGE_WORKSPACE_MCP_KEYS",
++            ]
++        else:
++            workspace_role = getattr(principal, "workspace_role", "WORKSPACE_MEMBER")
++            workspace_capabilities = (
++                ["CREATE_PROJECT"] if workspace_role != "WORKSPACE_GUEST" else []
++            )
++
++    handle = username or display_name or str(principal.principal_id)
++    return JSONResponse(
++        content={
++            "id": str(principal.principal_id),
++            "principal_id": str(principal.principal_id),
++            "workspace_id": str(principal.workspace_id),
++            "handle": handle,
++            "username": handle,
++            "display_name": display_name or handle,
++            "email": email,
++            "is_server_admin": is_server_admin,
++            "is_workspace_admin": is_workspace_admin,
++            "is_project_admin": is_project_admin,
++            "workspace_role": workspace_role,
++            "workspace_capabilities": workspace_capabilities,
++            "timezone": timezone,
++            "avatar_url": avatar_url,
++            "has_local_password": has_local_password,
++            "aal_level": principal.aal_level,
++            "mfa_pending": getattr(principal, "mfa_pending", False),
++        }
++    )
++
++
+ @router.patch("/auth/me")
+ async def update_profile(
+     body: UpdateProfileRequest,
+@@ -130,13 +351,7 @@ async def update_profile(
+             },
+         )
+ 
+-    return JSONResponse(
+-        content={
+-            "id": str(principal.principal_id),
+-            "display_name": cleaned_name,
+-            "timezone": cleaned_tz,
+-        }
+-    )
++    return await build_me_response(request, principal)
+ 
+ 
+ def _parse_avatar_upload(request: Request, body_bytes: bytes) -> tuple[str, str | None, bytes]:
+@@ -252,7 +467,7 @@ async def _process_and_store_avatar(
+             detail="Only PNG, JPEG, and WebP raster avatars are supported.",
+         )
+ 
+-    processed = await sanitize_and_reencode_raster(raw_bytes, detected)
++    processed = await sanitize_and_reencode_avatar(raw_bytes, detected)
+     blob_store = _get_blob_store(request)
+     storage_key, raw_sha = blob_store.store(processed.clean_bytes)
+ 
+@@ -290,11 +505,7 @@ async def _process_and_store_avatar(
+             },
+         )
+ 
+-    return JSONResponse(
+-        content={
+-            "avatar_url": f"/api/v1/users/{principal.principal_id}/avatar",
+-        }
+-    )
++    return await build_me_response(request, principal)
+ 
+ 
+ @router.delete("/auth/me/avatar")
+@@ -326,13 +537,14 @@ async def delete_avatar(
+             {"p_id": principal.principal_id},
+         )
+ 
+-    return JSONResponse(content={"avatar_url": None})
++    return await build_me_response(request, principal)
+ 
+ 
+ @router.get("/users/{principal_id}/avatar")
+ async def get_user_avatar(
+     principal_id: uuid.UUID,
+     request: Request,
++    v: str | None = None,  # noqa: ARG001
+ ) -> Response:
+     """Retrieve and serve user avatar image bytes."""
+     session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
+@@ -380,18 +592,31 @@ async def get_user_avatar(
+             detail="Avatar storage file could not be read.",
+         ) from exc
+ 
++    etag = f'"{hashlib.sha256(data).hexdigest()}"'
++    headers = {
++        "Cache-Control": "public, max-age=3600",
++        "Content-Security-Policy": "default-src 'none'; sandbox",
++        "X-Content-Type-Options": "nosniff",
++        "Cross-Origin-Resource-Policy": "same-origin",
++        "ETag": etag,
++    }
++
++    if_none_match = request.headers.get("if-none-match")
++    if if_none_match:
++        candidates = {etag, etag.strip('"'), f"W/{etag}"}
++        client_tags = [t.strip() for t in if_none_match.split(",")]
++        if any(c in candidates for c in client_tags) or "*" in client_tags:
++            return Response(status_code=304, headers=headers)
++
+     return Response(
+         content=data,
+         media_type=content_type,
+-        headers={
+-            "Cache-Control": "public, max-age=3600",
+-            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+-        },
++        headers=headers,
+     )
+ 
+ 
+ @router.post("/auth/me/password")
+-async def change_password(
++async def change_password(  # noqa: C901
+     body: ChangePasswordRequest,
+     request: Request,
+     principal: Annotated[PrincipalContext, Depends(get_principal)],
+@@ -499,11 +724,14 @@ async def change_password(
+                 {"p_id": principal.principal_id},
+             )
+             dname = p_res.scalar_one_or_none() or f"user-{principal.principal_id.hex[:8]}"
++            clean_username = re.sub(r"[^a-z0-9._-]", "_", dname.lower())[:32]
++            if len(clean_username) < _MIN_AUTO_USERNAME_LENGTH:
++                clean_username = f"user-{principal.principal_id.hex[:8]}"
+             await session.execute(
+                 text("SELECT kb_auth.local_admin_create(:p_id, :username, :hash)"),
+                 {
+                     "p_id": principal.principal_id,
+-                    "username": dname,
++                    "username": clean_username,
+                     "hash": new_hash,
+                 },
+             )
+diff --git a/kanban/attachments/__init__.py b/kanban/attachments/__init__.py
+index 213e40f..7413e75 100644
+--- a/kanban/attachments/__init__.py
++++ b/kanban/attachments/__init__.py
+@@ -6,6 +6,8 @@ from kanban.attachments.raster import (
+     MAX_DIMENSION,
+     MAX_IMAGE_PIXELS,
+     ProcessedAttachment,
++    sanitize_and_reencode_avatar,
++    sanitize_and_reencode_avatar_sync,
+     sanitize_and_reencode_raster,
+     sanitize_and_reencode_raster_sync,
+ )
+@@ -39,6 +41,8 @@ __all__ = [
+     "BlobStorageError",
+     "LocalFilesystemBlobStore",
+     "ProcessedAttachment",
++    "sanitize_and_reencode_avatar",
++    "sanitize_and_reencode_avatar_sync",
+     "sanitize_and_reencode_raster",
+     "sanitize_and_reencode_raster_sync",
+     "sanitize_content_disposition_filename",
+diff --git a/kanban/attachments/raster.py b/kanban/attachments/raster.py
+index e8c9d46..1f54865 100644
+--- a/kanban/attachments/raster.py
++++ b/kanban/attachments/raster.py
+@@ -23,6 +23,15 @@ MAX_DIMENSION: Final[int] = 16_384  # 16,384 px max width or height
+ MAX_ANIMATED_FRAMES: Final[int] = 200  # 200 frames max
+ MAX_ANIMATED_TOTAL_PIXELS: Final[int] = 80_000_000  # 80 MP total area across frames
+ 
++MAX_AVATAR_IMAGE_PIXELS: Final[int] = 16_000_000  # 16 MP exact
++MAX_AVATAR_DIMENSION: Final[int] = 4096  # 4096 px max width or height
++MAX_AVATAR_DOWNSCALE_DIMENSION: Final[int] = 1024  # 1024 px max downscale dimension
++ALLOWED_AVATAR_PIL_FORMATS: Final[dict[str, str]] = {
++    "image/png": "PNG",
++    "image/jpeg": "JPEG",
++    "image/webp": "WEBP",
++}
++
+ # Set Pillow library cap
+ Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+ 
+@@ -300,3 +309,123 @@ async def sanitize_and_reencode_raster(
+             raw_bytes,
+             content_type,
+         )
++
++
++def sanitize_and_reencode_avatar_sync(  # noqa: C901
++    raw_bytes: bytes,
++    content_type: str,
++) -> ProcessedAttachment:
++    """Re-encode avatar raster dropping metadata, enforcing single-frame, and downscaling."""
++    pil_format = ALLOWED_AVATAR_PIL_FORMATS.get(content_type)
++    if not pil_format:
++        raise ProblemException(
++            code="UNSUPPORTED_MEDIA_TYPE",
++            status=415,
++            title="Unsupported Media Type",
++            detail=(
++                f"Unsupported avatar media type: {content_type}. "
++                "Only PNG, JPEG, and WebP are allowed."
++            ),
++        )
++
++    bio = io.BytesIO(raw_bytes)
++    with warnings.catch_warnings():
++        warnings.simplefilter("error", Image.DecompressionBombWarning)
++        try:
++            im = Image.open(bio)
++        except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
++            raise ProblemException(
++                code="IMAGE_DIMENSIONS_EXCEEDED",
++                status=422,
++                title="Image Dimensions Exceeded",
++                detail="Decompression bomb detected in image header.",
++            ) from exc
++        except Exception as exc:
++            raise ProblemException(
++                code="MIME_MISMATCH_OR_UNSUPPORTED",
++                status=415,
++                title="Unsupported Media Type",
++                detail=f"Corrupt or invalid image payload: {exc}",
++            ) from exc
++
++        width, height = im.size
++        total_pixels = width * height
++        if (
++            total_pixels > MAX_AVATAR_IMAGE_PIXELS
++            or width > MAX_AVATAR_DIMENSION
++            or height > MAX_AVATAR_DIMENSION
++            or width <= 0
++            or height <= 0
++        ):
++            raise ProblemException(
++                code="IMAGE_DIMENSIONS_EXCEEDED",
++                status=422,
++                title="Image Dimensions Exceeded",
++                detail=(
++                    f"Avatar dimensions ({width}x{height} = {total_pixels} px) exceed limits "
++                    f"(max {MAX_AVATAR_IMAGE_PIXELS} px, max dimension {MAX_AVATAR_DIMENSION} px)."
++                ),
++            )
++
++        is_animated = bool(getattr(im, "is_animated", False))
++        n_frames = int(getattr(im, "n_frames", 1))
++        if is_animated or n_frames > 1:
++            raise ProblemException(
++                code="ANIMATED_AVATAR_NOT_ALLOWED",
++                status=422,
++                title="Animated Avatar Not Allowed",
++                detail="Only single-frame static PNG, JPEG, and WebP avatars are allowed.",
++            )
++
++        # Downscale oversized images <= 1024x1024
++        working_im: Image.Image = im
++        if width > MAX_AVATAR_DOWNSCALE_DIMENSION or height > MAX_AVATAR_DOWNSCALE_DIMENSION:
++            working_im = im.copy()
++            working_im.thumbnail(
++                (MAX_AVATAR_DOWNSCALE_DIMENSION, MAX_AVATAR_DOWNSCALE_DIMENSION),
++                Image.Resampling.LANCZOS,
++            )
++
++        clean_mode = working_im.mode
++        if pil_format == "JPEG" and clean_mode not in ("RGB", "L"):
++            clean_mode = "RGB"
++
++        clean_im = Image.new(clean_mode, working_im.size)
++        palette = working_im.getpalette()
++        if clean_mode == "P" and palette is not None:
++            clean_im.putpalette(palette)
++
++        clean_im.paste(working_im)
++
++        out_bio = io.BytesIO()
++        if pil_format == "JPEG":
++            clean_im.save(out_bio, format="JPEG", quality=95, optimize=True)
++        elif pil_format == "PNG":
++            clean_im.save(out_bio, format="PNG", optimize=True)
++        elif pil_format == "WEBP":
++            clean_im.save(out_bio, format="WEBP", quality=95)
++        else:
++            clean_im.save(out_bio, format=pil_format)
++
++        clean_bytes = out_bio.getvalue()
++        return ProcessedAttachment(
++            clean_bytes=clean_bytes,
++            byte_size=len(clean_bytes),
++            pixel_width=clean_im.width,
++            pixel_height=clean_im.height,
++            content_type=content_type,
++            blob_sha256=hashlib.sha256(clean_bytes).digest(),
++        )
++
++
++async def sanitize_and_reencode_avatar(
++    raw_bytes: bytes,
++    content_type: str,
++) -> ProcessedAttachment:
++    """Process and sanitize avatar media behind worker thread pool and concurrency semaphore."""
++    async with _RASTER_SEMAPHORE:
++        return await anyio.to_thread.run_sync(
++            sanitize_and_reencode_avatar_sync,
++            raw_bytes,
++            content_type,
++        )
+diff --git a/kanban/tests/api/test_user_personal_settings.py b/kanban/tests/api/test_user_personal_settings.py
+index cb34ddf..d329678 100644
+--- a/kanban/tests/api/test_user_personal_settings.py
++++ b/kanban/tests/api/test_user_personal_settings.py
+@@ -10,13 +10,18 @@ from __future__ import annotations
+ import base64
+ import dataclasses
+ import io
++import json
+ import uuid
+ from typing import TYPE_CHECKING
+ 
+ import pytest
++from fastapi import FastAPI
+ from PIL import Image
+ from sqlalchemy import text
++from starlette.requests import Request
+ 
++from kanban.api.deps import PrincipalContext
++from kanban.api.v1.user_settings import _resolve_auth_pepper, build_me_response
+ from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
+ from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
+ 
+@@ -38,7 +43,7 @@ def _create_sample_png_bytes(width: int = 64, height: int = 64) -> bytes:
+     return bio.getvalue()
+ 
+ 
+-async def test_user_personal_settings_profile_and_avatar_lifecycle(
++async def test_user_personal_settings_profile_and_avatar_lifecycle(  # noqa: PLR0915
+     make_user: Callable[..., Awaitable[SeededUser]],
+     as_principal: Callable[..., httpx.AsyncClient],
+ ) -> None:
+@@ -97,27 +102,45 @@ async def test_user_personal_settings_profile_and_avatar_lifecycle(
+         files={"file": ("avatar.png", png_bytes, "image/png")},
+     )
+     assert png_res.status_code == 200
+-    expected_url = f"/api/v1/users/{user.id}/avatar"
+-    assert png_res.json()["avatar_url"] == expected_url
++    expected_url_prefix = f"/api/v1/users/{user.id}/avatar"
++    avatar_url = png_res.json()["avatar_url"]
++    assert avatar_url.startswith(expected_url_prefix)
++    assert "?v=" in avatar_url
++    assert len(avatar_url.split("?v=")[1]) == 12
++    # Verify canonical UserProfileResponse fields are present and display_name is preserved
++    assert png_res.json()["display_name"] == "Alice Developer"
++    assert png_res.json()["timezone"] == "America/New_York"
++    assert "workspace_role" in png_res.json()
++    assert "workspace_capabilities" in png_res.json()
+ 
+     # Check me returns avatar_url
+     me_res3 = await client.get("/api/v1/auth/me")
+-    assert me_res3.json()["avatar_url"] == expected_url
++    assert me_res3.json()["avatar_url"] == avatar_url
++    assert me_res3.json()["display_name"] == "Alice Developer"
+ 
+-    # 6. Retrieve avatar bytes
+-    avatar_get = await client.get(expected_url)
++    # 6. Retrieve avatar bytes and verify CSP sandbox, nosniff, same-origin, and ETag
++    avatar_get = await client.get(avatar_url)
+     assert avatar_get.status_code == 200
+     assert avatar_get.headers["content-type"] == "image/png"
+-    assert "default-src 'none'" in avatar_get.headers["content-security-policy"]
++    assert avatar_get.headers["content-security-policy"] == "default-src 'none'; sandbox"
++    assert avatar_get.headers["x-content-type-options"] == "nosniff"
++    assert avatar_get.headers["cross-origin-resource-policy"] == "same-origin"
++    assert "etag" in avatar_get.headers
+     assert len(avatar_get.content) > 0
+ 
++    # Conditional GET with If-None-Match returns 304 Not Modified
++    etag = avatar_get.headers["etag"]
++    avatar_cached = await client.get(avatar_url, headers={"If-None-Match": etag})
++    assert avatar_cached.status_code == 304
++
+     # 7. Avatar Removal: DELETE /api/v1/auth/me/avatar
+     del_res = await client.delete("/api/v1/auth/me/avatar")
+     assert del_res.status_code == 200
+     assert del_res.json()["avatar_url"] is None
++    assert del_res.json()["display_name"] == "Alice Developer"
+ 
+     # Verify avatar is now 404
+-    avatar_get2 = await client.get(expected_url)
++    avatar_get2 = await client.get(expected_url_prefix)
+     assert avatar_get2.status_code == 404
+     assert avatar_get2.json()["code"] == "AVATAR_NOT_FOUND"
+ 
+@@ -315,3 +338,345 @@ async def test_admin_totp_last_factor_guard(
+     del_res = await client.delete("/api/v1/auth/mfa/totp", headers=auth_headers)
+     assert del_res.status_code == 409
+     assert del_res.json()["code"] == "LAST_FACTOR"
++
++
++async def test_user_personal_settings_validation_errors(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test validation boundaries for display_name, empty avatar, and limits."""
++    user = await make_user("bob")
++    client = as_principal(user)
++
++    # Empty display name -> 422
++    res_empty_name = await client.patch(
++        "/api/v1/auth/me",
++        json={"display_name": "   ", "timezone": "UTC"},
++    )
++    assert res_empty_name.status_code == 422
++    assert res_empty_name.json()["code"] == "INVALID_DISPLAY_NAME"
++
++    # Oversized display name (> 120 chars) -> 422
++    res_long_name = await client.patch(
++        "/api/v1/auth/me",
++        json={"display_name": "A" * 121, "timezone": "UTC"},
++    )
++    assert res_long_name.status_code == 422
++
++    # Empty avatar payload -> 400
++    res_empty_avatar = await client.put(
++        "/api/v1/auth/me/avatar",
++        content=b"",
++        headers={"Content-Type": "image/png"},
++    )
++    assert res_empty_avatar.status_code == 400
++    assert res_empty_avatar.json()["code"] == "EMPTY_PAYLOAD"
++
++    # Oversized avatar stream payload (> 2 MiB + 65536) -> 413
++    res_huge_avatar = await client.put(
++        "/api/v1/auth/me/avatar",
++        content=b"x" * (2 * 1024 * 1024 + 70000),
++        headers={"Content-Type": "image/png"},
++    )
++    assert res_huge_avatar.status_code == 413
++    assert res_huge_avatar.json()["code"] == "PAYLOAD_TOO_LARGE"
++
++    # Unsupported avatar MIME type (e.g. GIF) -> 415
++    gif_bytes = (
++        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
++        b"!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
++    )
++    res_gif = await client.put(
++        "/api/v1/auth/me/avatar",
++        files={"file": ("test.gif", gif_bytes, "image/gif")},
++    )
++    assert res_gif.status_code == 415
++    assert res_gif.json()["code"] == "UNSUPPORTED_MEDIA_TYPE"
++
++    # Non-existent user avatar -> 404
++    res_missing = await client.get(f"/api/v1/users/{uuid.uuid4()}/avatar")
++    assert res_missing.status_code == 404
++    assert res_missing.json()["code"] == "AVATAR_NOT_FOUND"
++
++
++async def test_build_me_response_fallbacks(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test build_me_response fallback branches when hash is computed from blob store."""
++    user = await make_user("charlie")
++    client = as_principal(user)
++
++    # 1. Upload valid avatar
++    png_bytes = _create_sample_png_bytes(32, 32)
++    png_res = await client.put(
++        "/api/v1/auth/me/avatar",
++        files={"file": ("avatar.png", png_bytes, "image/png")},
++    )
++    assert png_res.status_code == 200
++
++    # 2. Null out avatar_sha256 in user_preferences to test dynamic hash calculation from blob store
++    await api_env.seed.execute(
++        text("UPDATE user_preferences SET avatar_sha256 = NULL WHERE principal_id = :p_id"),
++        {"p_id": user.id},
++    )
++    await api_env.seed.commit()
++
++    me_res = await client.get("/api/v1/auth/me")
++    assert me_res.status_code == 200
++    assert "?v=" in me_res.json()["avatar_url"]
++
++    # 3. Direct call with session_factory = None on app.state
++    mock_app = FastAPI()
++    scope = {
++        "type": "http",
++        "method": "GET",
++        "path": "/api/v1/auth/me",
++        "headers": [],
++        "app": mock_app,
++    }
++    req = Request(scope)
++
++    p_ctx = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=uuid.uuid4(),
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    resp = await build_me_response(req, p_ctx)
++    assert resp.status_code == 200
++    data = json.loads(bytes(resp.body).decode("utf-8"))
++    assert data["principal_id"] == str(user.id)
++    assert data["workspace_role"] == "WORKSPACE_MEMBER"
++
++
++async def test_user_settings_avatar_etag_and_blob_error(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test avatar ETag 304 handling and blob store error handling."""
++    user = await make_user("etag_user")
++    client = as_principal(user)
++
++    # 1. Upload valid avatar
++    png_bytes = _create_sample_png_bytes(32, 32)
++    png_res = await client.put(
++        "/api/v1/auth/me/avatar",
++        files={"file": ("avatar.png", png_bytes, "image/png")},
++    )
++    assert png_res.status_code == 200
++
++    # 2. Get avatar with ETag
++    get_res = await client.get(f"/api/v1/users/{user.id}/avatar")
++    assert get_res.status_code == 200
++    etag = get_res.headers.get("etag")
++    assert etag is not None
++
++    # 3. Request with matching If-None-Match -> 304 Not Modified
++    res_304 = await client.get(
++        f"/api/v1/users/{user.id}/avatar",
++        headers={"if-none-match": etag},
++    )
++    assert res_304.status_code == 304
++
++    # 4. Request with wildcard If-None-Match -> 304 Not Modified
++    res_304_wildcard = await client.get(
++        f"/api/v1/users/{user.id}/avatar",
++        headers={"if-none-match": "*"},
++    )
++    assert res_304_wildcard.status_code == 304
++
++    # 5. Non-matching If-None-Match -> 200
++    res_200 = await client.get(
++        f"/api/v1/users/{user.id}/avatar",
++        headers={"if-none-match": '"nonmatching"'},
++    )
++    assert res_200.status_code == 200
++
++    # 6. Blob storage file corrupted/missing -> 404
++    await api_env.seed.execute(
++        text(
++            "UPDATE user_preferences SET avatar_storage_key = 'missing_key_file' "
++            "WHERE principal_id = :p_id"
++        ),
++        {"p_id": user.id},
++    )
++    await api_env.seed.commit()
++
++    res_missing_blob = await client.get(f"/api/v1/users/{user.id}/avatar")
++    assert res_missing_blob.status_code == 404
++    assert res_missing_blob.json()["code"] == "AVATAR_NOT_FOUND"
++
++
++async def test_user_settings_password_change_branches(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test password change validation branches and credential creation."""
++    pepper_bytes = b"p" * 32
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
++    user = await make_user("pw_user")
++    current_session_id = uuid.uuid4()
++    client = as_principal(user, aal_level=1)
++    assert api_env.resolver.principal is not None
++    api_env.resolver.principal = dataclasses.replace(
++        api_env.resolver.principal, session_id=current_session_id
++    )
++
++    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
++    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
++    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
++
++    # 1. New password too short for normal user (< 12) -> 422
++    res_short = await client.post(
++        "/api/v1/auth/me/password",
++        json={"new_password": "short"},
++        headers=auth_headers,
++    )
++    assert res_short.status_code == 422
++    assert res_short.json()["code"] == "PASSWORD_TOO_SHORT"
++
++    # 2. Identical password -> 422
++    res_identical = await client.post(
++        "/api/v1/auth/me/password",
++        json={"current_password": "ExistingPassword123!", "new_password": "ExistingPassword123!"},
++        headers=auth_headers,
++    )
++    assert res_identical.status_code == 422
++    assert res_identical.json()["code"] == "PASSWORD_UNCHANGED"
++
++    # Seed an existing local credential with valid lowercase username
++    current_pw = "CurrentSecret1234!"
++    pepper = get_auth_pepper()
++    pw_hash = hash_password_sync(current_pw, pepper)
++
++    await api_env.seed.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
++    await api_env.seed.execute(
++        text("SELECT kb_auth.local_admin_create(:p_id, 'pw-user', :hash)"),
++        {"p_id": user.id, "hash": pw_hash},
++    )
++    await api_env.seed.commit()
++
++    # 3. Missing current password when credential exists -> 422
++    res_missing_curr = await client.post(
++        "/api/v1/auth/me/password",
++        json={"new_password": "AnotherBrandNewPassword123!"},
++        headers=auth_headers,
++    )
++    assert res_missing_curr.status_code == 422
++    assert res_missing_curr.json()["code"] == "CURRENT_PASSWORD_REQUIRED"
++
++    # 4. Wrong current password -> 401
++    res_wrong_curr = await client.post(
++        "/api/v1/auth/me/password",
++        json={
++            "current_password": "WrongPassword123!",
++            "new_password": "AnotherBrandNewPassword123!",
++        },
++        headers=auth_headers,
++    )
++    assert res_wrong_curr.status_code == 401
++    assert res_wrong_curr.json()["code"] == "INVALID_CREDENTIALS"
++
++    # 5. Correct current password -> 200
++    res_valid_pw = await client.post(
++        "/api/v1/auth/me/password",
++        json={"current_password": current_pw, "new_password": "AnotherBrandNewPassword123!"},
++        headers=auth_headers,
++    )
++    assert res_valid_pw.status_code == 200
++    assert res_valid_pw.json()["success"] is True
++
++    # 6. Admin user with AAL1 -> 403 AAL2_REQUIRED
++    admin = await make_user("admin_aal1", workspace_role="SERVER_ADMIN")
++    admin_session_id = uuid.uuid4()
++    admin_client = as_principal(admin, aal_level=1)
++    assert api_env.resolver.principal is not None
++    api_env.resolver.principal = dataclasses.replace(
++        api_env.resolver.principal, session_id=admin_session_id
++    )
++    admin_csrf = generate_csrf_token(admin_session_id, b"\x00" * 32)
++    admin_headers = {CSRF_HEADER_NAME: admin_csrf}
++    admin_client.cookies.set(CSRF_COOKIE_NAME, admin_csrf)
++
++    res_admin_aal1 = await admin_client.post(
++        "/api/v1/auth/me/password",
++        json={"new_password": "AdminPasswordWith16Chars!"},
++        headers=admin_headers,
++    )
++    assert res_admin_aal1.status_code == 403
++    assert res_admin_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 7. Admin password too short (< 16 chars)
++    admin_client_aal2 = as_principal(admin, aal_level=2)
++    assert api_env.resolver.principal is not None
++    api_env.resolver.principal = dataclasses.replace(
++        api_env.resolver.principal, session_id=admin_session_id
++    )
++    admin_client_aal2.cookies.set(CSRF_COOKIE_NAME, admin_csrf)
++    res_admin_short = await admin_client_aal2.post(
++        "/api/v1/auth/me/password",
++        json={"new_password": "Short1!"},
++        headers=admin_headers,
++    )
++    assert res_admin_short.status_code == 422
++    assert res_admin_short.json()["code"] == "PASSWORD_TOO_SHORT"
++
++
++async def test_user_settings_pepper_and_svg_rejection(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test SVG rejection and pepper resolution with key material."""
++    user = await make_user("svg_user")
++    client = as_principal(user)
++
++    # 1. Reject SVG avatar explicitly
++    svg_bytes = b"<svg xmlns='http://www.w3.org/2000/svg'><circle r='10'/></svg>"
++    res_svg = await client.put(
++        "/api/v1/auth/me/avatar",
++        files={"file": ("avatar.svg", svg_bytes, "image/svg+xml")},
++    )
++    assert res_svg.status_code == 415
++    assert "SVG avatars are not allowed" in res_svg.json()["detail"]
++
++    # 2. Test _resolve_auth_pepper with app.state.key_material
++    class DummyKeyMaterial:
++        auth_pepper = b"custom_pepper_12345"
++
++    app = FastAPI()
++    app.state.key_material = DummyKeyMaterial()
++    scope = {"type": "http", "method": "GET", "path": "/", "headers": [], "app": app}
++    req = Request(scope)
++    pepper = _resolve_auth_pepper(req)
++    assert pepper == b"custom_pepper_12345"
++
++
++async def test_user_settings_raw_binary_upload_and_delete_empty(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test raw binary upload branch and deleting avatar when none is set."""
++    user = await make_user("raw_user")
++    client = as_principal(user)
++
++    # 1. Delete avatar when no avatar exists -> 200 with avatar_url=None
++    del_res = await client.delete("/api/v1/auth/me/avatar")
++    assert del_res.status_code == 200
++    assert del_res.json()["avatar_url"] is None
++
++    # 2. Upload via raw binary with x-filename header
++    png_bytes = _create_sample_png_bytes(48, 48)
++    upload_res = await client.put(
++        "/api/v1/auth/me/avatar",
++        content=png_bytes,
++        headers={"Content-Type": "image/png", "X-Filename": "my_avatar.png"},
++    )
++    assert upload_res.status_code == 200
++    data = upload_res.json()
++    assert data["avatar_url"] is not None
++    assert "?v=" in data["avatar_url"]
+diff --git a/kanban/tests/attachments/test_sniff_and_raster.py b/kanban/tests/attachments/test_sniff_and_raster.py
+index c237c4f..181134e 100644
+--- a/kanban/tests/attachments/test_sniff_and_raster.py
++++ b/kanban/tests/attachments/test_sniff_and_raster.py
+@@ -16,6 +16,8 @@ from kanban.api.problems import ProblemException
+ from kanban.attachments.raster import (
+     MAX_ANIMATED_FRAMES,
+     _validate_image_dimensions,
++    sanitize_and_reencode_avatar,
++    sanitize_and_reencode_avatar_sync,
+     sanitize_and_reencode_raster,
+     sanitize_and_reencode_raster_sync,
+ )
+@@ -539,3 +541,106 @@ class TestStorageAndSigningEdgeCases:
+         """Verify verify_attachment_url returns False on unexpected exceptions."""
+         # Non-bytes key or bad params
+         assert verify_attachment_url("att", "p", 9999999999, "sig", None) is False  # type: ignore[arg-type]
++
++
++class TestAvatarSanitization:
++    """Test avatar raster hardening, downscaling, single-frame guards, and bounds."""
++
++    @pytest.mark.asyncio
++    async def test_avatar_sanitization_png_and_jpeg(self) -> None:
++        """Verify static PNG and JPEG re-encoding with EXIF stripped."""
++        # PNG
++        im_png = Image.new("RGBA", (128, 128), color=(255, 0, 0, 255))
++        bio_png = io.BytesIO()
++        im_png.save(bio_png, format="PNG")
++        proc_png = await sanitize_and_reencode_avatar(bio_png.getvalue(), "image/png")
++        assert proc_png.content_type == "image/png"
++        assert proc_png.pixel_width == 128
++        assert proc_png.pixel_height == 128
++        assert len(proc_png.clean_bytes) > 0
++
++        # JPEG with EXIF
++        jpeg_bytes, _ = _create_jpeg_with_exif_and_polyglot()
++        proc_jpeg = await sanitize_and_reencode_avatar(jpeg_bytes, "image/jpeg")
++        assert proc_jpeg.content_type == "image/jpeg"
++        assert proc_jpeg.pixel_width == 64
++        assert proc_jpeg.pixel_height == 64
++        # Verify EXIF is stripped
++        clean_im = Image.open(io.BytesIO(proc_jpeg.clean_bytes))
++        assert not clean_im.getexif()
++
++    @pytest.mark.asyncio
++    async def test_avatar_downscales_oversized_images(self) -> None:
++        """Verify images exceeding 1024x1024 are proportionally downscaled."""
++        im_large = Image.new("RGB", (2048, 1536), color="green")
++        bio = io.BytesIO()
++        im_large.save(bio, format="JPEG", quality=90)
++        proc = await sanitize_and_reencode_avatar(bio.getvalue(), "image/jpeg")
++        assert proc.pixel_width is not None
++        assert proc.pixel_width <= 1024
++        assert proc.pixel_height is not None
++        assert proc.pixel_height <= 1024
++        # Check aspect ratio preserved: 2048/1536 = 1.333 -> 1024 / 768
++        assert proc.pixel_width == 1024
++        assert proc.pixel_height == 768
++
++    @pytest.mark.asyncio
++    async def test_avatar_webp_and_palette_modes(self) -> None:
++        """Verify WebP and P-mode palette avatars sanitize cleanly."""
++        # WebP
++        im_webp = Image.new("RGBA", (200, 200), color=(0, 255, 0, 128))
++        bio_webp = io.BytesIO()
++        im_webp.save(bio_webp, format="WEBP")
++        proc_webp = await sanitize_and_reencode_avatar(bio_webp.getvalue(), "image/webp")
++        assert proc_webp.content_type == "image/webp"
++        assert proc_webp.pixel_width == 200
++
++        # P-mode PNG
++        im_p = Image.new("P", (64, 64))
++        im_p.putpalette([255, 0, 0] + [0] * 765)
++        bio_p = io.BytesIO()
++        im_p.save(bio_p, format="PNG")
++        proc_p = await sanitize_and_reencode_avatar(bio_p.getvalue(), "image/png")
++        assert proc_p.pixel_width == 64
++
++        # CMYK JPEG mode converted to RGB
++        im_cmyk = Image.new("CMYK", (100, 100), color=(0, 255, 255, 0))
++        bio_cmyk = io.BytesIO()
++        im_cmyk.save(bio_cmyk, format="JPEG")
++        proc_cmyk = await sanitize_and_reencode_avatar(bio_cmyk.getvalue(), "image/jpeg")
++        assert proc_cmyk.content_type == "image/jpeg"
++        reopened = Image.open(io.BytesIO(proc_cmyk.clean_bytes))
++        assert reopened.mode == "RGB"
++
++    @pytest.mark.asyncio
++    async def test_avatar_animated_rejected(self) -> None:
++        """Verify animated/multi-frame media is rejected for avatars."""
++        im1 = Image.new("RGBA", (64, 64), color="blue")
++        im2 = Image.new("RGBA", (64, 64), color="red")
++        bio = io.BytesIO()
++        im1.save(bio, format="WEBP", save_all=True, append_images=[im2], duration=100, loop=0)
++        with pytest.raises(ProblemException) as exc_info:
++            await sanitize_and_reencode_avatar(bio.getvalue(), "image/webp")
++        assert exc_info.value.code == "ANIMATED_AVATAR_NOT_ALLOWED"
++        assert exc_info.value.status == 422
++
++    @pytest.mark.asyncio
++    async def test_avatar_dimension_and_pixel_bounds_exceeded(self) -> None:
++        """Verify dimensions exceeding 4096 px or 16 MP raise 422."""
++        header_png = _create_synthetic_png_header(5000, 100)
++        with pytest.raises(ProblemException) as exc_info:
++            await sanitize_and_reencode_avatar(header_png, "image/png")
++        assert exc_info.value.code == "IMAGE_DIMENSIONS_EXCEEDED"
++        assert exc_info.value.status == 422
++
++    def test_avatar_unsupported_type_and_corrupt_payload(self) -> None:
++        """Verify unsupported MIME and corrupt payloads raise appropriate exceptions."""
++        with pytest.raises(ProblemException) as exc_info:
++            sanitize_and_reencode_avatar_sync(b"data", "image/gif")
++        assert exc_info.value.code == "UNSUPPORTED_MEDIA_TYPE"
++        assert exc_info.value.status == 415
++
++        with pytest.raises(ProblemException) as exc_info2:
++            sanitize_and_reencode_avatar_sync(b"not-an-image", "image/png")
++        assert exc_info2.value.code == "MIME_MISMATCH_OR_UNSUPPORTED"
++        assert exc_info2.value.status == 415
+diff --git a/kanban/web/e2e/qa/kan-23-screenshots.spec.ts b/kanban/web/e2e/qa/kan-23-screenshots.spec.ts
+new file mode 100644
+index 0000000..df93411
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-23-screenshots.spec.ts
+@@ -0,0 +1,221 @@
++/**
++ * Playwright Visual & QA Proof Verification for KAN-23.
++ * Captures Desktop (1440x900) and Mobile (390x844) in Light and Dark themes.
++ * Plain ASCII hyphens only. Zero em-dashes or en-dashes.
++ */
++
++import { test, expect } from '../support/test';
++import type { Page } from '@playwright/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { resolve } from 'node:path';
++
++const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
++const SCREENSHOT_DIR = resolve(REPO_ROOT, 'docs/qa/KAN-23/screenshots');
++
++const samplePngBase64 =
++  'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAMElEQVR4nO3BMQEAAADCoPVPbQo/oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOA1wS0AAWzW3uEAAAAASUVORK5CYII=';
++const samplePngBuffer = Buffer.from(samplePngBase64, 'base64');
++
++const mockUser = {
++  principal_id: '11111111-1111-4111-8111-111111111111',
++  id: '11111111-1111-4111-8111-111111111111',
++  display_name: 'Security Architect',
++  username: 'architect',
++  email: 'architect@thumbsup.org',
++  timezone: 'UTC',
++  avatar_url: null as string | null,
++  roles: ['admin'],
++  is_server_admin: true,
++  capabilities: ['SERVER_ADMIN', 'WORKSPACE_ADMIN'],
++};
++
++const baseMocks = {
++  'GET /api/v1/setup/status': { json: { initialized: true } },
++  'GET /api/v1/auth/session': {
++    json: {
++      authenticated: true,
++      principal_id: mockUser.id,
++      workspace_id: '22222222-2222-2222-2222-222222222222',
++      aal_level: 2,
++      mfa_pending: false,
++      csrf_token: 'test-csrf-token-kan23',
++      remember_me: true,
++    },
++  },
++  'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
++  'GET /api/v1/workspaces': {
++    json: [{ id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' }],
++  },
++  'GET /api/v1/workspaces/current': {
++    json: { id: '22222222-2222-2222-2222-222222222222', name: 'kanban', slug: 'kanban' },
++  },
++  'GET /api/v1/projects': {
++    json: [{ id: '33333333-3333-3333-3333-333333333333', key: 'KAN', name: 'kanban' }],
++  },
++  'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
++  'GET /api/v1/projects/KAN/views': { json: [] },
++  'GET /api/v1/projects/KAN/issues': { json: [] },
++  'GET /api/v1/projects/KAN/cycles': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/modules': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/states': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/priorities': { json: { items: [] } },
++  'GET /api/v1/projects/KAN/labels': { json: { items: [] } },
++  'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++  'GET /api/v1/notifications': { json: { items: [] } },
++  'GET /api/v1/users/me': { json: mockUser },
++  'GET /api/v1/auth/me': { json: mockUser },
++  'GET /api/v1/auth/cards': { json: loadFixture('auth-cards-kan') },
++  'GET /api/v1/auth/mfa/status': {
++    json: {
++      totp_enabled: false,
++      passkeys_count: 0,
++      recovery_codes_remaining: 0,
++    },
++  },
++  'GET /api/v1/auth/webauthn/credentials': { json: [] },
++  'GET /api/v1/auth/identities': { json: { identities: [] } },
++};
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t: string) => {
++    localStorage.setItem('kb.theme', t);
++    document.documentElement.dataset.theme = t;
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++test.describe('KAN-23 Visual Verification & Proofs', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-kan23',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('Capture avatar crop modal at 1.0x and 2.5x zoom, preserved display name, and full-size lightbox', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    let userState = { ...mockUser };
++
++    await mockApi(page, {
++      ...baseMocks,
++      'GET /api/v1/auth/me': () => ({ json: userState }),
++      'PUT /api/v1/auth/me/avatar': () => {
++        userState = {
++          ...userState,
++          avatar_url: `/api/v1/users/${userState.id}/avatar?v=abc123def456`,
++        };
++        return { json: userState };
++      },
++      'GET /api/v1/users/:id/avatar': {
++        body: samplePngBuffer,
++        headers: {
++          'content-type': 'image/png',
++          'content-security-policy': "default-src 'none'; sandbox",
++          'x-content-type-options': 'nosniff',
++          'cross-origin-resource-policy': 'same-origin',
++          etag: '"abc123def456"',
++        },
++      },
++    });
++
++    await page.goto('/settings/profile');
++    await expect(page.locator('[data-testid="personal-settings-page"]')).toBeVisible();
++
++    // 1. Enter an unsaved display name draft
++    const displayNameInput = page.locator('[data-testid="display-name-input"]');
++    await displayNameInput.fill('Security Architect (Draft Edits)');
++    expect(await displayNameInput.inputValue()).toBe('Security Architect (Draft Edits)');
++
++    // 2. Select image file to open AvatarCropModal
++    await page.locator('[data-testid="avatar-file-input"]').setInputFiles({
++      name: 'avatar-test.png',
++      mimeType: 'image/png',
++      buffer: samplePngBuffer,
++    });
++
++    const cropModal = page.locator('[data-testid="avatar-crop-modal"]');
++    await expect(cropModal).toBeVisible();
++
++    // Verify 1.0x zoom
++    await expect(page.locator('[data-testid="avatar-crop-zoom-value"]')).toHaveText('1.0x');
++
++    // Screenshot 1: Avatar Crop Modal at 1.0x (Light & Dark)
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-avatar-crop-1.0x-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-avatar-crop-1.0x-dark-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // 3. Adjust Zoom Slider to 2.5x
++    const zoomSlider = page.locator('[data-testid="avatar-crop-zoom-slider"]');
++    await zoomSlider.fill('2.5');
++    await expect(page.locator('[data-testid="avatar-crop-zoom-value"]')).toHaveText('2.5x');
++
++    // Screenshot 2: Avatar Crop Modal at 2.5x (Light & Dark)
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-avatar-crop-2.5x-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-avatar-crop-2.5x-dark-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // 4. Save Picture
++    const saveBtn = page.locator('[data-testid="avatar-crop-save-btn"]');
++    await saveBtn.click();
++    await expect(cropModal).toBeHidden();
++
++    // Verify Display Name draft was preserved without reload
++    expect(await displayNameInput.inputValue()).toBe('Security Architect (Draft Edits)');
++
++    // Screenshot 3: Post-save Display Name preserved without reload (Light & Dark)
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-display-name-preserved-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-display-name-preserved-dark-${projectName}.png`),
++      fullPage: true,
++    });
++
++    // 5. Click Avatar Preview to open Full-Size Lightbox Modal
++    const avatarPreviewBtn = page.locator('[data-testid="avatar-preview"]');
++    await expect(avatarPreviewBtn).toBeVisible();
++    await avatarPreviewBtn.click();
++
++    const lightboxModal = page.locator('[data-testid="avatar-lightbox-modal"]');
++    await expect(lightboxModal).toBeVisible();
++
++    // Screenshot 4: Full-Size Avatar Lightbox (Light & Dark)
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-avatar-lightbox-light-${projectName}.png`),
++      fullPage: true,
++    });
++
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, `kan-23-avatar-lightbox-dark-${projectName}.png`),
++      fullPage: true,
++    });
++  });
++});
+diff --git a/kanban/web/src/features/settings/AvatarCropModal.tsx b/kanban/web/src/features/settings/AvatarCropModal.tsx
+new file mode 100644
+index 0000000..42d37c3
+--- /dev/null
++++ b/kanban/web/src/features/settings/AvatarCropModal.tsx
+@@ -0,0 +1,412 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useEffect, useRef, type JSX } from 'react';
++
++export interface AvatarCropModalProps {
++  file: File;
++  onSave: (croppedBlob: Blob) => void | Promise<void>;
++  onClose: () => void;
++  isSaving?: boolean;
++}
++
++const CROP_SIZE = 320;
++
++export function AvatarCropModal({
++  file,
++  onSave,
++  onClose,
++  isSaving = false,
++}: AvatarCropModalProps): JSX.Element {
++  const [zoom, setZoom] = useState<number>(1.0);
++  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
++  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
++
++  const canvasRef = useRef<HTMLCanvasElement | null>(null);
++  const imageRef = useRef<HTMLImageElement | null>(null);
++  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
++  const dragStart = useRef<{ panX: number; panY: number; clientX: number; clientY: number } | null>(null);
++  const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
++
++  // Load image from File
++  useEffect(() => {
++    let active = true;
++    const objectUrl = URL.createObjectURL(file);
++    const img = new Image();
++
++    img.onload = () => {
++      if (!active) return;
++      imageRef.current = img;
++      setImageLoaded(true);
++      setPan({ x: 0, y: 0 });
++      setZoom(1.0);
++    };
++
++    img.onerror = () => {
++      if (!active) return;
++      setImageLoaded(false);
++    };
++
++    img.src = objectUrl;
++
++    return () => {
++      active = false;
++      URL.revokeObjectURL(objectUrl);
++    };
++  }, [file]);
++
++  // Escape key handler
++  useEffect(() => {
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape' && !isSaving) {
++        onClose();
++      }
++    };
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [onClose, isSaving]);
++
++  // Clamp pan so image boundary covers crop area
++  const getClampedPan = (
++    x: number,
++    y: number,
++    currentZoom: number,
++    img: HTMLImageElement,
++  ): { x: number; y: number } => {
++    const baseScale = Math.max(CROP_SIZE / img.width, CROP_SIZE / img.height);
++    const renderWidth = img.width * baseScale * currentZoom;
++    const renderHeight = img.height * baseScale * currentZoom;
++    const maxPanX = Math.max(0, (renderWidth - CROP_SIZE) / 2);
++    const maxPanY = Math.max(0, (renderHeight - CROP_SIZE) / 2);
++    return {
++      x: Math.min(Math.max(x, -maxPanX), maxPanX),
++      y: Math.min(Math.max(y, -maxPanY), maxPanY),
++    };
++  };
++
++  // Render to canvas
++  useEffect(() => {
++    const canvas = canvasRef.current;
++    const img = imageRef.current;
++    if (!canvas || !img || !imageLoaded) return;
++    const ctx = canvas.getContext('2d');
++    if (!ctx) return;
++
++    ctx.clearRect(0, 0, CROP_SIZE, CROP_SIZE);
++
++    const baseScale = Math.max(CROP_SIZE / img.width, CROP_SIZE / img.height);
++    const renderWidth = img.width * baseScale * zoom;
++    const renderHeight = img.height * baseScale * zoom;
++
++    const clamped = getClampedPan(pan.x, pan.y, zoom, img);
++    const centerX = CROP_SIZE / 2 + clamped.x;
++    const centerY = CROP_SIZE / 2 + clamped.y;
++
++    ctx.drawImage(
++      img,
++      centerX - renderWidth / 2,
++      centerY - renderHeight / 2,
++      renderWidth,
++      renderHeight,
++    );
++  }, [zoom, pan, imageLoaded]);
++
++  // Zoom button helper
++  const handleZoomStep = (direction: 'in' | 'out'): void => {
++    const delta = direction === 'in' ? 0.2 : -0.2;
++    setZoom((prev) => {
++      const next = Math.min(4.0, Math.max(1.0, Number((prev + delta).toFixed(2))));
++      const img = imageRef.current;
++      if (img) {
++        setPan((p) => getClampedPan(p.x, p.y, next, img));
++      }
++      return next;
++    });
++  };
++
++  // Mouse wheel zoom
++  const handleWheel = (e: React.WheelEvent): void => {
++    e.preventDefault();
++    const delta = e.deltaY < 0 ? 0.1 : -0.1;
++    setZoom((prev) => {
++      const next = Math.min(4.0, Math.max(1.0, Number((prev + delta).toFixed(2))));
++      const img = imageRef.current;
++      if (img) {
++        setPan((p) => getClampedPan(p.x, p.y, next, img));
++      }
++      return next;
++    });
++  };
++
++  // Keyboard arrow pan
++  const handleKeyDownOnCrop = (e: React.KeyboardEvent): void => {
++    if (!imageRef.current) return;
++    const step = 12;
++    let newX = pan.x;
++    let newY = pan.y;
++    if (e.key === 'ArrowLeft') {
++      e.preventDefault();
++      newX -= step;
++    } else if (e.key === 'ArrowRight') {
++      e.preventDefault();
++      newX += step;
++    } else if (e.key === 'ArrowUp') {
++      e.preventDefault();
++      newY -= step;
++    } else if (e.key === 'ArrowDown') {
++      e.preventDefault();
++      newY += step;
++    } else {
++      return;
++    }
++    setPan(getClampedPan(newX, newY, zoom, imageRef.current));
++  };
++
++  // Pointer drag and 2-pointer pinch
++  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
++    if (typeof (e.currentTarget as HTMLElement).setPointerCapture === "function") {
++      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
++    }
++    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
++
++    if (activePointers.current.size === 1) {
++      dragStart.current = {
++        panX: pan.x,
++        panY: pan.y,
++        clientX: e.clientX,
++        clientY: e.clientY,
++      };
++      pinchStart.current = null;
++    } else if (activePointers.current.size === 2) {
++      const [p1, p2] = Array.from(activePointers.current.values()) as [
++        { x: number; y: number },
++        { x: number; y: number },
++      ];
++      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
++      pinchStart.current = { dist: Math.max(1, dist), zoom };
++      dragStart.current = null;
++    }
++  };
++
++  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
++    if (!activePointers.current.has(e.pointerId)) return;
++    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
++
++    if (activePointers.current.size === 2 && pinchStart.current) {
++      const [p1, p2] = Array.from(activePointers.current.values()) as [
++        { x: number; y: number },
++        { x: number; y: number },
++      ];
++      const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
++      const factor = currentDist / pinchStart.current.dist;
++      const nextZoom = Math.min(
++        4.0,
++        Math.max(1.0, Number((pinchStart.current.zoom * factor).toFixed(2))),
++      );
++      setZoom(nextZoom);
++      const img = imageRef.current;
++      if (img) {
++        setPan((p) => getClampedPan(p.x, p.y, nextZoom, img));
++      }
++    } else if (activePointers.current.size === 1 && dragStart.current && imageRef.current) {
++      const dx = e.clientX - dragStart.current.clientX;
++      const dy = e.clientY - dragStart.current.clientY;
++      const candidateX = dragStart.current.panX + dx;
++      const candidateY = dragStart.current.panY + dy;
++      setPan(getClampedPan(candidateX, candidateY, zoom, imageRef.current));
++    }
++  };
++
++  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
++    activePointers.current.delete(e.pointerId);
++    if (activePointers.current.size === 0) {
++      dragStart.current = null;
++      pinchStart.current = null;
++    } else if (activePointers.current.size === 1) {
++      pinchStart.current = null;
++      const [remaining] = Array.from(activePointers.current.values()) as [
++        { x: number; y: number },
++      ];
++      dragStart.current = {
++        panX: pan.x,
++        panY: pan.y,
++        clientX: remaining.x,
++        clientY: remaining.y,
++      };
++    }
++  };
++
++  // Export 512x512 raster Blob
++  const handleSave = (): void => {
++    if (!imageRef.current) {
++      void onSave(file);
++      return;
++    }
++    const img = imageRef.current;
++    const exportCanvas = document.createElement('canvas');
++    exportCanvas.width = 512;
++    exportCanvas.height = 512;
++    const exportCtx = exportCanvas.getContext('2d');
++    if (!exportCtx) {
++      void onSave(file);
++      return;
++    }
++
++    const baseScale = Math.max(CROP_SIZE / img.width, CROP_SIZE / img.height);
++    const renderWidth = img.width * baseScale * zoom;
++    const renderHeight = img.height * baseScale * zoom;
++    const clamped = getClampedPan(pan.x, pan.y, zoom, img);
++
++    const scaleFactor = 512 / CROP_SIZE;
++    const expRenderW = renderWidth * scaleFactor;
++    const expRenderH = renderHeight * scaleFactor;
++    const expCenterX = (CROP_SIZE / 2 + clamped.x) * scaleFactor;
++    const expCenterY = (CROP_SIZE / 2 + clamped.y) * scaleFactor;
++
++    exportCtx.drawImage(
++      img,
++      expCenterX - expRenderW / 2,
++      expCenterY - expRenderH / 2,
++      expRenderW,
++      expRenderH,
++    );
++
++    if (typeof exportCanvas.toBlob === 'function') {
++      exportCanvas.toBlob(
++        (blob) => {
++          if (blob) {
++            void onSave(blob);
++          } else {
++            void onSave(file);
++          }
++        },
++        'image/png',
++      );
++    } else {
++      void onSave(file);
++    }
++  };
++
++  return (
++    <div
++      className="kb-avatar-crop-backdrop"
++      role="dialog"
++      aria-modal="true"
++      aria-labelledby="avatar-crop-title"
++      data-testid="avatar-crop-modal"
++      onClick={(e) => {
++        if (e.target === e.currentTarget && !isSaving) {
++          onClose();
++        }
++      }}
++    >
++      <div className="kb-avatar-crop-card">
++        <div className="kb-avatar-crop-header">
++          <h2 id="avatar-crop-title" className="kb-avatar-crop-title">
++            Crop Profile Picture
++          </h2>
++          <button
++            type="button"
++            className="kb-avatar-crop-close-btn"
++            aria-label="Close"
++            onClick={onClose}
++            disabled={isSaving}
++          >
++            ✕
++          </button>
++        </div>
++
++        <div
++          className="kb-avatar-crop-viewport"
++          tabIndex={0}
++          role="application"
++          aria-label="Image crop area, use arrow keys to pan, mouse wheel or pinch to zoom"
++          data-testid="avatar-crop-viewport"
++          onWheel={handleWheel}
++          onKeyDown={handleKeyDownOnCrop}
++          onPointerDown={handlePointerDown}
++          onPointerMove={handlePointerMove}
++          onPointerUp={handlePointerUp}
++          onPointerCancel={handlePointerUp}
++        >
++          <canvas
++            ref={canvasRef}
++            width={CROP_SIZE}
++            height={CROP_SIZE}
++            className="kb-avatar-crop-canvas"
++            data-testid="avatar-crop-canvas"
++          />
++          <div className="kb-avatar-crop-guide" aria-hidden="true" />
++        </div>
++
++        <div className="kb-avatar-crop-controls">
++          <button
++            type="button"
++            className="kb-avatar-crop-zoom-btn"
++            aria-label="Zoom out"
++            data-testid="avatar-crop-zoom-out"
++            onClick={() => { handleZoomStep('out'); }}
++            disabled={zoom <= 1.0 || isSaving}
++          >
++            -
++          </button>
++          <input
++            type="range"
++            className="kb-avatar-crop-zoom-slider"
++            min={1.0}
++            max={4.0}
++            step={0.05}
++            value={zoom}
++            aria-label="Zoom level"
++            data-testid="avatar-crop-zoom-slider"
++            disabled={isSaving}
++            onChange={(e) => {
++              const next = parseFloat(e.target.value);
++              setZoom(next);
++              const img = imageRef.current;
++              if (img) {
++                setPan((p) => getClampedPan(p.x, p.y, next, img));
++              }
++            }}
++          />
++          <button
++            type="button"
++            className="kb-avatar-crop-zoom-btn"
++            aria-label="Zoom in"
++            data-testid="avatar-crop-zoom-in"
++            onClick={() => { handleZoomStep('in'); }}
++            disabled={zoom >= 4.0 || isSaving}
++          >
++            +
++          </button>
++          <span className="kb-avatar-crop-zoom-value" data-testid="avatar-crop-zoom-value">
++            {zoom.toFixed(1)}x
++          </span>
++        </div>
++
++        <div className="kb-avatar-crop-actions">
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            data-testid="avatar-crop-cancel-btn"
++            onClick={onClose}
++            disabled={isSaving}
++          >
++            Cancel
++          </button>
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++            data-testid="avatar-crop-save-btn"
++            onClick={handleSave}
++            disabled={isSaving}
++          >
++            {isSaving ? 'Saving...' : 'Save Picture'}
++          </button>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/settings/AvatarLightboxModal.tsx b/kanban/web/src/features/settings/AvatarLightboxModal.tsx
+new file mode 100644
+index 0000000..b0e92d8
+--- /dev/null
++++ b/kanban/web/src/features/settings/AvatarLightboxModal.tsx
+@@ -0,0 +1,353 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useEffect, useRef, type JSX } from 'react';
++
++export interface AvatarLightboxModalProps {
++  avatarUrl: string;
++  displayName: string;
++  onClose: () => void;
++}
++
++const LIGHTBOX_SIZE = 440;
++
++export function AvatarLightboxModal({
++  avatarUrl,
++  displayName,
++  onClose,
++}: AvatarLightboxModalProps): JSX.Element {
++  const [zoom, setZoom] = useState<number>(1.0);
++  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
++  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
++
++  const canvasRef = useRef<HTMLCanvasElement | null>(null);
++  const imageRef = useRef<HTMLImageElement | null>(null);
++  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
++  const dragStart = useRef<{ panX: number; panY: number; clientX: number; clientY: number } | null>(null);
++  const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
++
++  // Load avatar image
++  useEffect(() => {
++    let active = true;
++    const img = new Image();
++    img.crossOrigin = 'anonymous';
++
++    img.onload = () => {
++      if (!active) return;
++      imageRef.current = img;
++      setImageLoaded(true);
++      setPan({ x: 0, y: 0 });
++      setZoom(1.0);
++    };
++
++    img.onerror = () => {
++      if (!active) return;
++      setImageLoaded(false);
++    };
++
++    img.src = avatarUrl;
++
++    return () => {
++      active = false;
++    };
++  }, [avatarUrl]);
++
++  // Escape key handler
++  useEffect(() => {
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        onClose();
++      }
++    };
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [onClose]);
++
++  // Clamp pan so image does not drift out of view when zoomed in
++  const getClampedPan = (
++    x: number,
++    y: number,
++    currentZoom: number,
++    img: HTMLImageElement,
++  ): { x: number; y: number } => {
++    const baseScale = Math.min(LIGHTBOX_SIZE / img.width, LIGHTBOX_SIZE / img.height);
++    const renderWidth = img.width * baseScale * currentZoom;
++    const renderHeight = img.height * baseScale * currentZoom;
++    const maxPanX = Math.max(0, (renderWidth - LIGHTBOX_SIZE) / 2);
++    const maxPanY = Math.max(0, (renderHeight - LIGHTBOX_SIZE) / 2);
++    return {
++      x: Math.min(Math.max(x, -maxPanX), maxPanX),
++      y: Math.min(Math.max(y, -maxPanY), maxPanY),
++    };
++  };
++
++  // Render to canvas
++  useEffect(() => {
++    const canvas = canvasRef.current;
++    const img = imageRef.current;
++    if (!canvas || !img || !imageLoaded) return;
++    const ctx = canvas.getContext('2d');
++    if (!ctx) return;
++
++    ctx.clearRect(0, 0, LIGHTBOX_SIZE, LIGHTBOX_SIZE);
++
++    const baseScale = Math.min(LIGHTBOX_SIZE / img.width, LIGHTBOX_SIZE / img.height);
++    const renderWidth = img.width * baseScale * zoom;
++    const renderHeight = img.height * baseScale * zoom;
++
++    const clamped = getClampedPan(pan.x, pan.y, zoom, img);
++    const centerX = LIGHTBOX_SIZE / 2 + clamped.x;
++    const centerY = LIGHTBOX_SIZE / 2 + clamped.y;
++
++    ctx.drawImage(
++      img,
++      centerX - renderWidth / 2,
++      centerY - renderHeight / 2,
++      renderWidth,
++      renderHeight,
++    );
++  }, [zoom, pan, imageLoaded]);
++
++  // Zoom button helper
++  const handleZoomStep = (direction: 'in' | 'out'): void => {
++    const delta = direction === 'in' ? 0.2 : -0.2;
++    setZoom((prev) => {
++      const next = Math.min(4.0, Math.max(1.0, Number((prev + delta).toFixed(2))));
++      const img = imageRef.current;
++      if (img) {
++        setPan((p) => getClampedPan(p.x, p.y, next, img));
++      }
++      return next;
++    });
++  };
++
++  // Reset zoom helper
++  const handleResetZoom = (): void => {
++    setZoom(1.0);
++    setPan({ x: 0, y: 0 });
++  };
++
++  // Mouse wheel zoom
++  const handleWheel = (e: React.WheelEvent): void => {
++    e.preventDefault();
++    const delta = e.deltaY < 0 ? 0.1 : -0.1;
++    setZoom((prev) => {
++      const next = Math.min(4.0, Math.max(1.0, Number((prev + delta).toFixed(2))));
++      const img = imageRef.current;
++      if (img) {
++        setPan((p) => getClampedPan(p.x, p.y, next, img));
++      }
++      return next;
++    });
++  };
++
++  // Keyboard arrow pan
++  const handleKeyDownOnLightbox = (e: React.KeyboardEvent): void => {
++    if (!imageRef.current) return;
++    const step = 14;
++    let newX = pan.x;
++    let newY = pan.y;
++    if (e.key === 'ArrowLeft') {
++      e.preventDefault();
++      newX -= step;
++    } else if (e.key === 'ArrowRight') {
++      e.preventDefault();
++      newX += step;
++    } else if (e.key === 'ArrowUp') {
++      e.preventDefault();
++      newY -= step;
++    } else if (e.key === 'ArrowDown') {
++      e.preventDefault();
++      newY += step;
++    } else {
++      return;
++    }
++    setPan(getClampedPan(newX, newY, zoom, imageRef.current));
++  };
++
++  // Pointer drag and 2-pointer pinch
++  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
++    if (typeof (e.currentTarget as HTMLElement).setPointerCapture === "function") {
++      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
++    }
++    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
++
++    if (activePointers.current.size === 1) {
++      dragStart.current = {
++        panX: pan.x,
++        panY: pan.y,
++        clientX: e.clientX,
++        clientY: e.clientY,
++      };
++      pinchStart.current = null;
++    } else if (activePointers.current.size === 2) {
++      const [p1, p2] = Array.from(activePointers.current.values()) as [
++        { x: number; y: number },
++        { x: number; y: number },
++      ];
++      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
++      pinchStart.current = { dist: Math.max(1, dist), zoom };
++      dragStart.current = null;
++    }
++  };
++
++  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
++    if (!activePointers.current.has(e.pointerId)) return;
++    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
++
++    if (activePointers.current.size === 2 && pinchStart.current) {
++      const [p1, p2] = Array.from(activePointers.current.values()) as [
++        { x: number; y: number },
++        { x: number; y: number },
++      ];
++      const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
++      const factor = currentDist / pinchStart.current.dist;
++      const nextZoom = Math.min(
++        4.0,
++        Math.max(1.0, Number((pinchStart.current.zoom * factor).toFixed(2))),
++      );
++      setZoom(nextZoom);
++      const img = imageRef.current;
++      if (img) {
++        setPan((p) => getClampedPan(p.x, p.y, nextZoom, img));
++      }
++    } else if (activePointers.current.size === 1 && dragStart.current && imageRef.current) {
++      const dx = e.clientX - dragStart.current.clientX;
++      const dy = e.clientY - dragStart.current.clientY;
++      const candidateX = dragStart.current.panX + dx;
++      const candidateY = dragStart.current.panY + dy;
++      setPan(getClampedPan(candidateX, candidateY, zoom, imageRef.current));
++    }
++  };
++
++  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
++    activePointers.current.delete(e.pointerId);
++    if (activePointers.current.size === 0) {
++      dragStart.current = null;
++      pinchStart.current = null;
++    } else if (activePointers.current.size === 1) {
++      pinchStart.current = null;
++      const [remaining] = Array.from(activePointers.current.values()) as [
++        { x: number; y: number },
++      ];
++      dragStart.current = {
++        panX: pan.x,
++        panY: pan.y,
++        clientX: remaining.x,
++        clientY: remaining.y,
++      };
++    }
++  };
++
++  return (
++    <div
++      className="kb-avatar-lightbox-backdrop"
++      role="dialog"
++      aria-modal="true"
++      aria-labelledby="avatar-lightbox-title"
++      data-testid="avatar-lightbox-modal"
++      onClick={(e) => {
++        if (e.target === e.currentTarget) {
++          onClose();
++        }
++      }}
++    >
++      <div className="kb-avatar-lightbox-card">
++        <div className="kb-avatar-lightbox-header">
++          <h2 id="avatar-lightbox-title" className="kb-avatar-lightbox-title">
++            {displayName || 'User'} Picture
++          </h2>
++          <button
++            type="button"
++            className="kb-avatar-lightbox-close-btn"
++            aria-label="Close"
++            data-testid="avatar-lightbox-close-btn"
++            onClick={onClose}
++          >
++            ✕
++          </button>
++        </div>
++
++        <div
++          className="kb-avatar-lightbox-viewport"
++          tabIndex={0}
++          role="application"
++          aria-label="Avatar full-size lightbox viewport. Use arrow keys to pan, mouse wheel or pinch to zoom"
++          data-testid="avatar-lightbox-viewport"
++          onWheel={handleWheel}
++          onKeyDown={handleKeyDownOnLightbox}
++          onPointerDown={handlePointerDown}
++          onPointerMove={handlePointerMove}
++          onPointerUp={handlePointerUp}
++          onPointerCancel={handlePointerUp}
++        >
++          <canvas
++            ref={canvasRef}
++            width={LIGHTBOX_SIZE}
++            height={LIGHTBOX_SIZE}
++            className="kb-avatar-lightbox-canvas"
++            data-testid="avatar-lightbox-canvas"
++          />
++        </div>
++
++        <div className="kb-avatar-lightbox-controls">
++          <button
++            type="button"
++            className="kb-avatar-lightbox-zoom-btn"
++            aria-label="Zoom out"
++            data-testid="avatar-lightbox-zoom-out"
++            onClick={() => { handleZoomStep('out'); }}
++            disabled={zoom <= 1.0}
++          >
++            -
++          </button>
++          <input
++            type="range"
++            className="kb-avatar-lightbox-zoom-slider"
++            min={1.0}
++            max={4.0}
++            step={0.05}
++            value={zoom}
++            aria-label="Zoom level"
++            data-testid="avatar-lightbox-zoom-slider"
++            onChange={(e) => {
++              const next = parseFloat(e.target.value);
++              setZoom(next);
++              const img = imageRef.current;
++              if (img) {
++                setPan((p) => getClampedPan(p.x, p.y, next, img));
++              }
++            }}
++          />
++          <button
++            type="button"
++            className="kb-avatar-lightbox-zoom-btn"
++            aria-label="Zoom in"
++            data-testid="avatar-lightbox-zoom-in"
++            onClick={() => { handleZoomStep('in'); }}
++            disabled={zoom >= 4.0}
++          >
++            +
++          </button>
++          <span
++            className="kb-avatar-lightbox-zoom-value"
++            data-testid="avatar-lightbox-zoom-value"
++          >
++            {zoom.toFixed(1)}x
++          </span>
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            aria-label="Reset zoom"
++            data-testid="avatar-lightbox-reset-btn"
++            onClick={handleResetZoom}
++          >
++            Reset
++          </button>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
+index 6c35546..c125dad 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.css
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
+@@ -404,3 +404,318 @@
+   font-size: var(--text-sm);
+   word-break: break-all;
+ }
++
++/* Avatar Crop Modal */
++.kb-avatar-crop-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.75);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++  padding: var(--space-4);
++}
++
++.kb-avatar-crop-card {
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  padding: 24px;
++  max-width: 400px;
++  width: 100%;
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4);
++  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
++}
++
++.kb-avatar-crop-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.kb-avatar-crop-title {
++  margin: 0;
++  font-size: var(--text-lg);
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.kb-avatar-crop-close-btn {
++  background: transparent;
++  border: none;
++  font-size: var(--text-lg);
++  color: var(--fg-secondary);
++  cursor: pointer;
++  padding: 4px;
++  border-radius: var(--radius-sm);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-avatar-crop-close-btn:hover:not(:disabled) {
++  color: var(--fg-primary);
++  background-color: var(--bg-hover);
++}
++
++.kb-avatar-crop-viewport {
++  position: relative;
++  width: 320px;
++  height: 320px;
++  margin: 0 auto;
++  border-radius: var(--radius-md);
++  overflow: hidden;
++  background-color: var(--bg-canvas);
++  cursor: grab;
++  touch-action: none;
++  user-select: none;
++  outline: none;
++}
++
++.kb-avatar-crop-viewport:focus-visible {
++  box-shadow: 0 0 0 2px var(--focus-ring);
++}
++
++.kb-avatar-crop-viewport:active {
++  cursor: grabbing;
++}
++
++.kb-avatar-crop-canvas {
++  width: 320px;
++  height: 320px;
++  display: block;
++}
++
++.kb-avatar-crop-guide {
++  position: absolute;
++  inset: 0;
++  pointer-events: none;
++  border-radius: 50%;
++  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
++  border: 2px dashed var(--accent-primary);
++}
++
++.kb-avatar-crop-controls {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3);
++  justify-content: center;
++}
++
++.kb-avatar-crop-zoom-btn {
++  width: 32px;
++  height: 32px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-subtle);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
++  font-size: var(--text-base);
++  font-weight: 600;
++  cursor: pointer;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-avatar-crop-zoom-btn:hover:not(:disabled) {
++  background-color: var(--bg-hover);
++}
++
++.kb-avatar-crop-zoom-btn:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++.kb-avatar-crop-zoom-slider {
++  flex: 1;
++  accent-color: var(--accent-primary);
++  cursor: pointer;
++}
++
++.kb-avatar-crop-zoom-value {
++  font-size: var(--text-sm);
++  font-weight: 500;
++  color: var(--fg-secondary);
++  min-width: 36px;
++  text-align: right;
++  font-variant-numeric: tabular-nums;
++}
++
++.kb-avatar-crop-actions {
++  display: flex;
++  justify-content: flex-end;
++  gap: var(--space-2);
++}
++
++/* Avatar Preview Clickable Affordance */
++.kb-personal-settings-avatar-preview-clickable {
++  cursor: pointer;
++  position: relative;
++  padding: 0;
++  border: 2px solid var(--border-subtle);
++  background-color: var(--bg-canvas);
++  transition: transform 0.15s ease, border-color 0.15s ease;
++}
++
++.kb-personal-settings-avatar-preview-clickable:hover {
++  transform: scale(1.04);
++  border-color: var(--accent-primary);
++}
++
++.kb-personal-settings-avatar-hover-zoom {
++  position: absolute;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.45);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  opacity: 0;
++  transition: opacity 0.15s ease;
++  font-size: var(--text-lg);
++  border-radius: 50%;
++  pointer-events: none;
++}
++
++.kb-personal-settings-avatar-preview-clickable:hover .kb-personal-settings-avatar-hover-zoom {
++  opacity: 1;
++}
++
++/* Full-Size Avatar Lightbox */
++.kb-avatar-lightbox-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: rgba(0, 0, 0, 0.85);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1100;
++  padding: var(--space-4);
++}
++
++.kb-avatar-lightbox-card {
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  padding: 24px;
++  max-width: 520px;
++  width: 100%;
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4);
++  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
++}
++
++.kb-avatar-lightbox-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.kb-avatar-lightbox-title {
++  margin: 0;
++  font-size: var(--text-lg);
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.kb-avatar-lightbox-close-btn {
++  background: transparent;
++  border: none;
++  font-size: var(--text-lg);
++  color: var(--fg-secondary);
++  cursor: pointer;
++  padding: 4px;
++  border-radius: var(--radius-sm);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-avatar-lightbox-close-btn:hover {
++  color: var(--fg-primary);
++  background-color: var(--bg-hover);
++}
++
++.kb-avatar-lightbox-viewport {
++  position: relative;
++  width: 440px;
++  height: 440px;
++  max-width: 100%;
++  max-height: 70vh;
++  margin: 0 auto;
++  border-radius: var(--radius-md);
++  overflow: hidden;
++  background-color: var(--bg-canvas);
++  cursor: grab;
++  touch-action: none;
++  user-select: none;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  outline: none;
++}
++
++.kb-avatar-lightbox-viewport:focus-visible {
++  box-shadow: 0 0 0 2px var(--focus-ring);
++}
++
++.kb-avatar-lightbox-viewport:active {
++  cursor: grabbing;
++}
++
++.kb-avatar-lightbox-canvas {
++  width: 440px;
++  height: 440px;
++  max-width: 100%;
++  max-height: 100%;
++  display: block;
++}
++
++.kb-avatar-lightbox-controls {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3);
++  justify-content: center;
++}
++
++.kb-avatar-lightbox-zoom-btn {
++  width: 32px;
++  height: 32px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-subtle);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
++  font-size: var(--text-base);
++  font-weight: 600;
++  cursor: pointer;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-avatar-lightbox-zoom-btn:hover:not(:disabled) {
++  background-color: var(--bg-hover);
++}
++
++.kb-avatar-lightbox-zoom-btn:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++.kb-avatar-lightbox-zoom-slider {
++  flex: 1;
++  accent-color: var(--accent-primary);
++  cursor: pointer;
++}
++
++.kb-avatar-lightbox-zoom-value {
++  font-size: var(--text-sm);
++  font-weight: 500;
++  color: var(--fg-secondary);
++  min-width: 36px;
++  text-align: right;
++  font-variant-numeric: tabular-nums;
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index 330baa4..1890b77 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -28,6 +28,9 @@ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import { ApiProblem } from '../../api/problem';
+ import type { MfaMethod } from '../auth/authApi';
+ import { copyToClipboard } from '../../utils/clipboard';
++import { qk } from '../../api/queryKeys';
++import { AvatarCropModal } from './AvatarCropModal';
++import { AvatarLightboxModal } from './AvatarLightboxModal';
+ import './PersonalSettingsPage.css';
+ 
+ // IANA Timezones list
+@@ -85,6 +88,10 @@ export function PersonalSettingsPage(): JSX.Element {
+   } | null>(null);
+   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
+ 
++  // Avatar crop modal and lightbox states
++  const [cropFile, setCropFile] = useState<File | null>(null);
++  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
++
+   const fileInputRef = useRef<HTMLInputElement>(null);
+ 
+   // Data fetching
+@@ -139,7 +146,12 @@ export function PersonalSettingsPage(): JSX.Element {
+   const uploadAvatarMutation = useMutation({
+     mutationFn: uploadAvatar,
+     onSuccess: (updated) => {
+-      queryClient.setQueryData(['myProfile'], updated);
++      queryClient.setQueryData(['myProfile'], (prev: UserProfileResponse | undefined) =>
++        prev ? { ...prev, ...updated } : updated,
++      );
++      void queryClient.invalidateQueries({ queryKey: ['myProfile'] });
++      void queryClient.invalidateQueries({ queryKey: qk.me() });
++      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+       setSuccessMsg('Avatar uploaded successfully.');
+       setErrorMsg(null);
+     },
+@@ -151,7 +163,12 @@ export function PersonalSettingsPage(): JSX.Element {
+   const deleteAvatarMutation = useMutation({
+     mutationFn: deleteAvatar,
+     onSuccess: (updated) => {
+-      queryClient.setQueryData(['myProfile'], updated);
++      queryClient.setQueryData(['myProfile'], (prev: UserProfileResponse | undefined) =>
++        prev ? { ...prev, ...updated } : updated,
++      );
++      void queryClient.invalidateQueries({ queryKey: ['myProfile'] });
++      void queryClient.invalidateQueries({ queryKey: qk.me() });
++      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+       setSuccessMsg('Avatar removed.');
+       setErrorMsg(null);
+     },
+@@ -171,18 +188,18 @@ export function PersonalSettingsPage(): JSX.Element {
+ 
+     if (file.type === 'image/svg+xml' || ((file.name as string | undefined) ?? '').toLowerCase().endsWith('.svg')) {
+       setErrorMsg('SVG avatars are rejected for security. Please upload PNG, JPEG, or WebP.');
++      e.target.value = '';
+       return;
+     }
+ 
+     if (file.size > 2 * 1024 * 1024) {
+       setErrorMsg('Avatar file size exceeds 2 MiB limit.');
++      e.target.value = '';
+       return;
+     }
+ 
+-    uploadAvatarMutation.mutate(file);
+-    if (fileInputRef.current) {
+-      fileInputRef.current.value = '';
+-    }
++    setCropFile(file);
++    e.target.value = '';
+   };
+ 
+   const handlePasswordSubmit = async (e: SyntheticEvent): Promise<void> => {
+@@ -388,17 +405,28 @@ export function PersonalSettingsPage(): JSX.Element {
+         </p>
+ 
+         <div className="kb-personal-settings-avatar-row">
+-          <div className="kb-personal-settings-avatar-preview" data-testid="avatar-preview">
+-            {profile?.avatar_url ? (
++          {profile?.avatar_url ? (
++            <button
++              type="button"
++              className="kb-personal-settings-avatar-preview kb-personal-settings-avatar-preview-clickable"
++              aria-label="Zoom profile picture"
++              data-testid="avatar-preview"
++              onClick={() => { setIsLightboxOpen(true); }}
++            >
+               <img
+                 src={profile.avatar_url}
+                 alt={`${profile.display_name}'s avatar`}
+                 draggable={false}
+               />
+-            ) : (
++              <div className="kb-personal-settings-avatar-hover-zoom" aria-hidden="true">
++                🔍
++              </div>
++            </button>
++          ) : (
++            <div className="kb-personal-settings-avatar-preview" data-testid="avatar-preview">
+               <span>{((profile?.display_name ?? profile?.username ?? 'U')[0] ?? '').toUpperCase()}</span>
+-            )}
+-          </div>
++            </div>
++          )}
+           <div className="kb-personal-settings-avatar-actions">
+             <input
+               ref={fileInputRef}
+@@ -1007,6 +1035,26 @@ export function PersonalSettingsPage(): JSX.Element {
+           </div>
+         </div>
+       )}
++
++      {cropFile && (
++        <AvatarCropModal
++          file={cropFile}
++          onSave={(blob) => {
++            uploadAvatarMutation.mutate(blob);
++            setCropFile(null);
++          }}
++          onClose={() => { setCropFile(null); }}
++          isSaving={uploadAvatarMutation.isPending}
++        />
++      )}
++
++      {isLightboxOpen && profile?.avatar_url && (
++        <AvatarLightboxModal
++          avatarUrl={profile.avatar_url}
++          displayName={profile.display_name}
++          onClose={() => { setIsLightboxOpen(false); }}
++        />
++      )}
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/settings/__tests__/AvatarCropModal.test.tsx b/kanban/web/src/features/settings/__tests__/AvatarCropModal.test.tsx
+new file mode 100644
+index 0000000..e427db5
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/AvatarCropModal.test.tsx
+@@ -0,0 +1,397 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { AvatarCropModal } from '../AvatarCropModal';
++
++describe('AvatarCropModal', () => {
++  const origImage = global.Image;
++
++  beforeEach(() => {
++    vi.stubGlobal('URL', {
++      createObjectURL: vi.fn().mockReturnValue('blob:mock-image'),
++      revokeObjectURL: vi.fn(),
++    });
++
++    class MockImage {
++      onload: (() => void) | null = null;
++      onerror: (() => void) | null = null;
++      width = 800;
++      height = 600;
++      private _src = '';
++      get src(): string {
++        return this._src;
++      }
++      set src(val: string) {
++        this._src = val;
++        setTimeout(() => {
++          if (this.onload) this.onload();
++        }, 0);
++      }
++    }
++    global.Image = MockImage as unknown as typeof Image;
++
++    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
++      clearRect: vi.fn(),
++      drawImage: vi.fn(),
++    });
++
++    HTMLCanvasElement.prototype.toBlob = vi.fn().mockImplementation((cb: (blob: Blob | null) => void) => {
++      cb(new Blob(['mock-png-bytes'], { type: 'image/png' }));
++    });
++  });
++
++  afterEach(() => {
++    global.Image = origImage;
++    vi.unstubAllGlobals();
++    vi.restoreAllMocks();
++  });
++
++  it('renders crop modal and handles zoom adjustments via buttons and slider', async () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++
++    expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
++    expect(screen.getByText('Crop Profile Picture')).toBeDefined();
++
++    // Wait for image onload to execute
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.0x');
++    });
++
++    // Zoom in button
++    const zoomInBtn = screen.getByTestId('avatar-crop-zoom-in');
++    fireEvent.click(zoomInBtn);
++    expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.2x');
++
++    // Zoom out button
++    const zoomOutBtn = screen.getByTestId('avatar-crop-zoom-out');
++    fireEvent.click(zoomOutBtn);
++    expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.0x');
++
++    // Zoom slider
++    const slider = screen.getByTestId('avatar-crop-zoom-slider');
++    fireEvent.change(slider, { target: { value: '2.5' } });
++    expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('2.5x');
++  });
++
++  it('handles mouse wheel zoom and keyboard arrow panning', async () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.0x');
++    });
++
++    const viewport = screen.getByTestId('avatar-crop-viewport');
++
++    // Wheel zoom in
++    fireEvent.wheel(viewport, { deltaY: -100 });
++    expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.1x');
++
++    // Wheel zoom out
++    fireEvent.wheel(viewport, { deltaY: 100 });
++    expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.0x');
++
++    // Zoom in with slider first so panning has range
++    fireEvent.change(screen.getByTestId('avatar-crop-zoom-slider'), { target: { value: '3.0' } });
++
++    // Keyboard arrow keys
++    fireEvent.keyDown(viewport, { key: 'ArrowRight' });
++    fireEvent.keyDown(viewport, { key: 'ArrowLeft' });
++    fireEvent.keyDown(viewport, { key: 'ArrowDown' });
++    fireEvent.keyDown(viewport, { key: 'ArrowUp' });
++    fireEvent.keyDown(viewport, { key: 'Enter' }); // Ignored non-arrow key
++  });
++
++  it('handles pointer drag and multi-pointer pinch zoom', async () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-viewport')).toBeDefined();
++    });
++
++    const viewport = screen.getByTestId('avatar-crop-viewport');
++    viewport.setPointerCapture = vi.fn();
++
++    // Zoom in first to allow pan
++    fireEvent.change(screen.getByTestId('avatar-crop-zoom-slider'), { target: { value: '2.0' } });
++
++    // 1. Single pointer drag
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 140, clientY: 130 });
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++
++    // 2. Two pointer pinch
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 2, clientX: 200, clientY: 100 });
++    // Move pointers further apart (pinch in/out)
++    fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 250, clientY: 100 });
++    // Release pointer 2 (transitions back to 1 active pointer)
++    fireEvent.pointerUp(viewport, { pointerId: 2 });
++    // Release pointer 1
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++  });
++
++  it('handles Escape key, close button, cancel button, and backdrop click', () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    const { rerender } = render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++
++    // Close button
++    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    // Cancel button
++    fireEvent.click(screen.getByTestId('avatar-crop-cancel-btn'));
++    expect(onClose).toHaveBeenCalledTimes(2);
++
++    // Clicking inside the modal card does not trigger onClose
++    fireEvent.click(screen.getByText('Crop Profile Picture'));
++    expect(onClose).toHaveBeenCalledTimes(2);
++
++    // Backdrop click
++    const backdrop = screen.getByTestId('avatar-crop-modal');
++    fireEvent.click(backdrop);
++    expect(onClose).toHaveBeenCalledTimes(3);
++
++    // Escape key
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(onClose).toHaveBeenCalledTimes(4);
++
++    // Other key ignored
++    fireEvent.keyDown(window, { key: 'Tab' });
++    expect(onClose).toHaveBeenCalledTimes(4);
++
++    // When isSaving is true, Escape and Backdrop do not call onClose
++    rerender(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} isSaving={true} />);
++    fireEvent.keyDown(window, { key: 'Escape' });
++    fireEvent.click(backdrop);
++    expect(onClose).toHaveBeenCalledTimes(4);
++  });
++
++  it('exports 512x512 raster blob and calls onSave', async () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-save-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++
++    await waitFor(() => {
++      expect(onSave).toHaveBeenCalled();
++      const calledArg: unknown = onSave.mock.calls[0]?.[0];
++      expect(calledArg).toBeDefined();
++    });
++  });
++
++  it('handles image error gracefully and falls back to original file when canvas fails', async () => {
++    class FailingImage {
++      onload: (() => void) | null = null;
++      onerror: (() => void) | null = null;
++      width = 0;
++      height = 0;
++      private _src = '';
++      get src(): string {
++        return this._src;
++      }
++      set src(val: string) {
++        this._src = val;
++        setTimeout(() => {
++          if (this.onerror) this.onerror();
++        }, 0);
++      }
++    }
++    global.Image = FailingImage as unknown as typeof Image;
++
++    const file = new File(['corrupt-data'], 'bad.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++
++    // Even if image fails to load, Save Picture falls back to onSave(file)
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++    await waitFor(() => {
++      expect(onSave).toHaveBeenCalledWith(file);
++    });
++  });
++
++  it('covers export canvas fallback branches when context or blob is missing', async () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    // 1. getContext returns null for exportCanvas
++    const getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
++      this: HTMLCanvasElement,
++    ) {
++      if (this.width === 512) {
++        return null;
++      }
++      return { clearRect: vi.fn(), drawImage: vi.fn() } as unknown as CanvasRenderingContext2D;
++    });
++
++    const { unmount } = render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-save-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++    await waitFor(() => {
++      expect(onSave).toHaveBeenCalledWith(file);
++    });
++    unmount();
++    getContextSpy.mockRestore();
++
++    // 2. toBlob returns null blob
++    const toBlobSpy = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: (blob: Blob | null) => void) => {
++      cb(null);
++    });
++
++    const onSave2 = vi.fn();
++    const { unmount: unmount2 } = render(<AvatarCropModal file={file} onSave={onSave2} onClose={onClose} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-save-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++    await waitFor(() => {
++      expect(onSave2).toHaveBeenCalledWith(file);
++    });
++    unmount2();
++    toBlobSpy.mockRestore();
++
++    // 3. toBlob is undefined
++    // eslint-disable-next-line @typescript-eslint/unbound-method
++    const origToBlob = HTMLCanvasElement.prototype.toBlob;
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
++    delete (HTMLCanvasElement.prototype as any).toBlob;
++
++    const onSave3 = vi.fn();
++    render(<AvatarCropModal file={file} onSave={onSave3} onClose={onClose} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-save-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++    await waitFor(() => {
++      expect(onSave3).toHaveBeenCalledWith(file);
++    });
++    HTMLCanvasElement.prototype.toBlob = origToBlob;
++  });
++
++  it('covers pointer move without active pointer and pointer transitions', async () => {
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-viewport')).toBeDefined();
++    });
++
++    const viewport = screen.getByTestId('avatar-crop-viewport');
++    viewport.setPointerCapture = vi.fn();
++
++    // Pointer move when pointer is not active
++    fireEvent.pointerMove(viewport, { pointerId: 999, clientX: 50, clientY: 50 });
++
++    // Two pointer pinch with distance shrinking and growing to zoom clamps
++    fireEvent.pointerDown(viewport, { pointerId: 10, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 20, clientX: 200, clientY: 100 });
++    // Shrink distance (factor < 1, hits Math.max(1.0, ...))
++    fireEvent.pointerMove(viewport, { pointerId: 20, clientX: 105, clientY: 100 });
++    // Expand distance (factor > 4, hits Math.min(4.0, ...))
++    fireEvent.pointerMove(viewport, { pointerId: 20, clientX: 800, clientY: 100 });
++    // Release pointer 20 while pointer 10 remains
++    fireEvent.pointerUp(viewport, { pointerId: 20 });
++    // Now move pointer 10 while single active pointer
++    fireEvent.pointerMove(viewport, { pointerId: 10, clientX: 120, clientY: 120 });
++    // Release pointer 10
++    fireEvent.pointerUp(viewport, { pointerId: 10 });
++
++    // Three pointer transition to test size > 2 branches
++    fireEvent.pointerDown(viewport, { pointerId: 101, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 102, clientX: 200, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 103, clientX: 300, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 103, clientX: 310, clientY: 110 });
++    fireEvent.pointerUp(viewport, { pointerId: 103 }); // leaves 2 active
++    fireEvent.pointerUp(viewport, { pointerId: 102 }); // leaves 1 active
++    fireEvent.pointerUp(viewport, { pointerId: 101 }); // leaves 0 active
++  });
++
++  it('handles null canvas context and pre-load user interactions', () => {
++    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(null);
++
++    class SlowImage {
++      onload: (() => void) | null = null;
++      onerror: (() => void) | null = null;
++      width = 500;
++      height = 500;
++      private _src = '';
++      get src(): string {
++        return this._src;
++      }
++      set src(val: string) {
++        this._src = val;
++        // Never automatically fire onload to test interactions before image loads
++      }
++    }
++    global.Image = SlowImage as unknown as typeof Image;
++
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++
++    const { unmount } = render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++    const viewport = screen.getByTestId('avatar-crop-viewport');
++
++    // Zoom buttons, wheel, slider, and keyboard while image is not yet loaded
++    fireEvent.click(screen.getByTestId('avatar-crop-zoom-in'));
++    fireEvent.click(screen.getByTestId('avatar-crop-zoom-out'));
++    fireEvent.wheel(viewport, { deltaY: -50 });
++    fireEvent.keyDown(viewport, { key: 'ArrowLeft' });
++    fireEvent.change(screen.getByTestId('avatar-crop-zoom-slider'), { target: { value: '2.0' } });
++
++    // Multi-pointer pinch before image loads
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 2, clientX: 200, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 250, clientY: 100 });
++    fireEvent.pointerUp(viewport, { pointerId: 2 });
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++
++    // Unmount before image loads to test cleanup
++    unmount();
++  });
++
++  it('handles null 2d context when image is loaded in AvatarCropModal', async () => {
++    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(null);
++    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
++    const onSave = vi.fn();
++    const onClose = vi.fn();
++    render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/settings/__tests__/AvatarLightboxModal.test.tsx b/kanban/web/src/features/settings/__tests__/AvatarLightboxModal.test.tsx
+new file mode 100644
+index 0000000..a9cc77b
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/AvatarLightboxModal.test.tsx
+@@ -0,0 +1,295 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { AvatarLightboxModal } from '../AvatarLightboxModal';
++
++describe('AvatarLightboxModal', () => {
++  const origImage = global.Image;
++
++  beforeEach(() => {
++    class MockImage {
++      onload: (() => void) | null = null;
++      onerror: (() => void) | null = null;
++      crossOrigin = '';
++      width = 600;
++      height = 600;
++      private _src = '';
++      get src(): string {
++        return this._src;
++      }
++      set src(val: string) {
++        this._src = val;
++        setTimeout(() => {
++          if (this.onload) this.onload();
++        }, 0);
++      }
++    }
++    global.Image = MockImage as unknown as typeof Image;
++
++    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
++      clearRect: vi.fn(),
++      drawImage: vi.fn(),
++    });
++  });
++
++  afterEach(() => {
++    global.Image = origImage;
++    vi.restoreAllMocks();
++  });
++
++  it('renders lightbox dialog with title and handles zoom adjustments', async () => {
++    const onClose = vi.fn();
++    render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName="Alice Developer"
++        onClose={onClose}
++      />,
++    );
++
++    expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
++    expect(screen.getByText('Alice Developer Picture')).toBeDefined();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('1.0x');
++    });
++
++    // Zoom in
++    fireEvent.click(screen.getByTestId('avatar-lightbox-zoom-in'));
++    expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('1.2x');
++
++    // Zoom out
++    fireEvent.click(screen.getByTestId('avatar-lightbox-zoom-out'));
++    expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('1.0x');
++
++    // Zoom slider
++    fireEvent.change(screen.getByTestId('avatar-lightbox-zoom-slider'), { target: { value: '3.0' } });
++    expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('3.0x');
++
++    // Reset zoom button
++    fireEvent.click(screen.getByTestId('avatar-lightbox-reset-btn'));
++    expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('1.0x');
++  });
++
++  it('handles mouse wheel, keyboard arrows, and pointer dragging', async () => {
++    const onClose = vi.fn();
++    render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName="Alice Developer"
++        onClose={onClose}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-lightbox-viewport')).toBeDefined();
++    });
++
++    const viewport = screen.getByTestId('avatar-lightbox-viewport');
++    viewport.setPointerCapture = vi.fn();
++
++    // Wheel zoom in and out
++    fireEvent.wheel(viewport, { deltaY: -100 });
++    expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('1.1x');
++    fireEvent.wheel(viewport, { deltaY: 100 });
++    expect(screen.getByTestId('avatar-lightbox-zoom-value').textContent).toBe('1.0x');
++
++    // Zoom in with slider first so pan has range
++    fireEvent.change(screen.getByTestId('avatar-lightbox-zoom-slider'), { target: { value: '2.5' } });
++
++    // Keyboard arrow keys
++    fireEvent.keyDown(viewport, { key: 'ArrowRight' });
++    fireEvent.keyDown(viewport, { key: 'ArrowLeft' });
++    fireEvent.keyDown(viewport, { key: 'ArrowDown' });
++    fireEvent.keyDown(viewport, { key: 'ArrowUp' });
++    fireEvent.keyDown(viewport, { key: 'Enter' });
++
++    // Pointer drag
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 150, clientY: 120 });
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++
++    // 2-pointer pinch
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 2, clientX: 200, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 250, clientY: 100 });
++    fireEvent.pointerUp(viewport, { pointerId: 2 });
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++  });
++
++  it('handles close button, backdrop click, and Escape key', () => {
++    const onClose = vi.fn();
++    render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName=""
++        onClose={onClose}
++      />,
++    );
++
++    // Fallback displayName to 'User'
++    expect(screen.getByText('User Picture')).toBeDefined();
++
++    // Close button
++    fireEvent.click(screen.getByTestId('avatar-lightbox-close-btn'));
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    // Clicking inside dialog card does not close
++    fireEvent.click(screen.getByText('User Picture'));
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    // Backdrop click
++    fireEvent.click(screen.getByTestId('avatar-lightbox-modal'));
++    expect(onClose).toHaveBeenCalledTimes(2);
++
++    // Escape key
++    fireEvent.keyDown(window, { key: 'Escape' });
++    expect(onClose).toHaveBeenCalledTimes(3);
++
++    // Other key
++    fireEvent.keyDown(window, { key: 'Space' });
++    expect(onClose).toHaveBeenCalledTimes(3);
++  });
++
++  it('handles image loading error gracefully', async () => {
++    class FailingImage {
++      onload: (() => void) | null = null;
++      onerror: (() => void) | null = null;
++      crossOrigin = '';
++      width = 0;
++      height = 0;
++      private _src = '';
++      get src(): string {
++        return this._src;
++      }
++      set src(val: string) {
++        this._src = val;
++        setTimeout(() => {
++          if (this.onerror) this.onerror();
++        }, 10);
++      }
++    }
++    global.Image = FailingImage as unknown as typeof Image;
++
++    const onClose = vi.fn();
++    render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName="User"
++        onClose={onClose}
++      />,
++    );
++
++    expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
++    // Wait for onerror to execute
++    await new Promise((resolve) => setTimeout(resolve, 50));
++  });
++
++  it('covers pointer move without active pointer and pinch zoom clamping', async () => {
++    const onClose = vi.fn();
++    render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName="User"
++        onClose={onClose}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-lightbox-viewport')).toBeDefined();
++    });
++
++    const viewport = screen.getByTestId('avatar-lightbox-viewport');
++    viewport.setPointerCapture = vi.fn();
++
++    // Move pointer that is not registered
++    fireEvent.pointerMove(viewport, { pointerId: 999, clientX: 20, clientY: 20 });
++
++    // Multi-pointer pinch clamp: shrink (1.0 clamp) and expand (4.0 clamp)
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 2, clientX: 200, clientY: 100 });
++    // Shrink distance
++    fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 102, clientY: 100 });
++    // Expand distance
++    fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 900, clientY: 100 });
++    // Release pointer 2
++    fireEvent.pointerUp(viewport, { pointerId: 2 });
++    // Move single remaining pointer 1
++    fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 130, clientY: 130 });
++    // Release pointer 1
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++
++    // Three pointer transition to test size > 2 branches
++    fireEvent.pointerDown(viewport, { pointerId: 101, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 102, clientX: 200, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 103, clientX: 300, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 103, clientX: 310, clientY: 110 });
++    fireEvent.pointerUp(viewport, { pointerId: 103 }); // leaves 2 active
++    fireEvent.pointerUp(viewport, { pointerId: 102 }); // leaves 1 active
++    fireEvent.pointerUp(viewport, { pointerId: 101 }); // leaves 0 active
++  });
++
++  it('handles null canvas context and pre-load user interactions', () => {
++    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(null);
++
++    class SlowImage {
++      onload: (() => void) | null = null;
++      onerror: (() => void) | null = null;
++      width = 500;
++      height = 500;
++      private _src = '';
++      get src(): string {
++        return this._src;
++      }
++      set src(val: string) {
++        this._src = val;
++      }
++    }
++    global.Image = SlowImage as unknown as typeof Image;
++
++    const onClose = vi.fn();
++    const { unmount } = render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName="User"
++        onClose={onClose}
++      />,
++    );
++
++    const viewport = screen.getByTestId('avatar-lightbox-viewport');
++    // Zoom in, zoom out, wheel, slider, pinch, and keydown before image loaded
++    fireEvent.click(screen.getByTestId('avatar-lightbox-zoom-in'));
++    fireEvent.click(screen.getByTestId('avatar-lightbox-zoom-out'));
++    fireEvent.wheel(viewport, { deltaY: -50 });
++    fireEvent.keyDown(viewport, { key: 'ArrowRight' });
++    fireEvent.change(screen.getByTestId('avatar-lightbox-zoom-slider'), { target: { value: '2.0' } });
++
++    // Multi-pointer pinch before image loaded
++    fireEvent.pointerDown(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
++    fireEvent.pointerDown(viewport, { pointerId: 2, clientX: 200, clientY: 100 });
++    fireEvent.pointerMove(viewport, { pointerId: 2, clientX: 250, clientY: 100 });
++    fireEvent.pointerUp(viewport, { pointerId: 2 });
++    fireEvent.pointerUp(viewport, { pointerId: 1 });
++
++    // Unmount before image loads
++    unmount();
++  });
++
++  it('handles null 2d context when image is loaded', async () => {
++    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(null);
++    const onClose = vi.fn();
++    render(
++      <AvatarLightboxModal
++        avatarUrl="/api/v1/users/user-123/avatar"
++        displayName="User"
++        onClose={onClose}
++      />,
++    );
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+index 1ebe28f..37461b3 100644
+--- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -271,12 +271,17 @@ describe('PersonalSettingsPage', () => {
+     fireEvent.click(screen.getByTestId('upload-avatar-btn'));
+     expect(clickSpy).toHaveBeenCalled();
+ 
+-    // Upload valid image file
++    // Upload valid image file opens AvatarCropModal
+     const validFile = new File(['valid-image-bytes'], 'avatar.png', { type: 'image/png' });
+     fireEvent.change(fileInput, { target: { files: [validFile] } });
+ 
+     await waitFor(() => {
+-      expect(api.uploadAvatar).toHaveBeenCalledWith(validFile);
++      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++
++    await waitFor(() => {
++      expect(api.uploadAvatar).toHaveBeenCalled();
+       expect(screen.getByTestId('alert-success').textContent).toContain('Avatar uploaded successfully.');
+     });
+ 
+@@ -617,6 +622,13 @@ describe('PersonalSettingsPage', () => {
+       expect(screen.getByTestId('alert-error').textContent).toContain('Invalid TOTP verification code');
+     });
+ 
++    // Test non-Error rejection fallback for confirmTotp
++    vi.mocked(api.confirmTotp).mockRejectedValueOnce('raw string reject');
++    fireEvent.click(screen.getByTestId('confirm-totp-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Invalid TOTP code.');
++    });
++
+     // Regenerate recovery codes error
+     vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+     fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+@@ -895,6 +907,10 @@ describe('PersonalSettingsPage', () => {
+ 
+     const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
+     fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
+     await waitFor(() => {
+       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to upload avatar.');
+     });
+@@ -1480,4 +1496,127 @@ describe('PersonalSettingsPage', () => {
+     const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
+     expect(regenBtn.getAttribute('title')).toBe('Enable TOTP or Passkey 2FA first');
+   });
++
++  it('preserves unsaved display_name and timezone input when avatar is uploaded and removed', async () => {
++    vi.mocked(api.uploadAvatar).mockResolvedValue({
++      ...mockProfile,
++      avatar_url: '/api/v1/users/11111111-1111-4111-8111-111111111111/avatar?v=abcdef123456',
++    });
++    vi.mocked(api.deleteAvatar).mockResolvedValue({
++      ...mockProfile,
++      avatar_url: null,
++    });
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('display-name-input')).toBeDefined();
++    });
++
++    const nameInput = screen.getByTestId<HTMLInputElement>('display-name-input');
++    const tzSelect = screen.getByTestId<HTMLSelectElement>('timezone-select');
++
++    // Type unsaved draft
++    fireEvent.change(nameInput, { target: { value: 'Unsaved Draft Name' } });
++    fireEvent.change(tzSelect, { target: { value: 'Asia/Tokyo' } });
++
++    expect(nameInput.value).toBe('Unsaved Draft Name');
++    expect(tzSelect.value).toBe('Asia/Tokyo');
++
++    // Upload avatar via crop modal
++    const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
++    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-success').textContent).toContain('Avatar uploaded successfully.');
++    });
++
++    // Verify unsaved draft is preserved
++    expect(nameInput.value).toBe('Unsaved Draft Name');
++    expect(tzSelect.value).toBe('Asia/Tokyo');
++
++    // Remove avatar
++    fireEvent.click(screen.getByTestId('remove-avatar-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-success').textContent).toContain('Avatar removed.');
++    });
++
++    // Verify unsaved draft is still preserved
++    expect(nameInput.value).toBe('Unsaved Draft Name');
++    expect(tzSelect.value).toBe('Asia/Tokyo');
++  });
++
++  it('opens and closes AvatarCropModal without saving', async () => {
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-file-input')).toBeDefined();
++    });
++
++    const file = new File(['valid content'], 'pic.png', { type: 'image/png' });
++    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [file] } });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('avatar-crop-cancel-btn'));
++    expect(screen.queryByTestId('avatar-crop-modal')).toBeNull();
++  });
++
++  it('opens and closes AvatarLightboxModal when clicking avatar preview', async () => {
++    vi.mocked(api.fetchMyProfile).mockResolvedValue({
++      ...mockProfile,
++      avatar_url: '/api/v1/users/11111111-1111-4111-8111-111111111111/avatar?v=123456789012',
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-preview')).toBeDefined();
++    });
++
++    // Click avatar preview to open lightbox
++    fireEvent.click(screen.getByTestId('avatar-preview'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
++    });
++
++    // Close lightbox
++    fireEvent.click(screen.getByTestId('avatar-lightbox-close-btn'));
++    expect(screen.queryByTestId('avatar-lightbox-modal')).toBeNull();
++  });
++
++  it('renders default empty fallbacks when profile fields are null or empty', async () => {
++    vi.mocked(api.fetchMyProfile).mockResolvedValue({
++      ...mockProfile,
++      display_name: null as unknown as string,
++      timezone: null as unknown as string,
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('display-name-input')).toBeDefined();
++    });
++
++    const displayInput = screen.getByTestId<HTMLInputElement>('display-name-input');
++    expect(displayInput.value).toBe('');
++
++    // Empty files does nothing
++    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [] } });
++
++    // Selecting an SVG by type triggers rejection error
++    const svgFile = new File(['<svg></svg>'], 'pic.svg', { type: 'image/svg+xml' });
++    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile] } });
++    expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
++
++    // Selecting an SVG by extension with generic type
++    const svgFile2 = new File(['<svg></svg>'], 'bad.SVG', { type: '' });
++    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile2] } });
++    expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
++  });
+ });
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
+index 1b76ce8..dae89a9 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.ts
+@@ -4,15 +4,24 @@
+ import { apiFetch } from '../../api/client';
+ 
+ export interface UserProfileResponse {
++  id?: string;
+   principal_id: string;
++  workspace_id?: string;
+   display_name: string;
+   username: string;
++  handle?: string;
+   email: string | null;
+   timezone: string;
+   avatar_url: string | null;
+-  roles: string[];
++  roles?: string[];
+   is_server_admin: boolean;
++  is_workspace_admin?: boolean;
++  is_project_admin?: boolean;
++  workspace_role?: string;
++  workspace_capabilities?: string[];
+   has_local_password?: boolean;
++  aal_level?: number;
++  mfa_pending?: boolean;
+ }
+ 
+ export interface UpdateProfileRequest {
+@@ -64,7 +73,7 @@ export async function updateMyProfile(
+   })) as UserProfileResponse;
+ }
+ 
+-export async function uploadAvatar(file: File): Promise<UserProfileResponse> {
++export async function uploadAvatar(file: File | Blob): Promise<UserProfileResponse> {
+   const formData = new FormData();
+   formData.append('file', file);
+   return (await apiFetch('PUT', '/api/v1/auth/me/avatar' as never, {

@@ -23,6 +23,15 @@ MAX_DIMENSION: Final[int] = 16_384  # 16,384 px max width or height
 MAX_ANIMATED_FRAMES: Final[int] = 200  # 200 frames max
 MAX_ANIMATED_TOTAL_PIXELS: Final[int] = 80_000_000  # 80 MP total area across frames
 
+MAX_AVATAR_IMAGE_PIXELS: Final[int] = 16_000_000  # 16 MP exact
+MAX_AVATAR_DIMENSION: Final[int] = 4096  # 4096 px max width or height
+MAX_AVATAR_DOWNSCALE_DIMENSION: Final[int] = 1024  # 1024 px max downscale dimension
+ALLOWED_AVATAR_PIL_FORMATS: Final[dict[str, str]] = {
+    "image/png": "PNG",
+    "image/jpeg": "JPEG",
+    "image/webp": "WEBP",
+}
+
 # Set Pillow library cap
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
@@ -297,6 +306,126 @@ async def sanitize_and_reencode_raster(
     async with _RASTER_SEMAPHORE:
         return await anyio.to_thread.run_sync(
             sanitize_and_reencode_raster_sync,
+            raw_bytes,
+            content_type,
+        )
+
+
+def sanitize_and_reencode_avatar_sync(  # noqa: C901
+    raw_bytes: bytes,
+    content_type: str,
+) -> ProcessedAttachment:
+    """Re-encode avatar raster dropping metadata, enforcing single-frame, and downscaling."""
+    pil_format = ALLOWED_AVATAR_PIL_FORMATS.get(content_type)
+    if not pil_format:
+        raise ProblemException(
+            code="UNSUPPORTED_MEDIA_TYPE",
+            status=415,
+            title="Unsupported Media Type",
+            detail=(
+                f"Unsupported avatar media type: {content_type}. "
+                "Only PNG, JPEG, and WebP are allowed."
+            ),
+        )
+
+    bio = io.BytesIO(raw_bytes)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        try:
+            im = Image.open(bio)
+        except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+            raise ProblemException(
+                code="IMAGE_DIMENSIONS_EXCEEDED",
+                status=422,
+                title="Image Dimensions Exceeded",
+                detail="Decompression bomb detected in image header.",
+            ) from exc
+        except Exception as exc:
+            raise ProblemException(
+                code="MIME_MISMATCH_OR_UNSUPPORTED",
+                status=415,
+                title="Unsupported Media Type",
+                detail=f"Corrupt or invalid image payload: {exc}",
+            ) from exc
+
+        width, height = im.size
+        total_pixels = width * height
+        if (
+            total_pixels > MAX_AVATAR_IMAGE_PIXELS
+            or width > MAX_AVATAR_DIMENSION
+            or height > MAX_AVATAR_DIMENSION
+            or width <= 0
+            or height <= 0
+        ):
+            raise ProblemException(
+                code="IMAGE_DIMENSIONS_EXCEEDED",
+                status=422,
+                title="Image Dimensions Exceeded",
+                detail=(
+                    f"Avatar dimensions ({width}x{height} = {total_pixels} px) exceed limits "
+                    f"(max {MAX_AVATAR_IMAGE_PIXELS} px, max dimension {MAX_AVATAR_DIMENSION} px)."
+                ),
+            )
+
+        is_animated = bool(getattr(im, "is_animated", False))
+        n_frames = int(getattr(im, "n_frames", 1))
+        if is_animated or n_frames > 1:
+            raise ProblemException(
+                code="ANIMATED_AVATAR_NOT_ALLOWED",
+                status=422,
+                title="Animated Avatar Not Allowed",
+                detail="Only single-frame static PNG, JPEG, and WebP avatars are allowed.",
+            )
+
+        # Downscale oversized images <= 1024x1024
+        working_im: Image.Image = im
+        if width > MAX_AVATAR_DOWNSCALE_DIMENSION or height > MAX_AVATAR_DOWNSCALE_DIMENSION:
+            working_im = im.copy()
+            working_im.thumbnail(
+                (MAX_AVATAR_DOWNSCALE_DIMENSION, MAX_AVATAR_DOWNSCALE_DIMENSION),
+                Image.Resampling.LANCZOS,
+            )
+
+        clean_mode = working_im.mode
+        if pil_format == "JPEG" and clean_mode not in ("RGB", "L"):
+            clean_mode = "RGB"
+
+        clean_im = Image.new(clean_mode, working_im.size)
+        palette = working_im.getpalette()
+        if clean_mode == "P" and palette is not None:
+            clean_im.putpalette(palette)
+
+        clean_im.paste(working_im)
+
+        out_bio = io.BytesIO()
+        if pil_format == "JPEG":
+            clean_im.save(out_bio, format="JPEG", quality=95, optimize=True)
+        elif pil_format == "PNG":
+            clean_im.save(out_bio, format="PNG", optimize=True)
+        elif pil_format == "WEBP":
+            clean_im.save(out_bio, format="WEBP", quality=95)
+        else:
+            clean_im.save(out_bio, format=pil_format)
+
+        clean_bytes = out_bio.getvalue()
+        return ProcessedAttachment(
+            clean_bytes=clean_bytes,
+            byte_size=len(clean_bytes),
+            pixel_width=clean_im.width,
+            pixel_height=clean_im.height,
+            content_type=content_type,
+            blob_sha256=hashlib.sha256(clean_bytes).digest(),
+        )
+
+
+async def sanitize_and_reencode_avatar(
+    raw_bytes: bytes,
+    content_type: str,
+) -> ProcessedAttachment:
+    """Process and sanitize avatar media behind worker thread pool and concurrency semaphore."""
+    async with _RASTER_SEMAPHORE:
+        return await anyio.to_thread.run_sync(
+            sanitize_and_reencode_avatar_sync,
             raw_bytes,
             content_type,
         )

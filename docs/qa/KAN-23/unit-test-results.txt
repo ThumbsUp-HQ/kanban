@@ -1,0 +1,68 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan23-2313bbdb
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 39 items
+
+kanban/tests/attachments/test_sniff_and_raster.py ...................... [ 56%]
+.......                                                                  [ 74%]
+kanban/tests/api/test_user_personal_settings.py ..........               [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+kanban/api/v1/user_settings.py     305     45     92     21    83%   132-133, 158-159, 186-187, 190-191, 197-198, 204->221, 218-219, 232->234, 253-256, 262-263, 273-274, 336-337, 367->379, 369->379, 370->379, 372, 374->370, 430, 437, 446-449, 478-479, 521-522, 554-555, 575->578, 629-630, 724-732, 757-758
+kanban/attachments/raster.py       180      7     58      4    95%   75, 92-93, 149, 231, 337, 408
+----------------------------------------------------------------------------
+TOTAL                              485     52    150     25    88%
+============================= 39 passed in 17.21s ==============================
+
+=================== Frontend Vitest Results ===================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan23-2313bbdb/kanban/web
+> vitest run src/features/settings/__tests__/AvatarCropModal.test.tsx src/features/settings/__tests__/AvatarLightboxModal.test.tsx src/features/settings/__tests__/PersonalSettingsPage.test.tsx src/features/settings/personalSettingsApi.test.ts --coverage --coverage.include=src/features/settings/AvatarCropModal.tsx --coverage.include=src/features/settings/AvatarLightboxModal.tsx --coverage.include=src/features/settings/PersonalSettingsPage.tsx --coverage.include=src/features/settings/personalSettingsApi.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan23-2313bbdb/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/personalSettingsApi.test.ts (17 tests) 22ms
+ ✓ src/features/settings/__tests__/AvatarLightboxModal.test.tsx (7 tests) 200ms
+ ✓ src/features/settings/__tests__/AvatarCropModal.test.tsx (10 tests) 344ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (46 tests) 4548ms
+
+ Test Files  4 passed (4)
+      Tests  80 passed (80)
+   Start at  17:06:08
+   Duration  5.84s (tests 59%, environment 33%, import 6%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.98 |    96.48 |     100 |   99.64 |                   
+ ...rCropModal.tsx |    98.3 |     96.1 |     100 |    98.8 | 282-288           
+ ...htboxModal.tsx |   98.67 |    96.66 |     100 |     100 | 44,92             
+ ...ttingsPage.tsx |   99.58 |    96.51 |     100 |     100 | ...67,189,280,307 
+ ...SettingsApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+
+=================== CSS Tokens Audit ===================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan23-2313bbdb/kanban/web
+> vitest run src/styles/__tests__/cssTokensAudit.test.ts
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 11ms
+   ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
+     ✓ verifies 100% of var(--*) usages across all CSS files resolve to canonical tokens 6ms
+     ✓ verifies all static auth-* classes in AuthStudioPage.tsx and AuthCardEditorDrawer.tsx exist in adminAuth.css 1ms
+     ✓ verifies base.css defines color-scheme and button/input/select/textarea color inheritance 1ms
+     ✓ ensures simulated undefined token reference is caught by audit scanner 1ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Duration  875ms

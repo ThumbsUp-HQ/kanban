@@ -28,6 +28,9 @@ import { SecondFactorStep } from '../auth/SecondFactorStep';
 import { ApiProblem } from '../../api/problem';
 import type { MfaMethod } from '../auth/authApi';
 import { copyToClipboard } from '../../utils/clipboard';
+import { qk } from '../../api/queryKeys';
+import { AvatarCropModal } from './AvatarCropModal';
+import { AvatarLightboxModal } from './AvatarLightboxModal';
 import './PersonalSettingsPage.css';
 
 // IANA Timezones list
@@ -85,6 +88,10 @@ export function PersonalSettingsPage(): JSX.Element {
   } | null>(null);
   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
+  // Avatar crop modal and lightbox states
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Data fetching
@@ -139,7 +146,12 @@ export function PersonalSettingsPage(): JSX.Element {
   const uploadAvatarMutation = useMutation({
     mutationFn: uploadAvatar,
     onSuccess: (updated) => {
-      queryClient.setQueryData(['myProfile'], updated);
+      queryClient.setQueryData(['myProfile'], (prev: UserProfileResponse | undefined) =>
+        prev ? { ...prev, ...updated } : updated,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['myProfile'] });
+      void queryClient.invalidateQueries({ queryKey: qk.me() });
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       setSuccessMsg('Avatar uploaded successfully.');
       setErrorMsg(null);
     },
@@ -151,7 +163,12 @@ export function PersonalSettingsPage(): JSX.Element {
   const deleteAvatarMutation = useMutation({
     mutationFn: deleteAvatar,
     onSuccess: (updated) => {
-      queryClient.setQueryData(['myProfile'], updated);
+      queryClient.setQueryData(['myProfile'], (prev: UserProfileResponse | undefined) =>
+        prev ? { ...prev, ...updated } : updated,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['myProfile'] });
+      void queryClient.invalidateQueries({ queryKey: qk.me() });
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       setSuccessMsg('Avatar removed.');
       setErrorMsg(null);
     },
@@ -171,18 +188,18 @@ export function PersonalSettingsPage(): JSX.Element {
 
     if (file.type === 'image/svg+xml' || ((file.name as string | undefined) ?? '').toLowerCase().endsWith('.svg')) {
       setErrorMsg('SVG avatars are rejected for security. Please upload PNG, JPEG, or WebP.');
+      e.target.value = '';
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
       setErrorMsg('Avatar file size exceeds 2 MiB limit.');
+      e.target.value = '';
       return;
     }
 
-    uploadAvatarMutation.mutate(file);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setCropFile(file);
+    e.target.value = '';
   };
 
   const handlePasswordSubmit = async (e: SyntheticEvent): Promise<void> => {
@@ -388,17 +405,28 @@ export function PersonalSettingsPage(): JSX.Element {
         </p>
 
         <div className="kb-personal-settings-avatar-row">
-          <div className="kb-personal-settings-avatar-preview" data-testid="avatar-preview">
-            {profile?.avatar_url ? (
+          {profile?.avatar_url ? (
+            <button
+              type="button"
+              className="kb-personal-settings-avatar-preview kb-personal-settings-avatar-preview-clickable"
+              aria-label="Zoom profile picture"
+              data-testid="avatar-preview"
+              onClick={() => { setIsLightboxOpen(true); }}
+            >
               <img
                 src={profile.avatar_url}
                 alt={`${profile.display_name}'s avatar`}
                 draggable={false}
               />
-            ) : (
+              <div className="kb-personal-settings-avatar-hover-zoom" aria-hidden="true">
+                🔍
+              </div>
+            </button>
+          ) : (
+            <div className="kb-personal-settings-avatar-preview" data-testid="avatar-preview">
               <span>{((profile?.display_name ?? profile?.username ?? 'U')[0] ?? '').toUpperCase()}</span>
-            )}
-          </div>
+            </div>
+          )}
           <div className="kb-personal-settings-avatar-actions">
             <input
               ref={fileInputRef}
@@ -1006,6 +1034,26 @@ export function PersonalSettingsPage(): JSX.Element {
             </div>
           </div>
         </div>
+      )}
+
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          onSave={(blob) => {
+            uploadAvatarMutation.mutate(blob);
+            setCropFile(null);
+          }}
+          onClose={() => { setCropFile(null); }}
+          isSaving={uploadAvatarMutation.isPending}
+        />
+      )}
+
+      {isLightboxOpen && profile?.avatar_url && (
+        <AvatarLightboxModal
+          avatarUrl={profile.avatar_url}
+          displayName={profile.display_name}
+          onClose={() => { setIsLightboxOpen(false); }}
+        />
       )}
     </div>
   );

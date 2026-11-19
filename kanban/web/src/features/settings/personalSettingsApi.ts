@@ -4,15 +4,24 @@
 import { apiFetch } from '../../api/client';
 
 export interface UserProfileResponse {
+  id?: string;
   principal_id: string;
+  workspace_id?: string;
   display_name: string;
   username: string;
+  handle?: string;
   email: string | null;
   timezone: string;
   avatar_url: string | null;
-  roles: string[];
+  roles?: string[];
   is_server_admin: boolean;
+  is_workspace_admin?: boolean;
+  is_project_admin?: boolean;
+  workspace_role?: string;
+  workspace_capabilities?: string[];
   has_local_password?: boolean;
+  aal_level?: number;
+  mfa_pending?: boolean;
 }
 
 export interface UpdateProfileRequest {
@@ -64,7 +73,7 @@ export async function updateMyProfile(
   })) as UserProfileResponse;
 }
 
-export async function uploadAvatar(file: File): Promise<UserProfileResponse> {
+export async function uploadAvatar(file: File | Blob): Promise<UserProfileResponse> {
   const formData = new FormData();
   formData.append('file', file);
   return (await apiFetch('PUT', '/api/v1/auth/me/avatar' as never, {

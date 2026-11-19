@@ -6,6 +6,8 @@ from kanban.attachments.raster import (
     MAX_DIMENSION,
     MAX_IMAGE_PIXELS,
     ProcessedAttachment,
+    sanitize_and_reencode_avatar,
+    sanitize_and_reencode_avatar_sync,
     sanitize_and_reencode_raster,
     sanitize_and_reencode_raster_sync,
 )
@@ -39,6 +41,8 @@ __all__ = [
     "BlobStorageError",
     "LocalFilesystemBlobStore",
     "ProcessedAttachment",
+    "sanitize_and_reencode_avatar",
+    "sanitize_and_reencode_avatar_sync",
     "sanitize_and_reencode_raster",
     "sanitize_and_reencode_raster_sync",
     "sanitize_content_disposition_filename",
