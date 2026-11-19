@@ -46,6 +46,11 @@ __all__ = [
 
 PROTOCOL_VERSION: Final[str] = "2025-06-18"
 
+EPHEMERAL_SURFACE_READ_ONLY_TOOLS: Final[dict[Surface, frozenset[str]]] = {
+    Surface.AGENT: frozenset({"search_tickets", "read_ticket"}),
+    Surface.DOCS: frozenset({"search"}),
+}
+
 _logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 
@@ -534,8 +539,24 @@ class McpProtocolHandler:
             ]
         if auth_context is not None:
             if auth_context.token_kind == "ephemeral":  # noqa: S105
-                allowed = auth_context.allowed_tools or frozenset()
-                specs = [s for s in specs if s.name in allowed]
+                surface_allowed = EPHEMERAL_SURFACE_READ_ONLY_TOOLS.get(self.surface, frozenset())
+                specs = [
+                    s
+                    for s in specs
+                    if s.name in surface_allowed
+                    and (
+                        auth_context.allowed_tools is None
+                        or s.name in auth_context.allowed_tools
+                        or (
+                            s.name == "search"
+                            and bool(
+                                {"search", "search_knowledge", "read_doc"}.intersection(
+                                    auth_context.allowed_tools
+                                )
+                            )
+                        )
+                    )
+                ]
             elif auth_context.allowed_tools is not None:
                 specs = [s for s in specs if s.name in auth_context.allowed_tools]
             if auth_context.disabled_tools:
@@ -690,14 +711,27 @@ class McpProtocolHandler:
 
         # Ephemeral token allowlist and atomic call budget consumption
         if auth_context is not None and auth_context.token_kind == "ephemeral":  # noqa: S105
-            allowed_tools = sorted(auth_context.allowed_tools or [])
-            if tool_name not in (auth_context.allowed_tools or frozenset()):
+            surface_allowed = EPHEMERAL_SURFACE_READ_ONLY_TOOLS.get(self.surface, frozenset())
+            allowed_tools = sorted(surface_allowed)
+            is_allowed = tool_name in surface_allowed and (
+                auth_context.allowed_tools is None
+                or tool_name in auth_context.allowed_tools
+                or (
+                    tool_name == "search"
+                    and bool(
+                        {"search", "search_knowledge", "read_doc"}.intersection(
+                            auth_context.allowed_tools
+                        )
+                    )
+                )
+            )
+            if not is_allowed:
                 err = KbMcpError(
                     code=McpErrorCode.EPHEMERAL_TOOL_FORBIDDEN,
                     message=f"Tool '{tool_name}' is forbidden on ephemeral token",
                     hint=(
                         "Ephemeral tokens are strictly read-only and allow at most: "
-                        "search_tickets, read_ticket, search_knowledge, read_doc."
+                        "search_tickets, read_ticket, search."
                     ),
                     allowed_tools=allowed_tools,
                 )
@@ -713,6 +747,12 @@ class McpProtocolHandler:
                 )
 
             if self.internal_client is not None:
+                introspect_tool = tool_name
+                if self.surface == Surface.DOCS and tool_name == "search":
+                    if auth_context.allowed_tools and "search" in auth_context.allowed_tools:
+                        introspect_tool = "search"
+                    else:
+                        introspect_tool = "search_knowledge"
                 try:
                     res_data = await self.internal_client.request(
                         "POST",
@@ -721,7 +761,7 @@ class McpProtocolHandler:
                             "token": auth_context.token,
                             "surface": self.surface.value,
                             "consume_call": True,
-                            "tool_name": tool_name,
+                            "tool_name": introspect_tool,
                         },
                     )
                 except Exception:  # noqa: BLE001
@@ -752,7 +792,7 @@ class McpProtocolHandler:
                             message=f"Tool '{tool_name}' is forbidden on ephemeral token",
                             hint=(
                                 "Ephemeral tokens are strictly read-only and allow at most: "
-                                "search_tickets, read_ticket, search_knowledge, read_doc."
+                                "search_tickets, read_ticket, search."
                             ),
                             allowed_tools=allowed_tools,
                         )

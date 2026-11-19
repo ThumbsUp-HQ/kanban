@@ -1,0 +1,129 @@
+search_help:
+  tool: search
+  surface: /mcp/docs
+  purpose: CLI-modeled unified search, id read, and tree inspector
+  arguments: {id: help}
+  response:
+    tool: search
+    surface: /mcp/docs
+    version: 2.0.0
+    help:
+      description: Search and inspect knowledge base documents, pages, and sticky notes.
+      modes:
+        help: search(id="help") -> Surface usage documentation
+        read_by_id: search(id="docs/architecture", lod="standard"|"full", include_tree=true) -> Single document, page, or
+          sticky node with breadcrumbs, outline, and links
+        hybrid_search: search(query="OAuth PKCE", type="ALL"|"DOC"|"STICKY", project="ARCH", limit=20, cursor=...) -> Ranked
+          matches with snippets and anchors
+        project_list: search(project="ARCH", type="ALL"|"DOC"|"STICKY", include_tree=false) -> Listing of documents and stickies
+          within project
+        workspace_list: search(type="ALL"|"DOC"|"STICKY") -> Listing across entire workspace
+      parameters:
+        id: string (canonical key, path, or UUID; or "help")
+        query: string (1-500 chars for hybrid semantic/fulltext search)
+        type: '"ALL" | "DOC" | "STICKY" (default ALL)'
+        project: string (project identifier key or UUID)
+        lod: '"summary" | "standard" | "full" (default standard)'
+        include_tree: boolean (embed hierarchy tree on doc/project, default false)
+        limit: integer (1-100, default 20)
+        cursor: string (opaque pagination cursor)
+search_read_doc_standard:
+  tool: search
+  arguments: {id: docs/architecture/auth-studio, lod: standard}
+  response:
+    kind: page
+    key: docs/architecture/auth-studio
+    title: Auth Studio
+    version_seq: 2
+    breadcrumbs: [Architecture, Auth Studio]
+    access_pill: project
+    etag: e9b2512f46849492837482818
+    body_markdown: |-
+      ## PKCE S256
+      Hardened PKCE token verification.
+
+      ## Overview
+      Authentication overview.
+    outline: [PKCE S256, Overview]
+create_doc:
+  tool: create
+  arguments:
+    type: DOC
+    title: Architecture
+    project: ARCH
+    content: |-
+      # Architecture
+      Overview of system architecture.
+    links: ['+REL:ARCH-1']
+  response:
+    status: created
+    kind: doc
+    id: 0193457a-1111-7000-8000-000000000001
+    key: docs/architecture
+    title: Architecture
+    version_seq: 1
+    etag: 6a7f8e9d0c1b2a345678
+    links: [{action: added, target: ARCH-1, link_type: RELATES_TO}]
+create_sticky:
+  tool: create
+  arguments:
+    type: STICKY
+    project: ARCH
+    title: Quick Sticky Note
+    content: Need to verify TLS certificates on MCP client.
+    color: sky
+  response:
+    status: created
+    kind: sticky
+    id: 0193457a-2222-7000-8000-000000000002
+    color: sky
+    title: Quick Sticky Note
+    promotion_recommended: false
+    etag: 4b5c6d7e8f901a2b3c4d
+update_diff_patch:
+  tool: update
+  arguments: {id: docs/architecture/auth-studio, original_text: Initial PKCE content., replacement_text: Hardened PKCE token
+      verification., if_match: 6a7f8e9d0c1b2a345678}
+  response:
+    status: updated
+    kind: page
+    id: 0193457a-3333-7000-8000-000000000003
+    key: docs/architecture/auth-studio
+    title: Auth Studio
+    version_seq: 2
+    etag: e9b2512f46849492837482818
+update_sticky_auto_promotion:
+  tool: update
+  arguments:
+    id: 0193457a-2222-7000-8000-000000000002
+    type: DOC
+    title: TLS Verification Guide
+    parent: docs/architecture
+    content: |-
+      # TLS Verification Guide
+
+      Preserved permissions and converted to Doc.
+    links: [+ARCH-10]
+  response:
+    status: promoted
+    kind: doc
+    id: 0193457a-4444-7000-8000-000000000004
+    key: docs/architecture/tls-verification-guide
+    title: TLS Verification Guide
+    version_seq: 1
+    etag: 7c8d9e0f1a2b3c4d5e6f
+    links: [{action: added, target: ARCH-10, link_type: RELATES_TO}]
+update_inline_links:
+  tool: update
+  arguments:
+    id: docs/architecture/auth-studio
+    links: [+ARCH-2, -ARCH-1]
+  response:
+    status: updated
+    kind: page
+    id: 0193457a-3333-7000-8000-000000000003
+    key: docs/architecture/auth-studio
+    title: Auth Studio
+    version_seq: 3
+    etag: 1a2b3c4d5e6f7a8b9c0d
+    links: [{action: added, target: ARCH-2, link_type: RELATES_TO}, {action: removed, target: ARCH-1, link_type: RELATES_TO}]
