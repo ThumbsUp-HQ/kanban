@@ -1,0 +1,21 @@
+=== TYPECHECK & LINT RESULTS (KANBA-180) ===
+Target: kanban/web tsc -b --noEmit & python3 -m scripts.check_no_dashes --all
+Timestamp: 2026-11-19T05:28:36Z
+
+--- Web Typecheck (tsc -b --noEmit) ---
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+Exit code: 0
+Status: CLEAN (0 errors)
+
+--- Documentation Dash Check (python3 -m scripts.check_no_dashes --all) ---
+Command: python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w7-wiki-b1e1fd3d/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Exit code: 0
+Violations: 0 forbidden em-dashes (U+2014), 0 forbidden en-dashes (U+2013)
+
+--- Wiki Dash Check (python3 -m scripts.check_no_dashes thumbs-up-kanban.wiki/*.md) ---
+Command: python3 -m scripts.check_no_dashes /home/adamoutler/kanban/thumbs-up-kanban.wiki/*.md
+Exit code: 0
+Violations: 0 forbidden em-dashes (U+2014), 0 forbidden en-dashes (U+2013)

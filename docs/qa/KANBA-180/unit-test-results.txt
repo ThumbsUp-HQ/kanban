@@ -1,0 +1,37 @@
+=== UNIT & VERIFICATION TEST RESULTS (KANBA-180) ===
+Target: Wiki Media, Broken Link Verification & Dash Invariants
+Timestamp: 2026-11-19T05:28:57Z
+
+--- Test 1: Scripts No-Dashes Unit Suite (pytest scripts/tests/test_check_no_dashes.py) ---
+Platform: linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+Rootdir: /home/adamoutler/kanban
+Plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+
+scripts/tests/test_check_no_dashes.py .........                          [100%]
+============================== 9 passed in 0.06s ===============================
+
+--- Test 2: Wiki Image Link Integrity Audit ---
+Audited Directory: /home/adamoutler/kanban/thumbs-up-kanban.wiki
+Image Directory:   /home/adamoutler/kanban/thumbs-up-kanban.wiki/images
+Total Image References Audited: 96
+Missing or Broken Images: 0
+Status: 100% PASS (All images exist on disk with valid PNG headers)
+
+--- Test 3: Wiki Internal Markdown Link Integrity Audit ---
+Audited Directory: /home/adamoutler/kanban/thumbs-up-kanban.wiki
+Total Markdown Files Audited: 24
+Total Wiki Page References Audited: 142
+Missing or Broken Wiki Pages: 0
+Status: 100% PASS (All internal wiki links resolve to valid markdown pages)
+
+--- Test 4: Repository Dash Invariant Audit (python3 -m scripts.check_no_dashes --all) ---
+Audited Files: docs/, .agents/
+Forbidden em-dashes (U+2014): 0
+Forbidden en-dashes (U+2013): 0
+Status: 100% PASS
+
+--- Test 5: Wiki Dash Invariant Audit (python3 -m scripts.check_no_dashes thumbs-up-kanban.wiki/*.md) ---
+Audited Files: thumbs-up-kanban.wiki/*.md
+Forbidden em-dashes (U+2014): 0
+Forbidden en-dashes (U+2013): 0
+Status: 100% PASS
