@@ -2038,4 +2038,89 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(screen.getByTestId('principal-option-p-wrap-1'));
     expect(screen.getByDisplayValue('Wrapped Principal')).toBeDefined();
   });
+
+  it('KAN-14: guards nullable display_name, trash kind, and member role without throwing in .toLowerCase()', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      if (url.includes('/api/v1/admin/principals')) {
+        return [
+          {
+            id: 'p-null-name',
+            principal_type: 'USER',
+            display_name: null,
+            handle: 'nullname',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/projects/KAN/members')) {
+        return [
+          {
+            id: 'm-null-role',
+            principal_id: 'p-null-role',
+            role: null,
+            display_name: 'Member Null Role',
+            handle: 'nullrole',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/projects/KAN/trash-items') || url.includes('/api/v1/projects/KAN/trash')) {
+        return {
+          items: [
+            {
+              id: 'tr-null-kind',
+              key: 'KAN-99',
+              kind: null,
+              title: 'Item with null kind',
+              deleted_at: new Date().toISOString(),
+              purge_after: new Date().toISOString(),
+              remaining_days: 14,
+            },
+          ],
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN')) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          modules_enabled: true,
+          is_project_admin: true,
+        };
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+    expect(await screen.findByTestId('project-settings-page')).toBeDefined();
+
+    // 1. Members tab: check member with null role and search with null display_name
+    const membersTab = screen.getByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // Verify member with null role rendered badge without crash
+    expect(await screen.findByText('Member Null Role')).toBeDefined();
+    const roleBadge = screen.getByTestId('member-role-badge');
+    expect(roleBadge.className).toContain('kb-role-badge kb-role-');
+
+    // Autocomplete search filtering principal with null display_name
+    const input = screen.getByTestId('member-principal-id-input');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'nullname' } });
+    expect(await screen.findByTestId('principal-picker-dropdown')).toBeDefined();
+    expect(screen.getByTestId('principal-option-p-null-name')).toBeDefined();
+
+    // 2. Trash tab: filter trashed item with null kind
+    const trashTab = screen.getByTestId('tab-trash');
+    fireEvent.click(trashTab);
+
+    expect(await screen.findByTestId('trash-section')).toBeDefined();
+    // Default filter is 'all'
+    expect(screen.getByText('Item with null kind')).toBeDefined();
+
+    // Switch filter to 'issue' - null kind does not crash and gets filtered out
+    const filterBtn = screen.getByTestId('trash-filter-issue');
+    fireEvent.click(filterBtn);
+    expect(screen.queryByText('Item with null kind')).toBeNull();
+  });
 });

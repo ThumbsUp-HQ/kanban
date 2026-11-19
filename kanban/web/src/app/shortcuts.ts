@@ -47,6 +47,7 @@ export function isEditableElement(element: Element | null): boolean {
  * Normalizes keyboard event to compare against combo string.
  */
 export function matchesCombo(event: KeyboardEvent, combo: string): boolean {
+  if (typeof event.key !== 'string' || event.key.length === 0) return false;
   const isMac =
     typeof navigator !== 'undefined' &&
     /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent);

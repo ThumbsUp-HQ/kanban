@@ -193,4 +193,60 @@ describe('shortcuts', () => {
     );
     expect(handler1).toHaveBeenCalledTimes(1);
   });
+
+  it('KAN-14: guards against event.key === undefined, empty string, or non-string without crashing', () => {
+    const syntheticEventUndefined = new KeyboardEvent('keydown');
+    Object.defineProperty(syntheticEventUndefined, 'key', { value: undefined });
+    expect(matchesCombo(syntheticEventUndefined, 'Mod+K')).toBe(false);
+
+    const syntheticEventEmpty = new KeyboardEvent('keydown');
+    Object.defineProperty(syntheticEventEmpty, 'key', { value: '' });
+    expect(matchesCombo(syntheticEventEmpty, 'Mod+K')).toBe(false);
+
+    const syntheticEventNumber = new KeyboardEvent('keydown');
+    Object.defineProperty(syntheticEventNumber, 'key', { value: 123 });
+    expect(matchesCombo(syntheticEventNumber, 'Mod+K')).toBe(false);
+  });
+
+  it('KAN-14: handles synthetic autofill keydown event with undefined key without throwing in global listener', () => {
+    const handler = vi.fn();
+    const unregister = registerShortcut('Mod+K', handler, { allowInInputs: true });
+
+    const inputEmail = document.createElement('input');
+    inputEmail.type = 'email';
+    document.body.appendChild(inputEmail);
+    inputEmail.focus();
+
+    const autofillEvent = new KeyboardEvent('keydown', { bubbles: true });
+    Object.defineProperty(autofillEvent, 'key', { value: undefined });
+
+    expect(() => {
+      window.dispatchEvent(autofillEvent);
+    }).not.toThrow();
+
+    expect(handler).not.toHaveBeenCalled();
+
+    unregister();
+  });
+
+  it('KAN-14: tests Mod key branches across Mac and non-Mac user agents', () => {
+    const originalUserAgent = navigator.userAgent;
+    try {
+      Object.defineProperty(navigator, 'userAgent', {
+        value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+        configurable: true,
+      });
+
+      const macMetaEvent = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
+      expect(matchesCombo(macMetaEvent, 'Mod+K')).toBe(true);
+
+      const macCtrlEvent = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true });
+      expect(matchesCombo(macCtrlEvent, 'Mod+K')).toBe(false);
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', {
+        value: originalUserAgent,
+        configurable: true,
+      });
+    }
+  });
 });

@@ -340,6 +340,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     // Fill form and trigger failure
     fireEvent.change(screen.getByTestId('new-user-handle'), { target: { value: 'existing_handle' } });
     fireEvent.change(screen.getByTestId('new-user-name'), { target: { value: 'Existing User' } });
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: 'existing@example.com' } });
     fireEvent.click(screen.getByTestId('create-user-submit-btn'));
 
     await waitFor(() => {
@@ -414,6 +415,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     // 1. Submit with leading @ and throw string error
     fireEvent.change(screen.getByTestId('new-user-handle'), { target: { value: '@string_user' } });
     fireEvent.change(screen.getByTestId('new-user-name'), { target: { value: 'String User' } });
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: 'string_user@example.com' } });
     fireEvent.click(screen.getByTestId('create-user-submit-btn'));
 
     await waitFor(() => {
@@ -424,6 +426,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     returnItemsObject = true;
     fireEvent.change(screen.getByTestId('new-user-handle'), { target: { value: '@itemuser' } });
     fireEvent.change(screen.getByTestId('new-user-name'), { target: { value: 'Item User' } });
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: 'itemuser@example.com' } });
     fireEvent.click(screen.getByTestId('create-user-submit-btn'));
 
     await waitFor(() => {
@@ -521,6 +524,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     // Create user where response has no ID
     fireEvent.change(screen.getByTestId('new-user-handle'), { target: { value: 'noid_user' } });
     fireEvent.change(screen.getByTestId('new-user-name'), { target: { value: 'No ID User' } });
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: 'noid@example.com' } });
     fireEvent.click(screen.getByTestId('create-user-submit-btn'));
 
     await waitFor(() => {
@@ -1045,6 +1049,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     const nameInput = screen.getByTestId('new-user-name');
     fireEvent.change(handleInput, { target: { value: 'newbie' } });
     fireEvent.change(nameInput, { target: { value: 'Newbie Name' } });
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: 'newbie@example.com' } });
     fireEvent.click(addUserBtn);
     await waitFor(() => {
       expect(screen.getByText('Principal creation failed')).toBeDefined();
@@ -1299,5 +1304,403 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(formatHandle('alice')).toBe('@alice');
     expect(formatHandle('@bob')).toBe('@bob');
     expect(formatHandle('@@charlie')).toBe('@charlie');
+  });
+
+  it('KAN-14: renders live principal payload without handle and resolves p.handle ?? p.principal in members and groups tabs', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return {
+          id: 'user-admin',
+          is_server_admin: true,
+          is_workspace_admin: true,
+          workspace_role: 'SERVER_ADMIN',
+        };
+      }
+      if (url.includes('/api/v1/workspaces/current')) {
+        return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          {
+            id: 'u-live-1',
+            principal: '@alice', // Note: backend returns 'principal', no 'handle'
+            display_name: 'Alice Live',
+            type: 'USER',
+            role: 'WORKSPACE_MEMBER',
+            email: 'alice@live.test',
+          },
+          {
+            id: 'grp-live-1',
+            principal: '@core-team',
+            display_name: 'Core Team',
+            type: 'GROUP',
+            role: 'WORKSPACE_MEMBER',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/admin/groups/grp-live-1/members') && m === 'GET') {
+        return [
+          {
+            id: 'm-live-1',
+            principal: '@bob-member', // Group member without handle
+            display_name: 'Bob GroupMember',
+            type: 'USER',
+          },
+        ];
+      }
+      return {};
+    });
+
+    renderComponent();
+    expect(await screen.findByTestId('workspace-settings-page')).toBeDefined();
+
+    // 1. Members Tab: verify p.principal is used as handle
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    expect(await screen.findByTestId('member-name-u-live-1')).toBeDefined();
+    expect(screen.getByTestId('member-handle-u-live-1').textContent).toBe('@alice');
+    expect(screen.getByTestId('role-select-u-live-1').getAttribute('aria-label')).toBe('Role for Alice Live');
+
+    // 2. Groups Tab: verify group item, detail header, select options, and group members render p.principal
+    const groupsTab = screen.getByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    expect(await screen.findByTestId('group-item-grp-live-1')).toBeDefined();
+    expect(screen.getAllByText('@core-team').length).toBeGreaterThan(0);
+
+    // Select group
+    fireEvent.click(screen.getByTestId('group-item-grp-live-1'));
+    expect(await screen.findByTestId('selected-group-name')).toBeDefined();
+    expect(screen.getByTestId('selected-group-handle').textContent).toBe('@core-team');
+
+    // Verify Add to Group option displays formatted principal
+    const option = screen.getByText(/Alice Live \(@alice\)/);
+    expect(option).toBeDefined();
+
+    // Verify group member displays formatted principal
+    expect(await screen.findByText('Bob GroupMember')).toBeDefined();
+    expect(screen.getByText('@bob-member')).toBeDefined();
+  });
+
+  it('KAN-14: sends bound role in DELETE /api/v1/admin/role-bindings and validates required email before creating user', async () => {
+    let deletePayload: Record<string, unknown> | null = null;
+    let createPayload: Record<string, unknown> | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return {
+          id: 'user-admin',
+          is_server_admin: true,
+          is_workspace_admin: true,
+          workspace_role: 'SERVER_ADMIN',
+        };
+      }
+      if (url.includes('/api/v1/workspaces/current')) {
+        return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          {
+            id: 'u-bound-1',
+            principal: '@charlie',
+            display_name: 'Charlie Member',
+            type: 'USER',
+            role: 'WORKSPACE_ADMIN',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'DELETE') {
+        const bodyStr = (options as { body?: string }).body ?? '{}';
+        deletePayload = JSON.parse(bodyStr) as Record<string, unknown>;
+        return { ok: true };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'POST') {
+        const bodyStr = (options as { body?: string }).body ?? '{}';
+        createPayload = JSON.parse(bodyStr) as Record<string, unknown>;
+        return { id: 'new-user-123' };
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'POST') {
+        return { ok: true };
+      }
+      return {};
+    });
+
+    renderComponent();
+    expect(await screen.findByTestId('workspace-settings-page')).toBeDefined();
+
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // 1. Test DELETE role-bindings passes bound role
+    expect(await screen.findByTestId('remove-member-btn-u-bound-1')).toBeDefined();
+    fireEvent.click(screen.getByTestId('remove-member-btn-u-bound-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Member removed from workspace.')).toBeDefined();
+    });
+    expect(deletePayload).toEqual({
+      principal_id: 'u-bound-1',
+      role: 'WORKSPACE_ADMIN',
+      scope_type: 'workspace',
+    });
+
+    // 2. Test user creation email validation inline
+    fireEvent.change(screen.getByTestId('new-user-handle'), { target: { value: 'testuser' } });
+    fireEvent.change(screen.getByTestId('new-user-name'), { target: { value: 'Test User' } });
+    // Empty email
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('create-user-submit-btn'));
+
+    expect(await screen.findByText('Email is required for user provisioning.')).toBeDefined();
+    expect(createPayload).toBeNull();
+
+    // Now fill email and submit successfully
+    fireEvent.change(screen.getByTestId('new-user-email'), { target: { value: 'test@user.org' } });
+    fireEvent.click(screen.getByTestId('create-user-submit-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText('User Test User created successfully.')).toBeDefined();
+    });
+    expect(createPayload).toEqual({
+      type: 'USER',
+      handle: '@testuser',
+      display_name: 'Test User',
+      email: 'test@user.org',
+    });
+  });
+
+  it('KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches', async () => {
+    let removeBody: Record<string, unknown> | null = null;
+    let createGroupFailMode: 'none' | 'detail' | 'message' | 'fallback' = 'none';
+    let groupAddFailWithMessage = false;
+    let groupRemoveFailMode: 'none' | 'detail' | 'message' | 'fallback' = 'none';
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+      }
+      if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/admin/workspace-settings')) {
+        return { id: 'ws-1', name: 'WS 1' };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          {
+            id: 'p-bare-uuid',
+            display_name: null,
+            handle: null,
+            principal: null,
+            type: 'USER',
+            role: null,
+            role_name: null,
+          },
+          {
+            id: 'p-handle-only',
+            display_name: null,
+            handle: 'handleonly',
+            principal: null,
+            type: 'USER',
+            role: 'WORKSPACE_MEMBER',
+          },
+          {
+            id: 'p-princ-only',
+            display_name: null,
+            handle: null,
+            principal: 'princonly',
+            type: 'USER',
+            role: 'WORKSPACE_MEMBER',
+          },
+          {
+            id: 'p-name-only',
+            display_name: 'Name Only',
+            handle: null,
+            principal: null,
+            type: 'USER',
+            role: null,
+            role_name: 'WORKSPACE_GUEST',
+          },
+          {
+            id: 'grp-test-1',
+            display_name: 'Test Group',
+            principal: '@testgrp',
+            type: 'GROUP',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'DELETE') {
+        const bodyStr = (options as { body?: string }).body ?? '{}';
+        removeBody = JSON.parse(bodyStr) as Record<string, unknown>;
+        return { ok: true };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'POST') {
+        if (createGroupFailMode === 'detail') {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw { detail: 'Group detail failure' };
+        }
+        if (createGroupFailMode === 'message') {
+          throw new Error('Group message failure');
+        }
+        if (createGroupFailMode === 'fallback') {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw {};
+        }
+        return { id: '' }; // empty created ID to hit if (created.id) false branch
+      }
+      if (url.includes('/api/v1/admin/groups/grp-test-1/members') && m === 'POST') {
+        if (groupAddFailWithMessage) {
+          throw new Error('Group add message failure');
+        }
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw {}; // neither detail nor message to hit fallback cyclic error
+      }
+      if (url.includes('/api/v1/admin/groups/grp-test-1/members') && m === 'DELETE') {
+        if (groupRemoveFailMode === 'detail') {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw { detail: 'Group remove detail failure' };
+        }
+        if (groupRemoveFailMode === 'message') {
+          throw new Error('Group remove message failure');
+        }
+        if (groupRemoveFailMode === 'fallback') {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw {};
+        }
+        return {};
+      }
+      if (url.includes('/api/v1/admin/groups/grp-test-1/members') && m === 'GET') {
+        return [
+          { id: 'm-to-remove', display_name: 'Member In Group', type: 'USER' },
+        ];
+      }
+      return {};
+    });
+
+    renderComponent();
+    expect(await screen.findByTestId('workspace-settings-page')).toBeDefined();
+
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // 1. Verify bare UUID fallback when display_name, handle, and principal are null
+    expect(await screen.findByTestId('member-name-p-bare-uuid')).toBeDefined();
+    expect(screen.getByTestId('member-name-p-bare-uuid').textContent).toBe('p-bare-uuid');
+    expect(screen.queryByTestId('member-handle-p-bare-uuid')).toBeNull();
+
+    // Verify formatHandle fallback for null display_name with handle or principal
+    expect(screen.getByTestId('member-name-p-handle-only').textContent).toBe('@handleonly');
+    expect(screen.getByTestId('member-name-p-princ-only').textContent).toBe('@princonly');
+
+    // 2. Remove member with null role and null role_name -> falls back to WORKSPACE_MEMBER
+    const removeBareBtn = screen.getByTestId('remove-member-btn-p-bare-uuid');
+    fireEvent.click(removeBareBtn);
+    await waitFor(() => {
+      expect(removeBody).toEqual({
+        principal_id: 'p-bare-uuid',
+        role: 'WORKSPACE_MEMBER',
+        scope_type: 'workspace',
+      });
+    });
+
+    // 3. Remove member with null role but role_name = WORKSPACE_GUEST
+    const removeNameOnlyBtn = screen.getByTestId('remove-member-btn-p-name-only');
+    fireEvent.click(removeNameOnlyBtn);
+    await waitFor(() => {
+      expect(removeBody).toEqual({
+        principal_id: 'p-name-only',
+        role: 'WORKSPACE_GUEST',
+        scope_type: 'workspace',
+      });
+    });
+
+    // 4. Test group creation with empty ID response
+    const groupsTab = screen.getByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    fireEvent.change(screen.getByTestId('new-group-name'), { target: { value: 'No ID Group' } });
+    fireEvent.change(screen.getByTestId('new-group-handle'), { target: { value: 'noidgrp' } });
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Group created successfully.')).toBeDefined();
+    });
+
+    // 5. Test group creation error branches (detail, message, fallback)
+    createGroupFailMode = 'detail';
+    fireEvent.change(screen.getByTestId('new-group-name'), { target: { value: 'Fail Group' } });
+    fireEvent.change(screen.getByTestId('new-group-handle'), { target: { value: 'failgrp' } });
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Group detail failure')).toBeDefined();
+    });
+
+    createGroupFailMode = 'message';
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Group message failure')).toBeDefined();
+    });
+
+    createGroupFailMode = 'fallback';
+    fireEvent.click(screen.getByTestId('create-group-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Failed to create group.')).toBeDefined();
+    });
+
+    // 6. Select group and test add/remove group member error branches
+    fireEvent.click(screen.getByTestId('group-item-grp-test-1'));
+    expect(await screen.findByTestId('add-group-member-select')).toBeDefined();
+
+    // Group add error with message
+    groupAddFailWithMessage = true;
+    fireEvent.change(screen.getByTestId('add-group-member-select'), { target: { value: 'p-bare-uuid' } });
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Group add message failure')).toBeDefined();
+    });
+
+    // Group add error fallback
+    groupAddFailWithMessage = false;
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Cannot nest group: would introduce a cyclic dependency.')).toBeDefined();
+    });
+
+    // Group remove error branches (detail, message, fallback)
+    expect(await screen.findByTestId('remove-group-member-m-to-remove')).toBeDefined();
+
+    groupRemoveFailMode = 'detail';
+    fireEvent.click(screen.getByTestId('remove-group-member-m-to-remove'));
+    await waitFor(() => {
+      expect(screen.getByText('Group remove detail failure')).toBeDefined();
+    });
+
+    groupRemoveFailMode = 'message';
+    fireEvent.click(screen.getByTestId('remove-group-member-m-to-remove'));
+    await waitFor(() => {
+      expect(screen.getByText('Group remove message failure')).toBeDefined();
+    });
+
+    groupRemoveFailMode = 'fallback';
+    fireEvent.click(screen.getByTestId('remove-group-member-m-to-remove'));
+    await waitFor(() => {
+      expect(screen.getByText('Failed to remove group member.')).toBeDefined();
+    });
   });
 });

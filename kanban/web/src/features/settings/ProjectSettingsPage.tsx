@@ -917,7 +917,7 @@ export function ProjectSettingsPage(): JSX.Element {
     if (!principalSearch) return true;
     const q = principalSearch.toLowerCase();
     return (
-      p.display_name.toLowerCase().includes(q) ||
+      ((p.display_name as string | null | undefined) ?? '').toLowerCase().includes(q) ||
       (p.handle?.toLowerCase().includes(q) ?? false) ||
       p.id.toLowerCase().includes(q)
     );
@@ -926,7 +926,7 @@ export function ProjectSettingsPage(): JSX.Element {
   // Filter trashed items
   const filteredTrashed = trashedItems.filter((t) => {
     if (trashKindFilter === 'all') return true;
-    return t.kind.toLowerCase() === trashKindFilter.toLowerCase();
+    return ((t.kind as string | null | undefined) ?? '').toLowerCase() === trashKindFilter.toLowerCase();
   });
 
   return (
@@ -1628,7 +1628,7 @@ export function ProjectSettingsPage(): JSX.Element {
                     <td>
                       <span
                         data-testid="member-role-badge"
-                        className={`kb-role-badge kb-role-${m.role.toLowerCase()}`}
+                        className={`kb-role-badge kb-role-${((m.role as string | null | undefined) ?? '').toLowerCase()}`}
                       >
                         {m.role}
                       </span>
