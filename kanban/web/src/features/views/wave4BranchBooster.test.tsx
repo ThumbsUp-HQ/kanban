@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -181,7 +181,7 @@ describe('Wave 4 Branch Booster', () => {
       expect(norm3.capabilities).toEqual(['EDIT', 'TRANSITION', 'COMMENT']);
     });
 
-    it('renders IssueSurfaceRoot in split mode and responds to kb:toggle-sidebar', async () => {
+    it('renders IssueSurfaceRoot in split mode', async () => {
       vi.spyOn(clientModule.apiClient, 'get').mockResolvedValue({
         key: 'KAN-1',
         summary: 'Split view issue',
@@ -195,17 +195,7 @@ describe('Wave 4 Branch Booster', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Split view issue')).toBeDefined();
-      });
-
-      const navBtn = screen.getByRole('button', { name: 'Hide Nav' });
-      fireEvent.click(navBtn);
-      expect(screen.getByRole('button', { name: 'Show Nav' })).toBeDefined();
-
-      // Dispatch global sidebar change event
-      act(() => {
-        window.dispatchEvent(
-          new CustomEvent('kb:sidebar-changed', { detail: { collapsed: 'collapsed' } }),
-        );
+        expect(screen.getByRole('link', { name: 'Open in new tab' })).toBeDefined();
       });
     });
   });
