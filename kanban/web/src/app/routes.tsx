@@ -55,6 +55,9 @@ import { WorkspaceSettingsPage } from '../features/settings/WorkspaceSettingsPag
 import { LoginPage } from '../features/auth/LoginPage';
 import { SetupClaimPage } from '../features/auth/SetupClaimPage';
 import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
+import { AiStudioPage } from '../features/admin-ai/AiStudioPage';
+import { AgentStudioPage } from '../features/admin-agents/AgentStudioPage';
+import { RunnerStudioPage } from '../features/admin-runners/RunnerStudioPage';
 import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
 import { McpAccessStudio } from '../features/settings/McpAccessStudio';
 import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
@@ -1927,6 +1930,10 @@ export const appRoutes: RouteObject[] = [
             element: <McpAccessStudio tier="workspace" />,
           },
           {
+            path: 'workspaces/settings/ai',
+            element: <AiStudioPage />,
+          },
+          {
             path: 'admin',
             element: <AdminRouteGuard />,
             children: [
@@ -1937,6 +1944,18 @@ export const appRoutes: RouteObject[] = [
               {
                 path: 'auth',
                 element: <AuthStudioPage />,
+              },
+              {
+                path: 'ai',
+                element: <AiStudioPage />,
+              },
+              {
+                path: 'agents',
+                element: <AgentStudioPage />,
+              },
+              {
+                path: 'agent-runners',
+                element: <RunnerStudioPage />,
               },
               {
                 path: 'standalone',

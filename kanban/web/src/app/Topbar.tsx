@@ -417,6 +417,22 @@ export function Topbar({
                         Workspace MCP Keys
                       </span>
                     </Link>
+
+                    <Link
+                      to="/workspaces/settings/ai"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🧠
+                        </span>
+                        Workspace AI Studio
+                      </span>
+                    </Link>
                   </>
                 )}
 
@@ -451,6 +467,54 @@ export function Topbar({
                           🤖
                         </span>
                         Admin MCP Keys
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/admin/ai"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🧠
+                        </span>
+                        AI Providers & Token Caps
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/admin/agents"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🤖
+                        </span>
+                        Autonomous Agents
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/admin/agent-runners"
+                      role="menuitem"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🚀
+                        </span>
+                        Remote mTLS Runners
                       </span>
                     </Link>
 

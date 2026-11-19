@@ -359,6 +359,44 @@ async def disable_provider(
         return _to_public_config(disabled)
 
 
+@router.delete(
+    "/providers/{provider_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete AI provider configuration",
+)
+async def delete_provider(
+    provider_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+) -> Response:
+    """Delete an AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session)
+        await service.delete_config(provider_id)
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_CONFIG_DISABLED,
+            payload={
+                "config_id": str(provider_id),
+                "provider_kind": config.provider_kind,
+                "display_name": config.display_name,
+                "action": "deleted",
+            },
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get(
     "/budgets",
     response_model=list[BudgetRecord],
