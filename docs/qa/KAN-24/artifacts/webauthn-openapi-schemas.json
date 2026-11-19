@@ -1,0 +1,465 @@
+{
+  "paths": {
+    "/api/v1/auth/mfa/totp/enroll": {
+      "post": {
+        "tags": [
+          "auth",
+          "mfa"
+        ],
+        "summary": "Enroll Totp",
+        "description": "Enroll a new pending TOTP factor for the authenticated principal.",
+        "operationId": "enroll_totp_api_v1_auth_mfa_totp_enroll_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/totp/confirm": {
+      "post": {
+        "tags": [
+          "auth",
+          "mfa"
+        ],
+        "summary": "Confirm Totp",
+        "description": "Confirm a pending TOTP factor using a valid 6-digit code.",
+        "operationId": "confirm_totp_api_v1_auth_mfa_totp_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/status": {
+      "get": {
+        "tags": [
+          "auth",
+          "mfa"
+        ],
+        "summary": "Get Mfa Status",
+        "description": "Return active MFA status for authenticated principal.",
+        "operationId": "get_mfa_status_api_v1_auth_mfa_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/totp": {
+      "delete": {
+        "tags": [
+          "auth",
+          "mfa"
+        ],
+        "summary": "Delete Totp",
+        "description": "Revoke active TOTP factor for authenticated principal (requires AAL2).",
+        "operationId": "delete_totp_api_v1_auth_mfa_totp_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/verify": {
+      "post": {
+        "tags": [
+          "auth",
+          "mfa"
+        ],
+        "summary": "Verify Mfa",
+        "description": "Verify TOTP or recovery second factor and elevate session to AAL2.",
+        "operationId": "verify_mfa_api_v1_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/recovery/regenerate": {
+      "post": {
+        "tags": [
+          "auth",
+          "mfa"
+        ],
+        "summary": "Regenerate Recovery Codes",
+        "description": "Regenerate 10 one-time recovery codes (requires active AAL2 session).",
+        "operationId": "regenerate_recovery_codes_api_v1_auth_mfa_recovery_regenerate_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/register/options": {
+      "post": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "Register Options",
+        "description": "Generate WebAuthn registration options. Requires AAL2 or first enrollment on mfa_pending.",
+        "operationId": "register_options_api_v1_auth_webauthn_register_options_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WebauthnRegisterOptionsRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/register/verify": {
+      "post": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "Register Verify",
+        "description": "Verify WebAuthn registration and persist credential. Elevates to AAL2 on first enrollment.",
+        "operationId": "register_verify_api_v1_auth_webauthn_register_verify_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/authenticate/options": {
+      "post": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "Authenticate Options",
+        "description": "Generate WebAuthn authentication/assertion options for AAL2 elevation.",
+        "operationId": "authenticate_options_api_v1_auth_webauthn_authenticate_options_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/authenticate/verify": {
+      "post": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "Authenticate Verify",
+        "description": "Verify WebAuthn authentication response and elevate session to AAL2.",
+        "operationId": "authenticate_verify_api_v1_auth_webauthn_authenticate_verify_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/credentials": {
+      "get": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "List Credentials",
+        "description": "List registered WebAuthn credentials for authenticated principal.",
+        "operationId": "list_credentials_api_v1_auth_webauthn_credentials_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/credentials/{credential_id}": {
+      "patch": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "Rename Credential",
+        "description": "Rename a registered WebAuthn passkey credential.",
+        "operationId": "rename_credential_api_v1_auth_webauthn_credentials__credential_id__patch",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Credential Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebauthnRenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth",
+          "webauthn"
+        ],
+        "summary": "Delete Credential",
+        "description": "Delete a registered WebAuthn credential. Refuses deleting last factor of admin.",
+        "operationId": "delete_credential_api_v1_auth_webauthn_credentials__credential_id__delete",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Credential Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "schemas": {
+    "TotpConfirmRequest": {
+      "properties": {
+        "code": {
+          "type": "string",
+          "title": "Code",
+          "description": "6-digit TOTP verification code"
+        },
+        "enrollment_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Enrollment Id",
+          "description": "Optional setup enrollment session identifier for immediate AAL2 elevation"
+        }
+      },
+      "type": "object",
+      "required": [
+        "code"
+      ],
+      "title": "TotpConfirmRequest",
+      "description": "Payload for confirming a pending TOTP factor."
+    },
+    "WebauthnRegisterOptionsRequest": {
+      "properties": {
+        "authenticator_attachment": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "platform",
+                "cross-platform"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Authenticator Attachment",
+          "description": "Optional attachment modality hint ('platform' or 'cross-platform')"
+        }
+      },
+      "type": "object",
+      "title": "WebauthnRegisterOptionsRequest",
+      "description": "Payload for requesting WebAuthn registration options."
+    },
+    "WebauthnRenameRequest": {
+      "properties": {
+        "nickname": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Nickname",
+          "description": "Friendly nickname"
+        }
+      },
+      "type": "object",
+      "required": [
+        "nickname"
+      ],
+      "title": "WebauthnRenameRequest",
+      "description": "Payload for renaming a WebAuthn passkey credential."
+    }
+  }
+}

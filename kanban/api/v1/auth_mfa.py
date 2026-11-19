@@ -335,15 +335,18 @@ async def delete_totp(
     )
 
     async with session_factory.session(rls_ctx) as session:
-        admin_res = await session.execute(
-            text(
-                "SELECT 1 FROM role_bindings "
-                "WHERE principal_id = :p_id "
-                "  AND role IN ('SERVER_ADMIN', 'PROJECT_ADMIN')"
-            ),
-            {"p_id": principal.principal_id},
-        )
-        is_admin = admin_res.scalar_one_or_none() is not None
+        is_admin = bool(getattr(principal, "is_server_admin", False))
+        if not is_admin:
+            admin_res = await session.execute(
+                text(
+                    "SELECT 1 FROM role_bindings "
+                    "WHERE principal_id = :p_id "
+                    "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN') "
+                    "LIMIT 1"
+                ),
+                {"p_id": principal.principal_id},
+            )
+            is_admin = admin_res.scalar_one_or_none() is not None
         if is_admin:
             status_res = await session.execute(
                 text("SELECT * FROM kb_auth.mfa_status(:p_id)"),

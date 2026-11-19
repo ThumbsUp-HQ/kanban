@@ -41,6 +41,7 @@ class PrincipalContext:
     scope_tier: str | None = None
     scoped_project_id: uuid.UUID | None = None
     user_access_hash: bytes | None = None
+    is_server_admin: bool = False
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
