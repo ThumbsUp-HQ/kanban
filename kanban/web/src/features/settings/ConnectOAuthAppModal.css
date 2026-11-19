@@ -86,8 +86,8 @@
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid var(--kb-color-border-subtle, #30363d);
-  background-color: #0d1117;
-  color: var(--kb-color-text-primary, #f0f6fc);
+  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
+  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
   font-size: 0.875rem;
 }
 
@@ -108,7 +108,8 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background-color: #0d1117;
+  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #ffffff));
+  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   border-radius: 6px;
   font-size: 0.8125rem;
@@ -116,7 +117,7 @@
 }
 
 .kb-connect-oauth-endpoints {
-  background-color: #0d1117;
+  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   border-radius: 8px;
   padding: 12px;

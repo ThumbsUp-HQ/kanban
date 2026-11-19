@@ -1,3 +1,89 @@
+diff --git a/docs/qa/KAN-28/api-specialist-review.md b/docs/qa/KAN-28/api-specialist-review.md
+new file mode 100644
+index 0000000..f3bcb2f
+--- /dev/null
++++ b/docs/qa/KAN-28/api-specialist-review.md
+@@ -0,0 +1,80 @@
++# API Specialist Security & Architecture Audit Review: KAN-28
++
++## Audit Metadata
++- Ticket ID: KAN-28 ([KB-P3-AUDIT-22])
++- Reviewer: api-spec-2 (Clean-Room Backend/API Specialist)
++- Date: 2026-11-19
++- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9`
++- Target Branch: feat/KAN-28
++- Base Commit: 3dd6b9d
++- Head Commit: 476daa4
++- STATUS: APPROVED
++
++---
++
++## Executive Summary
++This clean-room audit evaluates the OAuth 2.1 protocol implementation, cryptographic CSRF token generation and validation, same-origin protections, consent screen Content-Security-Policy (CSP), and administrative client governance endpoints delivered for ticket KAN-28. The delivery resolves four core architectural and security requirements across user and administrative OAuth flows without introducing new dependencies or compromising security invariants.
++
++All changes adhere strictly to the authoritative specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and `kanban/GEMINI.md`.
++
++---
++
++## Detailed Contract & Security Verification
++
++### 1. Authorization Endpoint Hardening & Cryptographic CSRF Binding
++- Files: `kanban/api/v1/oauth.py`, `kanban/oauth/server.py`, `kanban/auth/sessions/csrf.py`
++- Invariant: User authorization decisions must be cryptographically bound to the initiating user session, client ID, PKCE challenge, state, surface, and redirect URI with short expiration, preventing cross-session and cross-site authorization forgery.
++- Audit Findings:
++  - `generate_consent_csrf_token()` computes an HMAC-SHA256 signature using `session_hmac_key` over `(v1, session_id, client_id, redirect_uri, code_challenge, state, surface, exp)` with a strict 600s TTL.
++  - In `POST /oauth/authorize/decision`, `verify_consent_csrf_token()` verifies the signature via `hmac.compare_digest` and checks token expiration.
++  - `verify_same_origin_request()` inspects `Sec-Fetch-Site` in `("same-origin", "none")` and ensures `Origin` or `Referer` matches the host, rejecting mismatched requests with RFC 7807 403 `CSRF_INVALID`.
++  - Re-verifies `client_record.status == "active"`, rejecting suspended or disabled clients with 302 `unauthorized_client`.
++  - Enforces `surface == "admin" and caller.aal_level < 2` on both GET and POST endpoints, redirecting to redirect URI with 302 `access_denied&error_description=aal2_required`.
++  - Empty approved scope lists are rejected with 302 `invalid_scope`.
++  - Content Security Policy: Removed `'unsafe-inline'` from consent screen style-src, replacing it with `style-src 'self' 'sha256-{CONSENT_STYLE_SHA256}'`.
++
++### 2. User OAuth Connect Flows on `/settings/mcp`
++- Files: `kanban/web/src/features/settings/ConnectOAuthAppModal.tsx`, `kanban/web/src/features/settings/McpAccessStudio.tsx`, `kanban/web/src/features/settings/McpConfigSnippetModal.tsx`
++- Audit Findings:
++  - Added `+ Connect OAuth App` modal with surface picker (`/mcp/agent`, `/mcp/docs`, `/mcp/admin` when caller is admin), scope selection, copyable Resource URL and RFC 8414 discovery URL.
++  - Includes 1-click configuration snippet generators for Claude Code, Cursor / VS Code, Antigravity (`agy`), and Codex (`codex`).
++  - Added `Enter Device Code` link directly navigating to `/oauth/device`.
++  - Added RFC 8414 OAuth discovery tab in `McpConfigSnippetModal.tsx`.
++
++### 3. Administrative OAuth Client Registration API & Studio
++- Files: `kanban/api/v1/oauth.py`, `kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx`, `kanban/web/src/features/oauth/oauthApi.ts`, `kanban/services/activity.py`
++- Invariant: Dynamic client registration by administrators must require AAL2, enforce secure redirect URI schemes, validate authentication methods, and log an audit record.
++- Audit Findings:
++  - `POST /api/v1/admin/oauth-clients` declares `Depends(require_admin_aal2)`.
++  - Enforces HTTPS or loopback HTTP (`127.0.0.1`, `localhost`, `[::1]`) for redirect URIs, forbidding cleartext public internet schemes.
++  - Validates `token_endpoint_auth_method` in `("none", "private_key_jwt")`.
++  - Emits `ActivityEventType.OAUTH_CLIENT_REGISTERED` audit record.
++  - `OAuthClientGovernanceStudio.tsx` renders `+ Register OAuth Client` modal with client ID copy feedback.
++
++### 4. Navigation & Route Aliases
++- File: `kanban/web/src/app/routes.tsx`
++- Audit Findings:
++  - Added `<Navigate replace />` redirects for `/settings/mcp-keys` -> `/settings/mcp` and `/admin/oauth-clients` -> `/admin/oauth`.
++  - Added route mapping for `/oauth/device` resolving to `<DeviceActivatePage />`.
++
++---
++
++## Gate & Invariant Checklist
++
++1. [x] Zero New Dependencies: No additions to `pyproject.toml` or `package.json`.
++2. [x] Admin Route Security: All `/api/v1/admin/*` endpoints maintain mandatory `Depends(require_admin_aal2)`. Verified by `kanban/tests/auth/test_aal2_policy.py`.
++3. [x] Architectural Layering: `uv run lint-imports` verified 2 kept contracts, 0 broken (`agent -> mcp -> kanban -> database`).
++4. [x] Test Coverage:
++   - Backend: 36 unit and integration tests passing in `kanban/tests/oauth/` (device flow, authorization flows, PKCE, CSRF).
++   - Frontend: 28 vitest tests passing across touched components (`ConnectOAuthAppModal.tsx`, `OAuthClientGovernanceStudio.tsx`, `oauthApi.ts`).
++   - Combined frontend coverage: 100% Statements, 99.06% Branches, 100% Functions, 100% Lines (all exceeding >= 95.10% threshold).
++5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy` (4 source files), `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
++6. [x] Zero Em/En-Dashes: Clean verification across code, tests, docs, and review markdown (0 em/en-dashes).
++7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `message-to-reality-checker.md`, and 16 Playwright screenshot PNGs verified in `docs/qa/KAN-28/`.
++
++---
++
++## Verdict & Handoff
++STATUS: APPROVED
++
++The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-28/screenshots/`.
 diff --git a/docs/qa/KAN-28/build-or-typecheck.txt b/docs/qa/KAN-28/build-or-typecheck.txt
 new file mode 100644
 index 0000000..de24cbb
@@ -49,35 +135,13 @@ index 0000000..de24cbb
 +=== ESLINT ===
 diff --git a/docs/qa/KAN-28/changed-files-manifest.txt b/docs/qa/KAN-28/changed-files-manifest.txt
 new file mode 100644
-index 0000000..aab21ec
+index 0000000..28e71b0
 --- /dev/null
 +++ b/docs/qa/KAN-28/changed-files-manifest.txt
 @@ -0,0 +1,42 @@
-+kanban/api/v1/oauth.py
-+kanban/auth/sessions/csrf.py
-+kanban/oauth/server.py
-+kanban/services/activity.py
-+kanban/tests/oauth/test_oauth_flow.py
-+kanban/tests/oauth/test_oauth_unit.py
-+kanban/web/src/app/routes.tsx
-+kanban/web/src/app/routes.test.tsx
-+kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-+kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
-+kanban/web/src/features/oauth/oauthApi.ts
-+kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-+kanban/web/src/features/oauth/__tests__/oauthApi.test.ts
-+kanban/web/src/features/settings/ConnectOAuthAppModal.css
-+kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
-+kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
-+kanban/web/src/features/settings/McpAccessStudio.css
-+kanban/web/src/features/settings/McpAccessStudio.tsx
-+kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
-+kanban/web/src/features/settings/McpConfigSnippetModal.tsx
-+kanban/web/e2e/qa/kan-28-screenshots.spec.ts
 +docs/qa/KAN-28/build-or-typecheck.txt
-+docs/qa/KAN-28/unit-test-results.txt
-+docs/qa/KAN-28/git-diff.patch
 +docs/qa/KAN-28/changed-files-manifest.txt
++docs/qa/KAN-28/git-diff.patch
 +docs/qa/KAN-28/message-to-reality-checker.md
 +docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-desktop.png
 +docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-mobile.png
@@ -95,12 +159,120 @@ index 0000000..aab21ec
 +docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-mobile.png
 +docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-desktop.png
 +docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-mobile.png
++docs/qa/KAN-28/unit-test-results.txt
++kanban/api/v1/oauth.py
++kanban/auth/sessions/csrf.py
++kanban/oauth/server.py
++kanban/services/activity.py
++kanban/tests/oauth/test_oauth_flow.py
++kanban/tests/oauth/test_oauth_unit.py
++kanban/web/e2e/qa/kan-28-screenshots.spec.ts
++kanban/web/src/app/routes.test.tsx
++kanban/web/src/app/routes.tsx
++kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
++kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
++kanban/web/src/features/oauth/__tests__/oauthApi.test.ts
++kanban/web/src/features/oauth/oauthApi.ts
++kanban/web/src/features/settings/ConnectOAuthAppModal.css
++kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
++kanban/web/src/features/settings/McpAccessStudio.css
++kanban/web/src/features/settings/McpAccessStudio.tsx
++kanban/web/src/features/settings/McpConfigSnippetModal.tsx
++kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
++kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 diff --git a/docs/qa/KAN-28/git-diff.patch b/docs/qa/KAN-28/git-diff.patch
 new file mode 100644
-index 0000000..fc8610d
+index 0000000..82736f2
 --- /dev/null
 +++ b/docs/qa/KAN-28/git-diff.patch
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,132 @@
++diff --git a/docs/qa/KAN-28/api-specialist-review.md b/docs/qa/KAN-28/api-specialist-review.md
++new file mode 100644
++index 0000000..f3bcb2f
++--- /dev/null
+++++ b/docs/qa/KAN-28/api-specialist-review.md
++@@ -0,0 +1,80 @@
+++# API Specialist Security & Architecture Audit Review: KAN-28
+++
+++## Audit Metadata
+++- Ticket ID: KAN-28 ([KB-P3-AUDIT-22])
+++- Reviewer: api-spec-2 (Clean-Room Backend/API Specialist)
+++- Date: 2026-11-19
+++- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9`
+++- Target Branch: feat/KAN-28
+++- Base Commit: 3dd6b9d
+++- Head Commit: 476daa4
+++- STATUS: APPROVED
+++
+++---
+++
+++## Executive Summary
+++This clean-room audit evaluates the OAuth 2.1 protocol implementation, cryptographic CSRF token generation and validation, same-origin protections, consent screen Content-Security-Policy (CSP), and administrative client governance endpoints delivered for ticket KAN-28. The delivery resolves four core architectural and security requirements across user and administrative OAuth flows without introducing new dependencies or compromising security invariants.
+++
+++All changes adhere strictly to the authoritative specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and `kanban/GEMINI.md`.
+++
+++---
+++
+++## Detailed Contract & Security Verification
+++
+++### 1. Authorization Endpoint Hardening & Cryptographic CSRF Binding
+++- Files: `kanban/api/v1/oauth.py`, `kanban/oauth/server.py`, `kanban/auth/sessions/csrf.py`
+++- Invariant: User authorization decisions must be cryptographically bound to the initiating user session, client ID, PKCE challenge, state, surface, and redirect URI with short expiration, preventing cross-session and cross-site authorization forgery.
+++- Audit Findings:
+++  - `generate_consent_csrf_token()` computes an HMAC-SHA256 signature using `session_hmac_key` over `(v1, session_id, client_id, redirect_uri, code_challenge, state, surface, exp)` with a strict 600s TTL.
+++  - In `POST /oauth/authorize/decision`, `verify_consent_csrf_token()` verifies the signature via `hmac.compare_digest` and checks token expiration.
+++  - `verify_same_origin_request()` inspects `Sec-Fetch-Site` in `("same-origin", "none")` and ensures `Origin` or `Referer` matches the host, rejecting mismatched requests with RFC 7807 403 `CSRF_INVALID`.
+++  - Re-verifies `client_record.status == "active"`, rejecting suspended or disabled clients with 302 `unauthorized_client`.
+++  - Enforces `surface == "admin" and caller.aal_level < 2` on both GET and POST endpoints, redirecting to redirect URI with 302 `access_denied&error_description=aal2_required`.
+++  - Empty approved scope lists are rejected with 302 `invalid_scope`.
+++  - Content Security Policy: Removed `'unsafe-inline'` from consent screen style-src, replacing it with `style-src 'self' 'sha256-{CONSENT_STYLE_SHA256}'`.
+++
+++### 2. User OAuth Connect Flows on `/settings/mcp`
+++- Files: `kanban/web/src/features/settings/ConnectOAuthAppModal.tsx`, `kanban/web/src/features/settings/McpAccessStudio.tsx`, `kanban/web/src/features/settings/McpConfigSnippetModal.tsx`
+++- Audit Findings:
+++  - Added `+ Connect OAuth App` modal with surface picker (`/mcp/agent`, `/mcp/docs`, `/mcp/admin` when caller is admin), scope selection, copyable Resource URL and RFC 8414 discovery URL.
+++  - Includes 1-click configuration snippet generators for Claude Code, Cursor / VS Code, Antigravity (`agy`), and Codex (`codex`).
+++  - Added `Enter Device Code` link directly navigating to `/oauth/device`.
+++  - Added RFC 8414 OAuth discovery tab in `McpConfigSnippetModal.tsx`.
+++
+++### 3. Administrative OAuth Client Registration API & Studio
+++- Files: `kanban/api/v1/oauth.py`, `kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx`, `kanban/web/src/features/oauth/oauthApi.ts`, `kanban/services/activity.py`
+++- Invariant: Dynamic client registration by administrators must require AAL2, enforce secure redirect URI schemes, validate authentication methods, and log an audit record.
+++- Audit Findings:
+++  - `POST /api/v1/admin/oauth-clients` declares `Depends(require_admin_aal2)`.
+++  - Enforces HTTPS or loopback HTTP (`127.0.0.1`, `localhost`, `[::1]`) for redirect URIs, forbidding cleartext public internet schemes.
+++  - Validates `token_endpoint_auth_method` in `("none", "private_key_jwt")`.
+++  - Emits `ActivityEventType.OAUTH_CLIENT_REGISTERED` audit record.
+++  - `OAuthClientGovernanceStudio.tsx` renders `+ Register OAuth Client` modal with client ID copy feedback.
+++
+++### 4. Navigation & Route Aliases
+++- File: `kanban/web/src/app/routes.tsx`
+++- Audit Findings:
+++  - Added `<Navigate replace />` redirects for `/settings/mcp-keys` -> `/settings/mcp` and `/admin/oauth-clients` -> `/admin/oauth`.
+++  - Added route mapping for `/oauth/device` resolving to `<DeviceActivatePage />`.
+++
+++---
+++
+++## Gate & Invariant Checklist
+++
+++1. [x] Zero New Dependencies: No additions to `pyproject.toml` or `package.json`.
+++2. [x] Admin Route Security: All `/api/v1/admin/*` endpoints maintain mandatory `Depends(require_admin_aal2)`. Verified by `kanban/tests/auth/test_aal2_policy.py`.
+++3. [x] Architectural Layering: `uv run lint-imports` verified 2 kept contracts, 0 broken (`agent -> mcp -> kanban -> database`).
+++4. [x] Test Coverage:
+++   - Backend: 36 unit and integration tests passing in `kanban/tests/oauth/` (device flow, authorization flows, PKCE, CSRF).
+++   - Frontend: 28 vitest tests passing across touched components (`ConnectOAuthAppModal.tsx`, `OAuthClientGovernanceStudio.tsx`, `oauthApi.ts`).
+++   - Combined frontend coverage: 100% Statements, 99.06% Branches, 100% Functions, 100% Lines (all exceeding >= 95.10% threshold).
+++5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy` (4 source files), `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
+++6. [x] Zero Em/En-Dashes: Clean verification across code, tests, docs, and review markdown (0 em/en-dashes).
+++7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `message-to-reality-checker.md`, and 16 Playwright screenshot PNGs verified in `docs/qa/KAN-28/`.
+++
+++---
+++
+++## Verdict & Handoff
+++STATUS: APPROVED
+++
+++The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-28/screenshots/`.
 +diff --git a/docs/qa/KAN-28/build-or-typecheck.txt b/docs/qa/KAN-28/build-or-typecheck.txt
 +new file mode 100644
 +index 0000000..de24cbb
@@ -146,61 +318,14 @@ index 0000000..fc8610d
 ++=== PNPM TYPECHECK ===
 ++
 ++> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/kanban/web
-++> tsc -b --noEmit
-++
-++
-++=== ESLINT ===
-+diff --git a/docs/qa/KAN-28/changed-files-manifest.txt b/docs/qa/KAN-28/changed-files-manifest.txt
-+new file mode 100644
-+index 0000000..aab21ec
-+--- /dev/null
-++++ b/docs/qa/KAN-28/changed-files-manifest.txt
-+@@ -0,0 +1,42 @@
-++kanban/api/v1/oauth.py
-++kanban/auth/sessions/csrf.py
-++kanban/oauth/server.py
-++kanban/services/activity.py
-++kanban/tests/oauth/test_oauth_flow.py
-++kanban/tests/oauth/test_oauth_unit.py
-++kanban/web/src/app/routes.tsx
-++kanban/web/src/app/routes.test.tsx
-++kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-++kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
-++kanban/web/src/features/oauth/oauthApi.ts
-++kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-++kanban/web/src/features/oauth/__tests__/oauthApi.test.ts
-++kanban/web/src/features/settings/ConnectOAuthAppModal.css
-++kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
-++kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
-++kanban/web/src/features/settings/McpAccessStudio.css
-++kanban/web/src/features/settings/McpAccessStudio.tsx
-++kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
-++kanban/web/src/features/settings/McpConfigSnippetModal.tsx
-++kanban/web/e2e/qa/kan-28-screenshots.spec.ts
-++docs/qa/KAN-28/build-or-typecheck.txt
-++docs/qa/KAN-28/unit-test-results.txt
-++docs/qa/KAN-28/git-diff.patch
-++docs/qa/KAN-28/changed-files-manifest.txt
-++docs/qa/KAN-28/message-to-reality-checker.md
-++docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-desktop.png
-++docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-mobile.png
-++docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-desktop.png
-++docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-mobile.png
-++docs/qa/KAN-28/screenshots/02-oauth-authorize-consent-dark-desktop.png
-++docs/qa/KAN-28/screenshots/02-oauth-authorize-consent-dark-mobile.png
-++docs/qa/KAN-28/screenshots/02-oauth-authorize-consent-light-desktop.png
-++docs/qa/KAN-28/screenshots/02-oauth-authorize-consent-light-mobile.png
-++docs/qa/KAN-28/screenshots/03-oauth-device-dark-desktop.png
-++docs/qa/KAN-28/screenshots/03-oauth-device-dark-mobile.png
-++docs/qa/KAN-28/screenshots/03-oauth-device-light-desktop.png
-++docs/qa/KAN-28/screenshots/03-oauth-device-light-mobile.pn
+++> tsc -b --
 \ No newline at end of file
 diff --git a/docs/qa/KAN-28/message-to-reality-checker.md b/docs/qa/KAN-28/message-to-reality-checker.md
 new file mode 100644
-index 0000000..5d96bdb
+index 0000000..0088f60
 --- /dev/null
 +++ b/docs/qa/KAN-28/message-to-reality-checker.md
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,127 @@
 +# KAN-28 Forensic Verification & QA Gate Packet
 +
 +## Ticket Summary
@@ -268,22 +393,23 @@ index 0000000..5d96bdb
 +## 2. Test Execution & Coverage Audit
 +
 +All unit and integration tests executed with v8 coverage:
-+- **Backend Tests (`kanban/tests/oauth/`):** 35 tests passed in 10.47s.
++- **Backend Tests (`kanban/tests/oauth/`):** 36 tests passed in 18.45s.
 +  * `test_device_flow.py` (6 tests)
 +  * `test_oauth_flow.py` (13 tests)
-+  * `test_oauth_unit.py` (16 tests)
-+- **Frontend Unit Tests:** 75 tests passed in 4.66s.
-+  * `OAuthClientGovernanceStudio.test.tsx` (14 tests)
++  * `test_oauth_unit.py` (17 tests)
++- **Frontend Unit Tests:**
++  * `OAuthClientGovernanceStudio.test.tsx` (17 tests)
 +  * `oauthApi.test.ts` (5 tests)
 +  * `ConnectOAuthAppModal.test.tsx` (6 tests)
 +  * `McpAccessStudio.test.tsx` (15 tests)
++  * `McpConfigSnippetModal.test.tsx` (3 tests)
 +  * `routes.test.tsx` (35 tests)
 +- **Frontend Coverage Audit on Touched Files:**
 +  * `oauthApi.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
 +  * `ConnectOAuthAppModal.tsx`: 100% Statements, 97.22% Branches, 100% Functions, 100% Lines
-+  * `OAuthClientGovernanceStudio.tsx`: 100% Statements, 96.10% Branches, 100% Functions, 100% Lines
-+  * Combined Frontend Coverage: 100% Statements, 96.46% Branches, 100% Functions, 100% Lines (All >= 95.10%).
-+- Raw test logs saved in `docs/qa/KAN-28/unit-test-results.txt`.
++  * `OAuthClientGovernanceStudio.tsx`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
++  * Combined Frontend Coverage: 100% Statements, 99.06% Branches, 100% Functions, 100% Lines (All >= 95.10%).
++- Full Vitest `--coverage` output table and Pytest coverage results recorded in `docs/qa/KAN-28/unit-test-results.txt`.
 +
 +---
 +
@@ -329,19 +455,19 @@ index 0000000..5d96bdb
 +   - `04-admin-register-oauth-client-dark-mobile.png` (Mobile 390x844 Dark)
 diff --git a/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-desktop.png b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-desktop.png
 new file mode 100644
-index 0000000..8f9392a
+index 0000000..45c914b
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-desktop.png differ
 diff --git a/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-mobile.png b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-mobile.png
 new file mode 100644
-index 0000000..f97b917
+index 0000000..9a14675
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-dark-mobile.png differ
 diff --git a/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-desktop.png b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-desktop.png
 new file mode 100644
-index 0000000..56a5feb
+index 0000000..ee8e914
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-desktop.png differ
 diff --git a/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-mobile.png b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-mobile.png
 new file mode 100644
-index 0000000..003e215
+index 0000000..36d634d
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/01-connect-oauth-app-modal-light-mobile.png differ
 diff --git a/docs/qa/KAN-28/screenshots/02-oauth-authorize-consent-dark-desktop.png b/docs/qa/KAN-28/screenshots/02-oauth-authorize-consent-dark-desktop.png
 new file mode 100644
@@ -377,19 +503,19 @@ index 0000000..8e148b4
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/03-oauth-device-light-mobile.png differ
 diff --git a/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-desktop.png b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-desktop.png
 new file mode 100644
-index 0000000..bc53c2b
+index 0000000..4bd59cc
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-desktop.png differ
 diff --git a/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-mobile.png b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-mobile.png
 new file mode 100644
-index 0000000..993c8e3
+index 0000000..bf8fb38
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-dark-mobile.png differ
 diff --git a/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-desktop.png b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-desktop.png
 new file mode 100644
-index 0000000..7d380dd
+index 0000000..8ca4340
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-desktop.png differ
 diff --git a/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-mobile.png b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-mobile.png
 new file mode 100644
-index 0000000..8a7c8cd
+index 0000000..22255b2
 Binary files /dev/null and b/docs/qa/KAN-28/screenshots/04-admin-register-oauth-client-light-mobile.png differ
 diff --git a/docs/qa/KAN-28/unit-test-results.txt b/docs/qa/KAN-28/unit-test-results.txt
 new file mode 100644
@@ -2630,7 +2756,7 @@ index 7615365..a1ea9b7 100644
                  path: 'imports',
                  element: <PlaneImportStudio />,
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-index 00f0f26..5340b74 100644
+index 00f0f26..ba1b055 100644
 --- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 +++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 @@ -350,6 +350,115 @@
@@ -2666,7 +2792,7 @@ index 00f0f26..5340b74 100644
 +
 +.kb-oauth-id-code {
 +  font-family: monospace;
-+  background-color: #0d1117;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #0d1117));
 +  padding: 6px 10px;
 +  border-radius: 6px;
 +  border: 1px solid var(--kb-color-border-subtle, #30363d);
@@ -2717,8 +2843,8 @@ index 00f0f26..5340b74 100644
 +  padding: 8px 12px;
 +  border-radius: 6px;
 +  border: 1px solid var(--kb-color-border-subtle, #30363d);
-+  background-color: #0d1117;
-+  color: var(--kb-color-text-primary, #f0f6fc);
++  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
++  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
 +  font-size: 0.875rem;
 +  font-family: inherit;
 +}
@@ -3537,10 +3663,10 @@ index 34b6466..621b0a2 100644
      params: { client_id: clientId },
 diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.css b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
 new file mode 100644
-index 0000000..0025e0b
+index 0000000..17ea48d
 --- /dev/null
 +++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,276 @@
 +/* Copyright 2026 Kanban Platform Contributors */
 +/* Apache-2.0 License. See LICENSE for details. */
 +
@@ -3629,8 +3755,8 @@ index 0000000..0025e0b
 +  padding: 8px 12px;
 +  border-radius: 6px;
 +  border: 1px solid var(--kb-color-border-subtle, #30363d);
-+  background-color: #0d1117;
-+  color: var(--kb-color-text-primary, #f0f6fc);
++  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
++  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
 +  font-size: 0.875rem;
 +}
 +
@@ -3651,7 +3777,8 @@ index 0000000..0025e0b
 +  align-items: center;
 +  gap: 6px;
 +  padding: 4px 8px;
-+  background-color: #0d1117;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #ffffff));
++  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
 +  border: 1px solid var(--kb-color-border-subtle, #30363d);
 +  border-radius: 6px;
 +  font-size: 0.8125rem;
@@ -3659,7 +3786,7 @@ index 0000000..0025e0b
 +}
 +
 +.kb-connect-oauth-endpoints {
-+  background-color: #0d1117;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
 +  border: 1px solid var(--kb-color-border-subtle, #30363d);
 +  border-radius: 8px;
 +  padding: 12px;
