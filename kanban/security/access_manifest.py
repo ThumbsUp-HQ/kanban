@@ -38,7 +38,9 @@ if TYPE_CHECKING:
 
     from kanban.api.deps import PrincipalContext
 
-GrantSourceType = Literal["project_owner", "project_role", "workspace_role", "direct_share"]
+GrantSourceType = Literal[
+    "project_owner", "project_role", "workspace_role", "workspace_admin", "direct_share"
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +252,8 @@ async def _create_manifest_user(
         grant_src = "direct_share"
     elif principal.id in ctx.project_roles:
         grant_src = "project_role"
+    elif ctx.workspace_roles.get(principal.id) in ("WORKSPACE_ADMIN", "SERVER_ADMIN"):
+        grant_src = "workspace_admin"
     else:
         grant_src = "workspace_role"
 
@@ -443,7 +447,7 @@ async def _collect_deny_overrides(
     return deny_overrides
 
 
-async def build_access_manifest(
+async def build_access_manifest(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     object_id: uuid.UUID,
@@ -464,6 +468,8 @@ async def build_access_manifest(
     project_rec: Project | None = None
     if object_rec.project_id is not None:
         project_rec = await session.get(Project, object_rec.project_id)
+    elif object_rec.object_type == ObjectKind.PROJECT:
+        project_rec = await session.get(Project, object_rec.id)
 
     # 4. Resolve inherited scope and pill label
     inherited_scope = await _resolve_inherited_scope(
@@ -503,9 +509,14 @@ async def build_access_manifest(
     if project_rec:
         pr_stmt = select(RoleBinding).where(RoleBinding.project_id == project_rec.id)
         for rb in (await session.execute(pr_stmt)).scalars().all():
-            project_roles[rb.principal_id] = str(
-                rb.role.value if hasattr(rb.role, "value") else rb.role
+            r_val = str(rb.role.value if hasattr(rb.role, "value") else rb.role)
+            project_roles[rb.principal_id] = r_val
+            m_stmt = select(PrincipalGroupClosure.member_id).where(
+                PrincipalGroupClosure.ancestor_group_id == rb.principal_id
             )
+            for mid in (await session.execute(m_stmt)).scalars().all():
+                if mid not in project_roles:
+                    project_roles[mid] = r_val
 
     workspace_roles: dict[uuid.UUID, str] = {}
     ws_stmt = select(RoleBinding).where(

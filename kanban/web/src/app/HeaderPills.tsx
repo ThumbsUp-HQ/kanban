@@ -37,6 +37,20 @@ export interface HeaderPillsProps {
 
 export const STANDALONE_DISMISS_KEY = 'kb_dismiss_standalone_warning';
 
+export function isNonAddressableAccessRoute(pathname: string): boolean {
+  if (!pathname) return false;
+  return (
+    pathname === '/your-work' ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/drafts') ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/setup') ||
+    pathname.startsWith('/activate') ||
+    pathname.startsWith('/workspaces')
+  );
+}
+
 export function HeaderPills({
   systemStatus: statusOverride,
   accessManifest: accessOverride,
@@ -67,10 +81,12 @@ export function HeaderPills({
     }
   };
 
+  const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+
   const accessQuery = useQuery({
     queryKey: qk.access(projectId ?? 'current'),
     queryFn: async ({ signal }) => {
-      const res = await fetch(`/api/v1/objects/${projectId ?? 'project'}/access`, {
+      const res = await fetch(`/api/v1/objects/${encodeURIComponent(projectId ?? '')}/access`, {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
         signal,
@@ -80,7 +96,10 @@ export function HeaderPills({
       }
       return (await res.json()) as AccessManifestData;
     },
-    enabled: accessOverride === undefined && Boolean(projectId),
+    enabled:
+      accessOverride === undefined &&
+      Boolean(projectId) &&
+      !isNonAddressableAccessRoute(currentPathname),
     staleTime: 60000,
   });
 
@@ -127,7 +146,6 @@ export function HeaderPills({
             label="Standalone mode warning"
             activateLabel="Open standalone status"
             onAction={() => { openPanel('standalone'); }}
-            onActivate={() => { openPanel('standalone'); }}
             content={
               <div className="kb-pill-content">
                 <div>

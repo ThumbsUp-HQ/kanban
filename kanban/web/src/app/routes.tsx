@@ -58,6 +58,7 @@ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
 import { AiStudioPage } from '../features/admin-ai/AiStudioPage';
 import { AgentStudioPage } from '../features/admin-agents/AgentStudioPage';
 import { RunnerStudioPage } from '../features/admin-runners/RunnerStudioPage';
+import { LinkAuditorStudio } from '../features/admin/LinkAuditorStudio';
 import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
 import { McpAccessStudio } from '../features/settings/McpAccessStudio';
 import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
@@ -1750,6 +1751,8 @@ export function ProjectRouteContainer(): JSX.Element {
 export function AdminRouteGuard(): JSX.Element {
   const { data: user, isLoading } = useQuery<{
     is_server_admin?: boolean;
+    is_workspace_admin?: boolean;
+    workspace_role?: string;
     aal_level?: number | string;
     auth_aal?: string;
   } | null>({
@@ -1758,6 +1761,8 @@ export function AdminRouteGuard(): JSX.Element {
       try {
         return (await apiFetch('GET', '/api/v1/auth/me')) as {
           is_server_admin?: boolean;
+          is_workspace_admin?: boolean;
+          workspace_role?: string;
           aal_level?: number | string;
           auth_aal?: string;
         };
@@ -1773,10 +1778,11 @@ export function AdminRouteGuard(): JSX.Element {
   }
 
   const isServerAdmin = Boolean(user?.is_server_admin);
+  const isWorkspaceAdmin = Boolean(user?.is_workspace_admin) || user?.workspace_role === 'WORKSPACE_ADMIN';
   const aal = user?.aal_level;
   const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
 
-  if (!isServerAdmin || !isAal2) {
+  if ((!isServerAdmin && !isWorkspaceAdmin) || !isAal2) {
     return <NotFoundView />;
   }
 
@@ -1937,6 +1943,10 @@ export const appRoutes: RouteObject[] = [
             path: 'admin',
             element: <AdminRouteGuard />,
             children: [
+              {
+                path: 'link-auditor',
+                element: <LinkAuditorStudio />,
+              },
               {
                 path: 'mcp',
                 element: <McpAccessStudio tier="global" />,

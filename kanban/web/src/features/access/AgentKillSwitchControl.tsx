@@ -16,7 +16,7 @@ import type { AccessManifest } from './types';
 
 export interface AgentKillSwitchControlProps {
   objectId: string;
-  canonicalKey?: string;
+  canonicalKey?: string | undefined;
   agentsCount: number;
 }
 

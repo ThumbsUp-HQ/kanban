@@ -52,8 +52,10 @@ class AuthorSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: uuid.UUID = Field(description="Author principal identifier")
-    handle: str = Field(description="Author handle")
+    handle: str = Field(default="", description="Author handle")
     display_name: str = Field(description="Author display name")
+    redacted: bool = Field(default=False, description="Whether author was redacted")
+    label: str | None = Field(default=None, description="Summary label if redacted")
 
 
 class CommentCreate(BaseModel):

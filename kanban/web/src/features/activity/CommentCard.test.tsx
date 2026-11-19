@@ -469,5 +469,95 @@ describe('CommentCard', () => {
         expect(mockDeleteComment).toHaveBeenCalled();
       });
     });
+
+    it('renders redacted external collaborator author without handle or edit/delete actions', () => {
+      const redactedComment: CommentResponse = {
+        ...sampleComment,
+        id: 'c-redacted',
+        author: {
+          id: 'usr-ext-999',
+          display_name: 'External Secret User',
+          handle: 'secret_handle',
+          redacted: true,
+          label: '1 External Collaborator',
+        },
+      };
+
+      render(
+        <MemoryRouter>
+          <CommentCard
+            comment={redactedComment}
+            issueKey="KAN-142"
+            projectKey="KAN"
+            currentUserId="usr-ext-999"
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('1 External Collaborator')).toBeDefined();
+      expect(screen.queryByText('@secret_handle')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    });
+
+    it('covers edge branches for redacted without label, user fallback, edited badge, and null body editing', () => {
+      const edgeComment: CommentResponse = {
+        ...sampleComment,
+        id: 'c-edge',
+        edited_at: '2026-11-19T01:00:00Z',
+        body_markdown: undefined,
+        author: {
+          id: 'usr-author-1',
+          display_name: undefined,
+          handle: '@prefixed_handle',
+          redacted: false,
+        },
+      };
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <CommentCard
+            comment={edgeComment}
+            issueKey="KAN-142"
+            projectKey="KAN"
+            currentUserId="usr-author-1"
+          />
+        </MemoryRouter>,
+      );
+
+      // Falls back to User and strips leading @ on handle
+      expect(screen.getByText('User')).toBeDefined();
+      expect(screen.getByText('@prefixed_handle')).toBeDefined();
+      expect(screen.getByText('(edited)')).toBeDefined();
+
+      // Trigger editing to cover line 205 initialValue with nullish body
+      const editBtn = screen.getByRole('button', { name: 'Edit' });
+      fireEvent.click(editBtn);
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined();
+
+      // Rerender with redacted and no label
+      const fallbackRedacted: CommentResponse = {
+        ...sampleComment,
+        id: 'c-redacted-fallback',
+        author: {
+          id: 'usr-ext-none',
+          redacted: true,
+          label: undefined,
+        },
+      };
+
+      rerender(
+        <MemoryRouter>
+          <CommentCard
+            comment={fallbackRedacted}
+            issueKey="KAN-142"
+            projectKey="KAN"
+            currentUserId="usr-ext-none"
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('External Collaborator')).toBeDefined();
+    });
   });
 });

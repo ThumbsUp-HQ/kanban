@@ -22,7 +22,15 @@ from database.session import RLSSessionFactory
 from database.testing.pg_harness import build_dsn
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
-from kanban.api.v1.objects_access import agent_kill_switch, get_object_access_manifest
+from kanban.api.v1.objects_access import (
+    ObjectAclGrantRequest,
+    ObjectAclRevokeRequest,
+    agent_kill_switch,
+    get_object_access_manifest,
+    grant_object_acl_entry,
+    list_object_acl_principals,
+    revoke_object_acl_entry,
+)
 from kanban.app import create_app
 from kanban.auth.sessions.csrf import (
     CSRF_COOKIE_NAME,
@@ -515,3 +523,31 @@ async def test_objects_access_handlers_direct_unit(
     # 5. agent_kill_switch execute directly with admin_ctx
     res_manifest = await agent_kill_switch(str(issue_id), admin_ctx, db_session)
     assert res_manifest.agents == []
+
+    # 6. list_object_acl_principals
+    principals = await list_object_acl_principals(
+        str(issue_id), admin_ctx, db_session, q="admin", limit=10
+    )
+    assert any("admin" in str(p.get("display_name", "")).lower() for p in principals)
+
+    # 7. grant_object_acl_entry: viewer lacks SHARE/ADMIN -> 403
+    grant_req = ObjectAclGrantRequest(
+        principal_id=str(viewer_id),
+        effect="ALLOW",
+        capabilities=["EDIT"],
+    )
+    with pytest.raises(ProblemException) as exc_grant_403:
+        await grant_object_acl_entry(str(issue_id), grant_req, viewer_ctx, db_session)
+    assert exc_grant_403.value.status == 403
+
+    # 8. grant_object_acl_entry: admin grants EDIT
+    m_granted = await grant_object_acl_entry(str(issue_id), grant_req, admin_ctx, db_session)
+    assert any(u.principal_id == viewer_id and "EDIT" in u.capabilities for u in m_granted.users)
+
+    # 9. revoke_object_acl_entry: admin revokes EDIT
+    revoke_req = ObjectAclRevokeRequest(
+        principal_id=str(viewer_id),
+        effect="ALLOW",
+    )
+    m_revoked = await revoke_object_acl_entry(str(issue_id), revoke_req, admin_ctx, db_session)
+    assert m_revoked is not None

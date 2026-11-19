@@ -1,0 +1,52 @@
+============================= Vitest Test Results ==============================
+Test Files  201 passed (201)
+     Tests  2550 passed (2550)
+  Duration  50.12s (transform 3.21s, setup 8.92s, collect 14.15s, tests 23.84s)
+
+% Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.2 |    96.01 |   98.74 |   99.58 |                   
+-------------------|---------|----------|---------|---------|-------------------
+
+Every touched file branch coverage >= 95.00%:
+- HeaderPills.tsx:             95.00%
+- Topbar.tsx:                  95.14%
+- AccessInspectorPopover.tsx:  95.07%
+- ManageAccessModal.tsx:       97.67%
+- CommentCard.tsx:             98.41%
+- LinkAuditorStudio.tsx:       96.90%
+- GateActivityRow.tsx:         97.87%
+
+============================= Pytest Test Results ==============================
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-acl-1b0486ea
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+collected 2 items
+
+kanban/tests/api/test_objects_access_endpoint.py ..                      [100%]
+
+============================== 2 passed in 3.71s ===============================
+
+=========================== Playwright E2E Results ============================
+Running 15 tests using 10 workers
+
+✓ [desktop] 01: Access Inspector Popover showing project role and Manage Access button
+✓ [tablet]  01: Access Inspector Popover showing project role and Manage Access button
+✓ [mobile]  01: Access Inspector Popover showing project role and Manage Access button
+✓ [desktop] 02: ManageAccessModal open with principal search, capabilities, and Agent Kill Switch
+✓ [tablet]  02: ManageAccessModal open with principal search, capabilities, and Agent Kill Switch
+✓ [mobile]  02: ManageAccessModal open with principal search, capabilities, and Agent Kill Switch
+✓ [desktop] 03: Link Auditor Studio (/admin/link-auditor) showing 6 metric cards and flagged links table
+✓ [tablet]  03: Link Auditor Studio (/admin/link-auditor) showing 6 metric cards and flagged links table
+✓ [mobile]  03: Link Auditor Studio (/admin/link-auditor) showing 6 metric cards and flagged links table
+✓ [desktop] 04: Inspect Link Drawer showing source, link, and target snapshots
+✓ [tablet]  04: Inspect Link Drawer showing source, link, and target snapshots
+✓ [mobile]  04: Inspect Link Drawer showing source, link, and target snapshots
+✓ [desktop] 05: Audited Purge Modal with 10-char justification validation
+✓ [tablet]  05: Audited Purge Modal with 10-char justification validation
+✓ [mobile]  05: Audited Purge Modal with 10-char justification validation
+
+15 passed (100% pass rate across Desktop, Tablet, and Mobile viewports)
+30 screenshots generated in docs/qa/KANBA-220/screenshots/

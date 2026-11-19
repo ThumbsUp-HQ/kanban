@@ -66,6 +66,8 @@ export interface CommentAuthor {
   readonly id: string;
   readonly handle?: string | undefined;
   readonly display_name?: string | undefined;
+  readonly redacted?: boolean | undefined;
+  readonly label?: string | undefined;
 }
 
 export interface ReactionSummary {

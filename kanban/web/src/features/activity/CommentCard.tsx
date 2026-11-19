@@ -45,7 +45,11 @@ export function CommentCard({
   const [copiedLink, setCopiedLink] = useState(false);
 
   const isTargeted = location.hash === `#comment-${comment.id}`;
-  const isAuthor = Boolean(currentUserId && (comment.author_id === currentUserId || comment.author.id === currentUserId));
+  const isAuthor = Boolean(
+    !comment.author.redacted &&
+    currentUserId &&
+    (comment.author_id === currentUserId || comment.author.id === currentUserId)
+  );
 
   const handleCopyPermalink = (): void => {
     const fullUrl = `${window.location.origin}${location.pathname}${location.search}#comment-${comment.id}`;
@@ -116,10 +120,16 @@ export function CommentCard({
       {/* Header */}
       <div className="comment-card__header">
         <div className="comment-card__author-info">
-          <span className="comment-card__author-name">{comment.author.display_name ?? 'User'}</span>
-          <span className="comment-card__author-handle">
-            {comment.author.handle ? `@${comment.author.handle.replace(/^@/, '')}` : ''}
+          <span className="comment-card__author-name">
+            {comment.author.redacted
+              ? (comment.author.label ?? 'External Collaborator')
+              : (comment.author.display_name ?? 'User')}
           </span>
+          {!comment.author.redacted && Boolean(comment.author.handle) && (
+            <span className="comment-card__author-handle">
+              {`@${(comment.author.handle ?? '').replace(/^@/, '')}`}
+            </span>
+          )}
           <time dateTime={comment.created_at} className="comment-card__time">
             {formattedDate}
           </time>

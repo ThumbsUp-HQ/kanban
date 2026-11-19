@@ -112,17 +112,17 @@ async def _assert_admin_on_object(
     actor_ctx: PrincipalContext,
     object_id: uuid.UUID,
 ) -> None:
-    """Verify caller holds ADMIN capability on object; return 404 if not viewable."""
+    """Verify caller holds SHARE or ADMIN capability on object; return 404 if not viewable."""
     caps = await evaluate_capabilities(session, actor_ctx, object_id)
     if Capability.VIEW not in caps:
         not_found()
 
-    if Capability.ADMIN not in caps:
+    if Capability.ADMIN not in caps and Capability.SHARE not in caps:
         raise ProblemException(
             code="INSUFFICIENT_PERMISSION",
             status=403,
             title="Insufficient Permission",
-            detail="Caller requires ADMIN capability on target object",
+            detail="Caller requires SHARE or ADMIN capability on target object",
         )
 
 

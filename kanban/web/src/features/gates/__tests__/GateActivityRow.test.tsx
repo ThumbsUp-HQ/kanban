@@ -206,4 +206,28 @@ describe('GateActivityRow (KB-P5-25)', () => {
     fireEvent.click(jumpBtn);
     expect(onJumpMock).toHaveBeenCalledWith('audit-comm-123');
   });
+
+  it('renders redacted external collaborator actor without leaking harness or internal names', () => {
+    const item: GateActivityItem = {
+      id: 'gate-row-redacted',
+      category: 'AGENT_GATE',
+      event_type: 'GATE_APPROVED',
+      actor: {
+        display_name: 'Internal Secret Gate',
+        redacted: true,
+        label: 'External Collaborator',
+      },
+      created_at: '2026-11-14T00:00:00Z',
+      payload: {
+        hook_name: 'Internal Secret Gate',
+        harness: 'cli: internal-runner',
+        execution_latency_ms: 100,
+      },
+    };
+
+    render(<GateActivityRow item={item} />);
+    expect(screen.getByText('External Collaborator')).not.toBeNull();
+    expect(screen.queryByText('Internal Secret Gate')).toBeNull();
+    expect(screen.queryByText('(cli: internal-runner)')).toBeNull();
+  });
 });

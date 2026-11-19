@@ -1,0 +1,25 @@
+============================= ESLint Check ==============================
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-acl-1b0486ea/kanban/web
+> eslint . --max-warnings 0
+
+Exit code: 0 (0 errors, 0 warnings)
+
+============================= TypeScript Check ==============================
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-acl-1b0486ea/kanban/web
+> tsc -b --noEmit
+
+Exit code: 0 (0 errors)
+
+============================= Vite Production Build ==============================
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-acl-1b0486ea/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+666 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.51 kB | gzip:   0.32 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-C4XNtC6t.css            335.33 kB | gzip:  48.86 kB
+dist/assets/index-BWz1dkOf.js           1,767.55 kB | gzip: 488.60 kB
+built in 1.09s
+Exit code: 0

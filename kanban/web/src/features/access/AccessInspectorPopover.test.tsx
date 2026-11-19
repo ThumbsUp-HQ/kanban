@@ -225,10 +225,19 @@ describe('AccessInspectorPopover', () => {
     const event = (call ? call[0] : null) as CustomEvent<{ objectId: string }>;
     expect(event.detail).toEqual({ objectId: TEST_OBJECT_ID });
 
+    // Close ManageAccessModal to test line 484
+    const modalCloseBtn = screen.getByRole('button', { name: 'Close Manage Access' });
+    fireEvent.click(modalCloseBtn);
+    expect(screen.queryByTestId('manage-access-modal')).toBeNull();
+
     window.removeEventListener('kb:open-manage-access', listener);
   });
 
   it('handles Escape key and close button clicks', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+
     const handleClose = vi.fn();
     renderWithClient(
       <AccessInspectorPopover
@@ -245,6 +254,8 @@ describe('AccessInspectorPopover', () => {
     const dialog = screen.getByRole('dialog');
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalledTimes(2);
+
+    document.body.removeChild(trigger);
   });
 
   it('traps Tab and Shift+Tab focus correctly within dialog', () => {

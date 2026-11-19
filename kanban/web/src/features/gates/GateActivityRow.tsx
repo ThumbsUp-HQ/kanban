@@ -14,7 +14,10 @@ export interface GateActivityRowProps {
 export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps): JSX.Element {
   const [copiedHash, setCopiedHash] = useState(false);
   const payload = item.payload;
-  const hookName = payload.hook_name ?? item.actor.display_name ?? 'Workflow Gate';
+  const isRedacted = Boolean(item.actor.redacted);
+  const hookName = isRedacted
+    ? (item.actor.label ?? 'External Collaborator')
+    : (payload.hook_name ?? item.actor.display_name ?? 'Workflow Gate');
   const harness = payload.harness ?? 'cli: agy -p';
   const latency =
     payload.execution_latency_ms !== undefined ? `${String(payload.execution_latency_ms)} ms` : '';
@@ -56,7 +59,7 @@ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps)
           <div className="gate-activity-row__body">
             <div className="gate-activity-row__header">
               <span className="gate-activity-row__hook">{hookName}</span>
-              <span className="gate-activity-row__harness">({harness})</span>
+              {!isRedacted && <span className="gate-activity-row__harness">({harness})</span>}
               <time dateTime={item.created_at} className="gate-activity-row__time">
                 {formattedDate}
               </time>
@@ -113,7 +116,7 @@ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps)
           <div className="gate-activity-row__body">
             <div className="gate-activity-row__header">
               <span className="gate-activity-row__hook">{hookName}</span>
-              <span className="gate-activity-row__harness">({harness})</span>
+              {!isRedacted && <span className="gate-activity-row__harness">({harness})</span>}
               <time dateTime={item.created_at} className="gate-activity-row__time">
                 {formattedDate}
               </time>
@@ -221,7 +224,7 @@ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps)
         <div className="gate-activity-row__body">
           <div className="gate-activity-row__header">
             <span className="gate-activity-row__hook">{hookName}</span>
-            <span className="gate-activity-row__harness">({harness})</span>
+            {!isRedacted && <span className="gate-activity-row__harness">({harness})</span>}
             <time dateTime={item.created_at} className="gate-activity-row__time">
               {formattedDate}
             </time>

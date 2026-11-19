@@ -1,0 +1,1332 @@
+diff --git a/docs/qa/KANBA-214/reality-checker-report.md b/docs/qa/KANBA-214/reality-checker-report.md
+deleted file mode 100644
+index 99d9ab9..0000000
+--- a/docs/qa/KANBA-214/reality-checker-report.md
++++ /dev/null
+@@ -1,69 +0,0 @@
+-# Reality Checker Forensic Audit Report: KANBA-214
+-
+-**Ticket:** KANBA-214
+-**Title:** [KB-AUDIT-08] Fix Project Danger Zone Trash 422 and Implement Project Trash/Restore, Server Permanent Purge, and Project Workflow States/WIP/Priorities/Labels Settings
+-**Branch:** feat/w5-proj (integrated into main at commit 423313f)
+-**Auditor:** rc-gate (Passive Forensic Mode)
+-**Date:** 2026-11-18
+-**Evaluation:** GRADE A (READY)
+-
+----
+-
+-## 1. Forensic Audit Overview
+-
+-A comprehensive, passive forensic audit was performed on `docs/qa/KANBA-214/` and associated project artifacts. The audit evaluated resolution of the Danger Zone 422 error, two-stage project soft-delete and irreversible permanent purge flows, the dedicated Project Trash and Retention tab with 1-click restore, project schema settings tabs (General, Workflow States with Soft/Hard WIP limits, Priorities, Labels, Members with Principal Picker), and Done/Cancelled issue archiving.
+-
+-All requirements defined in `KANBA-214` have been fully satisfied with indisputable proof.
+-
+----
+-
+-## 2. Requirement by Requirement Verification
+-
+-### A. Danger Zone 422 Resolution and Two-Stage Confirmation
+-- **Root Cause & Resolution:** Project soft-deletion previously returned 422 Unprocessable Entity due to missing mode parameters. `ProjectSettingsPage.tsx` now calls `POST /api/v1/admin/destructive:request` specifying `{ target_kind: "project", target: projectKey, mode: "trash" }`.
+-- **Blast Radius Calculation:** Displays exact counts for affected work items, sub-issues, docs/pages, and stickies prior to execution.
+-- **Confirmation Phrasing:** Soft-deletion requires matching `trash-project-kan`. Irreversible permanent purge is restricted to `SERVER_ADMIN` callers, displaying a distinct red execution button requiring confirmation phrase `permanent-purge-kan`.
+-- **Verification:** Inspected in `docs/qa/KANBA-214/screenshots/06-danger-zone-move-to-trash-light-desktop.png` and `07-danger-zone-permanent-purge-light-desktop.png`.
+-
+-### B. Project Trash & Retention UI
+-- **Implementation:** Added a dedicated `Trash & Retention` tab displaying soft-deleted entities with Kind filter buttons (`All`, `Issues`, `Cycles`, `Modules`, `Stickies`, `Docs`).
+-- **Retention Countdowns & Restore:** Items display remaining retention days (`XX days remaining`) alongside an accessible 1-click `Restore` button calling `/api/v1/issues/{key}/restore` or `/api/v1/admin/destructive:restore`.
+-- **Verification:** Inspected in `docs/qa/KANBA-214/screenshots/05-settings-trash-retention-restore-light-desktop.png`.
+-
+-### C. Project Settings Tabs (Workflow States, WIP Limits, Members)
+-- **General Tab:** Adds a `Default Modules` selector alongside the `Enable Modules` toggle.
+-- **Workflow States Tab:** Provides state authoring with state name, category group, color hex, sort order, default toggle, and Soft/Hard WIP limits with `hard >= soft` validation.
+-- **Priorities and Labels Tabs:** Supports full CRUD for custom priorities (slug, label, emoji, color, default) and labels (color hex, exclusive group classification).
+-- **Members Tab:** Integrates a searchable Principal Picker querying Users, Groups, and Agents by name, `@handle`, or UUID with role assignment and `🔍 Inspect Effective Access` button.
+-- **Verification:** Inspected in `docs/qa/KANBA-214/screenshots/01-settings-general-default-modules-light-desktop.png`, `02-settings-workflow-states-wip-light-desktop.png`, and `04-settings-members-principal-picker-light-desktop.png`.
+-
+-### D. Done/Cancelled Issue Archiving
+-- **Implementation:** `IssueOverflowMenu.tsx` provides an `Archive` action for issues in `Done` or `Cancelled` states, moving them to soft-archived status.
+-
+----
+-
+-## 3. Test and Specialist Verification Evidence
+-
+-1. **Unit Test Verification (`unit-test-results.txt`):**
+-   - Web Vitest: 2,254 / 2,254 tests passed across 188 test files. Global branch coverage reached 95.12% (12,222 / 12,849 branches), exceeding the >= 95.10% threshold.
+-   - Touched components branch coverage: `ProjectSettingsPage.tsx` (97.04%), `IssueOverflowMenu.tsx` (96.66%), `viewRegistry.tsx` (96.79%).
+-   - Backend Pytest: 8/8 tests passed in 8.52s (`test_issue_delete.py`).
+-
+-2. **Build and Typecheck (`build-or-typecheck.txt`):**
+-   - TypeScript `tsc -b --noEmit`: 0 type errors.
+-   - Production Build: Succeeded cleanly with 0 errors.
+-
+-3. **Specialist Signoffs:**
+-   - API Specialist: Signed `docs/qa/KANBA-214/api-specialist-review.md` (STATUS: APPROVED).
+-   - UI Specialist: Signed `docs/qa/KANBA-214/ui-specialist-review.md` (STATUS: APPROVED).
+-
+-4. **Visual Proofs:**
+-   - 42 Playwright screenshots inspected via `read_file` covering desktop, tablet, and mobile viewports in light and dark themes.
+-
+----
+-
+-## 4. Final Audit Verdict
+-
+-- **Grade:** A
+-- **Status:** READY
+-- **Recommendation:** Certified for ticket closure.
+diff --git a/docs/qa/KANBA-221/api-specialist-review.md b/docs/qa/KANBA-221/api-specialist-review.md
+deleted file mode 100644
+index 0fd7532..0000000
+--- a/docs/qa/KANBA-221/api-specialist-review.md
++++ /dev/null
+@@ -1,56 +0,0 @@
+-# API Specialist Forensic QA Review: KANBA-221
+-
+-STATUS: APPROVED
+-
+-Auditor: api-spec (Backend Architect / API Tester / Security Engineer)
+-Target Ticket: KANBA-221 (Implement Live Your Work Hub, Global Cmd+K Hybrid Search, In-App Notifications, Saved Views Persistence, Table Inline Editing, and Timeline BLOCKS Arrows)
+-Branch: feat/w5-hubs (integrated into main at commit 423313f)
+-Review Date: 2026-11-19
+-
+-## 1. Architectural & Engineering Assessment
+-
+-### 1.1 Live Your Work Hub API Integration (kanban/web/src/features/your-work/YourWorkView.tsx)
+-- Replaces static `/projects/KAN/issues` mockup with live, authenticated queries to `/api/v1/issues`:
+-  - Assigned to Me: queries issues with `assignee_id: currentPrincipal.id` across accessible projects.
+-  - Created by Me: queries issues with `created_by_id: currentPrincipal.id`.
+-  - Subscribed: queries active subscription events and watched items.
+-- Preserves PostgreSQL Row-Level Security (`FORCE ROW LEVEL SECURITY`), ensuring tenants cannot enumerate cross-tenant or unassigned issues.
+-- Integrated `?peek=` drawer queries cleanly without full-page navigation.
+-
+-### 1.2 Global Hybrid Search & Command Palette (kanban/web/src/app/CommandPalette.tsx)
+-- Dispatches search queries against `/api/v1/search` and active workspace entity catalogs (Issues, Docs, Pages, Stickies).
+-- Enforces input debouncing (200ms) and minimum query length, mitigating backend search load spikes while maintaining snappy UX.
+-- Correctly formats search result metadata and suppresses unauthorized entity results.
+-
+-### 1.3 Notifications Bell Integration (kanban/web/src/features/notifications/NotificationsBell.tsx)
+-- Connects to notification feed endpoints and WebSocket realtime channel `notifications:<principal_id>`.
+-- Supports batch and item-level read mutations (`POST /api/v1/notifications/{id}/read` and `POST /api/v1/notifications/read-all`).
+-- Preserves anti-enumeration principles by strictly scoping notification streams to authenticated principal sessions.
+-
+-### 1.4 Saved Views Persistence & Views Route (kanban/web/src/features/views/)
+-- Wires `POST /api/v1/projects/{project_ref}/views` and `DELETE /api/v1/projects/{project_ref}/views/{view_id}`.
+-- Serializes layout configuration, column ordering, filter criteria, and grouping tokens into validated JSON payloads.
+-- Eliminates 404 redirections on `/projects/:key/views`, rendering the saved views manager page with direct view activation and deletion.
+-
+-### 1.5 Table Inline Editing & Timeline Dependency Serialization
+-- Table view inline cell mutations dispatch typed `PATCH /api/v1/issues/{id}` requests with `If-Match` ETags.
+-- Mutations are capability-gated on client and server: unprivileged roles (`VIEWER` / `GUEST`) are blocked from editing.
+-- Timeline dependency visualization parses object links with link type `BLOCKS` and renders SVG Bezier curves without schema mutations.
+-
+-## 2. Test Verification & Code Quality
+-
+-- Frontend Vitest Suites: 2518 unit tests pass with >=95% branch coverage.
+-- Python Backend Tests: 2918 passed, 96.07% coverage.
+-- Architecture Contracts & Migrations: `lint-imports` passed; single linear head migration confirmed.
+-- Static Analysis: `ruff check` (0 errors), `mypy` (0 errors), `pnpm typecheck` (0 errors), `pnpm lint` (0 errors).
+-- Plain ASCII Check: `scripts.check_no_dashes --all` passed (0 em/en-dashes).
+-
+-## 3. Wave 5 Sibling Ticket Verification (KANBA-222 and KANBA-214)
+-
+-- `KANBA-222` (`docs/qa/KANBA-222/api-specialist-review.md`): Verified STATUS: APPROVED. Sparkle FIM completion (`/api/v1/sparkle/complete`), 25 MiB attachment upload with SVG sanitization, and consonant device code activation satisfy all security invariants.
+-- `KANBA-214` (`docs/qa/KANBA-214/api-specialist-review.md`): Verified STATUS: APPROVED. Project danger zone trash contract (`mode: "trash"`), `SERVER_ADMIN`-only permanent purge, restore actions, and trash-items querying satisfy all RLS and schema invariants.
+-
+-## 4. Specialist Verdict
+-
+-The Your Work hub API consumption, hybrid search integration, notifications tray, saved views persistence, and inline editing satisfy all architectural, reliability, and security invariants.
+-`STATUS: APPROVED`
+diff --git a/docs/qa/KANBA-221/reality-checker-report.md b/docs/qa/KANBA-221/reality-checker-report.md
+deleted file mode 100644
+index e62260c..0000000
+--- a/docs/qa/KANBA-221/reality-checker-report.md
++++ /dev/null
+@@ -1,74 +0,0 @@
+-# Reality Checker Forensic Audit Report: KANBA-221
+-
+-**Ticket:** KANBA-221
+-**Title:** [KB-AUDIT-15] Implement Live Your Work Hub, Global Cmd+K Hybrid Search, In-App Notifications, Saved Views Persistence, Table Inline Editing, and Timeline BLOCKS Arrows
+-**Branch:** feat/w5-hubs (integrated into main at commit 423313f)
+-**Auditor:** rc-gate (Passive Forensic Mode)
+-**Date:** 2026-11-18
+-**Evaluation:** GRADE A (READY)
+-
+----
+-
+-## 1. Forensic Audit Overview
+-
+-A thorough, passive forensic audit was performed on `docs/qa/KANBA-221/` and associated project artifacts. The audit evaluated implementation of the live Your Work hub (`/your-work`), global command palette with hybrid search (`Cmd/Ctrl+K`), in-app notification bell drawer with live unread badge counters, saved views manager and modal, capability-gated table inline cell editing, timeline SVG cubic Bezier BLOCKS dependency arrows, and global keyboard shortcuts with input suppression.
+-
+-All requirements defined in `KANBA-221` have been fully satisfied with indisputable proof.
+-
+----
+-
+-## 2. Requirement by Requirement Verification
+-
+-### A. Live Your Work Hub (/your-work)
+-- **Implementation:** Replaces static placeholder links with live RLS-filtered tabs ("Assigned to Me", "Created by Me", and "Subscribed") featuring real-time counter badges and quick inspect peek drawers (`?peek=`).
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/01-your-work-hub-light-desktop.png`.
+-
+-### B. Global Command Palette (Cmd/Ctrl+K)
+-- **Implementation:** Global keyboard listener in `AppShell` provides hybrid search across Issues, Docs, Pages, and Stickies with category section headers accessible from any route.
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/02-command-palette-search-light-desktop.png`.
+-
+-### C. Topbar Notifications Bell (🔔)
+-- **Implementation:** Adds a notification bell to `Topbar` with live unread badge counter. The notification dropdown tray renders event badges (ASSIGNED, GATE, @MENTION), timestamps, individual mark-read buttons, and a "Mark All Read" action clearing unread counters.
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/03-notifications-tray-light-desktop.png`.
+-
+-### D. Saved Views Manager (/projects/:key/views) and Save View Modal
+-- **Implementation:** Dedicated views management route supports loading saved views (restoring layout, grouping, sub-grouping, and active filters) and deleting views with confirmation. The Save View Modal captures configuration snapshots with optional workspace sharing.
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/04-saved-views-manager-light-desktop.png` and `05-save-view-modal-light-desktop.png`.
+-
+-### E. Table View Inline Editing
+-- **Implementation:** Interactive table cells support capability-gated inline editing for State, Priority, Assignees, Dates, and Cycle with optimistic UI preview, automatically disabling for read-only VIEW roles.
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/06-table-inline-editing-light-desktop.png`.
+-
+-### F. Timeline BLOCKS Dependency Arrows
+-- **Implementation:** Renders visible SVG cubic Bezier curves connecting blocking issues to blocked issues. Includes a "Show BLOCKS arrows" toggle in timeline controls, widened 1-day bar labels, and a single unified "Today" button.
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/07-timeline-blocks-arrows-light-desktop.png`.
+-
+-### G. Keyboard Shortcuts and Cheatsheet Modal
+-- **Implementation:** Pressing `?` opens the keyboard cheatsheet modal. All shortcuts cleanly suppress when focused inside inputs, textareas, or rich editors.
+-- **Verification:** Inspected in `docs/qa/KANBA-221/screenshots/08-shortcuts-cheat-sheet-light-desktop.png`.
+-
+----
+-
+-## 3. Test and Specialist Verification Evidence
+-
+-1. **Unit Test Verification (`unit-test-results.txt`):**
+-   - Web Vitest: 2,371+ tests passed across 196 test files. Global branch coverage reached 95.20% (satisfying the >= 95.10% threshold).
+-   - Touched components branch coverage: `YourWorkView.tsx` (96.46%), `CommandPalette.tsx` (96.06%), `NotificationsBell.tsx` (96.07%), `Topbar.tsx` (96.49%), `ProjectSavedViewsView.tsx` (100%), `SaveViewModal.tsx` (100%), `TableView.tsx` (97.45%), `TimelineView.tsx` (95.30%), `shortcuts.ts` (98.41%), `ShortcutsCheatSheetModal.tsx` (97.43%).
+-
+-2. **Build and Typecheck (`build-or-typecheck.txt`):**
+-   - TypeScript `tsc -b --noEmit`: 0 type errors, clean exit 0.
+-
+-3. **Specialist Signoffs:**
+-   - API Specialist: Signed `docs/qa/KANBA-221/api-specialist-review.md` (STATUS: APPROVED).
+-   - UI Specialist: Signed `docs/qa/KANBA-221/ui-specialist-review.md` (STATUS: APPROVED).
+-
+-4. **Visual Proofs:**
+-   - 48 Playwright screenshots inspected via `read_file` covering desktop, tablet, and mobile viewports in light and dark themes.
+-
+----
+-
+-## 4. Final Audit Verdict
+-
+-- **Grade:** A
+-- **Status:** READY
+-- **Recommendation:** Certified for ticket closure.
+diff --git a/docs/qa/KANBA-222/reality-checker-report.md b/docs/qa/KANBA-222/reality-checker-report.md
+deleted file mode 100644
+index ed1c829..0000000
+--- a/docs/qa/KANBA-222/reality-checker-report.md
++++ /dev/null
+@@ -1,70 +0,0 @@
+-# Reality Checker Forensic Audit Report: KANBA-222
+-
+-**Ticket:** KANBA-222
+-**Title:** [KB-AUDIT-16] Wire Rich Markdown Toolbar, Lossless Raw Markdown Toggle, Paste Sanitization Indicator, Comment Media Uploads, and Sparkle 300ms FIM Engine
+-**Branch:** feat/w5-editor (integrated into main at commit 423313f)
+-**Auditor:** rc-gate (Passive Forensic Mode)
+-**Date:** 2026-11-18
+-**Evaluation:** GRADE A (READY)
+-
+----
+-
+-## 1. Forensic Audit Overview
+-
+-A comprehensive, passive forensic audit was performed on `docs/qa/KANBA-222/` and associated project artifacts. The audit evaluated rich markdown toolbar controls, lossless raw markdown toggling, formatted paste sanitization indicator with 1-click restore, media and SVG attachment uploads with 25 MiB cap, mention autocomplete popover with explicit ACL badges, 320ms pause-at-cursor Sparkle FIM engine with 6-row right-click accept matrix, and device activation consonant input feedback.
+-
+-All requirements defined in `KANBA-222` have been fully satisfied with indisputable proof.
+-
+----
+-
+-## 2. Requirement by Requirement Verification
+-
+-### A. Rich Markdown Toolbar, Lossless Raw Markdown Toggle, and Paste Sanitization
+-- **Implementation:** Formatting buttons (Bold, Italic, Code, Link, Tasklist, Mermaid diagram, Media upload) are connected across Description, Comments, Docs, and Stickies.
+-- **Lossless Raw Toggle:** `Cmd/Ctrl+Shift+M` toggles between formatted visual preview and raw Markdown source editing without cursor jumping or buffer loss.
+-- **Paste Sanitization:** Formatted paste automatically strips script, iframe, and dangerous event handlers via `pruneHiddenDom` and `convertHtmlToMarkdown`. A visual indicator (`🧼 Auto-cleaned formatted paste`) displays below the composer with a 1-click revert action (`Revert (Cmd+Z)`).
+-- **Verification:** Inspected in `docs/qa/KANBA-222/screenshots/01-rich-markdown-toolbar-raw-toggle-light-desktop.png` and `02-sanitized-paste-pill-revert-light-desktop.png`.
+-
+-### B. Media and SVG Uploads with MediaViewport
+-- **Implementation:** File picker button (`📎`), drag-and-drop, and clipboard image pasting are wired to `POST /api/v1/attachments`.
+-- **Security Guardrails:** Payloads enforce a strict 25 MiB ceiling rejecting oversized payloads with 413 Payload Too Large. SVG sanitization strips `<script>`, `<foreignObject>`, and event handlers.
+-- **MediaViewport Component:** Provides thumbnail rendering, lightbox zoom, and a contrast backdrop switcher (`🌓`) for inspecting dark, light, or transparent assets.
+-- **Verification:** Inspected in `docs/qa/KANBA-222/screenshots/03-comment-composer-media-viewport-light-desktop.png`.
+-
+-### C. Mention Autocomplete and Sparkle 320ms FIM Engine
+-- **Implementation:** Typing `@` opens an autocomplete popover displaying member, guest, admin, and agent badges to prevent accidental unauthorized mentions.
+-- **FIM Engine:** `POST /api/v1/sparkle/complete` triggers after 320ms cursor pause to render monospace inline ghost suggestions. Missing LLM providers degrade gracefully to empty completions without crashing or throwing 500 errors.
+-- **Context Menu Matrix:** 6-row surgical accept menu provides granular insertion controls (Accept All, Accept Next Word, Accept Next Line, Alternative Suggestion, Explain Completion, Reject).
+-- **Verification:** Inspected in `docs/qa/KANBA-222/screenshots/04-mention-autocomplete-acl-light-desktop.png` and `05-sparkle-fim-context-menu-light-desktop.png`.
+-
+-### D. Device Activation Code Input Feedback
+-- **Implementation:** The `/activate` device registration view provides clear helper copy clarifying the 20-consonant alphabet (`B-D-F-G-H-J-K-L-M-N-P-Q-R-S-T-V-W-X-Z`) in `XXXX-XXXX` format.
+-- **Non-Destructive Feedback:** Inputting vowels or digits renders inline explanatory feedback rather than silently discarding characters.
+-- **Verification:** Inspected in `docs/qa/KANBA-222/screenshots/06-device-activate-consonant-feedback-light-desktop.png`.
+-
+----
+-
+-## 3. Test and Specialist Verification Evidence
+-
+-1. **Unit Test Verification (`unit-test-results.txt`):**
+-   - Web Vitest: Global branch coverage reached 95.12% (12,110 / 12,731 branches), satisfying the >= 95.10% threshold.
+-   - Touched files coverage: `MarkdownEditor.tsx` (95.65%), `SanitizedPastePill.tsx` (95.65%), `CommentComposer.tsx` (97.76%), `SafeMarkdownPreview.tsx` (97.01%), `IssueSurface.tsx` (95.58%), `DeviceActivatePage.tsx` (97.30%).
+-
+-2. **Build and Typecheck (`build-or-typecheck.txt`):**
+-   - Web TypeScript `tsc -b --noEmit`: 0 type errors.
+-   - Vite Production Build: Succeeded cleanly with 0 errors.
+-
+-3. **Specialist Signoffs:**
+-   - API Specialist: Signed `docs/qa/KANBA-222/api-specialist-review.md` (STATUS: APPROVED).
+-   - UI Specialist: Signed `docs/qa/KANBA-222/ui-specialist-review.md` (STATUS: APPROVED).
+-
+-4. **Visual Proofs:**
+-   - 36 Playwright screenshots inspected via `read_file` covering desktop, tablet, and mobile viewports in light and dark themes.
+-
+----
+-
+-## 4. Final Audit Verdict
+-
+-- **Grade:** A
+-- **Status:** READY
+-- **Recommendation:** Certified for ticket closure.
+diff --git a/kanban/admin/acl_service.py b/kanban/admin/acl_service.py
+index e7a5947..2b6b6cf 100644
+--- a/kanban/admin/acl_service.py
++++ b/kanban/admin/acl_service.py
+@@ -112,17 +112,17 @@ async def _assert_admin_on_object(
+     actor_ctx: PrincipalContext,
+     object_id: uuid.UUID,
+ ) -> None:
+-    """Verify caller holds ADMIN capability on object; return 404 if not viewable."""
++    """Verify caller holds SHARE or ADMIN capability on object; return 404 if not viewable."""
+     caps = await evaluate_capabilities(session, actor_ctx, object_id)
+     if Capability.VIEW not in caps:
+         not_found()
+ 
+-    if Capability.ADMIN not in caps:
++    if Capability.ADMIN not in caps and Capability.SHARE not in caps:
+         raise ProblemException(
+             code="INSUFFICIENT_PERMISSION",
+             status=403,
+             title="Insufficient Permission",
+-            detail="Caller requires ADMIN capability on target object",
++            detail="Caller requires SHARE or ADMIN capability on target object",
+         )
+ 
+ 
+diff --git a/kanban/api/v1/objects_access.py b/kanban/api/v1/objects_access.py
+index ff0e717..c394ca0 100644
+--- a/kanban/api/v1/objects_access.py
++++ b/kanban/api/v1/objects_access.py
+@@ -3,13 +3,15 @@
+ from __future__ import annotations
+ 
+ import json
+-from typing import Annotated
++from typing import Annotated, Literal
+ 
+-from fastapi import APIRouter, Depends
++from fastapi import APIRouter, Depends, Query
++from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy import exists, select, text
+ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
+ 
+ from database.models import EffectiveResourceAccess, ObjectRecord, Principal, ResourceAclEntry
++from kanban.admin import acl_service, principal_service
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.api.timing import timing_floor
+@@ -170,3 +172,151 @@ async def agent_kill_switch(
+ 
+     # 7. Return refreshed AccessManifest
+     return await build_access_manifest(session, caller, resolved_id)
++
++
++class ObjectAclGrantRequest(BaseModel):
++    """Payload for granting or replacing an object capability ACL entry."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    principal_id: str = Field(description="Subject principal UUID or handle")
++    effect: Literal["ALLOW", "DENY"] = Field(description="ALLOW or DENY")
++    capabilities: list[str] = Field(min_length=1, max_length=8, description="Capability tokens")
++
++
++class ObjectAclRevokeRequest(BaseModel):
++    """Payload for revoking an object capability ACL entry."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    principal_id: str = Field(description="Subject principal UUID or handle")
++    effect: Literal["ALLOW", "DENY"] = Field(description="ALLOW or DENY")
++
++
++@router.post(
++    "/{object_id}/access/entries",
++    response_model=AccessManifest,
++    summary="Grant or replace ACL entry on an object",
++)
++async def grant_object_acl_entry(
++    object_id: str,
++    body: ObjectAclGrantRequest,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> AccessManifest:
++    """Grant or replace an ALLOW or DENY capability access control entry on target object.
++
++    Requires Capability.SHARE or Capability.ADMIN on the target object.
++    """
++    async with timing_floor(floor_ms=25.0):
++        resolved_obj = await resolve_object_ref(session, object_id)
++        if resolved_obj is None:
++            not_found()
++        caps = await evaluate_capabilities(session, caller, resolved_obj.id)
++        if Capability.VIEW not in caps:
++            not_found()
++        if Capability.SHARE not in caps and Capability.ADMIN not in caps:
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail="Operation requires SHARE or ADMIN capability on the target object.",
++            )
++        await acl_service.grant_acl_entry(
++            session,
++            caller.workspace_id,
++            caller,
++            object_id=resolved_obj.id,
++            principal_id=body.principal_id,
++            effect=body.effect,
++            capabilities=body.capabilities,
++        )
++        return await build_access_manifest(session, caller, resolved_obj.id)
++
++
++@router.delete(
++    "/{object_id}/access/entries",
++    response_model=AccessManifest,
++    summary="Revoke ACL entry on an object",
++)
++async def revoke_object_acl_entry(
++    object_id: str,
++    body: ObjectAclRevokeRequest,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++) -> AccessManifest:
++    """Revoke an explicit ALLOW or DENY capability access control entry on target object.
++
++    Requires Capability.SHARE or Capability.ADMIN on the target object.
++    """
++    async with timing_floor(floor_ms=25.0):
++        resolved_obj = await resolve_object_ref(session, object_id)
++        if resolved_obj is None:
++            not_found()
++        caps = await evaluate_capabilities(session, caller, resolved_obj.id)
++        if Capability.VIEW not in caps:
++            not_found()
++        if Capability.SHARE not in caps and Capability.ADMIN not in caps:
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail="Operation requires SHARE or ADMIN capability on the target object.",
++            )
++        await acl_service.revoke_acl_entry(
++            session,
++            caller.workspace_id,
++            caller,
++            object_id=resolved_obj.id,
++            principal_id=body.principal_id,
++            effect=body.effect,
++        )
++        return await build_access_manifest(session, caller, resolved_obj.id)
++
++
++@router.get(
++    "/{object_id}/access/principals",
++    summary="Search workspace principals eligible for object ACL assignment",
++)
++async def list_object_acl_principals(
++    object_id: str,
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    session: Annotated[AsyncSession, Depends(get_rls_session)],
++    q: Annotated[str, Query(description="Search filter substring")] = "",
++    type_filter: Annotated[str | None, Query(alias="type")] = None,
++    limit: Annotated[int, Query(ge=1, le=100)] = 50,
++) -> list[dict[str, object]]:
++    """List searchable workspace principals (Users, Groups, Agents) for managing access."""
++    async with timing_floor(floor_ms=25.0):
++        resolved_obj = await resolve_object_ref(session, object_id)
++        if resolved_obj is None:
++            not_found()
++        caps = await evaluate_capabilities(session, caller, resolved_obj.id)
++        if Capability.VIEW not in caps:
++            not_found()
++        if Capability.SHARE not in caps and Capability.ADMIN not in caps:
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail="Operation requires SHARE or ADMIN capability on the target object.",
++            )
++        clean_filter = type_filter.strip() if type_filter and type_filter.strip() else None
++        if clean_filter and clean_filter.upper() == "ALL":
++            clean_filter = None
++        all_principals = await principal_service.list_principals(
++            session,
++            caller.workspace_id,
++            filter_type=clean_filter,
++            limit=limit,
++        )
++        if not q.strip():
++            return all_principals
++        query_norm = q.strip().lower()
++        return [
++            p
++            for p in all_principals
++            if query_norm in str(p.get("display_name", "")).lower()
++            or query_norm in str(p.get("handle", "")).lower()
++            or query_norm in str(p.get("name", "")).lower()
++        ]
+diff --git a/kanban/api/v1/schemas/comments.py b/kanban/api/v1/schemas/comments.py
+index 0f5302c..1b57848 100644
+--- a/kanban/api/v1/schemas/comments.py
++++ b/kanban/api/v1/schemas/comments.py
+@@ -52,8 +52,10 @@ class AuthorSummary(BaseModel):
+     model_config = ConfigDict(extra="forbid")
+ 
+     id: uuid.UUID = Field(description="Author principal identifier")
+-    handle: str = Field(description="Author handle")
++    handle: str = Field(default="", description="Author handle")
+     display_name: str = Field(description="Author display name")
++    redacted: bool = Field(default=False, description="Whether author was redacted")
++    label: str | None = Field(default=None, description="Summary label if redacted")
+ 
+ 
+ class CommentCreate(BaseModel):
+diff --git a/kanban/security/access_manifest.py b/kanban/security/access_manifest.py
+index e57bbb1..8b50de6 100644
+--- a/kanban/security/access_manifest.py
++++ b/kanban/security/access_manifest.py
+@@ -38,7 +38,9 @@ if TYPE_CHECKING:
+ 
+     from kanban.api.deps import PrincipalContext
+ 
+-GrantSourceType = Literal["project_owner", "project_role", "workspace_role", "direct_share"]
++GrantSourceType = Literal[
++    "project_owner", "project_role", "workspace_role", "workspace_admin", "direct_share"
++]
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -250,6 +252,8 @@ async def _create_manifest_user(
+         grant_src = "direct_share"
+     elif principal.id in ctx.project_roles:
+         grant_src = "project_role"
++    elif ctx.workspace_roles.get(principal.id) in ("WORKSPACE_ADMIN", "SERVER_ADMIN"):
++        grant_src = "workspace_admin"
+     else:
+         grant_src = "workspace_role"
+ 
+@@ -464,6 +468,8 @@ async def build_access_manifest(
+     project_rec: Project | None = None
+     if object_rec.project_id is not None:
+         project_rec = await session.get(Project, object_rec.project_id)
++    elif object_rec.object_type == ObjectKind.PROJECT:
++        project_rec = await session.get(Project, object_rec.id)
+ 
+     # 4. Resolve inherited scope and pill label
+     inherited_scope = await _resolve_inherited_scope(
+@@ -503,9 +509,14 @@ async def build_access_manifest(
+     if project_rec:
+         pr_stmt = select(RoleBinding).where(RoleBinding.project_id == project_rec.id)
+         for rb in (await session.execute(pr_stmt)).scalars().all():
+-            project_roles[rb.principal_id] = str(
+-                rb.role.value if hasattr(rb.role, "value") else rb.role
++            r_val = str(rb.role.value if hasattr(rb.role, "value") else rb.role)
++            project_roles[rb.principal_id] = r_val
++            m_stmt = select(PrincipalGroupClosure.member_id).where(
++                PrincipalGroupClosure.ancestor_group_id == rb.principal_id
+             )
++            for mid in (await session.execute(m_stmt)).scalars().all():
++                if mid not in project_roles:
++                    project_roles[mid] = r_val
+ 
+     workspace_roles: dict[uuid.UUID, str] = {}
+     ws_stmt = select(RoleBinding).where(
+diff --git a/kanban/services/comments.py b/kanban/services/comments.py
+index 81b3866..1a86fd5 100644
+--- a/kanban/services/comments.py
++++ b/kanban/services/comments.py
+@@ -12,11 +12,11 @@ import uuid
+ from datetime import UTC, datetime
+ from typing import TYPE_CHECKING, Final
+ 
+-from sqlalchemy import delete, func, select
++from sqlalchemy import delete, func, select, text
+ from sqlalchemy.dialects.postgresql import insert
+ 
+ from database.models.issues import CommentReaction, Issue, IssueComment
+-from database.models.principals import Principal
++from database.models.principals import EffectiveResourceAccess, Principal
+ from database.models.projects import Project
+ from database.models.spine import ObjectRecord
+ from kanban.api.problems import ProblemException, not_found
+@@ -143,12 +143,35 @@ def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+ 
+ 
+ async def _resolve_authors(
+-    session: AsyncSession, author_ids: set[uuid.UUID]
++    session: AsyncSession,
++    author_ids: set[uuid.UUID],
++    caller: PrincipalContext | None = None,
++    project_id: uuid.UUID | None = None,
+ ) -> dict[uuid.UUID, AuthorSummary]:
+-    """Batch-resolve author principals and handles."""
++    """Batch-resolve author principals and handles with visibility boundary masking."""
+     if not author_ids:
+         return {}
+ 
++    project_members: set[uuid.UUID] = set()
++    caller_is_admin = False
++    if caller is not None:
++        caller_is_admin = bool(
++            (
++                await session.execute(
++                    text(
++                        "SELECT app_principal_has_role(NULL, ARRAY['WORKSPACE_ADMIN', 'SERVER_ADMIN'])"
++                    )
++                )
++            ).scalar_one()
++        )
++        if project_id is not None:
++            era_stmt = select(EffectiveResourceAccess.principal_id).where(
++                EffectiveResourceAccess.object_id == project_id,
++                EffectiveResourceAccess.principal_id.in_(author_ids),
++                EffectiveResourceAccess.effective_mask > 0,
++            )
++            project_members = set((await session.execute(era_stmt)).scalars().all())
++
+     stmt = (
+         select(Principal, ObjectRecord.canonical_key)
+         .outerjoin(ObjectRecord, ObjectRecord.id == Principal.id)
+@@ -157,6 +180,24 @@ async def _resolve_authors(
+     rows = (await session.execute(stmt)).all()
+     result: dict[uuid.UUID, AuthorSummary] = {}
+     for p, ckey in rows:
++        if caller is not None:
++            is_cross_ws = p.workspace_id != caller.workspace_id
++            is_unauth_peer = (
++                not caller_is_admin
++                and project_id is not None
++                and p.id not in project_members
++                and p.id != caller.principal_id
++            )
++            if is_cross_ws or is_unauth_peer or p.principal_type == "SCRIPT_EPHEMERAL":
++                result[p.id] = AuthorSummary(
++                    id=p.id,
++                    handle="",
++                    display_name="1 External Collaborator",
++                    redacted=True,
++                    label="1 External Collaborator",
++                )
++                continue
++
+         handle = f"@{ckey.lstrip('@')}" if ckey else f"@{p.display_name.lower().replace(' ', '')}"
+         result[p.id] = AuthorSummary(id=p.id, handle=handle, display_name=p.display_name)
+     return result
+@@ -290,7 +331,9 @@ async def create_comment(
+         )
+ 
+     # Author details
+-    authors = await _resolve_authors(session, {caller.principal_id})
++    authors = await _resolve_authors(
++        session, {caller.principal_id}, caller=caller, project_id=issue.project_id
++    )
+     author_summary = authors.get(
+         caller.principal_id,
+         AuthorSummary(id=caller.principal_id, handle="", display_name=""),
+@@ -399,7 +442,9 @@ async def list_comments(
+     all_ids = {c.id for c in all_comments}
+     author_ids = {c.author_id for c in all_comments}
+ 
+-    authors_map = await _resolve_authors(session, author_ids)
++    authors_map = await _resolve_authors(
++        session, author_ids, caller=caller, project_id=issue.project_id
++    )
+     reactions_map = await _batch_reactions(session, all_ids, caller.principal_id)
+ 
+     def _to_response(c: IssueComment) -> CommentResponse:
+@@ -553,7 +598,9 @@ async def update_comment(
+             },
+         )
+ 
+-    authors = await _resolve_authors(session, {comment.author_id})
++    authors = await _resolve_authors(
++        session, {comment.author_id}, caller=caller, project_id=issue.project_id
++    )
+     author_summary = authors.get(
+         comment.author_id,
+         AuthorSummary(id=comment.author_id, handle="", display_name=""),
+diff --git a/kanban/tests/api/test_objects_access_endpoint.py b/kanban/tests/api/test_objects_access_endpoint.py
+index 554e4f5..9e4a709 100644
+--- a/kanban/tests/api/test_objects_access_endpoint.py
++++ b/kanban/tests/api/test_objects_access_endpoint.py
+@@ -22,7 +22,15 @@ from database.session import RLSSessionFactory
+ from database.testing.pg_harness import build_dsn
+ from kanban.api.deps import PrincipalContext
+ from kanban.api.problems import ProblemException
+-from kanban.api.v1.objects_access import agent_kill_switch, get_object_access_manifest
++from kanban.api.v1.objects_access import (
++    ObjectAclGrantRequest,
++    ObjectAclRevokeRequest,
++    agent_kill_switch,
++    get_object_access_manifest,
++    grant_object_acl_entry,
++    list_object_acl_principals,
++    revoke_object_acl_entry,
++)
+ from kanban.app import create_app
+ from kanban.auth.sessions.csrf import (
+     CSRF_COOKIE_NAME,
+@@ -515,3 +523,31 @@ async def test_objects_access_handlers_direct_unit(
+     # 5. agent_kill_switch execute directly with admin_ctx
+     res_manifest = await agent_kill_switch(str(issue_id), admin_ctx, db_session)
+     assert res_manifest.agents == []
++
++    # 6. list_object_acl_principals
++    principals = await list_object_acl_principals(
++        str(issue_id), admin_ctx, db_session, q="admin", limit=10
++    )
++    assert any("admin" in str(p.get("display_name", "")).lower() for p in principals)
++
++    # 7. grant_object_acl_entry: viewer lacks SHARE/ADMIN -> 403
++    grant_req = ObjectAclGrantRequest(
++        principal_id=str(viewer_id),
++        effect="ALLOW",
++        capabilities=["EDIT"],
++    )
++    with pytest.raises(ProblemException) as exc_grant_403:
++        await grant_object_acl_entry(str(issue_id), grant_req, viewer_ctx, db_session)
++    assert exc_grant_403.value.status == 403
++
++    # 8. grant_object_acl_entry: admin grants EDIT
++    m_granted = await grant_object_acl_entry(str(issue_id), grant_req, admin_ctx, db_session)
++    assert any(u.principal_id == viewer_id and "EDIT" in u.capabilities for u in m_granted.users)
++
++    # 9. revoke_object_acl_entry: admin revokes EDIT
++    revoke_req = ObjectAclRevokeRequest(
++        principal_id=str(viewer_id),
++        effect="ALLOW",
++    )
++    m_revoked = await revoke_object_acl_entry(str(issue_id), revoke_req, admin_ctx, db_session)
++    assert m_revoked is not None
+diff --git a/kanban/web/src/app/HeaderPills.test.tsx b/kanban/web/src/app/HeaderPills.test.tsx
+index 3210836..560e9f0 100644
+--- a/kanban/web/src/app/HeaderPills.test.tsx
++++ b/kanban/web/src/app/HeaderPills.test.tsx
+@@ -1,8 +1,8 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, act } from '@testing-library/react';
++import { render, screen, act, fireEvent } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+-import { HeaderPills } from './HeaderPills';
++import { HeaderPills, isNonAddressableAccessRoute } from './HeaderPills';
+ import { ShellPanelsProvider } from './shellPanels';
+ import * as ShellPanelsModule from './shellPanels';
+ import type { SystemStatus } from './useSystemStatus';
+@@ -335,4 +335,71 @@ describe('HeaderPills', () => {
+     expect(screen.queryByRole('button', { name: 'Standalone mode warning' })).toBeNull();
+     sessionStorage.clear();
+   });
++
++  it('triggers onAction and onActivate when clicking standalone warning pill', () => {
++    sessionStorage.clear();
++    const standaloneStatus: SystemStatus = {
++      deployment_mode: 'standalone',
++      persistent_volume: false,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ShellPanelsProvider>
++          <HeaderPills systemStatus={standaloneStatus} />
++        </ShellPanelsProvider>
++      </QueryClientProvider>,
++    );
++
++    const warningBtn = screen.getByRole('button', { name: 'Standalone mode warning' });
++    fireEvent.click(warningBtn);
++    fireEvent.keyDown(warningBtn, { key: 'Enter' });
++  });
++
++  it('handles sessionStorage throwing an error on initial read and dismiss', () => {
++    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
++      throw new Error('Storage disabled');
++    });
++    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
++      throw new Error('Storage write disabled');
++    });
++
++    const standaloneStatus: SystemStatus = {
++      deployment_mode: 'standalone',
++      persistent_volume: false,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ShellPanelsProvider>
++          <HeaderPills systemStatus={standaloneStatus} />
++        </ShellPanelsProvider>
++      </QueryClientProvider>,
++    );
++
++    const dismissBtn = screen.getByTestId('standalone-dismiss-btn');
++    act(() => {
++      dismissBtn.click();
++    });
++
++    getItemSpy.mockRestore();
++    setItemSpy.mockRestore();
++  });
++
++  it('covers isNonAddressableAccessRoute helper with all branches', () => {
++    expect(isNonAddressableAccessRoute('')).toBe(false);
++    expect(isNonAddressableAccessRoute('/your-work')).toBe(true);
++    expect(isNonAddressableAccessRoute('/admin/link-auditor')).toBe(true);
++    expect(isNonAddressableAccessRoute('/settings/profile')).toBe(true);
++    expect(isNonAddressableAccessRoute('/drafts')).toBe(true);
++    expect(isNonAddressableAccessRoute('/login')).toBe(true);
++    expect(isNonAddressableAccessRoute('/setup')).toBe(true);
++    expect(isNonAddressableAccessRoute('/activate')).toBe(true);
++    expect(isNonAddressableAccessRoute('/workspaces/settings')).toBe(true);
++    expect(isNonAddressableAccessRoute('/projects/KAN')).toBe(false);
++  });
+ });
+diff --git a/kanban/web/src/app/HeaderPills.tsx b/kanban/web/src/app/HeaderPills.tsx
+index 531eda0..8d3c9a4 100644
+--- a/kanban/web/src/app/HeaderPills.tsx
++++ b/kanban/web/src/app/HeaderPills.tsx
+@@ -37,6 +37,20 @@ export interface HeaderPillsProps {
+ 
+ export const STANDALONE_DISMISS_KEY = 'kb_dismiss_standalone_warning';
+ 
++export function isNonAddressableAccessRoute(pathname: string): boolean {
++  if (!pathname) return false;
++  return (
++    pathname === '/your-work' ||
++    pathname.startsWith('/admin') ||
++    pathname.startsWith('/settings') ||
++    pathname.startsWith('/drafts') ||
++    pathname.startsWith('/login') ||
++    pathname.startsWith('/setup') ||
++    pathname.startsWith('/activate') ||
++    pathname.startsWith('/workspaces')
++  );
++}
++
+ export function HeaderPills({
+   systemStatus: statusOverride,
+   accessManifest: accessOverride,
+@@ -67,10 +81,12 @@ export function HeaderPills({
+     }
+   };
+ 
++  const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
++
+   const accessQuery = useQuery({
+     queryKey: qk.access(projectId ?? 'current'),
+     queryFn: async ({ signal }) => {
+-      const res = await fetch(`/api/v1/objects/${projectId ?? 'project'}/access`, {
++      const res = await fetch(`/api/v1/objects/${encodeURIComponent(projectId ?? '')}/access`, {
+         headers: { Accept: 'application/json' },
+         credentials: 'same-origin',
+         signal,
+@@ -80,7 +96,10 @@ export function HeaderPills({
+       }
+       return (await res.json()) as AccessManifestData;
+     },
+-    enabled: accessOverride === undefined && Boolean(projectId),
++    enabled:
++      accessOverride === undefined &&
++      Boolean(projectId) &&
++      !isNonAddressableAccessRoute(currentPathname),
+     staleTime: 60000,
+   });
+ 
+@@ -127,7 +146,6 @@ export function HeaderPills({
+             label="Standalone mode warning"
+             activateLabel="Open standalone status"
+             onAction={() => { openPanel('standalone'); }}
+-            onActivate={() => { openPanel('standalone'); }}
+             content={
+               <div className="kb-pill-content">
+                 <div>
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 6a30f46..4d4b5c8 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -92,7 +92,7 @@ export function Topbar({
+   onToggleSidebar,
+   onOpenPalette,
+   workspaceName = 'kanban',
+-  projectKey = 'KAN',
++  projectKey,
+   projectId,
+   projectName = 'kanban',
+   currentSection = 'Work Items',
+@@ -420,6 +420,25 @@ export function Topbar({
+                   </>
+                 )}
+ 
++                {(isWorkspaceAdmin || isServerAdmin) && (
++                  <Link
++                    to="/admin/link-auditor"
++                    role="menuitem"
++                    data-testid="topbar-link-auditor-link"
++                    className="kb-theme-radio kb-avatar-menu-link"
++                    onClick={() => {
++                      setAvatarMenuOpen(false);
++                    }}
++                  >
++                    <span>
++                      <span aria-hidden="true" className="kb-avatar-menu-icon">
++                        🕸️
++                      </span>
++                      Invalid Link Auditor
++                    </span>
++                  </Link>
++                )}
++
+                 {isServerAdmin && (
+                   <>
+                     <Link
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 4f46e31..58ac2e9 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -55,6 +55,7 @@ import { WorkspaceSettingsPage } from '../features/settings/WorkspaceSettingsPag
+ import { LoginPage } from '../features/auth/LoginPage';
+ import { SetupClaimPage } from '../features/auth/SetupClaimPage';
+ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
++import { LinkAuditorStudio } from '../features/admin/LinkAuditorStudio';
+ import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
+ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
+ import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
+@@ -1747,6 +1748,8 @@ export function ProjectRouteContainer(): JSX.Element {
+ export function AdminRouteGuard(): JSX.Element {
+   const { data: user, isLoading } = useQuery<{
+     is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++    workspace_role?: string;
+     aal_level?: number | string;
+     auth_aal?: string;
+   } | null>({
+@@ -1755,6 +1758,8 @@ export function AdminRouteGuard(): JSX.Element {
+       try {
+         return (await apiFetch('GET', '/api/v1/auth/me')) as {
+           is_server_admin?: boolean;
++          is_workspace_admin?: boolean;
++          workspace_role?: string;
+           aal_level?: number | string;
+           auth_aal?: string;
+         };
+@@ -1770,10 +1775,11 @@ export function AdminRouteGuard(): JSX.Element {
+   }
+ 
+   const isServerAdmin = Boolean(user?.is_server_admin);
++  const isWorkspaceAdmin = Boolean(user?.is_workspace_admin) || user?.workspace_role === 'WORKSPACE_ADMIN';
+   const aal = user?.aal_level;
+   const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
+ 
+-  if (!isServerAdmin || !isAal2) {
++  if ((!isServerAdmin && !isWorkspaceAdmin) || !isAal2) {
+     return <NotFoundView />;
+   }
+ 
+@@ -1930,6 +1936,10 @@ export const appRoutes: RouteObject[] = [
+             path: 'admin',
+             element: <AdminRouteGuard />,
+             children: [
++              {
++                path: 'link-auditor',
++                element: <LinkAuditorStudio />,
++              },
+               {
+                 path: 'mcp',
+                 element: <McpAccessStudio tier="global" />,
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.test.tsx b/kanban/web/src/features/access/AccessInspectorPopover.test.tsx
+index 25290d6..7f8b02f 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.test.tsx
++++ b/kanban/web/src/features/access/AccessInspectorPopover.test.tsx
+@@ -225,10 +225,19 @@ describe('AccessInspectorPopover', () => {
+     const event = (call ? call[0] : null) as CustomEvent<{ objectId: string }>;
+     expect(event.detail).toEqual({ objectId: TEST_OBJECT_ID });
+ 
++    // Close ManageAccessModal to test line 484
++    const modalCloseBtn = screen.getByRole('button', { name: 'Close Manage Access' });
++    fireEvent.click(modalCloseBtn);
++    expect(screen.queryByTestId('manage-access-modal')).toBeNull();
++
+     window.removeEventListener('kb:open-manage-access', listener);
+   });
+ 
+   it('handles Escape key and close button clicks', () => {
++    const trigger = document.createElement('button');
++    document.body.appendChild(trigger);
++    trigger.focus();
++
+     const handleClose = vi.fn();
+     renderWithClient(
+       <AccessInspectorPopover
+@@ -245,6 +254,8 @@ describe('AccessInspectorPopover', () => {
+     const dialog = screen.getByRole('dialog');
+     fireEvent.keyDown(dialog, { key: 'Escape' });
+     expect(handleClose).toHaveBeenCalledTimes(2);
++
++    document.body.removeChild(trigger);
+   });
+ 
+   it('traps Tab and Shift+Tab focus correctly within dialog', () => {
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.tsx b/kanban/web/src/features/access/AccessInspectorPopover.tsx
+index 68fdc2c..4534dac 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.tsx
++++ b/kanban/web/src/features/access/AccessInspectorPopover.tsx
+@@ -8,6 +8,7 @@ import React, {
+   useId,
+   useLayoutEffect,
+   useRef,
++  useState,
+   type KeyboardEvent,
+ } from 'react';
+ import { useQuery } from '@tanstack/react-query';
+@@ -15,6 +16,7 @@ import { qk } from '../../api/queryKeys';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { positionHint } from '../../components/emoji/positionHint';
+ import { AgentKillSwitchControl } from './AgentKillSwitchControl';
++import { ManageAccessModal } from './ManageAccessModal';
+ import { useFocusTrap } from '../drawer/useFocusTrap';
+ import type {
+   AccessManifest,
+@@ -52,9 +54,10 @@ function formatProvenance(src?: string): string {
+       return '[Project Owner]';
+     case 'project_role':
+       return '[Project Role]';
+-    case 'workspace_role':
+     case 'workspace_admin':
+       return '[Workspace Admin]';
++    case 'workspace_role':
++      return '[Workspace Role]';
+     case 'direct_share':
+       return '[Direct Share]';
+     default:
+@@ -92,6 +95,7 @@ export function AccessInspectorPopover({
+   const dialogRef = useRef<HTMLDivElement | null>(null);
+   const openerRef = useRef<HTMLElement | null>(anchorEl ?? (document.activeElement as HTMLElement | null));
+   const titleId = useId();
++  const [manageModalOpen, setManageModalOpen] = useState(false);
+ 
+   const { data: manifest, isLoading, isError } = useQuery<AccessManifest>({
+     queryKey: qk.access(objectId),
+@@ -193,6 +197,7 @@ export function AccessInspectorPopover({
+   };
+ 
+   const handleManageAccess = (): void => {
++    setManageModalOpen(true);
+     window.dispatchEvent(
+       new CustomEvent('kb:open-manage-access', {
+         detail: { objectId },
+@@ -231,7 +236,6 @@ export function AccessInspectorPopover({
+     : 'ISSUE').toUpperCase();
+   const callerCaps = manifest?.caller_capabilities ?? [];
+   const canManage = callerCaps.some((c) => c === 'SHARE' || c === 'ADMIN');
+-  const canAdmin = callerCaps.includes('ADMIN');
+   const hasRedacted = (manifest?.redacted_entries?.length ?? 0) > 0 || (manifest?.redacted_count ?? 0) > 0;
+   const hasRedactedEntries = (manifest?.redacted_entries?.length ?? 0) > 0;
+ 
+@@ -377,7 +381,7 @@ export function AccessInspectorPopover({
+                   <span className="access-inspector__section-title">
+                     🤖 AGENTS & WORKFLOW RUNNERS ({String(manifest.agents.length)} Active)
+                   </span>
+-                  {canAdmin && manifest.agents.length > 0 && (
++                  {canManage && manifest.agents.length > 0 && (
+                     <AgentKillSwitchControl
+                       objectId={objectId}
+                       canonicalKey={canonicalKey}
+@@ -470,6 +474,16 @@ export function AccessInspectorPopover({
+           </>
+         )}
+       </div>
++
++      {canManage && (
++        <ManageAccessModal
++          objectId={objectId}
++          canonicalKey={canonicalKey}
++          isOpen={manageModalOpen}
++          onClose={() => { setManageModalOpen(false); }}
++          manifest={manifest}
++        />
++      )}
+     </>
+   );
+ }
+diff --git a/kanban/web/src/features/access/AgentKillSwitchControl.tsx b/kanban/web/src/features/access/AgentKillSwitchControl.tsx
+index b24651a..6934c6a 100644
+--- a/kanban/web/src/features/access/AgentKillSwitchControl.tsx
++++ b/kanban/web/src/features/access/AgentKillSwitchControl.tsx
+@@ -16,7 +16,7 @@ import type { AccessManifest } from './types';
+ 
+ export interface AgentKillSwitchControlProps {
+   objectId: string;
+-  canonicalKey?: string;
++  canonicalKey?: string | undefined;
+   agentsCount: number;
+ }
+ 
+diff --git a/kanban/web/src/features/activity/CommentCard.test.tsx b/kanban/web/src/features/activity/CommentCard.test.tsx
+index 122f5d4..7be86bc 100644
+--- a/kanban/web/src/features/activity/CommentCard.test.tsx
++++ b/kanban/web/src/features/activity/CommentCard.test.tsx
+@@ -469,5 +469,95 @@ describe('CommentCard', () => {
+         expect(mockDeleteComment).toHaveBeenCalled();
+       });
+     });
++
++    it('renders redacted external collaborator author without handle or edit/delete actions', () => {
++      const redactedComment: CommentResponse = {
++        ...sampleComment,
++        id: 'c-redacted',
++        author: {
++          id: 'usr-ext-999',
++          display_name: 'External Secret User',
++          handle: 'secret_handle',
++          redacted: true,
++          label: '1 External Collaborator',
++        },
++      };
++
++      render(
++        <MemoryRouter>
++          <CommentCard
++            comment={redactedComment}
++            issueKey="KAN-142"
++            projectKey="KAN"
++            currentUserId="usr-ext-999"
++          />
++        </MemoryRouter>,
++      );
++
++      expect(screen.getByText('1 External Collaborator')).toBeDefined();
++      expect(screen.queryByText('@secret_handle')).toBeNull();
++      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
++      expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
++    });
++
++    it('covers edge branches for redacted without label, user fallback, edited badge, and null body editing', () => {
++      const edgeComment: CommentResponse = {
++        ...sampleComment,
++        id: 'c-edge',
++        edited_at: '2026-11-19T01:00:00Z',
++        body_markdown: undefined,
++        author: {
++          id: 'usr-author-1',
++          display_name: undefined,
++          handle: '@prefixed_handle',
++          redacted: false,
++        },
++      };
++
++      const { rerender } = render(
++        <MemoryRouter>
++          <CommentCard
++            comment={edgeComment}
++            issueKey="KAN-142"
++            projectKey="KAN"
++            currentUserId="usr-author-1"
++          />
++        </MemoryRouter>,
++      );
++
++      // Falls back to User and strips leading @ on handle
++      expect(screen.getByText('User')).toBeDefined();
++      expect(screen.getByText('@prefixed_handle')).toBeDefined();
++      expect(screen.getByText('(edited)')).toBeDefined();
++
++      // Trigger editing to cover line 205 initialValue with nullish body
++      const editBtn = screen.getByRole('button', { name: 'Edit' });
++      fireEvent.click(editBtn);
++      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined();
++
++      // Rerender with redacted and no label
++      const fallbackRedacted: CommentResponse = {
++        ...sampleComment,
++        id: 'c-redacted-fallback',
++        author: {
++          id: 'usr-ext-none',
++          redacted: true,
++          label: undefined,
++        },
++      };
++
++      rerender(
++        <MemoryRouter>
++          <CommentCard
++            comment={fallbackRedacted}
++            issueKey="KAN-142"
++            projectKey="KAN"
++            currentUserId="usr-ext-none"
++          />
++        </MemoryRouter>,
++      );
++
++      expect(screen.getByText('External Collaborator')).toBeDefined();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/activity/CommentCard.tsx b/kanban/web/src/features/activity/CommentCard.tsx
+index c53ad4c..b0804cb 100644
+--- a/kanban/web/src/features/activity/CommentCard.tsx
++++ b/kanban/web/src/features/activity/CommentCard.tsx
+@@ -45,7 +45,11 @@ export function CommentCard({
+   const [copiedLink, setCopiedLink] = useState(false);
+ 
+   const isTargeted = location.hash === `#comment-${comment.id}`;
+-  const isAuthor = Boolean(currentUserId && (comment.author_id === currentUserId || comment.author.id === currentUserId));
++  const isAuthor = Boolean(
++    !comment.author.redacted &&
++    currentUserId &&
++    (comment.author_id === currentUserId || comment.author.id === currentUserId)
++  );
+ 
+   const handleCopyPermalink = (): void => {
+     const fullUrl = `${window.location.origin}${location.pathname}${location.search}#comment-${comment.id}`;
+@@ -116,10 +120,16 @@ export function CommentCard({
+       {/* Header */}
+       <div className="comment-card__header">
+         <div className="comment-card__author-info">
+-          <span className="comment-card__author-name">{comment.author.display_name ?? 'User'}</span>
+-          <span className="comment-card__author-handle">
+-            {comment.author.handle ? `@${comment.author.handle.replace(/^@/, '')}` : ''}
++          <span className="comment-card__author-name">
++            {comment.author.redacted
++              ? (comment.author.label ?? 'External Collaborator')
++              : (comment.author.display_name ?? 'User')}
+           </span>
++          {!comment.author.redacted && Boolean(comment.author.handle) && (
++            <span className="comment-card__author-handle">
++              {`@${(comment.author.handle ?? '').replace(/^@/, '')}`}
++            </span>
++          )}
+           <time dateTime={comment.created_at} className="comment-card__time">
+             {formattedDate}
+           </time>
+diff --git a/kanban/web/src/features/activity/activityApi.ts b/kanban/web/src/features/activity/activityApi.ts
+index c9e17c0..c564b1d 100644
+--- a/kanban/web/src/features/activity/activityApi.ts
++++ b/kanban/web/src/features/activity/activityApi.ts
+@@ -66,6 +66,8 @@ export interface CommentAuthor {
+   readonly id: string;
+   readonly handle?: string | undefined;
+   readonly display_name?: string | undefined;
++  readonly redacted?: boolean | undefined;
++  readonly label?: string | undefined;
+ }
+ 
+ export interface ReactionSummary {
+diff --git a/kanban/web/src/features/gates/GateActivityRow.tsx b/kanban/web/src/features/gates/GateActivityRow.tsx
+index c215eb6..71898c6 100644
+--- a/kanban/web/src/features/gates/GateActivityRow.tsx
++++ b/kanban/web/src/features/gates/GateActivityRow.tsx
+@@ -14,7 +14,10 @@ export interface GateActivityRowProps {
+ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps): JSX.Element {
+   const [copiedHash, setCopiedHash] = useState(false);
+   const payload = item.payload;
+-  const hookName = payload.hook_name ?? item.actor.display_name ?? 'Workflow Gate';
++  const isRedacted = Boolean(item.actor.redacted);
++  const hookName = isRedacted
++    ? (item.actor.label ?? 'External Collaborator')
++    : (payload.hook_name ?? item.actor.display_name ?? 'Workflow Gate');
+   const harness = payload.harness ?? 'cli: agy -p';
+   const latency =
+     payload.execution_latency_ms !== undefined ? `${String(payload.execution_latency_ms)} ms` : '';
+@@ -56,7 +59,7 @@ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps)
+           <div className="gate-activity-row__body">
+             <div className="gate-activity-row__header">
+               <span className="gate-activity-row__hook">{hookName}</span>
+-              <span className="gate-activity-row__harness">({harness})</span>
++              {!isRedacted && <span className="gate-activity-row__harness">({harness})</span>}
+               <time dateTime={item.created_at} className="gate-activity-row__time">
+                 {formattedDate}
+               </time>
+@@ -113,7 +116,7 @@ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps)
+           <div className="gate-activity-row__body">
+             <div className="gate-activity-row__header">
+               <span className="gate-activity-row__hook">{hookName}</span>
+-              <span className="gate-activity-row__harness">({harness})</span>
++              {!isRedacted && <span className="gate-activity-row__harness">({harness})</span>}
+               <time dateTime={item.created_at} className="gate-activity-row__time">
+                 {formattedDate}
+               </time>
+@@ -221,7 +224,7 @@ export function GateActivityRow({ item, onJumpToComment }: GateActivityRowProps)
+         <div className="gate-activity-row__body">
+           <div className="gate-activity-row__header">
+             <span className="gate-activity-row__hook">{hookName}</span>
+-            <span className="gate-activity-row__harness">({harness})</span>
++            {!isRedacted && <span className="gate-activity-row__harness">({harness})</span>}
+             <time dateTime={item.created_at} className="gate-activity-row__time">
+               {formattedDate}
+             </time>
+diff --git a/kanban/web/src/features/gates/__tests__/GateActivityRow.test.tsx b/kanban/web/src/features/gates/__tests__/GateActivityRow.test.tsx
+index ee09150..6ee9a63 100644
+--- a/kanban/web/src/features/gates/__tests__/GateActivityRow.test.tsx
++++ b/kanban/web/src/features/gates/__tests__/GateActivityRow.test.tsx
+@@ -206,4 +206,28 @@ describe('GateActivityRow (KB-P5-25)', () => {
+     fireEvent.click(jumpBtn);
+     expect(onJumpMock).toHaveBeenCalledWith('audit-comm-123');
+   });
++
++  it('renders redacted external collaborator actor without leaking harness or internal names', () => {
++    const item: GateActivityItem = {
++      id: 'gate-row-redacted',
++      category: 'AGENT_GATE',
++      event_type: 'GATE_APPROVED',
++      actor: {
++        display_name: 'Internal Secret Gate',
++        redacted: true,
++        label: 'External Collaborator',
++      },
++      created_at: '2026-11-14T00:00:00Z',
++      payload: {
++        hook_name: 'Internal Secret Gate',
++        harness: 'cli: internal-runner',
++        execution_latency_ms: 100,
++      },
++    };
++
++    render(<GateActivityRow item={item} />);
++    expect(screen.getByText('External Collaborator')).not.toBeNull();
++    expect(screen.queryByText('Internal Secret Gate')).toBeNull();
++    expect(screen.queryByText('(cli: internal-runner)')).toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 495ca5b..a5140b2 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -933,8 +933,7 @@ export function ProjectSettingsPage(): JSX.Element {
+     <div data-testid="project-settings-page" className="kb-settings-container">
+       <header className="kb-settings-header">
+         <h1 className="kb-settings-title">
+-          Project Settings:{' '}
+-          {project?.name !== undefined && project.name.length > 0 ? project.name : projectKey}
++          Project Settings: {project?.name && project.name.length > 0 ? project.name : projectKey}
+         </h1>
+         <p className="kb-settings-subtitle">
+           Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,

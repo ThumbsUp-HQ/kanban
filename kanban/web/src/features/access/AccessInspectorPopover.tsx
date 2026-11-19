@@ -8,6 +8,7 @@ import React, {
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   type KeyboardEvent,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -15,6 +16,7 @@ import { qk } from '../../api/queryKeys';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { positionHint } from '../../components/emoji/positionHint';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
+import { ManageAccessModal } from './ManageAccessModal';
 import { useFocusTrap } from '../drawer/useFocusTrap';
 import type {
   AccessManifest,
@@ -52,9 +54,10 @@ function formatProvenance(src?: string): string {
       return '[Project Owner]';
     case 'project_role':
       return '[Project Role]';
-    case 'workspace_role':
     case 'workspace_admin':
       return '[Workspace Admin]';
+    case 'workspace_role':
+      return '[Workspace Role]';
     case 'direct_share':
       return '[Direct Share]';
     default:
@@ -92,6 +95,7 @@ export function AccessInspectorPopover({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const openerRef = useRef<HTMLElement | null>(anchorEl ?? (document.activeElement as HTMLElement | null));
   const titleId = useId();
+  const [manageModalOpen, setManageModalOpen] = useState(false);
 
   const { data: manifest, isLoading, isError } = useQuery<AccessManifest>({
     queryKey: qk.access(objectId),
@@ -193,6 +197,7 @@ export function AccessInspectorPopover({
   };
 
   const handleManageAccess = (): void => {
+    setManageModalOpen(true);
     window.dispatchEvent(
       new CustomEvent('kb:open-manage-access', {
         detail: { objectId },
@@ -231,7 +236,6 @@ export function AccessInspectorPopover({
     : 'ISSUE').toUpperCase();
   const callerCaps = manifest?.caller_capabilities ?? [];
   const canManage = callerCaps.some((c) => c === 'SHARE' || c === 'ADMIN');
-  const canAdmin = callerCaps.includes('ADMIN');
   const hasRedacted = (manifest?.redacted_entries?.length ?? 0) > 0 || (manifest?.redacted_count ?? 0) > 0;
   const hasRedactedEntries = (manifest?.redacted_entries?.length ?? 0) > 0;
 
@@ -377,7 +381,7 @@ export function AccessInspectorPopover({
                   <span className="access-inspector__section-title">
                     🤖 AGENTS & WORKFLOW RUNNERS ({String(manifest.agents.length)} Active)
                   </span>
-                  {canAdmin && manifest.agents.length > 0 && (
+                  {canManage && manifest.agents.length > 0 && (
                     <AgentKillSwitchControl
                       objectId={objectId}
                       canonicalKey={canonicalKey}
@@ -470,6 +474,16 @@ export function AccessInspectorPopover({
           </>
         )}
       </div>
+
+      {canManage && (
+        <ManageAccessModal
+          objectId={objectId}
+          canonicalKey={canonicalKey}
+          isOpen={manageModalOpen}
+          onClose={() => { setManageModalOpen(false); }}
+          manifest={manifest}
+        />
+      )}
     </>
   );
 }

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HeaderPills } from './HeaderPills';
+import { HeaderPills, isNonAddressableAccessRoute } from './HeaderPills';
 import { ShellPanelsProvider } from './shellPanels';
 import * as ShellPanelsModule from './shellPanels';
 import type { SystemStatus } from './useSystemStatus';
@@ -334,5 +334,72 @@ describe('HeaderPills', () => {
     );
     expect(screen.queryByRole('button', { name: 'Standalone mode warning' })).toBeNull();
     sessionStorage.clear();
+  });
+
+  it('triggers onAction and onActivate when clicking standalone warning pill', () => {
+    sessionStorage.clear();
+    const standaloneStatus: SystemStatus = {
+      deployment_mode: 'standalone',
+      persistent_volume: false,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShellPanelsProvider>
+          <HeaderPills systemStatus={standaloneStatus} />
+        </ShellPanelsProvider>
+      </QueryClientProvider>,
+    );
+
+    const warningBtn = screen.getByRole('button', { name: 'Standalone mode warning' });
+    fireEvent.click(warningBtn);
+    fireEvent.keyDown(warningBtn, { key: 'Enter' });
+  });
+
+  it('handles sessionStorage throwing an error on initial read and dismiss', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Storage disabled');
+    });
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage write disabled');
+    });
+
+    const standaloneStatus: SystemStatus = {
+      deployment_mode: 'standalone',
+      persistent_volume: false,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShellPanelsProvider>
+          <HeaderPills systemStatus={standaloneStatus} />
+        </ShellPanelsProvider>
+      </QueryClientProvider>,
+    );
+
+    const dismissBtn = screen.getByTestId('standalone-dismiss-btn');
+    act(() => {
+      dismissBtn.click();
+    });
+
+    getItemSpy.mockRestore();
+    setItemSpy.mockRestore();
+  });
+
+  it('covers isNonAddressableAccessRoute helper with all branches', () => {
+    expect(isNonAddressableAccessRoute('')).toBe(false);
+    expect(isNonAddressableAccessRoute('/your-work')).toBe(true);
+    expect(isNonAddressableAccessRoute('/admin/link-auditor')).toBe(true);
+    expect(isNonAddressableAccessRoute('/settings/profile')).toBe(true);
+    expect(isNonAddressableAccessRoute('/drafts')).toBe(true);
+    expect(isNonAddressableAccessRoute('/login')).toBe(true);
+    expect(isNonAddressableAccessRoute('/setup')).toBe(true);
+    expect(isNonAddressableAccessRoute('/activate')).toBe(true);
+    expect(isNonAddressableAccessRoute('/workspaces/settings')).toBe(true);
+    expect(isNonAddressableAccessRoute('/projects/KAN')).toBe(false);
   });
 });

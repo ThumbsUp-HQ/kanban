@@ -92,7 +92,7 @@ export function Topbar({
   onToggleSidebar,
   onOpenPalette,
   workspaceName = 'kanban',
-  projectKey = 'KAN',
+  projectKey,
   projectId,
   projectName = 'kanban',
   currentSection = 'Work Items',
@@ -434,6 +434,25 @@ export function Topbar({
                       </span>
                     </Link>
                   </>
+                )}
+
+                {(isWorkspaceAdmin || isServerAdmin) && (
+                  <Link
+                    to="/admin/link-auditor"
+                    role="menuitem"
+                    data-testid="topbar-link-auditor-link"
+                    className="kb-theme-radio kb-avatar-menu-link"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                    }}
+                  >
+                    <span>
+                      <span aria-hidden="true" className="kb-avatar-menu-icon">
+                        🕸️
+                      </span>
+                      Invalid Link Auditor
+                    </span>
+                  </Link>
                 )}
 
                 {isServerAdmin && (

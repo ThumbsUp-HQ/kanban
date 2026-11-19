@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import exists, select, text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from database.models import EffectiveResourceAccess, ObjectRecord, Principal, ResourceAclEntry
+from kanban.admin import acl_service, principal_service
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
@@ -170,3 +172,151 @@ async def agent_kill_switch(
 
     # 7. Return refreshed AccessManifest
     return await build_access_manifest(session, caller, resolved_id)
+
+
+class ObjectAclGrantRequest(BaseModel):
+    """Payload for granting or replacing an object capability ACL entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: str = Field(description="Subject principal UUID or handle")
+    effect: Literal["ALLOW", "DENY"] = Field(description="ALLOW or DENY")
+    capabilities: list[str] = Field(min_length=1, max_length=8, description="Capability tokens")
+
+
+class ObjectAclRevokeRequest(BaseModel):
+    """Payload for revoking an object capability ACL entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: str = Field(description="Subject principal UUID or handle")
+    effect: Literal["ALLOW", "DENY"] = Field(description="ALLOW or DENY")
+
+
+@router.post(
+    "/{object_id}/access/entries",
+    response_model=AccessManifest,
+    summary="Grant or replace ACL entry on an object",
+)
+async def grant_object_acl_entry(
+    object_id: str,
+    body: ObjectAclGrantRequest,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> AccessManifest:
+    """Grant or replace an ALLOW or DENY capability access control entry on target object.
+
+    Requires Capability.SHARE or Capability.ADMIN on the target object.
+    """
+    async with timing_floor(floor_ms=25.0):
+        resolved_obj = await resolve_object_ref(session, object_id)
+        if resolved_obj is None:
+            not_found()
+        caps = await evaluate_capabilities(session, caller, resolved_obj.id)
+        if Capability.VIEW not in caps:
+            not_found()
+        if Capability.SHARE not in caps and Capability.ADMIN not in caps:
+            raise ProblemException(
+                code="INSUFFICIENT_CAPABILITY",
+                status=403,
+                title="Insufficient Capability",
+                detail="Operation requires SHARE or ADMIN capability on the target object.",
+            )
+        await acl_service.grant_acl_entry(
+            session,
+            caller.workspace_id,
+            caller,
+            object_id=resolved_obj.id,
+            principal_id=body.principal_id,
+            effect=body.effect,
+            capabilities=body.capabilities,
+        )
+        return await build_access_manifest(session, caller, resolved_obj.id)
+
+
+@router.delete(
+    "/{object_id}/access/entries",
+    response_model=AccessManifest,
+    summary="Revoke ACL entry on an object",
+)
+async def revoke_object_acl_entry(
+    object_id: str,
+    body: ObjectAclRevokeRequest,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> AccessManifest:
+    """Revoke an explicit ALLOW or DENY capability access control entry on target object.
+
+    Requires Capability.SHARE or Capability.ADMIN on the target object.
+    """
+    async with timing_floor(floor_ms=25.0):
+        resolved_obj = await resolve_object_ref(session, object_id)
+        if resolved_obj is None:
+            not_found()
+        caps = await evaluate_capabilities(session, caller, resolved_obj.id)
+        if Capability.VIEW not in caps:
+            not_found()
+        if Capability.SHARE not in caps and Capability.ADMIN not in caps:
+            raise ProblemException(
+                code="INSUFFICIENT_CAPABILITY",
+                status=403,
+                title="Insufficient Capability",
+                detail="Operation requires SHARE or ADMIN capability on the target object.",
+            )
+        await acl_service.revoke_acl_entry(
+            session,
+            caller.workspace_id,
+            caller,
+            object_id=resolved_obj.id,
+            principal_id=body.principal_id,
+            effect=body.effect,
+        )
+        return await build_access_manifest(session, caller, resolved_obj.id)
+
+
+@router.get(
+    "/{object_id}/access/principals",
+    summary="Search workspace principals eligible for object ACL assignment",
+)
+async def list_object_acl_principals(  # noqa: PLR0913, PLR0917
+    object_id: str,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+    q: Annotated[str, Query(description="Search filter substring")] = "",
+    type_filter: Annotated[str | None, Query(alias="type")] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[dict[str, object]]:
+    """List searchable workspace principals (Users, Groups, Agents) for managing access."""
+    async with timing_floor(floor_ms=25.0):
+        resolved_obj = await resolve_object_ref(session, object_id)
+        if resolved_obj is None:
+            not_found()
+        caps = await evaluate_capabilities(session, caller, resolved_obj.id)
+        if Capability.VIEW not in caps:
+            not_found()
+        if Capability.SHARE not in caps and Capability.ADMIN not in caps:
+            raise ProblemException(
+                code="INSUFFICIENT_CAPABILITY",
+                status=403,
+                title="Insufficient Capability",
+                detail="Operation requires SHARE or ADMIN capability on the target object.",
+            )
+        clean_filter = type_filter.strip() if type_filter and type_filter.strip() else None
+        if clean_filter and clean_filter.upper() == "ALL":
+            clean_filter = None
+        all_principals = await principal_service.list_principals(
+            session,
+            caller.workspace_id,
+            filter_type=clean_filter,
+            limit=limit,
+        )
+        if not q.strip():
+            return all_principals
+        query_norm = q.strip().lower()
+        return [
+            p
+            for p in all_principals
+            if query_norm in str(p.get("display_name", "")).lower()
+            or query_norm in str(p.get("handle", "")).lower()
+            or query_norm in str(p.get("name", "")).lower()
+        ]

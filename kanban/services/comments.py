@@ -12,11 +12,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from database.models.issues import CommentReaction, Issue, IssueComment
-from database.models.principals import Principal
+from database.models.principals import EffectiveResourceAccess, Principal
 from database.models.projects import Project
 from database.models.spine import ObjectRecord
 from kanban.api.problems import ProblemException, not_found
@@ -143,11 +143,35 @@ def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
 
 
 async def _resolve_authors(
-    session: AsyncSession, author_ids: set[uuid.UUID]
+    session: AsyncSession,
+    author_ids: set[uuid.UUID],
+    caller: PrincipalContext | None = None,
+    project_id: uuid.UUID | None = None,
 ) -> dict[uuid.UUID, AuthorSummary]:
-    """Batch-resolve author principals and handles."""
+    """Batch-resolve author principals and handles with visibility boundary masking."""
     if not author_ids:
         return {}
+
+    project_members: set[uuid.UUID] = set()
+    caller_is_admin = False
+    if caller is not None:
+        caller_is_admin = bool(
+            (
+                await session.execute(
+                    text(
+                        "SELECT app_principal_has_role("
+                        "NULL, ARRAY['WORKSPACE_ADMIN', 'SERVER_ADMIN'])"
+                    )
+                )
+            ).scalar_one()
+        )
+        if project_id is not None:
+            era_stmt = select(EffectiveResourceAccess.principal_id).where(
+                EffectiveResourceAccess.object_id == project_id,
+                EffectiveResourceAccess.principal_id.in_(author_ids),
+                EffectiveResourceAccess.effective_mask > 0,
+            )
+            project_members = set((await session.execute(era_stmt)).scalars().all())
 
     stmt = (
         select(Principal, ObjectRecord.canonical_key)
@@ -157,6 +181,24 @@ async def _resolve_authors(
     rows = (await session.execute(stmt)).all()
     result: dict[uuid.UUID, AuthorSummary] = {}
     for p, ckey in rows:
+        if caller is not None:
+            is_cross_ws = p.workspace_id != caller.workspace_id
+            is_unauth_peer = (
+                not caller_is_admin
+                and project_id is not None
+                and p.id not in project_members
+                and p.id != caller.principal_id
+            )
+            if is_cross_ws or is_unauth_peer or p.principal_type == "SCRIPT_EPHEMERAL":
+                result[p.id] = AuthorSummary(
+                    id=p.id,
+                    handle="",
+                    display_name="1 External Collaborator",
+                    redacted=True,
+                    label="1 External Collaborator",
+                )
+                continue
+
         handle = f"@{ckey.lstrip('@')}" if ckey else f"@{p.display_name.lower().replace(' ', '')}"
         result[p.id] = AuthorSummary(id=p.id, handle=handle, display_name=p.display_name)
     return result
@@ -290,7 +332,9 @@ async def create_comment(
         )
 
     # Author details
-    authors = await _resolve_authors(session, {caller.principal_id})
+    authors = await _resolve_authors(
+        session, {caller.principal_id}, caller=caller, project_id=issue.project_id
+    )
     author_summary = authors.get(
         caller.principal_id,
         AuthorSummary(id=caller.principal_id, handle="", display_name=""),
@@ -399,7 +443,9 @@ async def list_comments(
     all_ids = {c.id for c in all_comments}
     author_ids = {c.author_id for c in all_comments}
 
-    authors_map = await _resolve_authors(session, author_ids)
+    authors_map = await _resolve_authors(
+        session, author_ids, caller=caller, project_id=issue.project_id
+    )
     reactions_map = await _batch_reactions(session, all_ids, caller.principal_id)
 
     def _to_response(c: IssueComment) -> CommentResponse:
@@ -553,7 +599,9 @@ async def update_comment(
             },
         )
 
-    authors = await _resolve_authors(session, {comment.author_id})
+    authors = await _resolve_authors(
+        session, {comment.author_id}, caller=caller, project_id=issue.project_id
+    )
     author_summary = authors.get(
         comment.author_id,
         AuthorSummary(id=comment.author_id, handle="", display_name=""),
