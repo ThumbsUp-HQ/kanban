@@ -27,6 +27,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     );
 
     const tabs = screen.getAllByRole('tab');
+    expect(screen.getByTestId('second-factor-step')).toBeDefined();
     expect(tabs.length).toBe(2);
     expect(tabs[0]?.textContent).toBe('Authenticator code');
     expect(tabs[1]?.textContent).toBe('Recovery code');
@@ -205,6 +206,15 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     );
 
     const recInput = screen.getByLabelText(/Single-use Recovery Code/i);
+    const pattern = recInput.getAttribute('pattern');
+    expect(pattern).toBeTruthy();
+    const patternStr = pattern ?? '';
+    // Explicit assertion: Chromium UnicodeSets (/v) compiles without throwing SyntaxError
+    expect(() => new RegExp(patternStr, 'v')).not.toThrow();
+    const vRegExp = new RegExp(patternStr, 'v');
+    expect(vRegExp.test('valid-recovery-code-1234')).toBe(true);
+    expect(vRegExp.test('xxxx-xxxx-xxxx')).toBe(true);
+
     const recForm = recInput.closest('form');
     expect(recForm).not.toBeNull();
     // Short code (<8) fails client-side format
@@ -686,5 +696,51 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     // End moves to last (index 2)
     fireEvent.keyDown(tab0, { key: 'End' });
     expect(tab2.getAttribute('aria-selected')).toBe('true');
+
+    // Non-navigation key does not trigger tab change
+    fireEvent.keyDown(tab2, { key: 'Tab' });
+    expect(tab2.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('handles fallback when first method entry is undefined', () => {
+    render(
+      <SecondFactorStep
+        challengeId="chall-undef-method"
+        methods={[undefined as unknown as authApi.MfaMethod]}
+        onSuccess={vi.fn()}
+        onError={vi.fn()}
+        onSessionExpired={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('textbox', { name: /6-digit Authenticator Code/i })).toBeDefined();
+  });
+
+  it('prevents concurrent passkey assertions when isVerifying is already true', () => {
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
+    let resolveOptions: ((val: { options: { challenge: string; rpId: string } }) => void) | undefined;
+    vi.spyOn(authApi, 'getWebauthnAssertionOptions').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOptions = resolve;
+        }),
+    );
+
+    render(
+      <SecondFactorStep
+        challengeId="chall-passkey-concurrent"
+        methods={['webauthn']}
+        onSuccess={vi.fn()}
+        onError={vi.fn()}
+        onSessionExpired={vi.fn()}
+      />,
+    );
+
+    const passkeyBtn = screen.getByRole('button', { name: /Use passkey/i });
+    fireEvent.click(passkeyBtn);
+    // While isVerifying is true, second click should hit early return
+    fireEvent.click(passkeyBtn);
+
+    expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
+    resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
   });
 });

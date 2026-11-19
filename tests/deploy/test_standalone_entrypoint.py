@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from deploy.standalone.entrypoint import (
+    _PASSTHROUGH_ENV_VARS,
     BIN_ALEMBIC,
     BIN_INITDB,
     BIN_PG_CTL,
@@ -297,6 +298,14 @@ def test_trusted_proxies_passthrough_and_uvicorn_non_wildcard(
     monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
     cmd_default = build_uvicorn_command()
     assert '--forwarded-allow-ips=""' in cmd_default
+
+
+def test_setup_token_file_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify KB_SETUP_TOKEN_FILE is included in _PASSTHROUGH_ENV_VARS and passed to child env."""
+    assert "KB_SETUP_TOKEN_FILE" in _PASSTHROUGH_ENV_VARS
+    monkeypatch.setenv("KB_SETUP_TOKEN_FILE", "/custom/token_path")
+    env = build_child_env()
+    assert env["KB_SETUP_TOKEN_FILE"] == "/custom/token_path"
 
 
 # -----------------------------------------------------------------------------

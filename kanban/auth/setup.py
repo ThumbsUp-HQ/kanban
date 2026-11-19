@@ -13,13 +13,14 @@ import os
 import re
 import secrets
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
 
-from database.session import RLSContext
+from database.session import RLSContext, bind_rls_context
 from kanban.api.problems import ProblemException
 from kanban.auth.local.hashing import DUMMY_HASH, hash_password, verify_password
 from kanban.security.keys import derive_subkey, load_key_material
@@ -108,21 +109,10 @@ class SetupBootstrapService:
 
         token_file = os.environ.get("KB_SETUP_TOKEN_FILE", "/run/kanban/setup_token")
 
-        def _persist_token(dest: str, secret: str) -> bool:
-            try:
-                p = Path(dest)
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(secret, encoding="utf-8")
-                p.chmod(0o600)
-            except OSError:
-                return False
-            else:
-                return True
-
-        written = await asyncio.to_thread(_persist_token, token_file, raw_token)
+        written_path = await asyncio.to_thread(self._persist_token, token_file, raw_token)
         file_hint = (
-            f" (claim token written to {token_file})"
-            if written
+            f" (claim token written to {written_path})"
+            if written_path
             else " (token claim available via setup wizard)"
         )
 
@@ -133,6 +123,58 @@ class SetupBootstrapService:
         out_stream.flush()
 
         return raw_token
+
+    @staticmethod
+    def _persist_token(dest: str, secret: str) -> str | None:
+        """Persist raw claim token to dest with 0o600 permissions.
+
+        Falls back gracefully to a writable data/runtime directory on PermissionError.
+        """
+        targets: list[Path] = [Path(dest)]
+
+        fallbacks: list[Path] = []
+        if "KB_DATA_DIR" in os.environ:
+            fallbacks.append(Path(os.environ["KB_DATA_DIR"]) / "setup_token")
+        if "KB_RUN_DIR" in os.environ:
+            fallbacks.append(Path(os.environ["KB_RUN_DIR"]) / "setup_token")
+        fallbacks.extend(
+            [
+                Path("/var/lib/kanban/data/setup_token"),
+                Path("/var/lib/kanban/setup_token"),
+                Path(tempfile.gettempdir()) / "kanban" / "setup_token",
+                Path(tempfile.gettempdir()) / "setup_token",
+            ]
+        )
+
+        # Try primary destination first
+        try:
+            p = targets[0]
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(secret, encoding="utf-8")
+            p.chmod(0o600)
+            return str(p)
+        except PermissionError:
+            logger.warning(
+                "Permission denied writing setup token to %s; attempting fallback",
+                dest,
+            )
+        except OSError:
+            return None
+
+        # Fall back gracefully to a writable data/runtime directory
+        for fb in fallbacks:
+            if fb == targets[0]:
+                continue
+            try:
+                fb.parent.mkdir(parents=True, exist_ok=True)
+                fb.write_text(secret, encoding="utf-8")
+                fb.chmod(0o600)
+                logger.info("Persisted setup token to fallback path %s", fb)
+                return str(fb)
+            except OSError:
+                continue
+
+        return None
 
     async def claim_initial_admin(  # noqa: PLR0913
         self,
@@ -192,6 +234,18 @@ class SetupBootstrapService:
         principal_id = row["principal_id"]
         workspace_id = row["workspace_id"]
         local_card_id = row["local_card_id"]
+
+        admin_principal_id = (
+            principal_id if isinstance(principal_id, uuid.UUID) else uuid.UUID(str(principal_id))
+        )
+        admin_workspace_id = (
+            workspace_id if isinstance(workspace_id, uuid.UUID) else uuid.UUID(str(workspace_id))
+        )
+
+        await bind_rls_context(
+            session,
+            RLSContext(principal_id=admin_principal_id, workspace_id=admin_workspace_id),
+        )
 
         # Update initial workspace name & slug if provided
         ws_name = (workspace_name or "Default Workspace").strip()
