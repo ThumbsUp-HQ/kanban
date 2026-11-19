@@ -502,4 +502,54 @@ describe('EscalationApprovalPanel', () => {
       resolveRequest(pendingApproval);
     });
   });
+
+  it('renders dual-control explanation banner when approval status is PENDING or PENDING_SECOND_APPROVER', async () => {
+    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
+
+    renderPanel({
+      field: elevatedFieldSp,
+      callerTier: 'PROJECT_ADMIN',
+    });
+
+    const banner = await screen.findByTestId('dual-control-explanation-banner');
+    expect(banner).toBeDefined();
+    expect(banner.textContent).toContain('Dual-Control Policy:');
+    expect(banner.textContent).toContain('Self-approval is blocked (403 Forbidden)');
+  });
+
+  it('handles MEMBER caller tier and cannot approve', () => {
+    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
+
+    renderPanel({
+      field: elevatedFieldSp,
+      callerTier: 'MEMBER',
+    });
+
+    expect(screen.queryByTestId('approve-escalation-btn')).toBeNull();
+  });
+
+  it('updates query cache when requesting approval on a field with existing revoked approval', async () => {
+    const revokedApproval: api.CustomFieldApproval = {
+      ...pendingApproval,
+      id: 'appr-revoked',
+      status: 'REVOKED',
+    };
+    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([revokedApproval]);
+    vi.mocked(api.requestFieldApproval).mockResolvedValue(pendingApproval);
+
+    renderPanel({
+      field: elevatedFieldSp,
+      callerTier: 'PROJECT_ADMIN',
+    });
+
+    fireEvent.click(await screen.findByTestId('request-approval-btn'));
+    fireEvent.change(screen.getByTestId('approval-justification-input'), {
+      target: { value: 'New justification for re-approval' },
+    });
+    fireEvent.click(screen.getByTestId('submit-approval-request-btn'));
+
+    await waitFor(() => {
+      expect(api.requestFieldApproval).toHaveBeenCalled();
+    });
+  });
 });

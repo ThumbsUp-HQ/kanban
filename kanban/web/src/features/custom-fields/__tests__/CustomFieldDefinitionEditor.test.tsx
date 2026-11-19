@@ -19,6 +19,7 @@ vi.mock('../api', async () => {
     deleteCustomField: vi.fn(),
     fetchFieldApprovals: vi.fn().mockResolvedValue([]),
     approveFieldEscalation: vi.fn(),
+    testExecuteCustomField: vi.fn(),
   };
 });
 
@@ -60,6 +61,32 @@ const mockDefinitions: api.CustomFieldDefinition[] = [
     tier: 'wasm',
     output_format: 'text',
     output_format_metadata: {},
+    target_scope: 'PROJECT',
+    credential_mode: 'INVOKING_USER',
+    egress_allowlist: [],
+    is_enabled: true,
+  },
+  {
+    id: 'f-4',
+    slug: 'scalar-field',
+    name: 'Scalar Field',
+    tier: 'wasm',
+    output_format: 'text',
+    output_format_metadata: {},
+    script_source: 'scalar: "Static Result"',
+    target_scope: 'PROJECT',
+    credential_mode: 'INVOKING_USER',
+    egress_allowlist: [],
+    is_enabled: true,
+  },
+  {
+    id: 'f-5',
+    slug: 'formula-field',
+    name: 'Formula Field',
+    tier: 'wasm',
+    output_format: 'text',
+    output_format_metadata: {},
+    script_source: 'formula: issue.key + "-done"',
     target_scope: 'PROJECT',
     credential_mode: 'INVOKING_USER',
     egress_allowlist: [],
@@ -539,5 +566,229 @@ describe('CustomFieldDefinitionEditor', () => {
 
     fireEvent.click(await screen.findByTestId('field-item-minimal-field'));
     expect(screen.getByTestId<HTMLTextAreaElement>('script-source-textarea').value).toBe('');
+  });
+
+  it('switches field flavors and updates starter templates and tier', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+
+    renderEditor(true);
+
+    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+    const scriptArea = screen.getByTestId<HTMLTextAreaElement>('script-source-textarea');
+
+    // Switch to formula
+    fireEvent.change(flavorSelect, { target: { value: 'formula' } });
+    expect(flavorSelect.value).toBe('formula');
+    expect(scriptArea.value).toContain('formula:');
+
+    // Switch to wasm
+    fireEvent.change(flavorSelect, { target: { value: 'wasm' } });
+    expect(flavorSelect.value).toBe('wasm');
+    expect(scriptArea.value).toContain('WebAssembly Tier A Module');
+
+    // Switch to nsjail
+    fireEvent.change(flavorSelect, { target: { value: 'nsjail' } });
+    expect(flavorSelect.value).toBe('nsjail');
+    expect(scriptArea.value).toContain('Tier B nsjail container Python script');
+
+    // Switch back to scalar
+    fireEvent.change(flavorSelect, { target: { value: 'scalar' } });
+    expect(flavorSelect.value).toBe('scalar');
+    expect(scriptArea.value).toContain('scalar:');
+  });
+
+  it('enlarges metadata JSON textarea to rows=8 and uses escaped slug pattern', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+
+    renderEditor(true);
+
+    const metaArea = screen.getByTestId<HTMLTextAreaElement>('format-metadata-textarea');
+    expect(metaArea.getAttribute('rows')).toBe('8');
+
+    const slugInput = screen.getByTestId<HTMLInputElement>('field-slug-input');
+    expect(slugInput.getAttribute('pattern')).toBe('^[a-z0-9][a-z0-9\\\\-]{1,62}$');
+  });
+
+  it('evaluates test execute against chosen issue with latency, pill, and logs', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    const testResult: api.CustomFieldTestExecuteResult = {
+      output_format: 'text',
+      value: 'Verified Build',
+      status: 'SUCCESS',
+      latency_ms: 14.8,
+      logs: 'AST safe evaluation succeeded in 14.8ms',
+    };
+    vi.mocked(api.testExecuteCustomField).mockResolvedValue(testResult);
+
+    renderEditor(true);
+
+    const issueKeyInput = screen.getByTestId<HTMLInputElement>('test-issue-key-input');
+    const executeBtn = screen.getByTestId('test-execute-btn');
+
+    fireEvent.change(issueKeyInput, { target: { value: 'KAN-99' } });
+    fireEvent.click(executeBtn);
+
+    expect(await screen.findByTestId('test-execute-result-panel')).toBeDefined();
+    expect(screen.getByTestId('test-latency').textContent).toContain('14.8 ms');
+    expect(screen.getByTestId('test-output-pill').textContent).toContain('Verified Build');
+    expect(screen.getByTestId('test-logs').textContent).toContain('AST safe evaluation succeeded');
+  });
+
+  it('displays test execute error when metadata is invalid JSON or api throws', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    const issueKeyInput = screen.getByTestId<HTMLInputElement>('test-issue-key-input');
+    const executeBtn = screen.getByTestId('test-execute-btn');
+
+    // Invalid JSON in metadata
+    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
+      target: { value: 'invalid json{' },
+    });
+    fireEvent.change(issueKeyInput, { target: { value: 'KAN-99' } });
+    fireEvent.click(executeBtn);
+
+    expect(await screen.findByTestId('test-execute-error')).toBeDefined();
+    expect(screen.getByTestId('test-execute-error').textContent).toContain('Invalid JSON in format metadata');
+
+    // API error
+    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
+      target: { value: '{}' },
+    });
+    vi.mocked(api.testExecuteCustomField).mockRejectedValue(new Error('Issue not found or sandbox unavailable'));
+    fireEvent.click(executeBtn);
+
+    expect(await screen.findByTestId('test-execute-error')).toBeDefined();
+    expect(screen.getByTestId('test-execute-error').textContent).toContain('Issue not found or sandbox unavailable');
+  });
+
+  it('detects flavor correctly when selecting scalar and formula fields', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+
+    renderEditor(true);
+
+    // Select scalar field
+    fireEvent.click(await screen.findByTestId('field-item-scalar-field'));
+    expect(screen.getByTestId<HTMLSelectElement>('field-flavor-select').value).toBe('scalar');
+
+    // Select formula field
+    fireEvent.click(screen.getByTestId('field-item-formula-field'));
+    expect(screen.getByTestId<HTMLSelectElement>('field-flavor-select').value).toBe('formula');
+  });
+
+  it('toggles tabs between basic and advanced and back to basic', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    const advancedTab = screen.getByTestId('custom-fields-advanced-tab');
+    const basicTab = screen.getByTestId('custom-fields-basic-tab');
+
+    fireEvent.click(advancedTab);
+    expect(screen.getByTestId('custom-fields-advanced-panel').hidden).toBe(false);
+    expect(screen.getByTestId('custom-fields-basic-panel').hidden).toBe(true);
+
+    fireEvent.click(basicTab);
+    expect(screen.getByTestId('custom-fields-basic-panel').hidden).toBe(false);
+    expect(screen.getByTestId('custom-fields-advanced-panel').hidden).toBe(true);
+  });
+
+  it('handles invalid metadata JSON while rendered output pill is visible', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    const testResult: api.CustomFieldTestExecuteResult = {
+      output_format: 'text',
+      value: 'Rendered with fallback meta',
+      status: 'SUCCESS',
+      latency_ms: 10,
+      logs: 'ok',
+    };
+    vi.mocked(api.testExecuteCustomField).mockResolvedValue(testResult);
+
+    renderEditor(true);
+
+    const issueKeyInput = screen.getByTestId<HTMLInputElement>('test-issue-key-input');
+    const executeBtn = screen.getByTestId('test-execute-btn');
+
+    fireEvent.change(issueKeyInput, { target: { value: 'KAN-1' } });
+    fireEvent.click(executeBtn);
+
+    expect(await screen.findByTestId('test-execute-result-panel')).toBeDefined();
+
+    // Now corrupt metadata text to trigger catch in output pill render
+    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
+      target: { value: 'bad json{' },
+    });
+
+    expect(screen.getByTestId('test-output-pill')).toBeDefined();
+  });
+
+  it('displays error when executing test without providing issue key', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    const executeBtn = screen.getByTestId('test-execute-btn');
+    fireEvent.click(executeBtn);
+
+    const err = await screen.findByTestId('test-execute-error');
+    expect(err.textContent).toContain('Please provide an issue key to test execute');
+  });
+
+  it('keeps existing scriptSource when changing format on an already selected field', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    renderEditor(true);
+
+    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
+    const scriptArea = screen.getByTestId<HTMLTextAreaElement>('script-source-textarea');
+    const originalScript = scriptArea.value;
+
+    fireEvent.change(screen.getByTestId('output-format-select'), {
+      target: { value: 'badge' },
+    });
+    expect(scriptArea.value).toBe(originalScript);
+  });
+
+  it('copies SHA safely when navigator.clipboard is unavailable', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    renderEditor(true);
+
+    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
+    const copyBtn = screen.getByTestId('copy-manifest-sha-btn');
+
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    });
+
+    fireEvent.click(copyBtn);
+    expect(copyBtn.textContent).toContain('Copied');
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+    });
+  });
+
+  it('evaluates test execute with empty metadata text', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    vi.mocked(api.testExecuteCustomField).mockResolvedValue({
+      output_format: 'text',
+      value: 'Empty Meta Val',
+      status: 'SUCCESS',
+      latency_ms: 5,
+      logs: '',
+    });
+
+    renderEditor(true);
+
+    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
+      target: { value: '   ' },
+    });
+    fireEvent.change(screen.getByTestId('test-issue-key-input'), {
+      target: { value: 'KAN-5' },
+    });
+    fireEvent.click(screen.getByTestId('test-execute-btn'));
+
+    expect(await screen.findByTestId('test-execute-result-panel')).toBeDefined();
+    expect(screen.getByTestId('test-output-pill').textContent).toContain('Empty Meta Val');
   });
 });

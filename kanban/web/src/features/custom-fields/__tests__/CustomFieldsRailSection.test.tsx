@@ -314,8 +314,157 @@ describe('CustomFieldsRailSection', () => {
     expect(val.textContent).toContain('8.8');
   });
 
+  it('handles issueKey without hyphen when projectKey is empty', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    const { container } = renderWithQuery(<CustomFieldsRailSection projectKey="" issueKey="NOHYPHEN" />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('handles uncomputed definition with unknown tier', async () => {
+    const unknownTierDef: api.CustomFieldDefinition = {
+      ...firstDef,
+      id: 'f-unk',
+      slug: 'unk-tier',
+      tier: 'other' as unknown as api.CustomFieldTier,
+    };
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([unknownTierDef]);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([]);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
+
+    const uncomputed = await screen.findByTestId('custom-field-uncomputed-unk-tier');
+    expect(uncomputed.textContent).toBe('Uncomputed');
+  });
+
   it('renders null when mounted without QueryClientProvider', () => {
     const { container } = render(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it('surfaces EmojiHint tooltip on true sandbox error SANDBOX_UNAVAILABLE_IN_STANDALONE', async () => {
+    const sandboxErrorResult: api.CustomFieldExecutionResult[] = [
+      {
+        field_id: 'f-env',
+        field_slug: 'target-env',
+        field_name: 'Target Environment',
+        output_format: 'text',
+        value: null,
+        status: 'ERROR',
+        error_code: 'SANDBOX_UNAVAILABLE_IN_STANDALONE',
+        tier: 'nsjail',
+        token_scope: 'WORKSPACE',
+        credential_mode: 'PROJECT_ADMIN_SP',
+        last_latency_ms: 1,
+        computed_at: '2026-11-13T12:00:00Z',
+      },
+    ];
+
+    const targetDef = mockDefinitions[1];
+    if (!targetDef) throw new Error('missing target def');
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([targetDef]);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(sandboxErrorResult);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
+
+    const hint = await screen.findByTestId('custom-field-sandbox-hint-target-env');
+    expect(hint).toBeDefined();
+
+    const err = screen.getByTestId('custom-field-error-target-env');
+    expect(err.textContent).toBe('Optional CLI Sandbox not enabled in single-container mode');
+  });
+
+  it('infers projectKey from issueKey when projectKey prop is empty', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([firstDef]);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([firstRes]);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="" issueKey="INFER-99" />);
+
+    await waitFor(() => {
+      expect(api.fetchProjectCustomFields).toHaveBeenCalledWith('INFER');
+      expect(api.fetchIssueCustomFields).toHaveBeenCalledWith('INFER-99');
+    });
+
+    const val = await screen.findByTestId('custom-field-value-cvss-score');
+    expect(val.textContent).toContain('8.8');
+  });
+
+  it('handles issueKey without hyphen when projectKey is empty', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    const { container } = renderWithQuery(<CustomFieldsRailSection projectKey="" issueKey="NOHYPHEN" />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('handles uncomputed definition with unknown tier', async () => {
+    const unknownTierDef: api.CustomFieldDefinition = {
+      ...firstDef,
+      id: 'f-unk',
+      slug: 'unk-tier',
+      tier: 'other' as unknown as api.CustomFieldTier,
+    };
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([unknownTierDef]);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([]);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
+
+    const uncomputed = await screen.findByTestId('custom-field-uncomputed-unk-tier');
+    expect(uncomputed.textContent).toBe('Uncomputed');
+  });
+
+  it('renders Unavailable when error result has no error_code', async () => {
+    const noCodeError: api.CustomFieldExecutionResult[] = [
+      {
+        field_id: 'f-cvss',
+        field_slug: 'cvss-score',
+        field_name: 'CVSS Score',
+        output_format: 'severity_pill',
+        value: null,
+        status: 'ERROR',
+        tier: 'Wasmtime',
+        token_scope: 'PROJECT',
+        credential_mode: 'INVOKING_USER',
+        last_latency_ms: 10,
+        computed_at: '2026-11-13T12:00:00Z',
+      },
+    ];
+
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([firstDef]);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(noCodeError);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
+
+    const err = await screen.findByTestId('custom-field-error-cvss-score');
+    expect(err.textContent).toBe('Unavailable');
+  });
+
+  it('deduplicates rapid clicks on refresh by returning early while in flight', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(mockResults);
+    let resolveExecution!: (res: api.CustomFieldExecutionResult) => void;
+    const executionPromise = new Promise<api.CustomFieldExecutionResult>((resolve) => {
+      resolveExecution = resolve;
+    });
+    vi.mocked(api.executeCustomField).mockImplementation(() => executionPromise);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
+
+    const refreshBtn = await screen.findByTestId<HTMLButtonElement>('refresh-field-cvss-score');
+
+    // First click initiates flight
+    fireEvent.click(refreshBtn);
+
+    // Call onClick handler property directly while still in-flight
+    const propKey = Object.keys(refreshBtn).find(
+      (k) => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'),
+    );
+    if (propKey) {
+      const props = (refreshBtn as unknown as Record<string, { onClick?: () => void }>)[propKey];
+      props?.onClick?.();
+    }
+
+    await waitFor(() => {
+      expect(api.executeCustomField).toHaveBeenCalledTimes(1);
+    });
+
+    resolveExecution(firstRes);
   });
 });

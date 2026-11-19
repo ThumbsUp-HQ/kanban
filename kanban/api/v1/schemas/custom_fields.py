@@ -156,3 +156,31 @@ class CustomFieldValueItem(BaseModel):
     token_scope: str = "PROJECT"  # noqa: S105
     credential_mode: str = "INVOKING_USER"
     status: str = "computed"
+
+
+class CustomFieldTestExecuteRequest(BaseModel):
+    """Payload to test-execute an unsaved or draft custom field definition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    issue_key: str = Field(min_length=1, max_length=64)
+    tier: Literal["wasm", "nsjail"] = "wasm"
+    output_format: OutputFormatType
+    output_format_metadata: dict[str, Any] = Field(default_factory=dict)
+    script_source: str = Field(min_length=1, max_length=131072)
+    wasm_module_sha256: str | None = None
+    target_scope: Literal["PROJECT", "WORKSPACE", "SERVER"] = "PROJECT"
+    credential_mode: Literal["INVOKING_USER", "PROJECT_ADMIN_SP", "SERVER_ADMIN_SP"] = (
+        "INVOKING_USER"
+    )
+
+
+class CustomFieldTestExecuteResponse(BaseModel):
+    """Result of test execution."""
+
+    output_format: str
+    value: Any = None
+    latency_ms: int = 0
+    logs: str = ""
+    status: str = "SUCCESS"
+    error: str | None = None

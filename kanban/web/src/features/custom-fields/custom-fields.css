@@ -514,6 +514,8 @@
   font-size: 13px;
   font-family: inherit;
   box-sizing: border-box;
+  min-height: 140px;
+  line-height: 1.45;
 }
 
 .custom-field-input:focus,
@@ -821,3 +823,151 @@
     word-break: break-all;
   }
 }
+
+/* --------------------------------------------------------------------------
+   DUAL-CONTROL EXPLANATION BANNER (KB-AUDIT-10)
+   -------------------------------------------------------------------------- */
+
+.custom-field-dual-control-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background-color: var(--bg-accent-subtle, rgba(2, 132, 199, 0.08));
+  border: 1px solid var(--border-accent, #0284c7);
+  border-radius: var(--radius-md, 6px);
+  color: var(--fg-primary, #111827);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.custom-field-dual-control-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.custom-field-dual-control-text {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   TEST EXECUTE PANEL & TELEMETRY (KB-AUDIT-10)
+   -------------------------------------------------------------------------- */
+
+.custom-field-test-panel {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: var(--bg-surface-elevated, #f9fafb);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 6px);
+}
+
+.custom-field-test-header {
+  margin-bottom: 12px;
+}
+
+.custom-field-test-title {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-primary, #111827);
+}
+
+.custom-field-test-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.custom-field-test-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.custom-field-test-input-group {
+  flex: 1;
+  min-width: 180px;
+  margin-bottom: 0;
+}
+
+.custom-field-test-btn {
+  white-space: nowrap;
+}
+
+.custom-field-test-result {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.custom-field-test-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+}
+
+.custom-field-latency {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.custom-field-test-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-field-test-pill-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.custom-field-test-logs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-field-test-logs-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--fg-muted, #6b7280);
+}
+
+.custom-field-logs {
+  margin: 0;
+  padding: 8px 10px;
+  background-color: var(--bg-code, #f3f4f6);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-primary, #111827);
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.custom-field-error--sandbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-warning, #d97706);
+}
+

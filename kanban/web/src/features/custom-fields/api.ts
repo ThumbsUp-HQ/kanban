@@ -13,6 +13,7 @@ export type OutputFormatType =
 export type CustomFieldTargetScope = 'PROJECT' | 'WORKSPACE' | 'SERVER';
 export type CustomFieldCredentialMode = 'INVOKING_USER' | 'PROJECT_ADMIN_SP' | 'SERVER_ADMIN_SP';
 export type CustomFieldTier = 'wasm' | 'nsjail';
+export type FieldFlavor = 'scalar' | 'formula' | 'wasm' | 'nsjail';
 export type CustomFieldApprovalStatus =
   | 'PENDING'
   | 'PENDING_SECOND_APPROVER'
@@ -99,6 +100,26 @@ export interface CustomFieldUpdatePayload {
   credential_mode?: CustomFieldCredentialMode;
   egress_allowlist?: string[];
   is_enabled?: boolean;
+}
+
+export interface CustomFieldTestExecutePayload {
+  issue_key: string;
+  tier?: CustomFieldTier;
+  output_format: OutputFormatType;
+  output_format_metadata?: Record<string, unknown>;
+  script_source: string;
+  wasm_module_sha256?: string | null;
+  target_scope?: CustomFieldTargetScope;
+  credential_mode?: CustomFieldCredentialMode;
+}
+
+export interface CustomFieldTestExecuteResult {
+  output_format: OutputFormatType;
+  value: unknown;
+  latency_ms: number;
+  logs: string;
+  status: 'SUCCESS' | 'ERROR';
+  error?: string | null;
 }
 
 export const qk = {
@@ -204,6 +225,37 @@ export async function executeCustomField(
     );
   }
   return (await res.json()) as CustomFieldExecutionResult;
+}
+
+/**
+ * Test execute custom field draft against a project issue without saving.
+ */
+export async function testExecuteCustomField(
+  projectKey: string,
+  payload: CustomFieldTestExecutePayload,
+): Promise<CustomFieldTestExecuteResult> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...getCsrfHeaders(),
+  };
+
+  const res = await fetch(
+    `/api/v1/projects/${encodeURIComponent(projectKey)}/custom-fields/test-execute`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!res.ok) {
+    const errorBody = await parseErrorBody(res);
+    throw createApiError(
+      errorBody.detail ?? `Test execution failed with status ${String(res.status)}`,
+      res.status,
+      errorBody.code,
+    );
+  }
+  return (await res.json()) as CustomFieldTestExecuteResult;
 }
 
 /**

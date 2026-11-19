@@ -1,0 +1,75 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-cf-e071257b/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 96ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 613ms
+stderr | src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx > EscalationApprovalPanel > displays Submitting... while request approval mutation is in flight
+An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (22 tests) 1303ms
+stderr | src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx > CustomFieldsRailSection > deduplicates rapid clicks on refresh by returning early while in flight
+An update to CustomFieldsRailSectionInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (16 tests) 1318ms
+   ✓ CustomFieldsRailSection (16)
+     ✓ renders literal section header and rows with 🧪 popover metadata 481ms
+ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 44ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (31 tests) 1383ms
+
+ Test Files  6 passed (6)
+      Tests  133 passed (133)
+   Start at  23:42:08
+   Duration  5.96s (environment 44%, import 24%, tests 21%, transform 8%, worker 4%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.61 |    97.45 |     100 |     100 |                   
+ ...tionEditor.tsx |     100 |     97.8 |     100 |     100 | 410,443           
+ ...FieldValue.tsx |   99.14 |    98.16 |     100 |     100 | 36,283            
+ ...ailSection.tsx |     100 |    98.11 |     100 |     100 | 59                
+ ...eldsStudio.tsx |     100 |      100 |     100 |     100 |                   
+ ...rovalPanel.tsx |   98.79 |    95.45 |     100 |     100 | 99-111,127,141    
+ api.ts            |     100 |    97.91 |     100 |     100 | 253               
+-------------------|---------|----------|---------|---------|-------------------
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-w6-cf-e071257b
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 6 items
+
+kanban/tests/custom_fields/test_safe_formula_unit.py ......              [100%]
+
+============================== 6 passed in 0.05s ===============================

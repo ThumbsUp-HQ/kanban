@@ -28,6 +28,9 @@ const ERROR_CODE_MAP: Record<string, string> = {
   SCRIPT_FUEL_EXHAUSTED: 'Compute limit reached',
   APPROVAL_REVOKED: 'Approval revoked - admin re-sign required',
   SANDBOX_UNAVAILABLE_IN_STANDALONE: 'Optional CLI Sandbox not enabled in single-container mode',
+  WASM_BINARY_INVALID: 'Invalid WebAssembly module bytecode',
+  WASM_RUNTIME_ERROR: 'WebAssembly execution error',
+  COMPUTE_ERROR: 'Compute error',
 };
 
 function mapServerErrorCode(errorCode?: string): string {
@@ -49,11 +52,17 @@ function CustomFieldsRailSectionInner({
   const [inFlightFieldIds, setInFlightFieldIds] = useState<Set<string>>(new Set());
   const inFlightRef = useRef<Set<string>>(new Set());
 
+  // Fallback projectKey resolution from issueKey (e.g. KANBA-1 -> KANBA)
+  const resolvedProjectKey =
+    projectKey && projectKey !== 'undefined'
+      ? projectKey
+      : (issueKey.includes('-') ? (issueKey.split('-')[0] ?? '') : '');
+
   // Fetch project custom field definitions
-  const { data: definitions = [], isLoading: isLoadingDefs } = useQuery({
-    queryKey: qk.customFields.project(projectKey),
-    queryFn: () => fetchProjectCustomFields(projectKey),
-    enabled: Boolean(projectKey),
+  const { data: definitions = [] } = useQuery({
+    queryKey: qk.customFields.project(resolvedProjectKey),
+    queryFn: () => fetchProjectCustomFields(resolvedProjectKey),
+    enabled: Boolean(resolvedProjectKey),
   });
 
   // Fetch issue custom field cached values
@@ -110,10 +119,7 @@ function CustomFieldsRailSectionInner({
     [executeMutation],
   );
 
-  // If loading or project has 0 custom fields, do not mount section in DOM (S7.1)
-  if (!isLoadingDefs && definitions.length === 0) {
-    return null;
-  }
+  // If project has 0 custom fields, do not mount section in DOM (S7.1)
   if (definitions.length === 0) {
     return null;
   }
@@ -181,7 +187,21 @@ function CustomFieldsRailSectionInner({
                 />
 
                 <div className="custom-fields-rail-value">
-                  {hasError ? (
+                  {result?.error_code === 'SANDBOX_UNAVAILABLE_IN_STANDALONE' ? (
+                    <span className="custom-field-sandbox-error-wrap">
+                      <EmojiHint
+                        kind="scriptedField"
+                        testId={`custom-field-sandbox-hint-${def.slug}`}
+                        content="Optional CLI Sandbox not enabled in single-container mode (nsjail/advanced CLI requires multi-container deployment)."
+                      />
+                      <span
+                        className="custom-field-error-inline custom-field-error--sandbox"
+                        data-testid={`custom-field-error-${def.slug}`}
+                      >
+                        {errorMessage}
+                      </span>
+                    </span>
+                  ) : hasError ? (
                     <span
                       className="custom-field-error-inline"
                       data-testid={`custom-field-error-${def.slug}`}

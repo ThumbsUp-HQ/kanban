@@ -3,7 +3,7 @@
 
 import type { JSX } from 'react';
 import React, { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveFieldEscalation,
   fetchFieldApprovals,
@@ -65,6 +65,7 @@ export function EscalationApprovalPanel({
   onAal2Challenge,
   onApproved,
 }: EscalationApprovalPanelProps): JSX.Element {
+  const queryClient = useQueryClient();
   const [justification, setJustification] = useState('');
   const [spWarningAck, setSpWarningAck] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -101,10 +102,18 @@ export function EscalationApprovalPanel({
         justification,
       });
     },
-    onSuccess: () => {
+    onSuccess: (newApproval) => {
       setIsRequestModalOpen(false);
       setJustification('');
+      queryClient.setQueryData<CustomFieldApproval[]>(
+        qk.customFields.approvals(field.id),
+        (old) =>
+          old
+            ? [newApproval, ...old.filter((a) => a.id !== newApproval.id)]
+            : [newApproval],
+      );
       void refetchApprovals();
+      onApproved?.();
     },
     onError: (err: Error) => {
       setGeneralError(err.message);
@@ -122,10 +131,17 @@ export function EscalationApprovalPanel({
         sp_warning_acknowledged: spWarningAck,
       });
     },
-    onSuccess: () => {
+    onSuccess: (updatedApproval) => {
       setManifestMismatchError(null);
       setGeneralError(null);
       setIsAal2ModalOpen(false);
+      queryClient.setQueryData<CustomFieldApproval[]>(
+        qk.customFields.approvals(field.id),
+        (old) =>
+          old
+            ? [updatedApproval, ...old.filter((a) => a.id !== updatedApproval.id)]
+            : [updatedApproval],
+      );
       void refetchApprovals();
       onApproved?.();
     },
@@ -212,6 +228,21 @@ export function EscalationApprovalPanel({
           role="alert"
         >
           ⚠️ This field will run with Project Admin service-principal credentials for every viewer.
+        </div>
+      )}
+
+      {/* Dual-Control Explanation Banner */}
+      {(latestApproval?.status === 'PENDING' ||
+        latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
+        <div
+          className="custom-field-dual-control-banner"
+          data-testid="dual-control-explanation-banner"
+          role="status"
+        >
+          <strong>Dual-Control Policy:</strong> Another distinct administrator holding{' '}
+          <strong>{requiredTier}</strong> authority with a fresh <strong>AAL2</strong> step-up must
+          approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to
+          script source or format metadata will immediately revoke approval and reset state.
         </div>
       )}
 

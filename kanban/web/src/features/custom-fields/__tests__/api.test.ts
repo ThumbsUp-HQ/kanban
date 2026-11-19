@@ -507,6 +507,55 @@ describe('custom-fields api', () => {
     });
   });
 
+  describe('testExecuteCustomField', () => {
+    it('executes draft field against issue and returns telemetry result', async () => {
+      const mockResult = {
+        value: 'Executed Value',
+        status: 'SUCCESS',
+        latency_ms: 5.2,
+        logs: 'Evaluated formula',
+      };
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResult),
+      });
+
+      const res = await indexExports.testExecuteCustomField('KAN', {
+        issue_key: 'KAN-1',
+        tier: 'wasm',
+        output_format: 'text',
+        output_format_metadata: {},
+        script_source: 'scalar: "hello"',
+      });
+
+      expect(res).toEqual(mockResult);
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/projects/KAN/custom-fields/test-execute',
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+    });
+
+    it('throws server error message on failure', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ detail: 'Formula syntax error' }),
+      });
+
+      await expect(
+        indexExports.testExecuteCustomField('KAN', {
+          issue_key: 'KAN-1',
+          tier: 'wasm',
+          output_format: 'text',
+          output_format_metadata: {},
+          script_source: 'bad formula',
+        }),
+      ).rejects.toThrow('Formula syntax error');
+    });
+  });
+
   describe('barrel exports', () => {
     it('exports all feature components and utilities', () => {
       expect(indexExports.CustomFieldsRailSection).toBeDefined();
@@ -515,6 +564,7 @@ describe('custom-fields api', () => {
       expect(indexExports.EscalationApprovalPanel).toBeDefined();
       expect(indexExports.qk).toBeDefined();
       expect(indexExports.executeCustomField).toBeDefined();
+      expect(indexExports.testExecuteCustomField).toBeDefined();
     });
   });
 });

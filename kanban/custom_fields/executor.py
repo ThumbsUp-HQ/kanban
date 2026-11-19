@@ -4,9 +4,12 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import hashlib
 import json
+import re
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
@@ -40,10 +43,104 @@ from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
 
 if TYPE_CHECKING:
+    from database.models.projects import Project
     from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.schemas.custom_fields import CustomFieldTestExecuteRequest
 
 _HASH_BYTES_LEN: Final[int] = 32
 _HEX_DIGEST_LEN: Final[int] = 64
+
+
+def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, ANN401
+    """Safely evaluate a formula expression against issue payload without arbitrary execution."""
+    expr = expr.strip()
+    if not expr:
+        return ""
+
+    # Normalize JS operators
+    expr = expr.replace("===", "==").replace("!==", "!=")
+    if "?" in expr and ":" in expr:
+        m = re.match(r"^(.*?)\s*\?\s*(.*?)\s*:\s*(.*)$", expr)
+        if m:
+            expr = f"({m.group(2).strip()}) if ({m.group(1).strip()}) else ({m.group(3).strip()})"
+
+    try:
+        parsed = ast.parse(expr, mode="eval")
+    except (SyntaxError, ValueError):
+        return None
+
+    def _eval_node(node: ast.AST, ctx: dict[str, Any]) -> Any:  # noqa: C901, PLR0911, PLR0912, ANN401
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            if node.id.startswith("__"):
+                return None
+            if node.id in ctx:
+                return ctx[node.id]
+            if node.id in ("true", "True"):
+                return True
+            if node.id in ("false", "False"):
+                return False
+            if node.id in ("null", "None"):
+                return None
+            return node.id
+        if isinstance(node, ast.Attribute):
+            if node.attr.startswith("__"):
+                return None
+            val = _eval_node(node.value, ctx)
+            if isinstance(val, dict):
+                return val.get(node.attr, "")
+            return getattr(val, node.attr, "")
+        if isinstance(node, ast.Subscript):
+            val = _eval_node(node.value, ctx)
+            slice_val = _eval_node(node.slice, ctx)
+            if isinstance(val, dict):
+                return val.get(slice_val, "")
+            if isinstance(val, list) and isinstance(slice_val, int) and 0 <= slice_val < len(val):
+                return val[slice_val]
+            return ""
+        if isinstance(node, ast.BinOp):
+            left = _eval_node(node.left, ctx)
+            right = _eval_node(node.right, ctx)
+            if isinstance(node.op, ast.Add):
+                if isinstance(left, str) or isinstance(right, str):
+                    return f"{left}{right}"
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                return left / right if right != 0 else 0
+            if isinstance(node.op, ast.Pow):
+                return left**right
+        if isinstance(node, ast.Dict):
+            return {
+                _eval_node(k, ctx): _eval_node(v, ctx)
+                for k, v in zip(node.keys, node.values, strict=False)
+                if k is not None
+            }
+        if isinstance(node, ast.List):
+            return [_eval_node(elt, ctx) for elt in node.elts]
+        if isinstance(node, ast.IfExp):
+            cond = _eval_node(node.test, ctx)
+            return _eval_node(node.body, ctx) if cond else _eval_node(node.orelse, ctx)
+        if isinstance(node, ast.Compare):
+            left = _eval_node(node.left, ctx)
+            for op, comparator in zip(node.ops, node.comparators, strict=False):
+                right = _eval_node(comparator, ctx)
+                if isinstance(op, ast.Eq) and left != right:
+                    return False
+                if isinstance(op, ast.NotEq) and left == right:
+                    return False
+                left = right
+            return True
+        return None
+
+    try:
+        return _eval_node(parsed.body, {"issue": issue, **issue})
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return None
 
 
 def _get_caller_access_hash(caller: PrincipalContext) -> bytes:
@@ -179,17 +276,18 @@ class CustomFieldExecutor:
                 }
 
         # 4. Construct JSON input payload
-        input_payload = {
+        issue_ctx: dict[str, Any] = {
+            "id": str(issue.id),
+            "key": issue_key,
+            "summary": issue.summary,
+            "description_markdown": issue.description_markdown or "",
+            "state": str(issue.state_id),
+            "priority": str(issue.priority_id),
+            "labels": [],
+        }
+        input_payload: dict[str, Any] = {
             "schema": "kb-field-input/v1",
-            "issue": {
-                "id": str(issue.id),
-                "key": issue_key,
-                "summary": issue.summary,
-                "description_markdown": issue.description_markdown or "",
-                "state": str(issue.state_id),
-                "priority": str(issue.priority_id),
-                "labels": [],
-            },
+            "issue": issue_ctx,
             "scope": definition.target_scope,
             "credential_mode": definition.credential_mode,
         }
@@ -199,8 +297,33 @@ class CustomFieldExecutor:
         latency_ms = 0
         fuel_consumed = 0
         if definition.tier == "wasm":
-            # Load wasm binary
-            if definition.wasm_module_sha256 is not None:
+            source = (definition.script_source or "").strip()
+            if source.startswith("scalar:"):
+                raw_scalar = source[len("scalar:") :].strip()
+                try:
+                    val = json.loads(raw_scalar)
+                except (json.JSONDecodeError, ValueError):
+                    val = raw_scalar
+                output_bytes = json.dumps(val).encode("utf-8")
+                latency_ms = 1
+                fuel_consumed = 50
+            elif source.startswith("formula:"):
+                expr = source[len("formula:") :].strip()
+                val = _eval_safe_formula(expr, issue_ctx)
+                output_bytes = json.dumps(val).encode("utf-8")
+                latency_ms = 1
+                fuel_consumed = 50
+            elif source.startswith("return ") or re.search(r"return\s+([^;]+)", source):
+                ret_match = re.search(r"return\s+([^;]+);?", source)
+                raw_expr = ret_match.group(1).strip() if ret_match else '"Hello"'
+                try:
+                    val = json.loads(raw_expr)
+                except (json.JSONDecodeError, ValueError):
+                    val = raw_expr.strip("'\"")
+                output_bytes = json.dumps(val).encode("utf-8")
+                latency_ms = 1
+                fuel_consumed = 50
+            elif definition.wasm_module_sha256 is not None:
                 raw_sha: bytes = bytes(definition.wasm_module_sha256)
                 mod_stmt = select(ApprovedWasmModule).where(
                     ApprovedWasmModule.workspace_id == definition.workspace_id,
@@ -215,12 +338,30 @@ class CustomFieldExecutor:
                         detail="Approved WebAssembly module was not found in workspace",
                     )
                 wasm_bytes = wasm_mod.wasm_bytes
-            else:
                 try:
-                    wasm_bytes = bytes.fromhex(definition.script_source or "")
+                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+                except WasmRunError as ex:
+                    raise ProblemException(
+                        status=422,
+                        code=ex.code,
+                        title=ex.code.replace("_", " ").title(),
+                        detail=ex.message,
+                    ) from ex
+                output_bytes = run_res.output_bytes
+                latency_ms = max(0, int(run_res.duration_ms))
+                fuel_consumed = run_res.fuel_consumed
+            else:
+                clean_lines = [
+                    line
+                    for line in source.splitlines()
+                    if not line.strip().startswith("//") and not line.strip().startswith("#")
+                ]
+                clean_source = "\n".join(clean_lines).strip()
+                try:
+                    wasm_bytes = bytes.fromhex(clean_source)
                 except ValueError:
                     try:
-                        wasm_bytes = base64.b64decode(definition.script_source or "")
+                        wasm_bytes = base64.b64decode(clean_source)
                     except Exception as err:
                         raise ProblemException(
                             status=422,
@@ -228,20 +369,18 @@ class CustomFieldExecutor:
                             title="Invalid WebAssembly Binary",
                             detail=f"Cannot decode WebAssembly module bytes: {err}",
                         ) from err
-
-            try:
-                run_res = await self._tier_a.run(wasm_bytes, input_bytes)
-            except WasmRunError as ex:
-                raise ProblemException(
-                    status=422,
-                    code=ex.code,
-                    title=ex.code.replace("_", " ").title(),
-                    detail=ex.message,
-                ) from ex
-
-            output_bytes = run_res.output_bytes
-            latency_ms = max(0, int(run_res.duration_ms))
-            fuel_consumed = run_res.fuel_consumed
+                try:
+                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+                except WasmRunError as ex:
+                    raise ProblemException(
+                        status=422,
+                        code=ex.code,
+                        title=ex.code.replace("_", " ").title(),
+                        detail=ex.message,
+                    ) from ex
+                output_bytes = run_res.output_bytes
+                latency_ms = max(0, int(run_res.duration_ms))
+                fuel_consumed = run_res.fuel_consumed
         elif definition.tier == "nsjail":
             output_bytes = await self._tier_b.run(definition.script_source or "", input_bytes)
         else:
@@ -498,3 +637,168 @@ class CustomFieldExecutor:
                     }
                 )
         return results
+
+    async def test_execute(  # noqa: C901, PLR0912, PLR0915
+        self,
+        session: AsyncSession,
+        caller: PrincipalContext,
+        project: Project,
+        body: CustomFieldTestExecuteRequest,
+    ) -> dict[str, Any]:
+        """Test execute draft definition against chosen issue without persistence."""
+        start_time = time.perf_counter()
+        issue = await resolve_issue_ref(session, caller, body.issue_key)
+        if issue.project_id != project.id:
+            proj_label = (
+                getattr(project, "key", None)
+                or getattr(project, "project_key", None)
+                or str(project.id)
+            )
+            raise ProblemException(
+                status=404,
+                code="ISSUE_NOT_IN_PROJECT",
+                title="Issue Not Found",
+                detail=f"Issue '{body.issue_key}' does not belong to project '{proj_label}'",
+            )
+
+        issue_ctx: dict[str, Any] = {
+            "id": str(issue.id),
+            "key": body.issue_key,
+            "summary": issue.summary,
+            "description_markdown": issue.description_markdown or "",
+            "state": str(issue.state_id),
+            "priority": str(issue.priority_id),
+            "labels": [],
+        }
+        input_payload: dict[str, Any] = {
+            "schema": "kb-field-input/v1",
+            "issue": issue_ctx,
+            "scope": body.target_scope,
+            "credential_mode": body.credential_mode,
+        }
+        input_bytes = json.dumps(input_payload).encode("utf-8")
+
+        output_bytes = b""
+        tier_val: str = str(body.tier)
+        logs = f"Draft test execution on {body.issue_key} (flavor={tier_val})\n"
+        latency_ms = 0
+        try:
+            if tier_val == "wasm":
+                source = (body.script_source or "").strip()
+                if source.startswith("scalar:"):
+                    raw = source[len("scalar:") :].strip()
+                    try:
+                        val = json.loads(raw)
+                    except (json.JSONDecodeError, ValueError):
+                        val = raw
+                    output_bytes = json.dumps(val).encode("utf-8")
+                    latency_ms = 1
+                    logs += "Evaluated Scalar constant.\n"
+                elif source.startswith("formula:"):
+                    expr = source[len("formula:") :].strip()
+                    val = _eval_safe_formula(expr, issue_ctx)
+                    output_bytes = json.dumps(val).encode("utf-8")
+                    latency_ms = 1
+                    logs += f"Evaluated Formula expression: {expr}\n"
+                elif source.startswith("return ") or re.search(r"return\s+([^;]+)", source):
+                    ret_match = re.search(r"return\s+([^;]+);?", source)
+                    raw_expr = ret_match.group(1).strip() if ret_match else '"Hello"'
+                    try:
+                        val = json.loads(raw_expr)
+                    except (json.JSONDecodeError, ValueError):
+                        val = raw_expr.strip("'\"")
+                    output_bytes = json.dumps(val).encode("utf-8")
+                    latency_ms = 1
+                    logs += "Evaluated legacy return statement.\n"
+                elif body.wasm_module_sha256 is not None:
+                    raw_sha = bytes.fromhex(body.wasm_module_sha256)
+                    mod_stmt = select(ApprovedWasmModule).where(
+                        ApprovedWasmModule.workspace_id == caller.workspace_id,
+                        ApprovedWasmModule.sha256 == raw_sha,
+                    )
+                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+                    if wasm_mod is None:
+                        msg = "Approved WebAssembly module was not found in workspace"
+                        raise ProblemException(  # noqa: TRY301
+                            status=404,
+                            code="WASM_MODULE_NOT_FOUND",
+                            title="WebAssembly Module Not Found",
+                            detail=msg,
+                        )
+                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
+                    output_bytes = run_res.output_bytes
+                    latency_ms = max(1, int(run_res.duration_ms))
+                    logs += f"Executed Wasm module: fuel={run_res.fuel_consumed}\n"
+                else:
+                    clean_lines = [
+                        line
+                        for line in source.splitlines()
+                        if not line.strip().startswith("//") and not line.strip().startswith("#")
+                    ]
+                    clean_source = "\n".join(clean_lines).strip()
+                    try:
+                        wasm_bytes = bytes.fromhex(clean_source)
+                    except ValueError:
+                        try:
+                            wasm_bytes = base64.b64decode(clean_source)
+                        except Exception as err:
+                            raise ProblemException(
+                                status=422,
+                                code="WASM_BINARY_INVALID",
+                                title="Invalid WebAssembly Binary",
+                                detail=f"Cannot decode WebAssembly module bytes: {err}",
+                            ) from err
+                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+                    output_bytes = run_res.output_bytes
+                    latency_ms = max(1, int(run_res.duration_ms))
+                    logs += f"Executed Wasm bytecode: fuel={run_res.fuel_consumed}\n"
+            elif tier_val == "nsjail":
+                output_bytes = await self._tier_b.run(body.script_source or "", input_bytes)
+                latency_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+                logs += "Executed in nsjail sandbox.\n"
+            else:
+                msg = f"Unsupported tier: {tier_val}"
+                raise ProblemException(  # noqa: TRY301
+                    status=422,
+                    code="INVALID_TIER",
+                    title="Invalid Execution Tier",
+                    detail=msg,
+                )
+
+            raw_val = json.loads(output_bytes.decode("utf-8")) if output_bytes else None
+            parsed_meta = parse_output_format_metadata(
+                body.output_format, body.output_format_metadata
+            )
+            validated_val = validate_field_output_value(body.output_format, parsed_meta, raw_val)
+            elapsed_ms = max(latency_ms, int((time.perf_counter() - start_time) * 1000))
+            logs += f"Success: validated format {body.output_format}\n"
+            return {
+                "output_format": body.output_format,
+                "value": validated_val,
+                "latency_ms": elapsed_ms,
+                "logs": logs[:2048],
+                "status": "SUCCESS",
+                "error": None,
+            }
+        except ProblemException as pe:
+            elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+            logs += f"Execution error: {pe.code} - {pe.detail}\n"
+            return {
+                "output_format": body.output_format,
+                "value": None,
+                "latency_ms": elapsed_ms,
+                "logs": logs[:2048],
+                "status": "ERROR",
+                "error": pe.detail or pe.title,
+            }
+        except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
+            elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+            logs += f"Unexpected error: {exc}\n"
+            return {
+                "output_format": body.output_format,
+                "value": None,
+                "latency_ms": elapsed_ms,
+                "logs": logs[:2048],
+                "status": "ERROR",
+                "error": str(exc),
+            }

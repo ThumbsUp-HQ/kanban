@@ -900,16 +900,12 @@ function IssueSurfaceContent({
               <RailSlotWithMeta
                 key={`rail-${currentIssue.key}-${String(projectStates.length)}`}
                 issue={currentIssue}
-                projectMetadata={
-                  projectStates.length > 0
-                    ? {
-                        key: currentIssue.project_key,
-                        name: currentIssue.project_name ?? currentIssue.project_key,
-                        modules_enabled: true,
-                        states: projectStates,
-                      }
-                    : undefined
-                }
+                projectMetadata={{
+                  key: currentIssue.project_key || resolvedProjectForAux,
+                  name: currentIssue.project_name ?? currentIssue.project_key,
+                  modules_enabled: true,
+                  states: projectStates,
+                }}
                 onIssueUpdate={handleIssueUpdate}
               />
             ) : null}

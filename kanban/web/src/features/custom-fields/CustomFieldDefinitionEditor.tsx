@@ -3,28 +3,181 @@
 
 import type { JSX } from 'react';
 import React, { useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NotFoundView } from '../../app/routes';
 import {
   createCustomField,
   deleteCustomField,
   fetchProjectCustomFields,
   qk,
+  testExecuteCustomField,
   updateCustomField,
   type CustomFieldCreatePayload,
   type CustomFieldCredentialMode,
   type CustomFieldDefinition,
   type CustomFieldTargetScope,
+  type CustomFieldTestExecuteResult,
   type CustomFieldTier,
   type CustomFieldUpdatePayload,
+  type FieldFlavor,
   type OutputFormatType,
 } from './api';
+import { CustomFieldValue } from './CustomFieldValue';
 import { EscalationApprovalPanel } from './EscalationApprovalPanel';
 import './custom-fields.css';
 
 export interface CustomFieldDefinitionEditorProps {
   projectKey: string;
   isAdmin?: boolean;
+}
+
+const DEFAULT_WASM_BASE64 =
+  'AGFzbQEAAAABEQNgAn9/AGABfwF/YAJ/fwF/AhEBA2VudglrYl9vdXRwdXQAAAMDAgECBQMBAAEHHgMGbWVtb3J5AgAIa2JfYWxsb2MAAQZrYl9ydW4AAgoTAgUAQYAQCwsAQYAIQTQQAEEACws7AQBBgAgLNHsibGV2ZWwiOiAiaGlnaCIsICJzY29yZSI6IDguOCwgImxhYmVsIjogIjguOCBIaWdoIn0AKQRuYW1lAQwBAAlrYl9vdXRwdXQCFAIBAQADbGVuAgIAA3B0cgEDbGVu';
+
+const STARTER_TEMPLATES: Record<FieldFlavor, Record<OutputFormatType, string>> = {
+  scalar: {
+    text: 'scalar: "Verified"',
+    number: 'scalar: 42',
+    badge: 'scalar: "Active"',
+    markdown_snippet: 'scalar: "**Status:** Verified\\n*System is operating normally.*"',
+    url: 'scalar: "https://kanban.example.com"',
+    json_table:
+      'scalar: [{"metric": "Uptime", "value": "99.9%"}, {"metric": "Latency", "value": "12ms"}]',
+    severity_pill: 'scalar: {"level": "high", "score": 8.8, "label": "8.8 High"}',
+  },
+  formula: {
+    text: 'formula: issue.key + " - " + issue.summary',
+    number: 'formula: issue.summary ? issue.summary.length : 0',
+    badge: 'formula: issue.state === "DONE" ? "Completed" : "In Progress"',
+    markdown_snippet: 'formula: "### " + issue.key + "\\n" + issue.summary',
+    url: 'formula: "https://kanban.example.com/issues/" + issue.key',
+    json_table:
+      'formula: [{"metric": "Key", "value": issue.key}, {"metric": "State", "value": issue.state}]',
+    severity_pill:
+      'formula: {"level": issue.priority === "URGENT" ? "critical" : "medium", "score": issue.priority === "URGENT" ? 9.0 : 5.0, "label": issue.priority || "Medium"}',
+  },
+  wasm: {
+    text: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    number: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    badge: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    markdown_snippet: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    url: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    json_table: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    severity_pill: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+  },
+  nsjail: {
+    text: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        output = f"{issue.get('key', 'UNKNOWN')}: Verified"
+        print(json.dumps(output))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+    number: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        print(json.dumps(len(issue.get("summary", ""))))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+    badge: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        output = "Active" if issue.get("state") == "DONE" else "Pending"
+        print(json.dumps(output))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+    markdown_snippet: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        output = f"**Status:** Verified\\n*Key: {issue.get('key', '')}*"
+        print(json.dumps(output))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+    url: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        print(json.dumps(f"https://kanban.example.com/issues/{issue.get('key', '')}"))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+    json_table: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        table = [{"metric": "Key", "value": issue.get("key", "")}]
+        print(json.dumps(table))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+    severity_pill: `# Tier B nsjail container Python script (isolated Linux namespaces)
+import json
+import sys
+
+def main():
+    try:
+        data = json.loads(sys.stdin.read())
+        issue = data.get("issue", {})
+        pill = {"level": "high", "score": 8.8, "label": "8.8 High"}
+        print(json.dumps(pill))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+if __name__ == "__main__":
+    main()`,
+  },
+};
+
+function detectFlavor(field: CustomFieldDefinition): FieldFlavor {
+  const src = field.script_source?.trim() ?? '';
+  if (src.startsWith('scalar:')) return 'scalar';
+  if (src.startsWith('formula:')) return 'formula';
+  if (field.tier === 'nsjail') return 'nsjail';
+  return 'wasm';
 }
 
 const DEFAULT_METADATA_BY_FORMAT: Record<OutputFormatType, Record<string, unknown>> = {
@@ -51,18 +204,21 @@ export function CustomFieldDefinitionEditor({
   projectKey,
   isAdmin = true,
 }: CustomFieldDefinitionEditorProps): JSX.Element {
+  const queryClient = useQueryClient();
+
   // Selected field for editing (null = creating new)
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
 
   // Form states
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
+  const [flavor, setFlavor] = useState<FieldFlavor>('scalar');
   const [tier, setTier] = useState<CustomFieldTier>('wasm');
   const [outputFormat, setOutputFormat] = useState<OutputFormatType>('text');
   const [metadataText, setMetadataText] = useState(
     JSON.stringify(DEFAULT_METADATA_BY_FORMAT.text, null, 2),
   );
-  const [scriptSource, setScriptSource] = useState('// Return field value\nreturn "Hello";');
+  const [scriptSource, setScriptSource] = useState(STARTER_TEMPLATES.scalar.text);
   const [targetScope, setTargetScope] = useState<CustomFieldTargetScope>('PROJECT');
   const [credentialMode, setCredentialMode] =
     useState<CustomFieldCredentialMode>('INVOKING_USER');
@@ -76,6 +232,12 @@ export function CustomFieldDefinitionEditor({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isTamperConfirmOpen, setIsTamperConfirmOpen] = useState(false);
 
+  // Test execute states
+  const [testIssueKey, setTestIssueKey] = useState('');
+  const [testResult, setTestResult] = useState<CustomFieldTestExecuteResult | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+
   // Fetch definitions (all hooks declared unconditionally)
   const { data: definitions = [], refetch } = useQuery({
     queryKey: qk.customFields.project(projectKey),
@@ -87,6 +249,8 @@ export function CustomFieldDefinitionEditor({
     return definitions.find((d) => d.id === selectedFieldId) ?? null;
   }, [definitions, selectedFieldId]);
 
+  const manifestSha = selectedField?.manifest_sha256;
+
   // Load field into editor form
   const handleSelectField = (field: CustomFieldDefinition) => {
     setSelectedFieldId(field.id);
@@ -96,12 +260,15 @@ export function CustomFieldDefinitionEditor({
     setOutputFormat(field.output_format);
     setMetadataText(JSON.stringify(field.output_format_metadata, null, 2));
     setScriptSource(field.script_source ?? '');
+    setFlavor(detectFlavor(field));
     setTargetScope(field.target_scope);
     setCredentialMode(field.credential_mode);
     setEgressText(field.egress_allowlist.join('\n'));
     setIsEnabled(field.is_enabled);
     setJsonError(null);
     setSubmitError(null);
+    setTestResult(null);
+    setTestError(null);
   };
 
   const handleResetNew = () => {
@@ -109,21 +276,27 @@ export function CustomFieldDefinitionEditor({
     setName('');
     setSlug('');
     setTier('wasm');
+    setFlavor('scalar');
     setOutputFormat('text');
     setMetadataText(JSON.stringify(DEFAULT_METADATA_BY_FORMAT.text, null, 2));
-    setScriptSource('// Return field value\nreturn "Hello";');
+    setScriptSource(STARTER_TEMPLATES.scalar.text);
     setTargetScope('PROJECT');
     setCredentialMode('INVOKING_USER');
     setEgressText('');
     setIsEnabled(true);
     setJsonError(null);
     setSubmitError(null);
+    setTestResult(null);
+    setTestError(null);
   };
 
   // Format change helper
   const handleFormatChange = (fmt: OutputFormatType) => {
     setOutputFormat(fmt);
     setMetadataText(JSON.stringify(DEFAULT_METADATA_BY_FORMAT[fmt], null, 2));
+    if (!selectedFieldId) {
+      setScriptSource(STARTER_TEMPLATES[flavor][fmt]);
+    }
   };
 
   // Copy SHA helper
@@ -140,12 +313,16 @@ export function CustomFieldDefinitionEditor({
     }, 2000);
   };
 
-  // Create mutation
+  // Create mutation with immediate cache update to prevent F5 refresh race
   const createMutation = useMutation({
     mutationFn: async (payload: CustomFieldCreatePayload) => {
       return createCustomField(projectKey, payload);
     },
     onSuccess: (newField) => {
+      queryClient.setQueryData<CustomFieldDefinition[]>(
+        qk.customFields.project(projectKey),
+        (old = []) => [...old, newField],
+      );
       setSubmitError(null);
       void refetch();
       handleSelectField(newField);
@@ -155,7 +332,7 @@ export function CustomFieldDefinitionEditor({
     },
   });
 
-  // Update mutation
+  // Update mutation with immediate cache update to prevent F5 refresh race
   const updateMutation = useMutation({
     mutationFn: async ({
       fieldId,
@@ -167,6 +344,10 @@ export function CustomFieldDefinitionEditor({
       return updateCustomField(projectKey, fieldId, payload);
     },
     onSuccess: (updatedField) => {
+      queryClient.setQueryData<CustomFieldDefinition[]>(
+        qk.customFields.project(projectKey),
+        (old = []) => old.map((d) => (d.id === updatedField.id ? updatedField : d)),
+      );
       setSubmitError(null);
       setIsTamperConfirmOpen(false);
       void refetch();
@@ -178,16 +359,59 @@ export function CustomFieldDefinitionEditor({
     },
   });
 
-  // Delete mutation
+  // Delete mutation with immediate cache update
   const deleteMutation = useMutation({
     mutationFn: async (fieldId: string) => {
       return deleteCustomField(projectKey, fieldId);
     },
-    onSuccess: () => {
+    onSuccess: (_data, fieldId) => {
+      queryClient.setQueryData<CustomFieldDefinition[]>(
+        qk.customFields.project(projectKey),
+        (old = []) => old.filter((d) => d.id !== fieldId),
+      );
       handleResetNew();
       void refetch();
     },
   });
+
+  // Test execution handler
+  const handleTestExecute = async () => {
+    if (!testIssueKey.trim()) {
+      setTestError('Please provide an issue key to test execute');
+      return;
+    }
+    setIsTesting(true);
+    setTestError(null);
+    setTestResult(null);
+
+    let parsedMeta: Record<string, unknown> = {};
+    try {
+      if (metadataText.trim()) {
+        parsedMeta = JSON.parse(metadataText) as Record<string, unknown>;
+      }
+    } catch {
+      setTestError('Invalid JSON in format metadata');
+      setIsTesting(false);
+      return;
+    }
+
+    try {
+      const result = await testExecuteCustomField(projectKey, {
+        issue_key: testIssueKey.trim(),
+        tier,
+        output_format: outputFormat,
+        output_format_metadata: parsedMeta,
+        script_source: scriptSource,
+        target_scope: targetScope,
+        credential_mode: credentialMode,
+      });
+      setTestResult(result);
+    } catch (err: unknown) {
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   // Form submission handler
   const handleSubmit = (e?: React.SyntheticEvent) => {
@@ -308,17 +532,17 @@ export function CustomFieldDefinitionEditor({
             {selectedField ? `Edit: ${selectedField.name}` : 'New Custom Field Definition'}
           </h2>
 
-          {selectedField?.manifest_sha256 ? (
+          {manifestSha ? (
             <div className="custom-fields-sha-chip" data-testid="manifest-sha256-chip">
               <span className="custom-fields-sha-label">SHA256:</span>
               <span className="custom-fields-sha-val mono">
-                {selectedField.manifest_sha256.slice(0, 16)}...
+                {manifestSha.slice(0, 16)}...
               </span>
               <button
                 type="button"
                 className="custom-field-copy-btn"
                 onClick={() => {
-                  handleCopySha(selectedField.manifest_sha256 ?? '');
+                  handleCopySha(manifestSha);
                 }}
                 data-testid="copy-manifest-sha-btn"
               >
@@ -405,7 +629,7 @@ export function CustomFieldDefinitionEditor({
                   type="text"
                   className="custom-field-input mono"
                   maxLength={63}
-                  pattern="^[a-z0-9][a-z0-9-]{1,62}$"
+                  pattern="^[a-z0-9][a-z0-9\\-]{1,62}$"
                   required
                   disabled={Boolean(selectedField)}
                   value={slug}
@@ -415,6 +639,34 @@ export function CustomFieldDefinitionEditor({
                   data-testid="field-slug-input"
                   placeholder="cvss-score"
                 />
+              </div>
+
+              {/* Field Flavor */}
+              <div className="custom-field-form-group">
+                <label htmlFor="field-flavor" className="custom-field-form-label">
+                  Field Flavor
+                </label>
+                <select
+                  id="field-flavor"
+                  className="custom-field-select"
+                  value={flavor}
+                  onChange={(e) => {
+                    const next = e.target.value as FieldFlavor;
+                    setFlavor(next);
+                    if (next === 'nsjail') {
+                      setTier('nsjail');
+                    } else {
+                      setTier('wasm');
+                    }
+                    setScriptSource(STARTER_TEMPLATES[next][outputFormat]);
+                  }}
+                  data-testid="field-flavor-select"
+                >
+                  <option value="scalar">Scalar Value (Static literal or JSON object)</option>
+                  <option value="formula">Formula Expression (AST safe issue evaluation)</option>
+                  <option value="wasm">WebAssembly (Tier A sandboxed bytecode)</option>
+                  <option value="nsjail">nsjail Advanced Script (Linux namespaces)</option>
+                </select>
               </div>
 
               {/* Output Format */}
@@ -450,7 +702,7 @@ export function CustomFieldDefinitionEditor({
               <textarea
                 id="format-metadata"
                 className="custom-field-textarea mono"
-                rows={4}
+                rows={8}
                 value={metadataText}
                 onChange={(e) => {
                   setMetadataText(e.target.value);
@@ -476,6 +728,101 @@ export function CustomFieldDefinitionEditor({
                 }}
                 data-testid="script-source-textarea"
               />
+            </div>
+
+            {/* Test Execute Section */}
+            <div className="custom-field-test-panel" data-testid="custom-field-test-panel">
+              <div className="custom-field-test-controls">
+                <label htmlFor="test-issue-key" className="custom-field-form-label">
+                  Test With Issue Key
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    id="test-issue-key"
+                    type="text"
+                    className="custom-field-input mono"
+                    placeholder="e.g. KANBA-1"
+                    value={testIssueKey}
+                    onChange={(e) => {
+                      setTestIssueKey(e.target.value.toUpperCase());
+                    }}
+                    data-testid="test-issue-key-input"
+                  />
+                  <button
+                    type="button"
+                    className="custom-field-btn custom-field-btn--secondary"
+                    onClick={() => {
+                      void handleTestExecute();
+                    }}
+                    disabled={isTesting}
+                    data-testid="test-execute-btn"
+                  >
+                    {isTesting ? 'Evaluating...' : 'Test Execute'}
+                  </button>
+                </div>
+              </div>
+
+              {testError && (
+                <div
+                  className="custom-field-input-error"
+                  data-testid="test-execute-error"
+                  style={{ marginTop: '8px' }}
+                >
+                  {testError}
+                </div>
+              )}
+
+              {testResult && (
+                <div className="custom-field-test-result" data-testid="test-execute-result-panel">
+                  <div
+                    className="custom-field-test-meta"
+                    style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}
+                  >
+                    <span>
+                      <strong>Status:</strong>{' '}
+                      <span
+                        className={`custom-field-status-pill custom-field-status-pill--${testResult.status.toLowerCase()}`}
+                      >
+                        {testResult.status}
+                      </span>
+                    </span>
+                    <span data-testid="test-latency">
+                      <strong>Latency:</strong> {testResult.latency_ms.toFixed(1)} ms
+                    </span>
+                  </div>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <strong>Rendered Output Pill:</strong>
+                    <div
+                      className="custom-field-pill-preview"
+                      data-testid="test-output-pill"
+                      style={{ marginTop: '4px' }}
+                    >
+                      <CustomFieldValue
+                        format={outputFormat}
+                        value={testResult.value}
+                        metadata={(() => {
+                          try {
+                            return JSON.parse(metadataText) as Record<string, unknown>;
+                          } catch {
+                            return {};
+                          }
+                        })()}
+                        testId="test-result-value"
+                      />
+                    </div>
+                  </div>
+
+                  {testResult.logs && (
+                    <div>
+                      <strong>Truncated Logs:</strong>
+                      <pre className="custom-field-test-logs mono" data-testid="test-logs">
+                        {testResult.logs}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Is Enabled */}

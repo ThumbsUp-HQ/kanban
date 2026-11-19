@@ -18,6 +18,8 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.custom_fields import (
+    CustomFieldTestExecuteRequest,
+    CustomFieldTestExecuteResponse,
     CustomFieldValueItem,
     WasmModuleResponse,
     WasmModuleUploadRequest,
@@ -25,6 +27,7 @@ from kanban.api.v1.schemas.custom_fields import (
 from kanban.custom_fields.executor import CustomFieldExecutor
 from kanban.custom_fields.service import CustomFieldDefinitionService
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
+from kanban.security.permissions import Capability, require_capability
 from kanban.security.ratelimit.base import RateLimitPolicy
 from kanban.security.ratelimit.pg import PgRateLimiter
 from kanban.services.activity import ActivityEventType, record_activity
@@ -204,3 +207,47 @@ async def upload_wasm_module(
             name=body.name,
             size_bytes=len(wasm_bytes),
         )
+
+
+@router.post(
+    "/projects/{project}/custom-fields/test-execute",
+    response_model=CustomFieldTestExecuteResponse,
+    summary="Evaluate custom field definition draft against an issue without saving",
+)
+async def test_execute_custom_field(
+    project: str,
+    body: CustomFieldTestExecuteRequest,
+    caller: Caller,
+    session: Session,
+) -> CustomFieldTestExecuteResponse:
+    """Test-execute custom field draft against a chosen project issue.
+
+    Returns latency_ms, logs, rendered value, and execution status.
+    """
+    async with timing_floor(floor_ms=25.0):
+        proj = await get_project_or_404(session, caller, project)
+        await require_capability(session, caller, proj.id, Capability.VIEW)
+
+        rate_limiter = _execute_rate_limiter(session)
+        policy = RateLimitPolicy(name="custom_field_test_execute", limit=10, window_seconds=60)
+        key = hashlib.sha256(f"{caller.principal_id}:{proj.id}:test_execute".encode()).digest()
+        decision = await rate_limiter.hit(policy, key)
+        if not decision.allowed:
+            detail_msg = (
+                f"Test execution rate limit exceeded. Retry after {decision.retry_after_seconds}s."
+            )
+            raise ProblemException(
+                status=429,
+                code="RATE_LIMITED",
+                title="Rate Limited",
+                detail=detail_msg,
+            )
+
+        executor = CustomFieldExecutor(session)
+        res = await executor.test_execute(
+            session=session,
+            caller=caller,
+            project=proj,
+            body=body,
+        )
+        return CustomFieldTestExecuteResponse.model_validate(res)
