@@ -34,7 +34,7 @@ export function DatesCycleModulesRows({
   const stateGroup = issue.state?.group ?? (issue.state?.name === 'Done' ? 'completed' : '');
   const isResolved = stateGroup === 'completed' || stateGroup === 'cancelled';
 
-  const year = new Date().getFullYear();
+  const year = String(new Date().getFullYear());
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
   const day = String(new Date().getDate()).padStart(2, '0');
   const todayStr = `${year}-${month}-${day}`;

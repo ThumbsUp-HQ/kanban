@@ -85,15 +85,18 @@ function TimelineBar({
   const barRef = useRef<HTMLDivElement>(null);
 
   // Strict CSP (S5.4): CSSOM element ref positioning, zero JSX inline style string
+  const isSingleDay = geom.startDate === geom.dueDate;
   useLayoutEffect(() => {
     if (barRef.current) {
+      const widthVal = isSingleDay ? Math.max(geom.width, 120) : geom.width;
       barRef.current.style.transform = `translate3d(${String(geom.startX)}px, 0, 0)`;
-      barRef.current.style.width = `${String(geom.width)}px`;
+      barRef.current.style.width = `${String(widthVal)}px`;
     }
-  }, [geom.startX, geom.width]);
+  }, [geom.startX, geom.width, isSingleDay]);
 
   let barClass = 'timeline-bar';
   if (isOverdue) barClass += ' timeline-bar--overdue';
+  if (isSingleDay) barClass += ' timeline-bar--single-day';
 
   // Gate EmojiHint mapping
   let gateKind: 'gatePending' | 'gateVetoed' | 'gateApproved' | null = null;
@@ -266,9 +269,7 @@ export function TimelineView({
 
   // Set CSS custom property on canvas container for pure CSSOM styling
   useLayoutEffect(() => {
-    if (canvasRef.current) {
-      canvasRef.current.style.width = `${String(canvasWidth)}px`;
-    }
+    canvasRef.current?.style.setProperty('width', `${String(canvasWidth)}px`);
   }, [canvasWidth]);
 
   // Compute geometries for each issue
@@ -301,7 +302,7 @@ export function TimelineView({
         if (dayNum === '01') {
           const monthNum = parseInt(d.slice(5, 7), 10);
           const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          label = monthNames[monthNum] ?? dayNum;
+          label = monthNames[monthNum]!;
         } else if (parseInt(dayNum, 10) % 7 === 1) {
           label = dayNum;
         } else {
@@ -537,11 +538,18 @@ export function TimelineView({
   // Scroll to today button
   const handleScrollToToday = () => {
     const todayOffset = diffDays(todayDate, timelineStartDate);
-    const targetX = todayOffset * pxPerDay - 200;
-    canvasWrapperRef.current?.scrollTo({
-      left: Math.max(0, targetX),
-      behavior: 'smooth',
-    });
+    const targetX = Math.max(0, todayOffset * pxPerDay - 200);
+    const el = canvasWrapperRef.current;
+    if (el) {
+      if (typeof el.scrollTo === 'function') {
+        el.scrollTo({
+          left: targetX,
+          behavior: 'smooth',
+        });
+      } else {
+        el.scrollLeft = targetX;
+      }
+    }
   };
 
   const getPriorityKind = (
@@ -576,8 +584,9 @@ export function TimelineView({
               const dt = new Date(todayDate + 'T00:00:00Z');
               const dayOfWeek = isNaN(dt.getTime()) ? 0 : dt.getUTCDay();
               setAnchorStart(addDays(todayDate, -dayOfWeek));
+              handleScrollToToday();
             }}
-            aria-label="Jump to today"
+            aria-label="Today"
           >
             Today
           </button>
@@ -590,14 +599,6 @@ export function TimelineView({
             aria-label="Next 2 weeks"
           >
             Next
-          </button>
-          <button
-            type="button"
-            className="calendar-toolbar-btn"
-            onClick={handleScrollToToday}
-            aria-label="Scroll to today"
-          >
-            Scroll to today
           </button>
           <span className="timeline-range-heading" aria-live="polite">
             {`${anchorStart} - ${addDays(anchorStart, 13)}`}

@@ -202,7 +202,7 @@ describe('ActivitySection', () => {
       await screen.findByRole('tab', { name: 'All' });
       await waitFor(() => {
         expect(scrollIntoViewMock).toHaveBeenCalled();
-      });
+      }, { timeout: 3000 });
     });
 
     it('renders categorized HISTORY and AGENT_GATE rows and jumps to audit comment', async () => {

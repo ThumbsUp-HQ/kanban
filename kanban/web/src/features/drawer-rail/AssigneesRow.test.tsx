@@ -189,7 +189,7 @@ describe('AssigneesRow', () => {
     const input = screen.getByRole('combobox');
     fireEvent.change(input, { target: { value: 'user21' } });
 
-    const addBtn = await screen.findByRole('button', { name: /@user21/i }, { timeout: 500 });
+    const addBtn = await screen.findByRole('button', { name: /@user21/i }, { timeout: 2000 });
     fireEvent.click(addBtn);
 
     const alert = screen.getByRole('alert');

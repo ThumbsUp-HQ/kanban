@@ -61,6 +61,7 @@ import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage'
 import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
 import { fetchProjectStates } from '../features/views/viewsApi';
@@ -631,15 +632,8 @@ export function DraftsWorkspaceView(): JSX.Element {
   );
 }
 
-export function YourWorkView(): JSX.Element {
-  return (
-    <section data-testid="your-work-view" className="kb-workspace-section">
-      <h1>Your work</h1>
-      <p>Assigned and subscribed work items across your workspace projects.</p>
-      <Link to="/projects/KAN/issues">View project work items →</Link>
-    </section>
-  );
-}
+import { YourWorkView } from '../features/your-work/YourWorkView';
+export { YourWorkView };
 
 export interface ProjectCycleItem {
   id: string;
@@ -1604,23 +1598,7 @@ export function ProjectViewsRedirect(): JSX.Element {
   return <Navigate to={`/projects/${key}/issues`} replace />;
 }
 
-export function ProjectSavedViewsView(): JSX.Element {
-  const { projectKey } = useParams<{ projectKey: string }>();
-  const key = projectKey ?? 'KAN';
-  return (
-    <section data-testid="project-views-view" className="kb-workspace-section">
-      <h1>Views ({key})</h1>
-      <p>Switch between saved layouts and filter presets for {key}:</p>
-      <div className="kb-views-links-row">
-        <Link to={`/projects/${key}/issues?layout=list`}>List View</Link>
-        <Link to={`/projects/${key}/issues?layout=board`}>Board View</Link>
-        <Link to={`/projects/${key}/issues?layout=table`}>Table View</Link>
-        <Link to={`/projects/${key}/issues?layout=calendar`}>Calendar View</Link>
-        <Link to={`/projects/${key}/issues?layout=timeline`}>Timeline View</Link>
-      </div>
-    </section>
-  );
-}
+export { ProjectSavedViewsView };
 
 export function StandaloneStatusRoute(): JSX.Element {
   const navigate = useNavigate();
@@ -1854,7 +1832,7 @@ const projectRouteChildren: RouteObject[] = [
   },
   {
     path: 'views',
-    element: <ProjectViewsRedirect />,
+    element: <ProjectSavedViewsView />,
   },
   {
     path: 'overview',

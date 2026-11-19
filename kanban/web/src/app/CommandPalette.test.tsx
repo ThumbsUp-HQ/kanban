@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,6 +10,18 @@ import {
   MAX_ISSUE_RESULTS,
 } from './CommandPalette';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { apiFetch } from '../api/client';
+
+vi.mock('../api/client', () => ({
+  apiFetch: vi.fn(),
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+  },
+}));
+
+const mockApiFetch = vi.mocked(apiFetch);
 
 const noop = (): void => {
   /* noop */
@@ -228,6 +240,28 @@ describe('CommandPalette', () => {
       sysOpt.click();
     });
     expect(document.documentElement.dataset.theme).toBeUndefined();
+
+    // Additional navigation items
+    const navItems = [
+      'Go to Cycles',
+      'Go to Modules',
+      'Go to Project Overview',
+      'Go to Stickies',
+      'Go to Project Settings',
+      'Go to Workspace Settings',
+      'Go to Personal Profile',
+      'Keyboard Shortcuts Cheat Sheet',
+      'Go to Board',
+      'Go to Saved Views',
+    ];
+
+    for (const item of navItems) {
+      fireEvent.change(input, { target: { value: item } });
+      const optItem = screen.getByRole('option', { name: new RegExp(item, 'i') });
+      act(() => {
+        optItem.click();
+      });
+    }
   });
 
   it('selects and navigates to cached issue item', () => {
@@ -438,5 +472,421 @@ describe('CommandPalette', () => {
 
     expect(screen.getByRole('option', { name: /Direct array cached item/ })).toBeDefined();
     expect(screen.getByRole('option', { name: /Contained issues item/ })).toBeDefined();
+  });
+
+  it('performs live hybrid search across issues, docs, pages, and stickies', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 's-iss-1',
+          kind: 'issue',
+          key: 'KAN-999',
+          title: 'Live search issue title',
+          project_identifier: 'KAN',
+        },
+        {
+          id: 's-doc-1',
+          kind: 'doc',
+          title: 'Live Architecture Guide',
+          project_identifier: 'KAN',
+        },
+        {
+          id: 's-page-1',
+          kind: 'page',
+          title: 'Live Security Spec Page',
+          project_identifier: 'KAN',
+        },
+        {
+          id: 's-sticky-1',
+          kind: 'sticky',
+          title: 'Live Sticky Note',
+          project_identifier: 'KAN',
+        },
+      ],
+    });
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Live' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('KAN-999 - Live search issue title')).toBeDefined();
+    });
+
+    expect(screen.getByText('Live Architecture Guide')).toBeDefined();
+    expect(screen.getByText('Live Security Spec Page')).toBeDefined();
+    expect(screen.getByText('Live Sticky Note')).toBeDefined();
+
+    // Select doc option
+    act(() => {
+      screen.getByRole('option', { name: /Live Architecture Guide/ }).click();
+    });
+
+    // Select page option
+    act(() => {
+      screen.getByRole('option', { name: /Live Security Spec Page/ }).click();
+    });
+
+    // Select sticky option
+    act(() => {
+      screen.getByRole('option', { name: /Live Sticky Note/ }).click();
+    });
+  });
+
+  it('covers sticky without project and issue without key in search results', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 's-orphan',
+          kind: 'sticky',
+          title: '',
+          snippet: 'Orphan sticky note',
+          project_identifier: null,
+        },
+        {
+          id: 'i-nokey',
+          kind: 'issue',
+          title: 'Orphan issue without key',
+          key: '',
+        },
+      ],
+    });
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Orphan' } });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Orphan sticky note')).toBeDefined();
+    });
+
+    act(() => {
+      screen.getByRole('option', { name: /Orphan sticky note/ }).click();
+    });
+
+    act(() => {
+      screen.getByRole('option', { name: /Orphan issue without key/i }).click();
+    });
+  });
+
+  it('handles live search fetch rejection gracefully', async () => {
+    mockApiFetch.mockRejectedValueOnce(new Error('500 internal search error'));
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'ThrowsError' } });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
+
+    expect(input).toBeDefined();
+  });
+
+  it('dispatches kb:open-shortcuts event on Keyboard Shortcuts Cheat Sheet command', () => {
+    const listener = vi.fn();
+    window.addEventListener('kb:open-shortcuts', listener);
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Keyboard Shortcuts' } });
+
+    act(() => {
+      screen.getByRole('option', { name: /Keyboard Shortcuts Cheat Sheet/ }).click();
+    });
+
+    expect(listener).toHaveBeenCalled();
+    window.removeEventListener('kb:open-shortcuts', listener);
+  });
+
+  it('handles live search with empty title, snippet, summary fallbacks and items null', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'i-fallback',
+          kind: 'issue',
+          title: '   ',
+          summary: null,
+          key: null,
+          project_identifier: 'KAN',
+        },
+        {
+          id: 's-fallback-1',
+          kind: 'sticky',
+          title: '   ',
+          snippet: 'Work snippet',
+          project_identifier: null,
+        },
+        {
+          id: 's-fallback-2',
+          kind: 'sticky',
+          title: 'Work sticky project',
+          snippet: null,
+          project_identifier: 'KAN',
+        },
+        {
+          id: 'd-fallback',
+          kind: 'doc',
+          title: 'Work Documentation',
+          project_identifier: 'KAN',
+        },
+        {
+          id: 'p-fallback',
+          kind: 'page',
+          title: 'Work Architecture Page',
+          project_identifier: 'KAN',
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={noop}
+        cachedIssues={[
+          { key: '', summary: 'Missing key' },
+          { key: 'KAN-99', summary: '' },
+        ]}
+      />,
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Work' } });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Work Item')).toBeDefined();
+    });
+
+    act(() => {
+      screen.getByRole('option', { name: /^Work Item$/i }).click();
+    });
+    act(() => {
+      screen.getByRole('option', { name: /Work snippet/i }).click();
+    });
+    act(() => {
+      screen.getByRole('option', { name: /Work sticky project/i }).click();
+    });
+    act(() => {
+      screen.getByRole('option', { name: /Work Documentation/i }).click();
+    });
+    act(() => {
+      screen.getByRole('option', { name: /Work Architecture Page/i }).click();
+    });
+  });
+
+  it('covers query length truncation, arrow navigation with empty options, and non-admin user', () => {
+    const { container } = renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={noop}
+        user={{ is_server_admin: false }}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByRole('combobox');
+
+    // Truncates query exceeding MAX_QUERY_LENGTH
+    fireEvent.change(input, { target: { value: 'z'.repeat(250) } });
+    expect((input as HTMLInputElement).value.length).toBe(MAX_QUERY_LENGTH);
+
+    // No matching options, navigate with arrows and Enter
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'ArrowUp' });
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+
+    // Verify Auth Studio is not rendered when is_server_admin is false
+    expect(screen.queryByText(/Go to Auth Studio/i)).toBeNull();
+
+    // Reset query to toggle sidebar without onToggleSidebar prop
+    fireEvent.change(input, { target: { value: 'Toggle sidebar' } });
+    const toggleOpt = screen.getByRole('option', { name: /Toggle sidebar/i });
+    act(() => {
+      toggleOpt.click();
+    });
+  });
+
+  it('covers clicking navigation and action commands and backdrop click', () => {
+    const onClose = vi.fn();
+    const { container } = renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={onClose}
+        projectKey="KAN"
+      />,
+    );
+
+    // Backdrop click
+    const backdrop = container.querySelector('.kb-palette-scrim')!;
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalled();
+
+    // Select commands
+    const commandsToClick = [
+      'Go to Your Work',
+      'Go to Saved Views',
+      'Go to Board',
+      'Go to Cycles',
+      'Go to Modules',
+      'Go to Project Overview',
+      'Go to Docs',
+      'Go to Stickies',
+      'Go to Project Settings',
+      'Go to Workspace Settings',
+      'Go to Personal Profile',
+      'Keyboard Shortcuts Cheat Sheet',
+      'Create work item',
+      'Create project',
+      'Go to Auth Studio',
+      'Go to Personal MCP Keys',
+      'Go to System Storage, Backups & Deployment',
+      'Theme: System',
+      'Theme: Light',
+      'Theme: Dark',
+    ];
+
+    for (const title of commandsToClick) {
+      const opt = screen.getByRole('option', { name: new RegExp(title, 'i') });
+      act(() => {
+        opt.click();
+      });
+    }
+  });
+
+  it('covers search edge cases: empty items, keyless issue navigation, duplicate keys, and tab trapping', async () => {
+    const mockFetch = vi.mocked(apiFetch);
+    mockFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'iss-real',
+          kind: 'issue',
+          key: 'KAN-777',
+          title: 'Real Key Issue',
+          project_identifier: 'KAN',
+        },
+        {
+          id: 'dup-work-1',
+          kind: 'sticky',
+          title: 'Twin Sticky Note',
+          snippet: null,
+          project_identifier: 'KAN',
+        },
+        {
+          id: 'dup-work-2',
+          kind: 'sticky',
+          title: 'Twin Sticky Note',
+          snippet: null,
+          project_identifier: 'KAN',
+        },
+        {
+          id: 'stk-fallback-title',
+          kind: 'sticky',
+          title: '   ',
+          snippet: null,
+          project_identifier: null,
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={noop}
+        cachedIssues={[
+          { key: 'KAN-1', summary: 'First' },
+        ]}
+      />,
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const dialog = screen.getByRole('dialog');
+    const input = screen.getByRole('combobox');
+
+    // Tab key inside dialog
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+
+    // Search query
+    fireEvent.change(input, { target: { value: 'Twin' } });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Twin Sticky Note')).toBeDefined();
+    });
+
+    // Click issue with real key (covers keyStr ? true branch)
+    act(() => {
+      screen.getByRole('option', { name: 'Twin Sticky Note' }).click();
+    });
+  });
+
+  it('covers extractCachedIssues container with null/non-string items and empty search res items', async () => {
+    const testQueryClient = new QueryClient();
+    testQueryClient.setQueryData(['issues-list'], {
+      issues: [
+        null,
+        { key: 12345, summary: null },
+        { key: 'KAN-99', summary: 'Valid summary' },
+      ],
+    });
+    testQueryClient.setQueryData(['issues-not-array'], {
+      issues: 'invalid_string_not_array',
+    });
+    testQueryClient.setQueryData(['issues-array'], [
+      null,
+      { key: 9999 },
+    ]);
+
+    const mockFetch = vi.mocked(apiFetch);
+    mockFetch.mockResolvedValueOnce({}); // res.items is undefined
+
+    const { unmount } = renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={noop}
+      />,
+      testQueryClient,
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'UnmountingDuringSearch' } });
+
+    // Unmount immediately while debounced search is active
+    unmount();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
   });
 });

@@ -171,6 +171,14 @@ describe('Topbar', () => {
 
     const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
     expect(avatarBtn).toBeDefined();
+
+    fireEvent.click(avatarBtn);
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('renders Settings & Admin links and executes Log out action in avatar menu', async () => {
@@ -525,6 +533,127 @@ describe('Topbar', () => {
       const initialEl = screen.getByTestId('topbar-avatar-initial');
       expect(initialEl.textContent).toBe('B');
       expect(screen.queryByTestId('topbar-avatar-img')).toBeNull();
+    });
+
+    it('covers clicking personal, workspace, admin MCP and storage links in avatar menu', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'usr-admin',
+                    display_name: 'Admin User',
+                    is_server_admin: true,
+                    is_workspace_admin: true,
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      act(() => {
+        avatarBtn.click();
+      });
+
+      const personalMcp = screen.getByText('Personal MCP Keys');
+      act(() => {
+        personalMcp.click();
+      });
+
+      act(() => {
+        avatarBtn.click();
+      });
+
+      const wsMcp = screen.getByText('Workspace MCP Keys');
+      act(() => {
+        wsMcp.click();
+      });
+
+      act(() => {
+        avatarBtn.click();
+      });
+
+      const adminMcp = screen.getByText('Admin MCP Keys');
+      act(() => {
+        adminMcp.click();
+      });
+
+      act(() => {
+        avatarBtn.click();
+      });
+
+      const storage = screen.getByText('System Storage, Backups & Deployment');
+      act(() => {
+        storage.click();
+      });
+    });
+
+    it('covers resolveDisplayHandle edge branches and empty user fallbacks', () => {
+      expect(resolveDisplayHandle(null)).toBe('');
+      expect(resolveDisplayHandle(undefined)).toBe('');
+
+      // Handle with raw @@@
+      expect(resolveDisplayHandle({ handle: '@@@' })).toBe('@user');
+
+      // UUID handle falls through to display name
+      expect(
+        resolveDisplayHandle({
+          handle: '01931234-5678-7000-8000-000000000001',
+          display_name: '   ',
+          email: '01931234-5678-7000-8000-000000000001@example.com',
+          id: 'dev-user-id',
+        }),
+      ).toBe('@dev-user-id');
+
+      // UUID id fallback
+      expect(
+        resolveDisplayHandle({
+          id: '01931234-5678-7000-8000-000000000001',
+        }),
+      ).toBe('@user');
+
+      // Empty id fallback
+      expect(
+        resolveDisplayHandle({
+          id: '',
+        }),
+      ).toBe('@user');
+    });
+
+    it('covers avatar initial fallback A when display_name and email are empty', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar
+                  user={{
+                    id: 'u-empty',
+                    email: '',
+                    display_name: '',
+                  }}
+                />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      expect(avatarBtn.textContent).toContain('A');
+
+      // Open menu and test ArrowUp / ArrowDown navigation
+      act(() => {
+        avatarBtn.click();
+      });
+      const menu = screen.getByRole('menu');
+      fireEvent.keyDown(menu, { key: 'ArrowDown' });
+      fireEvent.keyDown(menu, { key: 'ArrowUp' });
     });
   });
 });

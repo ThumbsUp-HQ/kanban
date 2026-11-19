@@ -222,7 +222,7 @@ export async function createProjectLabel(
   const body: Record<string, unknown> = {
     name: payload.name,
   };
-  const colorHex = payload.color_hex || payload.color;
+  const colorHex = payload.color_hex ?? payload.color;
   if (colorHex) {
     body.color_hex = colorHex;
   }

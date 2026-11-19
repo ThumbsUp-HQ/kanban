@@ -15,13 +15,21 @@ import React, {
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeProvider';
+import { apiFetch } from '../api/client';
 import './CommandPalette.css';
 
 export interface CommandOption {
   readonly id: string;
   readonly title: string;
   readonly icon: string;
-  readonly category: 'navigation' | 'actions' | 'theme' | 'issues';
+  readonly category:
+    | 'navigation'
+    | 'actions'
+    | 'theme'
+    | 'issues'
+    | 'docs'
+    | 'pages'
+    | 'stickies';
   readonly onSelect: () => void;
   readonly meta?: string;
 }
@@ -96,10 +104,7 @@ export function CommandPalette({
   // Restore focus on close
   useEffect(() => {
     if (isOpen) {
-      previousFocusRef.current =
-        typeof document !== 'undefined'
-          ? (document.activeElement as HTMLElement)
-          : null;
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
       const timer = setTimeout(() => {
         setQuery('');
         setSelectedIndex(0);
@@ -178,6 +183,15 @@ export function CommandPalette({
   const baseCommands = useMemo<CommandOption[]>(() => {
     return [
       {
+        id: 'nav-your-work',
+        title: 'Go to Your Work',
+        icon: '💼',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/your-work');
+        },
+      },
+      {
         id: 'nav-work-items',
         title: 'Go to Work Items',
         icon: '📋',
@@ -187,12 +201,48 @@ export function CommandPalette({
         },
       },
       {
+        id: 'nav-views',
+        title: 'Go to Saved Views',
+        icon: '👓',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate(`/projects/${projectKey}/views`);
+        },
+      },
+      {
         id: 'nav-board',
         title: 'Go to Board',
         icon: '⚡',
         category: 'navigation',
         onSelect: () => {
           void navigate(`/projects/${projectKey}/issues?layout=board`);
+        },
+      },
+      {
+        id: 'nav-cycles',
+        title: 'Go to Cycles',
+        icon: '🔄',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate(`/projects/${projectKey}/cycles`);
+        },
+      },
+      {
+        id: 'nav-modules',
+        title: 'Go to Modules',
+        icon: '📦',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate(`/projects/${projectKey}/modules`);
+        },
+      },
+      {
+        id: 'nav-overview',
+        title: 'Go to Project Overview',
+        icon: '📌',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate(`/projects/${projectKey}/overview`);
         },
       },
       {
@@ -214,16 +264,52 @@ export function CommandPalette({
         },
       },
       {
+        id: 'nav-project-settings',
+        title: 'Go to Project Settings',
+        icon: '⚙️',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate(`/projects/${projectKey}/settings`);
+        },
+      },
+      {
+        id: 'nav-workspace-settings',
+        title: 'Go to Workspace Settings',
+        icon: '🏢',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/workspaces/settings');
+        },
+      },
+      {
+        id: 'nav-profile-settings',
+        title: 'Go to Personal Profile',
+        icon: '👤',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/settings/profile');
+        },
+      },
+      {
+        id: 'act-shortcuts',
+        title: 'Keyboard Shortcuts Cheat Sheet',
+        icon: '⌨️',
+        category: 'actions',
+        onSelect: () => {
+          window.dispatchEvent(
+            new CustomEvent('kb:open-shortcuts', { bubbles: true }),
+          );
+        },
+      },
+      {
         id: 'act-create-issue',
         title: 'Create work item',
         icon: '➕',
         category: 'actions',
         onSelect: () => {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('kb:create-issue', { bubbles: true }),
-            );
-          }
+          window.dispatchEvent(
+            new CustomEvent('kb:create-issue', { bubbles: true }),
+          );
           void navigate(`/projects/${projectKey}/issues?create=1`);
         },
       },
@@ -233,11 +319,9 @@ export function CommandPalette({
         icon: '📁',
         category: 'actions',
         onSelect: () => {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('kb:open-create-project', { bubbles: true }),
-            );
-          }
+          window.dispatchEvent(
+            new CustomEvent('kb:open-create-project', { bubbles: true }),
+          );
         },
       },
       ...((user ? Boolean(user.is_server_admin) : true)
@@ -325,16 +409,123 @@ export function CommandPalette({
       category: 'issues',
       meta: issue.key,
       onSelect: () => {
-        void navigate(`/projects/${projectKey}/issues/${issue.key}`);
+        void navigate(`/projects/${projectKey}/issues?peek=${issue.key}`);
       },
     }));
   }, [issuesFromCache, navigate, projectKey]);
 
+  // Live hybrid search across Issues, Docs, Pages, and Stickies
+  const [liveSearchResults, setLiveSearchResults] = useState<CommandOption[]>([]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = (await apiFetch(
+            'GET',
+            '/api/v1/search' as never,
+            { query: { q: trimmed, limit: 15 } },
+          )) as {
+            items?: {
+              id: string;
+              kind: 'issue' | 'doc' | 'page' | 'sticky';
+              key?: string | null;
+              title: string;
+              summary?: string | null;
+              snippet?: string | null;
+              project_identifier?: string | null;
+            }[];
+          };
+          if (!active) return;
+          const rawItems = res.items ?? (res as unknown as { results?: typeof res.items }).results;
+          const items = rawItems ?? [];
+          const mapped: CommandOption[] = items.map((item) => {
+            const pKey = item.project_identifier ?? projectKey;
+            if (item.kind === 'issue') {
+              const keyStr = item.key ?? '';
+              const titlePart = item.title.trim() ? item.title : (item.summary ?? '');
+              const displayTitle = keyStr ? `${keyStr} - ${titlePart}` : (titlePart.trim() ? titlePart : 'Work Item');
+              return {
+                id: `search-issue-${item.id}`,
+                title: displayTitle,
+                icon: '🎫',
+                category: 'issues' as const,
+                meta: keyStr,
+                onSelect: () => {
+                  void navigate(keyStr ? `/projects/${pKey}/issues?peek=${keyStr}` : `/projects/${pKey}/issues`);
+                },
+              };
+            }
+            if (item.kind === 'doc') {
+              return {
+                id: `search-doc-${item.id}`,
+                title: item.title,
+                icon: '📄',
+                category: 'docs' as const,
+                meta: `Doc (${pKey})`,
+                onSelect: () => {
+                  void navigate(`/projects/${pKey}/docs`);
+                },
+              };
+            }
+            if (item.kind === 'page') {
+              return {
+                id: `search-page-${item.id}`,
+                title: item.title,
+                icon: '📑',
+                category: 'pages' as const,
+                meta: `Page (${pKey})`,
+                onSelect: () => {
+                  void navigate(`/projects/${pKey}/docs/${item.id}`);
+                },
+              };
+            }
+            const stickyTitle = item.title.trim() ? item.title : (item.snippet ?? 'Sticky Note');
+            return {
+              id: `search-sticky-${item.id}`,
+              title: stickyTitle,
+              icon: '🟨',
+              category: 'stickies' as const,
+              meta: `Sticky (${pKey})`,
+              onSelect: () => {
+                void navigate(item.project_identifier ? `/projects/${pKey}/overview` : '/stickies');
+              },
+            };
+          });
+          setLiveSearchResults(mapped);
+        } catch {
+          if (active) setLiveSearchResults([]);
+        }
+      })();
+    }, 150);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [navigate, projectKey, query]);
+
   // Filtered and scored options
   const filteredOptions = useMemo<CommandOption[]>(() => {
-    const all = [...baseCommands, ...issueCommands];
+    const seen = new Set<string>();
+    const all: CommandOption[] = [];
+
+    for (const opt of [...liveSearchResults, ...baseCommands, ...issueCommands]) {
+      const key = `${opt.category}:${opt.title}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        all.push(opt);
+      }
+    }
+
     if (!query.trim()) {
-      return all;
+      return baseCommands;
     }
     const scored: { option: CommandOption; score: number }[] = [];
     for (const opt of all) {
@@ -348,7 +539,7 @@ export function CommandPalette({
     }
     scored.sort((a, b) => b.score - a.score);
     return scored.map((item) => item.option);
-  }, [baseCommands, issueCommands, query]);
+  }, [baseCommands, issueCommands, liveSearchResults, query]);
 
   // Bound selectedIndex
   const selectedIndex =
@@ -417,6 +608,7 @@ export function CommandPalette({
         aria-modal="true"
         aria-label="Command palette"
         className="kb-palette-dialog"
+        data-testid="command-palette-modal"
         onKeyDown={handleKeyDown}
       >
         <div className="kb-palette-input-wrapper">
@@ -431,6 +623,7 @@ export function CommandPalette({
             aria-controls="command-palette-list"
             aria-autocomplete="list"
             className="kb-palette-input"
+            data-testid="command-palette-input"
             placeholder="Type a command or search issues..."
             value={query}
             onChange={handleInputChange}

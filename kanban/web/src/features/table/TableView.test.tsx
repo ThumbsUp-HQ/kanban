@@ -292,4 +292,111 @@ describe('TableView', () => {
     expect(screen.queryByRole('columnheader', { name: /Modules/i })).toBeNull();
     getItemSpy.mockRestore();
   });
+
+  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', async () => {
+    const onUpdateIssue = vi.fn();
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    const testIssues: IssueItem[] = [
+      {
+        id: 'edit-1',
+        key: 'KAN-99',
+        summary: 'Inline editable task',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        assignees: [
+          {
+            id: 'asg-1',
+            kind: 'principal',
+            principal: { id: 'u1', handle: 'alice', display_name: 'Alice', type: 'USER' },
+          },
+        ],
+        start_date: '2026-11-01',
+        due_date: '2026-11-15',
+        cycle_id: 'cycle-1',
+        cycle: { id: 'cycle-1', name: 'Cycle 1' },
+      },
+    ];
+
+    const { rerender } = render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        modulesEnabled={true}
+        capabilities={['EDIT']}
+        onUpdateIssue={onUpdateIssue}
+      />
+    );
+
+    // 1. State inline edit
+    const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-99' });
+    fireEvent.change(stateSelect, { target: { value: 'In Progress' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      state: expect.objectContaining({ name: 'In Progress', group: 'started' }),
+    }));
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
+
+    // 2. Priority inline edit
+    const prioSelect = screen.getByRole('combobox', { name: 'Edit priority for KAN-99' });
+    fireEvent.change(prioSelect, { target: { value: 'urgent' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      priority: expect.objectContaining({ slug: 'urgent', label: 'Urgent' }),
+    }));
+
+    // 3. Due date inline edit
+    const dueDateInput = screen.getByLabelText('Edit due date for KAN-99');
+    fireEvent.change(dueDateInput, { target: { value: '2026-12-01' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      due_date: '2026-12-01',
+    }));
+
+    // 4. Start date inline edit (render with project key that has start_date configured)
+    localStorage.setItem('kb.tableCols.KAN_START', JSON.stringify(['key', 'summary', 'state', 'priority', 'start_date', 'due_date', 'cycle', 'assignees']));
+    const { unmount } = render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN_START"
+        modulesEnabled={true}
+        capabilities={['EDIT']}
+        onUpdateIssue={onUpdateIssue}
+      />
+    );
+    const startDateInput = screen.getByLabelText('Edit start date for KAN-99');
+    fireEvent.change(startDateInput, { target: { value: '2026-11-05' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      start_date: '2026-11-05',
+    }));
+    unmount();
+
+    // 5. Cycle inline edit
+    const cycleSelect = screen.getByRole('combobox', { name: 'Edit cycle for KAN-99' });
+    fireEvent.change(cycleSelect, { target: { value: 'cycle-2' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      cycle_id: 'cycle-2',
+    }));
+
+    // 6. Assignee toggle
+    const assignBtn = screen.getByRole('button', { name: 'Assign issue KAN-99' });
+    fireEvent.click(assignBtn);
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]),
+    }));
+
+    // 7. VIEWER capability gates out inline editing
+    rerender(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        modulesEnabled={true}
+        capabilities={['VIEWER']}
+        onUpdateIssue={onUpdateIssue}
+      />
+    );
+    expect(screen.queryByRole('combobox', { name: 'Edit state for KAN-99' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Edit priority for KAN-99' })).toBeNull();
+    expect(screen.queryByLabelText('Edit due date for KAN-99')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Assign issue KAN-99' })).toBeNull();
+
+    dispatchSpy.mockRestore();
+  });
 });

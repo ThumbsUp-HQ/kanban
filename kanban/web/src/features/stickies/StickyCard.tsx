@@ -165,7 +165,7 @@ export function StickyCard({
 
     if (nextIndex !== currentIndex) {
       const nextColor = STICKY_COLOR_TOKENS[nextIndex];
-      if (typeof nextColor === 'string') {
+      if (nextColor) {
         void handleColorSelect(nextColor);
       }
     }

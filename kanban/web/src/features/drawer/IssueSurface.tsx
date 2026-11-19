@@ -460,7 +460,7 @@ function IssueSurfaceContent({
           (err.status === 412 || err.status === 428)
         ) {
           setConflictError({
-            status: err.status as 412 | 428,
+            status: err.status,
             message:
               err.status === 412
                 ? 'This work item was updated in another session (412 Precondition Failed). Your draft has been preserved.'
@@ -516,26 +516,28 @@ function IssueSurfaceContent({
               <button
                 type="button"
                 className="conflict-banner__overwrite-btn"
-                onClick={async () => {
-                  const fresh = await refetch();
-                  if (fresh.data?.etag) {
-                    try {
-                      const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
-                        params: { issue_key: currentIssue.key },
-                        body: { description_markdown: descriptionDraft },
-                        ifMatch: fresh.data.etag,
-                      })) as unknown as IssueDetail;
-                      setConflictError(null);
-                      setEditingIssueKey(null);
-                      queryClient.setQueryData<IssueDetail>(
-                        qk.issue(currentIssue.key),
-                        normalizeIssueDetail(saved, projectKey),
-                      );
-                      window.dispatchEvent(new CustomEvent('kb:issue-updated'));
-                    } catch {
-                      // Stay in conflict state if overwrite fails
+                onClick={() => {
+                  void (async () => {
+                    const fresh = await refetch();
+                    if (fresh.data?.etag) {
+                      try {
+                        const saved = (await apiClient.patch('/api/v1/issues/{issue_key}', {
+                          params: { issue_key: currentIssue.key },
+                          body: { description_markdown: descriptionDraft },
+                          ifMatch: fresh.data.etag,
+                        })) as unknown as IssueDetail;
+                        setConflictError(null);
+                        setEditingIssueKey(null);
+                        queryClient.setQueryData<IssueDetail>(
+                          qk.issue(currentIssue.key),
+                          normalizeIssueDetail(saved, projectKey),
+                        );
+                        window.dispatchEvent(new CustomEvent('kb:issue-updated'));
+                      } catch {
+                        // Stay in conflict state if overwrite fails
+                      }
                     }
-                  }
+                  })();
                 }}
               >
                 Overwrite

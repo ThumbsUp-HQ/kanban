@@ -56,7 +56,7 @@ export function PropertiesRail({
   const projectKey: string =
     rawProject && rawProject !== 'undefined'
       ? rawProject
-      : (currentIssue.key && currentIssue.key.includes('-') ? (currentIssue.key.split('-')[0] ?? '') : '');
+      : (currentIssue.key.includes('-') ? (currentIssue.key.split('-')[0] ?? '') : '');
   const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
   const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
   const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');

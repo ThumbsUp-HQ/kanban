@@ -431,7 +431,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
     fireEvent.change(screen.getByLabelText(/summary/i), {
       target: { value: 'In-flight locking test' },
     });
-    const createBtn = screen.getByRole('button', { name: /^create$/i }) as HTMLButtonElement;
+    const createBtn = screen.getByRole<HTMLButtonElement>('button', { name: /^create$/i });
     expect(createBtn.disabled).toBe(false);
 
     fireEvent.click(createBtn);
@@ -472,7 +472,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
 
     // Dialog stays open and typed values are preserved
     expect(screen.getByRole('dialog')).toBeDefined();
-    expect((screen.getByLabelText(/summary/i) as HTMLInputElement).value).toBe('Offline task draft');
-    expect((screen.getByLabelText(/description/i) as HTMLTextAreaElement).value).toBe('Important draft details to preserve');
+    expect(screen.getByLabelText<HTMLInputElement>(/summary/i).value).toBe('Offline task draft');
+    expect(screen.getByLabelText<HTMLTextAreaElement>(/description/i).value).toBe('Important draft details to preserve');
   });
 });

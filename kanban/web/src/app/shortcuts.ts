@@ -29,10 +29,17 @@ export function isEditableElement(element: Element | null): boolean {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
     return true;
   }
-  return (
+  if (
     element.isContentEditable ||
     element.contentEditable === 'true' ||
     element.getAttribute('contenteditable') === 'true'
+  ) {
+    return true;
+  }
+  return Boolean(
+    element.closest(
+      'input, textarea, select, [contenteditable="true"], .ProseMirror',
+    ),
   );
 }
 

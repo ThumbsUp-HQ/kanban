@@ -10,6 +10,7 @@ import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
 import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
 import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
+import { SaveViewModal } from './SaveViewModal';
 import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
 import { useIssueKeyboardMap } from './useIssueKeyboardMap';
 import {
@@ -33,6 +34,7 @@ export {
   SwimlaneBoardGrid,
   BulkActionBar,
   QuickCreateIssueModal,
+  SaveViewModal,
   QuickFieldPopover,
   useIssueKeyboardMap,
 };
@@ -91,6 +93,7 @@ export interface ViewComponentProps {
   isLoading?: boolean | undefined;
   focusedKey?: string | null | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
+  capabilities?: string[] | undefined;
 }
 
 export type ViewComponent = ComponentType<ViewComponentProps>;
@@ -278,6 +281,7 @@ export function IssuesWorkspaceRoute({
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
@@ -451,7 +455,7 @@ export function IssuesWorkspaceRoute({
         })
       );
     },
-    isPopoverOrModalOpen: isCreateModalOpen || popoverState.isOpen,
+    isPopoverOrModalOpen: isCreateModalOpen || isSaveViewModalOpen || popoverState.isOpen,
   });
 
   const handleToggleSelect = (key: string, selected: boolean) => {
@@ -549,10 +553,15 @@ export function IssuesWorkspaceRoute({
         void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
       } else if (field === 'state') {
         const sId = String(value);
+        const stateObj = projectStates.find((ps) => ps.id === sId);
+        const stateNameLower = (stateObj?.name ?? sId).toLowerCase();
+        const isProgress = stateNameLower.includes('progress');
+        const isTodo = stateNameLower.includes('todo');
+        const isDone = stateNameLower.includes('done');
         const desired: StateSummary = {
           id: sId,
-          name: sId.includes('progress') ? 'In Progress' : sId.includes('todo') ? 'Todo' : sId.includes('done') ? 'Done' : 'Backlog',
-          group: sId.includes('progress') ? 'started' : sId.includes('todo') ? 'unstarted' : sId.includes('done') ? 'completed' : 'backlog',
+          name: isProgress ? 'In Progress' : isTodo ? 'Todo' : isDone ? 'Done' : 'Backlog',
+          group: isProgress ? 'started' : isTodo ? 'unstarted' : isDone ? 'completed' : 'backlog',
         };
         const resolvedUuid = resolveStateUuid(desired, projectStates);
         if (resolvedUuid) {
@@ -597,7 +606,7 @@ export function IssuesWorkspaceRoute({
   }, [projectStates]);
 
   const boardIssues: BoardIssue[] = useMemo(() => {
-    const fallbackStateId = boardStates[0]?.id ?? 'state-todo';
+    const fallbackStateId = boardStates[0]!.id;
     return filteredIssues.map((issue, idx) => {
       const explicitStateId = (issue as { state_id?: string }).state_id ?? issue.state.id;
       const exactMatch = boardStates.find((s) => s.id === explicitStateId);
@@ -679,6 +688,7 @@ export function IssuesWorkspaceRoute({
         onToggleFilterOpen={setIsFilterOpen}
         projectKey={projectKey}
         issues={issues}
+        onSaveView={() => { setIsSaveViewModalOpen(true); }}
       />
 
       {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
@@ -745,6 +755,7 @@ export function IssuesWorkspaceRoute({
             setIsCreateModalOpen(true);
           } : undefined}
           focusedKey={focusedKey}
+          capabilities={effectiveCaps}
         />
       )}
 
@@ -843,6 +854,20 @@ export function IssuesWorkspaceRoute({
         onSelect={handleFieldSelect}
         modulesEnabled={modulesEnabled}
         states={boardStates}
+      />
+
+      {/* 6. Save View Modal */}
+      <SaveViewModal
+        isOpen={isSaveViewModalOpen}
+        onClose={() => { setIsSaveViewModalOpen(false); }}
+        projectKey={projectKey}
+        layout={layout}
+        groupBy={groupBy}
+        subGroupBy={subGroupBy}
+        activeFilters={activeFilters}
+        onSaved={(_savedId) => {
+          setIsSaveViewModalOpen(false);
+        }}
       />
     </div>
   </QueryClientProvider>

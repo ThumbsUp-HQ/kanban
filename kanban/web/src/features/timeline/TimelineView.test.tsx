@@ -144,7 +144,7 @@ describe('TimelineView', () => {
 
     const prevBtn = screen.getByRole('button', { name: 'Previous 2 weeks' });
     const nextBtn = screen.getByRole('button', { name: 'Next 2 weeks' });
-    const todayBtn = screen.getByRole('button', { name: 'Jump to today' });
+    const todayBtn = screen.getByRole('button', { name: 'Today' });
 
     fireEvent.click(prevBtn);
     fireEvent.click(nextBtn);
@@ -403,7 +403,7 @@ describe('TimelineView', () => {
       wrapper.scrollTo = scrollToSpy;
     }
 
-    const todayBtn = screen.getByRole('button', { name: 'Scroll to today' });
+    const todayBtn = screen.getByRole('button', { name: 'Today' });
     fireEvent.click(todayBtn);
 
     expect(scrollToSpy).toHaveBeenCalled();
@@ -962,7 +962,7 @@ describe('TimelineView', () => {
       />
     );
 
-    const todayBtn = getByRole('button', { name: 'Jump to today' });
+    const todayBtn = getByRole('button', { name: 'Today' });
     fireEvent.click(todayBtn);
   });
 

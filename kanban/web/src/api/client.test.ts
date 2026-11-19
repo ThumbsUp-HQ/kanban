@@ -3,6 +3,7 @@ import {
   ApiClientError,
   REQUEST_TIMEOUT_MS,
   apiFetch,
+  bootstrapCsrfToken,
   getCsrfToken,
   setCsrfToken,
   apiClient,
@@ -356,5 +357,39 @@ describe('CSRF bootstrap and retry (KANBA-230)', () => {
     expect(await apiClient.post('/api/v1/x' as never)).toEqual({ ok: true });
     expect(await apiClient.put('/api/v1/x' as never)).toEqual({ ok: true });
     expect(await apiClient.delete('/api/v1/x' as never)).toEqual({ ok: true });
+
+    // 4. bootstrapCsrfToken early return when token cached and force=false
+    expect(await bootstrapCsrfToken(undefined, false)).toBe('api-client-token');
+
+    // 5. CSRF retry where second attempt fails with non-ok status
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ code: 'CSRF_REJECTED' }, { status: 403 }, 'application/problem+json'),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ authenticated: false, csrf_token: 'fresh-retry-token' }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ detail: 'Retry server crash' }, { status: 500 }, 'application/problem+json'),
+      );
+    await expect(
+      apiFetch('POST', '/api/v1/auth/local/login' as never, { body: { username: 'a', password: 'b' } }),
+    ).rejects.toMatchObject({ status: 500 });
+
+    // 6. setCsrfToken when protocol is https: or empty
+    const origLocation = window.location;
+    try {
+      // @ts-expect-error test location mocking
+      delete window.location;
+      // @ts-expect-error test location mocking
+      window.location = { protocol: 'https:' };
+      setCsrfToken('https-token');
+      expect(getCsrfToken()).toBe('https-token');
+      setCsrfToken(null);
+      expect(getCsrfToken()).toBeNull();
+    } finally {
+      // @ts-expect-error test location restoring
+      window.location = origLocation;
+    }
   });
 });

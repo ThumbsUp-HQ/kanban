@@ -15,6 +15,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
+import { ShortcutsCheatSheetModal } from './ShortcutsCheatSheetModal';
 import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
 import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
@@ -147,11 +148,12 @@ export function AppShell({
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  // Register Cmd/Ctrl+K shortcut (allowed even inside inputs)
+  // Register global shortcuts: Mod+K, [, C, ?
   useEffect(() => {
-    const unregister = registerShortcut(
+    const unregisterModK = registerShortcut(
       'Mod+K',
       (e) => {
         e.preventDefault();
@@ -159,7 +161,48 @@ export function AppShell({
       },
       { allowInInputs: true },
     );
-    return unregister;
+
+    const unregisterSidebar = registerShortcut(
+      '[',
+      (e) => {
+        e.preventDefault();
+        setMobileSidebarOpen((prev) => !prev);
+      },
+      { allowInInputs: false },
+    );
+
+    const unregisterCreate = registerShortcut(
+      'C',
+      (e) => {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('kb:create-issue', { bubbles: true }),
+        );
+      },
+      { allowInInputs: false },
+    );
+
+    const unregisterCheat = registerShortcut(
+      '?',
+      (e) => {
+        e.preventDefault();
+        setShortcutsModalOpen(true);
+      },
+      { allowInInputs: false },
+    );
+
+    const handleOpenShortcuts = (): void => {
+      setShortcutsModalOpen(true);
+    };
+    window.addEventListener('kb:open-shortcuts', handleOpenShortcuts);
+
+    return () => {
+      unregisterModK();
+      unregisterSidebar();
+      unregisterCreate();
+      unregisterCheat();
+      window.removeEventListener('kb:open-shortcuts', handleOpenShortcuts);
+    };
   }, []);
 
   const toggleMobileSidebar = useCallback(() => {
@@ -245,6 +288,12 @@ export function AppShell({
           projectKey={projectKey}
           cachedIssues={cachedIssues}
           user={currentUser}
+        />
+
+        {/* Global Keyboard Shortcuts Cheat Sheet Modal */}
+        <ShortcutsCheatSheetModal
+          isOpen={shortcutsModalOpen}
+          onClose={() => { setShortcutsModalOpen(false); }}
         />
       </div>
     </ShellPanelsProvider>
