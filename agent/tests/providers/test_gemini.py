@@ -903,3 +903,43 @@ async def test_stream_and_structured_text_fallback_without_content_parts() -> No
     )
     with pytest.raises(ProviderSchemaError):
         await provider_struct.generate_structured(req_struct)
+
+
+def test_gemini_custom_base_url_validation() -> None:
+    """Verify GeminiSettings custom base_url validation rules."""
+    # 1. Valid custom base_url
+    settings = GeminiSettings(
+        mode="ai_studio_paid",
+        api_key=SecretStr("test-key"),
+        base_url="https://generativelanguage.googleapis.com",
+        model_allowlist=("gemini-2.5-flash",),
+    )
+    assert settings.base_url is not None
+    assert str(settings.base_url).rstrip("/") == "https://generativelanguage.googleapis.com"
+
+    # 2. Userinfo rejected
+    with pytest.raises(ValidationError, match="base_url must not contain userinfo"):
+        GeminiSettings(
+            mode="ai_studio_paid",
+            api_key=SecretStr("test-key"),
+            base_url="https://user:pass@generativelanguage.googleapis.com",
+            model_allowlist=("gemini-2.5-flash",),
+        )
+
+    # 3. Query rejected
+    with pytest.raises(ValidationError, match="base_url must not contain query parameters"):
+        GeminiSettings(
+            mode="ai_studio_paid",
+            api_key=SecretStr("test-key"),
+            base_url="https://generativelanguage.googleapis.com?key=123",
+            model_allowlist=("gemini-2.5-flash",),
+        )
+
+    # 4. Fragment rejected
+    with pytest.raises(ValidationError, match="base_url must not contain fragment"):
+        GeminiSettings(
+            mode="ai_studio_paid",
+            api_key=SecretStr("test-key"),
+            base_url="https://generativelanguage.googleapis.com#frag",
+            model_allowlist=("gemini-2.5-flash",),
+        )

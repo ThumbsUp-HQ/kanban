@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import json
 import time
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeVar
@@ -32,6 +33,11 @@ from agent.providers.errors import (
     ProviderTimeout,
     ProviderUnavailable,
 )
+from kanban.ai_config.net_guard import (
+    is_hard_denied,
+    is_local_or_private_ip,
+    is_private_lan_hostname,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -50,12 +56,47 @@ _HTTP_TOO_MANY_REQUESTS: int = 429
 _HTTP_SERVER_ERROR_MIN: int = 500
 
 
+def _validate_openai_base_url(url: HttpUrl) -> bool:
+    """Validate OpenAI base_url and return whether it targets a local/private endpoint."""
+    if url.username or url.password:
+        msg = "base_url must not contain userinfo"
+        raise ValueError(msg)
+    if url.query:
+        msg = "base_url must not contain query parameters"
+        raise ValueError(msg)
+    if url.fragment:
+        msg = "base_url must not contain fragment"
+        raise ValueError(msg)
+
+    host = (url.host or "").strip("[]").lower()
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+
+    if ip is not None:
+        if is_hard_denied(ip):
+            msg = f"base_url must not target link-local, multicast, or metadata address '{host}'"
+            raise ValueError(msg)
+        if url.scheme != "https" and not is_local_or_private_ip(ip):
+            msg = (
+                "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1) or private LAN"
+            )
+            raise ValueError(msg)
+        return is_local_or_private_ip(ip)
+
+    if url.scheme != "https" and not is_private_lan_hostname(host):
+        msg = "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1) or private LAN"
+        raise ValueError(msg)
+    return is_private_lan_hostname(host)
+
+
 class OpenAISettings(BaseModel):
     """Configuration settings for OpenAI provider with residency and URL controls."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    api_key: SecretStr
+    api_key: SecretStr | None = None
     base_url: HttpUrl | None = None
     base_url_kind: Literal["openai", "azure", "vllm", "litellm"] = "openai"
     model_allowlist: tuple[str, ...] = Field(min_length=1)
@@ -66,22 +107,14 @@ class OpenAISettings(BaseModel):
     @model_validator(mode="after")
     def validate_settings(self) -> OpenAISettings:
         """Validate base URL scheme, host, and absence of userinfo/query/fragment."""
+        is_local = False
         if self.base_url is not None:
-            url = self.base_url
-            if url.username or url.password:
-                msg = "base_url must not contain userinfo"
-                raise ValueError(msg)
-            if url.query:
-                msg = "base_url must not contain query parameters"
-                raise ValueError(msg)
-            if url.fragment:
-                msg = "base_url must not contain fragment"
-                raise ValueError(msg)
+            is_local = _validate_openai_base_url(self.base_url)
 
-            host = (url.host or "").strip("[]")
-            if url.scheme != "https" and host not in _LOOPBACK_HOSTS:
-                msg = "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1)"
-                raise ValueError(msg)
+        if not is_local and (self.api_key is None or not self.api_key.get_secret_value().strip()):
+            msg = "api_key is required for cloud OpenAI endpoints"
+            raise ValueError(msg)
+
         return self
 
 
@@ -141,8 +174,13 @@ class OpenAIProvider(LLMProvider):
             trust_env=False,
             follow_redirects=False,
         )
+        api_key_val = (
+            settings.api_key.get_secret_value()
+            if settings.api_key is not None and settings.api_key.get_secret_value()
+            else "none"
+        )
         self._client: AsyncOpenAI = AsyncOpenAI(
-            api_key=settings.api_key.get_secret_value(),
+            api_key=api_key_val,
             base_url=base_url_str,
             organization=settings.organization,
             timeout=settings.timeout_s,

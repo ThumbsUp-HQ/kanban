@@ -239,15 +239,15 @@ async def test_case_10_stream_error_after_first_chunk_propagates_without_failove
 
 
 @pytest.mark.asyncio
-async def test_case_12_max_3_attempts_with_5_eligible_failing_candidates() -> None:
-    """Case 12: Max 3 attempts with 5 eligible failing candidates."""
+async def test_case_12_max_8_attempts_with_10_eligible_failing_candidates() -> None:
+    """Case 12: Max 8 attempts with 10 eligible failing candidates (KAN-21)."""
     providers = [
         MockStreamProvider(
             residency_tier="local",
             kind="ollama",
             fail_with=ProviderHTTPError("503", status=503),
         )
-        for _ in range(5)
+        for _ in range(10)
     ]
     candidates = [RouteCandidate(uuid4(), prov, "local", idx) for idx, prov in enumerate(providers)]
 
@@ -259,8 +259,65 @@ async def test_case_12_max_3_attempts_with_5_eligible_failing_candidates() -> No
             pass
 
     assert exc_info.value.code == "NO_PROVIDER_IN_RESIDENCY_TIER"
-    assert [p.call_count for p in providers] == [1, 1, 1, 0, 0]
-    assert len(router.last_route_trace) == 3
+    assert [p.call_count for p in providers] == [1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
+    assert len(router.last_route_trace) == 8
+
+
+@pytest.mark.asyncio
+async def test_cross_tier_failover_5_providers() -> None:
+    """Verify 5+ cross-tier failover evaluates providers across residency tiers."""
+    err_503 = ProviderHTTPError("503", status=503)
+    p1 = MockStreamProvider(residency_tier="tier-1", kind="ollama", fail_with=err_503)
+    p2 = MockStreamProvider(residency_tier="tier-2", kind="openai", fail_with=err_503)
+    p3 = MockStreamProvider(residency_tier="tier-3", kind="gemini", fail_with=err_503)
+    p4 = MockStreamProvider(residency_tier="tier-4", kind="fixture", fail_with=err_503)
+    p5 = MockStreamProvider(residency_tier="tier-5", kind="ollama")
+
+    candidates = [
+        RouteCandidate(uuid4(), p1, "tier-1", 10),
+        RouteCandidate(uuid4(), p2, "tier-2", 20),
+        RouteCandidate(uuid4(), p3, "tier-3", 30),
+        RouteCandidate(uuid4(), p4, "tier-4", 40),
+        RouteCandidate(uuid4(), p5, "tier-5", 50),
+    ]
+
+    router = ProviderRouter(uuid4(), candidates, air_gap_mode=False)
+    req = CompletionRequest(model="test-model", prompt="hello")
+
+    chunks = [c.delta async for c in router.stream_complete(req)]
+    assert "".join(chunks) == "Hello World"
+    assert p1.call_count == 1
+    assert p2.call_count == 1
+    assert p3.call_count == 1
+    assert p4.call_count == 1
+    assert p5.call_count == 1
+    assert len(router.last_route_trace) == 5
+
+
+@pytest.mark.asyncio
+async def test_required_residency_tier_isolates_failover() -> None:
+    """Verify required_residency_tier limits candidate selection strictly to specified tier."""
+    err_503 = ProviderHTTPError("503", status=503)
+    p1 = MockStreamProvider(residency_tier="us-east", kind="openai", fail_with=err_503)
+    p2 = MockStreamProvider(residency_tier="eu-west", kind="openai")
+    p3 = MockStreamProvider(residency_tier="us-east", kind="openai")
+
+    candidates = [
+        RouteCandidate(uuid4(), p1, "us-east", 10),
+        RouteCandidate(uuid4(), p2, "eu-west", 20),
+        RouteCandidate(uuid4(), p3, "us-east", 30),
+    ]
+
+    router = ProviderRouter(
+        uuid4(), candidates, air_gap_mode=False, required_residency_tier="us-east"
+    )
+    req = CompletionRequest(model="test-model", prompt="hello")
+
+    chunks = [c.delta async for c in router.stream_complete(req)]
+    assert "".join(chunks) == "Hello World"
+    assert p1.call_count == 1
+    assert p2.call_count == 0  # eu-west was bypassed
+    assert p3.call_count == 1
 
 
 @pytest.mark.asyncio

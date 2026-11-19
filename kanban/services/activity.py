@@ -193,6 +193,7 @@ class ActivityEventType(StrEnum):
     AI_PROVIDER_CONFIG_CREATED = "AI_PROVIDER_CONFIG_CREATED"
     AI_PROVIDER_CONFIG_UPDATED = "AI_PROVIDER_CONFIG_UPDATED"
     AI_PROVIDER_CONFIG_DISABLED = "AI_PROVIDER_CONFIG_DISABLED"
+    AI_PROVIDER_REORDERED = "AI_PROVIDER_REORDERED"
     AI_BUDGET_SET = "AI_BUDGET_SET"
     PRINCIPAL_PROVISIONED = "PRINCIPAL_PROVISIONED"
     PRINCIPAL_UPDATED = "PRINCIPAL_UPDATED"
@@ -346,6 +347,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.AI_PROVIDER_CONFIG_CREATED: ActivityCategory.SYSTEM,
         ActivityEventType.AI_PROVIDER_CONFIG_UPDATED: ActivityCategory.SYSTEM,
         ActivityEventType.AI_PROVIDER_CONFIG_DISABLED: ActivityCategory.SYSTEM,
+        ActivityEventType.AI_PROVIDER_REORDERED: ActivityCategory.SYSTEM,
         ActivityEventType.AI_BUDGET_SET: ActivityCategory.SYSTEM,
         ActivityEventType.PRINCIPAL_PROVISIONED: ActivityCategory.SYSTEM,
         ActivityEventType.PRINCIPAL_UPDATED: ActivityCategory.SYSTEM,

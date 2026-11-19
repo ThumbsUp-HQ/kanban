@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 import httpx
 from google import genai
 from google.genai import errors, types
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, SecretStr, model_validator
 
 from agent.providers.base import (
     CompletionRequest,
@@ -83,6 +83,7 @@ class GeminiSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     mode: Literal["vertex", "ai_studio_paid"]
+    base_url: HttpUrl | None = None
     api_key: SecretStr | None = None
     vertex_project: str | None = None
     vertex_location: str | None = None
@@ -136,6 +137,17 @@ class GeminiSettings(BaseModel):
             msg = "model_allowlist must contain at least one model"
             raise ValueError(msg)
 
+        if self.base_url is not None:
+            if self.base_url.username or self.base_url.password:
+                msg = "base_url must not contain userinfo"
+                raise ValueError(msg)
+            if self.base_url.query:
+                msg = "base_url must not contain query parameters"
+                raise ValueError(msg)
+            if self.base_url.fragment:
+                msg = "base_url must not contain fragment"
+                raise ValueError(msg)
+
         if self.mode == "ai_studio_paid":
             self._validate_ai_studio()
         else:
@@ -164,6 +176,7 @@ class GeminiProvider(LLMProvider):
             async_client_args["transport"] = transport
 
         http_options = types.HttpOptions(
+            base_url=str(settings.base_url) if settings.base_url is not None else None,
             timeout=int(settings.timeout_s * 1000),
             async_client_args=async_client_args,
         )

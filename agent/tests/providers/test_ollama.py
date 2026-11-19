@@ -741,3 +741,55 @@ class TestRegistryBuildProvider:
         """Unknown provider kind raises ValueError."""
         with pytest.raises(ValueError, match="Unknown provider kind 'custom'"):
             build_provider("custom", {})
+
+
+def test_ollama_auto_populate_default_cidrs() -> None:
+    """Verify OllamaSettings auto-populates allowed_ollama_cidrs from base_url when omitted."""
+    # 1. Loopback IPv4
+    s_loop = OllamaSettings.model_validate(
+        {"base_url": "http://127.0.0.1:11434", "model_allowlist": ["llama3"]}
+    )
+    assert ipaddress.ip_network("127.0.0.0/8") in s_loop.allowed_ollama_cidrs
+
+    # 2. Private LAN IPv4
+    s_lan = OllamaSettings.model_validate(
+        {"base_url": "http://192.168.1.50:11434", "model_allowlist": ["llama3"]}
+    )
+    assert ipaddress.ip_network("192.168.1.50/32") in s_lan.allowed_ollama_cidrs
+
+    # 3. IPv6 address
+    s_v6 = OllamaSettings.model_validate(
+        {"base_url": "http://[fc00::1]:11434", "model_allowlist": ["llama3"]}
+    )
+    assert ipaddress.ip_network("fc00::1/128") in s_v6.allowed_ollama_cidrs
+
+    # 4. Hostname
+    s_host = OllamaSettings.model_validate(
+        {
+            "base_url": "http://ollama.local:11434",
+            "allowed_ollama_cidrs": ["10.0.0.0/8"],
+            "model_allowlist": ["llama3"],
+        }
+    )
+    assert ipaddress.ip_network("10.0.0.0/8") in s_host.allowed_ollama_cidrs
+
+    # 5. Hostname without allowed_ollama_cidrs (hits ValueError pass in populate_default_cidrs)
+    s_no_cidrs = OllamaSettings.model_validate(
+        {"base_url": "http://ollama.local:11434", "model_allowlist": ["llama3"]}
+    )
+    assert len(s_no_cidrs.allowed_ollama_cidrs) == 0
+
+    # 6. Explicit CIDRs missing host IP are augmented in validate_settings
+    s_extra = OllamaSettings(
+        base_url="http://192.168.1.10:11434",
+        allowed_ollama_cidrs=("10.0.0.0/8",),
+        model_allowlist=("llama3",),
+    )
+    assert ipaddress.ip_network("192.168.1.10/32") in s_extra.allowed_ollama_cidrs
+
+    s_extra_v6 = OllamaSettings(
+        base_url="http://[fc00::2]:11434",
+        allowed_ollama_cidrs=("10.0.0.0/8",),
+        model_allowlist=("llama3",),
+    )
+    assert ipaddress.ip_network("fc00::2/128") in s_extra_v6.allowed_ollama_cidrs

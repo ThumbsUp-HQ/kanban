@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from agent.providers.errors import EgressDenied
+from kanban.ai_config.net_guard import is_local_base_url
 
 __all__ = [
     "ALLOWED_AIR_GAP_KINDS",
@@ -30,14 +31,20 @@ class AirGapGuard:
         endpoints is forbidden and raises EgressDenied(code='AIR_GAP_EGRESS_DENIED')
         before DNS resolution or socket allocation.
         """
-        del settings  # Reserved for provider-specific setting audits
         # Unknown/None is treated as True (fail-closed)
         is_air_gapped = air_gap_mode is not False
         normalized_kind = provider_kind.strip().lower()
 
-        if is_air_gapped and normalized_kind not in ALLOWED_AIR_GAP_KINDS:
-            msg = (
-                f"Air-gap mode is active: outbound cloud egress to provider '{provider_kind}' "
-                f"is strictly prohibited"
-            )
-            raise EgressDenied(msg, code="AIR_GAP_EGRESS_DENIED")
+        if is_air_gapped:
+            if normalized_kind == "openai" and settings is not None:
+                base_url = getattr(settings, "base_url", None)
+                if base_url is None and isinstance(settings, dict):
+                    base_url = settings.get("base_url")
+                if base_url is not None and is_local_base_url(str(base_url)):
+                    return
+            if normalized_kind not in ALLOWED_AIR_GAP_KINDS:
+                msg = (
+                    f"Air-gap mode is active: outbound cloud egress to provider '{provider_kind}' "
+                    f"is strictly prohibited"
+                )
+                raise EgressDenied(msg, code="AIR_GAP_EGRESS_DENIED")

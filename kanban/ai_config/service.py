@@ -6,14 +6,24 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import time
 import urllib.parse
 import uuid
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any, Final
 
+import httpx
 from sqlalchemy import delete, select, text
 
 from database.models.ai import AIProviderConfig, AITokenLedger
+from kanban.ai_config.net_guard import (
+    EgressDeniedError,
+    is_hard_denied,
+    is_local_base_url,
+    is_local_or_private_ip,
+    is_private_lan_hostname,
+    resolve_and_pin,
+)
 from kanban.security.envelope import (
     BLOB_VERSION,
     CODE_TAG_MISMATCH,
@@ -39,6 +49,10 @@ _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localho
 _MAX_DISPLAY_NAME_LEN: Final[int] = 80
 _MAX_MODELS_LEN: Final[int] = 32
 _MAX_TOKEN_CAP: Final[int] = 10_000_000_000
+_HTTP_200: Final[int] = 200
+_HTTP_401: Final[int] = 401
+_HTTP_403: Final[int] = 403
+_HTTP_404: Final[int] = 404
 
 _DEFAULT_KEK_FALLBACK = StaticKekProvider(
     keys={"kek-v1": b"k" * 32},
@@ -90,8 +104,37 @@ def build_ai_provider_aad(
     return f"{config_id}|{workspace_id}|{provider_kind}".encode()
 
 
+def _validate_base_url_host(parsed: urllib.parse.SplitResult) -> None:
+    host = (parsed.hostname or "").strip("[]").lower()
+    if not host:
+        msg = "base_url must contain a valid host"
+        raise AIConfigValidationError(msg)
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+
+    if ip is not None:
+        if is_hard_denied(ip):
+            msg = f"base_url must not target link-local, multicast, or metadata address '{host}'"
+            raise AIConfigValidationError(msg)
+        if parsed.scheme != "https" and not is_local_or_private_ip(ip):
+            msg = (
+                "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) "
+                f"or private LAN (got {host})"
+            )
+            raise AIConfigValidationError(msg)
+    elif parsed.scheme != "https" and not is_private_lan_hostname(host):
+        msg = (
+            "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) "
+            "or private LAN"
+        )
+        raise AIConfigValidationError(msg)
+
+
 def validate_base_url(base_url: str | None) -> str | None:
-    """Validate base URL scheme, absence of userinfo/query/fragment, and loopback rules."""
+    """Validate base URL scheme, absence of userinfo/query/fragment, and private LAN rules."""
     if base_url is None:
         return None
     trimmed = base_url.strip()
@@ -115,19 +158,7 @@ def validate_base_url(base_url: str | None) -> str | None:
         msg = "base_url must not contain fragment"
         raise AIConfigValidationError(msg)
 
-    host = (parsed.hostname or "").strip("[]").lower()
-    if parsed.scheme != "https" and host not in _LOOPBACK_HOSTS:
-        msg = "base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost)"
-        raise AIConfigValidationError(msg)
-
-    try:
-        ip = ipaddress.ip_address(host)
-        if ip.is_link_local or ip in ipaddress.ip_network("169.254.0.0/16"):
-            msg = f"base_url must not target link-local or metadata address '{host}'"
-            raise AIConfigValidationError(msg)
-    except ValueError:
-        pass
-
+    _validate_base_url_host(parsed)
     return trimmed
 
 
@@ -166,15 +197,29 @@ def _validate_fields(
     validate_base_url(base_url)
 
 
-def _check_air_gap(provider_kind: str, *, air_gap_mode: bool | None) -> None:
-    """Enforce air-gap policy: cloud providers are forbidden when air_gap_mode is active."""
+def _check_air_gap(
+    provider_kind: str,
+    base_url: str | None = None,
+    *,
+    air_gap_mode: bool | None,
+) -> None:
+    """Enforce air-gap policy: cloud providers are forbidden unless targeting local endpoints."""
     norm_kind = provider_kind.strip().lower()
-    if air_gap_mode is True and norm_kind in _CLOUD_PROVIDER_KINDS:
-        msg = (
-            f"Air-gap mode is active: outbound cloud egress to provider '{provider_kind}' "
-            f"is strictly prohibited"
-        )
-        raise AirGapViolation(msg, code="AIR_GAP_EGRESS_DENIED")
+    if air_gap_mode is True:
+        if norm_kind == "openai" and is_local_base_url(base_url):
+            return
+        if norm_kind in _CLOUD_PROVIDER_KINDS:
+            msg = (
+                f"Air-gap mode is active: outbound cloud egress to provider '{provider_kind}' "
+                f"is strictly prohibited"
+            )
+            raise AirGapViolation(msg, code="AIR_GAP_EGRESS_DENIED")
+
+
+_HTTP_OK = 200
+_HTTP_UNAUTHORIZED = 401
+_HTTP_FORBIDDEN = 403
+_HTTP_NOT_FOUND = 404
 
 
 class AIProviderConfigService:
@@ -277,7 +322,7 @@ class AIProviderConfigService:
             residency_tier=residency_tier,
             base_url=base_url,
         )
-        _check_air_gap(provider_kind, air_gap_mode=air_gap_mode)
+        _check_air_gap(provider_kind, base_url=base_url, air_gap_mode=air_gap_mode)
 
         assigned_id = config_id if config_id is not None else uuid.uuid4()
         norm_kind = provider_kind.strip().lower()
@@ -340,7 +385,12 @@ class AIProviderConfigService:
             raise AIConfigNotFoundError(msg)
 
         if air_gap_mode is not None:
-            _check_air_gap(config.provider_kind, air_gap_mode=air_gap_mode)
+            effective_base_url = base_url if base_url is not None else config.base_url
+            _check_air_gap(
+                config.provider_kind,
+                base_url=effective_base_url,
+                air_gap_mode=air_gap_mode,
+            )
 
         if display_name is not None:
             name = display_name.strip()
@@ -598,3 +648,238 @@ class AIProviderConfigService:
 
         await self._session.flush()
         return ledger
+
+    async def probe_provider(  # noqa: C901, PLR0911, PLR0912, PLR0915
+        self,
+        provider_kind: str,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        config_id: uuid.UUID | None = None,
+        air_gap_mode: bool | None = None,
+    ) -> dict[str, Any]:
+        """Probe upstream provider models and latency with zeroize key cleanup and SSRF defense."""
+        norm_kind = provider_kind.strip().lower()
+
+        # 1. Determine base URL
+        resolved_base_url: str
+        if base_url is not None and base_url.strip():
+            try:
+                validated = validate_base_url(base_url)
+            except AIConfigValidationError as exc:
+                return {
+                    "ok": False,
+                    "latency_ms": 0.0,
+                    "models": [],
+                    "model_count": 0,
+                    "error_code": "INVALID_BASE_URL",
+                    "message": str(exc),
+                }
+            if validated is None:
+                return {
+                    "ok": False,
+                    "latency_ms": 0.0,
+                    "models": [],
+                    "model_count": 0,
+                    "error_code": "INVALID_BASE_URL",
+                    "message": "base_url must not be empty",
+                }
+            resolved_base_url = validated
+        elif norm_kind == "ollama":
+            resolved_base_url = "http://127.0.0.1:11434"
+        elif norm_kind == "gemini":
+            resolved_base_url = "https://generativelanguage.googleapis.com"
+        else:
+            resolved_base_url = "https://api.openai.com/v1"
+
+        # 2. Air gap validation
+        try:
+            _check_air_gap(norm_kind, base_url=resolved_base_url, air_gap_mode=air_gap_mode)
+        except AirGapViolation as exc:
+            return {
+                "ok": False,
+                "latency_ms": 0.0,
+                "models": [],
+                "model_count": 0,
+                "error_code": "AIR_GAP_EGRESS_DENIED",
+                "message": str(exc),
+            }
+
+        # 3. SSRF defense via resolve_and_pin
+        parsed = urllib.parse.urlsplit(resolved_base_url)
+        host = (parsed.hostname or "").strip("[]")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            await resolve_and_pin(host, port)
+        except EgressDeniedError as exc:
+            return {
+                "ok": False,
+                "latency_ms": 0.0,
+                "models": [],
+                "model_count": 0,
+                "error_code": exc.code,
+                "message": str(exc),
+            }
+
+        # 4. Resolve API key with zeroize cleanup in finally
+        key_material: bytearray | None = None
+        try:
+            if api_key is not None and api_key.strip():
+                key_material = bytearray(api_key.encode("utf-8"))
+            elif config_id is not None:
+                try:
+                    key_material = await self.unwrap_api_key(config_id)
+                except AIConfigNotFoundError:
+                    key_material = None
+
+            active_key = key_material.decode("utf-8") if key_material is not None else ""
+
+            # 5. Dispatch upstream probe request
+            start_time = time.monotonic()
+            async with httpx.AsyncClient(
+                follow_redirects=False,
+                trust_env=False,
+                timeout=5.0,
+            ) as client:
+                if norm_kind == "ollama":
+                    tags_url = f"{resolved_base_url.rstrip('/')}/api/tags"
+                    resp = await client.get(tags_url)
+                    latency = (time.monotonic() - start_time) * 1000.0
+                    if resp.status_code != _HTTP_OK:
+                        body_snip = resp.text[:200]
+                        return {
+                            "ok": False,
+                            "latency_ms": round(latency, 2),
+                            "models": [],
+                            "model_count": 0,
+                            "error_code": f"HTTP_{resp.status_code}",
+                            "message": f"Ollama returned HTTP {resp.status_code}: {body_snip}",
+                        }
+                    data = resp.json()
+                    models = [
+                        m["name"]
+                        for m in data.get("models", [])
+                        if isinstance(m, dict) and "name" in m
+                    ]
+                    msg = f"Successfully connected to Ollama ({len(models)} models available)"
+                    return {
+                        "ok": True,
+                        "latency_ms": round(latency, 2),
+                        "models": models,
+                        "model_count": len(models),
+                        "error_code": None,
+                        "message": msg,
+                    }
+
+                if norm_kind == "gemini":
+                    models_url = f"{resolved_base_url.rstrip('/')}/v1beta/models"
+                    headers = {"x-goog-api-key": active_key} if active_key else {}
+                    resp = await client.get(models_url, headers=headers)
+                    latency = (time.monotonic() - start_time) * 1000.0
+                    if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
+                        return {
+                            "ok": False,
+                            "latency_ms": round(latency, 2),
+                            "models": [],
+                            "model_count": 0,
+                            "error_code": "UPSTREAM_AUTH_FAILED",
+                            "message": f"Gemini authentication failed (HTTP {resp.status_code})",
+                        }
+                    if resp.status_code != _HTTP_OK:
+                        body_snip = resp.text[:200]
+                        return {
+                            "ok": False,
+                            "latency_ms": round(latency, 2),
+                            "models": [],
+                            "model_count": 0,
+                            "error_code": f"HTTP_{resp.status_code}",
+                            "message": f"Gemini returned HTTP {resp.status_code}: {body_snip}",
+                        }
+                    data = resp.json()
+                    models = [
+                        m["name"].removeprefix("models/")
+                        for m in data.get("models", [])
+                        if isinstance(m, dict) and "name" in m
+                    ]
+                    msg = f"Successfully connected to Gemini ({len(models)} models available)"
+                    return {
+                        "ok": True,
+                        "latency_ms": round(latency, 2),
+                        "models": models,
+                        "model_count": len(models),
+                        "error_code": None,
+                        "message": msg,
+                    }
+
+                # Default: openai-compatible inference endpoints
+                base = resolved_base_url.rstrip("/")
+                models_url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
+                headers = {"Authorization": f"Bearer {active_key}"} if active_key else {}
+                resp = await client.get(models_url, headers=headers)
+                if resp.status_code == _HTTP_NOT_FOUND and not base.endswith("/v1"):
+                    resp = await client.get(f"{base}/models", headers=headers)
+                latency = (time.monotonic() - start_time) * 1000.0
+                if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
+                    return {
+                        "ok": False,
+                        "latency_ms": round(latency, 2),
+                        "models": [],
+                        "model_count": 0,
+                        "error_code": "UPSTREAM_AUTH_FAILED",
+                        "message": f"OpenAI authentication failed (HTTP {resp.status_code})",
+                    }
+                if resp.status_code != _HTTP_OK:
+                    body_snip = resp.text[:200]
+                    return {
+                        "ok": False,
+                        "latency_ms": round(latency, 2),
+                        "models": [],
+                        "model_count": 0,
+                        "error_code": f"HTTP_{resp.status_code}",
+                        "message": f"OpenAI returned HTTP {resp.status_code}: {body_snip}",
+                    }
+                data = resp.json()
+                models = [
+                    m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m
+                ]
+                msg = f"Successfully connected to OpenAI ({len(models)} models available)"
+                return {
+                    "ok": True,
+                    "latency_ms": round(latency, 2),
+                    "models": models,
+                    "model_count": len(models),
+                    "error_code": None,
+                    "message": msg,
+                }
+
+        except httpx.ConnectError as exc:
+            return {
+                "ok": False,
+                "latency_ms": 0.0,
+                "models": [],
+                "model_count": 0,
+                "error_code": "CONNECTION_REFUSED",
+                "message": f"Connection refused: {exc}",
+            }
+        except httpx.TimeoutException as exc:
+            return {
+                "ok": False,
+                "latency_ms": 5000.0,
+                "models": [],
+                "model_count": 0,
+                "error_code": "UPSTREAM_TIMEOUT",
+                "message": f"Connection timed out (5.0s): {exc}",
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "ok": False,
+                "latency_ms": 0.0,
+                "models": [],
+                "model_count": 0,
+                "error_code": "PROBE_ERROR",
+                "message": str(exc),
+            }
+        finally:
+            if key_material is not None:
+                for idx in range(len(key_material)):
+                    key_material[idx] = 0

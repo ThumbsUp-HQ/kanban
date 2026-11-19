@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import time
+import urllib.parse
 from ipaddress import (  # Runtime Pydantic field resolution
     IPv4Address,
     IPv4Network,
@@ -57,6 +59,7 @@ _HTTP_REDIRECT_MIN: int = 300
 _HTTP_REDIRECT_MAX: int = 400
 _HTTP_BAD_REQUEST: int = 400
 _HTTP_TOO_MANY_REQUESTS: int = 429
+_IPV4_VERSION: int = 4
 _IPV6_VERSION: int = 6
 
 
@@ -66,7 +69,9 @@ class OllamaSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     base_url: HttpUrl
-    allowed_ollama_cidrs: tuple[IPv4Network | IPv6Network, ...] = Field(min_length=1)
+    allowed_ollama_cidrs: tuple[IPv4Network | IPv6Network, ...] = Field(
+        default_factory=tuple, min_length=1
+    )
     model_allowlist: tuple[str, ...] = Field(min_length=1)
     keep_alive: str = "30m"
     connect_timeout_s: float = Field(default=2.0, ge=0.1, le=10.0)
@@ -74,6 +79,28 @@ class OllamaSettings(BaseModel):
     mtls_client_cert_path: Path | None = None
     mtls_client_key_path: Path | None = None
     ca_bundle_path: Path | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_default_cidrs(cls, data: Any) -> Any:  # noqa: ANN401
+        """Auto-populate default allowed CIDR from admin-configured base_url host if omitted."""
+        if isinstance(data, dict) and "allowed_ollama_cidrs" not in data:
+            base_url_val = data.get("base_url")
+            if base_url_val:
+                try:
+                    parsed = urllib.parse.urlsplit(str(base_url_val))
+                    host_str = (parsed.hostname or "").strip("[]").lower()
+                    if host_str:
+                        if host_str in ("127.0.0.1", "::1", "localhost"):
+                            data["allowed_ollama_cidrs"] = ["127.0.0.0/8", "::1/128"]
+                        else:
+                            ip = ipaddress.ip_address(host_str)
+                            data["allowed_ollama_cidrs"] = [
+                                f"{ip}/32" if ip.version == _IPV4_VERSION else f"{ip}/128"
+                            ]
+                except ValueError:
+                    pass
+        return data
 
     @model_validator(mode="after")
     def validate_settings(self) -> OllamaSettings:
@@ -97,6 +124,19 @@ class OllamaSettings(BaseModel):
         if has_cert != has_key:
             msg = "Both mtls_client_cert_path and mtls_client_key_path must be provided, or neither"
             raise ValueError(msg)
+
+        host_str = (url.host or "").strip("[]")
+        try:
+            ip = ipaddress.ip_address(host_str)
+            if not any(ip in cidr for cidr in self.allowed_ollama_cidrs):
+                host_net = ipaddress.ip_network(
+                    f"{ip}/32" if ip.version == _IPV4_VERSION else f"{ip}/128"
+                )
+                object.__setattr__(
+                    self, "allowed_ollama_cidrs", (*self.allowed_ollama_cidrs, host_net)
+                )
+        except ValueError:
+            pass
 
         return self
 

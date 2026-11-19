@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import uuid
 from typing import TYPE_CHECKING
+from unittest import mock
 
 import httpx
 import pytest
@@ -706,3 +707,239 @@ async def test_additional_coverage_branches(
     await _enroll_totp_and_set_aal2(api_env, proj_admin)
     resp_ws_list = await client.get("/api/v1/admin/ai/providers")
     assert resp_ws_list.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_case_admin_ai_providers_reorder(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test atomic reordering of AI providers via PUT /api/v1/admin/ai/providers/order."""
+    admin_user = await make_user("admin_reorder", workspace_role="WORKSPACE_ADMIN")
+    await _enroll_totp_and_set_aal2(api_env, admin_user)
+    client = api_env.client
+
+    # 1. Create three providers
+    p1_resp = await client.post(
+        "/api/v1/admin/ai/providers",
+        json={"provider_kind": "ollama", "display_name": "P1", "model_allowlist": ["m1"]},
+    )
+    assert p1_resp.status_code == 201
+    id1 = p1_resp.json()["id"]
+
+    p2_resp = await client.post(
+        "/api/v1/admin/ai/providers",
+        json={"provider_kind": "ollama", "display_name": "P2", "model_allowlist": ["m2"]},
+    )
+    assert p2_resp.status_code == 201
+    id2 = p2_resp.json()["id"]
+
+    p3_resp = await client.post(
+        "/api/v1/admin/ai/providers",
+        json={"provider_kind": "ollama", "display_name": "P3", "model_allowlist": ["m3"]},
+    )
+    assert p3_resp.status_code == 201
+    id3 = p3_resp.json()["id"]
+
+    # 2. Reorder providers: P3, P1, P2
+    reorder_resp = await client.put(
+        "/api/v1/admin/ai/providers/order",
+        json={"ordered_ids": [id3, id1, id2]},
+    )
+    assert reorder_resp.status_code == 200
+    reordered = reorder_resp.json()
+    assert len(reordered) == 3
+    assert reordered[0]["id"] == id3
+    assert reordered[0]["priority"] == 10
+    assert reordered[1]["id"] == id1
+    assert reordered[1]["priority"] == 20
+    assert reordered[2]["id"] == id2
+    assert reordered[2]["priority"] == 30
+
+    # 3. Verify audit record
+    audit_stmt = (
+        select(ActivityRecord)
+        .where(
+            ActivityRecord.workspace_id == admin_user.workspace_id,
+            ActivityRecord.event_type == ActivityEventType.AI_PROVIDER_REORDERED,
+        )
+        .order_by(ActivityRecord.recorded_at.desc())
+    )
+    audit_res = await api_env.seed.execute(audit_stmt)
+    audit_rec = audit_res.scalar_one_or_none()
+    assert audit_rec is not None
+    assert audit_rec.payload.get("ordered_ids") == [id3, id1, id2]
+
+    # 4. Incomplete reorder list -> 422
+    incomplete_resp = await client.put(
+        "/api/v1/admin/ai/providers/order",
+        json={"ordered_ids": [id3, id1]},
+    )
+    assert incomplete_resp.status_code == 422
+    assert incomplete_resp.json()["code"] == "INVALID_REORDER_MEMBERSHIP"
+
+    # 5. Unknown or foreign provider ID -> 422
+    foreign_id = str(uuid.uuid4())
+    unknown_resp = await client.put(
+        "/api/v1/admin/ai/providers/order",
+        json={"ordered_ids": [id3, id1, id2, foreign_id]},
+    )
+    assert unknown_resp.status_code == 422
+    assert unknown_resp.json()["code"] == "INVALID_REORDER_MEMBERSHIP"
+
+    # 6. Duplicate ID -> 422
+    dup_resp = await client.put(
+        "/api/v1/admin/ai/providers/order",
+        json={"ordered_ids": [id3, id1, id1]},
+    )
+    assert dup_resp.status_code == 422
+    assert dup_resp.json()["code"] == "INVALID_REORDER_REQUEST"
+
+    # 7. AAL1 caller -> 403
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        aal_level=1,
+    )
+    unauth_resp = await client.put(
+        "/api/v1/admin/ai/providers/order",
+        json={"ordered_ids": [id3, id1, id2]},
+    )
+    assert unauth_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_case_admin_ai_providers_probe_and_test_connection(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test model probing and test connection endpoints for ad-hoc and saved providers."""
+    admin_user = await make_user("admin_probe", workspace_role="WORKSPACE_ADMIN")
+    await _enroll_totp_and_set_aal2(api_env, admin_user)
+    client = api_env.client
+
+    # Mock upstream ollama response
+    mock_resp = mock.MagicMock(spec=httpx.Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "models": [{"name": "qwen2.5-coder:7b"}, {"name": "llama3.2:3b"}]
+    }
+
+    # 1. Ad-hoc probe models
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = mock_resp
+        probe_resp = await client.post(
+            "/api/v1/admin/ai/providers/probe-models",
+            json={
+                "provider_kind": "ollama",
+                "base_url": "http://127.0.0.1:11434",
+            },
+        )
+        assert probe_resp.status_code == 200
+        p_data = probe_resp.json()
+        assert p_data["ok"] is True
+        assert p_data["models"] == ["qwen2.5-coder:7b", "llama3.2:3b"]
+        assert p_data["model_count"] == 2
+
+    # 2. Ad-hoc test connection
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = mock_resp
+        test_conn_resp = await client.post(
+            "/api/v1/admin/ai/providers/test-connection",
+            json={
+                "provider_kind": "ollama",
+                "base_url": "http://127.0.0.1:11434",
+            },
+        )
+        assert test_conn_resp.status_code == 200
+        tc_data = test_conn_resp.json()
+        assert tc_data["ok"] is True
+        assert tc_data["model_count"] == 2
+
+    # 3. Create saved provider
+    create_resp = await client.post(
+        "/api/v1/admin/ai/providers",
+        json={
+            "provider_kind": "ollama",
+            "display_name": "Saved Ollama",
+            "base_url": "http://127.0.0.1:11434",
+            "model_allowlist": ["qwen2.5-coder:7b"],
+        },
+    )
+    assert create_resp.status_code == 201
+    provider_id = create_resp.json()["id"]
+
+    # 4. Saved provider probe models
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = mock_resp
+        saved_probe_resp = await client.post(
+            f"/api/v1/admin/ai/providers/{provider_id}/probe-models",
+            json={},
+        )
+        assert saved_probe_resp.status_code == 200
+        sp_data = saved_probe_resp.json()
+        assert sp_data["ok"] is True
+        assert sp_data["models"] == ["qwen2.5-coder:7b", "llama3.2:3b"]
+
+    # 5. Saved provider test connection
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.return_value = mock_resp
+        saved_test_resp = await client.post(
+            f"/api/v1/admin/ai/providers/{provider_id}/test-connection",
+            json={},
+        )
+        assert saved_test_resp.status_code == 200
+        stc_data = saved_test_resp.json()
+        assert stc_data["ok"] is True
+
+    # 6. Unknown provider ID -> 404
+    fake_id = str(uuid.uuid4())
+    unknown_probe = await client.post(
+        f"/api/v1/admin/ai/providers/{fake_id}/probe-models",
+        json={},
+    )
+    assert unknown_probe.status_code == 404
+    assert unknown_probe.json()["code"] == "NOT_FOUND"
+
+    unknown_test = await client.post(
+        f"/api/v1/admin/ai/providers/{fake_id}/test-connection",
+        json={},
+    )
+    assert unknown_test.status_code == 404
+    assert unknown_test.json()["code"] == "NOT_FOUND"
+
+    # 7. Validation of api_key length (>512) in probe schemas -> 422
+    long_key_probe = await client.post(
+        "/api/v1/admin/ai/providers/probe-models",
+        json={
+            "provider_kind": "ollama",
+            "api_key": "k" * 513,
+        },
+    )
+    assert long_key_probe.status_code == 422
+
+    long_key_saved = await client.post(
+        f"/api/v1/admin/ai/providers/{provider_id}/probe-models",
+        json={"api_key": "k" * 513},
+    )
+    assert long_key_saved.status_code == 422
+
+    # 8. Delete saved provider -> 204
+    del_resp = await client.delete(f"/api/v1/admin/ai/providers/{provider_id}")
+    assert del_resp.status_code == 204
+
+    # Verify deleted provider is gone
+    del_check = await client.get(f"/api/v1/admin/ai/providers/{provider_id}")
+    assert del_check.status_code == 404

@@ -33,11 +33,14 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 __all__ = [
+    "MAX_FAILOVER_CANDIDATES",
     "ProviderRouter",
     "RouteCandidate",
 ]
 
 _logger = logging.getLogger(__name__)
+
+MAX_FAILOVER_CANDIDATES: int = 8
 
 
 @dataclass(frozen=True)
@@ -53,12 +56,13 @@ class RouteCandidate:
 class ProviderRouter:
     """Multi-candidate router with residency locking, circuit breaking and air-gap guard."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         workspace_id: UUID | str,
         candidates: Sequence[RouteCandidate],
         *,
         air_gap_mode: bool | None = None,
+        required_residency_tier: str | None = None,
         breakers: CircuitBreaker | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -66,6 +70,7 @@ class ProviderRouter:
         self.workspace_id: UUID = UUID(str(workspace_id))
         self._candidates: list[RouteCandidate] = list(candidates)
         self.air_gap_mode: bool | None = air_gap_mode
+        self.required_residency_tier: str | None = required_residency_tier
         self._clock: Callable[[], float] = clock
         self._breakers: CircuitBreaker = (
             breakers if breakers is not None else CircuitBreaker(clock=clock)
@@ -121,15 +126,20 @@ class ProviderRouter:
             return "openai"
         return candidate.residency_tier.lower()
 
-    def _get_eligible_candidates(self) -> list[RouteCandidate]:
+    def _get_eligible_candidates(  # noqa: C901
+        self,
+        *,
+        required_residency_tier: str | None = None,
+    ) -> list[RouteCandidate]:
         candidates = self._candidates
 
         if self.air_gap_mode is not False:
             allowed: list[RouteCandidate] = []
             for c in candidates:
                 kind = self._get_candidate_kind(c)
+                settings = getattr(c.provider, "_settings", None)
                 try:
-                    AirGapGuard.check(kind, air_gap_mode=self.air_gap_mode)
+                    AirGapGuard.check(kind, settings=settings, air_gap_mode=self.air_gap_mode)
                     allowed.append(c)
                 except EgressDenied:
                     pass
@@ -152,9 +162,20 @@ class ProviderRouter:
             msg = "All candidate providers unavailable (circuit breakers OPEN)"
             raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
 
-        target_residency = first_candidate.residency_tier
-        eligible = [c for c in sorted_candidates if c.residency_tier == target_residency]
-        return eligible[:3]
+        target_tier = required_residency_tier or self.required_residency_tier
+        if target_tier is not None:
+            eligible = [c for c in sorted_candidates if c.residency_tier == target_tier]
+        elif self.air_gap_mode is True:
+            target_residency = first_candidate.residency_tier
+            eligible = [c for c in sorted_candidates if c.residency_tier == target_residency]
+        else:
+            eligible = sorted_candidates
+
+        if not eligible:
+            msg = "No provider available in residency tier"
+            raise AllProvidersUnavailable(msg, code="NO_PROVIDER_IN_RESIDENCY_TIER")
+
+        return eligible[:MAX_FAILOVER_CANDIDATES]
 
     async def _try_get_first_chunk(
         self,
