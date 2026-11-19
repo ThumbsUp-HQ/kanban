@@ -38,6 +38,7 @@ export interface WorkspacePrincipal {
   principal_type?: string | null;
   type?: string | null;
   handle?: string | null;
+  principal?: string | null;
   email?: string | null;
   role?: string | null;
   role_name?: string | null;
@@ -239,6 +240,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const handleCreateUser = (e: SyntheticEvent) => {
     e.preventDefault();
     if (!newHandle.trim() || !newDisplayName.trim()) return;
+    const trimmedEmail = newEmail.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Email is required for user provisioning.');
+      setSuccessMessage(null);
+      return;
+    }
     void (async () => {
       setIsCreatingUser(true);
       setErrorMessage(null);
@@ -255,8 +262,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
             type: 'USER',
             handle: newHandle.startsWith('@') ? newHandle.trim() : `@${newHandle.trim()}`,
             display_name: newDisplayName.trim(),
-            email: newEmail.trim() || undefined,
-            password: newPassword || undefined,
+            email: trimmedEmail,
+            password: newPassword.length > 0 ? newPassword : undefined,
           }),
         })) as { id: string };
 
@@ -315,7 +322,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
     }
   };
 
-  const handleRemoveMember = async (principalId: string): Promise<void> => {
+  const handleRemoveMember = async (principalId: string, role?: string): Promise<void> => {
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
@@ -323,10 +330,14 @@ export function WorkspaceSettingsPage(): JSX.Element {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (csrf) headers['X-CSRF-Token'] = csrf;
 
+      const member = principals.find((p) => p.id === principalId);
+      const memberRole = role ?? member?.role ?? member?.role_name ?? 'WORKSPACE_MEMBER';
+
       await apiFetch('DELETE', '/api/v1/admin/role-bindings' as never, {
         headers,
         body: JSON.stringify({
           principal_id: principalId,
+          role: memberRole,
           scope_type: 'workspace',
         }),
       });
@@ -744,11 +755,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           <td>
                             <div className="kb-member-info">
                               <span className="kb-member-name" data-testid={`member-name-${p.id}`}>
-                                {p.display_name ?? (p.handle ? formatHandle(p.handle) : p.id)}
+                                {p.display_name ?? ((p.handle ?? p.principal) ? formatHandle(p.handle ?? p.principal) : p.id)}
                               </span>
-                              {p.display_name && p.handle && (
+                              {p.display_name && (p.handle ?? p.principal) && (
                                 <span className="kb-member-handle" data-testid={`member-handle-${p.id}`}>
-                                  {formatHandle(p.handle)}
+                                  {formatHandle(p.handle ?? p.principal)}
                                 </span>
                               )}
                             </div>
@@ -769,7 +780,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           <td>
                             <select
                               data-testid={`role-select-${p.id}`}
-                              aria-label={`Role for ${p.display_name ?? p.handle ?? p.id}`}
+                              aria-label={`Role for ${p.display_name ?? p.handle ?? p.principal ?? p.id}`}
                               className="kb-select kb-member-role-select"
                               value={p.role ?? p.role_name ?? 'WORKSPACE_MEMBER'}
                               onChange={(e) => {
@@ -787,7 +798,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               data-testid={`remove-member-btn-${p.id}`}
                               className="kb-btn kb-btn-danger-subtle"
                               onClick={() => {
-                                void handleRemoveMember(p.id);
+                                void handleRemoveMember(p.id, p.role ?? p.role_name ?? undefined);
                               }}
                             >
                               Remove
@@ -863,8 +874,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           className={`kb-group-item ${isSelected ? 'kb-group-item-active' : ''}`}
                           onClick={() => { setSelectedGroupId(g.id); }}
                         >
-                          <span className="kb-group-item-name">{g.display_name ?? g.handle ?? g.id}</span>
-                          <span className="kb-group-item-handle">{formatHandle(g.handle ?? g.id)}</span>
+                          <span className="kb-group-item-name">{g.display_name ?? g.handle ?? g.principal ?? g.id}</span>
+                          <span className="kb-group-item-handle">{formatHandle(g.handle ?? g.principal ?? g.id)}</span>
                         </button>
                       );
                     })}
@@ -878,9 +889,9 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <>
                     <div className="kb-group-detail-header">
                       <div>
-                        <h4 data-testid="selected-group-name">{selectedGroup.display_name ?? selectedGroup.handle}</h4>
+                        <h4 data-testid="selected-group-name">{selectedGroup.display_name ?? selectedGroup.handle ?? selectedGroup.principal}</h4>
                         <span className="kb-group-detail-handle" data-testid="selected-group-handle">
-                          {formatHandle(selectedGroup.handle ?? selectedGroup.id)}
+                          {formatHandle(selectedGroup.handle ?? selectedGroup.principal ?? selectedGroup.id)}
                         </span>
                       </div>
                     </div>
@@ -908,7 +919,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               const pType = (p.principal_type ?? p.type ?? 'USER').toUpperCase();
                               return (
                                 <option key={p.id} value={p.id}>
-                                  [{pType}] {p.display_name ?? p.handle ?? p.id} ({formatHandle(p.handle ?? p.id)})
+                                  [{pType}] {p.display_name ?? p.handle ?? p.principal ?? p.id} ({formatHandle(p.handle ?? p.principal ?? p.id)})
                                 </option>
                               );
                             })}
@@ -954,11 +965,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                   <td>
                                     <div className="kb-member-info">
                                       <span className="kb-member-name">
-                                        {m.display_name ?? formatHandle(m.handle ?? m.id)}
+                                        {m.display_name ?? formatHandle(m.handle ?? m.principal ?? m.id)}
                                       </span>
                                       {m.display_name && (
                                         <span className="kb-member-handle">
-                                          {formatHandle(m.handle ?? m.id)}
+                                          {formatHandle(m.handle ?? m.principal ?? m.id)}
                                         </span>
                                       )}
                                     </div>
