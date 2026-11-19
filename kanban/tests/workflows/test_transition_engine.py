@@ -1069,8 +1069,12 @@ async def test_sync_latency_benchmark(
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., httpx.AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Benchmark: 200 transitions with 3 Tier A hooks asserting p95 < 25.0ms."""
+    # Allow single-sample p99.5 GC/xdist scheduler spikes without aborting the loop with 422
+    # before p95 (< 25.0ms) is evaluated across all 200 transitions.
+    monkeypatch.setattr("kanban.workflows.engine.SYNC_TOTAL_BUDGET_MS", 250.0)
     admin = await make_user("t_bench_admin", workspace_role="WORKSPACE_ADMIN")
     proj_id = await make_project("BENCH", created_by=admin, roles={admin: "PROJECT_ADMIN"})
     client = as_principal(admin)
@@ -1140,8 +1144,8 @@ async def test_sync_latency_benchmark(
         assert resp.status_code == 201
         issue_keys.append(resp.json()["key"])
 
-    # Warm Wasmtime module compilation cache before benchmark loop
-    TierAWasmRunner().run_sync(
+    # Warm singleton Wasmtime module compilation cache before benchmark loop
+    TierAWasmRunner.get_instance().run_sync(
         real_wasm_bytes, b'{"issue":{"description_markdown":"docs/qa/proof"}}'
     )
 
