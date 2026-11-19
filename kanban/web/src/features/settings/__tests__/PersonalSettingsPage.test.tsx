@@ -1104,4 +1104,114 @@ describe('PersonalSettingsPage', () => {
     if (cancelBtns[0]) fireEvent.click(cancelBtns[0]);
     expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
   });
+
+  it('covers passkey rename non-Error, passkey delete cancel, and avatar non-Error rejections', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
+    vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
+    vi.mocked(api.renamePasskey).mockRejectedValue('raw-rename-error');
+    vi.mocked(api.deletePasskey).mockRejectedValue('raw-delete-error');
+    vi.mocked(api.deleteAvatar).mockRejectedValue('raw-avatar-delete-error');
+
+    const confirmSpy = vi.spyOn(window, 'confirm');
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personal-settings-page')).toBeDefined();
+    });
+
+    // Rename passkey with non-Error rejection
+    const renameBtn = screen.getByTestId(`rename-passkey-${mockPasskeys[0]?.id ?? ''}`);
+    fireEvent.click(renameBtn);
+
+    const submitRenameBtn = screen.getByTestId('save-passkey-nickname-btn');
+    fireEvent.click(submitRenameBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
+    });
+
+    // Delete passkey cancel
+    confirmSpy.mockReturnValue(false);
+    const deletePasskeyBtn = screen.getByTestId(`delete-passkey-${mockPasskeys[0]?.id ?? ''}`);
+    fireEvent.click(deletePasskeyBtn);
+    expect(api.deletePasskey).not.toHaveBeenCalled();
+
+    // Delete passkey confirm with non-Error rejection
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(deletePasskeyBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete passkey.');
+    });
+
+    // Delete avatar with non-Error rejection
+    const deleteAvatarBtn = screen.getByTestId('remove-avatar-btn');
+    fireEvent.click(deleteAvatarBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete avatar.');
+    });
+
+    // Dismiss error alert
+    const dismissBtn = screen.getByText('Dismiss');
+    fireEvent.click(dismissBtn);
+    expect(screen.queryByTestId('alert-error')).toBeNull();
+  });
+
+  it('renders fallback U initial when profile display_name and username are null', async () => {
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: null,
+      display_name: null as unknown as string,
+      username: null as unknown as string,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('U')).toBeDefined();
+    });
+  });
+
+  it('covers non-Error fallback branches for TOTP, recovery codes, and passkey operations', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.deleteTotp).mockRejectedValue('String reject');
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValue('String reject');
+    vi.mocked(api.deletePasskey).mockRejectedValue('String reject');
+    vi.mocked(api.renamePasskey).mockRejectedValue('String reject');
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('disable-totp-btn')).toBeDefined();
+    });
+
+    // 1. Empty files on avatar input (hits if (!file) return)
+    fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [] } });
+
+    // 2. Disable TOTP non-Error rejection
+    fireEvent.click(screen.getByTestId('disable-totp-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to disable TOTP.');
+    });
+
+    // 3. Regenerate recovery codes non-Error rejection
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to regenerate recovery codes.');
+    });
+
+    // 4. Delete passkey non-Error rejection
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete passkey.');
+    });
+
+    // 5. Rename passkey non-Error rejection
+    fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
+    fireEvent.change(screen.getByTestId('passkey-nickname-input'), { target: { value: 'New Name' } });
+    fireEvent.click(screen.getByTestId('save-passkey-nickname-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
+    });
+  });
 });

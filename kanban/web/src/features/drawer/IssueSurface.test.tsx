@@ -421,7 +421,7 @@ describe('IssueSurface', () => {
       expect(screen.getByText(/412 Precondition Failed/i)).toBeDefined();
 
       // Draft text is preserved in textarea
-      expect((screen.getByRole('textbox', { name: 'Description' }) as HTMLTextAreaElement).value).toBe(
+      expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' }).value).toBe(
         'Conflicting draft edit',
       );
 
@@ -433,6 +433,67 @@ describe('IssueSurface', () => {
       // Discard Draft dismisses banner and resets
       fireEvent.click(screen.getByRole('button', { name: 'Discard Draft' }));
       expect(screen.queryByTestId('conflict-banner')).toBeNull();
+    });
+
+    it('handles Reload Latest and Overwrite actions on conflict banner', async () => {
+      const issueWithEtag = { ...validIssue, key: 'KAN-142', etag: '"etag-remote-2"' };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithEtag);
+      const patchSpy = vi.spyOn(apiClient, 'patch');
+      patchSpy.mockRejectedValueOnce(
+        new ApiProblem(412, {
+          title: 'Precondition Failed',
+          status: 412,
+          detail: 'Mid-air collision',
+        }),
+      );
+
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Edit description' })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole('textbox', { name: 'Description' });
+      fireEvent.change(textarea, { target: { value: 'Conflict draft to overwrite' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+
+      // Test Reload Latest action
+      fireEvent.click(screen.getByRole('button', { name: 'Reload Latest' }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('conflict-banner')).toBeNull();
+      });
+
+      // Trigger conflict again for Overwrite test
+      patchSpy.mockRejectedValueOnce(
+        new ApiProblem(412, {
+          title: 'Precondition Failed',
+          status: 412,
+          detail: 'Second collision',
+        }),
+      );
+      fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), {
+        target: { value: 'Second conflict draft' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      });
+
+      // Successful Overwrite
+      patchSpy.mockResolvedValueOnce(issueWithEtag);
+      fireEvent.click(screen.getByRole('button', { name: 'Overwrite' }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('conflict-banner')).toBeNull();
+      });
     });
 
     it('loads project workflow states and forwards onIssueUpdate when RailSlot is mounted', async () => {
@@ -675,6 +736,20 @@ describe('IssueSurface', () => {
         project_key: '',
       }, null);
       expect(normalized2.project_key).toBe('CUSTOM');
+
+      // Non-string key
+      const normNonStringKey = normalizeIssueDetail({
+        key: undefined as never,
+        summary: 'Non string key',
+      } as never, null);
+      expect(normNonStringKey.project_key).toBe('KAN');
+
+      // Key starting with hyphen
+      const normHyphenStart = normalizeIssueDetail({
+        key: '-123',
+        summary: 'Hyphen start key',
+      } as never, null);
+      expect(normHyphenStart.project_key).toBe('');
     });
   });
 });

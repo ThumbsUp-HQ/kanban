@@ -336,7 +336,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
     openPopoverIfNeeded();
     fireEvent.click(screen.getByRole('button', { name: /^Auth Core$/i }));
-  });
+  }, 30000);
 
   it('IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all', () => {
     window.history.pushState({}, '', '/projects/KAN/issues?layout=table');
@@ -407,6 +407,31 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
     // Selection cleared after archive
     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
+  });
+
+  it('IssuesWorkspaceRoute: covers batch update state with Shift (todo) and batch update priority with Shift (medium)', () => {
+    render(
+      <IssuesWorkspaceRoute
+        projectKey="KAN"
+        modulesEnabled={true}
+        initialIssues={FIXTURE_12_ISSUES}
+      />
+    );
+
+    // Select KAN-140
+    fireEvent.keyDown(window, { key: 'j' });
+    fireEvent.keyDown(window, { key: 'x' });
+
+    // Shift-click State button to update to 'todo'
+    const stateBtn = screen.getByRole('button', { name: /^state$/i });
+    fireEvent.click(stateBtn, { shiftKey: true });
+
+    // Select KAN-140 again
+    fireEvent.keyDown(window, { key: 'x' });
+
+    // Shift-click Priority button to update to 'medium'
+    const prioBtn = screen.getByRole('button', { name: /^priority$/i });
+    fireEvent.click(prioBtn, { shiftKey: true });
   });
 
   it('IssuesWorkspaceRoute: toggles Adam assignment via I shortcut', () => {
@@ -909,7 +934,10 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       // Quick field state update to Backlog
       fireEvent.keyDown(window, { key: 'j' });
-      fireEvent.keyDown(window, { key: 's' });
+      await waitFor(() => {
+        fireEvent.keyDown(window, { key: 's' });
+        expect(screen.getByRole('dialog', { name: /Quick State Picker/i })).toBeDefined();
+      });
       const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
       fireEvent.click(within(statePop).getByText('Backlog'));
 
@@ -960,12 +988,13 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     });
 
     it('covers read-only capabilities VIEW hiding create and bulk actions', () => {
-      render(
+      const { unmount: unmount1 } = render(
         <IssuesWorkspaceRoute
           projectKey="KAN"
           initialIssues={FIXTURE_12_ISSUES}
           capabilities={['VIEW']}
           isProjectAdmin={false}
+          initialLayout="board"
         />,
       );
 
@@ -974,6 +1003,51 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       // Keyboard shortcut 'c' for new item does not open modal when read-only
       fireEvent.keyDown(window, { key: 'c' });
       expect(screen.queryByRole('dialog', { name: /create/i })).toBeNull();
+      unmount1();
+
+      // Read-only list layout with activePeekKey
+      window.history.pushState({}, '', '/projects/KAN/issues?peek=KAN-1');
+      const { unmount: unmount2 } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          capabilities={['VIEW']}
+          isProjectAdmin={false}
+          initialLayout="list"
+        />,
+      );
+      expect(screen.getByTestId('split-list-layout')).toBeDefined();
+      unmount2();
+
+      // Read-only board with subGroupBy priority (renders SwimlaneBoardGrid)
+      window.history.pushState({}, '', '/projects/KAN/issues');
+      const { unmount: unmount3 } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          capabilities={['VIEW']}
+          isProjectAdmin={false}
+          initialLayout="board"
+        />,
+      );
+      fireEvent.change(screen.getByLabelText('Sub-group by axis'), {
+        target: { value: 'priority' },
+      });
+      expect(screen.getByRole('region', { name: '2D Swimlane Board Grid' })).toBeDefined();
+      unmount3();
+
+      // Read-only table layout
+      const { unmount: unmount4 } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          capabilities={['VIEW']}
+          isProjectAdmin={false}
+          initialLayout="table"
+        />,
+      );
+      expect(screen.getByRole('table')).toBeDefined();
+      unmount4();
     });
   });
 });

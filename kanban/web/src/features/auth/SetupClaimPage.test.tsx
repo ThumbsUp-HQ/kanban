@@ -844,4 +844,69 @@ describe('SetupClaimPage (KB-P3-35)', () => {
       expect(screen.getByText('Step 2 of 3')).toBeDefined();
     });
   });
+
+  it('covers validation edge branches, slugify fallback, and email inclusion', async () => {
+    vi.spyOn(authApi, 'fetchSessionInfo').mockResolvedValueOnce({
+      authenticated: true,
+      mfa_pending: true,
+      session_id: null,
+    });
+
+    const { unmount } = render(<SetupClaimPage initialToken={validToken43} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Step 2 of 3')).toBeDefined();
+    });
+    unmount();
+
+    // Step 1 validation branches
+    render(<SetupClaimPage initialToken={validToken43} />);
+
+    // 1. Empty display name
+    const displayInput = screen.getByLabelText(/Display Name/i);
+    fireEvent.change(displayInput, { target: { value: '' } });
+    fireEvent.submit(screen.getByRole('button', { name: /Claim Instance/i }));
+    expect(screen.getByText('Display name must be between 1 and 120 characters.')).toBeDefined();
+
+    // Fix display name, invalidate project key
+    fireEvent.change(displayInput, { target: { value: 'Admin' } });
+    const projectKeyInput = screen.getByLabelText(/Initial Project Key/i);
+    fireEvent.change(projectKeyInput, { target: { value: '1INVALID' } });
+    const passInput = document.getElementById('setup-password') as HTMLInputElement;
+    const confirmInput = document.getElementById('setup-confirm-password') as HTMLInputElement;
+    fireEvent.change(passInput, { target: { value: 'ValidPassword123!' } });
+    fireEvent.change(confirmInput, { target: { value: 'ValidPassword123!' } });
+    fireEvent.submit(screen.getByRole('button', { name: /Claim Instance/i }));
+    expect(
+      screen.getByText(/Project key must be 2-10 uppercase alphanumeric characters/i),
+    ).toBeDefined();
+
+    // 2. Slugify fallback when name is symbols
+    const wsNameInput = screen.getByLabelText(/Workspace Name/i);
+    fireEvent.change(wsNameInput, { target: { value: '$$$###' } });
+    const slugInput = screen.getByLabelText<HTMLInputElement>(/Workspace Slug/i);
+    expect(slugInput.value).toBe('kanban-workspace');
+
+    // Touch slug then change name (slugTouched branch)
+    fireEvent.change(slugInput, { target: { value: 'custom-slug' } });
+    fireEvent.change(wsNameInput, { target: { value: 'Another Workspace' } });
+    expect(slugInput.value).toBe('custom-slug');
+
+    // 3. Valid submit with email
+    fireEvent.change(projectKeyInput, { target: { value: 'KANBA' } });
+    const emailInput = document.getElementById('setup-email') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'admin@kanban.local' } });
+
+    const submitClaimSpy = vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValueOnce({
+      enrollment_id: 'enr-email-1',
+      status: 'enrollment_required',
+    });
+
+    fireEvent.submit(screen.getByRole('button', { name: /Claim Instance/i }));
+    await waitFor(() => {
+      expect(submitClaimSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'admin@kanban.local' }),
+      );
+    });
+  });
 });

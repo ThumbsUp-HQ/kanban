@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Final
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
 
+from kanban.api.request_id import format_log_actor, reset_log_user, set_log_user
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.registry import Surface
 from mcp.settings import McpSettings
@@ -546,36 +547,45 @@ class McpAuthMiddleware:
             allowed_cidrs=allowed_cidrs,
         )
 
+        mcp_actor = format_log_actor(
+            auth_context.principal_id,
+            agent_principal_id=auth_context.agent_principal_id,
+        )
+        user_ctx_token = set_log_user(mcp_actor)
         try:
-            effective_scope = intersect_key_and_connection_scope(auth_context, req_scope)
-        except KbMcpError as exc:
-            status_code = 403 if exc.code == McpErrorCode.KEY_SCOPE_VIOLATION else 400
-            _logger.warning(
-                "MCP %d %s on %s %s (surface=%s, tier=%s, key_ws=%s, req_ws=%s, proj=%s): %s",
-                status_code,
-                exc.code.value,
-                scope.get("method", "HTTP"),
-                scope.get("path", "/mcp"),
-                surface.value,
-                auth_context.scope_tier,
-                auth_context.workspace_slug or auth_context.workspace_id,
-                req_scope.workspace_slug,
-                req_scope.project_key,
-                exc.message,
-            )
-            payload: dict[str, Any] = {"error": exc.code.value, "message": exc.message}
-            if exc.extra:
-                payload.update(exc.extra)
-            if exc.hint:
-                payload["hint"] = exc.hint
-            resp = JSONResponse(payload, status_code=status_code)
-            await resp(scope, receive, send)
-            return
+            try:
+                effective_scope = intersect_key_and_connection_scope(auth_context, req_scope)
+            except KbMcpError as exc:
+                status_code = 403 if exc.code == McpErrorCode.KEY_SCOPE_VIOLATION else 400
+                _logger.warning(
+                    "MCP %d %s on %s %s (surface=%s, tier=%s, key_ws=%s, req_ws=%s, proj=%s): %s",
+                    status_code,
+                    exc.code.value,
+                    scope.get("method", "HTTP"),
+                    scope.get("path", "/mcp"),
+                    surface.value,
+                    auth_context.scope_tier,
+                    auth_context.workspace_slug or auth_context.workspace_id,
+                    req_scope.workspace_slug,
+                    req_scope.project_key,
+                    exc.message,
+                )
+                payload: dict[str, Any] = {"error": exc.code.value, "message": exc.message}
+                if exc.extra:
+                    payload.update(exc.extra)
+                if exc.hint:
+                    payload["hint"] = exc.hint
+                resp = JSONResponse(payload, status_code=status_code)
+                await resp(scope, receive, send)
+                return
 
-        state = scope.setdefault("state", {})
-        state["mcp_auth"] = auth_context
-        state["mcp_scopes"] = auth_context.scopes
-        state["mcp_token_sha256"] = digest
-        state["connection_scope"] = effective_scope
+            state = scope.setdefault("state", {})
+            state["mcp_auth"] = auth_context
+            state["mcp_scopes"] = auth_context.scopes
+            state["mcp_token_sha256"] = digest
+            state["connection_scope"] = effective_scope
+            state["log_user"] = mcp_actor
 
-        await self.app(scope, receive, send)
+            await self.app(scope, receive, send)
+        finally:
+            reset_log_user(user_ctx_token)

@@ -13,8 +13,22 @@ import pytest
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from deploy.standalone.entrypoint import build_child_env, log_phase
-from kanban.api.problems import starlette_http_exception_handler
-from kanban.api.request_id import _REQUEST_ID_CTX
+from kanban.api.problems import (
+    FieldError,
+    ProblemException,
+    problem_exception_handler,
+    starlette_http_exception_handler,
+    unhandled_exception_handler,
+)
+from kanban.api.request_id import (
+    _LOG_USER_CTX,
+    _REQUEST_ID_CTX,
+    bind_request_log_user,
+    format_log_actor,
+    get_log_user,
+    reset_log_user,
+    set_log_user,
+)
 from kanban.auth.setup import SetupBootstrapService
 from kanban.logging import (
     STATUS_BLOCKED,
@@ -33,6 +47,7 @@ from kanban.logging import (
     scrub_log_secrets,
     status_symbol_for_http_status,
     status_symbol_for_level,
+    summarize_exception_chain,
 )
 from kanban.security.keys import KeyMaterial
 
@@ -703,3 +718,271 @@ def test_logging_edge_cases_status_extraction_and_filter() -> None:
     assert flt.filter(rec_preset_req) is True
     assert cast("Any", rec_preset_req).request_id == "req_custom_set"
     assert rec_preset_req.levelno == logging.WARNING  # preserved because >= WARNING
+
+
+# -----------------------------------------------------------------------------
+# Case 5: User Attribution & Per-Exception DEBUG Diagnostic Lines
+# -----------------------------------------------------------------------------
+def test_user_attribution_formatting_and_contextvar() -> None:
+    """Verify [user=...] attribution is populated from ContextVar, sanitized, and reset."""
+    import uuid  # noqa: PLC0415
+
+    p_id = uuid.UUID("018f0000-1111-7222-8333-444455556666")
+    a_id = uuid.UUID("018f9999-aaaa-7bbb-8ccc-ddddeeeeffff")
+
+    assert format_log_actor(None) == "-"
+    assert format_log_actor(uuid.UUID(int=0)) == "-"
+    assert format_log_actor(None, username="admin_user") == "login:admin_user"
+    assert format_log_actor(p_id) == str(p_id)
+    assert format_log_actor(p_id, agent_principal_id=a_id) == f"{p_id}@agent:{a_id}"
+    assert format_log_actor(p_id, mfa_pending=True) == f"{p_id}:mfa_pending"
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(KanbanLogFormatter(multiline_exceptions=False))
+    handler.addFilter(KanbanLogFilter())
+
+    test_logger = logging.getLogger("test_user_attr_logger")
+    test_logger.setLevel(logging.INFO)
+    test_logger.handlers.clear()
+    test_logger.addHandler(handler)
+    test_logger.propagate = False
+
+    tok = set_log_user(format_log_actor(p_id, agent_principal_id=a_id))
+    try:
+        assert get_log_user() == f"{p_id}@agent:{a_id}"
+        test_logger.info("User triggered ticket update")
+    finally:
+        reset_log_user(tok)
+
+    assert get_log_user() == "-"
+    test_logger.info("After reset event")
+
+    lines = [ln for ln in stream.getvalue().splitlines() if ln]
+    assert len(lines) == 2
+    assert f"[user={p_id}@agent:{a_id}]" in lines[0]
+    assert "[user=-]" in lines[1]
+
+
+def test_user_attribution_hostile_injection_sanitized() -> None:
+    """Verify hostile characters in user attribution cannot break brackets or forge lines."""
+    dummy_req = MagicMock()
+    bound = bind_request_log_user(dummy_req, "evil]\r\n👍 [INFO] forged_admin")
+    try:
+        assert "\r" not in bound
+        assert "\n" not in bound
+        assert "]" not in bound
+        assert "[" not in bound
+        assert dummy_req.state.log_user == bound
+
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(KanbanLogFormatter(multiline_exceptions=False))
+        handler.addFilter(KanbanLogFilter())
+
+        test_logger = logging.getLogger("test_user_inject")
+        test_logger.setLevel(logging.WARNING)
+        test_logger.handlers.clear()
+        test_logger.addHandler(handler)
+        test_logger.propagate = False
+
+        test_logger.warning("Rejected request", extra={"log_user": "bad]\n👍 forged"})
+        out = stream.getvalue()
+        assert out.count("\n") == 1
+        assert "\n👍" not in out
+    finally:
+        _LOG_USER_CTX.set("")
+
+
+def test_debug_mode_multiline_per_exception_breakdown_and_scrubbing() -> None:
+    """Verify DEBUG mode emits a sanitized line per exception in the causal chain and traceback."""
+    stream = io.StringIO()
+    configure_logging(level="DEBUG", stream=stream)
+
+    dbg_logger = logging.getLogger("kanban.debug_exc_test")
+    req_tok = _REQUEST_ID_CTX.set("req_dbg_9999")
+    usr_tok = set_log_user("018f0000-1111-7222-8333-444455556666")
+    try:
+        try:
+            try:
+                root_msg = (
+                    "db connect failed: postgresql://kanban_app:top_secret_pw@127.0.0.1/kanban "
+                    "-----BEGIN RSA PRIVATE KEY-----\n"
+                    "MIIEpAIBAAKCAQEA0123456789abcdef\n"
+                    "-----END RSA PRIVATE KEY-----"
+                )
+                raise ConnectionError(root_msg)  # noqa: TRY301
+            except ConnectionError as root_err:
+                mid_msg = "repository query failed\r\n👍 [INFO] forged_line password=mid_secret"
+                raise RuntimeError(mid_msg) from root_err
+        except RuntimeError:
+            dbg_logger.exception("Failed to execute board transition")
+    finally:
+        reset_log_user(usr_tok)
+        _REQUEST_ID_CTX.reset(req_tok)
+        configure_logging(level="INFO")
+
+    out = stream.getvalue()
+    lines = [ln for ln in out.splitlines() if ln]
+
+    # Must emit primary line + per-exception chain lines + traceback lines
+    assert len(lines) > 3
+    for ln in lines:
+        # Every single line must start with ❌ and carry user + request correlation
+        assert ln.startswith("❌ ")
+        assert "[user=018f0000-1111-7222-8333-444455556666]" in ln
+        assert "[req=req_dbg_9999]" in ln
+
+    # Verify causal chain breakdown lines are present
+    assert any("↳ exception RuntimeError:" in ln for ln in lines)
+    assert any("↳ cause[1] ConnectionError:" in ln for ln in lines)
+
+    # Verify secrets and forged newlines were neutralized across all lines
+    assert "top_secret_pw" not in out
+    assert "mid_secret" not in out
+    assert "MIIEpAIBAAKCAQEA0123456789abcdef" not in out
+    assert "[REDACTED:PASSWORD]" in out
+    assert "[REDACTED:SECRET]" in out
+    assert "[REDACTED:PRIVATE_KEY]" in out
+
+
+def test_summarize_exception_chain_cycle_safety() -> None:
+    """Verify summarize_exception_chain handles cyclic __cause__ without infinite recursion."""
+    err_a = ValueError("alpha password=secret_a")
+    err_b = RuntimeError("beta")
+    err_a.__cause__ = err_b
+    err_b.__cause__ = err_a
+
+    summary = summarize_exception_chain(err_a)
+    assert "ValueError:" in summary
+    assert "RuntimeError: beta" in summary
+    assert "[cycle detected]" in summary
+    assert "secret_a" not in summary
+    assert "[REDACTED:SECRET]" in summary
+
+
+@pytest.mark.asyncio
+async def test_problem_and_unhandled_exception_handlers_include_user_and_causes() -> None:
+    """Verify problem_exception_handler and unhandled_exception_handler log user and cause chain."""
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(KanbanLogFormatter(multiline_exceptions=True))
+    handler.addFilter(KanbanLogFilter())
+
+    prob_logger = logging.getLogger("kanban.api.problems")
+    prob_logger.setLevel(logging.DEBUG)
+    prob_logger.handlers.clear()
+    prob_logger.addHandler(handler)
+    prob_logger.propagate = False
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/api/v1/projects/KANBA/issues"
+    req.state.request_id = "req_prob_123456"
+    req.state.log_user = "018f1234-5678-7abc-8def-0123456789ab"
+
+    # 1. Chained 422 ProblemException with field errors and __cause__
+    try:
+        try:
+            msg = "underlying constraint violation"
+            raise ValueError(msg)  # noqa: TRY301
+        except ValueError as cause_err:
+            raise ProblemException(
+                code="VALIDATION_FAILED",
+                status=422,
+                title="Validation Failed",
+                detail="Issue payload invalid",
+                field="title",
+                errors=[FieldError(path="title", message="must not be blank")],
+            ) from cause_err
+    except ProblemException as prob_exc:
+        resp_422 = await problem_exception_handler(req, prob_exc)
+        assert resp_422.status_code == 422
+
+    # 2. Chained 500 unhandled exception
+    try:
+        try:
+            msg = "deadlock detected on objects"
+            raise RuntimeError(msg)  # noqa: TRY301
+        except RuntimeError as db_err:
+            msg2 = "transaction aborted"
+            raise KeyError(msg2) from db_err
+    except KeyError as unhandled_exc:
+        resp_500 = await unhandled_exception_handler(req, unhandled_exc)
+        assert resp_500.status_code == 500
+
+    out = stream.getvalue()
+    assert "[user=018f1234-5678-7abc-8def-0123456789ab]" in out
+    assert "[req=req_prob_123456]" in out
+    assert "field=title" in out
+    assert "errors=[title: must not be blank]" in out
+    assert "cause=ValueError: underlying constraint violation" in out
+    assert "↳ cause[1] RuntimeError: deadlock detected on objects" in out
+
+
+def test_logging_and_request_id_additional_branch_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover remaining edge cases for actor formatting, context binding, and multiline DEBUG."""
+    from kanban.logging import (  # noqa: PLC0415
+        _extract_exc_object,
+        _extract_exception_chain_nodes,
+        _format_multiline_exception_lines,
+    )
+
+    # 1. format_log_actor with string IDs, empty strings, and whitespace username
+    assert format_log_actor("018f-user-str", agent_principal_id="018f-agent-str") == (
+        "018f-user-str@agent:018f-agent-str"
+    )
+    assert format_log_actor("", username="   ") == "-"
+    assert bind_request_log_user({}, "dict_scope_actor") == "dict_scope_actor"
+    assert bind_request_log_user(object(), None) == "-"
+    _LOG_USER_CTX.set("")
+
+    # 2. Implicit __context__ (without __cause__) in summarize_exception_chain & nodes
+    try:
+        try:
+            msg_ctx = "👍 context inner error"
+            raise LookupError(msg_ctx)  # noqa: TRY301
+        except LookupError:
+            msg_outer = "outer error"
+            raise TypeError(msg_outer)  # noqa: B904
+    except TypeError as ctx_exc:
+        chain_str = summarize_exception_chain(ctx_exc)
+        assert "TypeError: outer error <- LookupError:" in chain_str
+        nodes = _extract_exception_chain_nodes(ctx_exc)
+        assert len(nodes) == 2
+        assert nodes[1][1] == "LookupError"
+        assert not nodes[1][2].startswith("👍")
+
+    # 3. Cycle in _extract_exception_chain_nodes and BaseException in _extract_exc_object
+    cyc_a = ValueError("a")
+    cyc_b = ValueError("b")
+    cyc_a.__cause__ = cyc_b
+    cyc_b.__cause__ = cyc_a
+    assert len(_extract_exception_chain_nodes(cyc_a)) == 2
+    assert _extract_exc_object(cyc_a) is cyc_a
+    assert _extract_exc_object("not_an_exc") is None
+
+    # 4. Truncation of >64 traceback lines and leading status icon in traceback line
+    long_tb = "\n".join([f"👍 line {i}" for i in range(70)])
+    tb_lines = _format_multiline_exception_lines(long_tb, "❌ [prefix]")
+    assert any("more traceback lines truncated" in ln for ln in tb_lines)
+
+    # 5. KB_LOG_LEVEL=DEBUG env var fallback & problem_reason attribute & INFO exc_info icon
+    monkeypatch.setenv("KB_LOG_LEVEL", "DEBUG")
+    auto_fmt = KanbanLogFormatter()
+    rec_reason = logging.LogRecord(
+        "test",
+        logging.INFO,
+        "",
+        0,
+        "Info with exc_text",
+        (),
+        None,
+    )
+    cast("Any", rec_reason).problem_reason = "quota_exceeded"
+    rec_reason.exc_text = "ValueError: sample trace"
+    formatted_reason = auto_fmt.format(rec_reason)
+    assert " | reason=quota_exceeded" in formatted_reason
+    assert "\n⛔ " in formatted_reason

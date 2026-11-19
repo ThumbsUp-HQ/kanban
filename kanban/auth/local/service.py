@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Final
 from sqlalchemy import text
 
 from kanban.api.problems import ProblemException
+from kanban.api.request_id import format_log_actor, set_log_user
 from kanban.auth.cards.repository import get_for_login, list_enabled_public
 from kanban.auth.local.hashing import (
     DEFAULT_ARGON2_TIMEOUT_SECONDS,
@@ -227,6 +228,7 @@ class LocalAdminLoginService:
             except Exception:
                 logger.debug("Failed to record login success activity", exc_info=True)
 
+            set_log_user(format_log_actor(principal_id, mfa_pending=require_mfa))
             logger.info("Local admin login succeeded for principal %s", principal_id)
             return issued
 

@@ -292,4 +292,40 @@ describe('TableView', () => {
     expect(screen.queryByRole('columnheader', { name: /Modules/i })).toBeNull();
     getItemSpy.mockRestore();
   });
+
+  it('renders cycle and module fallbacks when cycle or modules summaries are undefined', () => {
+    const issuesWithFallbacks: IssueItem[] = [
+      {
+        id: 'i-fallback',
+        key: 'KAN-99',
+        summary: 'Fallback summaries',
+        state: { id: 's1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        cycle_id: 'cycle-1',
+        cycle: null,
+        module_ids: ['mod-1'],
+      },
+      {
+        id: 'i-module-list',
+        key: 'KAN-100',
+        summary: 'Module list',
+        state: { id: 's1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+        module_ids: ['mod-1'],
+        modules: [{ id: 'mod-1', name: 'Auth Core' }],
+      },
+    ];
+
+    render(
+      <TableView
+        issues={issuesWithFallbacks}
+        projectKey="KAN"
+        modulesEnabled={true}
+      />,
+    );
+
+    expect(screen.getByText('🔄 Cycle')).toBeDefined();
+    expect(screen.getByText('📦 Module')).toBeDefined();
+    expect(screen.getByText('📦 Auth Core')).toBeDefined();
+  });
 });

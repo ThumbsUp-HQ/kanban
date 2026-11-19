@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from kanban.api.request_id import get_request_id
+from kanban.api.request_id import (
+    _LOG_USER_CTX,
+    _REQUEST_ID_CTX,
+    format_log_actor,
+    get_request_id,
+)
 
 if TYPE_CHECKING:
     from fastapi.exceptions import RequestValidationError
@@ -162,14 +167,64 @@ def not_found() -> NoReturn:
     )
 
 
+def _extract_request_log_context(request: object) -> tuple[str, str, str, str]:
+    """Extract (request_id, log_user, method, path) from contextvars or request.state fallback."""
+    state = getattr(request, "state", None)
+
+    req_id = _REQUEST_ID_CTX.get()
+    if not req_id and state is not None:
+        req_id = getattr(state, "request_id", None) or ""
+    if not req_id:
+        req_id = get_request_id()
+
+    actor = _LOG_USER_CTX.get()
+    if (not actor or actor == "-") and state is not None:
+        state_user = getattr(state, "log_user", None)
+        if state_user and state_user != "-":
+            actor = str(state_user)
+        else:
+            principal = getattr(state, "principal", None)
+            if principal is not None:
+                actor = format_log_actor(
+                    getattr(principal, "principal_id", None),
+                    agent_principal_id=getattr(principal, "agent_principal_id", None),
+                    mfa_pending=bool(getattr(principal, "mfa_pending", False)),
+                )
+    if not actor:
+        actor = "-"
+
+    method = str(getattr(request, "method", "UNKNOWN"))
+    url_obj = getattr(request, "url", None)
+    path = str(getattr(url_obj, "path", "unknown")) if url_obj is not None else "unknown"
+    return req_id, actor, method, path
+
+
+def _build_problem_reason(exc: ProblemException) -> str:
+    """Build a rich diagnostic reason string including field errors and causal exception chain."""
+    from kanban.logging import summarize_exception_chain  # noqa: PLC0415
+
+    parts: list[str] = [exc.detail or exc.title]
+    if exc.field:
+        parts.append(f"field={exc.field}")
+    if exc.errors:
+        err_summary = "; ".join(f"{fe.path}: {fe.message}" for fe in exc.errors)
+        parts.append(f"errors=[{err_summary}]")
+    cause = exc.__cause__ or (None if exc.__suppress_context__ else exc.__context__)
+    if cause is not None:
+        parts.append(f"cause={summarize_exception_chain(cause)}")
+    return " | ".join(parts)
+
+
 async def problem_exception_handler(
     request: Request,
     exc: ProblemException,
 ) -> JSONResponse:
     """Format an explicit ProblemException into application/problem+json."""
-    req_id = get_request_id()
-    method = getattr(request, "method", "UNKNOWN")
-    path = request.url.path if hasattr(request, "url") else "unknown"
+    req_id, actor, method, path = _extract_request_log_context(request)
+    reason = _build_problem_reason(exc)
+    has_cause = exc.__cause__ is not None or (
+        exc.__context__ is not None and not exc.__suppress_context__
+    )
     if exc.status in range(400, 500):
         logger.warning(
             "Client error [%s / %d] on %s %s [request_id=%s]: %s",
@@ -178,7 +233,9 @@ async def problem_exception_handler(
             method,
             path,
             req_id,
-            exc.detail or exc.title,
+            reason,
+            exc_info=exc if (logger.isEnabledFor(logging.DEBUG) and has_cause) else None,
+            extra={"request_id": req_id, "log_user": actor, "status_code": exc.status},
         )
     elif exc.status >= 500:  # noqa: PLR2004
         logger.error(
@@ -188,7 +245,9 @@ async def problem_exception_handler(
             method,
             path,
             req_id,
-            exc.detail or exc.title,
+            reason,
+            exc_info=exc if (exc.__traceback__ is not None or has_cause) else None,
+            extra={"request_id": req_id, "log_user": actor, "status_code": exc.status},
         )
     extra_fields = dict(exc.extra or {})
     extra_field = extra_fields.pop("field", None)
@@ -227,9 +286,7 @@ async def validation_exception_handler(
     exc: RequestValidationError,
 ) -> JSONResponse:
     """Format request validation errors into 422 VALIDATION_FAILED without echoing input."""
-    req_id = get_request_id()
-    method = getattr(request, "method", "UNKNOWN")
-    path = request.url.path if hasattr(request, "url") else "unknown"
+    req_id, actor, method, path = _extract_request_log_context(request)
     field_errors: list[FieldError] = []
 
     for err in exc.errors():
@@ -247,6 +304,7 @@ async def validation_exception_handler(
         path,
         req_id,
         summary or "validation error",
+        extra={"request_id": req_id, "log_user": actor, "status_code": 422},
     )
 
     problem = Problem(
@@ -271,8 +329,7 @@ async def starlette_http_exception_handler(
     exc: StarletteHTTPException,
 ) -> JSONResponse:
     """Map standard Starlette/FastAPI HTTPExceptions to RFC 7807 problem structure."""
-    del request
-    req_id = get_request_id()
+    req_id, actor, _method, _path = _extract_request_log_context(request)
 
     code_map = {
         400: ("BAD_REQUEST", "Bad Request"),
@@ -289,7 +346,14 @@ async def starlette_http_exception_handler(
     }
 
     code, default_title = code_map.get(exc.status_code, (f"HTTP_{exc.status_code}", "HTTP Error"))
-    detail = None if exc.status_code in (401, 404) else (str(exc.detail) if exc.detail else None)
+    raw_detail = str(exc.detail) if exc.detail else None
+    detail = None if exc.status_code in (401, 404) else raw_detail
+    cause = exc.__cause__ or (None if exc.__suppress_context__ else exc.__context__)
+    log_reason = raw_detail or default_title
+    if cause is not None:
+        from kanban.logging import summarize_exception_chain  # noqa: PLC0415
+
+        log_reason = f"{log_reason} | cause={summarize_exception_chain(cause)}"
 
     if exc.status_code >= 500:  # noqa: PLR2004
         logger.error(
@@ -297,7 +361,9 @@ async def starlette_http_exception_handler(
             exc.status_code,
             code,
             req_id,
-            detail or default_title,
+            log_reason,
+            exc_info=exc if (exc.__traceback__ is not None or cause is not None) else None,
+            extra={"request_id": req_id, "log_user": actor, "status_code": exc.status_code},
         )
     elif exc.status_code >= 400:  # noqa: PLR2004
         logger.warning(
@@ -305,7 +371,9 @@ async def starlette_http_exception_handler(
             exc.status_code,
             code,
             req_id,
-            detail or default_title,
+            log_reason,
+            exc_info=exc if (logger.isEnabledFor(logging.DEBUG) and cause is not None) else None,
+            extra={"request_id": req_id, "log_user": actor, "status_code": exc.status_code},
         )
 
     problem = Problem(
@@ -332,16 +400,18 @@ async def unhandled_exception_handler(
     exc: Exception,
 ) -> JSONResponse:
     """Catch-all handler translating unexpected exceptions into non-leaking 500 INTERNAL_ERROR."""
-    req_id = get_request_id()
-    method = getattr(request, "method", "UNKNOWN")
-    path = request.url.path if hasattr(request, "url") else "unknown"
+    from kanban.logging import summarize_exception_chain  # noqa: PLC0415
+
+    req_id, actor, method, path = _extract_request_log_context(request)
+    chain_summary = summarize_exception_chain(exc)
     logger.error(
         "Unhandled server exception on %s %s [request_id=%s]: %s",
         method,
         path,
         req_id,
-        exc,
+        chain_summary,
         exc_info=exc,
+        extra={"request_id": req_id, "log_user": actor, "status_code": 500},
     )
 
     problem = Problem(

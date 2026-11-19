@@ -272,4 +272,55 @@ describe('railApi', () => {
     );
     expect(res.name).toBe('frontend');
   });
+
+  it('covers project key guards and label creation options', async () => {
+    // Guards on undefined / empty projectKey
+    expect(await fetchProjectPriorities('')).toEqual([]);
+    expect(await fetchProjectPriorities('undefined')).toEqual([]);
+    expect(await fetchAssigneeSuggestions('', 'query')).toEqual([]);
+    expect(await fetchAssigneeSuggestions('undefined', 'query')).toEqual([]);
+    expect(await fetchProjectModules('')).toEqual([]);
+    expect(await fetchProjectModules('undefined')).toEqual([]);
+    expect(await fetchProjectCycles('')).toEqual([]);
+    expect(await fetchProjectCycles('undefined')).toEqual([]);
+    expect(await fetchProjectLabels('')).toEqual([]);
+    expect(await fetchProjectLabels('undefined')).toEqual([]);
+
+    await expect(createProjectLabel('', { name: 'test' })).rejects.toThrow(
+      'Project key is required to create a label',
+    );
+    await expect(createProjectLabel('undefined', { name: 'test' })).rejects.toThrow(
+      'Project key is required to create a label',
+    );
+
+    // createProjectLabel with color, color_hex, and exclusive_group
+    vi.mocked(client.apiFetch).mockResolvedValueOnce({ id: 'l2', name: 'colored' });
+    await createProjectLabel('KAN', {
+      name: 'colored',
+      color: '#ff0000',
+      exclusive_group: 'team',
+    });
+    expect(client.apiFetch).toHaveBeenLastCalledWith(
+      'POST',
+      '/api/v1/projects/{project_ref}/labels',
+      {
+        params: { project_ref: 'KAN' },
+        body: { name: 'colored', color_hex: '#ff0000', exclusive_group: 'team' },
+      },
+    );
+
+    vi.mocked(client.apiFetch).mockResolvedValueOnce({ id: 'l3', name: 'hex_only' });
+    await createProjectLabel('KAN', {
+      name: 'hex_only',
+      color_hex: '#00ff00',
+    });
+    expect(client.apiFetch).toHaveBeenLastCalledWith(
+      'POST',
+      '/api/v1/projects/{project_ref}/labels',
+      {
+        params: { project_ref: 'KAN' },
+        body: { name: 'hex_only', color_hex: '#00ff00' },
+      },
+    );
+  });
 });

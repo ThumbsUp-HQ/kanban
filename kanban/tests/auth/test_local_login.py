@@ -442,9 +442,11 @@ async def test_case_6_enumeration_timing_bounded(
         AUTH_LOGIN_ACCOUNT, "admin", session_hmac_key=key_material.session_hmac_key
     )
 
-    # 50 iterations: unknown user
+    # 50 interleaved iterations: unknown user and wrong password on known user
+    # Interleaving ensures ambient CPU/worker load changes affect both cohorts identically.
     for i in range(50):
-        ip = f"10.0.1.{i % 250 + 1}"
+        # Unknown user
+        ip_unknown = f"10.0.1.{i % 250 + 1}"
         async with factory.session(anon_ctx) as db_sess:
             t0 = time.perf_counter()
             with pytest.raises(ProblemException):
@@ -452,14 +454,13 @@ async def test_case_6_enumeration_timing_bounded(
                     db_sess,
                     username=f"unknown_user_{i}",
                     password="SomePassword123!",
-                    client_ip=ip,
+                    client_ip=ip_unknown,
                     workspace_id=ws_id,
                 )
             durations_unknown.append((time.perf_counter() - t0) * 1000.0)
 
-    # 50 iterations: wrong password on known user (resetting account limit counter each iteration)
-    for i in range(50):
-        ip = f"10.0.2.{i % 250 + 1}"
+        # Wrong password on known user (resetting account limit counter each iteration)
+        ip_wrong = f"10.0.2.{i % 250 + 1}"
         await limiter.reset(AUTH_LOGIN_ACCOUNT, account_key)
         async with factory.session(anon_ctx) as db_sess:
             t0 = time.perf_counter()
@@ -468,7 +469,7 @@ async def test_case_6_enumeration_timing_bounded(
                     db_sess,
                     username="admin",
                     password="WrongPassword999!",
-                    client_ip=ip,
+                    client_ip=ip_wrong,
                     workspace_id=ws_id,
                 )
             durations_wrong.append((time.perf_counter() - t0) * 1000.0)

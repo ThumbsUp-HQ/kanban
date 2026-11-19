@@ -7,7 +7,7 @@ import './filterBulk.css';
 export interface QuickCreateIssueModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (newIssue: Partial<IssueItem>) => unknown;
+  onCreate: (newIssue: Partial<IssueItem>) => Promise<Partial<IssueItem> | undefined> | Partial<IssueItem> | undefined;
   projectKey: string;
   modulesEnabled?: boolean;
   defaultStateId?: string;
@@ -248,9 +248,9 @@ export function QuickCreateIssueModal({
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      const maybePromise = onCreate(payload);
-      if (maybePromise && typeof (maybePromise as Promise<unknown>).then === 'function') {
-        const res = (await maybePromise) as Partial<IssueItem> | undefined;
+      const maybeResult = onCreate(payload);
+      if (maybeResult instanceof Promise) {
+        const res = await maybeResult;
         const resolvedKey =
           res && typeof res === 'object' && typeof res.key === 'string'
             ? res.key
@@ -262,7 +262,7 @@ export function QuickCreateIssueModal({
           isDraft: false,
         });
       } else {
-        const res = maybePromise as Partial<IssueItem> | undefined;
+        const res = maybeResult;
         const resolvedKey =
           res && typeof res === 'object' && typeof res.key === 'string'
             ? res.key
@@ -383,7 +383,12 @@ export function QuickCreateIssueModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="quick-create-form">
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+          className="quick-create-form"
+        >
           <div className="quick-create-input-group">
             <label htmlFor="quick-create-summary" className="quick-create-label">
               Summary

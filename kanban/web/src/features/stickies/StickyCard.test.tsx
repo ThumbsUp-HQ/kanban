@@ -418,6 +418,36 @@ describe('StickyCard', () => {
       await waitFor(() => {
         expect(container.querySelector('.sticky-card__inline-error')?.textContent).toBe('Failed to snooze promotion');
       });
+
+      // Test body markdown save error branches (Error and non-Error)
+      const onUpdateBody = vi.fn().mockRejectedValueOnce(new Error('Body save error'));
+      const { container: containerBody } = render(
+        <StickyCard
+          sticky={{ ...baseSticky, id: 'sticky-body-err' }}
+          onUpdate={onUpdateBody}
+          onDelete={vi.fn()}
+          onPromote={vi.fn()}
+        />,
+      );
+
+      const rawToggle = screen.getByTestId('sticky-editor-sticky-body-err-raw-toggle');
+      fireEvent.click(rawToggle);
+      const rawTextarea = screen.getByTestId('sticky-editor-sticky-body-err-raw');
+
+      fireEvent.change(rawTextarea, { target: { value: 'New markdown body text' } });
+      fireEvent.blur(rawTextarea);
+
+      await waitFor(() => {
+        expect(containerBody.querySelector('.sticky-card__inline-error')?.textContent).toBe('Body save error');
+      });
+
+      onUpdateBody.mockRejectedValueOnce('raw string failure');
+      fireEvent.change(rawTextarea, { target: { value: 'Another markdown body' } });
+      fireEvent.blur(rawTextarea);
+
+      await waitFor(() => {
+        expect(containerBody.querySelector('.sticky-card__inline-error')?.textContent).toBe('Failed to update sticky');
+      });
     } finally {
       vi.useFakeTimers();
     }

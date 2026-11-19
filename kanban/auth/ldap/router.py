@@ -21,6 +21,7 @@ from database.models.auth import AuthProviderCard
 from database.session import RLSContext
 from kanban.api.deps import PrincipalContext  # noqa: TC001
 from kanban.api.problems import ProblemException
+from kanban.api.request_id import bind_request_log_user, format_log_actor
 from kanban.api.timing import timing_floor
 from kanban.auth.ldap.client import (
     LdapBindError,
@@ -201,6 +202,10 @@ async def _handle_ldap_login(
         issued_session = None
 
         if resolved is not None:
+            bind_request_log_user(
+                request,
+                format_log_actor(resolved.principal_id, mfa_pending=resolved.mfa_pending),
+            )
             response_data["principal_id"] = str(resolved.principal_id)
             response_data["workspace_id"] = str(resolved.workspace_id)
             response_data["aal_level"] = resolved.aal_level

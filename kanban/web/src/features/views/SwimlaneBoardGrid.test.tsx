@@ -467,4 +467,29 @@ describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
     expect(screen.getByRole('columnheader', { name: /Auth Module/i })).toBeDefined();
     expect(screen.getByRole('columnheader', { name: /No Module/i })).toBeDefined();
   });
+
+  it('handles fallback lane and column when issue has unmapped lane or column id', () => {
+    const base = FIXTURE_12_ISSUES[0];
+    if (!base) throw new Error('Missing fixture');
+    const unmappedIssue: IssueItem = {
+      ...base,
+      key: 'KAN-UNMAPPED',
+      module_ids: ['unknown-mod-id'],
+      state: { id: 'unknown-state-id', name: 'Unknown State', group: 'unmapped' },
+    };
+
+    render(
+      <SwimlaneBoardGrid
+        issues={[unmappedIssue]}
+        projectKey="KAN"
+        groupBy="state"
+        subGroupBy="module"
+        modulesEnabled={true}
+        projectModules={[{ id: 'mod-1', name: 'Known Module' }]}
+      />,
+    );
+
+    // Grid renders without throwing and places issue in fallback column
+    expect(screen.getByText('KAN-UNMAPPED')).toBeDefined();
+  });
 });

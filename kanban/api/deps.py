@@ -12,6 +12,7 @@ from starlette.requests import Request  # noqa: TC002  # Required at runtime for
 
 from database.session import RLSContext
 from kanban.api.problems import ProblemException
+from kanban.api.request_id import bind_request_log_user, format_log_actor
 from kanban.settings import Settings
 
 if TYPE_CHECKING:
@@ -92,6 +93,15 @@ async def get_principal(request: Request) -> PrincipalContext:
             title="Authentication Required",
             detail=None,
         )
+
+    bind_request_log_user(
+        request,
+        format_log_actor(
+            principal.principal_id,
+            agent_principal_id=principal.agent_principal_id,
+            mfa_pending=principal.mfa_pending,
+        ),
+    )
 
     allow_mfa = getattr(request.state, "allow_mfa_pending", False)
     endpoint = request.scope.get("endpoint")

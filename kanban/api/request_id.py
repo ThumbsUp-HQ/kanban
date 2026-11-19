@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import uuid
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -14,7 +15,12 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
 
 _REQUEST_ID_REGEX = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+_ACTOR_SAFE_CHARS_REGEX = re.compile(r"[^A-Za-z0-9_.:@+-]")
+_MAX_ACTOR_LEN = 128
+_ZERO_UUID = uuid.UUID(int=0)
+
 _REQUEST_ID_CTX: ContextVar[str] = ContextVar("request_id", default="")
+_LOG_USER_CTX: ContextVar[str] = ContextVar("log_user", default="")
 
 
 def get_request_id() -> str:
@@ -23,12 +29,93 @@ def get_request_id() -> str:
     return val or uuid.uuid4().hex
 
 
+def _normalize_actor(actor: str | None) -> str:
+    """Normalize an actor label into a single-line bracket-safe identifier."""
+    if not actor:
+        return "-"
+    cleaned = _ACTOR_SAFE_CHARS_REGEX.sub("_", str(actor).strip())
+    if not cleaned:
+        return "-"
+    return cleaned[:_MAX_ACTOR_LEN]
+
+
+def get_log_user() -> str:
+    """Return the active user/principal attribution label for the current task, or '-'."""
+    val = _LOG_USER_CTX.get()
+    return val or "-"
+
+
+def set_log_user(actor: str | None) -> Token[str]:
+    """Bind the active user/principal attribution label in contextvar storage."""
+    return _LOG_USER_CTX.set(_normalize_actor(actor))
+
+
+def reset_log_user(token: Token[str]) -> None:
+    """Reset the active user/principal attribution label to its previous token state."""
+    _LOG_USER_CTX.reset(token)
+
+
+def _stringify_non_zero_id(ident: uuid.UUID | str | None) -> str:
+    """Return string representation of a principal/agent UUID if non-empty and non-zero."""
+    if ident is None:
+        return ""
+    if isinstance(ident, uuid.UUID):
+        return "" if ident == _ZERO_UUID else str(ident)
+    s_val = str(ident).strip()
+    return "" if (not s_val or s_val == str(_ZERO_UUID)) else s_val
+
+
+def format_log_actor(
+    principal_id: uuid.UUID | str | None,
+    *,
+    agent_principal_id: uuid.UUID | str | None = None,
+    username: str | None = None,
+    mfa_pending: bool = False,
+) -> str:
+    """Format a canonical, non-PII actor attribution string for log correlation."""
+    base = _stringify_non_zero_id(principal_id)
+
+    if not base and username:
+        u_clean = _normalize_actor(username)
+        if u_clean != "-":
+            base = f"login:{u_clean}"
+
+    if not base:
+        return "-"
+
+    agent_str = _stringify_non_zero_id(agent_principal_id)
+    if agent_str:
+        base = f"{base}@agent:{agent_str}"
+
+    if mfa_pending:
+        base = f"{base}:mfa_pending"
+
+    return _normalize_actor(base)
+
+
+def bind_request_log_user(request_or_scope: object, actor: str | None) -> str:
+    """Bind the normalized actor to both the active ContextVar and request/scope state."""
+    normalized = _normalize_actor(actor)
+    _LOG_USER_CTX.set(normalized)
+    if isinstance(request_or_scope, dict):
+        state = request_or_scope.setdefault("state", {})
+        if isinstance(state, dict):
+            state["log_user"] = normalized
+    else:
+        state_obj = getattr(request_or_scope, "state", None)
+        if state_obj is not None:
+            with contextlib.suppress(AttributeError):
+                state_obj.log_user = normalized
+    return normalized
+
+
 class RequestIdFilter(logging.Filter):
-    """Logging filter that injects the active request_id into every log record."""
+    """Logging filter that injects the active request_id and log_user into every log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Add request_id attribute to record."""
+        """Add request_id and log_user attributes to record."""
         record.request_id = get_request_id()
+        record.log_user = get_log_user()
         return True
 
 
@@ -45,7 +132,7 @@ class RequestIdMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Intercept HTTP scopes to establish and echo request-id."""
+        """Intercept HTTP scopes to establish and echo request-id and reset user context."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -64,9 +151,11 @@ class RequestIdMiddleware:
         assigned_id = inbound_id if inbound_id is not None else uuid.uuid4().hex
 
         token = _REQUEST_ID_CTX.set(assigned_id)
+        user_token = _LOG_USER_CTX.set("anon")
         if "state" not in scope:
             scope["state"] = {}
         scope["state"]["request_id"] = assigned_id
+        scope["state"]["log_user"] = "anon"
 
         async def send_with_request_id(message: MutableMapping[str, Any]) -> None:
             if message["type"] == "http.response.start":
@@ -80,4 +169,5 @@ class RequestIdMiddleware:
         try:
             await self.app(scope, receive, send_with_request_id)
         finally:
+            _LOG_USER_CTX.reset(user_token)
             _REQUEST_ID_CTX.reset(token)

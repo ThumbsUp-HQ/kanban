@@ -323,6 +323,10 @@ def create_app(
 
     @app.exception_handler(OAuth2Error)
     async def oauth2_error_handler(request: Request, exc: OAuth2Error) -> JSONResponse:
+        from kanban.api.request_id import get_log_user, get_request_id  # noqa: PLC0415
+
+        req_id = get_request_id()
+        actor = get_log_user()
         logger.warning(
             "OAuth2Error [%s / %d] on %s %s: %s",
             exc.error,
@@ -330,6 +334,7 @@ def create_app(
             request.method,
             request.url.path,
             exc.description,
+            extra={"request_id": req_id, "log_user": actor, "status_code": exc.status_code},
         )
         return JSONResponse(
             {"error": exc.error, "error_description": exc.description},

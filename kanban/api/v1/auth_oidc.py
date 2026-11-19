@@ -16,6 +16,7 @@ from starlette.responses import RedirectResponse, Response
 
 from database.session import RLSContext
 from kanban.api.problems import ProblemException
+from kanban.api.request_id import bind_request_log_user
 from kanban.auth.oidc.discovery import OidcError
 from kanban.auth.oidc.flow import (
     BROWSER_BINDING_COOKIE_NAME,
@@ -99,6 +100,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
     remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
 ) -> Response:
     """Initialize authorization-code flow with PKCE S256 for an OIDC or OAuth2 card."""
+    bind_request_log_user(request, f"oidc:{slug}")
     try:
         return await flow.start(
             session,
@@ -156,6 +158,7 @@ async def oidc_callback(  # noqa: PLR0913, PLR0917
     link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Response:
     """Handle IdP callback redirect, validate state and token, and establish session."""
+    bind_request_log_user(request, f"oidc:{slug}")
     browser_binding = request.cookies.get(BROWSER_BINDING_COOKIE_NAME) or request.cookies.get(
         FALLBACK_BROWSER_BINDING_COOKIE_NAME
     )

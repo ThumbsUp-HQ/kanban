@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
-import { AuthStudioPage } from './AuthStudioPage';
+import { AuthStudioPage, formatHandle } from './AuthStudioPage';
 import * as client from '../../api/client';
 import * as adminAuthApi from './adminAuthApi';
 import type { AdminAuthCard } from './adminAuthApi';
@@ -1596,6 +1596,43 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Failed to reset password.')).toBeDefined();
+      });
+    });
+
+    it('covers formatHandle permutations in AuthStudioPage', () => {
+      expect(formatHandle(null)).toBe('');
+      expect(formatHandle(undefined)).toBe('');
+      expect(formatHandle('')).toBe('');
+      expect(formatHandle('alice')).toBe('@alice');
+      expect(formatHandle('@bob')).toBe('@bob');
+    });
+
+    it('covers loadUsers error branches (ApiProblem 403 and generic string error)', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation((method, path) => {
+        if ((path as string) === '/api/v1/auth/me') return Promise.resolve(adminUser);
+        if ((path as string) === '/api/v1/admin/auth-cards') return Promise.resolve({ cards: mockCards });
+        return Promise.resolve({});
+      });
+
+      vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce('Raw string error');
+
+      render(<AuthStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+      await waitFor(() => {
+        expect(screen.getByText('Failed to load user principals.')).toBeDefined();
+      });
+
+      vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce(
+        new ApiProblem(403, { code: 'FORBIDDEN' }),
+      );
+      // Trigger loadUsers with filter change to 'USER'
+      fireEvent.click(screen.getByTestId('filter-user'));
+      await waitFor(() => {
+        expect(screen.getByText('Not found or no access')).toBeDefined();
       });
     });
   });

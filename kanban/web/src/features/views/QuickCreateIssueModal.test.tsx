@@ -431,7 +431,7 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
     fireEvent.change(screen.getByLabelText(/summary/i), {
       target: { value: 'In-flight locking test' },
     });
-    const createBtn = screen.getByRole('button', { name: /^create$/i }) as HTMLButtonElement;
+    const createBtn = screen.getByRole<HTMLButtonElement>('button', { name: /^create$/i });
     expect(createBtn.disabled).toBe(false);
 
     fireEvent.click(createBtn);
@@ -472,7 +472,42 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
 
     // Dialog stays open and typed values are preserved
     expect(screen.getByRole('dialog')).toBeDefined();
-    expect((screen.getByLabelText(/summary/i) as HTMLInputElement).value).toBe('Offline task draft');
-    expect((screen.getByLabelText(/description/i) as HTMLTextAreaElement).value).toBe('Important draft details to preserve');
+    expect(screen.getByLabelText<HTMLInputElement>(/summary/i).value).toBe('Offline task draft');
+    expect(screen.getByLabelText<HTMLTextAreaElement>(/description/i).value).toBe('Important draft details to preserve');
+  });
+
+  it('covers cancelled state mapping and non-Error submission rejection fallback', async () => {
+    const handleCreate = vi.fn().mockRejectedValue('raw string submission failure');
+
+    render(
+      <QuickCreateIssueModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onCreate={handleCreate}
+        projectKey="KAN"
+      />
+    );
+
+    const summaryInput = screen.getByLabelText(/summary/i);
+    fireEvent.change(summaryInput, { target: { value: 'Cancelled Task' } });
+
+    const stateSelect = screen.getByLabelText(/^state$/i);
+    fireEvent.change(stateSelect, { target: { value: 'state-canceled' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    const errorAlert = await screen.findByTestId('quick-create-error');
+    expect(errorAlert.textContent).toContain('Network error: Failed to create issue. Your draft has been preserved.');
+
+    expect(handleCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: 'Cancelled Task',
+        state: expect.objectContaining({
+          id: 'state-canceled',
+          name: 'Cancelled',
+          group: 'cancelled',
+        }) as unknown as Record<string, unknown>,
+      }),
+    );
   });
 });

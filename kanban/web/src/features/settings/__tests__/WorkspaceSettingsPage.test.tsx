@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { WorkspaceSettingsPage } from '../WorkspaceSettingsPage';
 import * as clientModule from '../../../api/client';
+import * as sessionGuardModule from '../../auth/useSessionGuard';
 
 describe('WorkspaceSettingsPage (KANBA-202)', () => {
   let queryClient: QueryClient;
@@ -985,5 +986,244 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     fireEvent.click(screen.getByText('grp-bare'));
     expect(screen.getByTestId('selected-group-name').textContent).toBe('');
     expect(screen.getByTestId('selected-group-handle').textContent).toBe('@grp-bare');
+  });
+
+  it('covers early return guards and error fallbacks for members, users, and groups', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true, workspace_role: 'SERVER_ADMIN' };
+      }
+      if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+        return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          { id: 'usr-1', type: 'USER', display_name: 'User 1', handle: '@u1', role: 'MEMBER' },
+          { id: 'grp-1', type: 'GROUP', display_name: 'Group 1', handle: '@g1' },
+        ];
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'POST') {
+        return Promise.reject(Object.assign(new Error('Principal creation failed'), { detail: 'Principal creation failed' }));
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'POST') {
+        return Promise.reject(Object.assign(new Error('Role binding update failed'), { detail: 'Role binding update failed' }));
+      }
+      if (url.includes('/api/v1/admin/role-bindings') && m === 'DELETE') {
+        return Promise.reject(Object.assign(new Error('Role binding delete failed'), { detail: 'Role binding delete failed' }));
+      }
+      if (url.includes('/api/v1/admin/groups/grp-1/members') && m === 'GET') {
+        return [{ id: 'm-1', display_name: 'Member 1', handle: '@m1', type: 'USER' }];
+      }
+      if (url.includes('/api/v1/admin/groups/grp-1/members/m-1') && m === 'DELETE') {
+        return Promise.reject(Object.assign(new Error('Custom group member delete detail'), { detail: 'Custom group member delete detail' }));
+      }
+      if (url.includes('/api/v1/admin/groups/grp-1/members') && m === 'POST') {
+        return Promise.reject(Object.assign(new Error('Custom cycle detail error'), { detail: 'Custom cycle detail error' }));
+      }
+      return {};
+    });
+
+    renderComponent();
+
+    // 1. Members Tab: early return on empty user form inputs
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // Click submit with empty inputs
+    const addUserBtn = screen.getByTestId('create-user-submit-btn');
+    fireEvent.click(addUserBtn);
+
+    // Fill inputs and trigger error rejection
+    const handleInput = screen.getByTestId('new-user-handle');
+    const nameInput = screen.getByTestId('new-user-name');
+    fireEvent.change(handleInput, { target: { value: 'newbie' } });
+    fireEvent.change(nameInput, { target: { value: 'Newbie Name' } });
+    fireEvent.click(addUserBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Principal creation failed')).toBeDefined();
+    });
+
+    // Update role error rejection
+    const roleSelect = screen.getByTestId('role-select-usr-1');
+    fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+    await waitFor(() => {
+      expect(screen.getByText('Role binding update failed')).toBeDefined();
+    });
+
+    // Remove member error rejection
+    const removeBtn = screen.getByTestId('remove-member-btn-usr-1');
+    fireEvent.click(removeBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Role binding delete failed')).toBeDefined();
+    });
+
+    // 2. Groups Tab: early return on empty group form inputs
+    const groupsTab = screen.getByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    const createGroupBtn = screen.getByTestId('create-group-btn');
+    fireEvent.click(createGroupBtn);
+
+    const groupNameInput = screen.getByTestId('new-group-name');
+    const groupHandleInput = screen.getByTestId('new-group-handle');
+    fireEvent.change(groupNameInput, { target: { value: 'Alpha Group' } });
+    fireEvent.change(groupHandleInput, { target: { value: 'alphagroup' } });
+    fireEvent.click(createGroupBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Principal creation failed')).toBeDefined();
+    });
+
+    // Empty memberId early return on add group member
+    const addMemberBtn = screen.getByTestId('add-group-member-btn');
+    fireEvent.click(addMemberBtn);
+
+    // Remove group member with custom detail error
+    const removeGroupMemberBtn = screen.getByTestId('remove-group-member-m-1');
+    fireEvent.click(removeGroupMemberBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Custom group member delete detail')).toBeDefined();
+    });
+  });
+
+  it('covers nullish settings fallbacks, empty principals object, and string error fallbacks', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+      if (url.includes('/api/v1/auth/me')) {
+        return null;
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return {};
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return { items: undefined };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'PATCH') {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw {};
+      }
+      return {};
+    });
+
+    const { unmount } = renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-settings-page')).toBeDefined();
+    });
+
+    // Check defaults rendered from nullish fallbacks
+    const trashInput = screen.getByTestId<HTMLInputElement>('workspace-trash-retention-input');
+    expect(trashInput.value).toBe('30');
+
+    // Trigger general settings save error fallback
+    const form = document.querySelector('form.kb-settings-form');
+    if (form) fireEvent.submit(form);
+    await waitFor(() => {
+      expect(screen.getByText('Failed to update workspace settings.')).toBeDefined();
+    });
+
+    unmount();
+  });
+
+  it('covers csrf token injection and empty input validations across members and groups', async () => {
+    vi.spyOn(sessionGuardModule, 'ensureSessionCsrfToken').mockResolvedValue('csrf-token-valid-xyz');
+
+    const mockPrincipals = [
+      { id: 'usr-1', handle: 'alice', display_name: 'Alice User', role: 'MEMBER', type: 'USER', principal_type: 'USER' },
+      { id: 'grp-1', handle: '@engineers', display_name: 'Engineers Group', type: 'GROUP', principal_type: 'GROUP' },
+    ];
+
+    const csrfTokensRecorded: string[] = [];
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, init) => {
+      const url = path;
+      const m = method.toUpperCase();
+      const headers = (init as { headers?: Record<string, string> } | undefined)?.headers;
+      if (headers?.['X-CSRF-Token']) {
+        csrfTokensRecorded.push(headers['X-CSRF-Token']);
+      }
+
+      if (url.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return Promise.resolve({ name: 'WS', slug: 'ws', trash_retention_days: 30 });
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return Promise.resolve(mockPrincipals);
+      }
+      if (url.includes('/api/v1/admin/principals') && m === 'POST') {
+        return Promise.resolve({ id: 'grp-new', handle: '@designers', display_name: 'Designers', type: 'GROUP' });
+      }
+      if (url.includes('/members') && m === 'GET') {
+        return Promise.resolve([{ id: 'usr-1', handle: 'alice', display_name: 'Alice User' }]);
+      }
+      return Promise.resolve({ success: true });
+    });
+
+    const { unmount } = renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-settings-page')).toBeDefined();
+    });
+
+    // 1. General save with csrf
+    const form = document.querySelector('form.kb-settings-form');
+    if (form) fireEvent.submit(form);
+    await waitFor(() => {
+      expect(csrfTokensRecorded).toContain('csrf-token-valid-xyz');
+    });
+
+    // 2. Switch to Members tab
+    fireEvent.click(screen.getByTestId('tab-members'));
+    await waitFor(() => {
+      expect(screen.getByTestId('new-user-handle')).toBeDefined();
+    });
+
+    // Submit empty user form (hits line 241: if (!newHandle.trim() || !newDisplayName.trim()) return)
+    const createUserForm = screen.getByTestId('create-user-form');
+    fireEvent.submit(createUserForm);
+
+    // Fill valid user and submit with csrf
+    fireEvent.change(screen.getByTestId('new-user-handle'), { target: { value: 'bob' } });
+    fireEvent.change(screen.getByTestId('new-user-name'), { target: { value: 'Bob Builder' } });
+    fireEvent.submit(createUserForm);
+
+    // Update role with csrf
+    const roleSelect = screen.getByTestId('role-select-usr-1');
+    fireEvent.change(roleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
+
+    // Remove member with csrf
+    const removeBtn = screen.getByTestId('remove-member-btn-usr-1');
+    fireEvent.click(removeBtn);
+
+    // 3. Switch to Groups tab
+    fireEvent.click(screen.getByTestId('tab-groups'));
+    await waitFor(() => {
+      expect(screen.getByTestId('new-group-name')).toBeDefined();
+    });
+
+    // Submit empty group form (hits line 343: if (!newGroupName.trim() || !newGroupHandle.trim()) return)
+    const createGroupForm = screen.getByTestId('create-group-form');
+    fireEvent.submit(createGroupForm);
+
+    // Create group with handle starting with @
+    fireEvent.change(screen.getByTestId('new-group-name'), { target: { value: 'Designers' } });
+    fireEvent.change(screen.getByTestId('new-group-handle'), { target: { value: '@designers' } });
+    fireEvent.submit(createGroupForm);
+
+    await waitFor(() => {
+      expect(csrfTokensRecorded.length).toBeGreaterThanOrEqual(4);
+    });
+
+    unmount();
   });
 });

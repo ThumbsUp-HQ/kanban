@@ -13,6 +13,7 @@ from starlette.requests import Request  # noqa: TC002  # Required at runtime for
 from database.session import RLSContext
 from kanban.api.deps import PrincipalContext, get_principal
 from kanban.api.problems import ProblemException
+from kanban.api.request_id import bind_request_log_user, format_log_actor
 from kanban.auth.sessions.cookies import (
     extract_session_cookie,
     hash_session_token,
@@ -83,6 +84,14 @@ class SessionCookieResolver:
             aal2_verified_at=user_session.aal2_verified_at,
         )
         request.state.principal = ctx
+        bind_request_log_user(
+            request,
+            format_log_actor(
+                ctx.principal_id,
+                agent_principal_id=ctx.agent_principal_id,
+                mfa_pending=ctx.mfa_pending,
+            ),
+        )
         return ctx
 
     async def _resolve_subject_token(self, request: Request) -> PrincipalContext | None:
@@ -147,6 +156,14 @@ class SessionCookieResolver:
             scoped_project_id=intro.project_id,
         )
         request.state.principal = ctx
+        bind_request_log_user(
+            request,
+            format_log_actor(
+                ctx.principal_id,
+                agent_principal_id=ctx.agent_principal_id,
+                mfa_pending=ctx.mfa_pending,
+            ),
+        )
         return ctx
 
 

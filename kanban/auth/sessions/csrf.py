@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hmac
+import logging
 import os
 import secrets
 import uuid
@@ -17,7 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import JSONResponse, Response
 
 from kanban.api.problems import Problem
-from kanban.api.request_id import get_request_id
+from kanban.api.request_id import get_log_user, get_request_id
 from kanban.auth.sessions.cookies import (
     build_clear_cookie_header,
     build_clear_fallback_cookie_header,
@@ -361,13 +362,25 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         is_dead_session: bool = False,
     ) -> JSONResponse:
         """Construct standard RFC 7807 403 problem response for CSRF failure."""
+        req_id = get_request_id()
+        actor = get_log_user()
+        method = getattr(request, "method", "HTTP") if request is not None else "HTTP"
+        path = request.url.path if request is not None and hasattr(request, "url") else "unknown"
+        logging.getLogger(__name__).warning(
+            "CSRF rejected [CSRF_REJECTED / 403] on %s %s [request_id=%s]: reason=%s",
+            method,
+            path,
+            req_id,
+            detail,
+            extra={"request_id": req_id, "log_user": actor, "status_code": 403},
+        )
         problem = Problem(
             type="https://kanban.hackedyour.info/problems/csrf-rejected",
             title="CSRF validation failed",
             status=403,
             detail=detail,
             code="CSRF_REJECTED",
-            request_id=get_request_id(),
+            request_id=req_id,
         )
         resp = JSONResponse(
             status_code=403,

@@ -777,4 +777,47 @@ describe('Sidebar', () => {
       expect(screen.getByText('Envelope Project')).toBeDefined();
     });
   });
+
+  it('covers deduplicatedWorkspaces edge fallbacks, null workspace current, and empty project list', async () => {
+    const mockWorkspaces = [
+      { id: '', name: '', slug: '', is_current: false },
+      { id: 'ws-dup-name', name: 'default workspace', slug: 'default-1', is_current: false },
+      { id: 'ws-dup-name-2', name: 'default workspace', slug: 'default-2', is_current: false },
+    ];
+
+    global.fetch = vi.fn().mockImplementation((req: RequestInfo | URL) => {
+      const url = typeof req === 'string' ? req : 'url' in req ? req.url : String(req);
+      if (url.includes('/api/v1/workspaces')) {
+        return Promise.resolve(new Response(JSON.stringify(mockWorkspaces), { status: 200 }));
+      }
+      if (url.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'csrf' }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KAN" projectName="Kanban" modulesEnabled={false} user={undefined} />
+      </MemoryRouter>,
+    );
+
+    // Default workspace fallback when none has is_current
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Workspace switcher:/i })).toBeDefined();
+    });
+
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    fireEvent.click(switcherBtn);
+    const items = screen.getAllByRole('menuitem');
+    const firstItem = items[0];
+    if (firstItem) {
+      act(() => {
+        fireEvent.click(firstItem);
+      });
+    }
+  });
 });

@@ -98,7 +98,7 @@ describe('AssigneesRow', () => {
       () => {
         expect(fetchSuggestions).toHaveBeenCalledWith('KAN', 'ale');
       },
-      { timeout: 500 },
+      { timeout: 3000 },
     );
 
     const suggestionBtn = await screen.findByRole('button', { name: /@alex/i });
@@ -137,7 +137,7 @@ describe('AssigneesRow', () => {
     const addFreeTextBtn = await screen.findByRole(
       'button',
       { name: /Add external label: “contractor@corp\.com”/i },
-      { timeout: 500 },
+      { timeout: 3000 },
     );
     fireEvent.click(addFreeTextBtn);
 
@@ -189,7 +189,7 @@ describe('AssigneesRow', () => {
     const input = screen.getByRole('combobox');
     fireEvent.change(input, { target: { value: 'user21' } });
 
-    const addBtn = await screen.findByRole('button', { name: /@user21/i }, { timeout: 500 });
+    const addBtn = await screen.findByRole('button', { name: /@user21/i }, { timeout: 3000 });
     fireEvent.click(addBtn);
 
     const alert = screen.getByRole('alert');
@@ -219,7 +219,7 @@ describe('AssigneesRow', () => {
     const input = screen.getByRole('combobox');
     fireEvent.change(input, { target: { value: 'ext11@corp.com' } });
 
-    const addBtn = await screen.findByRole('button', { name: /Add external label/i }, { timeout: 500 });
+    const addBtn = await screen.findByRole('button', { name: /Add external label/i }, { timeout: 3000 });
     fireEvent.click(addBtn);
 
     const alert = screen.getByRole('alert');

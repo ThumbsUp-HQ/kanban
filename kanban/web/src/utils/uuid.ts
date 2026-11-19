@@ -37,9 +37,11 @@ export function safeRandomUUID(): string {
 
   // RFC 4122 v4 variant and version bits
   // byte 6: 0100xxxx (version 4)
-  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
   // byte 8: 10xxxxxx (variant 1: 10x)
-  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
 
   const hex: string[] = [];
   for (const b of bytes) {

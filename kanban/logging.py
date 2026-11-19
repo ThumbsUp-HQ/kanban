@@ -14,7 +14,15 @@ import re
 import sys
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from kanban.api.request_id import _REQUEST_ID_CTX
+from kanban.api.request_id import (
+    _LOG_USER_CTX,
+    _REQUEST_ID_CTX,
+    bind_request_log_user,
+    format_log_actor,
+    get_log_user,
+    reset_log_user,
+    set_log_user,
+)
 from kanban.security.scrubber import scrub_text
 
 if TYPE_CHECKING:
@@ -27,15 +35,21 @@ __all__ = [
     "KanbanLogFilter",
     "KanbanLogFormatter",
     "KanbanStreamHandler",
+    "bind_request_log_user",
     "configure_logging",
     "extract_http_status_code",
+    "format_log_actor",
+    "get_log_user",
     "log_blocked",
     "log_error",
     "log_ok",
+    "reset_log_user",
     "sanitize_log_text",
     "scrub_log_secrets",
+    "set_log_user",
     "status_symbol_for_http_status",
     "status_symbol_for_level",
+    "summarize_exception_chain",
 ]
 
 STATUS_OK: Final[str] = "👍"
@@ -84,6 +98,9 @@ _HTTP_CLIENT_ERROR_MIN: Final = 400
 _HTTP_SERVER_ERROR_MIN: Final = 500
 _UVICORN_ACCESS_ARGS_LEN: Final = 5
 _UVICORN_ACCESS_STATUS_IDX: Final = 4
+_MAX_EXC_CHAIN_DEPTH: Final = 8
+_MAX_MULTILINE_EXC_LINES: Final = 64
+_MAX_EXC_LINE_CHARS: Final = 4096
 
 
 def _coerce_int_status(val: object) -> int | None:
@@ -202,11 +219,112 @@ def sanitize_log_text(text: str) -> str:
     return scrub_log_secrets(text)
 
 
+def summarize_exception_chain(
+    exc: BaseException,
+    *,
+    max_depth: int = _MAX_EXC_CHAIN_DEPTH,
+) -> str:
+    """Summarize an exception and its causal chain (__cause__ / __context__) safely."""
+    parts: list[str] = []
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+
+    while cur is not None and len(parts) < max_depth:
+        obj_id = id(cur)
+        if obj_id in seen:
+            parts.append("[cycle detected]")
+            break
+        seen.add(obj_id)
+
+        exc_type = type(cur).__name__
+        raw_msg = str(cur).strip()
+        clean_msg = sanitize_log_text(raw_msg) if raw_msg else ""
+        parts.append(f"{exc_type}: {clean_msg}" if clean_msg else exc_type)
+
+        if cur.__cause__ is not None:
+            cur = cur.__cause__
+        elif cur.__context__ is not None and not cur.__suppress_context__:
+            cur = cur.__context__
+        else:
+            break
+
+    return " <- ".join(parts)
+
+
+def _extract_exception_chain_nodes(
+    exc: BaseException,
+    *,
+    max_depth: int = _MAX_EXC_CHAIN_DEPTH,
+) -> list[tuple[int, str, str]]:
+    """Extract (index, exc_type, sanitized_message) nodes from an exception causal chain."""
+    nodes: list[tuple[int, str, str]] = []
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+
+    while cur is not None and len(nodes) < max_depth:
+        obj_id = id(cur)
+        if obj_id in seen:
+            break
+        seen.add(obj_id)
+
+        exc_type = type(cur).__name__
+        raw_msg = str(cur).strip()
+        clean_msg = sanitize_log_text(raw_msg) if raw_msg else "<no message>"
+        for icon in _STATUS_ICONS:
+            if clean_msg.startswith(icon):
+                clean_msg = clean_msg[len(icon) :].lstrip()
+                break
+        nodes.append((len(nodes), exc_type, clean_msg[:_MAX_EXC_LINE_CHARS]))
+
+        if cur.__cause__ is not None:
+            cur = cur.__cause__
+        elif cur.__context__ is not None and not cur.__suppress_context__:
+            cur = cur.__context__
+        else:
+            break
+
+    return nodes
+
+
+def _format_multiline_exception_lines(
+    exc_text: str,
+    prefix: str,
+    *,
+    exc_obj: BaseException | None = None,
+) -> list[str]:
+    """Format an exception chain and traceback into sanitized per-line diagnostic entries."""
+    lines: list[str] = []
+
+    if exc_obj is not None:
+        for idx, exc_type, clean_msg in _extract_exception_chain_nodes(exc_obj):
+            label = "exception" if idx == 0 else f"cause[{idx}]"
+            lines.append(f"{prefix} ↳ {label} {exc_type}: {clean_msg}")
+
+    # Scrub multi-line secrets (such as PEM private keys) BEFORE splitting lines
+    scrubbed_block = scrub_log_secrets(exc_text)
+    raw_lines = [ln for ln in scrubbed_block.splitlines() if ln.strip()]
+
+    for raw_ln in raw_lines[:_MAX_MULTILINE_EXC_LINES]:
+        clean_ln = sanitize_log_text(raw_ln.strip())
+        for icon in _STATUS_ICONS:
+            if clean_ln.startswith(icon):
+                clean_ln = clean_ln[len(icon) :].lstrip()
+                break
+        if clean_ln:
+            lines.append(f"{prefix} ↳ {clean_ln[:_MAX_EXC_LINE_CHARS]}")
+
+    if len(raw_lines) > _MAX_MULTILINE_EXC_LINES:
+        omitted = len(raw_lines) - _MAX_MULTILINE_EXC_LINES
+        lines.append(f"{prefix} ↳ ... ({omitted} more traceback lines truncated)")
+
+    return lines
+
+
 class KanbanLogFilter(logging.Filter):
-    """Logging filter that attaches the semantic status icon and active request_id."""
+    """Logging filter that attaches the semantic status icon, request_id, and log_user."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Inject status_icon and request_id attributes with accurate HTTP severity mapping."""
+        """Inject status_icon, request_id, and log_user attributes."""
         http_status = extract_http_status_code(record)
         if http_status is not None:
             record.status_icon = status_symbol_for_http_status(http_status)
@@ -226,6 +344,11 @@ class KanbanLogFilter(logging.Filter):
         if not req_id or req_id == "-":
             ctx_id = _REQUEST_ID_CTX.get()
             record.request_id = ctx_id or "-"
+
+        log_user = getattr(record, "log_user", None)
+        if not log_user or log_user == "-":
+            ctx_user = _LOG_USER_CTX.get()
+            record.log_user = ctx_user or "-"
         return True
 
 
@@ -247,36 +370,126 @@ def _resolve_record_status_icon(record: logging.LogRecord) -> str:
     return status_symbol_for_http_status(http_status)
 
 
+def _strip_leading_status_icon(text: str) -> str:
+    """Remove any duplicate leading status icon from a sanitized log message."""
+    for icon in _STATUS_ICONS:
+        if text.startswith(icon):
+            return text[len(icon) :].lstrip()
+    return text
+
+
+def _clean_bracket_token(raw_val: object) -> str:
+    """Sanitize a bracketed header token (such as req_id or user) and strip brackets."""
+    cleaned = sanitize_log_text(str(raw_val)).replace("[", "").replace("]", "").strip()
+    return cleaned or "-"
+
+
+def _resolve_record_correlation(record: logging.LogRecord) -> tuple[str, str]:
+    """Resolve sanitized (req_id, log_user) pair from record attributes or active ContextVars."""
+    req_id = getattr(record, "request_id", None)
+    if not req_id or req_id == "-":
+        req_id = _REQUEST_ID_CTX.get() or "-"
+    raw_user = getattr(record, "log_user", None)
+    if not raw_user or raw_user == "-":
+        raw_user = _LOG_USER_CTX.get() or "-"
+    return _clean_bracket_token(req_id), _clean_bracket_token(raw_user)
+
+
+def _extract_exc_object(exc_info: object) -> BaseException | None:
+    """Extract BaseException instance from record.exc_info tuple or exception object."""
+    if isinstance(exc_info, tuple) and len(exc_info) >= 2:  # noqa: PLR2004
+        maybe_exc = exc_info[1]
+        return maybe_exc if isinstance(maybe_exc, BaseException) else None
+    if isinstance(exc_info, BaseException):
+        return exc_info
+    return None
+
+
 class KanbanLogFormatter(logging.Formatter):
-    """Standardized single-line log formatter with semantic status icons."""
+    """Standardized log formatter with semantic status icons, user attribution, and DEBUG lines."""
+
+    def __init__(
+        self,
+        fmt: str | None = None,
+        datefmt: str | None = None,
+        *,
+        multiline_exceptions: bool | None = None,
+    ) -> None:
+        """Initialize formatter with optional explicit multiline exception expansion."""
+        super().__init__(fmt=fmt, datefmt=datefmt)
+        self._multiline_exceptions = multiline_exceptions
+
+    def _is_multiline_enabled(self) -> bool:
+        """Return True if per-exception diagnostic lines are active (e.g. in DEBUG mode)."""
+        if self._multiline_exceptions is not None:
+            return self._multiline_exceptions
+        if os.environ.get("KB_LOG_LEVEL", "").upper() == "DEBUG":
+            return True
+        return logging.getLogger().getEffectiveLevel() <= logging.DEBUG
+
+    def _ensure_exc_text(self, record: logging.LogRecord) -> str | None:
+        """Populate and return record.exc_text when exc_info is present."""
+        if record.exc_info and not record.exc_text and isinstance(record.exc_info, tuple):
+            record.exc_text = self.formatException(record.exc_info)
+        return record.exc_text
+
+    def _format_exception_attachment(
+        self,
+        record: logging.LogRecord,
+        *,
+        status_icon: str,
+        ts: str,
+        clean_user: str,
+        clean_req_id: str,
+    ) -> str:
+        """Format exception details as single-line | exc=... or multi-line DEBUG lines."""
+        exc_text = self._ensure_exc_text(record)
+        if not exc_text:
+            return ""
+        if not self._is_multiline_enabled():
+            return f" | exc={sanitize_log_text(exc_text)}"
+
+        exc_icon = (
+            (STATUS_BLOCKED if record.levelno < logging.ERROR else STATUS_ERROR)
+            if status_icon == STATUS_OK
+            else status_icon
+        )
+        exc_prefix = (
+            f"{exc_icon} {ts} [{record.levelname}] [user={clean_user}] "
+            f"[{record.name}] [req={clean_req_id}]"
+        )
+        extra_lines = _format_multiline_exception_lines(
+            exc_text,
+            exc_prefix,
+            exc_obj=_extract_exc_object(record.exc_info),
+        )
+        return ("\n" + "\n".join(extra_lines)) if extra_lines else ""
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format record into a single sanitized line prefixed with status icon."""
+        """Format record with status icon, user attribution, and optional DEBUG exception lines."""
         record.message = record.getMessage()
-        sanitized_msg = sanitize_log_text(record.message)
-
-        # Deduplicate leading status icons if already present in message
-        for icon in _STATUS_ICONS:
-            if sanitized_msg.startswith(icon):
-                sanitized_msg = sanitized_msg[len(icon) :].lstrip()
-                break
-
+        sanitized_msg = _strip_leading_status_icon(sanitize_log_text(record.message))
         status_icon = _resolve_record_status_icon(record)
-
-        req_id = getattr(record, "request_id", None)
-        if not req_id or req_id == "-":
-            ctx_id = _REQUEST_ID_CTX.get()
-            req_id = ctx_id or "-"
+        clean_req_id, clean_user = _resolve_record_correlation(record)
 
         ts = self.formatTime(record, self.datefmt)
-        prefix = f"{status_icon} {ts} [{record.levelname}] [{record.name}] [req={req_id}]"
+        prefix = (
+            f"{status_icon} {ts} [{record.levelname}] [user={clean_user}] "
+            f"[{record.name}] [req={clean_req_id}]"
+        )
         line = f"{prefix} {sanitized_msg}"
 
-        if record.exc_info and not record.exc_text:
-            record.exc_text = self.formatException(record.exc_info)
-        if record.exc_text:
-            sanitized_exc = sanitize_log_text(record.exc_text)
-            line += f" | exc={sanitized_exc}"
+        reason_val = getattr(record, "problem_reason", None)
+        if reason_val:
+            line += f" | reason={sanitize_log_text(str(reason_val))}"
+
+        line += self._format_exception_attachment(
+            record,
+            status_icon=status_icon,
+            ts=ts,
+            clean_user=clean_user,
+            clean_req_id=clean_req_id,
+        )
 
         if record.stack_info:
             sanitized_stack = sanitize_log_text(self.formatStack(record.stack_info))
@@ -336,7 +549,9 @@ def configure_logging(
         managed_handler.setStream(stream)
 
     managed_handler.setLevel(resolved_level)
-    managed_handler.setFormatter(KanbanLogFormatter())
+    managed_handler.setFormatter(
+        KanbanLogFormatter(multiline_exceptions=(resolved_level <= logging.DEBUG))
+    )
     if not any(isinstance(f, KanbanLogFilter) for f in managed_handler.filters):
         managed_handler.addFilter(KanbanLogFilter())
 

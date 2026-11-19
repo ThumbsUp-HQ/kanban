@@ -972,6 +972,7 @@ describe('BoardView Component', () => {
     const issues: BoardIssue[] = [
       { id: 'b1', key: 'KAN-LEFTMOST', summary: 'Left card', state_id: 'st-backlog', board_rank: '1' },
       { id: 'b2', key: 'KAN-RIGHTMOST', summary: 'Right card', state_id: 'st-done', board_rank: '2' },
+      { id: 'b3', key: 'KAN-STACKED', summary: 'Stacked card', state_id: 'st-backlog', board_rank: '3' },
     ];
 
     renderWithClient(
@@ -980,14 +981,40 @@ describe('BoardView Component', () => {
 
     const leftCard = screen.getByText('Left card').closest('.board-card');
     const rightCard = screen.getByText('Right card').closest('.board-card');
+    const stackedCard = screen.getByText('Stacked card').closest('.board-card');
 
     if (leftCard) {
       // Alt+ArrowLeft at left-most column is a bounds no-op
       fireEvent.keyDown(leftCard, { key: 'ArrowLeft', altKey: true });
+      // Alt+ArrowRight moves to next column
+      fireEvent.keyDown(leftCard, { key: 'ArrowRight', altKey: true });
+      // Alt+ArrowDown swaps with card below
+      fireEvent.keyDown(leftCard, { key: 'ArrowDown', altKey: true });
+    }
+    if (stackedCard) {
+      // Alt+ArrowUp swaps with card above
+      fireEvent.keyDown(stackedCard, { key: 'ArrowUp', altKey: true });
     }
     if (rightCard) {
       // Alt+ArrowRight at right-most column is a bounds no-op
       fireEvent.keyDown(rightCard, { key: 'ArrowRight', altKey: true });
+      // Alt+ArrowLeft moves to previous column
+      fireEvent.keyDown(rightCard, { key: 'ArrowLeft', altKey: true });
     }
+  });
+
+  it('covers identical board_rank sorting and empty projectKey realtime subscription', () => {
+    const issues: BoardIssue[] = [
+      { id: 'eq-1', key: 'EQ-1', summary: 'Equal 1', state_id: 'st-todo', board_rank: 'SAME_RANK' },
+      { id: 'eq-2', key: 'EQ-2', summary: 'Equal 2', state_id: 'st-todo', board_rank: 'SAME_RANK' },
+    ];
+
+    const { unmount } = renderWithClient(
+      <BoardView projectKey="" states={mockStates} issues={issues} />,
+    );
+
+    expect(screen.getByText('Equal 1')).toBeDefined();
+    expect(screen.getByText('Equal 2')).toBeDefined();
+    unmount();
   });
 });

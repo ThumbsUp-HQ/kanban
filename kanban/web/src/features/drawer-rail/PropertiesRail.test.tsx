@@ -422,4 +422,53 @@ describe('PropertiesRail', () => {
       );
     });
   });
+
+  it('covers issue prop changes, undefined metadata, empty auxiliary lists, and undefined onIssueUpdate', async () => {
+    vi.mocked(railApi.fetchProjectMetadata).mockResolvedValue({
+      key: 'KAN',
+      name: 'Kanban Project',
+      modules_enabled: false,
+      states: [],
+      priorities: [],
+      labels: [],
+    });
+    vi.mocked(railApi.fetchProjectPriorities).mockResolvedValue([]);
+    vi.mocked(railApi.fetchProjectLabels).mockResolvedValue([]);
+    vi.mocked(railApi.fetchProjectCycles).mockResolvedValue([]);
+
+    const issueWithUndefinedFields: IssueDetail = {
+      ...mockIssue,
+      key: 'KAN-999',
+      project_key: 'undefined',
+      capabilities: undefined,
+    };
+
+    const { rerender } = render(
+      <PropertiesRail
+        issue={issueWithUndefinedFields}
+        projectMetadata={undefined}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('complementary', { name: 'Properties' })).toBeDefined();
+    });
+
+    // Rerender with changed initialIssue to trigger line 44
+    const nextIssue: IssueDetail = {
+      ...mockIssue,
+      key: 'KAN-1000',
+      project_key: 'KAN',
+    };
+    rerender(
+      <PropertiesRail
+        issue={nextIssue}
+        projectMetadata={undefined}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('complementary', { name: 'Properties' })).toBeDefined();
+    });
+  });
 });
