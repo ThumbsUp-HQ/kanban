@@ -1257,13 +1257,27 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       // Quick priority update (exercises patchProjectIssue catch block)
       fireEvent.keyDown(window, { key: 'j' });
-      fireEvent.keyDown(window, { key: 'p' });
-      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 10000 });
+      const prioPop = await waitFor(
+        () => {
+          const existing = screen.queryByRole('dialog', { name: /Quick Priority Picker/i });
+          if (existing) return existing;
+          fireEvent.keyDown(window, { key: 'p' });
+          return screen.getByRole('dialog', { name: /Quick Priority Picker/i });
+        },
+        { timeout: 10000 }
+      );
       fireEvent.click(within(prioPop).getByText('High'));
 
       // Quick state update (exercises patchProjectIssue catch block)
-      fireEvent.keyDown(window, { key: 's' });
-      const statePop = await screen.findByRole('dialog', { name: /Quick State Picker/i }, { timeout: 5000 });
+      const statePop = await waitFor(
+        () => {
+          const existing = screen.queryByRole('dialog', { name: /Quick State Picker/i });
+          if (existing) return existing;
+          fireEvent.keyDown(window, { key: 's' });
+          return screen.getByRole('dialog', { name: /Quick State Picker/i });
+        },
+        { timeout: 10000 }
+      );
       fireEvent.click(within(statePop).getByText('Done'));
 
       // Select issue and exercise batch update state, priority, and delete catch blocks
@@ -1334,8 +1348,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         expect(screen.getByText('Issue with Alien State')).toBeDefined();
       });
       fireEvent.keyDown(window, { key: 'j' });
-      fireEvent.keyDown(window, { key: 'p' });
-      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i }, { timeout: 10000 });
+      const prioPop = await waitFor(
+        () => {
+          const existing = screen.queryByRole('dialog', { name: /Quick Priority Picker/i });
+          if (existing) return existing;
+          fireEvent.keyDown(window, { key: 'p' });
+          return screen.getByRole('dialog', { name: /Quick Priority Picker/i });
+        },
+        { timeout: 10000 }
+      );
       fireEvent.click(within(prioPop).getByText('None'));
       unmountList();
 

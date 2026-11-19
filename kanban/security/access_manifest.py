@@ -210,7 +210,7 @@ async def _resolve_inherited_scope(
                 workspace_name=workspace_name,
             )
 
-    if project_rec:
+    if project_rec and object_rec.object_type != ObjectKind.PROJECT:
         return InheritedScope(
             kind="project",
             scope_label=f"Project: {project_rec.identifier}",
