@@ -932,7 +932,10 @@ export function ProjectSettingsPage(): JSX.Element {
   return (
     <div data-testid="project-settings-page" className="kb-settings-container">
       <header className="kb-settings-header">
-        <h1 className="kb-settings-title">Project Settings: {project?.name || projectKey}</h1>
+        <h1 className="kb-settings-title">
+          Project Settings:{' '}
+          {project?.name !== undefined && project.name.length > 0 ? project.name : projectKey}
+        </h1>
         <p className="kb-settings-subtitle">
           Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
           and lifecycle.
