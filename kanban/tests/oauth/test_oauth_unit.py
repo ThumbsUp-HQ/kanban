@@ -10,10 +10,12 @@ import uuid
 
 import pytest
 from joserfc import jwt
+from starlette.requests import Request
 
 from kanban.api.problems import format_validation_error
 from kanban.auth.ldap.config import LdapCardConfig
 from kanban.auth.oidc.config import OidcCardConfig
+from kanban.auth.sessions.csrf import verify_same_origin_request
 from kanban.oauth.jwt import (
     OAuthTokenError,
     _get_signing_eckey,
@@ -22,15 +24,19 @@ from kanban.oauth.jwt import (
     verify_access_token,
 )
 from kanban.oauth.server import (
+    CONSENT_STYLE_SHA256,
     MAX_CODE_VERIFIER_LEN,
     OAuth2Error,
     RegistrationRateLimiter,
     check_registration_rate_limit,
+    generate_consent_csrf_token,
     parse_resource_target,
     parse_surface_from_resource,
     render_consent_screen,
+    resolve_public_base_url,
     validate_redirect_uri,
     validate_registration_redirect_uris,
+    verify_consent_csrf_token,
     verify_pkce_s256,
 )
 
@@ -330,3 +336,303 @@ def test_format_validation_error() -> None:
     cleaned = format_validation_error(Exception(raw))
     assert "https://errors.pydantic.dev" not in cleaned
     assert "extra field not permitted" in cleaned
+
+
+def test_consent_csrf_token_lifecycle() -> None:
+    """Test HMAC-SHA256 consent CSRF token issuance, validation, and tampering resistance."""
+    hmac_key = b"s" * 32
+    session_id = uuid.uuid4()
+    client_id = "test-client"
+    redirect_uri = "http://127.0.0.1:8080/callback"
+    code_challenge = "chal123"
+    state = "state123"
+    surface = "agent"
+
+    token = generate_consent_csrf_token(
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+        ttl_seconds=300,
+    )
+
+    # Valid token passes
+    assert verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+
+    # Bound parameter mismatch fails
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=uuid.uuid4(),  # Different session
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id="other-client",
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri="http://127.0.0.1:8080/other",
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge="different-challenge",
+        state=state,
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state="different-state",
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface="docs",  # Different surface
+    )
+
+    # Expired token fails
+    assert not verify_consent_csrf_token(
+        token=token,
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+        now=time.time() + 301,
+    )
+
+    # Malformed tokens fail safely
+    assert not verify_consent_csrf_token(
+        token="",
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token="not-a-valid-token",  # noqa: S106
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+    assert not verify_consent_csrf_token(
+        token="invalidpayload.invalidsig",  # noqa: S106
+        session_hmac_key=hmac_key,
+        session_id=session_id,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=code_challenge,
+        state=state,
+        surface=surface,
+    )
+
+
+def test_render_consent_screen_security_headers_and_admin_surface() -> None:
+    """Test consent screen styles hash CSP and admin surface warning banner."""
+    resp_admin = render_consent_screen(
+        client_name="Admin Tool",
+        redirect_uri="http://127.0.0.1:8080/callback",
+        surface="admin",
+        requested_scopes=["admin:read", "admin:write"],
+        state="st-admin",
+        code_challenge="chal",
+        code_challenge_method="S256",
+        resource="https://auth.kanban/mcp/admin",
+        client_id="cid-admin",
+        csrf_token="csrf-test",  # noqa: S106
+        principal_display="admin@domain.local",
+    )
+    assert resp_admin.status_code == 200
+    csp = resp_admin.headers.get("content-security-policy", "")
+    assert f"style-src 'self' 'sha256-{CONSENT_STYLE_SHA256}'" in csp
+    assert "'unsafe-inline'" not in csp
+
+    body = bytes(resp_admin.body).decode("utf-8")
+    assert "admin@domain.local" in body
+    assert "ADMIN" in body
+
+
+def test_verify_same_origin_request_scenarios() -> None:
+    """Test same-origin validation with Sec-Fetch-Site, Origin, and Referer headers."""
+    # 1. Sec-Fetch-Site cross-site is rejected
+    req_cross = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"cross-site"),
+            ],
+        }
+    )
+    assert not verify_same_origin_request(req_cross)
+
+    # 2. Sec-Fetch-Site same-origin with matching origin is accepted
+    req_same = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"same-origin"),
+                (b"origin", b"http://127.0.0.1:8000"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_same)
+
+    # 3. Origin mismatch is rejected
+    req_bad_origin = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"same-origin"),
+                (b"origin", b"https://attacker.evil"),
+            ],
+        }
+    )
+    assert not verify_same_origin_request(req_bad_origin)
+
+    # 4. Sec-Fetch-Site none without origin is accepted
+    req_none = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"none"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_none)
+
+    # 5. Matching Referer is accepted when Origin is absent
+    req_referer = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"referer", b"http://127.0.0.1:8000/oauth/authorize"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_referer)
+
+    # 6. Mismatched Referer is rejected
+    req_bad_referer = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"referer", b"https://evil.attacker/oauth/authorize"),
+            ],
+        }
+    )
+    assert not verify_same_origin_request(req_bad_referer)
+
+
+def test_resolve_public_base_url_and_parse_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test resolve_public_base_url env, headers, and fallback paths."""
+    # 1. KANBAN_PUBLIC_ORIGIN env var
+    monkeypatch.setenv("KANBAN_PUBLIC_ORIGIN", "https://custom.kanban.local/")
+    assert resolve_public_base_url() == "https://custom.kanban.local"
+    monkeypatch.delenv("KANBAN_PUBLIC_ORIGIN", raising=False)
+
+    # 2. X-Forwarded-Proto and X-Forwarded-Host
+    req_fwd = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/",
+            "headers": [
+                (b"x-forwarded-proto", b"https"),
+                (b"x-forwarded-host", b"proxy.kanban.local"),
+            ],
+        }
+    )
+    assert resolve_public_base_url(req_fwd) == "https://proxy.kanban.local"
+
+    # 3. No request fallback
+    assert resolve_public_base_url(None) == "http://localhost:8000"
+
+    # 4. Resource path without leading slash
+    surface, ws, proj = parse_resource_target("mcp/agent")
+    assert surface == "agent"
+    assert ws is None
+    assert proj is None

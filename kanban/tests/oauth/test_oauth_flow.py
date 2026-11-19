@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import importlib
+import re
 import secrets
 import time
 import urllib.parse
@@ -22,6 +23,7 @@ from sqlalchemy import text, update
 
 from database.models.oauth import (
     OAuthAuthorizationCode,
+    OAuthClient,
 )
 from kanban.api.deps import PrincipalContext
 from kanban.oauth.jwt import (
@@ -41,6 +43,12 @@ pytestmark = [pytest.mark.committed_db, pytest.mark.asyncio]
 
 def _b64(b: bytes) -> str:
     return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
+
+
+def _extract_csrf(html_text: str) -> str:
+    m = re.search(r'name="csrf_token"\s+value="([^"]+)"', html_text)
+    assert m is not None, "csrf_token input field not found in HTML"
+    return m.group(1)
 
 
 @pytest.fixture(autouse=True)
@@ -191,6 +199,7 @@ async def test_case_1_positive_oauth_flow(  # noqa: PLR0915
     assert "Authorize Claude Code" in resp_auth.text
     assert "Target MCP Surface" in resp_auth.text
     assert "AGENT" in resp_auth.text
+    csrf_token = _extract_csrf(resp_auth.text)
 
     # 4. POST /oauth/authorize/decision -> Approve
     resp_decision = await client.post(
@@ -203,6 +212,7 @@ async def test_case_1_positive_oauth_flow(  # noqa: PLR0915
             "code_challenge_method": "S256",
             "state": state,
             "action": "approve",
+            "csrf_token": csrf_token,
             "scopes": ["agent:read", "agent:write"],
             "allowed_project_id": "__ALL__",
         },
@@ -325,6 +335,21 @@ async def test_case_2_pkce_security(
     assert "S256" in resp_plain.json()["error_description"]
 
     # 2b. Authorize valid code
+    resp_auth2 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state2",
+            "resource": resource,
+        },
+    )
+    assert resp_auth2.status_code == 200
+    csrf_token2 = _extract_csrf(resp_auth2.text)
+
     resp_decision = await client.post(
         "/oauth/authorize/decision",
         data={
@@ -335,6 +360,7 @@ async def test_case_2_pkce_security(
             "code_challenge_method": "S256",
             "state": "state2",
             "action": "approve",
+            "csrf_token": csrf_token2,
             "scopes": ["agent:read"],
         },
         follow_redirects=False,
@@ -426,6 +452,21 @@ async def test_case_3_audience_binding_and_alg_confusion(
     verifier, challenge = _generate_pkce()
 
     # Authorize & mint token with resource=agent
+    resp_auth3 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state3",
+            "resource": resource,
+        },
+    )
+    assert resp_auth3.status_code == 200
+    csrf_token3 = _extract_csrf(resp_auth3.text)
+
     resp_decision = await client.post(
         "/oauth/authorize/decision",
         data={
@@ -436,6 +477,7 @@ async def test_case_3_audience_binding_and_alg_confusion(
             "code_challenge_method": "S256",
             "state": "state3",
             "action": "approve",
+            "csrf_token": csrf_token3,
             "scopes": ["agent:read"],
         },
         follow_redirects=False,
@@ -568,6 +610,21 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
     assert resp_uri_diff.json()["error"] == "invalid_request"
 
     # Authorize valid code
+    resp_auth4 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state4",
+            "resource": resource,
+        },
+    )
+    assert resp_auth4.status_code == 200
+    csrf_token4 = _extract_csrf(resp_auth4.text)
+
     resp_decision = await client.post(
         "/oauth/authorize/decision",
         data={
@@ -578,6 +635,7 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
             "code_challenge_method": "S256",
             "state": "state4",
             "action": "approve",
+            "csrf_token": csrf_token4,
             "scopes": ["agent:read"],
         },
         follow_redirects=False,
@@ -634,6 +692,21 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
     # 4e. Refresh token single-use rotation and reuse detection
     as_principal(user)
     v2, c2 = _generate_pkce()
+    resp_auth2 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": c2,
+            "code_challenge_method": "S256",
+            "state": "state4b",
+            "resource": resource,
+        },
+    )
+    assert resp_auth2.status_code == 200
+    csrf_token2 = _extract_csrf(resp_auth2.text)
+
     resp_dec2 = await client.post(
         "/oauth/authorize/decision",
         data={
@@ -644,6 +717,7 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
             "code_challenge_method": "S256",
             "state": "state4b",
             "action": "approve",
+            "csrf_token": csrf_token2,
             "scopes": ["agent:read"],
         },
         follow_redirects=False,
@@ -875,6 +949,21 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
     verifier, challenge = _generate_pkce()
 
     # 6a. User approves decision with NARROWED scope (only agent:read) and project KAN
+    resp_auth6 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state6",
+            "resource": resource,
+        },
+    )
+    assert resp_auth6.status_code == 200
+    csrf_token6 = _extract_csrf(resp_auth6.text)
+
     resp_decision = await client.post(
         "/oauth/authorize/decision",
         data={
@@ -885,6 +974,7 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
             "code_challenge_method": "S256",
             "state": "state6",
             "action": "approve",
+            "csrf_token": csrf_token6,
             "scopes": ["agent:read"],  # Narrowed from requested read+write
             "allowed_project_id": str(project_kan),
         },
@@ -992,6 +1082,21 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
     # Create another grant
     as_principal(user)
     v3, c3 = _generate_pkce()
+    resp_auth3 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": c3,
+            "code_challenge_method": "S256",
+            "state": "state6c",
+            "resource": resource,
+        },
+    )
+    assert resp_auth3.status_code == 200
+    csrf_token3 = _extract_csrf(resp_auth3.text)
+
     resp_dec3 = await client.post(
         "/oauth/authorize/decision",
         data={
@@ -1002,6 +1107,7 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
             "code_challenge_method": "S256",
             "state": "state6c",
             "action": "approve",
+            "csrf_token": csrf_token3,
             "scopes": ["agent:read"],
         },
         follow_redirects=False,
@@ -1281,7 +1387,8 @@ async def test_case_10_scoped_resource_indicators_and_bare_mcp(
     assert resp_no_res.status_code == 200
     assert "AGENT" in resp_no_res.text
     csp = resp_no_res.headers.get("content-security-policy", "")
-    assert "style-src 'self' 'unsafe-inline'" in csp
+    assert "sha256-" in csp
+    assert "'unsafe-inline'" not in csp
     assert "http://127.0.0.1:*" in csp
 
     # 4. Unauthenticated browser request to /oauth/authorize redirects to relative /login?next=...
@@ -1338,3 +1445,360 @@ async def test_case_11_mcp_api_key_label_and_project_scoping(
     target_key = next((k for k in keys if k["id"] == mint_data["id"]), None)
     assert target_key is not None
     assert target_key["label"] == "My Personal Assistant Key"
+
+
+# =========================================================================
+# Test Case 12: Decision CSRF and Policy Hardening (KAN-28)
+# =========================================================================
+
+
+async def test_case_12_decision_csrf_and_policy_hardening(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Test Case 12: Validate CSRF tokens, origin enforcement, client status, and AAL2 policy."""
+    client = api_env.client
+    redirect_uri = "http://127.0.0.1:8080/callback"
+    resource = "http://test/mcp/agent"
+
+    user = await make_user("ian", workspace_role="WORKSPACE_ADMIN")
+    as_principal(user)
+    _v, challenge = _generate_pkce()
+
+    resp_reg = await client.post(
+        "/oauth/register",
+        json={"client_name": "Hardened Policy Client", "redirect_uris": [redirect_uri]},
+    )
+    client_id = resp_reg.json()["client_id"]
+
+    # 1. GET /oauth/authorize to get genuine CSRF token
+    resp_auth = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "resource": resource,
+        },
+    )
+    assert resp_auth.status_code == 200
+    csrf_token = _extract_csrf(resp_auth.text)
+
+    # 2. Decision with missing CSRF token -> 403 CSRF_INVALID
+    resp_no_csrf = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "action": "approve",
+            "scopes": ["agent:read"],
+        },
+        follow_redirects=False,
+    )
+    assert resp_no_csrf.status_code == 403
+    assert resp_no_csrf.json()["code"] == "CSRF_INVALID"
+
+    # 3. Decision with tampered CSRF token -> 403 CSRF_INVALID
+    resp_bad_csrf = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "action": "approve",
+            "csrf_token": csrf_token + "tampered",
+            "scopes": ["agent:read"],
+        },
+        follow_redirects=False,
+    )
+    assert resp_bad_csrf.status_code == 403
+    assert resp_bad_csrf.json()["code"] == "CSRF_INVALID"
+
+    # 4. Decision with cross-site Sec-Fetch-Site -> 403 CSRF_INVALID
+    resp_cross = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "action": "approve",
+            "csrf_token": csrf_token,
+            "scopes": ["agent:read"],
+        },
+        headers={"Sec-Fetch-Site": "cross-site"},
+        follow_redirects=False,
+    )
+    assert resp_cross.status_code == 403
+    assert resp_cross.json()["code"] == "CSRF_INVALID"
+
+    # 5. Empty scopes approved -> 302 redirect with invalid_scope
+    resp_empty_scopes = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "action": "approve",
+            "csrf_token": csrf_token,
+            "scopes": [],
+        },
+        follow_redirects=False,
+    )
+    assert resp_empty_scopes.status_code == 302
+    loc_empty = urllib.parse.urlparse(resp_empty_scopes.headers["location"])
+    params_empty = urllib.parse.parse_qs(loc_empty.query)
+    assert params_empty["error"][0] == "invalid_scope"
+
+    # 6. Surface is admin, caller has AAL1 -> GET /oauth/authorize redirects
+    # with access_denied and error_description=aal2_required
+    admin_resource = "http://test/mcp/admin"
+    resp_auth_admin_aal1 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-admin",
+            "resource": admin_resource,
+        },
+        follow_redirects=False,
+    )
+    assert resp_auth_admin_aal1.status_code == 302
+    loc_admin_aal1 = urllib.parse.urlparse(resp_auth_admin_aal1.headers["location"])
+    params_admin_aal1 = urllib.parse.parse_qs(loc_admin_aal1.query)
+    assert params_admin_aal1["error"][0] == "access_denied"
+    assert "aal2" in params_admin_aal1.get("error_description", [""])[0].lower()
+
+    # Elevate ian to AAL2 to obtain consent page and token
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user.id,
+        workspace_id=user.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+    )
+    resp_auth_admin_aal2 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-admin",
+            "resource": admin_resource,
+        },
+    )
+    assert resp_auth_admin_aal2.status_code == 200
+    csrf_token_admin = _extract_csrf(resp_auth_admin_aal2.text)
+
+    # Now step caller back down to AAL1 -> decision route enforces AAL2
+    # and rejects with 302 access_denied
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user.id,
+        workspace_id=user.workspace_id,
+        token_scopes=("session",),
+        aal_level=1,
+    )
+    resp_admin_aal1 = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": admin_resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-admin",
+            "action": "approve",
+            "csrf_token": csrf_token_admin,
+            "scopes": ["admin:read"],
+        },
+        follow_redirects=False,
+    )
+    assert resp_admin_aal1.status_code == 302
+    loc_aal = urllib.parse.urlparse(resp_admin_aal1.headers["location"])
+    params_aal = urllib.parse.parse_qs(loc_aal.query)
+    assert params_aal["error"][0] == "access_denied"
+    assert "aal2" in params_aal.get("error_description", [""])[0].lower()
+
+    # 7. Action deny -> 302 redirect with access_denied
+    resp_deny = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "action": "deny",
+            "csrf_token": csrf_token,
+            "scopes": ["agent:read"],
+        },
+        follow_redirects=False,
+    )
+    assert resp_deny.status_code == 302
+    loc_deny = urllib.parse.urlparse(resp_deny.headers["location"])
+    params_deny = urllib.parse.parse_qs(loc_deny.query)
+    assert params_deny["error"][0] == "access_denied"
+
+    # 8. Client disabled status -> 302 redirect with unauthorized_client
+    await api_env.seed.execute(
+        update(OAuthClient).where(OAuthClient.client_id == client_id).values(status="disabled")
+    )
+    await api_env.seed.commit()
+
+    resp_disabled = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state12",
+            "action": "approve",
+            "csrf_token": csrf_token,
+            "scopes": "agent:read",
+        },
+        follow_redirects=False,
+    )
+    assert resp_disabled.status_code == 302
+    loc_dis = urllib.parse.urlparse(resp_disabled.headers["location"])
+    params_dis = urllib.parse.parse_qs(loc_dis.query)
+    assert params_dis["error"][0] == "unauthorized_client"
+
+
+# =========================================================================
+# Test Case 13: Admin OAuth Client Registration (KAN-28)
+# =========================================================================
+
+
+async def test_case_13_admin_register_oauth_client(
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Test Case 13: Admin registration of OAuth client with AAL2, auditing, and validations."""
+    client = api_env.client
+    user = await make_user("admin_user", workspace_role="WORKSPACE_ADMIN")
+    as_principal(user)
+
+    # 1. Non-AAL2 caller is rejected with 403
+    resp_non_aal2 = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Audited Enterprise App",
+            "redirect_uris": ["https://app.enterprise.internal/callback"],
+            "token_endpoint_auth_method": "none",
+        },
+    )
+    assert resp_non_aal2.status_code == 403
+
+    # 2. Enroll TOTP MFA factor and elevate to AAL2
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {
+            "p_id": user.id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res_mfa = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": user.id},
+    )
+    p_row = res_mfa.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user.id,
+        workspace_id=user.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+    )
+
+    # 3. Successful admin registration
+    resp_create = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Audited Enterprise App",
+            "redirect_uris": [
+                "https://app.enterprise.internal/callback",
+                "http://127.0.0.1:9000/callback",
+            ],
+            "token_endpoint_auth_method": "none",
+        },
+    )
+    assert resp_create.status_code == 201
+    created_data = resp_create.json()
+    assert created_data["client_name"] == "Audited Enterprise App"
+    assert created_data["status"] == "active"
+    assert created_data["client_type"] == "public"
+    assert created_data["token_endpoint_auth_method"] == "none"
+    assert len(created_data["redirect_uris"]) == 2
+    assert "client_id" in created_data
+    registered_client_id = created_data["client_id"]
+
+    # 4. Verify client exists and is active in admin list
+    resp_list = await client.get("/api/v1/admin/oauth-clients")
+    assert resp_list.status_code == 200
+    clients = resp_list.json()
+    matching = next((c for c in clients if c["client_id"] == registered_client_id), None)
+    assert matching is not None
+    assert matching["status"] == "active"
+
+    # 5. Invalid redirect URI (non-loopback plain HTTP) is rejected with 400
+    resp_bad_uri = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Insecure App",
+            "redirect_uris": ["http://insecure.example.com/callback"],
+        },
+    )
+    assert resp_bad_uri.status_code == 400
+
+    # 6. Invalid token_endpoint_auth_method is rejected with 400
+    resp_bad_auth = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Bad Auth App",
+            "redirect_uris": ["https://app.example.com/callback"],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    )
+    assert resp_bad_auth.status_code == 400
+
+    # 7. Invalid client_type is rejected with 400
+    resp_bad_type = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Confidential App",
+            "redirect_uris": ["https://app.example.com/callback"],
+            "client_type": "confidential",
+        },
+    )
+    assert resp_bad_type.status_code == 400

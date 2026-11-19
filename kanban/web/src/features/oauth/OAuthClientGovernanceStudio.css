@@ -350,6 +350,115 @@
   color: var(--kb-color-text-primary, #f0f6fc);
 }
 
+.kb-oauth-gov-register-btn {
+  height: var(--prop-row-h);
+  padding: 0 16px;
+  min-height: 40px;
+  background-color: var(--kb-color-primary, #238636);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-oauth-gov-register-btn:hover {
+  background-color: #2ea043;
+}
+
+.kb-oauth-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-oauth-id-code {
+  font-family: monospace;
+  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #0d1117));
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  color: #58a6ff;
+  font-size: 0.875rem;
+  user-select: all;
+  word-break: break-all;
+}
+
+.kb-oauth-copy-btn {
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+  background-color: var(--kb-color-bg-surface-raised, #21262d);
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  color: var(--kb-color-text-primary, #f0f6fc);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.15s;
+}
+
+.kb-oauth-copy-btn:hover {
+  background-color: var(--bg-hover, #30363d);
+}
+
+.kb-oauth-modal-desc {
+  font-size: 0.875rem;
+  color: var(--kb-color-text-secondary, #8b949e);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.kb-oauth-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-oauth-form-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-oauth-form-input,
+.kb-oauth-form-textarea,
+.kb-oauth-form-select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
+  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.kb-oauth-form-textarea {
+  font-family: monospace;
+  resize: vertical;
+}
+
+.kb-oauth-form-input:focus,
+.kb-oauth-form-textarea:focus,
+.kb-oauth-form-select:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.kb-oauth-gov-btn-primary {
+  background-color: var(--kb-color-primary, #238636);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.kb-oauth-gov-btn-primary:hover:not(:disabled) {
+  background-color: #2ea043;
+}
+
 @media (max-width: 768px) {
   .kb-oauth-gov-header {
     flex-direction: column;

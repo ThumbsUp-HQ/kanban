@@ -47,6 +47,7 @@ export interface OAuthClientItem {
   client_id: string;
   client_name?: string | null | undefined;
   client_type: 'confidential' | 'public';
+  token_endpoint_auth_method?: 'none' | 'private_key_jwt' | undefined;
   redirect_uris: string[];
   status: OAuthClientStatus;
   created_at: string;
@@ -72,6 +73,24 @@ export async function patchAdminOAuthClient(
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+export async function registerAdminOAuthClient(
+  payload: RegisterOAuthClientRequest,
+): Promise<OAuthClientItem> {
+  return (await apiFetch('POST', '/api/v1/admin/oauth-clients' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as OAuthClientItem;
+}
+
+export interface RegisterOAuthClientRequest {
+  client_name?: string | undefined;
+  redirect_uris: string[];
+  client_type?: 'public' | undefined;
+  token_endpoint_auth_method?: 'none' | 'private_key_jwt' | undefined;
+  grant_types?: string[] | undefined;
+  response_types?: string[] | undefined;
 }
 
 export async function deleteAdminOAuthClient(clientId: string): Promise<void> {

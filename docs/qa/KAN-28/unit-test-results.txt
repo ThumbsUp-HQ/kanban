@@ -1,0 +1,88 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 36 items
+
+kanban/tests/oauth/test_device_flow.py::test_user_code_generator_and_normalizer PASSED [  2%]
+kanban/tests/oauth/test_device_flow.py::test_rate_limiting_helpers PASSED [  5%]
+kanban/tests/oauth/test_device_flow.py::test_case_1_positive_device_flow PASSED [  8%]
+kanban/tests/oauth/test_device_flow.py::test_case_2_device_flow_abuse_and_security PASSED [ 11%]
+kanban/tests/oauth/test_device_flow.py::test_case_3_personal_mcp_keys_lifecycle PASSED [ 13%]
+kanban/tests/oauth/test_device_flow.py::test_device_flow_edge_cases PASSED [ 16%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_1_positive_oauth_flow PASSED [ 19%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_2_pkce_security PASSED  [ 22%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_3_audience_binding_and_alg_confusion PASSED [ 25%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_4_boundary_conditions PASSED [ 27%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_5_admin_aal_and_approval_gate PASSED [ 30%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_6_consent_narrowing_and_deauthorization PASSED [ 33%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_7_metadata_and_security_invariants PASSED [ 36%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_8_rfc7591_dynamic_registration_metadata_and_validation PASSED [ 38%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_9_unauthenticated_authorize_browser_redirect_vs_json_api PASSED [ 41%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_10_scoped_resource_indicators_and_bare_mcp PASSED [ 44%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_11_mcp_api_key_label_and_project_scoping PASSED [ 47%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_12_decision_csrf_and_policy_hardening PASSED [ 50%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_13_admin_register_oauth_client PASSED [ 52%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [ 55%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [ 58%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [ 61%]
+kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [ 63%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 66%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 69%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 72%]
+kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 75%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_fragments_and_userinfo PASSED [ 77%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_resource_target_scenarios PASSED [ 80%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_descriptions_and_principal PASSED [ 83%]
+kanban/tests/oauth/test_oauth_unit.py::test_auth_card_config_normalizers PASSED [ 86%]
+kanban/tests/oauth/test_oauth_unit.py::test_format_validation_error PASSED [ 88%]
+kanban/tests/oauth/test_oauth_unit.py::test_consent_csrf_token_lifecycle PASSED [ 91%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_security_headers_and_admin_surface PASSED [ 94%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_same_origin_request_scenarios PASSED [ 97%]
+kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_and_parse_target PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/api/v1/oauth.py           575    101    140     35    79%   108-109, 128-131, 135, 150, 161, 362, 379-380, 450-452, 500-502, 510-512, 516-518, 524-526, 543-548, 560-565, 678, 728-730, 848-850, 857-859, 870->873, 879-881, 885-887, 942-944, 951-953, 971-974, 1024-1026, 1075-1077, 1095, 1108->1123, 1126-1133, 1195, 1219-1236, 1388, 1391-1392, 1394, 1395->1406, 1398-1404, 1438-1457
+kanban/auth/sessions/csrf.py     237     75     94     29    62%   95, 99, 108-109, 112, 125-129, 134, 139, 144, 149, 155->160, 158-159, 167-173, 180-183, 191-196, 206, 208-209, 213, 255-256, 273, 276, 283, 290, 294, 301->308, 303->308, 306, 308->314, 311, 322, 325, 329-335, 343, 347, 352, 363, 369, 375-379, 392-435
+kanban/oauth/server.py           196      3     60      2    97%   220, 340-341
+--------------------------------------------------------------------------
+TOTAL                           1008    179    294     66    78%
+============================= 36 passed in 19.12s ==============================
+
+
+==================== VITEST FRONTEND SUITE WITH COVERAGE ====================
+
+
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/kanban/web
+> vitest run --coverage --run src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx src/features/oauth/__tests__/oauthApi.test.ts src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx --coverage.include=src/features/settings/ConnectOAuthAppModal.tsx --coverage.include=src/features/oauth/OAuthClientGovernanceStudio.tsx --coverage.include=src/features/oauth/oauthApi.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/oauth/__tests__/oauthApi.test.ts (5 tests) 15ms
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (6 tests) 214ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (17 tests) 1126ms
+
+ Test Files  3 passed (3)
+      Tests  28 passed (28)
+   Start at  15:24:52
+   Duration  2.39s (environment 55%, tests 33%, import 7%, worker 3%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    99.06 |     100 |     100 |                   
+ oauth             |     100 |      100 |     100 |     100 |                   
+  ...nceStudio.tsx |     100 |      100 |     100 |     100 |                   
+  oauthApi.ts      |     100 |      100 |     100 |     100 |                   
+ settings          |     100 |    97.22 |     100 |     100 |                   
+  ...hAppModal.tsx |     100 |    97.22 |     100 |     100 | 48                
+-------------------|---------|----------|---------|---------|-------------------

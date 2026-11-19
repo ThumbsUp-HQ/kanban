@@ -322,6 +322,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('tab-claude'));
     expect(snippetCode.textContent).toContain('mcpServers');
 
+    // Switch to OAuth tab (RFC 8414 Discovery)
+    fireEvent.click(screen.getByTestId('tab-oauth'));
+    expect(snippetCode.textContent).toContain('/.well-known/oauth-authorization-server');
+
     // Switch URL scope to Workspace
     const urlSelect = screen.getByTestId('url-scope-select');
     fireEvent.change(urlSelect, { target: { value: 'workspace' } });

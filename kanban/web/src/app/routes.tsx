@@ -1927,6 +1927,10 @@ export const appRoutes: RouteObject[] = [
         element: <DeviceActivatePage />,
       },
       {
+        path: 'oauth/device',
+        element: <DeviceActivatePage />,
+      },
+      {
         path: 'login',
         element: <LoginPage />,
       },
@@ -1962,6 +1966,10 @@ export const appRoutes: RouteObject[] = [
             element: <McpAccessStudio />,
           },
           {
+            path: 'settings/mcp-keys',
+            element: <Navigate to="/settings/mcp" replace />,
+          },
+          {
             path: 'workspaces/settings',
             element: <WorkspaceSettingsPage />,
           },
@@ -1992,6 +2000,10 @@ export const appRoutes: RouteObject[] = [
               {
                 path: 'oauth',
                 element: <OAuthClientGovernanceStudio />,
+              },
+              {
+                path: 'oauth-clients',
+                element: <Navigate to="/admin/oauth" replace />,
               },
               {
                 path: 'imports',

@@ -3,10 +3,11 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { OAuthClientGovernanceStudio } from '../OAuthClientGovernanceStudio';
 import * as oauthApi from '../oauthApi';
+import * as clipboardModule from '../../../utils/clipboard';
 
 const mockClients: oauthApi.OAuthClientItem[] = [
   {
@@ -44,6 +45,14 @@ const mockClients: oauthApi.OAuthClientItem[] = [
     redirect_uris: ['https://evil.example.com/callback'],
     status: 'revoked',
     created_at: new Date('2026-04-01T00:00:00Z').toISOString(),
+  },
+  {
+    client_id: 'client_unknown_app',
+    client_name: 'Unknown Status App',
+    client_type: 'public',
+    redirect_uris: ['https://unknown.example.com/callback'],
+    status: 'other' as never,
+    created_at: new Date('2026-05-01T00:00:00Z').toISOString(),
   },
 ];
 
@@ -121,7 +130,9 @@ describe('OAuthClientGovernanceStudio', () => {
     // Inspect client with null client_name and null updated_at
     fireEvent.click(screen.getByTestId('inspect-btn-client_disabled_app'));
     expect(screen.getByTestId('inspect-modal-card').textContent).toContain('client_disabled_app');
-    fireEvent.click(screen.getByTestId('close-inspect-btn'));
+    // Close via Done button
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByTestId('inspect-modal-card')).toBeNull();
   });
 
   it('approves / activates a suspended or disabled client', async () => {
@@ -315,5 +326,303 @@ describe('OAuthClientGovernanceStudio', () => {
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('opens register OAuth client modal and registers a new client successfully', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const registerSpy = vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockResolvedValue({
+      client_id: 'client_brand_new_123',
+      client_name: 'VS Code Tool',
+      client_type: 'public',
+      redirect_uris: ['http://127.0.0.1:9090/cb'],
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    expect(screen.getByTestId('register-client-modal')).toBeDefined();
+    expect(screen.getByTestId('input-client-name')).toBeDefined();
+    expect(screen.getByTestId('input-redirect-uris')).toBeDefined();
+
+    fireEvent.change(screen.getByTestId('input-client-name'), {
+      target: { value: 'VS Code Tool' },
+    });
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'http://127.0.0.1:9090/cb' },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+
+    await waitFor(() => {
+      expect(registerSpy).toHaveBeenCalledWith({
+        client_name: 'VS Code Tool',
+        redirect_uris: ['http://127.0.0.1:9090/cb'],
+        client_type: 'public',
+        token_endpoint_auth_method: 'none',
+      });
+      expect(screen.getByTestId('register-success-view')).toBeDefined();
+      expect(screen.getByTestId('registered-client-id').textContent).toBe('client_brand_new_123');
+    });
+
+    vi.useFakeTimers();
+    const copySpy = vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValue(true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('copy-client-id-btn'));
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(copySpy).toHaveBeenCalledWith('client_brand_new_123');
+    expect(screen.getByTestId('copy-client-id-btn').textContent).toBe('Copied!');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(screen.getByTestId('copy-client-id-btn').textContent).toBe('Copy Client ID');
+
+    // Test copy failure branch
+    copySpy.mockResolvedValueOnce(false);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('copy-client-id-btn'));
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(screen.getByTestId('copy-client-id-btn').textContent).toBe('Copy Client ID');
+    vi.useRealTimers();
+
+    fireEvent.click(screen.getByTestId('done-register-btn'));
+    expect(screen.queryByTestId('register-client-modal')).toBeNull();
+  });
+
+  it('displays error in register modal when registration fails', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockRejectedValue(
+      new Error('Invalid redirect URI scheme'),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'http://evil.com/cb' },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-error-alert').textContent).toContain(
+        'Invalid redirect URI scheme',
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('cancel-register-btn'));
+    expect(screen.queryByTestId('modal-register-client')).toBeNull();
+  });
+
+  it('closes register modal via close button and backdrop click', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    // Open and close via X button
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+    expect(screen.getByTestId('register-client-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('close-register-modal-btn'));
+    expect(screen.queryByTestId('register-client-modal')).toBeNull();
+
+    // Open and close via backdrop click
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+    expect(screen.getByTestId('register-client-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('register-modal-backdrop'));
+    expect(screen.queryByTestId('register-client-modal')).toBeNull();
+
+    unmount();
+  });
+
+  it('supports selecting private_key_jwt auth method during client registration', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const registerSpy = vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockResolvedValue({
+      client_id: 'client_jwt_123',
+      client_name: undefined,
+      client_type: 'public',
+      status: 'active',
+      redirect_uris: ['https://app.example.com/oauth/callback'],
+      token_endpoint_auth_method: 'private_key_jwt',
+      created_at: '2026-03-31T00:00:00Z',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    // Leave client name empty to exercise default 'MCP Client' fallback
+    fireEvent.change(screen.getByTestId('input-client-name'), {
+      target: { value: '   ' },
+    });
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'https://app.example.com/oauth/callback' },
+    });
+    fireEvent.change(screen.getByTestId('select-auth-method'), {
+      target: { value: 'private_key_jwt' },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+
+    await waitFor(() => {
+      expect(registerSpy).toHaveBeenCalledWith({
+        client_name: 'MCP Client',
+        redirect_uris: ['https://app.example.com/oauth/callback'],
+        client_type: 'public',
+        token_endpoint_auth_method: 'private_key_jwt',
+      });
+      expect(screen.getByTestId('registered-client-id').textContent).toContain('client_jwt_123');
+    });
+  });
+
+  it('validates required redirect URIs and handles non-Error registration failure', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    // Submit with empty URIs
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+    expect(screen.getByTestId('register-error-alert').textContent).toContain(
+      'At least one redirect URI is required.',
+    );
+
+    // Non-Error rejection
+    vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockRejectedValueOnce('raw rejection');
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'https://app.example.com/cb' },
+    });
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('register-error-alert').textContent).toContain(
+        'Failed to register OAuth client.',
+      );
+    });
+  });
+
+  it('handles non-Error rejection in loadClients', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockRejectedValueOnce('raw network failure');
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to load registered OAuth clients.',
+      );
+    });
+  });
+
+  it('handles non-Error rejection in approve, suspend, and revoke', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('failed to approve');
+    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValueOnce('failed to revoke');
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('approve-btn-client_pending_app')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('approve-btn-client_pending_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to activate client client_pending_app.',
+      );
+    });
+
+    // Suspend non-error
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('failed to suspend');
+    fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to suspend client client_active_app.',
+      );
+    });
+
+    // Revoke non-error
+    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to revoke client client_active_app.',
+      );
+    });
+  });
+
+  it('handles unmounting gracefully during loadClients', async () => {
+    let resolvePromise: (value: oauthApi.OAuthClientItem[]) => void = () => undefined;
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        }),
+    );
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+    unmount();
+    resolvePromise(mockClients);
+    await Promise.resolve();
   });
 });
