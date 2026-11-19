@@ -65,22 +65,23 @@
 ## 2. Test Execution & Coverage Audit
 
 All unit and integration tests executed with v8 coverage:
-- **Backend Tests (`kanban/tests/oauth/`):** 35 tests passed in 10.47s.
+- **Backend Tests (`kanban/tests/oauth/`):** 36 tests passed in 18.45s.
   * `test_device_flow.py` (6 tests)
   * `test_oauth_flow.py` (13 tests)
-  * `test_oauth_unit.py` (16 tests)
-- **Frontend Unit Tests:** 75 tests passed in 4.66s.
-  * `OAuthClientGovernanceStudio.test.tsx` (14 tests)
+  * `test_oauth_unit.py` (17 tests)
+- **Frontend Unit Tests:**
+  * `OAuthClientGovernanceStudio.test.tsx` (17 tests)
   * `oauthApi.test.ts` (5 tests)
   * `ConnectOAuthAppModal.test.tsx` (6 tests)
   * `McpAccessStudio.test.tsx` (15 tests)
+  * `McpConfigSnippetModal.test.tsx` (3 tests)
   * `routes.test.tsx` (35 tests)
 - **Frontend Coverage Audit on Touched Files:**
   * `oauthApi.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
   * `ConnectOAuthAppModal.tsx`: 100% Statements, 97.22% Branches, 100% Functions, 100% Lines
-  * `OAuthClientGovernanceStudio.tsx`: 100% Statements, 96.10% Branches, 100% Functions, 100% Lines
-  * Combined Frontend Coverage: 100% Statements, 96.46% Branches, 100% Functions, 100% Lines (All >= 95.10%).
-- Raw test logs saved in `docs/qa/KAN-28/unit-test-results.txt`.
+  * `OAuthClientGovernanceStudio.tsx`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+  * Combined Frontend Coverage: 100% Statements, 99.06% Branches, 100% Functions, 100% Lines (All >= 95.10%).
+- Full Vitest `--coverage` output table and Pytest coverage results recorded in `docs/qa/KAN-28/unit-test-results.txt`.
 
 ---
 

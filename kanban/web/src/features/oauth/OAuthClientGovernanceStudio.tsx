@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useRef, useCallback, type JSX } from 'react';
+import React, { useState, useEffect, useCallback, type JSX } from 'react';
 import { Link } from 'react-router';
 import {
   fetchAdminOAuthClients,
@@ -30,59 +30,24 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   const [registeredClient, setRegisteredClient] = useState<OAuthClientItem | null>(null);
   const [copiedClientId, setCopiedClientId] = useState<boolean>(false);
 
-  const isMounted = useRef<boolean>(true);
-
   const loadClients = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       const data = await fetchAdminOAuthClients();
-      if (isMounted.current) {
-        setClients(data);
-      }
+      setClients(data);
     } catch (err: unknown) {
-      if (isMounted.current) {
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('Failed to load registered OAuth clients.');
-        }
-      }
+      setError(err instanceof Error ? err.message : 'Failed to load registered OAuth clients.');
     } finally {
-      if (isMounted.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    isMounted.current = true;
-    let active = true;
-    void Promise.resolve().then(async () => {
-      try {
-        const data = await fetchAdminOAuthClients();
-        if (active && isMounted.current) {
-          setClients(data);
-        }
-      } catch (err: unknown) {
-        if (active && isMounted.current) {
-          if (err instanceof Error) {
-            setError(err.message);
-          } else {
-            setError('Failed to load registered OAuth clients.');
-          }
-        }
-      } finally {
-        if (active && isMounted.current) {
-          setLoading(false);
-        }
-      }
+    void Promise.resolve().then(() => {
+      void loadClients();
     });
-    return () => {
-      active = false;
-      isMounted.current = false;
-    };
-  }, []);
+  }, [loadClients]);
 
   const handleApprove = async (clientId: string): Promise<void> => {
     setError(null);

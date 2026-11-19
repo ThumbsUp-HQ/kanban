@@ -46,6 +46,14 @@ const mockClients: oauthApi.OAuthClientItem[] = [
     status: 'revoked',
     created_at: new Date('2026-04-01T00:00:00Z').toISOString(),
   },
+  {
+    client_id: 'client_unknown_app',
+    client_name: 'Unknown Status App',
+    client_type: 'public',
+    redirect_uris: ['https://unknown.example.com/callback'],
+    status: 'other' as never,
+    created_at: new Date('2026-05-01T00:00:00Z').toISOString(),
+  },
 ];
 
 describe('OAuthClientGovernanceStudio', () => {
@@ -376,19 +384,26 @@ describe('OAuthClientGovernanceStudio', () => {
     });
 
     vi.useFakeTimers();
-    act(() => {
+    const copySpy = vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValue(true);
+    await act(async () => {
       fireEvent.click(screen.getByTestId('copy-client-id-btn'));
+      await vi.advanceTimersByTimeAsync(10);
     });
-    expect(writeTextMock).toHaveBeenCalledWith('client_brand_new_123');
-    act(() => {
-      vi.advanceTimersByTime(2100);
+    expect(copySpy).toHaveBeenCalledWith('client_brand_new_123');
+    expect(screen.getByTestId('copy-client-id-btn').textContent).toBe('Copied!');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
     });
+    expect(screen.getByTestId('copy-client-id-btn').textContent).toBe('Copy Client ID');
 
     // Test copy failure branch
-    vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValueOnce(false);
-    act(() => {
+    copySpy.mockResolvedValueOnce(false);
+    await act(async () => {
       fireEvent.click(screen.getByTestId('copy-client-id-btn'));
+      await vi.advanceTimersByTimeAsync(10);
     });
+    expect(screen.getByTestId('copy-client-id-btn').textContent).toBe('Copy Client ID');
     vi.useRealTimers();
 
     fireEvent.click(screen.getByTestId('done-register-btn'));
@@ -537,5 +552,77 @@ describe('OAuthClientGovernanceStudio', () => {
         'Failed to register OAuth client.',
       );
     });
+  });
+
+  it('handles non-Error rejection in loadClients', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockRejectedValueOnce('raw network failure');
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to load registered OAuth clients.',
+      );
+    });
+  });
+
+  it('handles non-Error rejection in approve, suspend, and revoke', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('failed to approve');
+    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValueOnce('failed to revoke');
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('approve-btn-client_pending_app')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('approve-btn-client_pending_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to activate client client_pending_app.',
+      );
+    });
+
+    // Suspend non-error
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('failed to suspend');
+    fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to suspend client client_active_app.',
+      );
+    });
+
+    // Revoke non-error
+    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain(
+        'Failed to revoke client client_active_app.',
+      );
+    });
+  });
+
+  it('handles unmounting gracefully during loadClients', async () => {
+    let resolvePromise: (value: oauthApi.OAuthClientItem[]) => void = () => undefined;
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        }),
+    );
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+    unmount();
+    resolvePromise(mockClients);
+    await Promise.resolve();
   });
 });

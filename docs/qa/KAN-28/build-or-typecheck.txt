@@ -1,10 +1,13 @@
-=== Ruff Check ===
+=== RUFF CHECK ===
 All checks passed!
-=== Ruff Format Check ===
-1806 files already formatted
-=== Mypy Typecheck ===
+
+=== RUFF FORMAT ===
+1807 files already formatted
+
+=== MYPY ===
 Success: no issues found in 4 source files
-=== Lint Imports ===
+
+=== LINT IMPORTS ===
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -27,15 +30,14 @@ Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored 
 mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
-=== Check No Dashes ===
+
+=== CHECK NO DASHES ===
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-=== Web Typecheck ===
+
+=== PNPM TYPECHECK ===
 
 > @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/kanban/web
 > tsc -b --noEmit
 
-=== Web Lint ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/kanban/web
-> eslint . --max-warnings 0
-
+=== ESLINT ===

@@ -170,8 +170,9 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     expect(screen.getByTestId('command-snippet').textContent).toContain('claude mcp add --transport http');
   });
 
-  it('copies resource URL, RFC 8414 URL, and snippet to clipboard', () => {
+  it('copies resource URL, RFC 8414 URL, and snippet to clipboard', async () => {
     vi.useFakeTimers();
+    const copySpy = vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValue(true);
     render(
       <MemoryRouter>
         <ConnectOAuthAppModal
@@ -182,33 +183,53 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     );
 
     // Copy resource URL
-    act(() => {
+    await act(async () => {
       fireEvent.click(screen.getByTestId('copy-resource-url-btn'));
+      await vi.advanceTimersByTimeAsync(10);
     });
-    expect(writeTextMock).toHaveBeenCalled();
+    expect(copySpy).toHaveBeenCalled();
+    expect(screen.getByTestId('copy-resource-url-btn').textContent).toBe('Copied!');
 
     // Advance timer to trigger reset
-    act(() => {
-      vi.advanceTimersByTime(2100);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
     });
+    expect(screen.getByTestId('copy-resource-url-btn').textContent).toBe('Copy');
 
     // Copy RFC 8414 URL
-    act(() => {
+    await act(async () => {
       fireEvent.click(screen.getByTestId('copy-rfc8414-url-btn'));
+      await vi.advanceTimersByTimeAsync(10);
     });
-    expect(writeTextMock).toHaveBeenCalled();
+    expect(copySpy).toHaveBeenCalled();
+    expect(screen.getByTestId('copy-rfc8414-url-btn').textContent).toBe('Copied!');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(screen.getByTestId('copy-rfc8414-url-btn').textContent).toBe('Copy');
 
     // Copy snippet
-    act(() => {
+    await act(async () => {
       fireEvent.click(screen.getByTestId('copy-snippet-btn'));
+      await vi.advanceTimersByTimeAsync(10);
     });
-    expect(writeTextMock).toHaveBeenCalled();
+    expect(copySpy).toHaveBeenCalled();
+    expect(screen.getByTestId('copy-snippet-btn').textContent).toBe('Copied Command!');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(screen.getByTestId('copy-snippet-btn').textContent).toBe('Copy Command');
 
     // Failed copy does not trigger timer
-    vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValueOnce(false);
-    act(() => {
+    copySpy.mockResolvedValueOnce(false);
+    await act(async () => {
       fireEvent.click(screen.getByTestId('copy-resource-url-btn'));
+      await vi.advanceTimersByTimeAsync(10);
     });
+    expect(screen.getByTestId('copy-resource-url-btn').textContent).toBe('Copy');
+
     vi.useRealTimers();
   });
 
