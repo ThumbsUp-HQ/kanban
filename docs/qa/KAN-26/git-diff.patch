@@ -1,0 +1,1292 @@
+diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
+index 0d7f7e3..dddf905 100644
+--- a/kanban/web/src/app/Topbar.css
++++ b/kanban/web/src/app/Topbar.css
+@@ -10,6 +10,8 @@
+   box-sizing: border-box;
+   position: relative;
+   z-index: 10;
++  user-select: none;
++  -webkit-user-select: none;
+ }
+ 
+ .kb-topbar-left {
+@@ -17,6 +19,8 @@
+   align-items: center;
+   gap: var(--space-3, 12px);
+   flex-shrink: 0;
++  user-select: none;
++  -webkit-user-select: none;
+ }
+ 
+ .kb-topbar-hamburger {
+@@ -30,6 +34,8 @@
+   border-radius: var(--radius-sm, 4px);
+   align-items: center;
+   justify-content: center;
++  user-select: none;
++  -webkit-user-select: none;
+ }
+ 
+ .kb-topbar-hamburger:hover {
+@@ -59,6 +65,8 @@
+   font-size: 13px;
+   cursor: pointer;
+   transition: border-color 120ms ease, background 120ms ease;
++  user-select: none;
++  -webkit-user-select: none;
+ }
+ 
+ .kb-search-trigger:hover {
+@@ -80,6 +88,8 @@
+   background: var(--bg-surface, #1e2025);
+   border: 1px solid var(--border-subtle, #333842);
+   color: var(--fg-muted, #94a3b8);
++  user-select: none;
++  -webkit-user-select: none;
+ }
+ 
+ .kb-topbar-right {
+@@ -87,6 +97,8 @@
+   align-items: center;
+   gap: var(--space-4, 16px);
+   flex-shrink: 0;
++  user-select: none;
++  -webkit-user-select: none;
+ }
+ 
+ .kb-avatar-wrapper {
+@@ -96,7 +108,12 @@
+ .kb-avatar-button {
+   width: 32px;
+   height: 32px;
+-  border-radius: var(--radius-full, 9999px);
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+   background: var(--accent-primary);
+   color: #ffffff;
+   border: 2px solid transparent;
+@@ -118,7 +135,12 @@
+ .kb-avatar-img {
+   width: 100%;
+   height: 100%;
+-  border-radius: var(--radius-full, 9999px);
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+   object-fit: cover;
+ }
+ 
+@@ -146,7 +168,12 @@
+ .kb-avatar-user-card-avatar {
+   width: 36px;
+   height: 36px;
+-  border-radius: var(--radius-full, 9999px);
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+   background: var(--accent-primary, #3b82f6);
+   color: #ffffff;
+   display: flex;
+@@ -155,7 +182,6 @@
+   font-size: 14px;
+   font-weight: 600;
+   flex-shrink: 0;
+-  overflow: hidden;
+ }
+ 
+ .kb-avatar-fallback {
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 4bba652..7fd9a5b 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -272,6 +272,7 @@ export function Topbar({
+                 alt={user.display_name ?? 'User avatar'}
+                 className="kb-avatar-img"
+                 data-testid="topbar-avatar-img"
++                draggable={false}
+               />
+             ) : (
+               <span data-testid="topbar-avatar-initial">{userInitial}</span>
+@@ -295,6 +296,7 @@ export function Topbar({
+                           src={user.avatar_url}
+                           alt={user.display_name ?? 'User avatar'}
+                           className="kb-avatar-img"
++                          draggable={false}
+                         />
+                       ) : (
+                         <span className="kb-avatar-fallback">{userInitial}</span>
+diff --git a/kanban/web/src/components/error/AppErrorModal.css b/kanban/web/src/components/error/AppErrorModal.css
+index d6ee714..025b797 100644
+--- a/kanban/web/src/components/error/AppErrorModal.css
++++ b/kanban/web/src/components/error/AppErrorModal.css
+@@ -74,12 +74,12 @@
+ .app-error-modal__message {
+   font-size: 1rem;
+   font-weight: 600;
+-  color: #ff8a80;
++  color: var(--danger-fg);
+   word-break: break-word;
+-  background-color: rgba(211, 47, 47, 0.1);
++  background-color: var(--danger-bg);
+   padding: 0.75rem 1rem;
+   border-radius: 6px;
+-  border-left: 4px solid #d32f2f;
++  border-left: 4px solid var(--danger-fg);
+ }
+ 
+ .app-error-modal__url {
+@@ -98,7 +98,9 @@
+ 
+ .app-error-modal__url code {
+   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+-  background-color: rgba(255, 255, 255, 0.08);
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-subtle);
+   padding: 0.2rem 0.4rem;
+   border-radius: 4px;
+ }
+@@ -115,9 +117,9 @@
+   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+   font-size: 0.8125rem;
+   line-height: 1.45;
+-  background-color: #121212;
+-  color: #eceff1;
+-  border: 1px solid rgba(255, 255, 255, 0.12);
++  background-color: var(--bg-canvas);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-subtle);
+   border-radius: 6px;
+   max-height: 240px;
+   overflow-y: auto;
+@@ -133,8 +135,8 @@
+   justify-content: flex-end;
+   gap: 0.75rem;
+   padding: 1rem 1.25rem;
+-  background-color: rgba(255, 255, 255, 0.03);
+-  border-top: 1px solid rgba(255, 255, 255, 0.1);
++  background-color: var(--bg-surface-raised);
++  border-top: 1px solid var(--border-subtle);
+ }
+ 
+ .app-error-modal__btn {
+@@ -152,19 +154,20 @@
+ }
+ 
+ .app-error-modal__btn:focus-visible {
+-  outline: 2px solid #ffffff;
++  outline: 2px solid var(--focus-ring);
+   outline-offset: 2px;
+ }
+ 
+ .app-error-modal__btn--copy {
+-  background-color: transparent;
+-  color: #eceff1;
+-  border: 1px solid rgba(255, 255, 255, 0.25);
++  background-color: var(--bg-surface-raised);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-strong);
+ }
+ 
+ .app-error-modal__btn--copy:hover {
+-  background-color: rgba(255, 255, 255, 0.1);
+-  border-color: rgba(255, 255, 255, 0.4);
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
+ }
+ 
+ .app-error-modal__btn--report {
+diff --git a/kanban/web/src/components/error/AppErrorModal.test.tsx b/kanban/web/src/components/error/AppErrorModal.test.tsx
+index e10499e..8189471 100644
+--- a/kanban/web/src/components/error/AppErrorModal.test.tsx
++++ b/kanban/web/src/components/error/AppErrorModal.test.tsx
+@@ -47,10 +47,70 @@ describe('AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary', () => {
+       expect(dismissBtn).toBeDefined();
+ 
+       const href = reportLink.getAttribute('href') ?? '';
+-      expect(href).toContain('https://github.com/ThumbsUp-HQ/thumbs-up-kanban/issues/new');
++      expect(href).toContain('https://github.com/ThumbsUp-HQ/kanban/issues/new');
+       expect(href).toContain(encodeURIComponent('[Bug]: Application Error: Test fatal failure'));
+     });
+ 
++    it('uses VITE_ISSUE_REPORT_URL override when configured', () => {
++      const envRecord = import.meta.env as Record<string, string | undefined>;
++      const orig = envRecord.VITE_ISSUE_REPORT_URL;
++      envRecord.VITE_ISSUE_REPORT_URL = 'https://custom-tracker.example.com/new';
++      try {
++        render(<AppErrorModal error={new Error('Custom report url test')} />);
++        const reportLink = screen.getByTestId('error-report-link');
++        expect(reportLink.getAttribute('href')).toContain('https://custom-tracker.example.com/new?title=');
++      } finally {
++        envRecord.VITE_ISSUE_REPORT_URL = orig;
++      }
++    });
++
++    it('formats numeric, boolean, and bigint error objects into string trace', () => {
++      const { rerender } = render(<AppErrorModal error={404} />);
++      expect(screen.getByTestId('error-trace').textContent).toContain('404');
++
++      rerender(<AppErrorModal error={true} />);
++      expect(screen.getByTestId('error-trace').textContent).toContain('true');
++
++      rerender(<AppErrorModal error={false} />);
++      expect(screen.getByTestId('error-trace').textContent).toContain('false');
++
++      rerender(<AppErrorModal error={BigInt(9007199254740991)} />);
++      expect(screen.getByTestId('error-trace').textContent).toContain('9007199254740991');
++
++      const errWithoutStack = new Error('No stack error');
++      delete (errWithoutStack as { stack?: string }).stack;
++      rerender(<AppErrorModal error={errWithoutStack} />);
++      expect(screen.getByTestId('error-trace').textContent).toContain('{}');
++
++      rerender(<AppErrorModal error={Symbol('custom')} />);
++      expect(screen.getByTestId('error-trace').textContent).toContain('No stack trace available.');
++
++      rerender(
++        <AppErrorModal
++          error={new Error('With component stack')}
++          errorInfo={{ componentStack: '\n    at Child (Child.tsx:5)' }}
++        />,
++      );
++      expect(screen.getByTestId('error-trace').textContent).toContain('Component Stack:');
++    });
++
++    it('resets copied state after 2 seconds', async () => {
++      render(<AppErrorModal error={new Error('Timer test')} />);
++      const copyBtn = screen.getByTestId('error-copy-btn');
++      fireEvent.click(copyBtn);
++
++      await waitFor(() => {
++        expect(screen.getByText('Copied Traceback!')).toBeDefined();
++      });
++
++      await waitFor(
++        () => {
++          expect(screen.getByText('Copy Traceback')).toBeDefined();
++        },
++        { timeout: 3000 },
++      );
++    });
++
+     it('copies traceback and shows Copied feedback on click', async () => {
+       const { safeCopyToClipboard } = await import('../../utils/uuid');
+       const error = new Error('Clipboard test error');
+@@ -80,6 +140,17 @@ describe('AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary', () => {
+ 
+       expect(onDismiss).toHaveBeenCalledTimes(1);
+       expect(pushStateSpy).toHaveBeenCalled();
++
++      // Dismiss without peek and without onDismiss
++      const cleanUrl = new URL(window.location.href);
++      cleanUrl.searchParams.delete('peek');
++      window.history.pushState({}, '', cleanUrl.toString());
++      render(<AppErrorModal error="No peek error" />);
++      const dismissBtns = screen.getAllByTestId('error-dismiss-btn');
++      const secondBtn = dismissBtns[1];
++      if (secondBtn) {
++        fireEvent.click(secondBtn);
++      }
+     });
+ 
+     it('handles non-Error objects and statusText gracefully', () => {
+@@ -102,6 +173,52 @@ describe('AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary', () => {
+       expect(screen.getByText('Application Error Detected')).toBeDefined();
+       expect(screen.getByTestId('error-message').textContent).toBe('Route level failure');
+     });
++
++    it('clears peek parameter on dismiss inside RouteErrorBoundary', () => {
++      const mockRouteError = new Error('Route level failure');
++      vi.mocked(useRouteError).mockReturnValue(mockRouteError);
++
++      const { unmount } = render(
++        <MemoryRouter initialEntries={['/projects/TEST?peek=task-1&other=val']}>
++          <RouteErrorBoundary />
++        </MemoryRouter>,
++      );
++
++      fireEvent.click(screen.getByTestId('error-dismiss-btn'));
++      unmount();
++
++      render(
++        <MemoryRouter initialEntries={['/projects/TEST?peek=task-1']}>
++          <RouteErrorBoundary />
++        </MemoryRouter>,
++      );
++      fireEvent.click(screen.getByTestId('error-dismiss-btn'));
++    });
++
++    it('reloads location on dismiss inside RouteErrorBoundary without peek', () => {
++      const mockRouteError = new Error('Route level failure');
++      vi.mocked(useRouteError).mockReturnValue(mockRouteError);
++      const reloadSpy = vi.fn();
++      Object.defineProperty(window, 'location', {
++        value: {
++          href: window.location.href,
++          pathname: window.location.pathname,
++          search: window.location.search,
++          hash: window.location.hash,
++          reload: reloadSpy,
++        },
++        writable: true,
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/TEST']}>
++          <RouteErrorBoundary />
++        </MemoryRouter>,
++      );
++
++      fireEvent.click(screen.getByTestId('error-dismiss-btn'));
++      expect(reloadSpy).toHaveBeenCalled();
++    });
+   });
+ 
+   describe('GlobalErrorBoundary', () => {
+@@ -208,6 +325,44 @@ describe('AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary', () => {
+           'Promise rejection error',
+         );
+       });
++      // Dispatch rejection with undefined reason
++      const emptyRejectionEvent = new Event('unhandledrejection') as unknown as PromiseRejectionEvent;
++      Object.defineProperty(emptyRejectionEvent, 'reason', { value: undefined });
++      window.dispatchEvent(emptyRejectionEvent);
++
++      await waitFor(() => {
++        expect(screen.getByText('Application Error Detected')).toBeDefined();
++        expect(screen.getByTestId('error-message').textContent).toBe(
++          'Unhandled Promise Rejection',
++        );
++      });
++    });
++
++    it('handles window error event with only message property', async () => {
++      render(
++        <GlobalErrorBoundary>
++          <div>Message Child Area</div>
++        </GlobalErrorBoundary>,
++      );
++
++      // Dispatch error event with neither error nor message
++      const emptyErrorEvent = new Event('error') as unknown as ErrorEvent;
++      Object.defineProperty(emptyErrorEvent, 'message', { value: '' });
++      Object.defineProperty(emptyErrorEvent, 'error', { value: null });
++      window.dispatchEvent(emptyErrorEvent);
++      expect(screen.getByText('Message Child Area')).toBeDefined();
++
++      const errorEvent = new Event('error') as unknown as ErrorEvent;
++      Object.defineProperty(errorEvent, 'message', { value: 'Script error without Error object' });
++      Object.defineProperty(errorEvent, 'error', { value: null });
++      window.dispatchEvent(errorEvent);
++
++      await waitFor(() => {
++        expect(screen.getByText('Application Error Detected')).toBeDefined();
++        expect(screen.getByTestId('error-message').textContent).toBe(
++          'Script error without Error object',
++        );
++      });
+     });
+   });
+ });
+diff --git a/kanban/web/src/components/error/AppErrorModal.tsx b/kanban/web/src/components/error/AppErrorModal.tsx
+index fb4277b..645f513 100644
+--- a/kanban/web/src/components/error/AppErrorModal.tsx
++++ b/kanban/web/src/components/error/AppErrorModal.tsx
+@@ -40,8 +40,6 @@ export function AppErrorModal({
+   let stackTrace = 'No stack trace available.';
+   if (error instanceof Error && error.stack) {
+     stackTrace = error.stack;
+-  } else if (typeof error === 'object' && error !== null) {
+-    stackTrace = JSON.stringify(error, null, 2);
+   } else if (typeof error === 'string') {
+     stackTrace = error;
+   } else if (
+@@ -50,6 +48,8 @@ export function AppErrorModal({
+     typeof error === 'bigint'
+   ) {
+     stackTrace = error.toString();
++  } else if (typeof error === 'object' && error !== null) {
++    stackTrace = JSON.stringify(error, null, 2);
+   }
+ 
+   const componentStack = errorInfo?.componentStack ?? '';
+@@ -57,8 +57,7 @@ export function AppErrorModal({
+     ? `${stackTrace}\n\nComponent Stack:\n${componentStack}`
+     : stackTrace;
+ 
+-  const currentUrl =
+-    typeof window !== 'undefined' ? window.location.href : 'Unknown URL';
++  const currentUrl = window.location.href;
+ 
+   const handleCopy = useCallback(async (): Promise<void> => {
+     const textToCopy = `Error: ${errorMessage}\nURL: ${currentUrl}\n\nTraceback:\n${fullTrace}`;
+@@ -72,20 +71,21 @@ export function AppErrorModal({
+   }, [errorMessage, currentUrl, fullTrace]);
+ 
+   const handleDismiss = useCallback((): void => {
+-    if (typeof window !== 'undefined') {
+-      const url = new URL(window.location.href);
+-      if (url.searchParams.has('peek')) {
+-        url.searchParams.delete('peek');
+-        window.history.replaceState({}, '', url.toString());
+-        window.dispatchEvent(new PopStateEvent('popstate'));
+-      }
++    const url = new URL(window.location.href);
++    if (url.searchParams.has('peek')) {
++      url.searchParams.delete('peek');
++      window.history.replaceState({}, '', url.toString());
++      window.dispatchEvent(new PopStateEvent('popstate'));
+     }
+     onDismiss?.();
+   }, [onDismiss]);
+ 
+   const reportTitle = `[Bug]: Application Error: ${errorMessage.slice(0, 80)}`;
+   const reportBody = `### Application Error Detected\n\n**URL:** ${currentUrl}\n**Error:** ${errorMessage}\n\n\`\`\`\n${fullTrace}\n\`\`\``;
+-  const reportUrl = `https://github.com/ThumbsUp-HQ/thumbs-up-kanban/issues/new?title=${encodeURIComponent(reportTitle)}&body=${encodeURIComponent(reportBody)}`;
++  const baseUrl =
++    (import.meta.env.VITE_ISSUE_REPORT_URL as string | undefined) ??
++    'https://github.com/ThumbsUp-HQ/kanban/issues/new';
++  const reportUrl = `${baseUrl}?title=${encodeURIComponent(reportTitle)}&body=${encodeURIComponent(reportBody)}`;
+ 
+   return (
+     <div
+@@ -95,7 +95,7 @@ export function AppErrorModal({
+       aria-labelledby="app-error-title"
+       aria-describedby="app-error-message"
+     >
+-      <div className="app-error-modal">
++      <div className="app-error-modal" data-testid="app-error-modal">
+         <header className="app-error-modal__header">
+           <span className="app-error-modal__icon" aria-hidden="true">
+             🚨
+@@ -219,7 +219,7 @@ export class GlobalErrorBoundary extends Component<
+   override componentDidCatch(error: unknown, errorInfo: ErrorInfo): void {
+     this.setState({
+       error,
+-      errorInfo: { componentStack: errorInfo.componentStack ?? null },
++      errorInfo: { componentStack: errorInfo.componentStack },
+     });
+   }
+ 
+diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
+index a18fa7c..3e02a54 100644
+--- a/kanban/web/src/features/activity/activity.css
++++ b/kanban/web/src/features/activity/activity.css
+@@ -1,5 +1,15 @@
+ /* Activity & Comments Styling (KB-P3-44, S7.1, S6.1, S7.2 8j/8k) */
+ 
++.comment-card__avatar,
++.comment-author-avatar {
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
++}
++
+ .activity-section {
+   display: flex;
+   flex-direction: column;
+diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
+index 92f9c7b..b06910d 100644
+--- a/kanban/web/src/features/board/board.css
++++ b/kanban/web/src/features/board/board.css
+@@ -20,6 +20,17 @@
+   flex-direction: column;
+ }
+ 
++.board-card-avatar,
++.board-card__avatar,
++.assignee-chip-avatar {
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
++}
++
+ .board-canvas {
+   height: 100%;
+   box-sizing: border-box;
+diff --git a/kanban/web/src/features/drawer/IssueHeader.css b/kanban/web/src/features/drawer/IssueHeader.css
+index e66ab1f..559a6d7 100644
+--- a/kanban/web/src/features/drawer/IssueHeader.css
++++ b/kanban/web/src/features/drawer/IssueHeader.css
+@@ -92,3 +92,13 @@
+     min-height: var(--tap-min);
+   }
+ }
++
++.issue-header__avatar,
++.issue-avatar {
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
++}
+diff --git a/kanban/web/src/features/notifications/NotificationsBell.css b/kanban/web/src/features/notifications/NotificationsBell.css
+index 8e3ec0e..30188e1 100644
+--- a/kanban/web/src/features/notifications/NotificationsBell.css
++++ b/kanban/web/src/features/notifications/NotificationsBell.css
+@@ -16,6 +16,9 @@
+   position: relative;
+   color: var(--fg-secondary, #64748b);
+   transition: all 120ms ease;
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+ }
+ 
+ .kb-notif-bell-btn:hover {
+@@ -25,6 +28,9 @@
+ 
+ .kb-notif-bell-icon {
+   font-size: 1.125rem;
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+ }
+ 
+ .kb-notif-badge {
+@@ -44,6 +50,9 @@
+   justify-content: center;
+   line-height: 1;
+   box-shadow: 0 0 0 2px var(--bg-surface, #ffffff);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+ }
+ 
+ .kb-notif-tray {
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 30817b9..a11df63 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -394,7 +394,7 @@ export function McpAccessStudio({
+                       </code>
+                     </td>
+                     <td className="kb-mcp-td">{getTierBadge(k.scope_tier, k.allowed_projects)}</td>
+-                    <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
++                    <td className="kb-mcp-td">{((k.surface as string | undefined) ?? '').toUpperCase()}</td>
+                     <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
+                       {k.expires_at ? (
+                         new Date(k.expires_at).toLocaleDateString()
+@@ -497,7 +497,7 @@ export function McpAccessStudio({
+                     <td className="kb-mcp-td">
+                       <code>{app.client_id}</code>
+                     </td>
+-                    <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
++                    <td className="kb-mcp-td">{((app.surface as string | undefined) ?? '').toUpperCase()}</td>
+                     <td className="kb-mcp-td">
+                       {new Date(app.created_at).toLocaleDateString()}
+                     </td>
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
+index ebe7ef2..6c35546 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.css
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
+@@ -117,7 +117,12 @@
+ .kb-personal-settings-avatar-preview {
+   width: 72px;
+   height: 72px;
+-  border-radius: var(--radius-full);
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+   object-fit: cover;
+   border: 2px solid var(--border-subtle);
+   background-color: var(--bg-canvas);
+@@ -127,7 +132,18 @@
+   font-size: var(--text-2xl);
+   font-weight: 600;
+   color: var(--fg-secondary);
++}
++
++.kb-personal-settings-avatar-preview img {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++  border-radius: 50%;
+   overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
+ }
+ 
+ .kb-personal-settings-avatar-actions {
+@@ -338,3 +354,53 @@
+   color: var(--fg-primary);
+   user-select: all;
+ }
++
++.kb-personal-settings-th-right,
++.kb-personal-settings-td-right {
++  text-align: right;
++}
++
++.kb-personal-settings-btn--mr {
++  margin-right: 8px;
++}
++
++.kb-personal-settings-empty {
++  color: var(--fg-secondary);
++  font-style: italic;
++}
++
++.kb-personal-settings-file-hidden {
++  display: none;
++}
++
++.kb-personal-settings-header-row {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++}
++
++.kb-personal-settings-mfa-actions {
++  display: flex;
++  gap: 12px;
++  flex-wrap: wrap;
++  align-items: center;
++}
++
++.kb-personal-settings-hint-muted {
++  color: var(--fg-secondary);
++  font-size: var(--text-xs);
++}
++
++.kb-personal-settings-modal-text {
++  margin: 0;
++  font-size: var(--text-sm);
++}
++
++.kb-personal-settings-secret-box {
++  padding: 12px;
++  background: var(--bg-canvas);
++  border-radius: var(--radius-md);
++  font-family: var(--font-mono);
++  font-size: var(--text-sm);
++  word-break: break-all;
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index a29f31a..330baa4 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -169,7 +169,7 @@ export function PersonalSettingsPage(): JSX.Element {
+     const file = e.target.files?.[0];
+     if (!file) return;
+ 
+-    if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
++    if (file.type === 'image/svg+xml' || ((file.name as string | undefined) ?? '').toLowerCase().endsWith('.svg')) {
+       setErrorMsg('SVG avatars are rejected for security. Please upload PNG, JPEG, or WebP.');
+       return;
+     }
+@@ -393,10 +393,10 @@ export function PersonalSettingsPage(): JSX.Element {
+               <img
+                 src={profile.avatar_url}
+                 alt={`${profile.display_name}'s avatar`}
+-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
++                draggable={false}
+               />
+             ) : (
+-              <span>{(profile?.display_name ?? profile?.username ?? 'U')[0]?.toUpperCase()}</span>
++              <span>{((profile?.display_name ?? profile?.username ?? 'U')[0] ?? '').toUpperCase()}</span>
+             )}
+           </div>
+           <div className="kb-personal-settings-avatar-actions">
+@@ -406,7 +406,7 @@ export function PersonalSettingsPage(): JSX.Element {
+               id="avatar-file-input"
+               data-testid="avatar-file-input"
+               accept="image/png,image/jpeg,image/webp"
+-              style={{ display: 'none' }}
++              className="kb-personal-settings-file-hidden"
+               onChange={handleAvatarFileChange}
+             />
+             <button
+@@ -573,7 +573,7 @@ export function PersonalSettingsPage(): JSX.Element {
+ 
+       {/* Section 3: Passkeys (WebAuthn) */}
+       <section className="kb-personal-settings-section" aria-labelledby="section-passkeys-title">
+-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++        <div className="kb-personal-settings-header-row">
+           <div>
+             <h2 id="section-passkeys-title" className="kb-personal-settings-section-title">
+               Passkeys & Security Keys
+@@ -591,14 +591,14 @@ export function PersonalSettingsPage(): JSX.Element {
+                 <th className="kb-personal-settings-th">Name</th>
+                 <th className="kb-personal-settings-th">Created</th>
+                 <th className="kb-personal-settings-th">Last Used</th>
+-                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
++                <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
+               </tr>
+             </thead>
+             <tbody>
+               {passkeys.map((pk) => (
+                 <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
+                   <td className="kb-personal-settings-td">
+-                    <strong>{pk.nickname || 'Passkey'}</strong>
++                    <strong>{pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}</strong>
+                   </td>
+                   <td className="kb-personal-settings-td">
+                     {new Date(pk.created_at).toLocaleDateString()}
+@@ -606,15 +606,14 @@ export function PersonalSettingsPage(): JSX.Element {
+                   <td className="kb-personal-settings-td">
+                     {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
+                   </td>
+-                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
++                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
+                     <button
+                       type="button"
+-                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
+                       data-testid={`rename-passkey-${pk.id}`}
+-                      style={{ marginRight: 8 }}
+                       onClick={() => {
+                         setEditingPasskey(pk);
+-                        setPasskeyNickname(pk.nickname || '');
++                        setPasskeyNickname(pk.nickname ?? '');
+                       }}
+                     >
+                       Rename
+@@ -633,7 +632,7 @@ export function PersonalSettingsPage(): JSX.Element {
+             </tbody>
+           </table>
+         ) : (
+-          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
++          <p className="kb-personal-settings-empty">
+             No passkeys registered yet.
+           </p>
+         )}
+@@ -664,9 +663,9 @@ export function PersonalSettingsPage(): JSX.Element {
+         </div>
+ 
+         {(() => {
+-          const is2faActive = mfaStatus?.totp_enabled === true || Boolean(passkeys && passkeys.length > 0);
++          const is2faActive = Boolean(mfaStatus?.totp_enabled) || Boolean(passkeys && passkeys.length > 0);
+           return (
+-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
++            <div className="kb-personal-settings-mfa-actions">
+               {!mfaStatus?.totp_enabled ? (
+                 <button
+                   type="button"
+@@ -699,9 +698,8 @@ export function PersonalSettingsPage(): JSX.Element {
+               </button>
+               {!is2faActive && (
+                 <span
+-                  className="kb-personal-settings-hint"
++                  className="kb-personal-settings-hint kb-personal-settings-hint-muted"
+                   data-testid="regenerate-hint"
+-                  style={{ color: 'var(--fg-secondary)', fontSize: 'var(--text-xs)' }}
+                 >
+                   Enable TOTP or Passkey 2FA first
+                 </span>
+@@ -727,22 +725,22 @@ export function PersonalSettingsPage(): JSX.Element {
+                 <th className="kb-personal-settings-th">Provider</th>
+                 <th className="kb-personal-settings-th">Subject / Account</th>
+                 <th className="kb-personal-settings-th">Linked</th>
+-                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
++                <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
+               </tr>
+             </thead>
+             <tbody>
+               {identities.map((ident) => (
+                 <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
+                   <td className="kb-personal-settings-td">
+-                    <strong>{ident.card_slug}</strong> ({ident.provider_type.toUpperCase()})
++                    <strong>{ident.card_slug}</strong> ({(ident.provider_kind ?? ident.provider_type ?? '').toUpperCase()})
+                   </td>
+                   <td className="kb-personal-settings-td">
+-                    {ident.display_name ?? ident.email ?? ident.subject_id}
++                    {ident.subject_email_at_link ?? ident.immutable_subject_id ?? ident.card_display_name ?? ident.display_name ?? ident.email ?? ident.subject_id ?? 'Unknown'}
+                   </td>
+                   <td className="kb-personal-settings-td">
+-                    {new Date(ident.created_at).toLocaleDateString()}
++                    {ident.created_at ? new Date(ident.created_at).toLocaleDateString() : 'N/A'}
+                   </td>
+-                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
++                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
+                     <button
+                       type="button"
+                       className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+@@ -757,7 +755,7 @@ export function PersonalSettingsPage(): JSX.Element {
+             </tbody>
+           </table>
+         ) : (
+-          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
++          <p className="kb-personal-settings-empty">
+             No external identities linked.
+           </p>
+         )}
+@@ -786,20 +784,13 @@ export function PersonalSettingsPage(): JSX.Element {
+             </div>
+             <form onSubmit={(e) => { void handleConfirmTotp(e); }}>
+               <div className="kb-personal-settings-modal-body">
+-                <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
++                <p className="kb-personal-settings-modal-text">
+                   Scan the QR code or enter the secret code into your authenticator app (Google
+                   Authenticator, 1Password, Bitwarden, etc.):
+                 </p>
+                 {totpSetupStep.secret && (
+                   <div
+-                    style={{
+-                      padding: 12,
+-                      background: 'var(--bg-canvas)',
+-                      borderRadius: 'var(--radius-md)',
+-                      fontFamily: 'var(--font-mono)',
+-                      fontSize: 'var(--text-sm)',
+-                      wordBreak: 'break-all',
+-                    }}
++                    className="kb-personal-settings-secret-box"
+                     data-testid="totp-secret-key"
+                   >
+                     {totpSetupStep.secret}
+@@ -858,7 +849,7 @@ export function PersonalSettingsPage(): JSX.Element {
+               </h3>
+             </div>
+             <div className="kb-personal-settings-modal-body">
+-              <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
++              <p className="kb-personal-settings-modal-text">
+                 Store these recovery codes in a secure location. Each code can only be used once to access
+                 your account if you lose your 2FA device.
+               </p>
+@@ -988,7 +979,7 @@ export function PersonalSettingsPage(): JSX.Element {
+               </button>
+             </div>
+             <div className="kb-personal-settings-modal-body">
+-              <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
++              <p className="kb-personal-settings-modal-text">
+                 This operation requires fresh second-factor verification. Please confirm with your passkey or TOTP authenticator.
+               </p>
+               <SecondFactorStep
+@@ -996,11 +987,9 @@ export function PersonalSettingsPage(): JSX.Element {
+                 methods={aal2Challenge.methods}
+                 onSuccess={() => {
+                   setAal2Challenge(null);
+-                  if (pendingAction) {
+-                    const action = pendingAction;
+-                    setPendingAction(null);
+-                    void action();
+-                  }
++                  const action = pendingAction;
++                  setPendingAction(null);
++                  void action?.();
+                 }}
+                 onError={() => {
+                   // handled inside SecondFactorStep
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+index 7ad1133..1ebe28f 100644
+--- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -228,6 +228,15 @@ describe('PersonalSettingsPage', () => {
+     document.execCommand = vi.fn().mockReturnValue(true);
+     /* eslint-enable @typescript-eslint/no-deprecated */
+     fireEvent.click(screen.getByTestId('copy-recovery-codes-btn'));
++    await waitFor(() => {
++      expect(screen.getByText('Copied!')).toBeDefined();
++    });
++    await waitFor(
++      () => {
++        expect(screen.getByText('Copy Codes')).toBeDefined();
++      },
++      { timeout: 3000 },
++    );
+ 
+     fireEvent.click(screen.getByTestId('close-recovery-modal-btn'));
+     expect(screen.queryByTestId('recovery-codes-grid')).toBeNull();
+@@ -442,11 +451,18 @@ describe('PersonalSettingsPage', () => {
+     fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
+     expect(screen.getByTestId('passkey-nickname-input')).toBeDefined();
+ 
+-    // Click Cancel button in rename modal
++    // Click Header Cancel button in rename modal
+     const cancelButtons = screen.getAllByRole('button', { name: 'Cancel' });
+     const firstCancelBtn = cancelButtons[0];
+     if (firstCancelBtn) fireEvent.click(firstCancelBtn);
+     expect(screen.queryByTestId('passkey-nickname-input')).toBeNull();
++
++    // Reopen and click Footer Cancel button in rename modal
++    fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
++    const cancelButtonsFooter = screen.getAllByRole('button', { name: 'Cancel' });
++    const secondCancelBtn = cancelButtonsFooter[1];
++    if (secondCancelBtn) fireEvent.click(secondCancelBtn);
++    expect(screen.queryByTestId('passkey-nickname-input')).toBeNull();
+   });
+ 
+   it('renders empty passkey notice when passkeys list is empty', async () => {
+@@ -1000,11 +1016,12 @@ describe('PersonalSettingsPage', () => {
+       {
+         id: 'ident-1',
+         card_slug: 'github-corp',
+-        provider_type: 'oauth',
+-        subject_id: 'gh-123',
+-        display_name: 'Jane GitHub',
+-        email: 'jane@github.example',
++        card_display_name: 'GitHub Enterprise',
++        provider_kind: 'oauth2',
++        immutable_subject_id: 'gh-123',
++        subject_email_at_link: 'jane@github.example',
+         created_at: '2026-01-15T00:00:00Z',
++        last_login_at: '2026-01-15T00:00:00Z',
+       },
+     ];
+     vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
+@@ -1016,6 +1033,8 @@ describe('PersonalSettingsPage', () => {
+     await waitFor(() => {
+       expect(screen.getByTestId('identity-row-ident-1')).toBeDefined();
+       expect(screen.getByText('github-corp')).toBeDefined();
++      expect(screen.getByText('(OAUTH2)')).toBeDefined();
++      expect(screen.getByText('jane@github.example')).toBeDefined();
+     });
+ 
+     const unlinkBtn = screen.getByTestId('unlink-identity-ident-1');
+@@ -1032,11 +1051,12 @@ describe('PersonalSettingsPage', () => {
+       {
+         id: 'ident-2',
+         card_slug: 'google',
+-        provider_type: 'oidc',
+-        subject_id: 'g-456',
+-        display_name: null,
+-        email: null,
++        card_display_name: null,
++        provider_kind: 'oidc',
++        immutable_subject_id: 'g-456',
++        subject_email_at_link: null,
+         created_at: '2026-02-01T00:00:00Z',
++        last_login_at: '2026-02-01T00:00:00Z',
+       },
+     ];
+     vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
+@@ -1047,6 +1067,9 @@ describe('PersonalSettingsPage', () => {
+ 
+     await waitFor(() => {
+       expect(screen.getByTestId('identity-row-ident-2')).toBeDefined();
++      expect(screen.getByText('google')).toBeDefined();
++      expect(screen.getByText('(OIDC)')).toBeDefined();
++      expect(screen.getByText('g-456')).toBeDefined();
+     });
+ 
+     fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
+@@ -1064,6 +1087,37 @@ describe('PersonalSettingsPage', () => {
+     await waitFor(() => {
+       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to unlink identity.');
+     });
++
++    const aal2Error = new ApiProblem(403, { code: 'AAL2_REQUIRED' });
++    vi.mocked(api.unlinkIdentity).mockRejectedValue(aal2Error);
++    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
++    });
++  });
++
++  it('safely handles external identity with undefined provider_kind and created_at without crashing', async () => {
++    const mockIdentities: api.ExternalIdentityItem[] = [
++      {
++        id: 'ident-3',
++        card_slug: 'custom-card',
++        card_display_name: null,
++        provider_kind: undefined as unknown as string,
++        immutable_subject_id: null,
++        subject_email_at_link: null,
++        created_at: null as unknown as string,
++      },
++    ];
++    vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
++
++    renderComponent();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('identity-row-ident-3')).toBeDefined();
++      expect(screen.getByText('custom-card')).toBeDefined();
++      expect(screen.getByText('N/A')).toBeDefined();
++      expect(screen.getByText('Unknown')).toBeDefined();
++    });
+   });
+ 
+   it('covers show/hide password toggle and TOTP setup modal cancel', async () => {
+@@ -1103,6 +1157,15 @@ describe('PersonalSettingsPage', () => {
+     const cancelBtns = screen.getAllByRole('button', { name: 'Cancel' });
+     if (cancelBtns[0]) fireEvent.click(cancelBtns[0]);
+     expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
++
++    // Reopen and cancel via footer cancel button
++    fireEvent.click(enableTotpBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-totp-btn')).toBeDefined();
++    });
++    const cancelBtns2 = screen.getAllByRole('button', { name: 'Cancel' });
++    if (cancelBtns2[1]) fireEvent.click(cancelBtns2[1]);
++    expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
+   });
+ 
+   it('covers passkey rename non-Error, passkey delete cancel, and avatar non-Error rejections', async () => {
+@@ -1165,11 +1228,39 @@ describe('PersonalSettingsPage', () => {
+       username: null as unknown as string,
+     });
+ 
+-    renderComponent();
++    const { unmount } = renderComponent();
+ 
+     await waitFor(() => {
+       expect(screen.getByText('U')).toBeDefined();
+     });
++    unmount();
++
++    // Fallback to username initial
++    queryClient.clear();
++    vi.mocked(api.fetchMyProfile).mockResolvedValue({
++      ...mockProfile,
++      avatar_url: null,
++      display_name: null as unknown as string,
++      username: 'alice',
++    });
++    const render2 = renderComponent();
++    await waitFor(() => {
++      expect(screen.getByText('A')).toBeDefined();
++    });
++    render2.unmount();
++
++    // Empty strings fallback
++    queryClient.clear();
++    vi.mocked(api.fetchMyProfile).mockResolvedValue({
++      ...mockProfile,
++      avatar_url: null,
++      display_name: '',
++      username: '',
++    });
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('avatar-preview')).toBeDefined();
++    });
+   });
+ 
+   it('covers non-Error fallback branches for TOTP, recovery codes, and passkey operations', async () => {
+@@ -1263,25 +1354,130 @@ describe('PersonalSettingsPage', () => {
+     }
+ 
+     // 4. renamePasskey error
+-    const editPasskeyBtns = screen.queryAllByRole('button', { name: /Edit/i });
+-    if (editPasskeyBtns[0]) {
+-      vi.mocked(api.renamePasskey).mockRejectedValueOnce(new Error('Failed to rename passkey.'));
+-      fireEvent.click(editPasskeyBtns[0]);
+-      const saveNicknameBtn = screen.getByRole('button', { name: /Save/i });
+-      fireEvent.click(saveNicknameBtn);
+-      await waitFor(() => {
+-        expect(screen.getByText('Failed to rename passkey.')).toBeDefined();
+-      });
+-    }
++    const renamePasskeyBtn = screen.getByTestId('rename-passkey-pk-1');
++    vi.mocked(api.renamePasskey).mockRejectedValueOnce(new Error('Failed to rename passkey.'));
++    fireEvent.click(renamePasskeyBtn);
++    const saveNicknameBtn = screen.getByTestId('save-passkey-nickname-btn');
++    fireEvent.click(saveNicknameBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
++    });
+ 
+     // 5. deletePasskey error
+-    const deletePasskeyBtns = screen.queryAllByRole('button', { name: /Delete/i });
+-    if (deletePasskeyBtns[0]) {
+-      vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Error('Failed to delete passkey.'));
+-      fireEvent.click(deletePasskeyBtns[0]);
+-      await waitFor(() => {
+-        expect(screen.getByText('Failed to delete passkey.')).toBeDefined();
+-      });
+-    }
++    const deletePasskeyBtn = screen.getByTestId('delete-passkey-pk-1');
++    vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Error('Failed to delete passkey.'));
++    fireEvent.click(deletePasskeyBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete passkey.');
++    });
++  });
++
++  it('covers SecondFactorStep callbacks (success without pendingAction, expired, error)', async () => {
++    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
++      totp_enabled: true,
++      passkeys_count: 1,
++      recovery_codes_remaining: 10,
++    });
++    const aal2Error = new ApiProblem(403, { code: 'AAL2_REQUIRED' });
++    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('regenerate-recovery-codes-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByText('BtnMockError'));
++    fireEvent.click(screen.getByText('BtnMockSuccess'));
++    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
++
++    // Trigger AAL2 again to test expired
++    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
++    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
++    });
++    fireEvent.click(screen.getByText('BtnMockExpired'));
++    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
++  });
++
++  it('covers passkey-only 2FA with undefined recovery codes count', async () => {
++    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
++      totp_enabled: false,
++      passkeys_count: 1,
++      recovery_codes_remaining: undefined as unknown as number,
++    });
++    vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('mfa-status-recovery-count').textContent).toBe('0');
++      expect(screen.getByTestId('enable-totp-btn')).toBeDefined();
++    });
++    const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
++    expect(regenBtn.hasAttribute('disabled')).toBe(false);
++    expect(regenBtn.getAttribute('title')).toBeNull();
++  });
++
++  it('handles copyToClipboard failure when copying recovery codes', async () => {
++    const clipboard = await import('../../../utils/clipboard');
++    vi.spyOn(clipboard, 'copyToClipboard').mockResolvedValue(false);
++    vi.mocked(api.regenerateRecoveryCodes).mockResolvedValue({
++      recovery_codes: ['REC-1', 'REC-2'],
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('regenerate-recovery-codes-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('copy-recovery-codes-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('copy-recovery-codes-btn'));
++    expect(screen.getByText('Copy Codes')).toBeDefined();
++  });
++
++  it('covers passkey with null nickname and zero-2fa state', async () => {
++    const nullNickPasskeys: api.WebauthnCredentialItem[] = [
++      {
++        id: 'pk-null',
++        nickname: null,
++        created_at: '2026-01-01T00:00:00Z',
++        last_used_at: '2026-01-02T00:00:00Z',
++        aaguid: '00000000-0000-0000-0000-000000000000',
++      },
++    ];
++    vi.mocked(api.fetchPasskeys).mockResolvedValue(nullNickPasskeys);
++    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
++      totp_enabled: false,
++      passkeys_count: 0,
++      recovery_codes_remaining: 0,
++    });
++
++    const { unmount } = renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('rename-passkey-pk-null')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('rename-passkey-pk-null'));
++    expect(screen.getByTestId<HTMLInputElement>('passkey-nickname-input').value).toBe('');
++    unmount();
++
++    // Zero-2fa state
++    queryClient.clear();
++    vi.mocked(api.fetchPasskeys).mockResolvedValue([]);
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('regenerate-hint')).toBeDefined();
++    });
++    const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
++    expect(regenBtn.getAttribute('title')).toBe('Enable TOTP or Passkey 2FA first');
+   });
+ });
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.test.ts b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+index c9f4c52..2fc5462 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.test.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+@@ -181,7 +181,20 @@ describe('personalSettingsApi', () => {
+   });
+ 
+   it('fetchExternalIdentities returns identities on success and empty array on error', async () => {
+-    const mockData = { identities: [{ id: 'i-1', card_slug: 'github', provider_type: 'oauth', subject_id: 'sub-1', created_at: '2026-01-01' }] };
++    const mockData = {
++      identities: [
++        {
++          id: 'i-1',
++          card_slug: 'github',
++          card_display_name: 'GitHub Enterprise',
++          provider_kind: 'oauth2',
++          subject_email_at_link: 'user@example.com',
++          immutable_subject_id: 'sub-1',
++          created_at: '2026-01-01T00:00:00Z',
++          last_login_at: '2026-01-01T12:00:00Z',
++        },
++      ],
++    };
+     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockData);
+ 
+     const res1 = await fetchExternalIdentities();
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
+index 995b497..1b76ce8 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.ts
+@@ -27,7 +27,7 @@ export interface ChangePasswordRequest {
+ 
+ export interface WebauthnCredentialItem {
+   id: string;
+-  nickname: string;
++  nickname?: string | null;
+   created_at: string;
+   last_used_at: string | null;
+   aaguid: string | null;
+@@ -143,12 +143,18 @@ export async function regenerateRecoveryCodes(): Promise<RecoveryCodesResponse>
+ 
+ export interface ExternalIdentityItem {
+   id: string;
+-  provider_type: string;
+   card_slug: string;
+-  subject_id: string;
++  card_display_name?: string | null;
++  provider_kind?: string;
++  subject_email_at_link?: string | null;
++  immutable_subject_id?: string | null;
++  created_at: string;
++  last_login_at?: string | null;
++  // Backward-compatibility optional fields
++  provider_type?: string;
++  subject_id?: string;
+   email?: string | null;
+   display_name?: string | null;
+-  created_at: string;
+   last_used_at?: string | null;
+ }
+ 

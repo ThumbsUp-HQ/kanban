@@ -169,7 +169,7 @@ export function PersonalSettingsPage(): JSX.Element {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+    if (file.type === 'image/svg+xml' || ((file.name as string | undefined) ?? '').toLowerCase().endsWith('.svg')) {
       setErrorMsg('SVG avatars are rejected for security. Please upload PNG, JPEG, or WebP.');
       return;
     }
@@ -393,10 +393,10 @@ export function PersonalSettingsPage(): JSX.Element {
               <img
                 src={profile.avatar_url}
                 alt={`${profile.display_name}'s avatar`}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                draggable={false}
               />
             ) : (
-              <span>{(profile?.display_name ?? profile?.username ?? 'U')[0]?.toUpperCase()}</span>
+              <span>{((profile?.display_name ?? profile?.username ?? 'U')[0] ?? '').toUpperCase()}</span>
             )}
           </div>
           <div className="kb-personal-settings-avatar-actions">
@@ -406,7 +406,7 @@ export function PersonalSettingsPage(): JSX.Element {
               id="avatar-file-input"
               data-testid="avatar-file-input"
               accept="image/png,image/jpeg,image/webp"
-              style={{ display: 'none' }}
+              className="kb-personal-settings-file-hidden"
               onChange={handleAvatarFileChange}
             />
             <button
@@ -573,7 +573,7 @@ export function PersonalSettingsPage(): JSX.Element {
 
       {/* Section 3: Passkeys (WebAuthn) */}
       <section className="kb-personal-settings-section" aria-labelledby="section-passkeys-title">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="kb-personal-settings-header-row">
           <div>
             <h2 id="section-passkeys-title" className="kb-personal-settings-section-title">
               Passkeys & Security Keys
@@ -591,14 +591,14 @@ export function PersonalSettingsPage(): JSX.Element {
                 <th className="kb-personal-settings-th">Name</th>
                 <th className="kb-personal-settings-th">Created</th>
                 <th className="kb-personal-settings-th">Last Used</th>
-                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
+                <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {passkeys.map((pk) => (
                 <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
                   <td className="kb-personal-settings-td">
-                    <strong>{pk.nickname || 'Passkey'}</strong>
+                    <strong>{pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}</strong>
                   </td>
                   <td className="kb-personal-settings-td">
                     {new Date(pk.created_at).toLocaleDateString()}
@@ -606,15 +606,14 @@ export function PersonalSettingsPage(): JSX.Element {
                   <td className="kb-personal-settings-td">
                     {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
                   </td>
-                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
+                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
                     <button
                       type="button"
-                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
                       data-testid={`rename-passkey-${pk.id}`}
-                      style={{ marginRight: 8 }}
                       onClick={() => {
                         setEditingPasskey(pk);
-                        setPasskeyNickname(pk.nickname || '');
+                        setPasskeyNickname(pk.nickname ?? '');
                       }}
                     >
                       Rename
@@ -633,7 +632,7 @@ export function PersonalSettingsPage(): JSX.Element {
             </tbody>
           </table>
         ) : (
-          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
+          <p className="kb-personal-settings-empty">
             No passkeys registered yet.
           </p>
         )}
@@ -664,9 +663,9 @@ export function PersonalSettingsPage(): JSX.Element {
         </div>
 
         {(() => {
-          const is2faActive = mfaStatus?.totp_enabled === true || Boolean(passkeys && passkeys.length > 0);
+          const is2faActive = Boolean(mfaStatus?.totp_enabled) || Boolean(passkeys && passkeys.length > 0);
           return (
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="kb-personal-settings-mfa-actions">
               {!mfaStatus?.totp_enabled ? (
                 <button
                   type="button"
@@ -699,9 +698,8 @@ export function PersonalSettingsPage(): JSX.Element {
               </button>
               {!is2faActive && (
                 <span
-                  className="kb-personal-settings-hint"
+                  className="kb-personal-settings-hint kb-personal-settings-hint-muted"
                   data-testid="regenerate-hint"
-                  style={{ color: 'var(--fg-secondary)', fontSize: 'var(--text-xs)' }}
                 >
                   Enable TOTP or Passkey 2FA first
                 </span>
@@ -727,22 +725,22 @@ export function PersonalSettingsPage(): JSX.Element {
                 <th className="kb-personal-settings-th">Provider</th>
                 <th className="kb-personal-settings-th">Subject / Account</th>
                 <th className="kb-personal-settings-th">Linked</th>
-                <th className="kb-personal-settings-th" style={{ textAlign: 'right' }}>Actions</th>
+                <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {identities.map((ident) => (
                 <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
                   <td className="kb-personal-settings-td">
-                    <strong>{ident.card_slug}</strong> ({ident.provider_type.toUpperCase()})
+                    <strong>{ident.card_slug}</strong> ({(ident.provider_kind ?? ident.provider_type ?? '').toUpperCase()})
                   </td>
                   <td className="kb-personal-settings-td">
-                    {ident.display_name ?? ident.email ?? ident.subject_id}
+                    {ident.subject_email_at_link ?? ident.immutable_subject_id ?? ident.card_display_name ?? ident.display_name ?? ident.email ?? ident.subject_id ?? 'Unknown'}
                   </td>
                   <td className="kb-personal-settings-td">
-                    {new Date(ident.created_at).toLocaleDateString()}
+                    {ident.created_at ? new Date(ident.created_at).toLocaleDateString() : 'N/A'}
                   </td>
-                  <td className="kb-personal-settings-td" style={{ textAlign: 'right' }}>
+                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
                     <button
                       type="button"
                       className="kb-personal-settings-btn kb-personal-settings-btn-danger"
@@ -757,7 +755,7 @@ export function PersonalSettingsPage(): JSX.Element {
             </tbody>
           </table>
         ) : (
-          <p style={{ color: 'var(--fg-secondary)', fontStyle: 'italic' }}>
+          <p className="kb-personal-settings-empty">
             No external identities linked.
           </p>
         )}
@@ -786,20 +784,13 @@ export function PersonalSettingsPage(): JSX.Element {
             </div>
             <form onSubmit={(e) => { void handleConfirmTotp(e); }}>
               <div className="kb-personal-settings-modal-body">
-                <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+                <p className="kb-personal-settings-modal-text">
                   Scan the QR code or enter the secret code into your authenticator app (Google
                   Authenticator, 1Password, Bitwarden, etc.):
                 </p>
                 {totpSetupStep.secret && (
                   <div
-                    style={{
-                      padding: 12,
-                      background: 'var(--bg-canvas)',
-                      borderRadius: 'var(--radius-md)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 'var(--text-sm)',
-                      wordBreak: 'break-all',
-                    }}
+                    className="kb-personal-settings-secret-box"
                     data-testid="totp-secret-key"
                   >
                     {totpSetupStep.secret}
@@ -858,7 +849,7 @@ export function PersonalSettingsPage(): JSX.Element {
               </h3>
             </div>
             <div className="kb-personal-settings-modal-body">
-              <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+              <p className="kb-personal-settings-modal-text">
                 Store these recovery codes in a secure location. Each code can only be used once to access
                 your account if you lose your 2FA device.
               </p>
@@ -988,7 +979,7 @@ export function PersonalSettingsPage(): JSX.Element {
               </button>
             </div>
             <div className="kb-personal-settings-modal-body">
-              <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+              <p className="kb-personal-settings-modal-text">
                 This operation requires fresh second-factor verification. Please confirm with your passkey or TOTP authenticator.
               </p>
               <SecondFactorStep
@@ -996,11 +987,9 @@ export function PersonalSettingsPage(): JSX.Element {
                 methods={aal2Challenge.methods}
                 onSuccess={() => {
                   setAal2Challenge(null);
-                  if (pendingAction) {
-                    const action = pendingAction;
-                    setPendingAction(null);
-                    void action();
-                  }
+                  const action = pendingAction;
+                  setPendingAction(null);
+                  void action?.();
                 }}
                 onError={() => {
                   // handled inside SecondFactorStep

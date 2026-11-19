@@ -27,7 +27,7 @@ export interface ChangePasswordRequest {
 
 export interface WebauthnCredentialItem {
   id: string;
-  nickname: string;
+  nickname?: string | null;
   created_at: string;
   last_used_at: string | null;
   aaguid: string | null;
@@ -143,12 +143,18 @@ export async function regenerateRecoveryCodes(): Promise<RecoveryCodesResponse> 
 
 export interface ExternalIdentityItem {
   id: string;
-  provider_type: string;
   card_slug: string;
-  subject_id: string;
+  card_display_name?: string | null;
+  provider_kind?: string;
+  subject_email_at_link?: string | null;
+  immutable_subject_id?: string | null;
+  created_at: string;
+  last_login_at?: string | null;
+  // Backward-compatibility optional fields
+  provider_type?: string;
+  subject_id?: string;
   email?: string | null;
   display_name?: string | null;
-  created_at: string;
   last_used_at?: string | null;
 }
 

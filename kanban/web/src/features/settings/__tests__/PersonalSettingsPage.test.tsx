@@ -228,6 +228,15 @@ describe('PersonalSettingsPage', () => {
     document.execCommand = vi.fn().mockReturnValue(true);
     /* eslint-enable @typescript-eslint/no-deprecated */
     fireEvent.click(screen.getByTestId('copy-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Copied!')).toBeDefined();
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('Copy Codes')).toBeDefined();
+      },
+      { timeout: 3000 },
+    );
 
     fireEvent.click(screen.getByTestId('close-recovery-modal-btn'));
     expect(screen.queryByTestId('recovery-codes-grid')).toBeNull();
@@ -442,10 +451,17 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
     expect(screen.getByTestId('passkey-nickname-input')).toBeDefined();
 
-    // Click Cancel button in rename modal
+    // Click Header Cancel button in rename modal
     const cancelButtons = screen.getAllByRole('button', { name: 'Cancel' });
     const firstCancelBtn = cancelButtons[0];
     if (firstCancelBtn) fireEvent.click(firstCancelBtn);
+    expect(screen.queryByTestId('passkey-nickname-input')).toBeNull();
+
+    // Reopen and click Footer Cancel button in rename modal
+    fireEvent.click(screen.getByTestId('rename-passkey-pk-1'));
+    const cancelButtonsFooter = screen.getAllByRole('button', { name: 'Cancel' });
+    const secondCancelBtn = cancelButtonsFooter[1];
+    if (secondCancelBtn) fireEvent.click(secondCancelBtn);
     expect(screen.queryByTestId('passkey-nickname-input')).toBeNull();
   });
 
@@ -1000,11 +1016,12 @@ describe('PersonalSettingsPage', () => {
       {
         id: 'ident-1',
         card_slug: 'github-corp',
-        provider_type: 'oauth',
-        subject_id: 'gh-123',
-        display_name: 'Jane GitHub',
-        email: 'jane@github.example',
+        card_display_name: 'GitHub Enterprise',
+        provider_kind: 'oauth2',
+        immutable_subject_id: 'gh-123',
+        subject_email_at_link: 'jane@github.example',
         created_at: '2026-01-15T00:00:00Z',
+        last_login_at: '2026-01-15T00:00:00Z',
       },
     ];
     vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
@@ -1016,6 +1033,8 @@ describe('PersonalSettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('identity-row-ident-1')).toBeDefined();
       expect(screen.getByText('github-corp')).toBeDefined();
+      expect(screen.getByText('(OAUTH2)')).toBeDefined();
+      expect(screen.getByText('jane@github.example')).toBeDefined();
     });
 
     const unlinkBtn = screen.getByTestId('unlink-identity-ident-1');
@@ -1032,11 +1051,12 @@ describe('PersonalSettingsPage', () => {
       {
         id: 'ident-2',
         card_slug: 'google',
-        provider_type: 'oidc',
-        subject_id: 'g-456',
-        display_name: null,
-        email: null,
+        card_display_name: null,
+        provider_kind: 'oidc',
+        immutable_subject_id: 'g-456',
+        subject_email_at_link: null,
         created_at: '2026-02-01T00:00:00Z',
+        last_login_at: '2026-02-01T00:00:00Z',
       },
     ];
     vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
@@ -1047,6 +1067,9 @@ describe('PersonalSettingsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('identity-row-ident-2')).toBeDefined();
+      expect(screen.getByText('google')).toBeDefined();
+      expect(screen.getByText('(OIDC)')).toBeDefined();
+      expect(screen.getByText('g-456')).toBeDefined();
     });
 
     fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
@@ -1063,6 +1086,37 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
     await waitFor(() => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to unlink identity.');
+    });
+
+    const aal2Error = new ApiProblem(403, { code: 'AAL2_REQUIRED' });
+    vi.mocked(api.unlinkIdentity).mockRejectedValue(aal2Error);
+    fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+  });
+
+  it('safely handles external identity with undefined provider_kind and created_at without crashing', async () => {
+    const mockIdentities: api.ExternalIdentityItem[] = [
+      {
+        id: 'ident-3',
+        card_slug: 'custom-card',
+        card_display_name: null,
+        provider_kind: undefined as unknown as string,
+        immutable_subject_id: null,
+        subject_email_at_link: null,
+        created_at: null as unknown as string,
+      },
+    ];
+    vi.mocked(api.fetchExternalIdentities).mockResolvedValue(mockIdentities);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-row-ident-3')).toBeDefined();
+      expect(screen.getByText('custom-card')).toBeDefined();
+      expect(screen.getByText('N/A')).toBeDefined();
+      expect(screen.getByText('Unknown')).toBeDefined();
     });
   });
 
@@ -1102,6 +1156,15 @@ describe('PersonalSettingsPage', () => {
     });
     const cancelBtns = screen.getAllByRole('button', { name: 'Cancel' });
     if (cancelBtns[0]) fireEvent.click(cancelBtns[0]);
+    expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
+
+    // Reopen and cancel via footer cancel button
+    fireEvent.click(enableTotpBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-totp-btn')).toBeDefined();
+    });
+    const cancelBtns2 = screen.getAllByRole('button', { name: 'Cancel' });
+    if (cancelBtns2[1]) fireEvent.click(cancelBtns2[1]);
     expect(screen.queryByTestId('confirm-totp-btn')).toBeNull();
   });
 
@@ -1165,10 +1228,38 @@ describe('PersonalSettingsPage', () => {
       username: null as unknown as string,
     });
 
-    renderComponent();
+    const { unmount } = renderComponent();
 
     await waitFor(() => {
       expect(screen.getByText('U')).toBeDefined();
+    });
+    unmount();
+
+    // Fallback to username initial
+    queryClient.clear();
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: null,
+      display_name: null as unknown as string,
+      username: 'alice',
+    });
+    const render2 = renderComponent();
+    await waitFor(() => {
+      expect(screen.getByText('A')).toBeDefined();
+    });
+    render2.unmount();
+
+    // Empty strings fallback
+    queryClient.clear();
+    vi.mocked(api.fetchMyProfile).mockResolvedValue({
+      ...mockProfile,
+      avatar_url: null,
+      display_name: '',
+      username: '',
+    });
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-preview')).toBeDefined();
     });
   });
 
@@ -1263,25 +1354,130 @@ describe('PersonalSettingsPage', () => {
     }
 
     // 4. renamePasskey error
-    const editPasskeyBtns = screen.queryAllByRole('button', { name: /Edit/i });
-    if (editPasskeyBtns[0]) {
-      vi.mocked(api.renamePasskey).mockRejectedValueOnce(new Error('Failed to rename passkey.'));
-      fireEvent.click(editPasskeyBtns[0]);
-      const saveNicknameBtn = screen.getByRole('button', { name: /Save/i });
-      fireEvent.click(saveNicknameBtn);
-      await waitFor(() => {
-        expect(screen.getByText('Failed to rename passkey.')).toBeDefined();
-      });
-    }
+    const renamePasskeyBtn = screen.getByTestId('rename-passkey-pk-1');
+    vi.mocked(api.renamePasskey).mockRejectedValueOnce(new Error('Failed to rename passkey.'));
+    fireEvent.click(renamePasskeyBtn);
+    const saveNicknameBtn = screen.getByTestId('save-passkey-nickname-btn');
+    fireEvent.click(saveNicknameBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to rename passkey.');
+    });
 
     // 5. deletePasskey error
-    const deletePasskeyBtns = screen.queryAllByRole('button', { name: /Delete/i });
-    if (deletePasskeyBtns[0]) {
-      vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Error('Failed to delete passkey.'));
-      fireEvent.click(deletePasskeyBtns[0]);
-      await waitFor(() => {
-        expect(screen.getByText('Failed to delete passkey.')).toBeDefined();
-      });
-    }
+    const deletePasskeyBtn = screen.getByTestId('delete-passkey-pk-1');
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Error('Failed to delete passkey.'));
+    fireEvent.click(deletePasskeyBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete passkey.');
+    });
+  });
+
+  it('covers SecondFactorStep callbacks (success without pendingAction, expired, error)', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: true,
+      passkeys_count: 1,
+      recovery_codes_remaining: 10,
+    });
+    const aal2Error = new ApiProblem(403, { code: 'AAL2_REQUIRED' });
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('regenerate-recovery-codes-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('BtnMockError'));
+    fireEvent.click(screen.getByText('BtnMockSuccess'));
+    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+
+    // Trigger AAL2 again to test expired
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('BtnMockExpired'));
+    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+  });
+
+  it('covers passkey-only 2FA with undefined recovery codes count', async () => {
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 1,
+      recovery_codes_remaining: undefined as unknown as number,
+    });
+    vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('mfa-status-recovery-count').textContent).toBe('0');
+      expect(screen.getByTestId('enable-totp-btn')).toBeDefined();
+    });
+    const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
+    expect(regenBtn.hasAttribute('disabled')).toBe(false);
+    expect(regenBtn.getAttribute('title')).toBeNull();
+  });
+
+  it('handles copyToClipboard failure when copying recovery codes', async () => {
+    const clipboard = await import('../../../utils/clipboard');
+    vi.spyOn(clipboard, 'copyToClipboard').mockResolvedValue(false);
+    vi.mocked(api.regenerateRecoveryCodes).mockResolvedValue({
+      recovery_codes: ['REC-1', 'REC-2'],
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('regenerate-recovery-codes-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-recovery-codes-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('copy-recovery-codes-btn'));
+    expect(screen.getByText('Copy Codes')).toBeDefined();
+  });
+
+  it('covers passkey with null nickname and zero-2fa state', async () => {
+    const nullNickPasskeys: api.WebauthnCredentialItem[] = [
+      {
+        id: 'pk-null',
+        nickname: null,
+        created_at: '2026-01-01T00:00:00Z',
+        last_used_at: '2026-01-02T00:00:00Z',
+        aaguid: '00000000-0000-0000-0000-000000000000',
+      },
+    ];
+    vi.mocked(api.fetchPasskeys).mockResolvedValue(nullNickPasskeys);
+    vi.mocked(api.fetchMfaStatus).mockResolvedValue({
+      totp_enabled: false,
+      passkeys_count: 0,
+      recovery_codes_remaining: 0,
+    });
+
+    const { unmount } = renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('rename-passkey-pk-null')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('rename-passkey-pk-null'));
+    expect(screen.getByTestId<HTMLInputElement>('passkey-nickname-input').value).toBe('');
+    unmount();
+
+    // Zero-2fa state
+    queryClient.clear();
+    vi.mocked(api.fetchPasskeys).mockResolvedValue([]);
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('regenerate-hint')).toBeDefined();
+    });
+    const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
+    expect(regenBtn.getAttribute('title')).toBe('Enable TOTP or Passkey 2FA first');
   });
 });

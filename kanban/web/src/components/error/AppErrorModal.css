@@ -74,12 +74,12 @@
 .app-error-modal__message {
   font-size: 1rem;
   font-weight: 600;
-  color: #ff8a80;
+  color: var(--danger-fg);
   word-break: break-word;
-  background-color: rgba(211, 47, 47, 0.1);
+  background-color: var(--danger-bg);
   padding: 0.75rem 1rem;
   border-radius: 6px;
-  border-left: 4px solid #d32f2f;
+  border-left: 4px solid var(--danger-fg);
 }
 
 .app-error-modal__url {
@@ -98,7 +98,9 @@
 
 .app-error-modal__url code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-subtle);
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
 }
@@ -115,9 +117,9 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8125rem;
   line-height: 1.45;
-  background-color: #121212;
-  color: #eceff1;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: var(--bg-canvas);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   max-height: 240px;
   overflow-y: auto;
@@ -133,8 +135,8 @@
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
-  background-color: rgba(255, 255, 255, 0.03);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-surface-raised);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .app-error-modal__btn {
@@ -152,19 +154,20 @@
 }
 
 .app-error-modal__btn:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 .app-error-modal__btn--copy {
-  background-color: transparent;
-  color: #eceff1;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background-color: var(--bg-surface-raised);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-strong);
 }
 
 .app-error-modal__btn--copy:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.4);
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
+  border-color: var(--border-strong);
 }
 
 .app-error-modal__btn--report {
