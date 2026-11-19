@@ -471,7 +471,7 @@ async def test_mint_token_uses_settings_effective_origin(
     mock_session.execute.return_value = mock_res
 
     class FakeSessionFactory:
-        def session(self, ctx: object) -> object:
+        def session(self, _ctx: object) -> object:
             class FakeCM:
                 async def __aenter__(self) -> AsyncSession:
                     return mock_session
@@ -494,4 +494,3 @@ async def test_mint_token_uses_settings_effective_origin(
     raw_token = await service.mint_token_if_uninitialized(stdout=stdout_buf)
     assert raw_token is not None
     assert "https://custom-origin.local:9000/setup?token=" in stdout_buf.getvalue()
-

@@ -169,10 +169,10 @@ index a31790f..369dc30 100644
          ws_slug = (workspace_slug or "default").strip()
 diff --git a/kanban/tests/auth/test_setup.py b/kanban/tests/auth/test_setup.py
 new file mode 100644
-index 0000000..8d4913d
+index 0000000..b91c2f4
 --- /dev/null
 +++ b/kanban/tests/auth/test_setup.py
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,496 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +# ruff: noqa: S106, SLF001, ARG001, TRY003, EM101
@@ -646,7 +646,7 @@ index 0000000..8d4913d
 +    mock_session.execute.return_value = mock_res
 +
 +    class FakeSessionFactory:
-+        def session(self, ctx: object) -> object:
++        def session(self, _ctx: object) -> object:
 +            class FakeCM:
 +                async def __aenter__(self) -> AsyncSession:
 +                    return mock_session
@@ -669,7 +669,6 @@ index 0000000..8d4913d
 +    raw_token = await service.mint_token_if_uninitialized(stdout=stdout_buf)
 +    assert raw_token is not None
 +    assert "https://custom-origin.local:9000/setup?token=" in stdout_buf.getvalue()
-+
 diff --git a/kanban/web/e2e/qa/kan-7-screenshots.spec.ts b/kanban/web/e2e/qa/kan-7-screenshots.spec.ts
 new file mode 100644
 index 0000000..10c8172
