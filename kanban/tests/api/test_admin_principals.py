@@ -15,8 +15,10 @@ from database.models import Principal as DBPrincipal
 from database.models.auth import UserSession
 from database.models.mcp_api_key import McpApiKey
 from kanban.admin.principal_service import (
+    _format_principal_entry,
     _highest_role,
     _resolve_provider_label,
+    _slugify_or_default,
     _validate_principal_filter,
     add_group_member,
     bind_role,
@@ -1064,7 +1066,15 @@ async def test_provision_group_with_handle_slug(
     group_entry = next((p for p in p_list if p["id"] == data["id"]), None)
     assert group_entry is not None
     assert group_entry["principal"] == "infra-team"
+    assert group_entry["handle"] == "@infra-team"
     assert group_entry["display_name"] == "Infra Team"
+
+    # Verify detail endpoint returns the normalized handle
+    resp_detail = await api_env.client.get(f"/api/v1/admin/principals/{data['id']}")
+    assert resp_detail.status_code == 200
+    detail = resp_detail.json()
+    assert detail["principal"] == "infra-team"
+    assert detail["handle"] == "@infra-team"
 
 
 @pytest.mark.asyncio
@@ -1440,3 +1450,85 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
         session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
     )
     assert ub_res2["status"] == "role_unbound"
+
+    # 13. _format_principal_entry with group slugification and UUID display name fallback
+    p_group_custom = DBPrincipal(
+        id=uuid.uuid4(),
+        workspace_id=admin.workspace_id,
+        principal_type="GROUP",
+        status="ACTIVE",
+        display_name="DevOps Security Team",
+    )
+    formatted_grp = await _format_principal_entry(session, admin.workspace_id, p_group_custom)
+    assert formatted_grp["handle"] == "@DevOps Security Team"
+
+    p_group_uuid = DBPrincipal(
+        id=uuid.uuid4(),
+        workspace_id=admin.workspace_id,
+        principal_type="GROUP",
+        status="ACTIVE",
+        display_name=str(uuid.uuid4()),
+    )
+    formatted_uuid = await _format_principal_entry(session, admin.workspace_id, p_group_uuid)
+    assert formatted_uuid["handle"] == "@group"
+
+    # 14. _slugify_or_default unit tests
+    assert _slugify_or_default("infra-team", "fallback") == "infra-team"
+    assert _slugify_or_default("@infra-team", "fallback") == "infra-team"
+    assert _slugify_or_default("Infra Team", "fallback") == "infra-team"
+    assert _slugify_or_default(str(uuid.uuid4()), "fallback") == "fallback"
+    assert _slugify_or_default(None, "fallback") == "fallback"
+    assert _slugify_or_default("", "fallback") == "fallback"
+    assert _slugify_or_default("   ", "fallback") == "fallback"
+
+    # 15. get_principal_detail for group without Group row, with UUID name, and SCRIPT_EPHEMERAL
+    session.add(p_group_custom)
+    session.add(p_group_uuid)
+    await session.flush()
+    detail_grp = await get_principal_detail(session, admin.workspace_id, str(p_group_custom.id))
+    assert detail_grp["handle"] == "@DevOps Security Team"
+
+    detail_uuid = await get_principal_detail(session, admin.workspace_id, str(p_group_uuid.id))
+    assert detail_uuid["handle"] == "@group"
+
+    grp_uuid_name = await provision_group(
+        session,
+        admin.workspace_id,
+        admin.id,
+        name=str(uuid.uuid4()),
+        display_name="Cloud Security",
+    )
+    detail_uuid_name = await get_principal_detail(
+        session, admin.workspace_id, grp_uuid_name["id"]
+    )
+    assert detail_uuid_name["handle"] == "@cloud-security"
+
+    p_group_row = (
+        await session.execute(
+            select(DBPrincipal).where(DBPrincipal.id == uuid.UUID(grp_uuid_name["id"]))
+        )
+    ).scalar_one()
+    formatted_uuid_name = await _format_principal_entry(
+        session, admin.workspace_id, p_group_row
+    )
+    assert formatted_uuid_name["handle"] == "@cloud-security"
+
+    p_eph = DBPrincipal(
+        id=uuid.uuid4(),
+        workspace_id=admin.workspace_id,
+        principal_type="SCRIPT_EPHEMERAL",
+        status="ACTIVE",
+        display_name="Ephemeral",
+    )
+    session.add(p_eph)
+    await session.flush()
+    with pytest.raises(ProblemException) as exc_eph:
+        await get_principal_detail(session, admin.workspace_id, str(p_eph.id))
+    assert exc_eph.value.code == "NOT_FOUND"
+
+    # 16. add_group_member idempotent branch
+    g_mem_test = await provision_group(session, admin.workspace_id, admin.id, name="idem-group")
+    gid = uuid.UUID(g_mem_test["id"])
+    await add_group_member(session, admin.workspace_id, admin.id, gid, user_pw_id)
+    dup_mem = await add_group_member(session, admin.workspace_id, admin.id, gid, user_pw_id)
+    assert dup_mem["status"] == "ok"

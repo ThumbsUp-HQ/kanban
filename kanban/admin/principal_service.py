@@ -59,6 +59,17 @@ def normalize_handle(handle: str) -> str:
     return h
 
 
+def _slugify_or_default(value: str | None, default: str) -> str:
+    """Derive a slug from a display name or fall back to default, never leaking UUIDs."""
+    if not value:
+        return default
+    clean = value.strip().lstrip("@")
+    if not clean or _RFC4122_UUID_REGEX.match(clean):
+        return default
+    slug = re.sub(r"[^a-z0-9._-]+", "-", clean.lower()).strip("-")
+    return slug or default
+
+
 async def resolve_principal_id(  # noqa: RET503
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -168,7 +179,17 @@ async def get_principal_detail(
         g_stmt = select(Group.name).where(Group.id == p_id)
         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
         raw_principal = g_name or principal.display_name
-        handle = f"@{raw_principal.lstrip('@')}" if raw_principal else None
+        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
+            handle = f"@{raw_principal.lstrip('@')}"
+        elif principal.display_name and not _RFC4122_UUID_REGEX.match(
+            principal.display_name.strip().lstrip("@")
+        ):
+            slug = re.sub(
+                r"[^a-z0-9._-]+", "-", principal.display_name.strip().lower()
+            ).strip("-")
+            handle = f"@{slug or 'group'}"
+        else:
+            handle = "@group"
 
     # Retrieve groups via closure
     closure_stmt = (
@@ -327,10 +348,23 @@ async def _format_principal_entry(
     elif p.principal_type == "GROUP":
         g_stmt = select(Group.name).where(Group.id == p.id)
         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
-        if g_name:
-            raw_principal = g_name
+        raw_principal = g_name or p.display_name
 
-    handle = f"@{raw_principal.lstrip('@')}" if raw_principal else f"@{p.display_name.lstrip('@')}"
+    if p.principal_type == "GROUP":
+        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
+            handle = f"@{raw_principal.lstrip('@')}"
+        elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
+            slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
+            handle = f"@{slug or 'group'}"
+        else:
+            handle = "@group"
+    elif raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
+        handle = f"@{raw_principal.lstrip('@')}"
+    elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
+        slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
+        handle = f"@{slug or 'user'}"
+    else:
+        handle = f"@{p.principal_type.lower() if p.principal_type else 'user'}"
 
     return {
         "id": str(p.id),

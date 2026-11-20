@@ -1,0 +1,80 @@
+=== BACKEND UNIT TEST & COVERAGE (kanban/admin/principal_service.py) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+created: 4/4 workers
+4 workers [16 items]
+
+................                                                         [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/admin/principal_service.py     433      9    164     14    96%   152, 178->195, 346->353, 348->353, 363-367, 536, 670, 749, 819->897, 878->897, 970, 1138->1146, 1146->1155, 1251->1257
+-------------------------------------------------------------------------------
+TOTAL                                 433      9    164     14    96%
+============================= 16 passed in 13.69s ==============================
+
+=== FRONTEND UNIT TEST & COVERAGE (useSystemStatus, AuthStudioPage, WorkspaceSettingsPage) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/system/useSystemStatus.test.tsx (1 test) 50ms
+ ✓ src/app/useSystemStatus.test.tsx (4 tests) 166ms
+stderr | src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx > WorkspaceSettingsPage (KANBA-202) > covers group selection, member table rendering (nested group, bare user, agent), member removal, and member addition cyclic rejection
+An update to WorkspaceSettingsPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkspaceSettingsPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (25 tests) 2076ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (25)
+     ✓ renders workspace settings page and updates workspace name and slug 344ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (42 tests) 5807ms
+   ✓ AuthStudioPage (KB-P3-36) (42)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 387ms
+     ✓ opens drawer to add a new auth card and appends created card 632ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 510ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 487ms
+
+ Test Files  4 passed (4)
+      Tests  72 passed (72)
+   Start at  08:40:36
+   Duration  7.41s (tests 63%, environment 25%, import 7%, transform 4%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    98.9 |    95.61 |   99.41 |     100 |                   
+ app               |     100 |      100 |     100 |     100 |                   
+  ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
+ ...res/admin-auth |   98.28 |    95.68 |      99 |     100 |                   
+  ...tudioPage.tsx |   98.28 |    95.68 |      99 |     100 | ...54,559,565,587 
+ features/settings |   99.67 |    95.47 |     100 |     100 |                   
+  ...tingsPage.tsx |   99.67 |    95.47 |     100 |     100 | ...25,365,392,438 
+ features/system   |     100 |      100 |     100 |     100 |                   
+  ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

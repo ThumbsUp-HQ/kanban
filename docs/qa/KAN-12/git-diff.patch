@@ -1,0 +1,1328 @@
+diff --git a/kanban/admin/principal_service.py b/kanban/admin/principal_service.py
+index 92280fa6..3279df56 100644
+--- a/kanban/admin/principal_service.py
++++ b/kanban/admin/principal_service.py
+@@ -59,6 +59,17 @@ def normalize_handle(handle: str) -> str:
+     return h
+ 
+ 
++def _slugify_or_default(value: str | None, default: str) -> str:
++    """Derive a slug from a display name or fall back to default, never leaking UUIDs."""
++    if not value:
++        return default
++    clean = value.strip().lstrip("@")
++    if not clean or _RFC4122_UUID_REGEX.match(clean):
++        return default
++    slug = re.sub(r"[^a-z0-9._-]+", "-", clean.lower()).strip("-")
++    return slug or default
++
++
+ async def resolve_principal_id(  # noqa: RET503
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+@@ -168,7 +179,17 @@ async def get_principal_detail(
+         g_stmt = select(Group.name).where(Group.id == p_id)
+         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
+         raw_principal = g_name or principal.display_name
+-        handle = f"@{raw_principal.lstrip('@')}" if raw_principal else None
++        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
++            handle = f"@{raw_principal.lstrip('@')}"
++        elif principal.display_name and not _RFC4122_UUID_REGEX.match(
++            principal.display_name.strip().lstrip("@")
++        ):
++            slug = re.sub(
++                r"[^a-z0-9._-]+", "-", principal.display_name.strip().lower()
++            ).strip("-")
++            handle = f"@{slug or 'group'}"
++        else:
++            handle = "@group"
+ 
+     # Retrieve groups via closure
+     closure_stmt = (
+@@ -327,10 +348,23 @@ async def _format_principal_entry(
+     elif p.principal_type == "GROUP":
+         g_stmt = select(Group.name).where(Group.id == p.id)
+         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
+-        if g_name:
+-            raw_principal = g_name
+-
+-    handle = f"@{raw_principal.lstrip('@')}" if raw_principal else f"@{p.display_name.lstrip('@')}"
++        raw_principal = g_name or p.display_name
++
++    if p.principal_type == "GROUP":
++        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
++            handle = f"@{raw_principal.lstrip('@')}"
++        elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
++            slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
++            handle = f"@{slug or 'group'}"
++        else:
++            handle = "@group"
++    elif raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
++        handle = f"@{raw_principal.lstrip('@')}"
++    elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
++        slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
++        handle = f"@{slug or 'user'}"
++    else:
++        handle = f"@{p.principal_type.lower() if p.principal_type else 'user'}"
+ 
+     return {
+         "id": str(p.id),
+diff --git a/kanban/tests/api/test_admin_principals.py b/kanban/tests/api/test_admin_principals.py
+index 5d5f02c1..d6969b30 100644
+--- a/kanban/tests/api/test_admin_principals.py
++++ b/kanban/tests/api/test_admin_principals.py
+@@ -15,8 +15,10 @@ from database.models import Principal as DBPrincipal
+ from database.models.auth import UserSession
+ from database.models.mcp_api_key import McpApiKey
+ from kanban.admin.principal_service import (
++    _format_principal_entry,
+     _highest_role,
+     _resolve_provider_label,
++    _slugify_or_default,
+     _validate_principal_filter,
+     add_group_member,
+     bind_role,
+@@ -1064,8 +1066,16 @@ async def test_provision_group_with_handle_slug(
+     group_entry = next((p for p in p_list if p["id"] == data["id"]), None)
+     assert group_entry is not None
+     assert group_entry["principal"] == "infra-team"
++    assert group_entry["handle"] == "@infra-team"
+     assert group_entry["display_name"] == "Infra Team"
+ 
++    # Verify detail endpoint returns the normalized handle
++    resp_detail = await api_env.client.get(f"/api/v1/admin/principals/{data['id']}")
++    assert resp_detail.status_code == 200
++    detail = resp_detail.json()
++    assert detail["principal"] == "infra-team"
++    assert detail["handle"] == "@infra-team"
++
+ 
+ @pytest.mark.asyncio
+ async def test_admin_principals_endpoints_additional_coverage(
+@@ -1440,3 +1450,85 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
+         session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
+     )
+     assert ub_res2["status"] == "role_unbound"
++
++    # 13. _format_principal_entry with group slugification and UUID display name fallback
++    p_group_custom = DBPrincipal(
++        id=uuid.uuid4(),
++        workspace_id=admin.workspace_id,
++        principal_type="GROUP",
++        status="ACTIVE",
++        display_name="DevOps Security Team",
++    )
++    formatted_grp = await _format_principal_entry(session, admin.workspace_id, p_group_custom)
++    assert formatted_grp["handle"] == "@DevOps Security Team"
++
++    p_group_uuid = DBPrincipal(
++        id=uuid.uuid4(),
++        workspace_id=admin.workspace_id,
++        principal_type="GROUP",
++        status="ACTIVE",
++        display_name=str(uuid.uuid4()),
++    )
++    formatted_uuid = await _format_principal_entry(session, admin.workspace_id, p_group_uuid)
++    assert formatted_uuid["handle"] == "@group"
++
++    # 14. _slugify_or_default unit tests
++    assert _slugify_or_default("infra-team", "fallback") == "infra-team"
++    assert _slugify_or_default("@infra-team", "fallback") == "infra-team"
++    assert _slugify_or_default("Infra Team", "fallback") == "infra-team"
++    assert _slugify_or_default(str(uuid.uuid4()), "fallback") == "fallback"
++    assert _slugify_or_default(None, "fallback") == "fallback"
++    assert _slugify_or_default("", "fallback") == "fallback"
++    assert _slugify_or_default("   ", "fallback") == "fallback"
++
++    # 15. get_principal_detail for group without Group row, with UUID name, and SCRIPT_EPHEMERAL
++    session.add(p_group_custom)
++    session.add(p_group_uuid)
++    await session.flush()
++    detail_grp = await get_principal_detail(session, admin.workspace_id, str(p_group_custom.id))
++    assert detail_grp["handle"] == "@DevOps Security Team"
++
++    detail_uuid = await get_principal_detail(session, admin.workspace_id, str(p_group_uuid.id))
++    assert detail_uuid["handle"] == "@group"
++
++    grp_uuid_name = await provision_group(
++        session,
++        admin.workspace_id,
++        admin.id,
++        name=str(uuid.uuid4()),
++        display_name="Cloud Security",
++    )
++    detail_uuid_name = await get_principal_detail(
++        session, admin.workspace_id, grp_uuid_name["id"]
++    )
++    assert detail_uuid_name["handle"] == "@cloud-security"
++
++    p_group_row = (
++        await session.execute(
++            select(DBPrincipal).where(DBPrincipal.id == uuid.UUID(grp_uuid_name["id"]))
++        )
++    ).scalar_one()
++    formatted_uuid_name = await _format_principal_entry(
++        session, admin.workspace_id, p_group_row
++    )
++    assert formatted_uuid_name["handle"] == "@cloud-security"
++
++    p_eph = DBPrincipal(
++        id=uuid.uuid4(),
++        workspace_id=admin.workspace_id,
++        principal_type="SCRIPT_EPHEMERAL",
++        status="ACTIVE",
++        display_name="Ephemeral",
++    )
++    session.add(p_eph)
++    await session.flush()
++    with pytest.raises(ProblemException) as exc_eph:
++        await get_principal_detail(session, admin.workspace_id, str(p_eph.id))
++    assert exc_eph.value.code == "NOT_FOUND"
++
++    # 16. add_group_member idempotent branch
++    g_mem_test = await provision_group(session, admin.workspace_id, admin.id, name="idem-group")
++    gid = uuid.UUID(g_mem_test["id"])
++    await add_group_member(session, admin.workspace_id, admin.id, gid, user_pw_id)
++    dup_mem = await add_group_member(session, admin.workspace_id, admin.id, gid, user_pw_id)
++    assert dup_mem["status"] == "ok"
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index bcf7366e..432164f5 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -14,6 +14,7 @@ import React, {
+ } from 'react';
+ import { Link, useLocation, useNavigate } from 'react-router';
+ import { useQueryClient } from '@tanstack/react-query';
++import { qk } from '../api/queryKeys';
+ import { Breadcrumb } from './Breadcrumb';
+ import { HeaderPills, type AccessManifestData } from './HeaderPills';
+ import { LayoutSwitcher } from './LayoutSwitcher';
+@@ -124,6 +125,18 @@ export function Topbar({
+   const menuRef = useRef<HTMLDivElement>(null);
+   const themeContext = useTheme();
+ 
++  useEffect(() => {
++    if (typeof window === 'undefined') return;
++    const handleStatusChanged = (): void => {
++      void queryClient.invalidateQueries({ queryKey: qk.systemStatus() });
++      void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
++    };
++    window.addEventListener('kb:system-status-changed', handleStatusChanged);
++    return () => {
++      window.removeEventListener('kb:system-status-changed', handleStatusChanged);
++    };
++  }, [queryClient]);
++
+   // Close avatar menu on outside click
+   useEffect(() => {
+     if (!avatarMenuOpen) return;
+diff --git a/kanban/web/src/app/useSystemStatus.test.tsx b/kanban/web/src/app/useSystemStatus.test.tsx
+index a42e082b..2a2967a0 100644
+--- a/kanban/web/src/app/useSystemStatus.test.tsx
++++ b/kanban/web/src/app/useSystemStatus.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { renderHook, waitFor } from '@testing-library/react';
++import { act, renderHook, waitFor } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { useSystemStatus, fetchSystemStatus } from './useSystemStatus';
+@@ -60,4 +60,59 @@ describe('useSystemStatus', () => {
+     await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
+     expect(result.current.data).toEqual(mockData);
+   });
++
++  it('subscribes to kb:system-status-changed event and invalidates query cache', async () => {
++    const mockData1 = {
++      deployment_mode: 'multi_container',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++    };
++    const mockData2 = {
++      ...mockData1,
++      air_gap_mode: true,
++    };
++
++    const fetchSpy = vi.spyOn(window, 'fetch')
++      .mockResolvedValueOnce(new Response(JSON.stringify(mockData1), { status: 200 }))
++      .mockResolvedValueOnce(new Response(JSON.stringify(mockData2), { status: 200 }));
++
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++
++    const wrapper = ({ children }: { children: React.ReactNode }) => (
++      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
++    );
++
++    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
++    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
++
++    const { result, unmount } = renderHook(() => useSystemStatus(), { wrapper });
++
++    await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
++    expect(result.current.data?.air_gap_mode).toBe(false);
++    expect(addEventListenerSpy).toHaveBeenCalledWith('kb:system-status-changed', expect.any(Function));
++
++    // Dispatch custom event
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
++    });
++
++    await waitFor(() => {
++      expect(invalidateSpy).toHaveBeenCalled();
++    });
++
++    await waitFor(() => {
++      expect(fetchSpy).toHaveBeenCalledTimes(2);
++    });
++
++    await waitFor(() => {
++      expect(result.current.data?.air_gap_mode).toBe(true);
++    });
++
++    unmount();
++    expect(removeEventListenerSpy).toHaveBeenCalledWith('kb:system-status-changed', expect.any(Function));
++  });
+ });
+diff --git a/kanban/web/src/app/useSystemStatus.ts b/kanban/web/src/app/useSystemStatus.ts
+index d2322bb2..7d45a260 100644
+--- a/kanban/web/src/app/useSystemStatus.ts
++++ b/kanban/web/src/app/useSystemStatus.ts
+@@ -3,7 +3,8 @@
+  * Queries /api/v1/system/status to determine deployment mode, air-gap, and persistence.
+  */
+ 
+-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
++import { useEffect } from 'react';
++import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+ import { qk } from '../api/queryKeys';
+ 
+ export interface SystemStatus {
+@@ -36,6 +37,18 @@ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemSta
+ }
+ 
+ export function useSystemStatus(): UseQueryResult<SystemStatus> {
++  const queryClient = useQueryClient();
++
++  useEffect(() => {
++    const handleStatusChanged = (): void => {
++      void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
++    };
++    window.addEventListener('kb:system-status-changed', handleStatusChanged);
++    return () => {
++      window.removeEventListener('kb:system-status-changed', handleStatusChanged);
++    };
++  }, [queryClient]);
++
+   return useQuery({
+     queryKey: qk.systemStatus(),
+     queryFn: ({ signal }) => fetchSystemStatus(signal),
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
+index 061583ca..d81b4ef1 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
+@@ -1,6 +1,7 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+ import React from 'react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { AuthStudioPage, formatHandle } from './AuthStudioPage';
+ import * as client from '../../api/client';
+ import * as adminAuthApi from './adminAuthApi';
+@@ -1048,7 +1049,6 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockRejectedValue(
+       new ApiProblem(409, {
+         code: 'LOCKOUT_PREVENTED',
+-        detail: 'Generic lockout prevention',
+       }),
+     );
+ 
+@@ -1056,7 +1056,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     fireEvent.click(oktaSwitch);
+ 
+     await waitFor(() => {
+-      expect(screen.getByText('Generic lockout prevention')).toBeDefined();
++      expect(
++        screen.getByText('Lockout prevented: this change would block Server Administrator sign-in.'),
++      ).toBeDefined();
+     });
+   });
+ 
+@@ -1112,6 +1114,29 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     await waitFor(() => {
+       expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+     });
++
++    // 7. Move down on index 1 to cover nextNext === null
++    const reorderSpy = vi.spyOn(adminAuthApi, 'reorderAdminAuthCard').mockResolvedValue(mockCards[1]);
++    const ghDown = screen.getByRole('button', { name: /Move GitHub Enterprise down/i });
++    fireEvent.click(ghDown);
++    await waitFor(() => {
++      expect(reorderSpy).toHaveBeenCalledWith('c-github', expect.objectContaining({
++        after_card_id: 'c-ldap',
++        before_card_id: null,
++      }));
++    });
++
++    // 8. Test handshake returning empty status & summary
++    vi.spyOn(adminAuthApi, 'testAuthCardHandshake').mockResolvedValueOnce({
++      latency_ms: 15,
++      summary: null,
++      error_code: null,
++    } as never);
++    const testHandshakeBtns = screen.getAllByRole('button', { name: /^Test handshake/i });
++    if (testHandshakeBtns[0]) fireEvent.click(testHandshakeBtns[0]);
++    await waitFor(() => {
++      expect(screen.getByText('FAILED')).toBeDefined();
++    });
+   });
+ 
+   describe('Users & Permissions Tab (KANBA-176)', () => {
+@@ -1138,6 +1163,17 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+         role: 'WORKSPACE_MEMBER',
+         provider: 'LDAP',
+       },
++      {
++        id: 'u-3',
++        principal: 'bare.user',
++        handle: null,
++        display_name: '',
++        type: 'USER' as const,
++        status: 'active' as const,
++        email: null,
++        role: null,
++        provider: null,
++      },
+     ];
+ 
+     beforeEach(() => {
+@@ -1151,7 +1187,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     });
+ 
+     it('switches to Users & Permissions tab and renders principals table with badges', async () => {
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1167,7 +1211,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+         expect(screen.getByText('LDAP Engineer')).toBeDefined();
+       });
+ 
+-      expect(screen.getByText('LOCAL')).toBeDefined();
++      expect(screen.getAllByText('LOCAL').length).toBeGreaterThan(0);
+       expect(screen.getByText('LDAP')).toBeDefined();
+     });
+ 
+@@ -1184,7 +1228,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+         provider: 'LOCAL',
+       });
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1227,7 +1279,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     it('updates user role grant via role select dropdown', async () => {
+       const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockResolvedValue(undefined);
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1250,7 +1310,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     it('opens Reset Password modal and resets user password', async () => {
+       const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword').mockResolvedValue(undefined);
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1280,6 +1348,27 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+       await waitFor(() => {
+         expect(resetSpy).toHaveBeenCalledWith('u-1', 'NewPass12345!');
+       });
++
++      // Also open reset modal for u-3 (bare user) to cover fallback display name and email branches
++      const u3Row = screen.getByTestId('auth-user-row-u-3');
++      const u3ResetBtn = within(u3Row).getByRole('button', { name: /^Reset Password$/i });
++      fireEvent.click(u3ResetBtn);
++
++      expect(screen.getByRole('heading', { name: /Reset Password: @bare\.user/i })).toBeDefined();
++      expect(screen.getByText(/Set a new password for/i)).toBeDefined();
++
++      fireEvent.change(screen.getByLabelText(/^New Password/i), {
++        target: { value: 'NewPass12345!' },
++      });
++      fireEvent.change(screen.getByLabelText(/Confirm New Password/i), {
++        target: { value: 'NewPass12345!' },
++      });
++      fireEvent.click(screen.getByRole('button', { name: /^Update Password$/i }));
++
++      await waitFor(() => {
++        expect(resetSpy).toHaveBeenCalledWith('u-3', 'NewPass12345!');
++        expect(screen.getByText('Password reset successfully for @bare.user.')).toBeDefined();
++      });
+     });
+ 
+     it('filters principals by kind and displays provider badges', async () => {
+@@ -1382,7 +1471,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+         return {};
+       });
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       // General error alert appears
+       await waitFor(() => {
+@@ -1426,7 +1523,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+ 
+       const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockRejectedValueOnce(new Error('Permission denied for role change'));
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1465,7 +1570,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+ 
+       const createSpy = vi.spyOn(adminAuthApi, 'createLocalUser');
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1554,7 +1667,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+ 
+       const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword');
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1616,7 +1737,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+ 
+       vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce('Raw string error');
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1628,10 +1757,18 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+       });
+ 
+       vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce(
+-        new ApiProblem(403, { code: 'FORBIDDEN' }),
++        new Error('Network error loading users'),
+       );
+-      // Trigger loadUsers with filter change to 'USER'
+-      fireEvent.click(screen.getByTestId('filter-user'));
++      fireEvent.click(screen.getByTestId('filter-agent'));
++      await waitFor(() => {
++        expect(screen.getByText('Network error loading users')).toBeDefined();
++      });
++
++      vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce(
++        new ApiProblem(404, { code: 'NOT_FOUND' }),
++      );
++      // Trigger loadUsers with filter change to 'ALL' to cover 404 and filter === 'ALL'
++      fireEvent.click(screen.getByTestId('filter-all'));
+       await waitFor(() => {
+         expect(screen.getByText('Not found or no access')).toBeDefined();
+       });
+@@ -1651,7 +1788,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+         check_summary: 'Probe OK',
+       });
+ 
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1675,7 +1820,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+     });
+ 
+     it('covers role change in add user modal and cancelling reset password modal', async () => {
+-      render(<AuthStudioPage />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Okta SSO')).toBeDefined();
+@@ -1711,5 +1864,196 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+       fireEvent.click(screen.getByRole('button', { name: /Close/i }));
+       expect(screen.queryByRole('heading', { name: /Reset Password: @local\.user/i })).toBeNull();
+     });
++
++    it('renders Reset Password action strictly for USER and hides it for GROUP and AGENT principals, and displays group @slug', async () => {
++      const mixedPrincipals = [
++        {
++          id: 'p-user',
++          principal: 'alice',
++          handle: '@alice',
++          display_name: 'Alice User',
++          type: 'USER',
++          status: 'active' as const,
++          email: 'alice@example.com',
++          role: 'WORKSPACE_MEMBER',
++          provider: 'LOCAL',
++        },
++        {
++          id: 'p-group',
++          principal: 'infra-team',
++          handle: '@infra-team',
++          display_name: 'Infra Team',
++          type: 'GROUP',
++          status: 'active' as const,
++          email: null,
++          role: 'WORKSPACE_MEMBER',
++          provider: 'LOCAL',
++        },
++        {
++          id: 'p-agent',
++          principal: 'code-bot',
++          handle: '@code-bot',
++          display_name: 'Code Bot',
++          type: 'AGENT',
++          status: 'active' as const,
++          email: null,
++          role: 'WORKSPACE_MEMBER',
++          provider: 'LOCAL',
++        },
++      ];
++
++      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if ((path as string) === '/api/v1/auth/me') return adminUser;
++        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
++        if ((path as string).startsWith('/api/v1/admin/principals')) return mixedPrincipals;
++        return {};
++      });
++
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('Okta SSO')).toBeDefined();
++      });
++
++      // Switch to Users & Permissions tab
++      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('auth-user-row-p-user')).toBeDefined();
++      });
++
++      const userRow = screen.getByTestId('auth-user-row-p-user');
++      const groupRow = screen.getByTestId('auth-user-row-p-group');
++      const agentRow = screen.getByTestId('auth-user-row-p-agent');
++
++      // User row MUST have Reset Password button
++      expect(within(userRow).getByRole('button', { name: /Reset Password/i })).toBeDefined();
++
++      // Group and Agent rows MUST NEVER have Reset Password button
++      expect(within(groupRow).queryByRole('button', { name: /Reset Password/i })).toBeNull();
++      expect(within(agentRow).queryByRole('button', { name: /Reset Password/i })).toBeNull();
++
++      // Group handle must render @infra-team cleanly
++      expect(within(groupRow).getByText('@infra-team')).toBeDefined();
++    });
++
++    it('formatHandle unit tests: handles slugs, UUIDs without leaking, display name fallback, and nulls', () => {
++      expect(formatHandle('@infra-team')).toBe('@infra-team');
++      expect(formatHandle('infra-team')).toBe('@infra-team');
++      expect(formatHandle(null, 'Infra Team')).toBe('@infra-team');
++      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', 'Infra Team')).toBe('@infra-team');
++      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', null)).toBe('');
++      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', '801f9859-9944-42f0-9831-279c13dcbdb6')).toBe('');
++      expect(formatHandle(null, '---')).toBe('');
++      expect(formatHandle(null, '   ')).toBe('');
++      expect(formatHandle(null, null)).toBe('');
++      expect(formatHandle('')).toBe('');
++      expect(formatHandle('   ')).toBe('');
++      expect(formatHandle('@user')).toBe('@user');
++    });
++
++    it('dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close', async () => {
++      const draftSpy = vi.spyOn(adminAuthApi, 'testDraftAuthCardHandshake').mockResolvedValue({
++        status: 'HEALTHY',
++        latency_ms: 10,
++        check_summary: 'Draft Handshake Success',
++        error_code: null,
++      });
++
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <AuthStudioPage />
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText('Okta SSO')).toBeDefined();
++      });
++
++      // 1. Open drawer in create mode (no card id) and test handshake draft
++      fireEvent.click(screen.getByRole('button', { name: /\+ Add auth card/i }));
++      expect(screen.getByTestId('drawer-test-handshake-btn')).toBeDefined();
++
++      const testBtn = screen.getByTestId('drawer-test-handshake-btn');
++      fireEvent.click(testBtn);
++
++      await waitFor(() => {
++        expect(draftSpy).toHaveBeenCalled();
++      });
++
++      // Close drawer
++      fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
++
++      // 2. Open Add Local User modal and close via X button
++      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
++      await waitFor(() => {
++        expect(screen.getByRole('button', { name: /\+ Add Local User/i })).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByRole('button', { name: /\+ Add Local User/i }));
++      expect(screen.getByRole('heading', { name: /\+ Add Local User/i })).toBeDefined();
++
++      const closeXBtn = screen.getByRole('button', { name: 'Close' });
++      fireEvent.click(closeXBtn);
++      expect(screen.queryByRole('heading', { name: /\+ Add Local User/i })).toBeNull();
++
++      // 3. Trigger validation userActionError and dismiss it
++      fireEvent.click(screen.getByRole('button', { name: /\+ Add Local User/i }));
++      const form = screen.getByRole('button', { name: /^Create User$/i }).closest('form');
++      if (form) fireEvent.submit(form);
++      expect(screen.getByText('Handle, email, and password are required.')).toBeDefined();
++
++      fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
++      expect(screen.queryByText('Handle, email, and password are required.')).toBeNull();
++
++      // 4. Trigger userActionSuccess and dismiss it
++      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Username \/ Handle/i), {
++        target: { value: 'dismiss-success' },
++      });
++      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++        target: { value: 'Dismiss Success' },
++      });
++      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Email Address/i), {
++        target: { value: 'dismiss@example.com' },
++      });
++      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Password/i), {
++        target: { value: 'Pass12345!' },
++      });
++      vi.spyOn(adminAuthApi, 'createLocalUser').mockResolvedValueOnce({
++        id: 'u-dismiss',
++        principal: 'dismiss-success',
++        handle: 'dismiss-success',
++        type: 'USER',
++        display_name: 'Dismiss Success',
++        email: 'dismiss@example.com',
++        status: 'active',
++        role: 'WORKSPACE_MEMBER',
++        provider: 'LOCAL',
++      });
++      if (form) fireEvent.submit(form);
++
++      await waitFor(() => {
++        expect(screen.getByText(/created successfully/i)).toBeDefined();
++      });
++      fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }));
++      expect(screen.queryByText(/created successfully/i)).toBeNull();
++
++      // 5. Switch back to Auth Provider Cards tab
++      fireEvent.click(screen.getByRole('tab', { name: /Auth Provider Cards/i }));
++      expect(screen.getByText('Okta SSO')).toBeDefined();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+index 07fbf2e6..5cbc38c0 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+@@ -35,10 +35,31 @@ interface CurrentUserResponse {
+   is_server_admin?: boolean;
+ }
+ 
+-export function formatHandle(handle?: string | null): string {
+-  if (!handle) return '';
+-  const clean = handle.replace(/^@+/, '');
+-  return `@${clean}`;
++const isUuid = (val: string): boolean =>
++  /^[0-9a-f]{8}(-[0-9a-f]{4}){0,3}(-[0-9a-f]{4,12})?$/i.test(val.replace(/^@+/, '').trim());
++
++export function formatHandle(
++  handle?: string | null,
++  fallbackDisplayName?: string | null,
++): string {
++  if (handle) {
++    const clean = handle.trim().replace(/^@+/, '');
++    if (clean && !isUuid(clean)) {
++      return `@${clean}`;
++    }
++  }
++  if (fallbackDisplayName) {
++    const cleanFallback = fallbackDisplayName.trim().replace(/^@+/, '');
++    if (cleanFallback && !isUuid(cleanFallback)) {
++      const slug = cleanFallback
++        .toLowerCase()
++        .replace(/\s+/g, '-')
++        .replace(/[^a-z0-9._-]/g, '')
++        .replace(/^-+|-+$/g, '');
++      if (slug) return `@${slug}`;
++    }
++  }
++  return '';
+ }
+ 
+ interface PendingMutation {
+@@ -574,7 +595,9 @@ export function AuthStudioPage(): JSX.Element {
+ 
+     try {
+       await resetUserPassword(resetTargetUser.id, newPassword);
+-      setUserActionSuccess(`Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}.`);
++      setUserActionSuccess(
++        `Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}.`,
++      );
+       setResetTargetUser(null);
+       setNewPassword('');
+       setConfirmPassword('');
+@@ -821,7 +844,9 @@ export function AuthStudioPage(): JSX.Element {
+                             <span className="auth-user-display-name">
+                               {u.display_name || (u.handle ?? u.principal)}
+                             </span>
+-                            <span className="auth-user-handle">{formatHandle(u.handle ?? u.principal)}</span>
++                            <span className="auth-user-handle">
++                              {formatHandle(u.handle ?? u.principal, u.display_name)}
++                            </span>
+                           </div>
+                         </td>
+                         <td className="auth-users-td">
+@@ -853,7 +878,7 @@ export function AuthStudioPage(): JSX.Element {
+                             onChange={(e) => {
+                               void handleRoleChange(u.id, e.target.value, u.role);
+                             }}
+-                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal)}`}
++                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal, u.display_name)}`}
+                           >
+                             <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
+                             <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
+@@ -862,19 +887,32 @@ export function AuthStudioPage(): JSX.Element {
+                           </select>
+                         </td>
+                         <td className="auth-users-td">
+-                          <button
+-                            type="button"
+-                            className="auth-btn-secondary"
+-                            onClick={() => {
+-                              setUserActionError(null);
+-                              setUserActionSuccess(null);
+-                              setResetTargetUser(u);
+-                              setNewPassword('');
+-                              setConfirmPassword('');
+-                            }}
+-                          >
+-                            Reset Password
+-                          </button>
++                          {(() => {
++                            const rawType = (
++                              u.type ??
++                              (u as unknown as { kind?: string }).kind ??
++                              'USER'
++                            ).toUpperCase();
++                            const isUser = rawType === 'USER';
++                            if (!isUser) {
++                              return null;
++                            }
++                            return (
++                              <button
++                                type="button"
++                                className="auth-btn-secondary"
++                                onClick={() => {
++                                  setUserActionError(null);
++                                  setUserActionSuccess(null);
++                                  setResetTargetUser(u);
++                                  setNewPassword('');
++                                  setConfirmPassword('');
++                                }}
++                              >
++                                Reset Password
++                              </button>
++                            );
++                          })()}
+                         </td>
+                       </tr>
+                     ))
+@@ -1048,7 +1086,12 @@ export function AuthStudioPage(): JSX.Element {
+       ) : null}
+ 
+       {/* Reset Password Modal */}
+-      {resetTargetUser ? (
++      {resetTargetUser &&
++      (
++        resetTargetUser.type ??
++        (resetTargetUser as unknown as { kind?: string }).kind ??
++        'USER'
++      ).toUpperCase() === 'USER' ? (
+         <div className="auth-modal-backdrop" role="presentation">
+           <div
+             className="auth-modal-dialog"
+@@ -1058,7 +1101,7 @@ export function AuthStudioPage(): JSX.Element {
+           >
+             <div className="auth-modal-header">
+               <h2 id="reset-pwd-modal-title" className="auth-modal-title">
+-                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}
++                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}
+               </h2>
+               <button
+                 type="button"
+@@ -1073,8 +1116,8 @@ export function AuthStudioPage(): JSX.Element {
+               <div className="auth-modal-body">
+                 <p className="auth-card-subtext">
+                   Set a new password for{' '}
+-                  <strong>{resetTargetUser.display_name || (resetTargetUser.handle ?? resetTargetUser.principal)}</strong> (
+-                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}).
++                  <strong>{resetTargetUser.display_name || formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}</strong> (
++                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}).
+                 </p>
+ 
+                 <div className="auth-editor-field">
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index be281f43..1e2538fb 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -12,7 +12,8 @@
+  */
+ 
+ import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
+-import { Link } from 'react-router';
++import { Link, useLocation } from 'react-router';
++import { useQueryClient } from '@tanstack/react-query';
+ import { apiFetch } from '../../api/client';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+ import './ProjectSettingsPage.css';
+@@ -50,8 +51,49 @@ export function formatHandle(handle?: string | null): string {
+   return clean ? `@${clean}` : '';
+ }
+ 
++export function parseTabFromHash(hash?: string | null): 'general' | 'members' | 'groups' | null {
++  if (!hash) return null;
++  const clean = hash.trim().replace(/^#+/, '');
++  if (clean === 'tab-general' || clean === 'general') return 'general';
++  if (clean === 'tab-members' || clean === 'members') return 'members';
++  if (clean === 'tab-groups' || clean === 'groups') return 'groups';
++  return null;
++}
++
+ export function WorkspaceSettingsPage(): JSX.Element {
+-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>('general');
++  const location = useLocation();
++  const queryClient = useQueryClient();
++  const locationHash = location.hash;
++
++  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>(() => {
++    const rawHash = window.location.hash || locationHash;
++    return parseTabFromHash(rawHash) ?? 'general';
++  });
++
++  useEffect(() => {
++    const syncFromHash = (): void => {
++      const currentHash = window.location.hash || locationHash;
++      const parsed = parseTabFromHash(currentHash);
++      if (parsed) {
++        setActiveTab(parsed);
++      }
++    };
++
++    syncFromHash();
++
++    window.addEventListener('hashchange', syncFromHash);
++    return () => {
++      window.removeEventListener('hashchange', syncFromHash);
++    };
++  }, [locationHash]);
++
++  const handleTabChange = (tab: 'general' | 'members' | 'groups'): void => {
++    setActiveTab(tab);
++    const targetHash = `#tab-${tab}`;
++    if (window.location.hash !== targetHash) {
++      window.location.hash = targetHash;
++    }
++  };
+   const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
+   const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+@@ -226,8 +268,10 @@ export function WorkspaceSettingsPage(): JSX.Element {
+ 
+         setSettings(updated);
+         setSuccessMessage('Workspace settings updated successfully.');
++        // Invalidate system status queries
++        void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+         // Notify topbar header pills of air-gap status update
+-        window.dispatchEvent(new Event('kb:system-status-changed'));
++        window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
+       } catch (err: unknown) {
+         const errObj = err as { message?: string; detail?: string };
+         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update workspace settings.');
+@@ -482,30 +526,33 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         <button
+           type="button"
+           role="tab"
++          id="tab-general"
+           aria-selected={activeTab === 'general'}
+           data-testid="tab-general"
+           className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('general'); }}
++          onClick={() => { handleTabChange('general'); }}
+         >
+           General & Policy
+         </button>
+         <button
+           type="button"
+           role="tab"
++          id="tab-members"
+           aria-selected={activeTab === 'members'}
+           data-testid="tab-members"
+           className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('members'); }}
++          onClick={() => { handleTabChange('members'); }}
+         >
+           Workspace Members
+         </button>
+         <button
+           type="button"
+           role="tab"
++          id="tab-groups"
+           aria-selected={activeTab === 'groups'}
+           data-testid="tab-groups"
+           className={`kb-settings-tab ${activeTab === 'groups' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('groups'); }}
++          onClick={() => { handleTabChange('groups'); }}
+         >
+           Groups & Governance
+         </button>
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index 38239d6d..7c13e2ba 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+-import { WorkspaceSettingsPage, formatHandle } from '../WorkspaceSettingsPage';
++import { WorkspaceSettingsPage, formatHandle, parseTabFromHash } from '../WorkspaceSettingsPage';
+ import * as clientModule from '../../../api/client';
+ import * as sessionGuardModule from '../../auth/useSessionGuard';
+ 
+@@ -14,6 +14,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+   let queryClient: QueryClient;
+ 
+   beforeEach(() => {
++    window.location.hash = '';
+     queryClient = new QueryClient({
+       defaultOptions: {
+         queries: { retry: false },
+@@ -1698,4 +1699,133 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+       expect(screen.getByText('Failed to remove group member.')).toBeDefined();
+     });
+   });
++
++  it('renders id="tab-*" attributes on all settings tab buttons', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if (path.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true, is_workspace_admin: true };
++      }
++      if (path.includes('/api/v1/admin/workspace-settings')) {
++        return { name: 'WS', slug: 'ws', default_project_visibility: 'workspace' };
++      }
++      return [];
++    });
++
++    renderComponent();
++
++    const generalTab = await screen.findByTestId('tab-general');
++    const membersTab = await screen.findByTestId('tab-members');
++    const groupsTab = await screen.findByTestId('tab-groups');
++
++    expect(generalTab.getAttribute('id')).toBe('tab-general');
++    expect(membersTab.getAttribute('id')).toBe('tab-members');
++    expect(groupsTab.getAttribute('id')).toBe('tab-groups');
++  });
++
++  it('synchronizes active tab with window.location.hash on initial mount, click, and hashchange', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if (path.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true, is_workspace_admin: true };
++      }
++      if (path.includes('/api/v1/admin/workspace-settings')) {
++        return { name: 'WS', slug: 'ws', default_project_visibility: 'workspace' };
++      }
++      if (path.includes('/api/v1/admin/principals')) {
++        return [];
++      }
++      return [];
++    });
++
++    // 1. Initial mount with #tab-members in hash
++    window.location.hash = '#tab-members';
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/workspaces/settings#tab-members']}>
++          <WorkspaceSettingsPage />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('tab-members').getAttribute('aria-selected')).toBe('true');
++    });
++
++    // 2. Click on #tab-groups updates window.location.hash
++    const groupsTab = screen.getByTestId('tab-groups');
++    fireEvent.click(groupsTab);
++
++    expect(window.location.hash).toBe('#tab-groups');
++    expect(groupsTab.getAttribute('aria-selected')).toBe('true');
++
++    // 3. hashchange event to #tab-general
++    window.location.hash = '#tab-general';
++    fireEvent(window, new HashChangeEvent('hashchange'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('tab-general').getAttribute('aria-selected')).toBe('true');
++    });
++
++    // 4. Reset hash
++    window.location.hash = '';
++  });
++
++  it('parseTabFromHash handles hash variations and defaults to null', () => {
++    expect(parseTabFromHash('#tab-general')).toBe('general');
++    expect(parseTabFromHash('#general')).toBe('general');
++    expect(parseTabFromHash('tab-general')).toBe('general');
++    expect(parseTabFromHash('#tab-members')).toBe('members');
++    expect(parseTabFromHash('#members')).toBe('members');
++    expect(parseTabFromHash('#tab-groups')).toBe('groups');
++    expect(parseTabFromHash('#groups')).toBe('groups');
++    expect(parseTabFromHash('#unknown')).toBeNull();
++    expect(parseTabFromHash('')).toBeNull();
++    expect(parseTabFromHash(null)).toBeNull();
++    expect(parseTabFromHash(undefined)).toBeNull();
++  });
++
++  it('dispatches CustomEvent kb:system-status-changed on air gap mode update', async () => {
++    let patchedBody: Record<string, unknown> | null = null;
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++      await Promise.resolve();
++      if (path.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true, is_workspace_admin: true };
++      }
++      if (path.includes('/api/v1/admin/workspace-settings')) {
++        if (method.toUpperCase() === 'PATCH') {
++          const bodyVal = options && 'body' in options ? options.body : undefined;
++          patchedBody = typeof bodyVal === 'string'
++            ? (JSON.parse(bodyVal) as Record<string, unknown>)
++            : ((bodyVal as Record<string, unknown> | undefined) ?? {});
++          return {
++            name: 'WS',
++            slug: 'ws',
++            air_gap_mode: true,
++          };
++        }
++        return { name: 'WS', slug: 'ws', air_gap_mode: false, default_project_visibility: 'workspace' };
++      }
++      return [];
++    });
++
++    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
++
++    renderComponent();
++
++    const airGapCheckbox = await screen.findByTestId('workspace-air-gap-toggle');
++    fireEvent.click(airGapCheckbox);
++
++    const submitBtn = screen.getByTestId('save-workspace-btn');
++    fireEvent.click(submitBtn);
++
++    await waitFor(() => {
++      expect(patchedBody?.air_gap_mode).toBe(true);
++    });
++
++    expect(dispatchEventSpy).toHaveBeenCalledWith(
++      expect.objectContaining({ type: 'kb:system-status-changed' }),
++    );
++  });
+ });
+diff --git a/kanban/web/src/features/system/useSystemStatus.test.tsx b/kanban/web/src/features/system/useSystemStatus.test.tsx
+new file mode 100644
+index 00000000..38af73e1
+--- /dev/null
++++ b/kanban/web/src/features/system/useSystemStatus.test.tsx
+@@ -0,0 +1,33 @@
++import { describe, it, expect, vi } from 'vitest';
++import { renderHook } from '@testing-library/react';
++import React from 'react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { useSystemStatus, fetchSystemStatus } from './useSystemStatus';
++
++describe('features/system/useSystemStatus', () => {
++  it('calls underlying fetchSystemStatus and useSystemStatus', async () => {
++    const mockData = {
++      deployment_mode: 'multi_container' as const,
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++    };
++
++    vi.spyOn(window, 'fetch').mockResolvedValue(
++      new Response(JSON.stringify(mockData), { status: 200 }),
++    );
++
++    const res = await fetchSystemStatus();
++    expect(res).toEqual(mockData);
++
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    const wrapper = ({ children }: { children: React.ReactNode }) => (
++      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
++    );
++
++    const { result } = renderHook(() => useSystemStatus(), { wrapper });
++    expect(result.current).toBeDefined();
++  });
++});
+diff --git a/kanban/web/src/features/system/useSystemStatus.ts b/kanban/web/src/features/system/useSystemStatus.ts
+new file mode 100644
+index 00000000..10ebe69e
+--- /dev/null
++++ b/kanban/web/src/features/system/useSystemStatus.ts
+@@ -0,0 +1,19 @@
++/**
++ * Re-export useSystemStatus hook from app layer (KAN-12, KB-P3-AUDIT-06).
++ */
++
++import {
++  useSystemStatus as useAppSystemStatus,
++  fetchSystemStatus as fetchAppSystemStatus,
++  type SystemStatus,
++} from '../../app/useSystemStatus';
++
++export type { SystemStatus };
++
++export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
++  return await fetchAppSystemStatus(signal);
++}
++
++export function useSystemStatus() {
++  return useAppSystemStatus();
++}

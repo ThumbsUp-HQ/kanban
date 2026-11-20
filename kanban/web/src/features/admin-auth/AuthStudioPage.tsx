@@ -35,10 +35,31 @@ interface CurrentUserResponse {
   is_server_admin?: boolean;
 }
 
-export function formatHandle(handle?: string | null): string {
-  if (!handle) return '';
-  const clean = handle.replace(/^@+/, '');
-  return `@${clean}`;
+const isUuid = (val: string): boolean =>
+  /^[0-9a-f]{8}(-[0-9a-f]{4}){0,3}(-[0-9a-f]{4,12})?$/i.test(val.replace(/^@+/, '').trim());
+
+export function formatHandle(
+  handle?: string | null,
+  fallbackDisplayName?: string | null,
+): string {
+  if (handle) {
+    const clean = handle.trim().replace(/^@+/, '');
+    if (clean && !isUuid(clean)) {
+      return `@${clean}`;
+    }
+  }
+  if (fallbackDisplayName) {
+    const cleanFallback = fallbackDisplayName.trim().replace(/^@+/, '');
+    if (cleanFallback && !isUuid(cleanFallback)) {
+      const slug = cleanFallback
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9._-]/g, '')
+        .replace(/^-+|-+$/g, '');
+      if (slug) return `@${slug}`;
+    }
+  }
+  return '';
 }
 
 interface PendingMutation {
@@ -574,7 +595,9 @@ export function AuthStudioPage(): JSX.Element {
 
     try {
       await resetUserPassword(resetTargetUser.id, newPassword);
-      setUserActionSuccess(`Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}.`);
+      setUserActionSuccess(
+        `Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}.`,
+      );
       setResetTargetUser(null);
       setNewPassword('');
       setConfirmPassword('');
@@ -821,7 +844,9 @@ export function AuthStudioPage(): JSX.Element {
                             <span className="auth-user-display-name">
                               {u.display_name || (u.handle ?? u.principal)}
                             </span>
-                            <span className="auth-user-handle">{formatHandle(u.handle ?? u.principal)}</span>
+                            <span className="auth-user-handle">
+                              {formatHandle(u.handle ?? u.principal, u.display_name)}
+                            </span>
                           </div>
                         </td>
                         <td className="auth-users-td">
@@ -853,7 +878,7 @@ export function AuthStudioPage(): JSX.Element {
                             onChange={(e) => {
                               void handleRoleChange(u.id, e.target.value, u.role);
                             }}
-                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal)}`}
+                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal, u.display_name)}`}
                           >
                             <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
                             <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
@@ -862,19 +887,32 @@ export function AuthStudioPage(): JSX.Element {
                           </select>
                         </td>
                         <td className="auth-users-td">
-                          <button
-                            type="button"
-                            className="auth-btn-secondary"
-                            onClick={() => {
-                              setUserActionError(null);
-                              setUserActionSuccess(null);
-                              setResetTargetUser(u);
-                              setNewPassword('');
-                              setConfirmPassword('');
-                            }}
-                          >
-                            Reset Password
-                          </button>
+                          {(() => {
+                            const rawType = (
+                              u.type ??
+                              (u as unknown as { kind?: string }).kind ??
+                              'USER'
+                            ).toUpperCase();
+                            const isUser = rawType === 'USER';
+                            if (!isUser) {
+                              return null;
+                            }
+                            return (
+                              <button
+                                type="button"
+                                className="auth-btn-secondary"
+                                onClick={() => {
+                                  setUserActionError(null);
+                                  setUserActionSuccess(null);
+                                  setResetTargetUser(u);
+                                  setNewPassword('');
+                                  setConfirmPassword('');
+                                }}
+                              >
+                                Reset Password
+                              </button>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))
@@ -1048,7 +1086,12 @@ export function AuthStudioPage(): JSX.Element {
       ) : null}
 
       {/* Reset Password Modal */}
-      {resetTargetUser ? (
+      {resetTargetUser &&
+      (
+        resetTargetUser.type ??
+        (resetTargetUser as unknown as { kind?: string }).kind ??
+        'USER'
+      ).toUpperCase() === 'USER' ? (
         <div className="auth-modal-backdrop" role="presentation">
           <div
             className="auth-modal-dialog"
@@ -1058,7 +1101,7 @@ export function AuthStudioPage(): JSX.Element {
           >
             <div className="auth-modal-header">
               <h2 id="reset-pwd-modal-title" className="auth-modal-title">
-                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}
+                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}
               </h2>
               <button
                 type="button"
@@ -1073,8 +1116,8 @@ export function AuthStudioPage(): JSX.Element {
               <div className="auth-modal-body">
                 <p className="auth-card-subtext">
                   Set a new password for{' '}
-                  <strong>{resetTargetUser.display_name || (resetTargetUser.handle ?? resetTargetUser.principal)}</strong> (
-                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}).
+                  <strong>{resetTargetUser.display_name || formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}</strong> (
+                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}).
                 </p>
 
                 <div className="auth-editor-field">

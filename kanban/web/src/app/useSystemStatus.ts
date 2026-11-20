@@ -3,7 +3,8 @@
  * Queries /api/v1/system/status to determine deployment mode, air-gap, and persistence.
  */
 
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 
 export interface SystemStatus {
@@ -36,6 +37,18 @@ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemSta
 }
 
 export function useSystemStatus(): UseQueryResult<SystemStatus> {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const handleStatusChanged = (): void => {
+      void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+    };
+    window.addEventListener('kb:system-status-changed', handleStatusChanged);
+    return () => {
+      window.removeEventListener('kb:system-status-changed', handleStatusChanged);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: qk.systemStatus(),
     queryFn: ({ signal }) => fetchSystemStatus(signal),
