@@ -904,6 +904,82 @@ def test_enforce_connection_scope_auto_fill_and_parent_identifier() -> None:
     enforce_connection_scope_on_tool_call("search_tickets", args_other, scope)
 
 
+def test_enforce_connection_scope_docs_create_and_update_mutating_tools() -> None:
+    """Exercise /mcp/docs 'create' and 'update' in mutating_tools and 'id' scoping (KAN-18)."""
+    scope = ConnectionScope(ScopeMode.PROJECT, workspace_slug="kanban", project_key="KANBA")
+
+    # 1. 'create' tool with explicit foreign project -> blocked
+    args_create_foreign_proj = {"project": "OTHER", "type": "STICKY", "content": "text"}
+    with pytest.raises(KbMcpError) as exc_create_proj:
+        enforce_connection_scope_on_tool_call("create", args_create_foreign_proj, scope)
+    assert exc_create_proj.value.code == McpErrorCode.CONNECTION_SCOPE_VIOLATION
+    assert "strictly pinned to project 'KANBA'" in str(exc_create_proj.value.message)
+
+    # 2. 'create' tool with foreign issue key in 'id' argument -> blocked
+    args_create_foreign_id = {"id": "OTHER-99", "type": "STICKY", "content": "text"}
+    with pytest.raises(KbMcpError) as exc_create_id:
+        enforce_connection_scope_on_tool_call("create", args_create_foreign_id, scope)
+    assert exc_create_id.value.code == McpErrorCode.CONNECTION_SCOPE_VIOLATION
+    assert "Mutation targeting foreign project 'OTHER' was blocked" in str(
+        exc_create_id.value.message
+    )
+
+    # 3. 'create' tool with matching issue key in 'id' argument -> allowed
+    args_create_matching_id = {"id": "KANBA-99", "type": "STICKY", "content": "text"}
+    enforce_connection_scope_on_tool_call("create", args_create_matching_id, scope)
+    assert args_create_matching_id["project"] == "KANBA"
+
+    # 4. 'create' tool with non-issue-key string in 'id' argument (e.g. UUID) -> allowed
+    args_create_uuid_id = {"id": "00000000-0000-0000-0000-000000000001", "type": "STICKY"}
+    enforce_connection_scope_on_tool_call("create", args_create_uuid_id, scope)
+    assert args_create_uuid_id["project"] == "KANBA"
+
+    # 5. 'create' tool without project -> auto-fills project
+    args_create_autofill = {"type": "DOC", "title": "New Doc"}
+    enforce_connection_scope_on_tool_call("create", args_create_autofill, scope)
+    assert args_create_autofill["project"] == "KANBA"
+
+    # 6. 'update' tool with foreign issue key in 'id' argument -> blocked
+    args_update_foreign_id = {"id": "OTHER-42", "content": "patch"}
+    with pytest.raises(KbMcpError) as exc_update_id:
+        enforce_connection_scope_on_tool_call("update", args_update_foreign_id, scope)
+    assert exc_update_id.value.code == McpErrorCode.CONNECTION_SCOPE_VIOLATION
+    assert "Mutation targeting foreign project 'OTHER' was blocked" in str(
+        exc_update_id.value.message
+    )
+
+    # 7. 'update' tool with matching issue key in 'id' argument -> allowed
+    args_update_matching_id = {"id": "KANBA-42", "content": "patch"}
+    enforce_connection_scope_on_tool_call("update", args_update_matching_id, scope)
+    assert args_update_matching_id["project"] == "KANBA"
+
+    # 8. 'update' tool with doc path and foreign project -> blocked
+    args_update_foreign_proj = {"id": "docs/architecture", "project": "OTHER", "content": "patch"}
+    with pytest.raises(KbMcpError) as exc_update_proj:
+        enforce_connection_scope_on_tool_call("update", args_update_foreign_proj, scope)
+    assert exc_update_proj.value.code == McpErrorCode.CONNECTION_SCOPE_VIOLATION
+
+    # 9. 'update' tool with doc path and matching project -> allowed
+    args_update_matching_proj = {
+        "id": "docs/architecture",
+        "project": "KANBA",
+        "content": "patch",
+    }
+    enforce_connection_scope_on_tool_call("update", args_update_matching_proj, scope)
+    assert args_update_matching_proj["project"] == "KANBA"
+
+    # 10. 'update' tool with doc path without project -> auto-fills project
+    args_update_autofill = {"id": "docs/architecture", "content": "patch"}
+    enforce_connection_scope_on_tool_call("update", args_update_autofill, scope)
+    assert args_update_autofill["project"] == "KANBA"
+
+    # 11. Non-project scope (GLOBAL / WORKSPACE) is a no-op
+    scope_global = ConnectionScope(ScopeMode.GLOBAL)
+    args_global = {"id": "OTHER-42", "content": "patch"}
+    enforce_connection_scope_on_tool_call("update", args_global, scope_global)
+    assert "project" not in args_global
+
+
 def test_intersect_key_and_connection_scope_workspace_valid() -> None:
     """Workspace token connecting in matching workspace mode succeeds."""
     ws_ctx = McpAuthContext(

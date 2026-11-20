@@ -1,127 +1,110 @@
-KAN-18 Live Full-Stack Black-Box & Integration QA Proof
-Target Container: kanban-liveqa-3 (http://localhost:18953)
-Date: 2026-11-20T03:00:00Z
-Zero-Mock Mandate: Verified against live PostgreSQL 16 + FORCE RLS + /mcp/docs JSON-RPC 2.0 endpoint (0 mockApi, 0 stubs).
+=== KAN-18 [KB-P3-AUDIT-12] Live Full-Stack Proof ===
+Target: http://localhost:18953 (container: kanban-liveqa-3)
+Mode: ZERO-MOCK live full-stack black-box & integration verification
 
-=== 1. SETUP & TOKEN ===
-- Real issue created in PostgreSQL: KAN-1 (id=01a1f6e0-b8df-73e2-b23a-91873b251dcf)
-- Minted /mcp/docs API key (scopes=["docs:read", "docs:write"], prefix=kb_doc_)
-- POST /mcp/docs/ initialize -> HTTP 200 (Mcp-Session-Id=uN7C6gtvvIbX_aL3JFw3pVPLDUp11fpUy1Ishshw1BM)
+=== PHASE 0: BOOTSTRAP kanban-liveqa-3 ===
+Setup token read from container (prefix): kb_setup_yef...
+Setup claim -> HTTP 200, status=enrollment_required
+Admin TOTP confirm -> HTTP 200, aal_level=2
+Admin /auth/me -> HTTP 200, aal_level=2, is_server_admin=True
+Created project OPS -> HTTP 201, id=01a1f730-333c-7697-8b15-e74e2ce6a9e6
+Created issue -> HTTP 201, key=KAN-1
+Bind member via /projects/KAN/members -> HTTP 404 {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"5c32d2cb783542d6a29733297c218022"}
+Bind member via /admin/role-bindings (KAN) -> HTTP 200
+Bind member via /projects/OPS/members -> HTTP 201 {"id":"ce0bacbf-2165-4200-b621-d38dd1266ff7","principal_id":"a18d3896-9654-46d2-8b54-14e389b92df7","project_id":"01a1f730-333c-7697-8b15-e74
+@member /auth/me -> HTTP 200, aal_level=1, role=WORKSPACE_MEMBER
+Bind PROJECT_ADMIN via /projects/KAN/members -> HTTP 404 {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"91757981ac6342259072922533ec555d"}
+Bind PROJECT_ADMIN via /admin/role-bindings (KAN) -> HTTP 200
+@projadmin /auth/me -> HTTP 200, aal_level=2, is_project_admin=True, is_workspace_admin=False
 
-=== 2. JSON-RPC 2.0 TRANSCRIPT (/mcp/docs/) ===
-
-[1] tools/list -> HTTP 200
-tools: ["search", "create", "update"]
-
-[2] tools/call search(id="help") -> HTTP 200, isError=False
-tool: search
+--- 1. Mint @admin /mcp/docs key (docs:read, docs:write) ---
+Minted /mcp/docs key -> HTTP 201, prefix=kb_doc_
+[PASS] MCP /mcp/docs initialize returns 200 :: status=200, session=T1L7JArb1zoenb8PPLKQcKRiaZR3ddIUJxR4NT7lIDU
+[PASS] tools/list returns ['search', 'create', 'update'] :: tools=['search', 'create', 'update']
+[PASS] search(id='help') returns docs tool schema/modes :: output=tool: search
 modes: [read_by_id, hybrid_search, list_project_knowledge]
 parameters:
   id: Entity key, path, UUID, or 'help' to read
   query: Search query for lexical/semantic hybrid search
   type: ALL, DOC, or STICKY
-  project: Project key or UUID scope filter
-  lod: 'Level of detail: summary, standard, full'
-  include_tree: Whether to include page hierarchy or heading outline
-  limit: Max items to return (1..50)
-  cursor: Opaque pagination cursor
-
-[3] tools/call create(type="STICKY", project="KAN", title="Live Sticky", content="alpha\ni have a typo\nomega", links=["KAN-1"]) -> HTTP 200, isError=False
-status: created
+  p
+[PASS] create(type='STICKY', project='KAN', content='alpha beta gamma', links=['KAN-1']) succeeds with id & etag :: sticky_id=e1da2f8d-dfd8-49f1-9ff3-d18ee6a2d434, etag='8ace9046c4a43e55377c4fdc489a2d98e7739ea6045584d8b660d75ef30ddff2', raw=status: created
 kind: sticky
-id: 4db5dad2-b179-468e-a4fa-020c71df7618
+id: e1da2f8d-dfd8-49f1-9ff3-d18ee6a2d434
 color: amber
-title: Live Sticky
+title: Live QA Sticky
 promotion_recommended: false
-etag: '"bcd8cdae15e07115813f93ad66ddb293ca85fb3fa5bf11ab67c9555f6d1d5bba"'
+etag: 8ace9046c4a43e55377c4fdc489a2d98e7739ea6045584d8b660d75ef30ddff2
 links: [{action: added, target: KAN-1, link_type: RELATES_TO}]
 
-[4] tools/call create(type="STICKY", project="KAN", title="Bad Sticky", parent="00000000-0000-0000-0000-000000000001") -> HTTP 200, isError=True
-error: {code: VALIDATION_FAILED, message: Sticky notes do not support 'parent' hierarchy}
+[PASS] update(if_match=created_etag) returns status: updated (zero CONFLICT_ETAG) :: raw=status: updated
+kind: sticky
+id: e1da2f8d-dfd8-49f1-9ff3-d18ee6a2d434
+color: amber
+title: Live QA Sticky
+etag: d418536a11adea32ee0d6562165bba202bcbcdd00c5b00e278e876e9c06e091c
 
-[5] tools/call update(id="4db5dad2-b179-468e-a4fa-020c71df7618", original_text="nonexistent line", replacement_text="fixed") -> HTTP 200, isError=True
-error:
+[PASS] Half-supplied update (missing replacement_text) returns VALIDATION_FAILED :: raw=error: {code: VALIDATION_FAILED, message: Parameters 'original_text' and 'replacement_text' must be provided together for
+    surgical diff-patching}
+
+[PASS] Typo original_text returns PATCH_TARGET_NOT_FOUND with closest_match :: raw=error:
   code: PATCH_TARGET_NOT_FOUND
   message: Target text not found in document
-  closest_match: [{line_start: 5, line_end: 5, similarity: 0.19, snippet: omega}, {line_start: 1, line_end: 1, similarity: 0.138,
-      snippet: '# Live Sticky'}]
+  closest_match:
+  - {line_start: 3, line_end: 3, similarity: 0.629, snippet: alpha patched-beta gamma}
+  - line_start: 2
+    line_end: 3
+    similarity: 0.611
+    snippet: |2-
+
+      alpha patched-beta gamma
   hint: Verify exact whitespace and indentation, or inspect closest_match suggestions.
 
-[6] tools/call update(id="4db5dad2-b179-468e-a4fa-020c71df7618", original_text="a", replacement_text="x") -> HTTP 200, isError=True
-error:
+[PASS] Ambiguous original_text returns PATCH_TARGET_AMBIGUOUS :: raw=error:
   code: PATCH_TARGET_AMBIGUOUS
-  message: Target text appears 5 times in document; provide more surrounding context
-  line_hints: [3, 3, 4, 4, 5]
-  count: 5
+  message: Target text appears 2 times in document; provide more surrounding context
+  line_hints: [3, 3]
+  count: 2
   hint: Include unique surrounding lines to disambiguate the target region.
 
-[7] tools/call update(id="4db5dad2-b179-468e-a4fa-020c71df7618", original_text="i have a typo", replacement_text="i was patched cleanly", if_match='"0000000000000000000000000000000000000000000000000000000000000000"') -> HTTP 200, isError=True
-error: {code: CONFLICT_ETAG, message: 'ETag mismatch: client provided ''"0000000000000000000000000000000000000000000000000000000000000000"'',
-    current is ''bcd8cdae15e07115813f93ad66ddb293ca85fb3fa5bf11ab67c9555f6d1d5bba''', hint: Current fresh ETag is bcd8cdae15e07115813f93ad66ddb293ca85fb3fa5bf11ab67c9555f6d1d5bba}
+[PASS] Stale if_match returns CONFLICT_ETAG :: raw=error: {code: CONFLICT_ETAG, message: 'ETag mismatch: client provided ''8ace9046c4a43e55377c4fdc489a2d98e7739ea6045584d8b660d75ef30ddff2'',
+    current is ''6abcb8a794354d8a3eaa84dfc1d967cc103a96056bc4c7eef85386448ab08779''', hint: Current fresh ETag is 6abcb8a794354d8a3eaa84dfc1d967cc103a96056bc4c7eef85386448ab08779}
 
-[8] tools/call update(id="4db5dad2-b179-468e-a4fa-020c71df7618", original_text="i have a typo", replacement_text="i was patched cleanly") -> HTTP 200, isError=False
-status: updated
-kind: sticky
-id: 4db5dad2-b179-468e-a4fa-020c71df7618
-color: amber
-title: Live Sticky
-etag: '"155bba6ce3567e712e728dd5a545b1b5192c3fb84582ccabd75d9a4cdc20bfb1"'
-
-[8b] Additional explicit valid if_match verification on fresh sticky f6d293f4-c347-4daa-983f-12ce291a6d0d (etag=ad59f1b06e1488217a6bb4861614883f1961908f5b6199e62ede1a25d5b80c36):
-- Passing quoted HTTP ETag '"ad59f1b0..."' and unquoted 64-hex SHA-256 strings both succeed seamlessly because update.py normalizes incoming if_match by stripping whitespace and surrounding quotes.
-- Emitted ETags in tool output YAML across create, search, and update are strictly normalized to clean unquoted 64-hex strings.
-- Verified in test_case_6_kan18_cleanroom_regressions: passing res["etag"] directly into update(if_match=res["etag"]) succeeds without client-side manipulation.
-status: updated
-kind: sticky
-id: f6d293f4-c347-4daa-983f-12ce291a6d0d
-color: amber
-title: ETag Sticky 3
-etag: b8f6bc921b6dcac23657aa8c2ca4d38c2110c2ed79177ee5a9cc1a943315d054
-
-[9] tools/call update(id="4db5dad2-b179-468e-a4fa-020c71df7618", type="DOC", title="Promoted Live Doc", links=["+KAN-1"]) -> HTTP 200, isError=False
-status: promoted
-id: 4db5dad2-b179-468e-a4fa-020c71df7618
-doc: docs/promoted-live-doc
+[PASS] Promote Sticky -> DOC returns status: promoted & docs/... doc_key :: doc_key=docs/live-promoted-architecture, raw=status: promoted
+id: e1da2f8d-dfd8-49f1-9ff3-d18ee6a2d434
+doc: docs/live-promoted-architecture
 link: PROMOTED_TO_DOC
-title: Promoted Live Doc
+title: Live Promoted Architecture
 links: [{action: added, target: KAN-1, link_type: RELATES_TO}]
 
-[10] tools/call search(id="01a1f6e1-1374-7cc2-8e82-82459f5c3861", lod="full") -> HTTP 200, isError=False
-kind: doc
-key: docs/promoted-live-doc
-title: Promoted Live Doc
-breadcrumbs: [Promoted Live Doc]
+[PASS] search(id=doc_key, lod='standard') resolves to kind: doc (NOT kind: page) :: raw=kind: doc
+key: docs/live-promoted-architecture
+title: Live Promoted Architecture
+breadcrumbs: [Live Promoted Architecture]
 version_seq: 1
 body_markdown: |-
-  # Live Sticky
+  # Live QA Sticky
 
-  alpha
-  i was patched cleanly
-  omega
-etag: 155bba6ce3567e712e728dd5a545b1b5192c3fb84582ccabd75d9a4cdc20bfb1
-tree:
-- id: 01a1f6e1-137c-7742-bc27-2b6b4c6d21ef
-  title: Promoted Live Doc
-  slug: promoted-live-doc
-  sort_rank: a0
-  restricted: false
-outline: [{level: 1, text: Live Sticky, anchor: '#live-sticky'}]
-links:
-- id: 01a1f6e1-13ca-72c2-9b98-e9ace0cdb187
-  link_type: RELATES_TO
-  link_state: ACTIVE
-  target: {id: 01a1f6e0-b8df-73e2-b23a-91873b251dcf, type: issue, key: KAN-1, title: LiveQA Anchor Issue for KAN-18}
-- id: 01a1f6e1-1390-7b0a-a9f8-4397c68ede8a
-  link_type: PROMOTED_TO_DOC
-  link_state: ACTIVE
-  source: {id: 4db5dad2-b179-468e-a4fa-020c71df7618, type: sticky, key: stickies/4db5dad2-b179-468e-a4fa-020c71df7618, title: Live Sticky}
+  dup token here and dup token there
+etag: 6abcb8a794354d8a3eaa84dfc1d967cc103a96056bc4c7eef85386448ab08779
+access: '{''kind'': ''project'', ''scope_label'': ''project: kan'', ''workspace_id'': ''01a1f730-32a4-7303-9a29-6946413fe5ee'',
+  ''workspace_name'': ''kanban'', ''project_id'': ''01a1f730-32b3-7ecd-9782-d0e9489452f9'', ''project_key'': ''kan'', ''project_name'':
+  ''kanban core''}'
 
-=== PER-PROBLEM VERDICTS ===
-- tools/list exact 3-tool set ["search", "create", "update"]: LIVE_STACK_VERDICT: PASS
-- search(id="help") compact YAML help: LIVE_STACK_VERDICT: PASS
-- create(type="STICKY", ..., links=["KAN-1"]) & parent rejection: LIVE_STACK_VERDICT: PASS
-- update PATCH_TARGET_NOT_FOUND with closest_match & PATCH_TARGET_AMBIGUOUS: LIVE_STACK_VERDICT: PASS
-- update surgical patch + CONFLICT_ETAG on stale if_match + success with fresh 64-hex if_match: LIVE_STACK_VERDICT: PASS
-- update(type="DOC") auto-promotion & search(id=doc_id, lod="full") returning patched text & links: LIVE_STACK_VERDICT: PASS
+[PASS] update(id=doc_key, title='Live Promoted Architecture v2') resolves to kind: doc (NOT kind: page) :: raw=status: updated
+kind: doc
+id: 01a1f731-061a-7dba-a64c-59aca71e37cc
+key: docs/live-promoted-architecture
+title: Live Promoted Architecture v2
+version_seq: 2
+etag: 6abcb8a794354d8a3eaa84dfc1d967cc103a96056bc4c7eef85386448ab08779
 
-OVERALL KAN-18 LIVE_STACK_VERDICT: PASS
+[PASS] search(project='KAN', type='DOC') returns promoted project Doc :: raw=project: KAN
+docs: [{id: 01a1f731-061a-7dba-a64c-59aca71e37cc, key: d01a1f731061a7dbaa64c59aca71e37cc, title: Live Promoted Architecture
+      v2, version_seq: 2}]
+
+[PASS] search(project='NOPE') returns NOT_FOUND :: raw=error: {code: NOT_FOUND, message: Not Found}
+
+
+FAILURES_COUNT: 0
+LIVE_STACK_VERDICT: PASS

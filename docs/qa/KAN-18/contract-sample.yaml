@@ -41,8 +41,8 @@ search_read_doc_standard:
 
       Authentication overview.'
     etag: 25da1324e14efbc20ccf12ece7314acf98e606e26782edc41da760b76f9d9383
-    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a1f711-87ca-7eb0-b296-2eaa5ec7dc98'',
-      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a1f711-8829-7a89-83d3-4e7918959d58'', ''project_key'':
+    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a1f75d-9131-7aa2-85c5-5f21b40c2944'',
+      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a1f75d-9187-73e2-84b1-ddb831ef0d5d'', ''project_key'':
       ''arch'', ''project_name'': ''architecture project''}'
 create_doc:
   tool: create
@@ -58,7 +58,7 @@ create_doc:
   response:
     status: created
     kind: doc
-    id: 01a1f711-89f2-7ee1-a926-5f5dfb003094
+    id: 01a1f75d-942d-7867-82b9-ee059fe5c727
     key: docs/architecture
     title: Architecture
     version_seq: 1
@@ -78,7 +78,7 @@ create_sticky:
   response:
     status: created
     kind: sticky
-    id: d2b05957-e663-491d-917f-3f32e9e09cc7
+    id: 933792d7-340b-4a5c-a9b0-99ace6e6608c
     color: sky
     title: Quick Sticky Note
     promotion_recommended: false
@@ -93,7 +93,7 @@ update_diff_patch:
   response:
     status: updated
     kind: page
-    id: 01a1f711-8a53-79ce-ba63-4d9f20945316
+    id: 01a1f75d-948d-7b0b-90d8-d2c1ef31b819
     key: docs/architecture/auth-studio
     title: Auth Studio
     version_seq: 2
@@ -101,7 +101,7 @@ update_diff_patch:
 update_sticky_auto_promotion:
   tool: update
   arguments:
-    id: d2b05957-e663-491d-917f-3f32e9e09cc7
+    id: 933792d7-340b-4a5c-a9b0-99ace6e6608c
     type: DOC
     title: TLS Verification Guide
     parent: docs/architecture
@@ -111,7 +111,7 @@ update_sticky_auto_promotion:
       Preserved permissions and converted to Doc.'
   response:
     status: promoted
-    id: d2b05957-e663-491d-917f-3f32e9e09cc7
+    id: 933792d7-340b-4a5c-a9b0-99ace6e6608c
     doc: docs/architecture
     link: PROMOTED_TO_DOC
     title: Architecture
@@ -125,7 +125,7 @@ update_inline_links:
   response:
     status: updated
     kind: page
-    id: 01a1f711-8a53-79ce-ba63-4d9f20945316
+    id: 01a1f75d-948d-7b0b-90d8-d2c1ef31b819
     key: docs/architecture/auth-studio
     title: Auth Studio
     version_seq: 2
