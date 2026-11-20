@@ -158,7 +158,7 @@ function computeStateSummary(sId: string): StateSummary {
 
 export function IssuesWorkspaceRoute({
   projectKey,
-  modulesEnabled = true,
+  modulesEnabled: propModulesEnabled,
   initialIssues,
   initialLayout,
   queryClient = defaultQueryClient,
@@ -167,6 +167,39 @@ export function IssuesWorkspaceRoute({
   isProjectAdmin,
 }: IssuesWorkspaceRouteProps): JSX.Element {
   const isLiveMode = initialIssues === undefined;
+
+  const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean } | null>(() => {
+    return queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]) ?? null;
+  });
+
+  useEffect(() => {
+    if (!projectKey) return;
+    const updateFromCache = (): void => {
+      const data = queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]);
+      setProjectMetadata(data ?? null);
+    };
+    updateFromCache();
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      const keyParts = event.query.queryKey as readonly unknown[];
+      if (keyParts[0] === 'project' && keyParts[1] === projectKey) {
+        updateFromCache();
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [queryClient, projectKey]);
+
+  // KB-P3-AUDIT-08: In live mode or when project query is tracked, do NOT pass modulesEnabled=true
+  // until project query explicitly confirms project?.modules_enabled === true.
+  const hasProjectQuery = Boolean(
+    projectMetadata !== null || queryClient.getQueryState(['project', projectKey])
+  );
+  const modulesEnabled = propModulesEnabled === false
+    ? false
+    : hasProjectQuery
+      ? Boolean(projectMetadata?.modules_enabled)
+      : (propModulesEnabled ?? (isLiveMode ? false : true));
 
   const effectiveCaps = capabilities ?? (isProjectAdmin === false ? ['VIEW', 'EDIT'] : ['EDIT', 'ADMIN']);
   const canEdit =

@@ -332,6 +332,24 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     });
   });
 
+  it('KB-P3-AUDIT-08: does NOT call fetchProjectModules when modulesEnabled is false', async () => {
+    vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockResolvedValue([]);
+    vi.spyOn(railApi, 'fetchProjectLabels').mockResolvedValue([]);
+    vi.spyOn(railApi, 'fetchProjectCycles').mockResolvedValue([]);
+    const modulesSpy = vi.spyOn(railApi, 'fetchProjectModules').mockResolvedValue([]);
+
+    render(
+      <FilterDisplayBar
+        projectKey="KAN"
+        modulesEnabled={false}
+      />
+    );
+
+    await Promise.resolve();
+
+    expect(modulesSpy).not.toHaveBeenCalled();
+  });
+
   it('covers dynamic facet edge cases: fallback labels, unmount in flight, and chip removal fallbacks', () => {
     // 1. Assignee without display_name, custom cycle, custom module
     const { unmount: u1 } = render(

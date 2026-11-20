@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { QueryClient } from '@tanstack/react-query';
 import React from 'react';
 import {
   ViewHost,
@@ -1692,6 +1693,29 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         />,
       );
       window.history.pushState({}, '', '/');
+    });
+
+    it('KB-P3-AUDIT-08: gates modulesEnabled on project query confirmation', () => {
+      const qc = new QueryClient();
+      qc.setQueryData(['project', 'KAN'], {
+        id: 'p-1',
+        identifier: 'KAN',
+        modules_enabled: false,
+      });
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={FIXTURE_12_ISSUES}
+          initialLayout="list"
+          queryClient={qc}
+        />,
+      );
+
+      // Group select should NOT contain module axis when modules_enabled is false
+      const groupSelect = screen.getByLabelText(/^Group by axis$/i);
+      const options = Array.from(groupSelect.querySelectorAll('option')).map((o) => o.value);
+      expect(options).not.toContain('module');
     });
   });
 });

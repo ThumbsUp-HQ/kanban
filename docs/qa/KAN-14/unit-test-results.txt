@@ -1,10 +1,10 @@
 ========================================================================
-UNIT TEST & COVERAGE RESULTS - KAN-14 CLEAN-ROOM REMEDIATION
+UNIT TEST & COVERAGE RESULTS - KAN-14 CLEAN-ROOM REMEDIATION & ROUND 3 POLISH
 ========================================================================
 
 --- Backend Tests (Pytest) ---
-Command: KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-kan14 KB_TEST_PGHOST=/tmp/kb-pgsock-kan14 pytest --cov=kanban.admin.principal_service --cov=kanban.api.v1.admin.principals --cov-report=term-missing kanban/tests/api/test_admin_principals.py
-Status: PASSED (16 passed in 16.49s)
+Command: uv run pytest kanban/tests/api/test_admin_principals.py
+Status: PASSED (16 passed in 7.75s)
 
 Coverage Summary:
 Name                                Stmts   Miss Branch BrPart  Cover   Missing
@@ -15,17 +15,19 @@ kanban/api/v1/admin/principals.py     104      2     20      2    97%   368, 398
 TOTAL                                 513      9    168     16    96%
 
 --- Frontend Tests (Vitest) ---
-Command: cd kanban/web && npx vitest run src/app/shortcuts.test.ts src/features/views/useIssueKeyboardMap.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/drawer-rail/PropertiesRail.test.tsx src/features/drawer-rail/railApi.test.ts
-Status: PASSED (7 passed test files, 137 passed tests in 6.02s)
+Command: cd kanban/web && vitest run src/app/shortcuts.test.ts src/features/views/useIssueKeyboardMap.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/drawer-rail/PropertiesRail.test.tsx src/features/drawer-rail/railApi.test.ts src/features/views/FilterDisplayBar.test.tsx src/features/views/viewRegistry.test.tsx
+Status: PASSED (9 passed test files, 198 passed tests in 10.23s)
 
 Files Tested:
 - src/app/shortcuts.test.ts (10 passed)
 - src/features/views/useIssueKeyboardMap.test.tsx (11 passed)
 - src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (21 passed)
-- src/features/settings/__tests__/ProjectSettingsPage.test.tsx (25 passed)
+- src/features/settings/__tests__/ProjectSettingsPage.test.tsx (26 passed)
 - src/features/admin-auth/AuthStudioPage.test.tsx (39 passed)
-- src/features/drawer-rail/PropertiesRail.test.tsx (15 passed)
+- src/features/drawer-rail/PropertiesRail.test.tsx (17 passed)
 - src/features/drawer-rail/railApi.test.ts (16 passed)
+- src/features/views/FilterDisplayBar.test.tsx (18 passed)
+- src/features/views/viewRegistry.test.tsx (40 passed)
 
 Coverage Highlights:
 - useIssueKeyboardMap.ts: 98.03% Lines, 94.89% Branches, 100% Functions, 97.88% Statements
@@ -34,3 +36,5 @@ Coverage Highlights:
 - ProjectSettingsPage.tsx: 99.56% Statements, 95.68% Branches, 100% Functions, 100% Lines
 - WorkspaceSettingsPage.tsx: 99.63% Statements, 95.43% Branches, 100% Functions, 100% Lines
 - AuthStudioPage.tsx: 96.12% Lines, 94.43% Statements
+- FilterDisplayBar.tsx: 100% Statements, 98.43% Branches, 100% Functions, 100% Lines
+- viewRegistry.tsx: 98.51% Statements, 95.28% Branches, 97.82% Functions, 100% Lines

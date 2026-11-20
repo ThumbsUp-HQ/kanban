@@ -82,7 +82,7 @@ export function FilterDisplayBar({
     if (!projectKey || projectKey === 'undefined') return;
     let active = true;
 
-    void Promise.allSettled([
+    const fetches: Promise<unknown>[] = [
       fetchAssigneeSuggestions(projectKey, '').then((res) => {
         if (!active) return;
         setLiveAssignees(
@@ -113,22 +113,29 @@ export function FilterDisplayBar({
           }))
         );
       }),
-      fetchProjectModules(projectKey).then((res) => {
-        if (!active) return;
-        setLiveModules(
-          res.map((m) => ({
-            key: m.id,
-            label: m.name,
-            category: 'module',
-          }))
-        );
-      }),
-    ]);
+    ];
+
+    if (modulesEnabled) {
+      fetches.push(
+        fetchProjectModules(projectKey).then((res) => {
+          if (!active) return;
+          setLiveModules(
+            res.map((m) => ({
+              key: m.id,
+              label: m.name,
+              category: 'module',
+            }))
+          );
+        })
+      );
+    }
+
+    void Promise.allSettled(fetches);
 
     return () => {
       active = false;
     };
-  }, [projectKey]);
+  }, [projectKey, modulesEnabled]);
 
   // Derive dynamic facets from issues collection
   const derivedFacets = useMemo(() => {
