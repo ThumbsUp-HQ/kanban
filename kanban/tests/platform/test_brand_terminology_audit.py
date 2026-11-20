@@ -69,6 +69,8 @@ def is_path_excluded(rel_path: str) -> bool:
         return True
     if norm_path.startswith("kanban/importer/plane_"):
         return True
+    if norm_path.startswith("thumbs-up-kanban.wiki/"):
+        return True
     return bool(norm_path.endswith(("test_brand_terminology_audit.py", "test_wiki_media_audit.py")))
 
 
@@ -130,6 +132,7 @@ def collect_repo_files(repo_root: Path) -> Iterable[Path]:
         ".pytest_cache",
         ".ruff_cache",
         ".mypy_cache",
+        "thumbs-up-kanban.wiki",
     }
 
     for path in repo_root.rglob("*"):
