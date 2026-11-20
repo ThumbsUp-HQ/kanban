@@ -251,8 +251,8 @@ async def test_test_execute_endpoint_security_and_wasm_verification(  # noqa: PL
     assert resp_unapproved_sha.json()["code"] == "WASM_MODULE_NOT_FOUND"
 
     # 5. Wasm test-execution with unapproved raw bytecode gets 404 WASM_MODULE_NOT_FOUND
-    echo_bytes = _read_fixture("echo_cvss.wasm")
-    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
+    unapproved_bytes = b"\x00asm\x01\x00\x00\x00\x00\x00\x00\x00"
+    unapproved_b64 = base64.b64encode(unapproved_bytes).decode("ascii")
     resp_unapproved_bytes = await _as_admin_aal2(api_env, admin).post(
         "/api/v1/projects/SEC/custom-fields/test-execute",
         json={
@@ -260,13 +260,15 @@ async def test_test_execute_endpoint_security_and_wasm_verification(  # noqa: PL
             "tier": "wasm",
             "output_format": "severity_pill",
             "output_format_metadata": {},
-            "script_source": echo_b64,
+            "script_source": unapproved_b64,
         },
     )
     assert resp_unapproved_bytes.status_code == 404
     assert resp_unapproved_bytes.json()["code"] == "WASM_MODULE_NOT_FOUND"
 
     # 6. Upload approved wasm module
+    echo_bytes = _read_fixture("echo_cvss.wasm")
+    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
     resp_wasm = await _as_admin_aal2(api_env, admin).post(
         "/api/v1/projects/SEC/wasm-modules",
         json={"name": "echo_cvss", "wasm_base64": echo_b64},

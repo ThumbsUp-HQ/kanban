@@ -252,6 +252,21 @@ describe('CustomFieldValue', () => {
       expect(el.textContent).toContain('High');
     });
 
+    it('avoids duplicate score when displayLabel already starts with displayScore', () => {
+      render(
+        <CustomFieldValue
+          format="severity_pill"
+          value={{ level: 'high', score: 8.8, label: '8.8 High' }}
+          testId="cf-sev-dedup"
+        />,
+      );
+      const el = screen.getByTestId('cf-sev-dedup');
+      const scoreEl = el.querySelector('.custom-field-severity-score');
+      const labelEl = el.querySelector('.custom-field-severity-label');
+      expect(scoreEl?.textContent).toBe('8.8');
+      expect(labelEl?.textContent).toBe('High');
+    });
+
     it('renders all 4 severity levels (low, medium, high, critical)', () => {
       const levels = ['low', 'medium', 'high', 'critical'] as const;
       for (const lvl of levels) {

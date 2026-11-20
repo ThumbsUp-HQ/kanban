@@ -274,7 +274,9 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.fixture(scope="session")
 async def pg_worker_db(request: pytest.FixtureRequest) -> AsyncGenerator[AsyncEngine, None]:
     """Provide an isolated worker database cloned from golden kanban_template."""
-    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+    worker_id = getattr(request.config, "workerinput", {}).get(
+        "workerid", os.environ.get("PYTEST_XDIST_WORKER", "master")
+    )
     prefix = os.environ.get("KB_TEST_DB_PREFIX", "kanban_test")
     db_name = f"{prefix}_{worker_id}"
     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")

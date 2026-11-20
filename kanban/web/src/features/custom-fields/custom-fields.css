@@ -541,7 +541,20 @@
 }
 
 .custom-field-input,
-.custom-field-select,
+.custom-field-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--fg-primary, #111827);
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+  min-height: 38px;
+  line-height: 1.45;
+}
+
 .custom-field-textarea {
   width: 100%;
   padding: 8px 10px;

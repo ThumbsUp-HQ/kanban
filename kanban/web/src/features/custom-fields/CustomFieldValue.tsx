@@ -353,7 +353,13 @@ export function CustomFieldValue({
       }
 
       const displayScore = score !== undefined ? score.toFixed(1) : null;
-      const displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
+      let displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
+      if (displayScore && displayLabel.startsWith(displayScore)) {
+        const trimmed = displayLabel.slice(displayScore.length).trimStart();
+        if (trimmed) {
+          displayLabel = trimmed;
+        }
+      }
 
       return (
         <span
