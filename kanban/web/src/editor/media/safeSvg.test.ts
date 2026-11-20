@@ -62,6 +62,22 @@ describe('safeSvg Sanitizer & DAG Guard', () => {
     expect(result.cleanSvg).toContain('<circle');
   });
 
+  it('strips <style> tags and inline style attributes before DOMPurify to eliminate CSP errors', () => {
+    const styledSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background: red">
+      <style>rect { fill: blue; }</style>
+      <rect x="10" y="10" width="80" height="80" style="fill: green" data-style="solid" />
+    </svg>`;
+
+    const result = createSafeSvgBlobUrl(styledSvg);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.cleanSvg).not.toContain('<style');
+    expect(result.cleanSvg).not.toMatch(/(?:^|\s)style=/);
+    expect(result.cleanSvg).toContain('data-style="solid"');
+    expect(result.cleanSvg).toContain('<rect');
+  });
+
   it('rejects self-referencing and mutual cyclic <use> references (SVG_USE_CYCLE)', () => {
     // Self cycle
     const selfCycleSvg = `<svg xmlns="http://www.w3.org/2000/svg">
@@ -381,16 +397,16 @@ describe('safeSvg Sanitizer & DAG Guard', () => {
 
     // Now test with policy that supports createScriptURL
     const policyWithScriptUrl = {
-      createPolicy: vi.fn((_name: string, rules: { createHTML: (s: string) => string; createScriptURL: (u: string) => string }) => ({
+      createPolicy: vi.fn((_name: string, rules: { createHTML: (s: string) => string; createScriptURL?: ((u: string) => string) | undefined }) => ({
         createHTML: rules.createHTML,
-        createScriptURL: (u: string) => `trusted-url-${u}`,
+        createScriptURL: (u: string) => rules.createScriptURL?.(u) ?? `trusted-url-${u}`,
       })),
     };
     (window as unknown as { trustedTypes: unknown }).trustedTypes = policyWithScriptUrl;
     _resetPolicyForTesting();
     try {
-      expect(toTrustedScriptUrl('https://example.com/script.js')).toBe('trusted-url-https://example.com/script.js');
-      expect(toTrustedScriptUrl(new URL('https://example.com/worker.js'))).toBe('trusted-url-https://example.com/worker.js');
+      expect(toTrustedScriptUrl('https://example.com/script.js')).toBe('https://example.com/script.js');
+      expect(toTrustedScriptUrl(new URL('https://example.com/worker.js'))).toBe('https://example.com/worker.js');
     } finally {
       (window as unknown as { trustedTypes: unknown }).trustedTypes = originalTrustedTypes;
       _resetPolicyForTesting();

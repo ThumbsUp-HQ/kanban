@@ -205,8 +205,27 @@ export function createSafeSvgBlobUrl(rawSvg: string): SafeSvgResult {
     };
   }
 
+  // Pre-strip <style> elements and style attributes on the isolated XMLDocument.
+  // In Chromium, passing strings containing <style> or style="..." to DOMPurify.sanitize()
+  // causes Chromium to parse them into an HTML <template> within the main document,
+  // triggering inline-style CSP violations (style-src 'self') before DOMPurify strips them.
+  // Stripping them in XML DOMParser ('image/svg+xml') prevents all main-document CSP errors.
+  const styleElements = Array.from(rawDoc.querySelectorAll('style'));
+  for (const styleEl of styleElements) {
+    styleEl.remove();
+  }
+  const allRawElements = Array.from(rawDoc.querySelectorAll('*'));
+  for (const el of allRawElements) {
+    if (el.hasAttribute('style')) {
+      el.removeAttribute('style');
+    }
+  }
+
+  const preSerializer = new XMLSerializer();
+  const preSanitizedSvg = preSerializer.serializeToString(rawDoc);
+
   // 3. DOMPurify sanitize under strict SVG profile, retaining local <use>
-  const sanitizedMarkup = DOMPurify.sanitize(rawSvg, {
+  const sanitizedMarkup = DOMPurify.sanitize(preSanitizedSvg, {
     USE_PROFILES: { svg: true, svgFilters: false },
     ALLOWED_TAGS: ALLOWED_SVG_TAGS as unknown as string[],
     FORBID_TAGS: FORBIDDEN_SVG_TAGS as unknown as string[],

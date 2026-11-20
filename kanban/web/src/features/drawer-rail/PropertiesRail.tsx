@@ -63,7 +63,7 @@ export function PropertiesRail({
   const isAdmin = capabilities.includes('ADMIN');
 
   const modulesEnabled =
-    metadata?.modules_enabled ?? initialMetadata?.modules_enabled ?? true;
+    (metadata?.modules_enabled ?? initialMetadata?.modules_enabled) !== false;
 
   // Fetch project auxiliary configuration
   useEffect(() => {
@@ -74,8 +74,9 @@ export function PropertiesRail({
       }
       let resolvedMeta = initialMetadata;
       try {
-        if (!resolvedMeta) {
-          resolvedMeta = await fetchProjectMetadata(projectKey);
+        if (resolvedMeta?.modules_enabled === undefined) {
+          const fetched = await fetchProjectMetadata(projectKey);
+          resolvedMeta = resolvedMeta ? { ...resolvedMeta, ...fetched } : fetched;
           if (isMounted) setMetadata(resolvedMeta);
         }
       } catch {
@@ -97,7 +98,7 @@ export function PropertiesRail({
         // Ignore in tests
       }
 
-      const shouldLoadModules = resolvedMeta?.modules_enabled ?? modulesEnabled;
+      const shouldLoadModules = resolvedMeta?.modules_enabled === true;
       if (shouldLoadModules) {
         try {
           const mods = await fetchProjectModules(projectKey);
@@ -112,7 +113,7 @@ export function PropertiesRail({
     return () => {
       isMounted = false;
     };
-  }, [projectKey, modulesEnabled, initialMetadata]);
+  }, [projectKey, initialMetadata]);
 
   const updateLocalIssue = (patch: Partial<IssueDetail>): void => {
     setCurrentIssue((prev) => {

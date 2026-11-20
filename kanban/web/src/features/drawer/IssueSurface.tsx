@@ -688,7 +688,7 @@ function IssueSurfaceContent({
                 accept="image/*,.svg"
                 tabIndex={-1}
                 aria-hidden="true"
-                style={{ display: 'none' }}
+                className="surface__hidden-file-input"
                 onChange={(e) => { void handleDescFileSelected(e); }}
                 data-testid="desc-file-input"
               />
@@ -834,7 +834,6 @@ function IssueSurfaceContent({
                 projectMetadata={{
                   key: currentIssue.project_key || resolvedProjectForAux,
                   name: currentIssue.project_name ?? currentIssue.project_key,
-                  modules_enabled: true,
                   states: projectStates,
                 }}
                 onIssueUpdate={handleIssueUpdate}

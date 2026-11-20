@@ -500,7 +500,11 @@ describe('IssueSurface', () => {
     });
 
     it('loads project workflow states and forwards onIssueUpdate when RailSlot is mounted', async () => {
-      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        project_key: '',
+        project_name: 'Kanban Custom Name',
+      });
       const originalFetch = globalThis.fetch;
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -520,7 +524,7 @@ describe('IssueSurface', () => {
         <button
           type="button"
           data-testid="mock-rail-update"
-          onClick={() => onIssueUpdate?.({ ...issue, summary: 'Rail Updated Summary' })}
+          onClick={() => onIssueUpdate?.({ ...issue, summary: 'Rail Updated Summary', project_key: 'KAN', project_name: undefined })}
         >
           Rail {issue.summary}
         </button>
@@ -530,7 +534,12 @@ describe('IssueSurface', () => {
       render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
-            <IssueSurfaceSlotsContext.Provider value={{ rail: MockRail }}>
+            <IssueSurfaceSlotsContext.Provider
+              value={{
+                rail: MockRail,
+                activity: ({ issue }) => <div data-testid="mock-activity">Activity for {issue.key}</div>,
+              }}
+            >
               <div id="main-content">
                 <main id="kb-main" tabIndex={-1}>
                   Main
@@ -546,6 +555,7 @@ describe('IssueSurface', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('mock-rail-update')).toBeDefined();
+        expect(screen.getByTestId('mock-activity')).toBeDefined();
       });
       fireEvent.click(screen.getByTestId('mock-rail-update'));
       await waitFor(() => {
