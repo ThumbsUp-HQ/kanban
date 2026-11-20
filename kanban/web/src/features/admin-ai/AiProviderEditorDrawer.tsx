@@ -48,17 +48,26 @@ function AiProviderEditorContent({
     provider?.provider_kind ?? defaultKind,
   );
   const [displayName, setDisplayName] = useState<string>(
-    provider?.display_name ?? (airGapMode ? 'Local Ollama Runtime' : 'Enterprise OpenAI'),
+    provider?.display_name ??
+      (airGapMode ? 'Local Ollama Runtime' : 'OpenAI / OpenAI-Compatible'),
   );
   const [baseUrl, setBaseUrl] = useState<string>(
-    provider?.base_url ?? (airGapMode ? 'http://127.0.0.1:11434' : ''),
+    provider?.base_url ??
+      (airGapMode ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'),
   );
   const [modelAllowlist, setModelAllowlist] = useState<string>(
     provider?.model_allowlist.join(', ') ??
       (airGapMode ? 'qwen2.5-coder:7b, llama3.2:3b' : 'gpt-4o, gpt-4o-mini'),
   );
 
-  const initialResidency = provider?.residency_tier ?? (airGapMode ? 'local_only' : 'cloud_standard');
+  const normalizeResidencyTier = (rawTier: string | null | undefined): string => {
+    if (!rawTier) return airGapMode ? 'local_only' : 'cloud_standard';
+    if (rawTier === 'cloud') return 'cloud_standard';
+    if (rawTier === 'local') return 'local_only';
+    return rawTier;
+  };
+
+  const initialResidency = normalizeResidencyTier(provider?.residency_tier);
   const [residencyTier, setResidencyTier] = useState<string>(initialResidency);
   const [residencyTierManual, setResidencyTierManual] = useState<boolean>(isEditing);
 
@@ -152,14 +161,21 @@ function AiProviderEditorContent({
     try {
       setIsProbing(true);
       setProbeError(null);
-      const payload = provider
-        ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
-        : {
+      const isEndpointModified =
+        provider !== null &&
+        (baseUrl !== (provider.base_url ?? '') || providerKind !== provider.provider_kind);
+      const hasKeyOrNotNeeded = isLocal || apiKey.trim().length > 0;
+      const useDraftEndpoint = !provider || (isEndpointModified && hasKeyOrNotNeeded);
+
+      const payload = useDraftEndpoint
+        ? {
             provider_kind: providerKind,
             base_url: baseUrl.trim() || null,
             api_key: apiKey.trim() || null,
-          };
-      const res = await probeAiModels(payload, provider?.id);
+          }
+        : (apiKey.trim() ? { api_key: apiKey.trim() } : {});
+      const targetProviderId = useDraftEndpoint ? undefined : provider.id;
+      const res = await probeAiModels(payload, targetProviderId);
       if (res.ok) {
         setProbedModels(res.models);
         if (res.models.length === 0) {
@@ -179,14 +195,21 @@ function AiProviderEditorContent({
     try {
       setIsTestingConnection(true);
       setTestStatus({ kind: 'loading', message: 'Testing connection...' });
-      const payload = provider
-        ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
-        : {
+      const isEndpointModified =
+        provider !== null &&
+        (baseUrl !== (provider.base_url ?? '') || providerKind !== provider.provider_kind);
+      const hasKeyOrNotNeeded = isLocal || apiKey.trim().length > 0;
+      const useDraftEndpoint = !provider || (isEndpointModified && hasKeyOrNotNeeded);
+
+      const payload = useDraftEndpoint
+        ? {
             provider_kind: providerKind,
             base_url: baseUrl.trim() || null,
             api_key: apiKey.trim() || null,
-          };
-      const res = await testAiConnection(payload, provider?.id);
+          }
+        : (apiKey.trim() ? { api_key: apiKey.trim() } : {});
+      const targetProviderId = useDraftEndpoint ? undefined : provider.id;
+      const res = await testAiConnection(payload, targetProviderId);
       if (res.ok) {
         setTestStatus({
           kind: 'success',
@@ -477,7 +500,7 @@ function AiProviderEditorContent({
         {/* Collapsible Advanced Settings */}
         <details className="kb-advanced-settings" data-testid="advanced-settings-details">
           <summary className="kb-advanced-settings-summary">
-            ▸ Advanced Settings
+            Advanced Settings
           </summary>
           <div className="kb-advanced-settings-body">
             <div className="kb-form-group">
@@ -497,6 +520,7 @@ function AiProviderEditorContent({
                 <option value="local_only">Local Only (Zero Egress)</option>
                 <option value="cloud_standard">Cloud Standard</option>
                 <option value="default">Default / Global</option>
+                <option value="cloud">Cloud (Legacy)</option>
                 <option value="local">Local (Legacy)</option>
                 <option value="us-east">US East</option>
                 <option value="eu-central">EU Central</option>
