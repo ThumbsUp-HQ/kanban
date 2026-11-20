@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
-import { CustomFieldDefinitionEditor } from '../CustomFieldDefinitionEditor';
+import {
+  CustomFieldDefinitionEditor,
+  normalizeScriptSource,
+} from '../CustomFieldDefinitionEditor';
 import * as api from '../api';
 
 vi.mock('../api', async () => {
@@ -1034,5 +1037,74 @@ describe('CustomFieldDefinitionEditor', () => {
 
     // Pre-existing warning banner not present
     expect(screen.queryByTestId('preexisting-nsjail-warning-banner')).toBeNull();
+  });
+
+  describe('normalizeScriptSource helper', () => {
+    it('normalizes bare formula expressions and preserves already-prefixed scripts', () => {
+      expect(normalizeScriptSource('formula', 'a + b')).toBe('formula: a + b');
+      expect(normalizeScriptSource('formula', 'formula: a + b')).toBe('formula: a + b');
+      expect(normalizeScriptSource('formula', 'return a + b')).toBe('return a + b');
+      expect(normalizeScriptSource('formula', '   ')).toBe('   ');
+      expect(normalizeScriptSource('scalar', '42')).toBe('scalar: 42');
+      expect(normalizeScriptSource('scalar', 'scalar: 42')).toBe('scalar: 42');
+      expect(normalizeScriptSource('wasm', 'AGFzbQE...')).toBe('AGFzbQE...');
+      expect(normalizeScriptSource('nsjail', 'import sys')).toBe('import sys');
+    });
+  });
+
+  it('normalizes bare formula expression on Test Execute and Save (KAN-32)', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    const testResult: api.CustomFieldTestExecuteResult = {
+      output_format: 'text',
+      value: 'critical',
+      status: 'SUCCESS',
+      latency_ms: 5,
+      logs: 'ok',
+    };
+    vi.mocked(api.testExecuteCustomField).mockResolvedValue(testResult);
+    vi.mocked(api.createCustomField).mockResolvedValue(def0);
+
+    renderEditor(true);
+
+    // Switch flavor to formula
+    fireEvent.change(screen.getByTestId('field-flavor-select'), {
+      target: { value: 'formula' },
+    });
+
+    // Enter bare expression without "formula: " prefix
+    const bareExpr = '{"level": "critical"} if priority == "URGENT" else {"level": "medium"}';
+    fireEvent.change(screen.getByTestId('script-source-textarea'), {
+      target: { value: bareExpr },
+    });
+
+    // Test Execute with bare expression
+    fireEvent.change(screen.getByTestId('test-issue-key-input'), {
+      target: { value: 'KAN-42' },
+    });
+    fireEvent.click(screen.getByTestId('test-execute-btn'));
+
+    await waitFor(() => {
+      expect(api.testExecuteCustomField).toHaveBeenCalledWith(
+        'KAN',
+        expect.objectContaining({
+          issue_key: 'KAN-42',
+          script_source: `formula: ${bareExpr}`,
+        }),
+      );
+    });
+
+    // Save with bare expression
+    fireEvent.change(screen.getByTestId('field-name-input'), { target: { value: 'Formula Field' } });
+    fireEvent.change(screen.getByTestId('field-slug-input'), { target: { value: 'formula-field' } });
+    fireEvent.click(screen.getByTestId('save-definition-btn'));
+
+    await waitFor(() => {
+      expect(api.createCustomField).toHaveBeenCalledWith(
+        'KAN',
+        expect.objectContaining({
+          script_source: `formula: ${bareExpr}`,
+        }),
+      );
+    });
   });
 });

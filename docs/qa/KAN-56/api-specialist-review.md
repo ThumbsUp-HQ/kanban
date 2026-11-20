@@ -1,80 +1,106 @@
-# Clean-Room API Specialist Review: KAN-56
+# Clean-Room API Specialist Review: KAN-56 (RC1 Remediation)
 
 **Reviewer:** `api-spec-2` (Clean-Room Backend, API, MCP, and Security Specialist)  
 **Date:** 2026-11-20  
-**Branch:** `feat/KAN-56`  
-**Main Commit:** `70b7738259366bf1fb3b91849dc37154ec5637a7`  
-**Wiki Commit:** `c646b342bd5352cfb221d31b086e07aac68f51cd`  
+**Branch:** `fix/KAN-56-rc1`  
+**Commit:** `97ab8829d2d0ff3c742d6fb3faeb46ba8bf97b09`  
 **Status:** APPROVED  
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room audit verifies the deliverables for **KAN-56** (`[KB-BRAND-CLEAN-03] Rename Wiki Scripted-Workflows-and-Transition-Helpers.md & Add Brand Audit CI Gate`).
+This clean-room audit evaluates ticket **KAN-56** on branch `fix/KAN-56-rc1` at commit `97ab8829`. It verifies the complete remediation of all reality-checker findings recorded in `docs/qa/KAN-56/reality-checker-report.md`.
 
-The ticket enforces complete brand hygiene across documentation and codebase:
-1. Renaming the canonical workflows wiki article from `ScriptRunner-Workflows-and-Transition-Interceptors.md` to `Scripted-Workflows-and-Transition-Helpers.md` and synchronizing all inbound wiki links, prose terminology, and Mermaid diagram node labels.
-2. Introducing automated CI brand audit gates in `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/docs/test_wiki_media_audit.py` to prevent regression of legacy competitor self-descriptions.
-3. Updating Workflow Studio UI documentation links in `AttachHookDialog.tsx` and `WorkflowStudioPage.tsx` to reference the canonical slug.
-4. Updating `scripts/sync_wiki_bundle.py` description and aliases.
-
-All architectural boundaries, test coverage standards, static analysis gates, and typography invariants are verified and approved.
+The audit confirms that:
+1. Both `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/docs/test_wiki_media_audit.py` have been hardened with path portability (`resolve_wiki_dir` / `get_wiki_dir`) supporting `KANBAN_WIKI_PATH`, relative repository paths, and sibling directories.
+2. The blanket exclusion of `wikiManifest.ts` has been removed; instead, `scan_wiki_manifest_for_violations` inspects bundled `WIKI_CHAPTERS` directly, ensuring full brand hygiene even in containerized or hermetic CI environments where the wiki repo is not checked out on disk.
+3. Zero skipped tests gate: Under `KANBAN_WIKI_PATH=/nonexistent`, all 17 tests execute and pass cleanly via the manifest fallback mechanism.
+4. Heading regex matching is hardened with line-anchored regex `^### Failure Policies$` and forward-compatible title matching (`^#\s+(?:\[(?:Guide|Informational|Architectural)\]\s+)?Scripted Workflows`). Anchor fragments on internal markdown links (`[text](Page#anchor)` and `[text](#anchor)`) are validated against computed GitHub-style heading slugs in target pages and chapters.
+5. The brand terminology and wiki media audit suites are wired directly into `.github/workflows/ci.yml` under `Fast smoke unit tests`.
+6. Code coverage on both test files reaches 98%, and all static analysis gates pass with zero warnings and zero em/en-dashes.
 
 ---
 
-## 2. Detailed Technical & Architectural Audit
+## 2. Technical and Security Audit
 
-### 2.1. Brand Terminology CI Gate (`kanban/tests/platform/test_brand_terminology_audit.py`)
-- **Coverage & Scope**: Scans all frontend files (`.ts`, `.tsx`), style files (`.css`), backend Python files (`.py`), manifests (`.toml`, `.json`, `.md`), repository documentation (`docs/`), and wiki articles (`thumbs-up-kanban.wiki/*.md`).
-- **Banned Terminology Regex**: Matches case-insensitive `scriptrunner`, `transition interceptor`, `plane-parity`, `plane-calm`, `plane-style`, `jira/plane`, and `jira-surpassing`.
-- **Allowed Exception Boundaries**:
-  * Spec-mandated comparison documents (`docs/FEATURE_COMPARISON.md`, `docs/CUTOVER.md`, wiki comparison/cutover tables).
-  * Data importers (`kanban/importer/plane_*`).
-  * Historical audit records in `docs/qa/` and `docs/tickets/`.
-  * Wire-protocol and database schema identifiers (`agent_interceptor`, `manage_workflow_interceptors`).
-- **Assertion Robustness**: Produces clear diagnostics detailing offending file, line number, matched text, and rule name.
-- **Coverage**: Achieves 98% statement and branch coverage (128 statements, 1 miss, 44 branches, 2 branch parts).
+### 2.1. Path Portability and Fallback Architecture
+In `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/docs/test_wiki_media_audit.py`:
+- `resolve_wiki_dir` and `get_wiki_dir` dynamically check:
+  1. `KANBAN_WIKI_PATH` environment variable.
+  2. Relative path `REPO_ROOT / "thumbs-up-kanban.wiki"`.
+  3. Sibling path `REPO_ROOT.parent / "thumbs-up-kanban.wiki"`.
+  4. Default system wiki directory.
+- When no wiki directory is found, tests automatically switch to auditing `kanban/web/src/features/docs-center/wikiManifest.ts` rather than skipping (`pytest.skip` eliminated).
+- Validated via `KANBAN_WIKI_PATH=/nonexistent uv run pytest ...`: 17/17 tests passed with zero skipped tests.
 
-### 2.2. Wiki Document & Media Asset Audit (`kanban/tests/docs/test_wiki_media_audit.py`)
-- **Document Existence**: Confirms `Scripted-Workflows-and-Transition-Helpers.md` exists and obsolete `ScriptRunner-Workflows-and-Transition-Interceptors.md` has been deleted.
-- **Internal Markdown Link Integrity**: Scans every internal link across all 27 wiki articles. Verifies 0 broken links (`assert not broken_links`).
-- **Media Asset Verification**: Extracts every image reference `![alt](src)` and asserts the target file exists on disk under `images/` or canonical paths (0 broken images).
-- **Mermaid & Heading Validation**: Confirms canonical node labels `HelperEngine["Transition Helper Engine"]` and participant labels in sequence diagrams.
+### 2.2. Heading Regex and Anchor Slug Verification
+- Heading check in `test_wiki_media_audit.py`:
+  * Uses line-anchored regex `^### Failure Policies$` matching canonical h3 headings.
+  * H1 check supports optional category prefix tags (`[Guide]`, `[Informational]`, `[Architectural]`) ensuring compatibility with upcoming KAN-33 taxonomy updates.
+- Internal Anchor Validation:
+  * Implements `github_heading_slug` and `extract_heading_slugs` to extract all valid anchors from markdown headings.
+  * Links with `#anchor` fragments are checked against the extracted slugs of the destination page, catching dead or broken anchor links across documentation.
 
-### 2.3. Workflow Studio and Script Alignment
-- `kanban/web/src/features/workflows/AttachHookDialog.tsx`:
-  * Updated `docHref` in line 230 to `/docs/scripted-workflows-and-transition-helpers#helper-architecture`.
-  * Updated `docHref` in line 375 to `/docs/scripted-workflows-and-transition-helpers#failure-policies`.
-- `kanban/web/src/features/workflows/WorkflowStudioPage.tsx`:
-  * Updated `href` in line 286 to `/docs/scripted-workflows-and-transition-helpers`.
-- `scripts/sync_wiki_bundle.py`:
-  * Updated alias map: `"workflows": "scripted-workflows-and-transition-helpers"`.
-  * Updated role description to "Project workflows, transition helpers, and custom fields."
+### 2.3. CI Workflow Wiring
+- `.github/workflows/ci.yml`:
+  ```yaml
+  - name: Fast smoke unit tests
+    shell: bash
+    run: |
+      uv run pytest scripts/tests/test_ci_workflow.py tests/test_workspace_layout.py kanban/tests/ci/test_github_workflows.py kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py
+  ```
+- Guarantees automated enforcement on every push and pull request.
 
-### 2.4. Sibling Isolation & Collision Avoidance
-- Zero touches to `Sidebar.tsx` (owned by `KAN-52`).
-- Zero touches to `DocsCenterPage.tsx` or `wikiManifest.ts` (owned by `KAN-16-rc1`).
+### 2.4. Sibling Isolation and Conflict Avoidance
+- Zero modifications to `/home/adamoutler/kanban/thumbs-up-kanban.wiki/` (owned by `KAN-33`).
+- Zero modifications to `DocsCenterPage.tsx` or `wikiManifest.ts` (owned by `KAN-33`).
 - Untracked files `.backup_schedule.json` and `backups/` strictly unstaged.
 
 ---
 
-## 3. Test Suites and Static Analysis Verification
+## 3. Test Suites, Coverage, and Static Analysis Verification
 
-| Check / Gate | Target / Command | Result |
-| :--- | :--- | :--- |
-| **Pytest Suite** | `kanban/tests/platform/test_brand_terminology_audit.py`, `kanban/tests/docs/test_wiki_media_audit.py` | 7 passed in 4.52s, 98% coverage |
-| **Ruff Linter** | `uv run ruff check kanban/tests/ scripts/` | Clean (0 errors, 0 warnings) |
-| **Ruff Formatter** | `uv run ruff format --check kanban/tests/ scripts/` | Clean (1984 files already formatted) |
-| **MyPy Typecheck** | `uv run mypy kanban/tests/platform/ kanban/tests/docs/ scripts/` | Clean (Success: 1130 source files) |
-| **Import Layering** | `uv run lint-imports` | Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database`) |
-| **Typography Check** | `python3 -m scripts.check_no_dashes --all` | 0 em-dashes and 0 en-dashes in repository |
-| **Wiki Typography** | `python3 -m scripts.check_no_dashes /home/adamoutler/kanban/thumbs-up-kanban.wiki` | 0 em-dashes and 0 en-dashes in wiki |
+### 3.1. Backend Pytest Suite
+- Command: `uv run pytest kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py --cov=kanban/tests/platform/test_brand_terminology_audit --cov=kanban/tests/docs/test_wiki_media_audit --cov-report=term-missing`
+- Results: 17/17 tests passed in 5.39s.
+- Coverage Breakdown:
+  * `kanban/tests/docs/test_wiki_media_audit.py`: 98% (226 stmts, 1 miss, 68 branches)
+  * `kanban/tests/platform/test_brand_terminology_audit.py`: 98% (233 stmts, 2 miss, 78 branches)
+  * **Overall Coverage**: 98% (459 stmts, 3 miss, 146 branches).
+- Fallback Verification: Under `KANBAN_WIKI_PATH=/nonexistent`, 17/17 tests passed in 2.38s (0 skipped).
+
+### 3.2. Frontend Vitest Suite
+- Command: `pnpm --dir kanban/web exec vitest run src/features/workflows/ src/features/docs-center/__tests__/DocsCenter.test.tsx src/styles/__tests__/cssTokensAudit.test.ts`
+- Results: 8 test files, 107/107 passed in 3.94s with 0 `act(...)` warnings.
+
+### 3.3. Static Gates & Security Checks
+- `uv run ruff check`: Clean (All checks passed).
+- `uv run ruff format --check`: Clean (1992 files formatted).
+- `uv run mypy`: Clean (Success: 1135 source files).
+- `uv run lint-imports`: 2 contracts kept, 0 broken (`agent -> mcp -> kanban -> database`).
+- `tsc -b --noEmit`: Clean (0 errors).
+- `eslint . --max-warnings 0`: Clean (0 warnings).
+- `vite build`: Production build succeeded in 1.18s.
+- `python3 -m scripts.check_no_dashes --all`: Clean (0 em/en-dashes across repository and wiki).
 
 ---
 
-## 4. Certification & Signoff
+## 4. Security & Quality Invariants
+
+| Invariant / Check | Specification Requirement | Verification Result |
+| :--- | :--- | :--- |
+| **Zero Skipped Tests** | Tests pass even without separate wiki checkout | Manifest fallback passes 17/17 with zero skips |
+| **Path Flexibility** | Supports multiple wiki path conventions | Env var, relative, and sibling paths resolved |
+| **Anchor Link Validity** | Verifies internal `#anchor` fragments | Validated against computed GitHub heading slugs |
+| **Brand Hygiene** | 0 occurrences of banned competitor terms | Verified across UI, CSS, Python, manifests, docs |
+| **CI Integration** | Executed in public CI smoke workflow | Wired into `.github/workflows/ci.yml` |
+| **Code Style** | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` |
+
+---
+
+## 5. Certification Signoff
 
 STATUS: APPROVED
 
-All requirements for KAN-56 have been audited and certified. The wiki documentation is clean, internal links and media resolve cleanly, the brand terminology CI gate enforces future hygiene, and zero regressions or collisions were introduced. KAN-56 is certified ready for reality-checker QA.
+All findings from the reality-checker report have been fully resolved. Path portability, manifest fallback, heading anchor validation, and CI workflow integration are verified on disk. KAN-56 is certified ready for reality-checker QA gate on `fix/KAN-56-rc1`.

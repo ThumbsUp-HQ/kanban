@@ -1,20 +1,119 @@
+=== 1. Pytest Brand Terminology and Wiki Media Audit with Coverage ===
+$ PYTEST_XDIST_WORKER=gw_kan56rc1 uv run pytest kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py --cov=kanban/tests/platform/test_brand_terminology_audit --cov=kanban/tests/docs/test_wiki_media_audit --cov-report=term-missing
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-aa8b69bf
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 7 items
+collected 17 items
 
-kanban/tests/platform/test_brand_terminology_audit.py ...                [ 42%]
-kanban/tests/docs/test_wiki_media_audit.py ....                          [100%]
+kanban/tests/platform/test_brand_terminology_audit.py ........           [ 47%]
+kanban/tests/docs/test_wiki_media_audit.py .........                     [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
 Name                                                    Stmts   Miss Branch BrPart  Cover   Missing
 ---------------------------------------------------------------------------------------------------
-kanban/tests/platform/test_brand_terminology_audit.py     128      1     44      2    98%   94->97, 107
+kanban/tests/docs/test_wiki_media_audit.py                226      1     68      4    98%   77, 86->71, 158->161, 223->222
+kanban/tests/platform/test_brand_terminology_audit.py     233      2     78      3    98%   140, 205, 223->226
 ---------------------------------------------------------------------------------------------------
-TOTAL                                                     128      1     44      2    98%
-============================== 7 passed in 4.47s ===============================
+TOTAL                                                     459      3    146      7    98%
+============================== 17 passed in 5.13s ==============================
+Exit code: 0
+
+=== 2. Pytest Nonexistent Wiki Path (Clean-Room Manifest Fallback Gate: 0 Skipped Tests) ===
+$ KANBAN_WIKI_PATH=/nonexistent uv run pytest kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 17 items
+
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_scanner_unit_detects_violations_and_respects_exclusions PASSED [  5%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_scanner_unit_missing_file_and_wire_tokens PASSED [ 11%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_scanner_unit_wiki_manifest_parsing_and_fallbacks PASSED [ 17%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_scanner_unit_collect_repo_files PASSED [ 23%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_wiki_dir_resolution_and_fallbacks PASSED [ 29%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_main_repo_has_zero_brand_terminology_violations PASSED [ 35%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_wiki_repo_has_zero_brand_terminology_violations PASSED [ 41%]
+kanban/tests/platform/test_brand_terminology_audit.py::TestBrandTerminologyAudit::test_wiki_repo_manifest_fallback_has_zero_brand_violations PASSED [ 47%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_renamed_scripted_workflows_doc_exists_and_old_is_purged PASSED [ 52%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_all_internal_wiki_links_resolve_cleanly PASSED [ 58%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_all_wiki_image_references_exist_on_disk PASSED [ 64%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_wiki_mermaid_and_headings_use_canonical_branding PASSED [ 70%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_bundled_manifest_fallback_all_checks PASSED [ 76%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_github_heading_slug_and_extract_slugs_unit PASSED [ 82%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_wiki_dir_resolution_and_fallbacks PASSED [ 88%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_internal_link_and_anchor_validation_unit PASSED [ 94%]
+kanban/tests/docs/test_wiki_media_audit.py::TestWikiMediaAndLinkAudit::test_image_reference_validation_unit PASSED [100%]
+
+============================== 17 passed in 2.22s ==============================
+Exit code: 0
+
+=== 3. Vitest Workflows and DocsCenter Suite ===
+$ pnpm --dir kanban/web exec vitest run src/features/workflows/ src/features/docs-center/__tests__/DocsCenter.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 14ms
+ ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx (2 tests) 152ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (5 tests) 398ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (6 tests) 682ms
+   ✓ AttachHookDialog (KB-P5-24) (6)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 321ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (16 tests) 697ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (35 tests) 1463ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (11 tests) 790ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (28 tests) 1697ms
+   ✓ Workflow Studio Coverage Booster (28)
+     ✓ WorkflowStudioPage interactive actions (10)
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 311ms
+
+ Test Files  8 passed (8)
+      Tests  107 passed (107)
+   Start at  15:27:28
+   Duration  3.94s (environment 45%, tests 36%, import 15%, transform 4%)
+
+Exit code: 0
+
+
+=== 4. Vitest HelpDrawer, FieldHelpHint, and cssTokensAudit (Z-Index Stacking Remediation) ===
+$ pnpm --dir kanban/web exec vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx src/components/help/FieldHelpHint.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+ ✓ src/components/help/FieldHelpHint.test.tsx (23 tests) 280ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (35 tests) 1655ms
+
+ Test Files  3 passed (3)
+      Tests  62 passed (62)
+   Start at  15:48:35
+   Duration  2.84s (environment 48%, tests 42%, import 7%, transform 2%, worker 1%)
+
+Exit code: 0
+
+
+=== 5. Vitest CustomFieldDefinitionEditor, FieldHelpHint, DocsCenter, and cssTokensAudit (Focus & Formula Normalization) ===
+$ pnpm --dir kanban/web exec vitest run src/components/help/FieldHelpHint.test.tsx src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+ ✓ src/components/help/FieldHelpHint.test.tsx (24 tests) 281ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (36 tests) 1414ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (42 tests) 1806ms
+
+ Test Files  4 passed (4)
+      Tests  106 passed (106)
+   Start at  15:56:32
+   Duration  3.84s (tests 42%, environment 39%, import 12%, transform 6%)
+
+Exit code: 0

@@ -41,7 +41,7 @@ jobs:
       - name: Fast smoke unit tests
         shell: bash
         run: |
-          uv run pytest scripts/tests/test_ci_workflow.py tests/test_workspace_layout.py kanban/tests/ci/test_github_workflows.py
+          uv run pytest scripts/tests/test_ci_workflow.py tests/test_workspace_layout.py kanban/tests/ci/test_github_workflows.py kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py
 
   web-smoke:
     runs-on: ubuntu-latest
