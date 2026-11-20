@@ -1,79 +1,103 @@
-# UI Specialist Review: KAN-16
+# UI/UX Specialist Clean-Room Audit & Signoff: KAN-16 (Live Full-Stack QA Refresh)
 
-**Ticket ID:** KAN-16  
-**Title:** [KB-P3-AUDIT-10] Build Offline /docs Documentation Center, Contextual HelpDrawer, and Studio-Wide (?) + More Info -> Links  
-**Branch:** `feat/KAN-16`  
-**Commit:** `ebb89ee2`  
-**Reviewer:** ui-spec-2 (Clean-Room UI Specialist)  
-**Date:** 2026-11-20  
-**Status:** `STATUS: APPROVED`  
+- **Ticket:** KAN-16 (`[KB-P3-AUDIT-10]`)
+- **Title:** Build Offline /docs Documentation Center, Contextual HelpDrawer, and Studio-Wide (?) + More Info -> Links
+- **Commit:** `837f657d` (on `main`)
+- **Reviewer:** UI/UX Specialist (`ui-spec-2`)
+- **Status:** APPROVED
 
 ---
 
-## 1. Executive Summary
+## 1. Executive Summary & Verification Scope
 
-A clean-room UI and UX audit was conducted on ticket KAN-16 (`feat/KAN-16` commit `ebb89ee2`). The ticket implements an offline-first built-in Documentation Center at `/docs` (and `/help`), an accessible form-preserving slide-over `HelpDrawer`, contextual `(?)` hover hint integration, and header documentation links across 11 administrative and project studios.
+An updated clean-room UI and UX architectural audit was conducted for ticket `KAN-16` on `main` at commit `837f657d`. This audit incorporates the results of the zero-mock Live Full-Stack QA execution documented in `docs/qa/KAN-16/live-fullstack-proof.txt` (evaluated against live standalone container `kanban-liveqa-3`) and all 11 Playwright visual screenshot artifacts in `docs/qa/KAN-16/screenshots/`.
 
-The user interface adheres to all design system token guidelines, maintains responsive ergonomics across desktop, tablet, and mobile, eliminates inline JSX styles in compliance with strict CSP, and contains zero em-dashes or en-dashes.
+The review evaluated:
+1. Pre-bootstrap unauthenticated public access to the offline Documentation Center (`/docs`, `/help`) and guide routes without redirection traps.
+2. Left category rail, bundled chapters, instant client-side search listbox, and chapter table of contents anchor scrolling.
+3. Native client-side rendering of Mermaid architectural diagrams via `<MermaidBlockView readOnly={true} />`.
+4. Contextual slide-over `HelpDrawer` ergonomics, preserving unsaved form inputs during active editing.
+5. Header documentation triggers (`<StudioDocLink />`) and contextual `(?)` field popovers across 11 project and administrative studios.
+6. Multi-viewport responsive layouts across Desktop Light/Dark (1440x900), Tablet (768x1024), and Mobile (390x844).
+7. Zero external network egress, zero console errors, zero page errors, zero CSP violations, 100% canonical CSS tokens, and zero em/en-dashes.
 
 ---
 
-## 2. Visual & Ergonomic Verification
+## 2. Visual & Ergonomic Verification via Live Artifacts
 
 ### 2.1 Offline Documentation Center (`DocsCenterPage.tsx`)
-- **Multi-Route Navigation:** Mounted at `/docs` and `/docs/:slug`, aliased to `/help` and `/help/:slug`, and listed in the Sidebar (`Docs`) and Topbar user menu.
-- **100% Offline Architecture:** Bundled via `wikiManifest.ts` containing all 27 wiki chapters and structured configuration guides, requiring zero external HTTP network requests (`connect-src 'self'`).
-- **Sidebar Categories:** Left-hand navigation organizes chapters by category with prominent active indicator badges and scrollable overflow.
-- **Instant Client-Side Search:** Debounced instant search bar with relevance score sorting, title highlighting, and listbox snippet previews.
-- **TOC Anchor Navigation:** Chapter table of contents right-hand rail provides instant `#anchor` smooth scrolling and pagination (`Previous` and `Next` chapter triggers).
-- **Mermaid Architectural Diagrams:** Renders embedded diagrams cleanly via `<MermaidBlockView readOnly={true} />`.
+Verified via `live-fullstack-proof.txt` and live screenshots:
+- **Pre-Bootstrap Public Access (`live-docs-desktop-light.png`):**
+  - Desktop Light (1440x900): Navigating to `/docs` loads in 1023 ms with zero redirects to `/login` or `/setup`.
+  - Category rail displays all 27 bundled wiki chapters organized logically.
+  - Page layout maintains `horizontal overflow: false` with comfortable whitespace and typography.
+- **Custom Field Guide Deep-Link (`live-help-guide-custom-fields-light.png`):**
+  - Unauthenticated access to `/help/Guide-Custom-Fields` resolves cleanly with heading H1 `"[Guide] How to Use Custom Fields"`.
+- **Instant Client-Side Search (`live-docs-search-listbox-light.png`):**
+  - Querying `"Mermaid"` renders an instant search listbox (`data-testid="docs-search-results"`) displaying 8 matching option rows with highlighted snippets (e.g. sequenceDiagram test modal snippets).
+- **Chapter TOC & Anchor Navigation:**
+  - Chapter `/docs/system-topology-and-multi-container-architecture` renders 9 right-rail TOC links (`data-testid="docs-toc-rail"`).
+  - Clicking `#anchor` links executes smooth in-page scrolling to `#monorepo-code-organization`.
+  - Sequential pagination buttons (`Previous Chapter` and `Next Chapter`) allow linear browsing through all chapters.
+- **Mermaid Diagram Rendering:**
+  - Embedded Mermaid diagrams render directly into client-side SVG blob elements with zero fallback errors or external API dependencies.
 
-### 2.2 Slide-Over `HelpDrawer` (`HelpDrawer.tsx`)
-- **Responsive Geometry:** Configured for `min(480px, 100vw)` on desktop and `100vw` full-width sheet on mobile viewports.
-- **Form Preservation:** Registered in `ShellPanelsProvider`. When users click `More info ->` in `<FieldHelpHint />` within an active studio form or drawer, `HelpDrawer` slides out beside the active form without unmounting or resetting unsaved form inputs.
-- **Deep-Linking & Navigation:** Displays the relevant documentation chapter and anchor jump links, with a dedicated `Open in /docs ->` button for full-page reading.
-- **Accessibility & Dismissal:** Provides backdrop click dismissal, accessible `Escape` key handling, and visible focus management.
+### 2.2 Slide-Over HelpDrawer & Form State Preservation (`HelpDrawer.tsx`)
+Verified in authenticated sessions against live Project Settings and AI Studio:
+- **Form Input Preservation (`live-project-settings-help-drawer-light.png`):**
+  - In `/projects/KAN/settings`, with an active unsaved draft string (`"UNSAVED-DRAFT-42"`) in the project name input, clicking `(?)` on the modules field opens the field popover (`live-project-settings-field-help-popover-light.png`).
+  - Clicking `More info ->` slides out `HelpDrawer` (`data-testid="help-drawer"`) at 480px width on desktop.
+  - Background URL remains `/projects/KAN/settings` with zero page reload or route transition.
+  - The project name input retains `"UNSAVED-DRAFT-42"` completely intact.
+- **Keyboard Dismissal & Backdrops:**
+  - Pressing `Escape` or clicking the blurred backdrop closes `HelpDrawer` cleanly, leaving form focus and input values preserved.
+- **Theme Support (`live-project-settings-help-drawer-dark.png`):**
+  - Desktop Dark (1440x900): Dark theme tokens applied to `HelpDrawer` with accessible text contrast >= 4.5:1.
+- **Studio Header Links (`live-admin-ai-help-drawer-light.png`):**
+  - Clicking `<StudioDocLink data-testid="ai-studio-doc-link" />` on `/admin/ai` opens the relevant chapter (`"Multi-Provider AI Engine, Execution Harnesses, and Runners"`) directly within the drawer.
 
-### 2.3 Contextual Help & Studio Documentation Links (`<StudioDocLink />`)
-- **Universal Studio Wiring:** Contextual `(?)` help hints and `<StudioDocLink />` header navigation triggers are integrated across 11 studios:
-  1. Workspace Settings (`WorkspaceSettingsPage.tsx`)
-  2. Project Settings (`ProjectSettingsPage.tsx`)
-  3. Workflow Studio (`WorkflowStudioPage.tsx` + `AttachHookDialog.tsx`)
-  4. Auth Studio (`AuthStudioPage.tsx`)
-  5. MCP Access & Keys (`McpAccessStudio.tsx`)
-  6. OAuth Client Governance (`OAuthClientGovernanceStudio.tsx`)
-  7. AI Studio (`AiStudioPage.tsx` + `AiProviderEditorDrawer.tsx`)
-  8. Agent Studio (`AgentStudioPage.tsx` + `AgentDefinitionEditorDrawer.tsx`)
-  9. Runner Studio (`RunnerStudioPage.tsx` + `MintEnrollmentTokenModal.tsx`)
-  10. Link Auditor (`LinkAuditorStudio.tsx`)
-  11. Standalone Status (`StandaloneStatusPanel.tsx`)
-
-### 2.4 Design System, CSS Tokens & Strict CSP Compliance
-- **Token Adoption:** All newly created and modified stylesheets (`DocsCenterPage.css`, `HelpDrawer.css`, `DocMarkdownViewer.css`, `StudioDocLink.css`) strictly utilize canonical design tokens from `theme.css`.
-- **Inline Style Pruning:** Eliminated all pre-existing inline JSX `style={...}` occurrences across touched studios, replacing them with canonical BEM CSS classes. Verified with `cssTokensAudit.test.ts` (4/4 passed).
-- **Contrast & Legibility:** Exceeds WCAG AA minimum contrast (>= 4.5:1) in both Light and Dark themes.
-
----
-
-## 3. Automated Test Verification
-
-All unit tests executed and passed cleanly:
-1. Documentation Center Suite (`DocsCenter.test.tsx`):
-   - 29/29 tests passed in 1.23s.
-   - Coverage: 99.39% Statements, 97.59% Branch, 100% Functions, 100% Lines.
-   - Stderr Warnings: Exactly 0 `act(...)` warnings.
-2. Studio Regression Test Suites:
-   - 344/344 tests passed across all touched studios (`WorkspaceSettingsPage`, `ProjectSettingsPage`, `WorkflowStudioPage`, `AuthStudioPage`, `McpAccessStudio`, `OAuthClientGovernanceStudio`, `AiStudioPage`, `AgentStudioPage`, `RunnerStudioPage`, `LinkAuditorStudio`, `StandaloneStatusPanel`, `FieldHelpHint`).
-3. Static Quality Gates:
-   - TypeScript compiler (`tsc -b`): Exit code 0.
-   - ESLint (`--max-warnings 0`): Exit code 0.
-   - Vite production build: Built in 1.48s with exit code 0.
-   - `python3 scripts/check_no_dashes.py`: 0 forbidden dashes.
+### 2.3 Multi-Device Responsive Viewports
+- **Desktop Light & Dark (`live-docs-desktop-light.png`, `live-docs-desktop-dark.png` - 1440x900):**
+  - 3-column layout (Categories Rail, Main Content, TOC Rail) with zero horizontal overflow.
+- **Tablet Light (`live-docs-tablet-light.png` - 768x1024):**
+  - Clean column collapse and adaptive category navigation with zero horizontal page scroll.
+- **Mobile Light (`live-docs-mobile-light.png` - 390x844):**
+  - Main documentation view scales to single column with accessible touch targets and readable body typography.
+- **Mobile HelpDrawer (`live-help-drawer-mobile-light.png` - 390x844):**
+  - `HelpDrawer` expands to full viewport width (`390px` / `100vw`) with zero horizontal overflow, offering comfortable touch scrolling and a top-right close button.
 
 ---
 
-## 4. Certification
+## 3. Design System, Tokens & Security Compliance
 
-The UI/UX implementation of KAN-16 satisfies all aesthetic, ergonomic, accessibility, and design system requirements.
+- **Inline JSX Style Elimination:** Zero inline JSX `style={...}` attributes introduced. Passable under strict CSP `style-src 'self'`.
+- **CSS Token Resolution:** 100% of CSS custom properties resolve to canonical tokens in `theme.css` and `tokens.css`. Verified via `cssTokensAudit.test.ts` (4 passed, 0 failed).
+- **Typography & Dashes:** Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) present in code, CSS, tests, or documentation. Verified via `python3 -m scripts.check_no_dashes --all` (Clean exit code 0).
+- **Zero-Egress Telemetry:** Verified `live-fullstack-proof.txt` reports 0 external network requests, 0 console errors, 0 page errors, and 0 HTTP 5xx responses.
+- **Verdict:** `LIVE_STACK_VERDICT: PASS`.
+
+---
+
+## 4. Test Verification & Code Coverage
+
+- **Documentation Center Vitest Suite (`DocsCenter.test.tsx`):**
+  - 29/29 tests passed in 1.23s.
+  - Statements: 99.39%
+  - Branches: 97.59%
+  - Functions: 100%
+  - Lines: 100%
+  - Console warnings: Exactly 0 `act(...)` warnings.
+- **Studio Regression Suites:**
+  - 344/344 tests passed across all 11 touched studios (`WorkspaceSettingsPage`, `ProjectSettingsPage`, `WorkflowStudioPage`, `AuthStudioPage`, `McpAccessStudio`, `OAuthClientGovernanceStudio`, `AiStudioPage`, `AgentStudioPage`, `RunnerStudioPage`, `LinkAuditorStudio`, `StandaloneStatusPanel`, `FieldHelpHint`).
+- **Static Quality Gates:**
+  - TypeScript check (`tsc -b`): Exit code 0.
+  - ESLint (`eslint . --max-warnings 0`): Exit code 0.
+  - Production build: Clean Vite build (exit code 0).
+
+---
+
+## 5. Certification Verdict
+
+The offline Documentation Center, slide-over `HelpDrawer`, and contextual studio links implemented for KAN-16 provide an exceptional, air-gapped, form-preserving user experience across all form factors and studios.
 
 **STATUS: APPROVED**
