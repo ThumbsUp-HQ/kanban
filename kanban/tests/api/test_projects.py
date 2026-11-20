@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from kanban.content import ContentNormalizeError
+from kanban.security.permissions import Capability
 from kanban.services.projects import decode_cursor, encode_cursor
 
 if TYPE_CHECKING:
@@ -56,6 +57,7 @@ async def test_case_1_admin_create_seeds_defaults_and_activity(
     assert body["identifier"] == "KAN"
     assert body["name"] == "Platform Core"
     assert body["modules_enabled"] is False
+    assert body["skip_loaded_sequence_numbers"] is False
     assert body["default_module_ids"] == []
     assert body["auto_archive_days"] is None
     assert {"VIEW", "EDIT", "ADMIN"} <= set(body["capabilities"])
@@ -272,11 +274,17 @@ async def test_patch_semantics_and_activity(
 
     changed = await client.patch(
         "/api/v1/projects/PAT",
-        json={"name": "New", "description_markdown": "new body", "auto_archive_days": 30},
+        json={
+            "name": "New",
+            "description_markdown": "new body",
+            "auto_archive_days": 30,
+            "skip_loaded_sequence_numbers": True,
+        },
     )
     assert changed.status_code == 200
     assert changed.json()["name"] == "New"
     assert changed.json()["auto_archive_days"] == 30
+    assert changed.json()["skip_loaded_sequence_numbers"] is True
 
     row = (
         await api_env.seed.execute(
@@ -289,6 +297,7 @@ async def test_patch_semantics_and_activity(
     ).scalar_one()
     changes = row["changes"]
     assert changes["name"] == {"old": "Old", "new": "New"}
+    assert changes["skip_loaded_sequence_numbers"] == {"old": False, "new": True}
     assert set(changes["description_markdown"]) == {"old_sha256", "new_sha256"}
     assert "new body" not in str(row)
 
@@ -437,6 +446,30 @@ async def test_patch_unchanged_description_and_module_toggle(
     assert bad.status_code == 422
     assert bad.json()["code"] == "INVALID_CONTENT"
 
+    def _too_big(_raw: str) -> str:
+        msg = "CONTENT_TOO_LARGE"
+        raise ContentNormalizeError(msg)
+
+    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", _too_big)
+    bad_big = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
+    assert bad_big.status_code == 422
+    assert bad_big.json()["code"] == "DESCRIPTION_TOO_LARGE"
+
+    def _unicode_err(_raw: str) -> str:
+        msg = "utf-8"
+        raise UnicodeEncodeError(msg, "x", 0, 1, "surrogate")
+
+    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", _unicode_err)
+    bad_enc = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
+    assert bad_enc.status_code == 422
+    assert bad_enc.json()["code"] == "INVALID_CONTENT"
+
+    big_doc = "a" * (524288 + 1)
+    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", lambda _x: big_doc)
+    bad_cap = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
+    assert bad_cap.status_code == 422
+    assert bad_cap.json()["code"] == "DESCRIPTION_TOO_LARGE"
+
 
 async def test_project_members_endpoints(
     make_user: Callable[..., Awaitable[SeededUser]],
@@ -459,13 +492,263 @@ async def test_project_members_endpoints(
     assert resp_list.status_code == 200
     assert isinstance(resp_list.json(), list)
 
+    # Nonexistent principal yields 404
+    bad_resp = await client.post(
+        "/api/v1/projects/PMEM/members",
+        json={"principal_id": "00000000-0000-0000-0000-000000000000", "role": "MEMBER"},
+    )
+    assert bad_resp.status_code == 404
+
     # 3. Add member
     resp_add = await client.post(
         "/api/v1/projects/PMEM/members",
         json={"principal_id": str(member.id), "role": "MEMBER"},
     )
     assert resp_add.status_code == 201
+    assert resp_add.json()["role"] == "MEMBER"
+
+    # Update existing member role
+    resp_update = await client.post(
+        "/api/v1/projects/PMEM/members",
+        json={"principal_id": str(member.id), "role": "PROJECT_ADMIN"},
+    )
+    assert resp_update.status_code == 201
+    assert resp_update.json()["role"] == "PROJECT_ADMIN"
 
     # 4. Remove member
     resp_del = await client.delete(f"/api/v1/projects/PMEM/members/{member.id}")
     assert resp_del.status_code == 204
+
+
+async def test_serialize_project_capability_fallbacks(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Caller without explicit role binding falls back through capability checks."""
+    admin1 = await make_user("admin_p1", workspace_role="WORKSPACE_ADMIN")
+    admin2 = await make_user("admin_p2", workspace_role="WORKSPACE_ADMIN")
+    client1 = as_principal(admin1)
+    await client1.post("/api/v1/projects", json={"identifier": "FALL", "name": "Fallback Test"})
+
+    # admin2 has no explicit role_binding, but is workspace admin (Capability.ADMIN)
+    client2 = as_principal(admin2)
+    r1 = await client2.get("/api/v1/projects/FALL")
+    assert r1.status_code == 200
+    assert r1.json()["project_role"] == "PROJECT_ADMIN"
+
+    # EDIT capability fallback
+    async def _caps_edit(*_args: object, **_kwargs: object) -> Capability:
+        return Capability.EDIT | Capability.VIEW
+
+    monkeypatch.setattr("kanban.services.projects.evaluate_capabilities", _caps_edit)
+    r2 = await client2.get("/api/v1/projects/FALL")
+    assert r2.status_code == 200
+    assert r2.json()["project_role"] == "MEMBER"
+
+    # VIEW capability fallback
+    async def _caps_view(*_args: object, **_kwargs: object) -> Capability:
+        return Capability.VIEW
+
+    monkeypatch.setattr("kanban.services.projects.evaluate_capabilities", _caps_view)
+    r3 = await client2.get("/api/v1/projects/FALL")
+    assert r3.status_code == 200
+    assert r3.json()["project_role"] == "VIEWER"
+
+    # None capability fallback
+    async def _caps_none(*_args: object, **_kwargs: object) -> Capability:
+        return Capability.NONE
+
+    monkeypatch.setattr("kanban.services.projects.evaluate_capabilities", _caps_none)
+    r4 = await client2.get("/api/v1/projects/FALL")
+    assert r4.status_code == 200
+    assert r4.json()["project_role"] is None
+
+
+async def test_skip_loaded_sequences_inheritance_and_explicit_override(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify projects inherit default_skip_loaded_sequence_numbers or accept explicit overrides."""
+    admin = await make_user("admin_seq_inherit", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+
+    # 1. Workspace default is False -> Project created without flag inherits False
+    p1 = (
+        await client.post(
+            "/api/v1/projects",
+            json={"identifier": "SEQ1", "name": "Default False Project"},
+        )
+    ).json()
+    assert p1["skip_loaded_sequence_numbers"] is False
+
+    # 2. Explicitly override with True on creation
+    p2 = (
+        await client.post(
+            "/api/v1/projects",
+            json={
+                "identifier": "SEQ2",
+                "name": "Explicit True Project",
+                "skip_loaded_sequence_numbers": True,
+            },
+        )
+    ).json()
+    assert p2["skip_loaded_sequence_numbers"] is True
+
+    # 3. Update workspace setting to True via direct SQL or admin endpoint
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO workspace_settings "
+            "(workspace_id, display_name, default_skip_loaded_sequence_numbers) "
+            "VALUES (:ws, 'Workspace', TRUE) "
+            "ON CONFLICT (workspace_id) DO UPDATE SET default_skip_loaded_sequence_numbers = TRUE"
+        ),
+        {"ws": admin.workspace_id},
+    )
+    await api_env.seed.commit()
+
+    # 4. New project created without flag now inherits True
+    p3 = (
+        await client.post(
+            "/api/v1/projects",
+            json={"identifier": "SEQ3", "name": "Inherit True Project"},
+        )
+    ).json()
+    assert p3["skip_loaded_sequence_numbers"] is True
+
+    # 5. Explicitly override with False even though workspace default is True
+    p4 = (
+        await client.post(
+            "/api/v1/projects",
+            json={
+                "identifier": "SEQ4",
+                "name": "Explicit False Project",
+                "skip_loaded_sequence_numbers": False,
+            },
+        )
+    ).json()
+    assert p4["skip_loaded_sequence_numbers"] is False
+
+
+async def test_skip_loaded_sequences_end_to_end_rest(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify creating issues via REST respects skip_loaded_sequence_numbers and logs audit."""
+    admin = await make_user("admin_seq_e2e", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+
+    # Create project with skip_loaded_sequence_numbers=True
+    resp = await client.post(
+        "/api/v1/projects",
+        json={
+            "identifier": "SAFE",
+            "name": "Safe Sequences E2E",
+            "skip_loaded_sequence_numbers": True,
+        },
+    )
+    assert resp.status_code == 201
+    proj_id = resp.json()["id"]
+
+    # Advance sequence counter to 12
+    await api_env.seed.execute(
+        text("UPDATE projects SET issue_seq_counter = 12 WHERE id = :p"),
+        {"p": proj_id},
+    )
+    await api_env.seed.commit()
+
+    # Create issue via REST: next sequence would be 13, so it must skip 13 and become 14!
+    issue_resp = await client.post(
+        "/api/v1/projects/SAFE/issues",
+        json={"summary": "Should skip 13 to 14"},
+    )
+    assert issue_resp.status_code == 201, issue_resp.text
+    issue_body = issue_resp.json()
+    assert issue_body["key"] == "SAFE-14"
+
+    # Verify SEQUENCE_SKIPPED activity record was emitted
+    skip_events = (
+        (
+            await api_env.seed.execute(
+                text(
+                    "SELECT payload FROM activity_records "
+                    "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
+                ),
+                {"ws": admin.workspace_id},
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(skip_events) >= 1
+    assert any(ev.get("skipped_sequences") == [13] for ev in skip_events)
+
+    # Now disable skip_loaded_sequence_numbers on project via PATCH
+    patch_resp = await client.patch(
+        "/api/v1/projects/SAFE",
+        json={"skip_loaded_sequence_numbers": False},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["skip_loaded_sequence_numbers"] is False
+
+    # Advance sequence counter to 68
+    await api_env.seed.execute(
+        text("UPDATE projects SET issue_seq_counter = 68 WHERE id = :p"),
+        {"p": proj_id},
+    )
+    await api_env.seed.commit()
+
+    # Next issue should NOT skip 69
+    issue69_resp = await client.post(
+        "/api/v1/projects/SAFE/issues",
+        json={"summary": "Should NOT skip 69"},
+    )
+    assert issue69_resp.status_code == 201
+    assert issue69_resp.json()["key"] == "SAFE-69"
+
+    # Invalid content with lone surrogates
+    surrogate_body = (
+        b'{"identifier": "SURR", "name": "Surrogate Test", '
+        b'"description_markdown": "Bad \xed\xa0\x80 content"}'
+    )
+    bad_content = await client.post(
+        "/api/v1/projects",
+        content=surrogate_body,
+        headers={"Content-Type": "application/json"},
+    )
+    assert bad_content.status_code == 422
+    assert bad_content.json()["code"] == "INVALID_UTF8_SURROGATE"
+
+    # Non-admin member viewing project with MEMBER and VIEWER roles
+    member_user = await make_user("mem_view_user", workspace_role="WORKSPACE_MEMBER")
+    mem_client = as_principal(member_user)
+
+    # 1. Project with role binding as VIEWER
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
+            "VALUES (:ws, :pid, CAST('VIEWER' AS rbac_role), 'project', :proj)"
+        ),
+        {"ws": admin.workspace_id, "pid": member_user.id, "proj": proj_id},
+    )
+    await api_env.seed.commit()
+
+    v_res = await mem_client.get("/api/v1/projects/SAFE")
+    assert v_res.status_code == 200
+    assert v_res.json()["project_role"] == "VIEWER"
+
+    # 2. Update role binding to MEMBER
+    await api_env.seed.execute(
+        text(
+            "UPDATE role_bindings SET role = CAST('MEMBER' AS rbac_role) "
+            "WHERE project_id = :proj AND principal_id = :pid"
+        ),
+        {"proj": proj_id, "pid": member_user.id},
+    )
+    await api_env.seed.commit()
+
+    m_res = await mem_client.get("/api/v1/projects/SAFE")
+    assert m_res.status_code == 200
+    assert m_res.json()["project_role"] == "MEMBER"

@@ -43,6 +43,7 @@ class WorkspaceSettingsResponse(BaseModel):
     trash_retention_days: int
     mcp_key_max_ttl_days: int
     air_gap_mode: bool
+    default_skip_loaded_sequence_numbers: bool = False
     updated_at: datetime
 
 
@@ -60,6 +61,7 @@ class WorkspaceSettingsUpdate(BaseModel):
     trash_retention_days: int | None = Field(default=None, ge=7, le=365)
     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
     air_gap_mode: bool | None = None
+    default_skip_loaded_sequence_numbers: bool | None = None
 
 
 async def require_workspace_or_server_admin(
@@ -119,6 +121,7 @@ async def _get_or_create_settings(
         trash_retention_days=trash_days,
         mcp_key_max_ttl_days=90,
         air_gap_mode=False,
+        default_skip_loaded_sequence_numbers=False,
     )
     session.add(settings)
     await session.flush()
@@ -150,6 +153,7 @@ async def get_workspace_settings(
         trash_retention_days=settings.trash_retention_days,
         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
         air_gap_mode=settings.air_gap_mode,
+        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
         updated_at=settings.updated_at,
     )
 
@@ -246,6 +250,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         "trash_retention_days": settings.trash_retention_days,
         "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
         "air_gap_mode": settings.air_gap_mode,
+        "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
     }
 
     diff: dict[str, Any] = {}
@@ -332,6 +337,11 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         diff["air_gap_mode"] = body.air_gap_mode
         settings.air_gap_mode = bool(body.air_gap_mode)
 
+    skip_seq = body.default_skip_loaded_sequence_numbers
+    if skip_seq is not None and skip_seq != settings.default_skip_loaded_sequence_numbers:
+        diff["default_skip_loaded_sequence_numbers"] = skip_seq
+        settings.default_skip_loaded_sequence_numbers = skip_seq
+
     if diff:
         await session.flush()
         await session.refresh(settings)
@@ -346,6 +356,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             "trash_retention_days": settings.trash_retention_days,
             "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
             "air_gap_mode": settings.air_gap_mode,
+            "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
         }
 
         await record_activity(
@@ -401,5 +412,6 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         trash_retention_days=settings.trash_retention_days,
         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
         air_gap_mode=settings.air_gap_mode,
+        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
         updated_at=settings.updated_at,
     )

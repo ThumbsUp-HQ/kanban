@@ -36,6 +36,13 @@ class ProjectCreate(BaseModel):
     modules_enabled: bool = Field(
         default=False, description="Whether sub-project modules feature is enabled"
     )
+    skip_loaded_sequence_numbers: bool | None = Field(
+        default=None,
+        description=(
+            "Whether to skip culturally loaded sequence numbers "
+            "(defaults to workspace setting if omitted)"
+        ),
+    )
     auto_archive_days: AutoArchiveDays | None = Field(
         default=None, description="Number of days after completion before auto-archiving issues"
     )
@@ -58,6 +65,9 @@ class ProjectPatch(BaseModel):
     )
     modules_enabled: bool | None = Field(
         default=None, description="Updated modules feature enablement toggle"
+    )
+    skip_loaded_sequence_numbers: bool | None = Field(
+        default=None, description="Updated skip loaded sequence numbers toggle"
     )
     auto_archive_days: AutoArchiveDays | None = Field(
         default=None, description="Updated auto-archive retention threshold in days"
@@ -94,6 +104,9 @@ class ProjectResponse(BaseModel):
     name: str = Field(description="Project human-readable display name")
     description_markdown: str = Field(description="Project description in canonical Markdown")
     modules_enabled: bool = Field(description="Whether the modules feature is enabled")
+    skip_loaded_sequence_numbers: bool = Field(
+        description="Whether culturally loaded sequence numbers are skipped"
+    )
     default_module_ids: list[uuid.UUID] = Field(
         description="Module UUIDs assigned by default to newly created issues"
     )

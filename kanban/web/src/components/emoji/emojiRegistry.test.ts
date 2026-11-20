@@ -76,4 +76,21 @@ describe('emojiRegistry', () => {
       'Converted pasted HTML to clean Markdown - Cmd+Z to paste plain text',
     );
   });
+
+  it('provides frozen agentSafeNumbering entry in EXTENDED_EMOJI_REGISTRY with correct metadata', () => {
+    const entry = EXTENDED_EMOJI_REGISTRY.agentSafeNumbering;
+    expect(entry).toBeDefined();
+    if (!entry) {
+      throw new Error('agentSafeNumbering entry missing');
+    }
+    expect(entry.glyph).toBe('🔢');
+    expect(entry.domain).toBe('Agent-Safe Sequence Numbering');
+    expect(entry.ariaLabel).toBe('Agent-safe sequence numbering');
+    expect(entry.defaultHint).toBe(
+      'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)',
+    );
+    expect(Object.isFrozen(entry)).toBe(true);
+    // Strict invariant: EMOJI_REGISTRY remains exactly 21 keys
+    expect(Object.keys(EMOJI_REGISTRY)).toHaveLength(21);
+  });
 });

@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Final
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 
-from database.models import Module, Project, ProjectModuleDefault
+from database.models import Module, Project, ProjectModuleDefault, WorkspaceSettings
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.projects import (
     ProjectList,
@@ -170,6 +170,7 @@ async def serialize_project(
         name=project.name,
         description_markdown=project.description_markdown,
         modules_enabled=project.modules_enabled,
+        skip_loaded_sequence_numbers=project.skip_loaded_sequence_numbers,
         default_module_ids=await _default_module_ids(session, project.id),
         auto_archive_days=project.auto_archive_days,
         access_manifest=manifest,
@@ -203,6 +204,14 @@ async def create_project(
     """Create a project, seeded defaults, creator ADMIN binding and PROJECT_CREATED activity."""
     await _require_project_creator(session, caller)
     description = _normalize_description(body.description_markdown)
+    skip_seq = body.skip_loaded_sequence_numbers
+    if skip_seq is None:
+        ws_settings_stmt = select(WorkspaceSettings.default_skip_loaded_sequence_numbers).where(
+            WorkspaceSettings.workspace_id == caller.workspace_id
+        )
+        ws_skip = (await session.execute(ws_settings_stmt)).scalar_one_or_none()
+        skip_seq = bool(ws_skip) if ws_skip is not None else False
+
     project_id: uuid.UUID
     try:
         async with session.begin_nested():
@@ -229,6 +238,7 @@ async def create_project(
                     name=body.name,
                     description_markdown=description,
                     modules_enabled=body.modules_enabled,
+                    skip_loaded_sequence_numbers=skip_seq,
                     auto_archive_days=body.auto_archive_days,
                 )
             )
@@ -283,6 +293,17 @@ async def list_projects(
     )
 
 
+async def _ensure_modules_can_disable(session: AsyncSession, project_id: uuid.UUID) -> None:
+    """Verify that no active modules belong to the project before disabling."""
+    module_count = (
+        await session.execute(
+            select(func.count()).select_from(Module).where(Module.project_id == project_id)
+        )
+    ).scalar_one()
+    if module_count > 0:
+        raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
+
+
 async def update_project(
     session: AsyncSession,
     caller: PrincipalContext,
@@ -317,15 +338,20 @@ async def update_project(
         and body.modules_enabled != project.modules_enabled
     ):
         if not body.modules_enabled:
-            module_count = (
-                await session.execute(
-                    select(func.count()).select_from(Module).where(Module.project_id == project.id)
-                )
-            ).scalar_one()
-            if module_count > 0:
-                raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
+            await _ensure_modules_can_disable(session, project.id)
         changes["modules_enabled"] = {"old": project.modules_enabled, "new": body.modules_enabled}
         project.modules_enabled = body.modules_enabled
+
+    if (
+        "skip_loaded_sequence_numbers" in fields
+        and body.skip_loaded_sequence_numbers is not None
+        and body.skip_loaded_sequence_numbers != project.skip_loaded_sequence_numbers
+    ):
+        changes["skip_loaded_sequence_numbers"] = {
+            "old": project.skip_loaded_sequence_numbers,
+            "new": body.skip_loaded_sequence_numbers,
+        }
+        project.skip_loaded_sequence_numbers = body.skip_loaded_sequence_numbers
 
     if "auto_archive_days" in fields and body.auto_archive_days != project.auto_archive_days:
         changes["auto_archive_days"] = {

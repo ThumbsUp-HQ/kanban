@@ -98,6 +98,10 @@ describe('CreateProjectModal & useSessionGuard', () => {
     fireEvent.change(idInput, { target: { value: 'secops' } });
     expect((idInput as HTMLInputElement).value).toBe('SECOPS');
 
+    // Name change when identifier is touched leaves manual identifier untouched
+    fireEvent.change(nameInput, { target: { value: 'Security Operations Updated' } });
+    expect((idInput as HTMLInputElement).value).toBe('SECOPS');
+
     fireEvent.change(descInput, { target: { value: 'Hardened project' } });
 
     fireEvent.click(screen.getByTestId('create-project-submit'));
@@ -166,6 +170,10 @@ describe('CreateProjectModal & useSessionGuard', () => {
         'Project identifier already exists',
       );
     });
+
+    // Non-Escape key does not close
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(onClose).not.toHaveBeenCalled();
 
     // Close on Escape and scrim click
     fireEvent.keyDown(window, { key: 'Escape' });
@@ -310,5 +318,161 @@ describe('CreateProjectModal & useSessionGuard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('guard-status').textContent).toBe('authenticated');
     });
+  });
+
+  it('renders skip culturally loaded sequence numbers checkbox and includes it in POST payload', async () => {
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    let sentPayload: Record<string, unknown> | null = null;
+
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              authenticated: true,
+              csrf_token: 'csrf-tok-456',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/api/v1/projects') && init?.method === 'POST') {
+        sentPayload = typeof init.body === 'string'
+          ? (JSON.parse(init.body) as Record<string, unknown>)
+          : null;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'proj-safe-seq',
+              identifier: 'SAFE',
+              name: 'Safe Sequences Project',
+              description_markdown: 'No loaded numbers',
+              modules_enabled: true,
+              skip_loaded_sequence_numbers: true,
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <MemoryRouter>
+        <CreateProjectModal
+          isOpen={true}
+          onClose={onClose}
+          onCreated={onCreated}
+        />
+      </MemoryRouter>,
+    );
+
+    const nameInput = screen.getByLabelText('Project Name');
+    fireEvent.change(nameInput, { target: { value: 'Safe Sequences Project' } });
+    const idInput = screen.getByLabelText('Identifier (Key)');
+    fireEvent.change(idInput, { target: { value: 'SAFE' } });
+
+    const skipCheckbox = screen.getByTestId<HTMLInputElement>('create-project-skip-loaded-seq');
+    expect(skipCheckbox).toBeDefined();
+    expect(skipCheckbox.checked).toBe(false);
+
+    // Toggle checkbox on
+    fireEvent.click(skipCheckbox);
+    expect(skipCheckbox.checked).toBe(true);
+
+    const modulesCheckbox = screen.getByLabelText<HTMLInputElement>('Enable project modules');
+    expect(modulesCheckbox.checked).toBe(true);
+    fireEvent.click(modulesCheckbox);
+    expect(modulesCheckbox.checked).toBe(false);
+
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+
+    await waitFor(() => {
+      expect(onCreated).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identifier: 'SAFE',
+          name: 'Safe Sequences Project',
+          skip_loaded_sequence_numbers: true,
+        }),
+      );
+    });
+
+    expect(sentPayload).toEqual({
+      name: 'Safe Sequences Project',
+      identifier: 'SAFE',
+      description_markdown: '',
+      modules_enabled: false,
+      skip_loaded_sequence_numbers: true,
+    });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('handles error response variants, modal buttons, and outside router context', async () => {
+    const onClose = vi.fn();
+    let errorMode: 'nested' | 'generic' | 'reject' = 'nested';
+
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'csrf-1' }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/projects')) {
+        if (errorMode === 'nested') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ detail: { detail: 'Nested detail error' } }),
+              { status: 422, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        if (errorMode === 'generic') {
+          return Promise.resolve(new Response('Server error', { status: 500 }));
+        }
+        return Promise.reject(new Error('network failure'));
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    const { unmount } = render(
+      <CreateProjectModal isOpen={true} onClose={onClose} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Project Name'), { target: { value: 'Err Proj' } });
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-project-error').textContent).toBe('Nested detail error');
+    });
+
+    // 2. Generic HTTP status error
+    errorMode = 'generic';
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+    await waitFor(() => {
+      expect(screen.getByTestId('create-project-error').textContent).toBe(
+        'Failed to create project (HTTP 500)',
+      );
+    });
+
+    // 3. Network error throw
+    errorMode = 'reject';
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+    await waitFor(() => {
+      expect(screen.getByTestId('create-project-error').textContent).toBe('network failure');
+    });
+
+    // 4. Click inside modal dialog does not trigger close
+    fireEvent.click(screen.getByTestId('create-project-modal'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    // 5. Close button '✕' triggers close
+    fireEvent.click(screen.getByLabelText('Close create project modal'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    // 6. Suggest project identifier branch where name has single word
+    expect(suggestProjectIdentifier('Testing')).toBe('TESTI');
   });
 });

@@ -1,0 +1,1047 @@
+diff --git a/kanban/api/v1/admin/workspace_settings.py b/kanban/api/v1/admin/workspace_settings.py
+index 7738886e..73279ed9 100644
+--- a/kanban/api/v1/admin/workspace_settings.py
++++ b/kanban/api/v1/admin/workspace_settings.py
+@@ -43,6 +43,7 @@ class WorkspaceSettingsResponse(BaseModel):
+     trash_retention_days: int
+     mcp_key_max_ttl_days: int
+     air_gap_mode: bool
++    default_skip_loaded_sequence_numbers: bool = False
+     updated_at: datetime
+ 
+ 
+@@ -60,6 +61,7 @@ class WorkspaceSettingsUpdate(BaseModel):
+     trash_retention_days: int | None = Field(default=None, ge=7, le=365)
+     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
+     air_gap_mode: bool | None = None
++    default_skip_loaded_sequence_numbers: bool | None = None
+ 
+ 
+ async def require_workspace_or_server_admin(
+@@ -119,6 +121,7 @@ async def _get_or_create_settings(
+         trash_retention_days=trash_days,
+         mcp_key_max_ttl_days=90,
+         air_gap_mode=False,
++        default_skip_loaded_sequence_numbers=False,
+     )
+     session.add(settings)
+     await session.flush()
+@@ -150,6 +153,7 @@ async def get_workspace_settings(
+         trash_retention_days=settings.trash_retention_days,
+         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+         air_gap_mode=settings.air_gap_mode,
++        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+         updated_at=settings.updated_at,
+     )
+ 
+@@ -246,6 +250,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+         "trash_retention_days": settings.trash_retention_days,
+         "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
+         "air_gap_mode": settings.air_gap_mode,
++        "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+     }
+ 
+     diff: dict[str, Any] = {}
+@@ -332,6 +337,11 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+         diff["air_gap_mode"] = body.air_gap_mode
+         settings.air_gap_mode = bool(body.air_gap_mode)
+ 
++    skip_seq = body.default_skip_loaded_sequence_numbers
++    if skip_seq is not None and skip_seq != settings.default_skip_loaded_sequence_numbers:
++        diff["default_skip_loaded_sequence_numbers"] = skip_seq
++        settings.default_skip_loaded_sequence_numbers = skip_seq
++
+     if diff:
+         await session.flush()
+         await session.refresh(settings)
+@@ -346,6 +356,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+             "trash_retention_days": settings.trash_retention_days,
+             "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
+             "air_gap_mode": settings.air_gap_mode,
++            "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+         }
+ 
+         await record_activity(
+@@ -401,5 +412,6 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+         trash_retention_days=settings.trash_retention_days,
+         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+         air_gap_mode=settings.air_gap_mode,
++        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+         updated_at=settings.updated_at,
+     )
+diff --git a/kanban/api/v1/schemas/projects.py b/kanban/api/v1/schemas/projects.py
+index 6fdd87ab..07a8cc9c 100644
+--- a/kanban/api/v1/schemas/projects.py
++++ b/kanban/api/v1/schemas/projects.py
+@@ -36,6 +36,13 @@ class ProjectCreate(BaseModel):
+     modules_enabled: bool = Field(
+         default=False, description="Whether sub-project modules feature is enabled"
+     )
++    skip_loaded_sequence_numbers: bool | None = Field(
++        default=None,
++        description=(
++            "Whether to skip culturally loaded sequence numbers "
++            "(defaults to workspace setting if omitted)"
++        ),
++    )
+     auto_archive_days: AutoArchiveDays | None = Field(
+         default=None, description="Number of days after completion before auto-archiving issues"
+     )
+@@ -59,6 +66,9 @@ class ProjectPatch(BaseModel):
+     modules_enabled: bool | None = Field(
+         default=None, description="Updated modules feature enablement toggle"
+     )
++    skip_loaded_sequence_numbers: bool | None = Field(
++        default=None, description="Updated skip loaded sequence numbers toggle"
++    )
+     auto_archive_days: AutoArchiveDays | None = Field(
+         default=None, description="Updated auto-archive retention threshold in days"
+     )
+@@ -94,6 +104,9 @@ class ProjectResponse(BaseModel):
+     name: str = Field(description="Project human-readable display name")
+     description_markdown: str = Field(description="Project description in canonical Markdown")
+     modules_enabled: bool = Field(description="Whether the modules feature is enabled")
++    skip_loaded_sequence_numbers: bool = Field(
++        description="Whether culturally loaded sequence numbers are skipped"
++    )
+     default_module_ids: list[uuid.UUID] = Field(
+         description="Module UUIDs assigned by default to newly created issues"
+     )
+diff --git a/kanban/services/projects.py b/kanban/services/projects.py
+index 4903ca9f..22ce9ed5 100644
+--- a/kanban/services/projects.py
++++ b/kanban/services/projects.py
+@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Final
+ from sqlalchemy import delete, func, select, text
+ from sqlalchemy.exc import IntegrityError
+ 
+-from database.models import Module, Project, ProjectModuleDefault
++from database.models import Module, Project, ProjectModuleDefault, WorkspaceSettings
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.api.v1.schemas.projects import (
+     ProjectList,
+@@ -170,6 +170,7 @@ async def serialize_project(
+         name=project.name,
+         description_markdown=project.description_markdown,
+         modules_enabled=project.modules_enabled,
++        skip_loaded_sequence_numbers=project.skip_loaded_sequence_numbers,
+         default_module_ids=await _default_module_ids(session, project.id),
+         auto_archive_days=project.auto_archive_days,
+         access_manifest=manifest,
+@@ -203,6 +204,14 @@ async def create_project(
+     """Create a project, seeded defaults, creator ADMIN binding and PROJECT_CREATED activity."""
+     await _require_project_creator(session, caller)
+     description = _normalize_description(body.description_markdown)
++    skip_seq = body.skip_loaded_sequence_numbers
++    if skip_seq is None:
++        ws_settings_stmt = select(WorkspaceSettings.default_skip_loaded_sequence_numbers).where(
++            WorkspaceSettings.workspace_id == caller.workspace_id
++        )
++        ws_skip = (await session.execute(ws_settings_stmt)).scalar_one_or_none()
++        skip_seq = bool(ws_skip) if ws_skip is not None else False
++
+     project_id: uuid.UUID
+     try:
+         async with session.begin_nested():
+@@ -229,6 +238,7 @@ async def create_project(
+                     name=body.name,
+                     description_markdown=description,
+                     modules_enabled=body.modules_enabled,
++                    skip_loaded_sequence_numbers=skip_seq,
+                     auto_archive_days=body.auto_archive_days,
+                 )
+             )
+@@ -283,6 +293,17 @@ async def list_projects(
+     )
+ 
+ 
++async def _ensure_modules_can_disable(session: AsyncSession, project_id: uuid.UUID) -> None:
++    """Verify that no active modules belong to the project before disabling."""
++    module_count = (
++        await session.execute(
++            select(func.count()).select_from(Module).where(Module.project_id == project_id)
++        )
++    ).scalar_one()
++    if module_count > 0:
++        raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
++
++
+ async def update_project(
+     session: AsyncSession,
+     caller: PrincipalContext,
+@@ -317,16 +338,21 @@ async def update_project(
+         and body.modules_enabled != project.modules_enabled
+     ):
+         if not body.modules_enabled:
+-            module_count = (
+-                await session.execute(
+-                    select(func.count()).select_from(Module).where(Module.project_id == project.id)
+-                )
+-            ).scalar_one()
+-            if module_count > 0:
+-                raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
++            await _ensure_modules_can_disable(session, project.id)
+         changes["modules_enabled"] = {"old": project.modules_enabled, "new": body.modules_enabled}
+         project.modules_enabled = body.modules_enabled
+ 
++    if (
++        "skip_loaded_sequence_numbers" in fields
++        and body.skip_loaded_sequence_numbers is not None
++        and body.skip_loaded_sequence_numbers != project.skip_loaded_sequence_numbers
++    ):
++        changes["skip_loaded_sequence_numbers"] = {
++            "old": project.skip_loaded_sequence_numbers,
++            "new": body.skip_loaded_sequence_numbers,
++        }
++        project.skip_loaded_sequence_numbers = body.skip_loaded_sequence_numbers
++
+     if "auto_archive_days" in fields and body.auto_archive_days != project.auto_archive_days:
+         changes["auto_archive_days"] = {
+             "old": project.auto_archive_days,
+diff --git a/kanban/tests/api/test_projects.py b/kanban/tests/api/test_projects.py
+index c1b6c671..26fe0e17 100644
+--- a/kanban/tests/api/test_projects.py
++++ b/kanban/tests/api/test_projects.py
+@@ -9,6 +9,7 @@ import pytest
+ from sqlalchemy import text
+ 
+ from kanban.content import ContentNormalizeError
++from kanban.security.permissions import Capability
+ from kanban.services.projects import decode_cursor, encode_cursor
+ 
+ if TYPE_CHECKING:
+@@ -56,6 +57,7 @@ async def test_case_1_admin_create_seeds_defaults_and_activity(
+     assert body["identifier"] == "KAN"
+     assert body["name"] == "Platform Core"
+     assert body["modules_enabled"] is False
++    assert body["skip_loaded_sequence_numbers"] is False
+     assert body["default_module_ids"] == []
+     assert body["auto_archive_days"] is None
+     assert {"VIEW", "EDIT", "ADMIN"} <= set(body["capabilities"])
+@@ -272,11 +274,17 @@ async def test_patch_semantics_and_activity(
+ 
+     changed = await client.patch(
+         "/api/v1/projects/PAT",
+-        json={"name": "New", "description_markdown": "new body", "auto_archive_days": 30},
++        json={
++            "name": "New",
++            "description_markdown": "new body",
++            "auto_archive_days": 30,
++            "skip_loaded_sequence_numbers": True,
++        },
+     )
+     assert changed.status_code == 200
+     assert changed.json()["name"] == "New"
+     assert changed.json()["auto_archive_days"] == 30
++    assert changed.json()["skip_loaded_sequence_numbers"] is True
+ 
+     row = (
+         await api_env.seed.execute(
+@@ -289,6 +297,7 @@ async def test_patch_semantics_and_activity(
+     ).scalar_one()
+     changes = row["changes"]
+     assert changes["name"] == {"old": "Old", "new": "New"}
++    assert changes["skip_loaded_sequence_numbers"] == {"old": False, "new": True}
+     assert set(changes["description_markdown"]) == {"old_sha256", "new_sha256"}
+     assert "new body" not in str(row)
+ 
+@@ -437,6 +446,30 @@ async def test_patch_unchanged_description_and_module_toggle(
+     assert bad.status_code == 422
+     assert bad.json()["code"] == "INVALID_CONTENT"
+ 
++    def _too_big(_raw: str) -> str:
++        msg = "CONTENT_TOO_LARGE"
++        raise ContentNormalizeError(msg)
++
++    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", _too_big)
++    bad_big = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
++    assert bad_big.status_code == 422
++    assert bad_big.json()["code"] == "DESCRIPTION_TOO_LARGE"
++
++    def _unicode_err(_raw: str) -> str:
++        msg = "utf-8"
++        raise UnicodeEncodeError(msg, "x", 0, 1, "surrogate")
++
++    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", _unicode_err)
++    bad_enc = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
++    assert bad_enc.status_code == 422
++    assert bad_enc.json()["code"] == "INVALID_CONTENT"
++
++    big_doc = "a" * (524288 + 1)
++    monkeypatch.setattr("kanban.services.projects.normalize_to_markdown", lambda _x: big_doc)
++    bad_cap = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
++    assert bad_cap.status_code == 422
++    assert bad_cap.json()["code"] == "DESCRIPTION_TOO_LARGE"
++
+ 
+ async def test_project_members_endpoints(
+     make_user: Callable[..., Awaitable[SeededUser]],
+@@ -459,13 +492,263 @@ async def test_project_members_endpoints(
+     assert resp_list.status_code == 200
+     assert isinstance(resp_list.json(), list)
+ 
++    # Nonexistent principal yields 404
++    bad_resp = await client.post(
++        "/api/v1/projects/PMEM/members",
++        json={"principal_id": "00000000-0000-0000-0000-000000000000", "role": "MEMBER"},
++    )
++    assert bad_resp.status_code == 404
++
+     # 3. Add member
+     resp_add = await client.post(
+         "/api/v1/projects/PMEM/members",
+         json={"principal_id": str(member.id), "role": "MEMBER"},
+     )
+     assert resp_add.status_code == 201
++    assert resp_add.json()["role"] == "MEMBER"
++
++    # Update existing member role
++    resp_update = await client.post(
++        "/api/v1/projects/PMEM/members",
++        json={"principal_id": str(member.id), "role": "PROJECT_ADMIN"},
++    )
++    assert resp_update.status_code == 201
++    assert resp_update.json()["role"] == "PROJECT_ADMIN"
+ 
+     # 4. Remove member
+     resp_del = await client.delete(f"/api/v1/projects/PMEM/members/{member.id}")
+     assert resp_del.status_code == 204
++
++
++async def test_serialize_project_capability_fallbacks(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Caller without explicit role binding falls back through capability checks."""
++    admin1 = await make_user("admin_p1", workspace_role="WORKSPACE_ADMIN")
++    admin2 = await make_user("admin_p2", workspace_role="WORKSPACE_ADMIN")
++    client1 = as_principal(admin1)
++    await client1.post("/api/v1/projects", json={"identifier": "FALL", "name": "Fallback Test"})
++
++    # admin2 has no explicit role_binding, but is workspace admin (Capability.ADMIN)
++    client2 = as_principal(admin2)
++    r1 = await client2.get("/api/v1/projects/FALL")
++    assert r1.status_code == 200
++    assert r1.json()["project_role"] == "PROJECT_ADMIN"
++
++    # EDIT capability fallback
++    async def _caps_edit(*_args: object, **_kwargs: object) -> Capability:
++        return Capability.EDIT | Capability.VIEW
++
++    monkeypatch.setattr("kanban.services.projects.evaluate_capabilities", _caps_edit)
++    r2 = await client2.get("/api/v1/projects/FALL")
++    assert r2.status_code == 200
++    assert r2.json()["project_role"] == "MEMBER"
++
++    # VIEW capability fallback
++    async def _caps_view(*_args: object, **_kwargs: object) -> Capability:
++        return Capability.VIEW
++
++    monkeypatch.setattr("kanban.services.projects.evaluate_capabilities", _caps_view)
++    r3 = await client2.get("/api/v1/projects/FALL")
++    assert r3.status_code == 200
++    assert r3.json()["project_role"] == "VIEWER"
++
++    # None capability fallback
++    async def _caps_none(*_args: object, **_kwargs: object) -> Capability:
++        return Capability.NONE
++
++    monkeypatch.setattr("kanban.services.projects.evaluate_capabilities", _caps_none)
++    r4 = await client2.get("/api/v1/projects/FALL")
++    assert r4.status_code == 200
++    assert r4.json()["project_role"] is None
++
++
++async def test_skip_loaded_sequences_inheritance_and_explicit_override(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify projects inherit default_skip_loaded_sequence_numbers or accept explicit overrides."""
++    admin = await make_user("admin_seq_inherit", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++
++    # 1. Workspace default is False -> Project created without flag inherits False
++    p1 = (
++        await client.post(
++            "/api/v1/projects",
++            json={"identifier": "SEQ1", "name": "Default False Project"},
++        )
++    ).json()
++    assert p1["skip_loaded_sequence_numbers"] is False
++
++    # 2. Explicitly override with True on creation
++    p2 = (
++        await client.post(
++            "/api/v1/projects",
++            json={
++                "identifier": "SEQ2",
++                "name": "Explicit True Project",
++                "skip_loaded_sequence_numbers": True,
++            },
++        )
++    ).json()
++    assert p2["skip_loaded_sequence_numbers"] is True
++
++    # 3. Update workspace setting to True via direct SQL or admin endpoint
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO workspace_settings "
++            "(workspace_id, display_name, default_skip_loaded_sequence_numbers) "
++            "VALUES (:ws, 'Workspace', TRUE) "
++            "ON CONFLICT (workspace_id) DO UPDATE SET default_skip_loaded_sequence_numbers = TRUE"
++        ),
++        {"ws": admin.workspace_id},
++    )
++    await api_env.seed.commit()
++
++    # 4. New project created without flag now inherits True
++    p3 = (
++        await client.post(
++            "/api/v1/projects",
++            json={"identifier": "SEQ3", "name": "Inherit True Project"},
++        )
++    ).json()
++    assert p3["skip_loaded_sequence_numbers"] is True
++
++    # 5. Explicitly override with False even though workspace default is True
++    p4 = (
++        await client.post(
++            "/api/v1/projects",
++            json={
++                "identifier": "SEQ4",
++                "name": "Explicit False Project",
++                "skip_loaded_sequence_numbers": False,
++            },
++        )
++    ).json()
++    assert p4["skip_loaded_sequence_numbers"] is False
++
++
++async def test_skip_loaded_sequences_end_to_end_rest(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify creating issues via REST respects skip_loaded_sequence_numbers and logs audit."""
++    admin = await make_user("admin_seq_e2e", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++
++    # Create project with skip_loaded_sequence_numbers=True
++    resp = await client.post(
++        "/api/v1/projects",
++        json={
++            "identifier": "SAFE",
++            "name": "Safe Sequences E2E",
++            "skip_loaded_sequence_numbers": True,
++        },
++    )
++    assert resp.status_code == 201
++    proj_id = resp.json()["id"]
++
++    # Advance sequence counter to 12
++    await api_env.seed.execute(
++        text("UPDATE projects SET issue_seq_counter = 12 WHERE id = :p"),
++        {"p": proj_id},
++    )
++    await api_env.seed.commit()
++
++    # Create issue via REST: next sequence would be 13, so it must skip 13 and become 14!
++    issue_resp = await client.post(
++        "/api/v1/projects/SAFE/issues",
++        json={"summary": "Should skip 13 to 14"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_body = issue_resp.json()
++    assert issue_body["key"] == "SAFE-14"
++
++    # Verify SEQUENCE_SKIPPED activity record was emitted
++    skip_events = (
++        (
++            await api_env.seed.execute(
++                text(
++                    "SELECT payload FROM activity_records "
++                    "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
++                ),
++                {"ws": admin.workspace_id},
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(skip_events) >= 1
++    assert any(ev.get("skipped_sequences") == [13] for ev in skip_events)
++
++    # Now disable skip_loaded_sequence_numbers on project via PATCH
++    patch_resp = await client.patch(
++        "/api/v1/projects/SAFE",
++        json={"skip_loaded_sequence_numbers": False},
++    )
++    assert patch_resp.status_code == 200
++    assert patch_resp.json()["skip_loaded_sequence_numbers"] is False
++
++    # Advance sequence counter to 68
++    await api_env.seed.execute(
++        text("UPDATE projects SET issue_seq_counter = 68 WHERE id = :p"),
++        {"p": proj_id},
++    )
++    await api_env.seed.commit()
++
++    # Next issue should NOT skip 69
++    issue69_resp = await client.post(
++        "/api/v1/projects/SAFE/issues",
++        json={"summary": "Should NOT skip 69"},
++    )
++    assert issue69_resp.status_code == 201
++    assert issue69_resp.json()["key"] == "SAFE-69"
++
++    # Invalid content with lone surrogates
++    surrogate_body = (
++        b'{"identifier": "SURR", "name": "Surrogate Test", '
++        b'"description_markdown": "Bad \xed\xa0\x80 content"}'
++    )
++    bad_content = await client.post(
++        "/api/v1/projects",
++        content=surrogate_body,
++        headers={"Content-Type": "application/json"},
++    )
++    assert bad_content.status_code == 422
++    assert bad_content.json()["code"] == "INVALID_UTF8_SURROGATE"
++
++    # Non-admin member viewing project with MEMBER and VIEWER roles
++    member_user = await make_user("mem_view_user", workspace_role="WORKSPACE_MEMBER")
++    mem_client = as_principal(member_user)
++
++    # 1. Project with role binding as VIEWER
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:ws, :pid, CAST('VIEWER' AS rbac_role), 'project', :proj)"
++        ),
++        {"ws": admin.workspace_id, "pid": member_user.id, "proj": proj_id},
++    )
++    await api_env.seed.commit()
++
++    v_res = await mem_client.get("/api/v1/projects/SAFE")
++    assert v_res.status_code == 200
++    assert v_res.json()["project_role"] == "VIEWER"
++
++    # 2. Update role binding to MEMBER
++    await api_env.seed.execute(
++        text(
++            "UPDATE role_bindings SET role = CAST('MEMBER' AS rbac_role) "
++            "WHERE project_id = :proj AND principal_id = :pid"
++        ),
++        {"proj": proj_id, "pid": member_user.id},
++    )
++    await api_env.seed.commit()
++
++    m_res = await mem_client.get("/api/v1/projects/SAFE")
++    assert m_res.status_code == 200
++    assert m_res.json()["project_role"] == "MEMBER"
+diff --git a/kanban/tests/api/test_workspace_settings.py b/kanban/tests/api/test_workspace_settings.py
+index dc84f446..82853516 100644
+--- a/kanban/tests/api/test_workspace_settings.py
++++ b/kanban/tests/api/test_workspace_settings.py
+@@ -108,6 +108,7 @@ async def test_workspace_settings_get_default(
+     assert data["trash_retention_days"] == 30
+     assert data["mcp_key_max_ttl_days"] == 90
+     assert data["air_gap_mode"] is False
++    assert data["default_skip_loaded_sequence_numbers"] is False
+     assert "updated_at" in data
+ 
+ 
+@@ -127,6 +128,7 @@ async def test_workspace_settings_patch_and_activity(
+         "session_absolute_timeout_min": 1440,
+         "mcp_key_max_ttl_days": 60,
+         "default_project_visibility": "workspace",
++        "default_skip_loaded_sequence_numbers": True,
+     }
+     resp = await api_env.client.patch(
+         "/api/v1/admin/workspace-settings",
+@@ -141,6 +143,7 @@ async def test_workspace_settings_patch_and_activity(
+     assert data["session_absolute_timeout_min"] == 1440
+     assert data["mcp_key_max_ttl_days"] == 60
+     assert data["default_project_visibility"] == "workspace"
++    assert data["default_skip_loaded_sequence_numbers"] is True
+ 
+     # Verify activity record was appended
+     act_stmt = text(
+@@ -153,6 +156,9 @@ async def test_workspace_settings_patch_and_activity(
+     payload = act_row[1]
+     assert "diff" in payload
+     assert payload["diff"]["trash_retention_days"] == 45
++    assert payload["diff"]["default_skip_loaded_sequence_numbers"] is True
++    assert payload["before"]["default_skip_loaded_sequence_numbers"] is False
++    assert payload["after"]["default_skip_loaded_sequence_numbers"] is True
+ 
+     # Verify workspaces.trash_retention_days is synchronized
+     ws_row = (
+@@ -596,3 +602,19 @@ async def test_workspace_settings_name_and_slug_updates(
+         json={"slug": "-invalid_slug"},
+     )
+     assert r3.status_code == 422
++
++    # 4. Slug conflict with existing workspace -> 409
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO workspaces (id, name, slug) "
++            "VALUES (uuidv7(), 'Taken Workspace', 'taken-slug')"
++        ),
++    )
++    await api_env.seed.commit()
++
++    r4 = await api_env.client.patch(
++        "/api/v1/admin/workspace-settings",
++        json={"slug": "taken-slug"},
++    )
++    assert r4.status_code == 409
++    assert r4.json()["code"] == "WORKSPACE_SLUG_CONFLICT"
+diff --git a/kanban/web/src/components/emoji/emojiRegistry.test.ts b/kanban/web/src/components/emoji/emojiRegistry.test.ts
+index 4a00b7fa..1ab2105b 100644
+--- a/kanban/web/src/components/emoji/emojiRegistry.test.ts
++++ b/kanban/web/src/components/emoji/emojiRegistry.test.ts
+@@ -76,4 +76,21 @@ describe('emojiRegistry', () => {
+       'Converted pasted HTML to clean Markdown - Cmd+Z to paste plain text',
+     );
+   });
++
++  it('provides frozen agentSafeNumbering entry in EXTENDED_EMOJI_REGISTRY with correct metadata', () => {
++    const entry = EXTENDED_EMOJI_REGISTRY.agentSafeNumbering;
++    expect(entry).toBeDefined();
++    if (!entry) {
++      throw new Error('agentSafeNumbering entry missing');
++    }
++    expect(entry.glyph).toBe('🔢');
++    expect(entry.domain).toBe('Agent-Safe Sequence Numbering');
++    expect(entry.ariaLabel).toBe('Agent-safe sequence numbering');
++    expect(entry.defaultHint).toBe(
++      'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)',
++    );
++    expect(Object.isFrozen(entry)).toBe(true);
++    // Strict invariant: EMOJI_REGISTRY remains exactly 21 keys
++    expect(Object.keys(EMOJI_REGISTRY)).toHaveLength(21);
++  });
+ });
+diff --git a/kanban/web/src/components/emoji/emojiRegistry.ts b/kanban/web/src/components/emoji/emojiRegistry.ts
+index eb67d369..04dd8199 100644
+--- a/kanban/web/src/components/emoji/emojiRegistry.ts
++++ b/kanban/web/src/components/emoji/emojiRegistry.ts
+@@ -188,6 +188,13 @@ export const EXTENDED_EMOJI_REGISTRY: Readonly<Record<string, EmojiEntry>> = Obj
+     ariaLabel: 'Proxied external image',
+     defaultHint: 'Proxied anonymously via Kanban Media Shield',
+   }),
++  agentSafeNumbering: Object.freeze({
++    glyph: '🔢',
++    domain: 'Agent-Safe Sequence Numbering',
++    ariaLabel: 'Agent-safe sequence numbering',
++    defaultHint:
++      'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)',
++  }),
+ });
+ 
+-export type ExtendedEmojiKey = EmojiKey | 'externalMedia';
++export type ExtendedEmojiKey = EmojiKey | 'externalMedia' | 'agentSafeNumbering';
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.test.tsx b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+index 720375ca..4b5381f9 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.test.tsx
++++ b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+@@ -98,6 +98,10 @@ describe('CreateProjectModal & useSessionGuard', () => {
+     fireEvent.change(idInput, { target: { value: 'secops' } });
+     expect((idInput as HTMLInputElement).value).toBe('SECOPS');
+ 
++    // Name change when identifier is touched leaves manual identifier untouched
++    fireEvent.change(nameInput, { target: { value: 'Security Operations Updated' } });
++    expect((idInput as HTMLInputElement).value).toBe('SECOPS');
++
+     fireEvent.change(descInput, { target: { value: 'Hardened project' } });
+ 
+     fireEvent.click(screen.getByTestId('create-project-submit'));
+@@ -167,6 +171,10 @@ describe('CreateProjectModal & useSessionGuard', () => {
+       );
+     });
+ 
++    // Non-Escape key does not close
++    fireEvent.keyDown(window, { key: 'Tab' });
++    expect(onClose).not.toHaveBeenCalled();
++
+     // Close on Escape and scrim click
+     fireEvent.keyDown(window, { key: 'Escape' });
+     expect(onClose).toHaveBeenCalledTimes(1);
+@@ -311,4 +319,160 @@ describe('CreateProjectModal & useSessionGuard', () => {
+       expect(screen.getByTestId('guard-status').textContent).toBe('authenticated');
+     });
+   });
++
++  it('renders skip culturally loaded sequence numbers checkbox and includes it in POST payload', async () => {
++    const onClose = vi.fn();
++    const onCreated = vi.fn();
++    let sentPayload: Record<string, unknown> | null = null;
++
++    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              authenticated: true,
++              csrf_token: 'csrf-tok-456',
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      if (url.includes('/api/v1/projects') && init?.method === 'POST') {
++        sentPayload = typeof init.body === 'string'
++          ? (JSON.parse(init.body) as Record<string, unknown>)
++          : null;
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              id: 'proj-safe-seq',
++              identifier: 'SAFE',
++              name: 'Safe Sequences Project',
++              description_markdown: 'No loaded numbers',
++              modules_enabled: true,
++              skip_loaded_sequence_numbers: true,
++            }),
++            { status: 201, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <MemoryRouter>
++        <CreateProjectModal
++          isOpen={true}
++          onClose={onClose}
++          onCreated={onCreated}
++        />
++      </MemoryRouter>,
++    );
++
++    const nameInput = screen.getByLabelText('Project Name');
++    fireEvent.change(nameInput, { target: { value: 'Safe Sequences Project' } });
++    const idInput = screen.getByLabelText('Identifier (Key)');
++    fireEvent.change(idInput, { target: { value: 'SAFE' } });
++
++    const skipCheckbox = screen.getByTestId<HTMLInputElement>('create-project-skip-loaded-seq');
++    expect(skipCheckbox).toBeDefined();
++    expect(skipCheckbox.checked).toBe(false);
++
++    // Toggle checkbox on
++    fireEvent.click(skipCheckbox);
++    expect(skipCheckbox.checked).toBe(true);
++
++    const modulesCheckbox = screen.getByLabelText<HTMLInputElement>('Enable project modules');
++    expect(modulesCheckbox.checked).toBe(true);
++    fireEvent.click(modulesCheckbox);
++    expect(modulesCheckbox.checked).toBe(false);
++
++    fireEvent.click(screen.getByTestId('create-project-submit'));
++
++    await waitFor(() => {
++      expect(onCreated).toHaveBeenCalledWith(
++        expect.objectContaining({
++          identifier: 'SAFE',
++          name: 'Safe Sequences Project',
++          skip_loaded_sequence_numbers: true,
++        }),
++      );
++    });
++
++    expect(sentPayload).toEqual({
++      name: 'Safe Sequences Project',
++      identifier: 'SAFE',
++      description_markdown: '',
++      modules_enabled: false,
++      skip_loaded_sequence_numbers: true,
++    });
++    expect(onClose).toHaveBeenCalled();
++  });
++
++  it('handles error response variants, modal buttons, and outside router context', async () => {
++    const onClose = vi.fn();
++    let errorMode: 'nested' | 'generic' | 'reject' = 'nested';
++
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'csrf-1' }), { status: 200 }));
++      }
++      if (url.includes('/api/v1/projects')) {
++        if (errorMode === 'nested') {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({ detail: { detail: 'Nested detail error' } }),
++              { status: 422, headers: { 'Content-Type': 'application/json' } },
++            ),
++          );
++        }
++        if (errorMode === 'generic') {
++          return Promise.resolve(new Response('Server error', { status: 500 }));
++        }
++        return Promise.reject(new Error('network failure'));
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    const { unmount } = render(
++      <CreateProjectModal isOpen={true} onClose={onClose} />,
++    );
++
++    fireEvent.change(screen.getByLabelText('Project Name'), { target: { value: 'Err Proj' } });
++    fireEvent.click(screen.getByTestId('create-project-submit'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('create-project-error').textContent).toBe('Nested detail error');
++    });
++
++    // 2. Generic HTTP status error
++    errorMode = 'generic';
++    fireEvent.click(screen.getByTestId('create-project-submit'));
++    await waitFor(() => {
++      expect(screen.getByTestId('create-project-error').textContent).toBe(
++        'Failed to create project (HTTP 500)',
++      );
++    });
++
++    // 3. Network error throw
++    errorMode = 'reject';
++    fireEvent.click(screen.getByTestId('create-project-submit'));
++    await waitFor(() => {
++      expect(screen.getByTestId('create-project-error').textContent).toBe('network failure');
++    });
++
++    // 4. Click inside modal dialog does not trigger close
++    fireEvent.click(screen.getByTestId('create-project-modal'));
++    expect(onClose).not.toHaveBeenCalled();
++
++    // 5. Close button '✕' triggers close
++    fireEvent.click(screen.getByLabelText('Close create project modal'));
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    unmount();
++
++    // 6. Suggest project identifier branch where name has single word
++    expect(suggestProjectIdentifier('Testing')).toBe('TESTI');
++  });
+ });
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.tsx b/kanban/web/src/features/projects/CreateProjectModal.tsx
+index 118b808e..2204f37d 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.tsx
++++ b/kanban/web/src/features/projects/CreateProjectModal.tsx
+@@ -9,6 +9,7 @@
+ import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
+ import { useNavigate } from 'react-router';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import './CreateProjectModal.css';
+ 
+ export interface CreatedProject {
+@@ -17,6 +18,7 @@ export interface CreatedProject {
+   readonly name: string;
+   readonly description_markdown?: string;
+   readonly modules_enabled?: boolean;
++  readonly skip_loaded_sequence_numbers?: boolean;
+   readonly is_project_admin?: boolean;
+   readonly capabilities?: readonly string[];
+ }
+@@ -73,6 +75,7 @@ export function CreateProjectModal({
+   const [identifierTouched, setIdentifierTouched] = useState(false);
+   const [description, setDescription] = useState('');
+   const [modulesEnabled, setModulesEnabled] = useState(true);
++  const [skipLoadedSeq, setSkipLoadedSeq] = useState(false);
+   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+@@ -94,6 +97,7 @@ export function CreateProjectModal({
+     setIdentifierTouched(false);
+     setDescription('');
+     setModulesEnabled(true);
++    setSkipLoadedSeq(false);
+     setErrorMessage(null);
+     setIsSubmitting(false);
+   };
+@@ -187,6 +191,7 @@ export function CreateProjectModal({
+           identifier: cleanId,
+           description_markdown: description.trim(),
+           modules_enabled: modulesEnabled,
++          skip_loaded_sequence_numbers: skipLoadedSeq,
+         }),
+       });
+ 
+@@ -337,6 +342,23 @@ export function CreateProjectModal({
+             <span>Enable project modules</span>
+           </label>
+ 
++          <label
++            htmlFor="create-project-skip-loaded-seq"
++            className="kb-create-project-checkbox-row"
++          >
++            <input
++              id="create-project-skip-loaded-seq"
++              data-testid="create-project-skip-loaded-seq"
++              type="checkbox"
++              checked={skipLoadedSeq}
++              onChange={(e) => {
++                setSkipLoadedSeq(e.target.checked);
++              }}
++            />
++            <EmojiHint kind="agentSafeNumbering" />
++            <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++          </label>
++
+           {errorMessage && (
+             <div
+               role="alert"
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 59f55069..819fcca0 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -25,6 +25,7 @@ import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
+ import { DeleteAuditModal } from './DeleteAuditModal';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import './ProjectSettingsPage.css';
+ 
+ export interface ProjectDetail {
+@@ -33,6 +34,7 @@ export interface ProjectDetail {
+   name: string;
+   description_markdown?: string | null;
+   modules_enabled?: boolean;
++  skip_loaded_sequence_numbers?: boolean;
+   default_module_ids?: string[];
+   auto_archive_days?: number | null;
+   capabilities?: string[];
+@@ -179,6 +181,7 @@ export function ProjectSettingsPage(): JSX.Element {
+   const [name, setName] = useState<string>('');
+   const [description, setDescription] = useState<string>('');
+   const [modulesEnabled, setModulesEnabled] = useState<boolean>(true);
++  const [skipLoadedSeq, setSkipLoadedSeq] = useState<boolean>(false);
+   const [defaultModuleIds, setDefaultModuleIds] = useState<string[]>([]);
+   const [autoArchiveDays, setAutoArchiveDays] = useState<string>('');
+   const [isSaving, setIsSaving] = useState<boolean>(false);
+@@ -276,6 +279,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           setName(projRes.name);
+           setDescription(projRes.description_markdown ?? '');
+           setModulesEnabled(projRes.modules_enabled ?? true);
++          setSkipLoadedSeq(projRes.skip_loaded_sequence_numbers ?? false);
+           setDefaultModuleIds(projRes.default_module_ids ?? []);
+           setAutoArchiveDays(
+             projRes.auto_archive_days !== null && projRes.auto_archive_days !== undefined
+@@ -483,6 +487,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           name: name.trim(),
+           description_markdown: description,
+           modules_enabled: modulesEnabled,
++          skip_loaded_sequence_numbers: skipLoadedSeq,
+           auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
+         };
+ 
+@@ -1433,6 +1438,20 @@ export function ProjectSettingsPage(): JSX.Element {
+               </label>
+             </div>
+ 
++            <div className="kb-form-group kb-form-group-checkbox">
++              <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
++                <input
++                  type="checkbox"
++                  id="project-skip-loaded-seq"
++                  data-testid="project-skip-loaded-seq-checkbox"
++                  checked={skipLoadedSeq}
++                  onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
++                />
++                <EmojiHint kind="agentSafeNumbering" />
++                <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++              </label>
++            </div>
++
+             {/* Default Modules Selector (when modulesEnabled is true) */}
+             {modulesEnabled && (
+               <div className="kb-default-modules-box" data-testid="default-modules-section">
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index 5c3a6a71..bc198bfa 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -254,6 +254,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+       name: 'New Platform Name',
+       description_markdown: 'Updated markdown description',
+       modules_enabled: true,
++      skip_loaded_sequence_numbers: false,
+       auto_archive_days: 30,
+     });
+   });
+@@ -3417,4 +3418,69 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
+     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
+   });
++
++  it('renders and toggles skip_loaded_sequence_numbers checkbox in general settings tab', async () => {
++    let patchedBody: Record<string, unknown> | null = null;
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
++        return [];
++      }
++      if (url.includes('/api/v1/projects/KAN') && m === 'GET') {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Platform Core',
++          description_markdown: 'Core project',
++          modules_enabled: false,
++          skip_loaded_sequence_numbers: false,
++          is_project_admin: true,
++        };
++      }
++      if (url.includes('/api/v1/projects/KAN') && m === 'PATCH') {
++        patchedBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Platform Core',
++          description_markdown: 'Core project',
++          modules_enabled: false,
++          skip_loaded_sequence_numbers: true,
++          is_project_admin: true,
++        };
++      }
++      return {};
++    });
++
++    renderComponent('KAN');
++
++    const skipCheckbox = await screen.findByTestId<HTMLInputElement>(
++      'project-skip-loaded-seq-checkbox',
++    );
++    expect(skipCheckbox).toBeDefined();
++    expect(skipCheckbox.checked).toBe(false);
++
++    // Toggle skip_loaded_sequence_numbers
++    fireEvent.click(skipCheckbox);
++    expect(skipCheckbox.checked).toBe(true);
++
++    const saveBtn = screen.getByTestId('save-general-btn');
++    fireEvent.click(saveBtn);
++
++    await waitFor(() => {
++      expect(screen.getByText('Project settings saved successfully.')).toBeDefined();
++    });
++
++    expect(patchedBody).toEqual({
++      name: 'Platform Core',
++      description_markdown: 'Core project',
++      modules_enabled: false,
++      skip_loaded_sequence_numbers: true,
++      auto_archive_days: null,
++    });
++  });
+ });
