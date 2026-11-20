@@ -74,7 +74,22 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 
 ---
 
+## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-22)
+
+- Target Branch: `fix/KAN-28-liveqa`
+- Remediation Head Commit: `e895795`
+- Remediation Scope:
+  1. Modal Tab Layout and Interaction: Fixed `.kb-connect-oauth-tabs` height collapse by configuring `flex-shrink: 0`, `flex-wrap: wrap`, and `min-height: 40px` with child `height: 36px`, ensuring all 4 tabs remain visible and clickable without pointer interception on Desktop and Mobile viewports.
+  2. Dynamic Resource URL Formatting: Replaced hardcoded `'KANBA'` fallback in `ConnectOAuthAppModal.tsx` with dynamic workspace project resolution via `GET /api/v1/projects`, emitting canonical workspace or project URLs without hardcoded tenant keys.
+  3. Direct SPA Routing to `/oauth/device`: In `kanban/web_static.py`, implemented `is_oauth_device_spa` allowing direct browser access to `/oauth/device` via SPA fallback to `index.html` while strictly preserving 404/405 protection on backend OAuth protocol routes.
+  4. Device Activation Project Scoping: Updated `DeviceActivatePage.tsx` with dynamic project loading via `GET /api/v1/projects` to populate project scope selection dynamically.
+  5. Chromium CSP Compliance: In `kanban/oauth/server.py`, replaced invalid W3C CSP3 `http://[::1]:*` grammar with exact dynamic origin extraction (`f"{scheme}://{netloc}"`) appended to `form-action`, eliminating Chromium console errors.
+  6. Test and Coverage Verification: 26 Pytest backend tests passing (100% coverage on `kanban.web_static`, 95% total across touched files); 23 Vitest unit tests passing with 100% lines and 96.49% branch coverage (exceeding >= 95.10%); `cssTokensAudit.test.ts` (4/4 passed); zero em/en-dashes; clean ruff, mypy, and typecheck.
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-28/screenshots/`.
+

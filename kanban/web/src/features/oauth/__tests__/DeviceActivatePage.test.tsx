@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { DeviceActivatePage, formatUserCodeInput } from '../DeviceActivatePage';
@@ -451,5 +451,139 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
       expect(clientNameEl.textContent).toBe(hostileName);
       expect(clientNameEl.querySelector('img')).toBeNull();
     });
+  });
+
+  it('fetches real workspace projects from /api/v1/projects when allowed_projects is not specified', async () => {
+    const mockInfo: oauthApi.DeviceCodeInfoResponse = {
+      user_code: 'WDJB-MJHT',
+      client_name: 'Test Device Client',
+      client_id: 'client_live',
+      resource: 'https://kanban.example.com/mcp/agent',
+      surface: 'agent',
+      requested_scopes: ['agent:read'],
+      allowed_projects: null,
+      expires_at: new Date().toISOString(),
+    };
+
+    vi.spyOn(oauthApi, 'fetchDeviceCodeInfo').mockResolvedValue(mockInfo);
+
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [{ key: 'KAN' }, { key: 'OPS' }] }),
+        });
+      }
+      return Promise.reject(new Error('Unknown url'));
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(
+      <MemoryRouter initialEntries={['/activate?user_code=WDJB-MJHT']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-checkbox-KAN')).not.toBeNull();
+      expect(screen.getByTestId('project-checkbox-OPS')).not.toBeNull();
+      expect(screen.queryByTestId('project-checkbox-KANBA')).toBeNull();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it('populates workspace projects during manual code lookup and handles fetch failures', async () => {
+    // 1. Manual code lookup populates workspace projects from fetch
+    const mockInfo: oauthApi.DeviceCodeInfoResponse = {
+      user_code: 'WDJB-MJHT',
+      client_name: 'Manual Client',
+      client_id: 'client_manual',
+      resource: 'https://kanban.example.com/mcp/agent',
+      surface: 'agent',
+      requested_scopes: ['agent:read'],
+      allowed_projects: null,
+      expires_at: new Date().toISOString(),
+    };
+    vi.spyOn(oauthApi, 'fetchDeviceCodeInfo').mockResolvedValue(mockInfo);
+
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ key: 'PROJECT_X' }]),
+        });
+      }
+      return Promise.reject(new Error('Fail'));
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/activate']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByTestId<HTMLInputElement>('user-code-input');
+    fireEvent.change(input, { target: { value: 'WDJBMJHT' } });
+    fireEvent.click(screen.getByTestId('lookup-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-checkbox-PROJECT_X')).not.toBeNull();
+    });
+    unmount();
+
+    // 2. HTTP 500 on projects endpoint
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    const { unmount: u2 } = render(
+      <MemoryRouter initialEntries={['/activate?user_code=WDJB-MJHT']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('client-name')).not.toBeNull();
+    });
+    u2();
+
+    // 3. Network error on projects endpoint
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+    const { unmount: u3 } = render(
+      <MemoryRouter initialEntries={['/activate?user_code=WDJB-MJHT']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('client-name')).not.toBeNull();
+    });
+    u3();
+
+    // 4. Identifier mapping and cached workspaceProjects branch in handleLookup
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ items: [{ identifier: 'ID_PROJECT' }] }),
+      }),
+    );
+    const { unmount: u4 } = render(
+      <MemoryRouter initialEntries={['/activate']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const input4 = screen.getByTestId<HTMLInputElement>('user-code-input');
+    fireEvent.change(input4, { target: { value: 'WDJBMJHT' } });
+    fireEvent.click(screen.getByTestId('lookup-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-checkbox-ID_PROJECT')).not.toBeNull();
+    });
+    u4();
+
+    vi.unstubAllGlobals();
   });
 });

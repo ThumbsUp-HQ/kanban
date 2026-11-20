@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, type JSX, type ChangeEvent } from 'react';
+import React, { useState, useEffect, useRef, type JSX, type ChangeEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   fetchDeviceCodeInfo,
@@ -25,6 +25,28 @@ export function formatUserCodeInput(raw: string): string {
   return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}`;
 }
 
+async function fetchWorkspaceProjects(): Promise<string[]> {
+  try {
+    const res = await fetch('/api/v1/projects', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (!res.ok) {
+      return [];
+    }
+    const data = (await res.json()) as
+      | { items?: { key?: string; identifier?: string }[] }
+      | { key?: string; identifier?: string }[];
+    const items = Array.isArray(data) ? data : (data.items ?? []);
+    return items
+      .map((p) => p.key ?? p.identifier ?? '')
+      .filter((k): k is string => Boolean(k));
+  } catch {
+    return [];
+  }
+}
+
 export function DeviceActivatePage(): JSX.Element {
   const [searchParams] = useSearchParams();
   const [userCode, setUserCode] = useState<string>(() =>
@@ -37,7 +59,24 @@ export function DeviceActivatePage(): JSX.Element {
   const [completionStatus, setCompletionStatus] = useState<'approved' | 'denied' | null>(null);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [workspaceProjects, setWorkspaceProjects] = useState<string[]>([]);
+  const workspaceProjectsRef = useRef<string[]>([]);
+  useEffect(() => {
+    workspaceProjectsRef.current = workspaceProjects;
+  }, [workspaceProjects]);
   const [invalidCharNotice, setInvalidCharNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchWorkspaceProjects().then((keys) => {
+      if (active && keys.length > 0) {
+        setWorkspaceProjects(keys);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const codeParam = searchParams.get('user_code');
@@ -52,11 +91,24 @@ export function DeviceActivatePage(): JSX.Element {
     const isMounted = { current: true };
     void (async () => {
       try {
-        const data = await fetchDeviceCodeInfo(formatted);
+        const cachedProjects = workspaceProjectsRef.current;
+        const [data, wsProjects] = await Promise.all([
+          fetchDeviceCodeInfo(formatted),
+          cachedProjects.length > 0
+            ? Promise.resolve(cachedProjects)
+            : fetchWorkspaceProjects(),
+        ]);
         if (isMounted.current) {
+          if (cachedProjects.length === 0 && wsProjects.length > 0) {
+            setWorkspaceProjects(wsProjects);
+          }
           setInfo(data);
           setSelectedScopes(data.requested_scopes);
-          setSelectedProjects(data.allowed_projects ?? ['KANBA']);
+          const effectiveProjects =
+            data.allowed_projects && data.allowed_projects.length > 0
+              ? data.allowed_projects
+              : wsProjects;
+          setSelectedProjects(effectiveProjects);
         }
       } catch (err: unknown) {
         if (isMounted.current) {
@@ -84,10 +136,23 @@ export function DeviceActivatePage(): JSX.Element {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const data = await fetchDeviceCodeInfo(codeToLookup);
+      const cachedProjects = workspaceProjectsRef.current;
+      const [data, wsProjects] = await Promise.all([
+        fetchDeviceCodeInfo(codeToLookup),
+        cachedProjects.length > 0
+          ? Promise.resolve(cachedProjects)
+          : fetchWorkspaceProjects(),
+      ]);
+      if (cachedProjects.length === 0 && wsProjects.length > 0) {
+        setWorkspaceProjects(wsProjects);
+      }
       setInfo(data);
       setSelectedScopes(data.requested_scopes);
-      setSelectedProjects(data.allowed_projects ?? ['KANBA']);
+      const effectiveProjects =
+        data.allowed_projects && data.allowed_projects.length > 0
+          ? data.allowed_projects
+          : wsProjects;
+      setSelectedProjects(effectiveProjects);
     } catch (err: unknown) {
       const errObj = err as { code?: string; message?: string };
       if (errObj.code === 'RATE_LIMIT_EXCEEDED') {
@@ -298,22 +363,33 @@ export function DeviceActivatePage(): JSX.Element {
               ))}
             </div>
 
-            <div className="kb-device-projects-group">
-              <div className="kb-device-group-title">Project Narrowing:</div>
-              {['KANBA'].map((proj) => (
-                <label key={proj} className="kb-device-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedProjects.includes(proj)}
-                    onChange={() => {
-                      toggleProject(proj);
-                    }}
-                    data-testid={`project-checkbox-${proj}`}
-                  />
-                  <span>Project: {proj}</span>
-                </label>
-              ))}
-            </div>
+            {(() => {
+              const displayProjects =
+                info.allowed_projects && info.allowed_projects.length > 0
+                  ? info.allowed_projects
+                  : workspaceProjects;
+              if (displayProjects.length === 0) {
+                return null;
+              }
+              return (
+                <div className="kb-device-projects-group">
+                  <div className="kb-device-group-title">Project Narrowing:</div>
+                  {displayProjects.map((proj) => (
+                    <label key={proj} className="kb-device-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={selectedProjects.includes(proj)}
+                        onChange={() => {
+                          toggleProject(proj);
+                        }}
+                        data-testid={`project-checkbox-${proj}`}
+                      />
+                      <span>Project: {proj}</span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })()}
 
             <div className="kb-device-actions-row">
               <button

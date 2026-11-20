@@ -612,6 +612,13 @@ def render_consent_screen(  # noqa: PLR0913
 </body>
 </html>
 """
+    form_actions = ["'self'", "http://127.0.0.1:*", "http://localhost:*", "https:"]
+    if parsed_redirect.scheme and parsed_redirect.netloc:
+        exact_origin = f"{parsed_redirect.scheme}://{parsed_redirect.netloc}"
+        if exact_origin not in form_actions:
+            form_actions.append(exact_origin)
+    form_action_directive = " ".join(form_actions)
+
     return HTMLResponse(
         html_content,
         headers={
@@ -621,7 +628,7 @@ def render_consent_screen(  # noqa: PLR0913
                 "default-src 'none'; "
                 f"style-src 'self' 'sha256-{CONSENT_STYLE_SHA256}'; "
                 "img-src 'self' data:; "
-                "form-action 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* https:; "
+                f"form-action {form_action_directive}; "
                 "frame-ancestors 'none'; "
                 "base-uri 'none';"
             ),

@@ -123,6 +123,24 @@ async def test_spa_fallback_routing(static_dist: Path) -> None:
         assert api_resp.status_code == 404
         assert api_resp.headers.get("content-type") == "application/problem+json"
 
+        # /oauth/device SPA route falls back to index.html
+        oauth_device_resp = await client.get("/oauth/device")
+        assert oauth_device_resp.status_code == 200
+        assert b"Root App" in oauth_device_resp.content
+
+        # Direct navigation with user_code query param falls back to index.html
+        oauth_device_param_resp = await client.get("/oauth/device?user_code=DMDJ-DLQH")
+        assert oauth_device_param_resp.status_code == 200
+        assert b"Root App" in oauth_device_param_resp.content
+
+        # Disallowed /oauth prefixes outside /oauth/device must NOT fallback
+        oauth_root_resp = await client.get("/oauth")
+        assert oauth_root_resp.status_code == 404
+        assert oauth_root_resp.text == "Not Found"
+
+        oauth_other_resp = await client.get("/oauth/device_authorization")
+        assert oauth_other_resp.status_code in (404, 405)
+
 
 @pytest.mark.asyncio
 async def test_security_and_path_traversal_guards(static_dist: Path, tmp_path: Path) -> None:

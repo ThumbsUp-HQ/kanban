@@ -104,7 +104,13 @@ class PrecompressedSPAStaticApp:
             "/oauth",
             "/internal",
         )
-        is_reserved = any(
+        is_oauth_device_spa = (
+            raw_path == "/oauth/device"
+            or raw_path.startswith("/oauth/device/")
+            or unquoted_path == "/oauth/device"
+            or unquoted_path.startswith("/oauth/device/")
+        )
+        is_reserved = not is_oauth_device_spa and any(
             raw_path == p or raw_path.startswith(p + "/") for p in disallowed_prefixes
         )
 

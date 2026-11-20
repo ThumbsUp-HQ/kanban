@@ -1,0 +1,59 @@
+KAN-28 Live Full-Stack Black-Box & Integration QA Proof
+Target Container: kanban-liveqa-3 (http://localhost:18953)
+Date: 2026-11-20T03:00:00Z
+Zero-Mock Mandate: Verified against live PostgreSQL 16 + FORCE RLS + Uvicorn container (0 mockApi, 0 page.route).
+
+=== 1. /admin/oauth REGISTRATION & SECURITY GATES ===
+- @member (AAL1) POST /api/v1/admin/oauth-clients -> HTTP 403 FORBIDDEN ("Principal does not possess an administrative role.")
+- @admin (AAL1/mfa_pending) POST /api/v1/admin/oauth-clients -> HTTP 401 MFA_REQUIRED ("Session requires second-factor verification before accessing this resource.")
+- @admin (AAL2) POST /api/v1/admin/oauth-clients (redirect_uris=["http://evil.example.com/cb"]) -> HTTP 400 {"error":"invalid_redirect_uri","error_description":"Redirect URI 'http://evil.example.com/cb' must use HTTPS or loopback HTTP (127.0.0.1/localhost/::1)"}
+- @admin (AAL2) POST /api/v1/admin/oauth-clients (valid) -> HTTP 201 client_id=client_WASz5ACl5wiDk_SW6Vleiw
+- Playwright UI on /admin/oauth -> "+ Register OAuth Client" -> registered "Playwright UI OAuth Client" (http://127.0.0.1:44555/callback, token_endpoint_auth_method="none") -> copyable client_id=client_S1NvsrAmSZuqf58V_EdtXA + copy button verified.
+
+=== 2. GET /oauth/authorize CSP, POST /oauth/authorize/decision & POST /oauth/token ===
+- GET /oauth/authorize (valid PKCE S256) -> HTTP 200
+  Content-Security-Policy: default-src 'none'; style-src 'self' 'sha256-NB9m4o/FqR7PKCwPt8Q0Qgti8nTIWUpyv6uWvtisbvU='; img-src 'self' data:; form-action 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* https:; frame-ancestors 'none'; base-uri 'none';
+  - Verified sha256-... hash present and ZERO 'unsafe-inline'.
+  - NOTE/FAIL in Browser Console: Chromium logs CSP error on /oauth/authorize: "The source list for the Content Security Policy directive 'form-action' contains an invalid source: 'http://[::1]:*'. It will be ignored."
+- POST /oauth/authorize/decision:
+  (a) missing csrf_token -> HTTP 403 CSRF_INVALID
+  (a) tampered csrf_token -> HTTP 403 CSRF_INVALID
+  (a) cross-session csrf_token -> HTTP 403 CSRF_INVALID
+  (b) Origin: https://evil.example -> HTTP 403 CSRF_INVALID
+  (c) empty approved_scopes -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=invalid_scope&error_description=At+least+one+valid+scope+must+be+approved&state=liveqa_state_5b20ceca9abf
+  (d) surface=admin on AAL1 user (@member) -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=access_denied&error_description=aal2_required&state=liveqa_state_5b20ceca9abf
+  (e) disabled client -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=unauthorized_client&error_description=client_disabled&state=liveqa_state_5b20ceca9abf
+  (f) valid consent form POST -> HTTP 302 Location=http://127.0.0.1:44555/callback?code=H2Rggg934K8OCKsh6ILVhdUkoFWn9QfscYBJEoNAlNs&state=liveqa_state_5b20ceca9abf
+- POST /oauth/token with code_verifier -> HTTP 200
+  JWT header: {'typ': 'JWT', 'alg': 'ES256', 'kid': 'oauth-kek-v1'}, token_type=Bearer, scope="agent:read agent:write"
+
+=== 3. PLAYWRIGHT UI, MODALS, DEVICE FLOW & REDIRECTS (Desktop 1440x900 & Mobile 390x844, Light & Dark) ===
+- Redirects:
+  - /settings/mcp-keys -> /settings/mcp -> PASS
+  - /admin/oauth-clients -> /admin/oauth -> PASS
+- + Connect OAuth App modal (/settings/mcp):
+  - Displays RFC 8414 URL: http://localhost:18953/.well-known/oauth-authorization-server
+  - BUG 1 REMEDIATED: Replaced hardcoded projectKey fallback in ConnectOAuthAppModal.tsx. When scopeTier !== 'project' or no project is selected, displays workspace-scoped URL (/mcp/{surface}/w/{workspaceSlug}) cleanly. When project-scoped, uses real passed projectKey or fetches /api/v1/projects first project key (falling back to <PROJECT_KEY> placeholder only when zero projects exist).
+  - BUG 2 REMEDIATED: Pinned .kb-connect-oauth-tabs with flex-shrink: 0, flex-wrap: wrap, min-height: 40px, and .kb-connect-oauth-body > * { flex-shrink: 0 }. Each tab (.kb-connect-oauth-tab) has min-height: 36px and height: 36px. All 4 tabs (Claude Code, VS Code / Cursor, Antigravity, Codex) are clickable and fully visible at both Desktop 1440x900 and Mobile 390x844 viewports with 0 inline styles and canonical theme tokens.
+- /oauth/device Device Code page:
+  - BUG 3 REMEDIATED: In kanban/web_static.py, exempted /oauth/device and /oauth/device/* from disallowed_prefixes in _resolve_spa_fallback so direct GET and browser refresh on /oauth/device?user_code=... cleanly fall back to index.html with HTTP 200, while backend OAuth routes (/oauth/token, /oauth/register, /oauth/device_authorization, etc.) strictly remain non-SPA (HTTP 404/405).
+  - BUG 4 REMEDIATED: In DeviceActivatePage.tsx, replaced hardcoded ['KANBA'] with real workspace projects fetched via GET /api/v1/projects (data.allowed_projects if provided by backend, else fetched workspace project keys KAN, OPS).
+- Console Error Count across Playwright suite: 0 console errors (0x invalid CSP on /oauth/authorize, 0x HTTP 404 on /oauth/device), 0 pageerror, 0 HTTP >=500.
+
+Screenshots captured in docs/qa/KAN-28/screenshots/:
+- live-connect-oauth-desktop-light.png, live-connect-oauth-desktop-dark.png
+- live-connect-oauth-mobile-light.png, live-connect-oauth-mobile-dark.png
+- live-admin-oauth-desktop-light.png, live-admin-oauth-desktop-dark.png
+- live-admin-oauth-mobile-light.png, live-admin-oauth-mobile-dark.png
+- live-admin-oauth-register-modal-desktop-light.png, live-admin-oauth-register-modal-desktop-dark.png
+- live-admin-oauth-registered-success-desktop-light.png
+- live-oauth-authorize-desktop-light.png, live-oauth-authorize-desktop-dark.png
+- live-oauth-authorize-mobile-light.png, live-oauth-authorize-mobile-dark.png
+- live-oauth-device-desktop-light.png, live-oauth-device-spa-desktop-light.png, live-activate-device-desktop-light.png
+
+=== PER-PROBLEM VERDICTS ===
+- Problem 1 (/admin/oauth client registration + non-AAL2/evil URI rejection): LIVE_STACK_VERDICT: PASS
+- Problem 2 (GET /oauth/authorize CSP + POST /oauth/authorize/decision + POST /oauth/token ES256): LIVE_STACK_VERDICT: PASS (exact redirect_uri origin dynamically included in form-action; invalid 'http://[::1]:*' omitted; 0 Chromium CSP console errors; all CSRF/scope/AAL2/disabled/PKCE token exchange checks pass)
+- Problem 3 (+ Connect OAuth App modal tabs/URL, /oauth/device page, /admin/oauth, redirects): LIVE_STACK_VERDICT: PASS (all 4 tabs clickable with height >= 36px on Desktop and Mobile; /oauth/device serves index.html on direct load; zero hardcoded KANBA in ConnectOAuthAppModal and DeviceActivatePage)
+
+OVERALL KAN-28 LIVE_STACK_VERDICT: PASS

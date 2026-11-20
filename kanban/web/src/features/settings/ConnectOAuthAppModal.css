@@ -63,6 +63,10 @@
   gap: 16px;
 }
 
+.kb-connect-oauth-body > * {
+  flex-shrink: 0;
+}
+
 .kb-connect-oauth-desc {
   font-size: 0.875rem;
   color: var(--kb-color-text-secondary, #8b949e);
@@ -172,12 +176,17 @@
 
 .kb-connect-oauth-tabs {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
-  overflow-x: auto;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 40px;
 }
 
 .kb-connect-oauth-tab {
+  min-height: 36px;
+  height: 36px;
   padding: 8px 14px;
   background: none;
   border: none;
@@ -187,6 +196,11 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .kb-connect-oauth-tab:hover {
@@ -194,8 +208,8 @@
 }
 
 .kb-connect-oauth-tab-active {
-  color: #58a6ff;
-  border-bottom-color: #58a6ff;
+  color: var(--kb-color-accent, #58a6ff);
+  border-bottom-color: var(--kb-color-accent, #58a6ff);
   font-weight: 600;
 }
 
