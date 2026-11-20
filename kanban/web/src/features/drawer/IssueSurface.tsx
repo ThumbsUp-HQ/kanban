@@ -401,15 +401,23 @@ function IssueSurfaceContent({
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const current = textarea.value;
-      const selected = current.slice(start, end) || placeholder;
+      const hasSelection = start !== end;
+      const selected = hasSelection ? current.slice(start, end) : placeholder;
 
       let effBefore = before;
       let effAfter = after;
       const isFence = effBefore.startsWith('```') || effAfter.includes('```');
 
       if (isFence) {
-        if (start > 0 && current[start - 1] !== '\n') {
-          effBefore = `\n${effBefore}`;
+        if (start > 0) {
+          const textBefore = current.slice(0, start);
+          if (textBefore.endsWith('\n\n')) {
+            // already preceded by blank line
+          } else if (textBefore.endsWith('\n')) {
+            effBefore = `\n${effBefore}`;
+          } else {
+            effBefore = `\n\n${effBefore}`;
+          }
         }
         if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
           effAfter = `${effAfter}\n`;
@@ -419,10 +427,24 @@ function IssueSurfaceContent({
       const replacement = `${effBefore}${selected}${effAfter}`;
       const next = current.slice(0, start) + replacement + current.slice(end);
       setDescriptionDraft(next);
+
+      const newCursor = isFence && !hasSelection
+        ? start + replacement.length
+        : start + effBefore.length + selected.length;
+
+      try {
+        textarea.setSelectionRange(newCursor, newCursor);
+      } catch {
+        // ignore
+      }
+
       setTimeout(() => {
         textarea.focus();
-        const newCursor = start + effBefore.length + selected.length;
-        textarea.setSelectionRange(newCursor, newCursor);
+        try {
+          textarea.setSelectionRange(newCursor, newCursor);
+        } catch {
+          // ignore
+        }
       }, 0);
     };
 
@@ -697,7 +719,7 @@ function IssueSurfaceContent({
                 className="composer-tool-btn"
                 aria-label="Insert Mermaid diagram"
                 data-testid="description-editor-tool-mermaid"
-                onClick={() => { insertTextInDesc('```mermaid\ngraph TD;\n  ', '\n```', 'A-->B;'); }}
+                onClick={() => { insertTextInDesc('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
               >
                 📊
               </button>

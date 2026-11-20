@@ -1274,5 +1274,45 @@ describe('IssueSurface', () => {
       uploadSpy.mockRestore();
       unmount();
     });
+
+    it('clicking [aria-label="Insert Mermaid diagram"] twice consecutively produces exact 2-block output', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
+      render(<Harness />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Edit description' })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+      const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
+
+      // Clear description
+      fireEvent.change(textarea, { target: { value: '' } });
+      textarea.setSelectionRange(0, 0);
+
+      // First click
+      fireEvent.click(mermaidBtn);
+      const expectedBlock1 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
+      expect(textarea.value).toBe(expectedBlock1);
+      expect(textarea.selectionStart).toBe(expectedBlock1.length);
+      expect(textarea.selectionEnd).toBe(expectedBlock1.length);
+
+      // Second click: immediately click again with cursor at end of first block
+      fireEvent.click(mermaidBtn);
+      const expectedBlock2 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
+      const expectedFull = `${expectedBlock1}\n${expectedBlock2}`;
+      expect(textarea.value).toBe(expectedFull);
+      expect(textarea.selectionStart).toBe(expectedFull.length);
+      expect(textarea.selectionEnd).toBe(expectedFull.length);
+
+      const matches = Array.from(textarea.value.matchAll(/```mermaid\n([\s\S]*?)```/g));
+      expect(matches).toHaveLength(2);
+      expect(textarea.value).not.toContain(';');
+      expect(textarea.value).toBe(
+        '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
+      );
+    });
   });
 });

@@ -645,4 +645,46 @@ This is a breathable technical description.
 
     uploadSpy.mockRestore();
   });
+
+  it('clicking [aria-label="Insert Mermaid diagram"] twice consecutively in raw mode produces exact 2-block output', () => {
+    const handleChange = vi.fn();
+    render(
+      <MarkdownEditor
+        value=""
+        onChange={handleChange}
+        surface="description"
+        ariaLabel="Description editor"
+        testId="raw-mermaid-editor"
+      />,
+    );
+
+    // Switch to raw mode
+    const rawToggle = screen.getByTestId('raw-mermaid-editor-tool-raw');
+    fireEvent.click(rawToggle);
+
+    const rawTextarea = screen.getByTestId<HTMLTextAreaElement>('raw-mermaid-editor-raw');
+    const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
+
+    // First click
+    fireEvent.click(mermaidBtn);
+    const expectedBlock1 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
+    expect(rawTextarea.value).toBe(expectedBlock1);
+    expect(rawTextarea.selectionStart).toBe(expectedBlock1.length);
+    expect(rawTextarea.selectionEnd).toBe(expectedBlock1.length);
+
+    // Second click: immediately click again with cursor at end of first block
+    fireEvent.click(mermaidBtn);
+    const expectedBlock2 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
+    const expectedFull = `${expectedBlock1}\n${expectedBlock2}`;
+    expect(rawTextarea.value).toBe(expectedFull);
+    expect(rawTextarea.selectionStart).toBe(expectedFull.length);
+    expect(rawTextarea.selectionEnd).toBe(expectedFull.length);
+
+    const matches = Array.from(rawTextarea.value.matchAll(/```mermaid\n([\s\S]*?)```/g));
+    expect(matches).toHaveLength(2);
+    expect(rawTextarea.value).not.toContain(';');
+    expect(rawTextarea.value).toBe(
+      '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
+    );
+  });
 });

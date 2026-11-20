@@ -124,6 +124,24 @@
   color: var(--fg-primary, #ffffff);
 }
 
+@media (max-width: 640px) {
+  .media-viewport__controls {
+    position: static;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    left: auto;
+    bottom: auto;
+    justify-content: center;
+    border-radius: 0;
+    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    box-shadow: none;
+  }
+}
+
 .media-btn {
   display: inline-flex;
   align-items: center;

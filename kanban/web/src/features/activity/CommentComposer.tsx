@@ -485,7 +485,7 @@ export function CommentComposer({
           accept="image/*,.svg"
           tabIndex={-1}
           aria-hidden="true"
-          style={{ display: 'none' }}
+          className="comment-composer__file-input"
           onChange={(e) => { void handleFileSelected(e); }}
           data-testid="comment-file-input"
         />

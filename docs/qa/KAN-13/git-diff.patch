@@ -1,3 +1,439 @@
+diff --git a/kanban/web/e2e/qa/kan-13-screenshots.spec.ts b/kanban/web/e2e/qa/kan-13-screenshots.spec.ts
+new file mode 100644
+index 0000000..5d2bb15
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-13-screenshots.spec.ts
+@@ -0,0 +1,378 @@
++/**
++ * Playwright Visual & QA Proof Verification for KAN-13.
++ * Captures Desktop (1440x900) and Mobile (390x844) in Light and Dark themes.
++ * Plain ASCII hyphens only. Zero em-dashes or en-dashes.
++ */
++
++import { test } from '../support/test';
++import type { Page } from '@playwright/test';
++import { mockApi, loadFixture } from '../support/mockApi';
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++
++const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
++const SCREENSHOT_DIR = resolve(REPO_ROOT, 'docs/qa/KAN-13/screenshots');
++
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++const mockUser = {
++  principal_id: '11111111-1111-4111-8111-111111111111',
++  id: '11111111-1111-4111-8111-111111111111',
++  display_name: 'Security Architect',
++  username: 'architect',
++  email: 'architect@thumbsup.org',
++  timezone: 'UTC',
++  avatar_url: null,
++  roles: ['admin'],
++  is_server_admin: true,
++  is_workspace_admin: true,
++  is_project_admin: true,
++  workspace_role: 'WORKSPACE_ADMIN',
++  aal_level: 2,
++  auth_aal: 'aal2',
++  capabilities: ['SERVER_ADMIN', 'WORKSPACE_ADMIN'],
++};
++
++const rawProject = loadFixture<Record<string, unknown>>('project-kan');
++const projectKan = {
++  ...rawProject,
++  identifier: 'KAN',
++  capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN'],
++  is_project_admin: true,
++};
++
++const issueKan13 = {
++  key: 'KAN-13',
++  object_id: '11111111-1111-1111-1111-111111111113',
++  project_key: 'KAN',
++  project_name: 'Platform Core',
++  summary: 'Render Mermaid outside Docs, fix fence newlines & ligatures, move Hide Nav',
++  description_markdown: `### Architecture and Rendering Pipeline
++
++Here is the architectural dataflow for Mermaid SVG rendering outside docs:
++
++\`\`\`mermaid
++flowchart TD
++  UserRequest[User Request or Edit] --> SafeMarkdownPreview[SafeMarkdownPreview Ingestion]
++  SafeMarkdownPreview --> FencedCheck{codeLang == 'mermaid'?}
++  FencedCheck -->|Yes: Render SVG| MermaidBlockView[MermaidBlockView Live SVG]
++  FencedCheck -->|No: Code Syntax| SyntaxPre[pre className="code-block"]
++\`\`\`
++
++All issue descriptions and comments now render live vector SVGs directly!`,
++  priority: {
++    slug: 'high',
++    label: 'High',
++    emoji: '⚡',
++    sort_order: 2,
++    sla_target: null,
++  },
++  state: {
++    id: 'state-in-progress',
++    name: 'In Progress',
++    group: 'started',
++  },
++  etag: '"etag-kan-13"',
++};
++
++const commentsKan13 = {
++  items: [
++    {
++      id: 'c1111111-1111-1111-1111-111111111113',
++      issue_id: '11111111-1111-1111-1111-111111111113',
++      parent_comment_id: null,
++      author_id: '11111111-1111-4111-8111-111111111111',
++      author: {
++        id: '11111111-1111-4111-8111-111111111111',
++        handle: 'architect',
++        display_name: 'Security Architect',
++      },
++      body_markdown: `Verified live Mermaid rendering in issue comments:
++
++\`\`\`mermaid
++sequenceDiagram
++  participant User
++  participant Topbar
++  participant Sidebar
++  User->>Sidebar: Click PanelLeftClose
++  Sidebar->>Topbar: State lifted to AppShell
++  Topbar-->>User: Show PanelLeftOpen button
++\`\`\`
++
++The diagram renders with zero code leaks or ligatures.`,
++      body_sha256: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
++      permalink: '/projects/KAN/issues/KAN-13#comment-c1111111-1111-1111-1111-111111111113',
++      created_at: '2026-11-19T14:30:00Z',
++      edited_at: null,
++      deleted: false,
++      etag: '"etag-comment-13"',
++      reactions: [
++        {
++          emoji: '🚀',
++          count: 2,
++          reacted_by_me: true,
++        },
++      ],
++      replies: [],
++    },
++  ],
++};
++
++function getBaseMocks() {
++  return {
++    'GET /api/v1/me': { json: mockUser },
++    'GET /api/v1/auth/me': { json: mockUser },
++    'GET /api/v1/users/me': { json: mockUser },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 2,
++        csrf_token: 'test-csrf-token-kan13',
++        user: mockUser,
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'test-csrf-token-kan13' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/system/status': { json: loadFixture('system-status-prod') },
++    'GET /api/v1/workspaces': {
++      json: [
++        {
++          id: '01918a22-0000-7000-8000-000000000001',
++          name: 'Primary Workspace',
++          slug: 'kanban',
++          is_current: true,
++        },
++      ],
++    },
++    'GET /api/v1/workspaces/current': {
++      json: {
++        id: '01918a22-0000-7000-8000-000000000001',
++        name: 'Primary Workspace',
++        slug: 'kanban',
++        is_current: true,
++      },
++    },
++    'GET /api/v1/projects': { json: [projectKan] },
++    'GET /api/v1/projects/KAN': { json: projectKan },
++    'GET /api/v1/projects/KAN/views': { json: [] },
++    'GET /api/v1/projects/KAN/cycles': {
++      json: [
++        { id: 'cycle-1', name: 'Cycle 1', status: 'active' },
++      ],
++    },
++    'GET /api/v1/projects/KAN/modules': {
++      json: [
++        { id: 'mod-1', name: 'Auth Core' },
++        { id: 'mod-2', name: 'Kanban Board' },
++      ],
++    },
++    'GET /api/v1/projects/KAN/states': {
++      json: [
++        { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++        { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
++        { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3 },
++        { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4 },
++        { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
++        { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 6 },
++      ],
++    },
++    'GET /api/v1/projects/KAN/issues': { json: [issueKan13] },
++    'GET /api/v1/projects/KAN/priorities': {
++      json: [
++        { slug: 'urgent', label: 'Urgent', emoji: '🔥', sort_order: 1 },
++        { slug: 'high', label: 'High', emoji: '⚡', sort_order: 2 },
++        { slug: 'medium', label: 'Medium', emoji: '🔹', sort_order: 3 },
++        { slug: 'low', label: 'Low', emoji: '💤', sort_order: 4 },
++      ],
++    },
++    'GET /api/v1/projects/KAN/labels': {
++      json: [
++        { id: 'lbl-1', name: 'Database', color_hex: '#2563eb' },
++        { id: 'lbl-2', name: 'Security', color_hex: '#dc2626' },
++      ],
++    },
++    'GET /api/v1/projects/KAN/assignee-suggestions': {
++      json: {
++        items: [
++          { id: 'u-1', handle: '@alice', display_name: 'Alice Cooper', type: 'USER' },
++          { id: 'u-2', handle: '@adam', display_name: 'Adam Outler', type: 'USER' },
++        ],
++      },
++    },
++    'GET /api/v1/projects/KAN/custom-fields': { json: [] },
++    'GET /api/v1/issues/:id': { json: issueKan13 },
++    'GET /api/v1/issues/:id/subscription': { json: { items: [], subscribed: false } },
++    'GET /api/v1/objects/:id/canonical-url': { json: { url: 'http://127.0.0.1:4183/projects/KAN/issues/KAN-13' } },
++    'GET /api/v1/issues/:id/activity': { json: { items: [] } },
++    'GET /api/v1/issues/:id/comments': { json: commentsKan13 },
++    'GET /api/v1/issues/:id/subscribers': { json: [] },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/notifications': { json: { items: [] } },
++    'GET /api/v1/media-proxy': {
++      status: 200,
++      contentType: 'image/png',
++      body: Buffer.from(
++        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
++        'base64',
++      ),
++    },
++  };
++}
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t: string) => {
++    localStorage.setItem('kb.theme', t);
++    document.documentElement.dataset.theme = t;
++  }, theme);
++  await page.waitForTimeout(150);
++}
++
++test.describe('KAN-13 Visual Verification & Proofs', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-kan13',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++      {
++        name: 'kb_session',
++        value: 'mock_session_kan13',
++        domain: '127.0.0.1',
++        path: '/',
++        httpOnly: true,
++        sameSite: 'Lax',
++      },
++    ]);
++  });
++
++  test('01: Render Mermaid diagrams in issue surface and comments (Desktop & Mobile)', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, getBaseMocks());
++    await page.goto('/projects/KAN/issues/KAN-13');
++
++    // Wait for the issue surface and mermaid SVGs to render
++    await page.waitForSelector('.surface__description');
++    await page.waitForTimeout(600);
++
++    if (projectName === 'desktop') {
++      // 1. Light Desktop
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '01-desktop-light-mermaid-issue.png'),
++        fullPage: false,
++      });
++
++      // 2. Dark Desktop
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '02-desktop-dark-mermaid-issue.png'),
++        fullPage: false,
++      });
++    } else {
++      // 3. Light Mobile
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '03-mobile-light-mermaid-issue.png'),
++        fullPage: false,
++      });
++
++      // 4. Dark Mobile
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '04-mobile-dark-mermaid-issue.png'),
++        fullPage: false,
++      });
++    }
++  });
++
++  test('02: WorkspaceBadge monogram replacing [👍] (Desktop & Mobile)', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++
++    await mockApi(page, getBaseMocks());
++    await page.goto('/projects/KAN/issues');
++
++    if (projectName === 'desktop') {
++      // Wait for sidebar and breadcrumb
++      await page.waitForSelector('.kb-sidebar');
++      await page.waitForSelector('.kb-breadcrumb');
++      await page.waitForTimeout(300);
++
++      // 5. Desktop Light WorkspaceBadge
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '05-desktop-light-workspace-badge.png'),
++        fullPage: false,
++      });
++
++      // 6. Desktop Dark WorkspaceBadge
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '06-desktop-dark-workspace-badge.png'),
++        fullPage: false,
++      });
++    } else {
++      // Mobile Topbar with WorkspaceBadge
++      await page.waitForSelector('.kb-topbar');
++      await page.waitForTimeout(300);
++
++      // 11. Mobile Light WorkspaceBadge
++      await applyTheme(page, 'light');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '11-mobile-light-workspace-badge.png'),
++        fullPage: false,
++      });
++
++      // 12. Mobile Dark WorkspaceBadge
++      await applyTheme(page, 'dark');
++      await page.screenshot({
++        path: resolve(SCREENSHOT_DIR, '12-mobile-dark-workspace-badge.png'),
++        fullPage: false,
++      });
++    }
++  });
++
++  test('03: Sidebar Collapse in Workspace Header & Topbar Expand Button (Desktop)', async ({ page }, testInfo) => {
++    const projectName = testInfo.project.name;
++    if (projectName !== 'desktop') return;
++
++    await mockApi(page, getBaseMocks());
++    await page.goto('/projects/KAN/issues/KAN-13');
++    await page.waitForSelector('.kb-sidebar');
++
++    // 1. Expanded Sidebar state with PanelLeftClose in sidebar header
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, '09-desktop-light-sidebar-expanded.png'),
++      fullPage: false,
++    });
++
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, '10-desktop-dark-sidebar-expanded.png'),
++      fullPage: false,
++    });
++
++    // 2. Click collapse button in sidebar header
++    const collapseBtn = page.getByRole('button', { name: 'Collapse navigation sidebar' });
++    await collapseBtn.click();
++    await page.waitForTimeout(300);
++
++    // Collapsed Sidebar state with PanelLeftOpen in topbar
++    await applyTheme(page, 'light');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, '07-desktop-light-sidebar-collapsed.png'),
++      fullPage: false,
++    });
++
++    await applyTheme(page, 'dark');
++    await page.screenshot({
++      path: resolve(SCREENSHOT_DIR, '08-desktop-dark-sidebar-collapsed.png'),
++      fullPage: false,
++    });
++  });
++});
+diff --git a/kanban/web/src/app/Breadcrumb.css b/kanban/web/src/app/Breadcrumb.css
+index 8389850..6c6dcd2 100644
+--- a/kanban/web/src/app/Breadcrumb.css
++++ b/kanban/web/src/app/Breadcrumb.css
+@@ -27,6 +27,9 @@
+ }
+ 
+ .kb-breadcrumb-workspace {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
+   font-weight: 500;
+   color: var(--fg-secondary, #94a3b8);
+ }
+diff --git a/kanban/web/src/app/Breadcrumb.test.tsx b/kanban/web/src/app/Breadcrumb.test.tsx
+index 8cb8f04..a3a53d3 100644
+--- a/kanban/web/src/app/Breadcrumb.test.tsx
++++ b/kanban/web/src/app/Breadcrumb.test.tsx
+@@ -21,7 +21,10 @@ describe('Breadcrumb', () => {
+     const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+     expect(nav).toBeDefined();
+ 
+-    expect(screen.getByText('kanban')).toBeDefined();
++    expect(screen.getByRole('link', { name: 'kanban' })).toBeDefined();
++    expect(screen.getByTestId('breadcrumb-workspace')).toBeDefined();
++    expect(screen.getByTestId('breadcrumb-workspace').textContent).not.toContain('[👍]');
++    expect(screen.getByTestId('workspace-badge')).toBeDefined();
+     expect(screen.getByText('Work Items')).toBeDefined();
+     expect(screen.getByText('(7)')).toBeDefined();
+ 
+diff --git a/kanban/web/src/app/Breadcrumb.tsx b/kanban/web/src/app/Breadcrumb.tsx
+index acfd264..f9fba08 100644
+--- a/kanban/web/src/app/Breadcrumb.tsx
++++ b/kanban/web/src/app/Breadcrumb.tsx
+@@ -6,6 +6,7 @@
+ 
+ import React, { type JSX } from 'react';
+ import { Link, useNavigate } from 'react-router';
++import { WorkspaceBadge } from '../components/workspace/WorkspaceBadge';
+ import './Breadcrumb.css';
+ 
+ export interface BreadcrumbProps {
+@@ -50,7 +51,8 @@ export function Breadcrumb({
+           <>
+             <li className="kb-breadcrumb-item">
+               <span className="kb-breadcrumb-workspace" data-testid="breadcrumb-workspace">
+-                [👍] {workspaceName}
++                <WorkspaceBadge name={workspaceName} size="sm" />
++                <span>{workspaceName}</span>
+               </span>
+             </li>
+             <li aria-hidden="true" className="kb-breadcrumb-separator">
 diff --git a/kanban/web/src/app/Sidebar.css b/kanban/web/src/app/Sidebar.css
 index 7c8c470..7e19ef2 100644
 --- a/kanban/web/src/app/Sidebar.css
@@ -1010,8 +1446,180 @@ index 0000000..3f2a2e9
 +    </span>
 +  );
 +}
+diff --git a/kanban/web/src/editor/MarkdownEditor.test.tsx b/kanban/web/src/editor/MarkdownEditor.test.tsx
+index 66cd46a..7bce2ed 100644
+--- a/kanban/web/src/editor/MarkdownEditor.test.tsx
++++ b/kanban/web/src/editor/MarkdownEditor.test.tsx
+@@ -630,12 +630,61 @@ This is a breathable technical description.
+     fireEvent.click(revertBtn);
+     expect(screen.queryByTestId('edge-editor-sanitized-pill')).toBeNull();
+ 
+-    // 5. Test raw mode text selection with bold/italic/code
++    // 5. Test raw mode text selection with bold/italic/code/mermaid
+     rawTextarea.setSelectionRange(0, 6);
+     const boldBtn = screen.getByTestId('edge-editor-tool-bold');
+     fireEvent.click(boldBtn);
+     expect(rawTextarea.value).toContain('**');
+ 
++    // Mermaid button in raw mode with start > 0 and no leading newline
++    fireEvent.change(rawTextarea, { target: { value: 'Leading text' } });
++    rawTextarea.setSelectionRange(12, 12);
++    const mermaidBtn = screen.getByTestId('edge-editor-tool-mermaid');
++    fireEvent.click(mermaidBtn);
++    expect(rawTextarea.value).toContain('\n```mermaid\n');
++
+     uploadSpy.mockRestore();
+   });
++
++  it('clicking [aria-label="Insert Mermaid diagram"] twice consecutively in raw mode produces exact 2-block output', () => {
++    const handleChange = vi.fn();
++    render(
++      <MarkdownEditor
++        value=""
++        onChange={handleChange}
++        surface="description"
++        ariaLabel="Description editor"
++        testId="raw-mermaid-editor"
++      />,
++    );
++
++    // Switch to raw mode
++    const rawToggle = screen.getByTestId('raw-mermaid-editor-tool-raw');
++    fireEvent.click(rawToggle);
++
++    const rawTextarea = screen.getByTestId<HTMLTextAreaElement>('raw-mermaid-editor-raw');
++    const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
++
++    // First click
++    fireEvent.click(mermaidBtn);
++    const expectedBlock1 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
++    expect(rawTextarea.value).toBe(expectedBlock1);
++    expect(rawTextarea.selectionStart).toBe(expectedBlock1.length);
++    expect(rawTextarea.selectionEnd).toBe(expectedBlock1.length);
++
++    // Second click: immediately click again with cursor at end of first block
++    fireEvent.click(mermaidBtn);
++    const expectedBlock2 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
++    const expectedFull = `${expectedBlock1}\n${expectedBlock2}`;
++    expect(rawTextarea.value).toBe(expectedFull);
++    expect(rawTextarea.selectionStart).toBe(expectedFull.length);
++    expect(rawTextarea.selectionEnd).toBe(expectedFull.length);
++
++    const matches = Array.from(rawTextarea.value.matchAll(/```mermaid\n([\s\S]*?)```/g));
++    expect(matches).toHaveLength(2);
++    expect(rawTextarea.value).not.toContain(';');
++    expect(rawTextarea.value).toBe(
++      '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
++    );
++  });
+ });
+diff --git a/kanban/web/src/editor/MarkdownEditor.tsx b/kanban/web/src/editor/MarkdownEditor.tsx
+index 9abec7b..b9a1e8a 100644
+--- a/kanban/web/src/editor/MarkdownEditor.tsx
++++ b/kanban/web/src/editor/MarkdownEditor.tsx
+@@ -250,9 +250,28 @@ export function MarkdownEditor({
+   const insertTextInRaw = (before: string, after = '', placeholder = ''): void => {
+     const textarea = rawTextareaRef.current;
+     const current = rawTextRef.current;
+-    /* v8 ignore next 8 */
++
++    let effBefore = before;
++    let effAfter = after;
++    const isFence = effBefore.startsWith('```') || effAfter.includes('```');
++
++    /* v8 ignore next 14 */
+     if (!textarea) {
+-      const next = `${current}${before}${placeholder}${after}`;
++      if (isFence) {
++        if (current.length > 0) {
++          if (current.endsWith('\n\n')) {
++            // already preceded
++          } else if (current.endsWith('\n')) {
++            effBefore = `\n${effBefore}`;
++          } else {
++            effBefore = `\n\n${effBefore}`;
++          }
++        }
++        if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
++          effAfter = `${effAfter}\n`;
++        }
++      }
++      const next = `${current}${effBefore}${placeholder}${effAfter}`;
+       setRawText(next);
+       rawTextRef.current = next;
+       lastSerializedRef.current = next;
+@@ -261,17 +280,49 @@ export function MarkdownEditor({
+     }
+     const start = textarea.selectionStart;
+     const end = textarea.selectionEnd;
+-    const selected = current.slice(start, end) || placeholder;
+-    const replacement = `${before}${selected}${after}`;
++    const hasSelection = start !== end;
++    const selected = hasSelection ? current.slice(start, end) : placeholder;
++
++    if (isFence) {
++      if (start > 0) {
++        const textBefore = current.slice(0, start);
++        if (textBefore.endsWith('\n\n')) {
++          // already preceded by blank line
++        } else if (textBefore.endsWith('\n')) {
++          effBefore = `\n${effBefore}`;
++        } else {
++          effBefore = `\n\n${effBefore}`;
++        }
++      }
++      if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
++        effAfter = `${effAfter}\n`;
++      }
++    }
++
++    const replacement = `${effBefore}${selected}${effAfter}`;
+     const next = current.slice(0, start) + replacement + current.slice(end);
+     setRawText(next);
+     rawTextRef.current = next;
+     lastSerializedRef.current = next;
+     onChangeRef.current(next);
++
++    const newCursor = isFence && !hasSelection
++      ? start + replacement.length
++      : start + effBefore.length + selected.length;
++
++    try {
++      textarea.setSelectionRange(newCursor, newCursor);
++    } catch {
++      // ignore
++    }
++
+     setTimeout(() => {
+       textarea.focus();
+-      const newCursor = start + before.length + selected.length;
+-      textarea.setSelectionRange(newCursor, newCursor);
++      try {
++        textarea.setSelectionRange(newCursor, newCursor);
++      } catch {
++        // ignore
++      }
+     }, 0);
+   };
+ 
+@@ -344,13 +395,13 @@ export function MarkdownEditor({
+ 
+   const handleToolbarMermaid = (): void => {
+     if (isRawMode) {
+-      insertTextInRaw('```mermaid\ngraph TD;\n  A-->B;\n```\n', '', '');
++      insertTextInRaw('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]');
+       return;
+     }
+     /* v8 ignore next */
+     if (!viewRef.current) return;
+     const { state, dispatch } = viewRef.current;
+-    const mermaidText = 'graph TD;\n  A-->B;';
++    const mermaidText = 'graph TD\n  A[Start] --> B[End]';
+     const codeBlock = editorSchema.nodes.code_block.create(
+       { lang: 'mermaid' },
+       editorSchema.text(mermaidText),
 diff --git a/kanban/web/src/editor/media/MediaViewport.css b/kanban/web/src/editor/media/MediaViewport.css
-index f820400..c6ef75c 100644
+index f820400..67c97a2 100644
 --- a/kanban/web/src/editor/media/MediaViewport.css
 +++ b/kanban/web/src/editor/media/MediaViewport.css
 @@ -110,6 +110,9 @@
@@ -1024,7 +1632,32 @@ index f820400..c6ef75c 100644
    gap: 6px;
    padding: 4px 8px;
    background-color: var(--bg-surface-raised, rgba(15, 23, 42, 0.85));
-@@ -137,6 +140,8 @@
+@@ -121,6 +124,24 @@
+   color: var(--fg-primary, #ffffff);
+ }
+ 
++@media (max-width: 640px) {
++  .media-viewport__controls {
++    position: static;
++    transform: none;
++    width: 100%;
++    max-width: 100%;
++    left: auto;
++    bottom: auto;
++    justify-content: center;
++    border-radius: 0;
++    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
++    border-left: none;
++    border-right: none;
++    border-bottom: none;
++    box-shadow: none;
++  }
++}
++
+ .media-btn {
+   display: inline-flex;
+   align-items: center;
+@@ -137,6 +158,8 @@
    font-weight: 500;
    cursor: pointer;
    text-decoration: none;
@@ -1732,7 +2365,7 @@ index a139d2f..f2c9805 100644
    });
  });
 diff --git a/kanban/web/src/features/activity/CommentComposer.tsx b/kanban/web/src/features/activity/CommentComposer.tsx
-index 242ee78..004d411 100644
+index 242ee78..476fca3 100644
 --- a/kanban/web/src/features/activity/CommentComposer.tsx
 +++ b/kanban/web/src/features/activity/CommentComposer.tsx
 @@ -132,18 +132,54 @@ export function CommentComposer({
@@ -1818,6 +2451,15 @@ index 242ee78..004d411 100644
          if (chosen) {
            applyMention(chosen.handle);
          }
+@@ -446,7 +485,7 @@ export function CommentComposer({
+           accept="image/*,.svg"
+           tabIndex={-1}
+           aria-hidden="true"
+-          style={{ display: 'none' }}
++          className="comment-composer__file-input"
+           onChange={(e) => { void handleFileSelected(e); }}
+           data-testid="comment-file-input"
+         />
 @@ -454,7 +493,7 @@ export function CommentComposer({
            type="button"
            className="composer-tool-btn"
@@ -1827,6 +2469,131 @@ index 242ee78..004d411 100644
          >
            📊
          </button>
+diff --git a/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx b/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
+index 2ff91ca..6bc5f7a 100644
+--- a/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
++++ b/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
+@@ -162,5 +162,14 @@ describe('SafeMarkdownPreview', () => {
+       const { container: unclosedNoLangContainer } = render(<SafeMarkdownPreview markdown={unclosedNoLang} />);
+       expect(unclosedNoLangContainer.querySelector('pre')).not.toBeNull();
+     });
++
++    it('renders fenced mermaid code blocks via MermaidBlockView with CRLF and case normalization', () => {
++      const mermaidMarkdown = '```MERMAID\r\ngraph TD;\r\n  A-->B;\r\n```';
++      render(<SafeMarkdownPreview markdown={mermaidMarkdown} />);
++      const mermaidEl = screen.getByTestId('mermaid-block');
++      expect(mermaidEl).toBeDefined();
++      expect(mermaidEl.getAttribute('data-lang')).toBe('mermaid');
++      expect(screen.queryByTestId('mermaid-block-toggle-btn')).toBeNull();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/activity/SafeMarkdownPreview.tsx b/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
+index 26373d4..04e20be 100644
+--- a/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
++++ b/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
+@@ -6,6 +6,7 @@
+ 
+ import React, { type JSX, type ReactNode } from 'react';
+ import { MediaViewport } from '../../editor/media/MediaViewport';
++import { MermaidBlockView } from '../../editor/mermaid/MermaidBlockView';
+ 
+ export type CommentBodyRenderer = (markdown: string) => ReactNode;
+ 
+@@ -132,7 +133,8 @@ export function SafeMarkdownPreview({
+ 
+   // Parse blocks: fenced code blocks vs standard blocks
+   const blocks: ReactNode[] = [];
+-  const lines = markdown.split('\n');
++  const normalized = markdown.replace(/\r\n/g, '\n');
++  const lines = normalized.split('\n');
+   let inCodeBlock = false;
+   let codeLang = '';
+   let codeLines: string[] = [];
+@@ -199,7 +201,15 @@ export function SafeMarkdownPreview({
+     if (trimmed.startsWith('```')) {
+       if (inCodeBlock) {
+         // Closing code block
+-        if (codeLang === 'svg') {
++        if (codeLang === 'mermaid') {
++          blocks.push(
++            <MermaidBlockView
++              key={`mermaid-${String(blockIdx++)}`}
++              source={codeLines.join('\n')}
++              readOnly={true}
++            />,
++          );
++        } else if (codeLang === 'svg') {
+           const rawSvg = codeLines.join('\n');
+           const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
+           blocks.push(
+@@ -226,7 +236,7 @@ export function SafeMarkdownPreview({
+         // Opening code block
+         flushTextLines();
+         inCodeBlock = true;
+-        codeLang = trimmed.slice(3).trim();
++        codeLang = trimmed.slice(3).trim().toLowerCase();
+         codeLines = [];
+       }
+     } else if (inCodeBlock) {
+diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
+index a18fa7c..45f243b 100644
+--- a/kanban/web/src/features/activity/activity.css
++++ b/kanban/web/src/features/activity/activity.css
+@@ -1,5 +1,15 @@
+ /* Activity & Comments Styling (KB-P3-44, S7.1, S6.1, S7.2 8j/8k) */
+ 
++.comment-card__avatar,
++.comment-author-avatar {
++  border-radius: 50%;
++  overflow: hidden;
++  clip-path: circle(50%);
++  user-select: none;
++  -webkit-user-select: none;
++  -webkit-user-drag: none;
++}
++
+ .activity-section {
+   display: flex;
+   flex-direction: column;
+@@ -470,6 +480,10 @@
+   column-gap: 4px;
+ }
+ 
++.comment-composer__file-input {
++  display: none;
++}
++
+ .composer-tool-btn {
+   background: transparent;
+   border: none;
+@@ -497,6 +511,8 @@
+   border-radius: var(--radius-md, 6px);
+   color: var(--fg-primary, #f8fafc);
+   font-family: inherit;
++  font-variant-ligatures: none;
++  font-feature-settings: "liga" 0, "calt" 0;
+   font-size: var(--text-body, 15px);
+   line-height: var(--leading-prose, 1.73);
+   padding: 10px 12px;
+@@ -670,6 +686,8 @@
+   padding: 10px 12px;
+   overflow-x: auto;
+   font-family: var(--font-mono, monospace);
++  font-variant-ligatures: none;
++  font-feature-settings: "liga" 0, "calt" 0;
+   font-size: 13px;
+   margin: 8px 0;
+ }
+@@ -679,6 +697,8 @@
+   padding: 2px 4px;
+   border-radius: var(--radius-sm, 4px);
+   font-family: var(--font-mono, monospace);
++  font-variant-ligatures: none;
++  font-feature-settings: "liga" 0, "calt" 0;
+   font-size: 13px;
+ }
+ 
 diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.test.tsx b/kanban/web/src/features/drawer-rail/PropertiesRail.test.tsx
 index 02783b5..1194cc3 100644
 --- a/kanban/web/src/features/drawer-rail/PropertiesRail.test.tsx
@@ -2064,7 +2831,7 @@ index a213ca1..cc7c200 100644
 +
 +
 diff --git a/kanban/web/src/features/drawer/IssueSurface.test.tsx b/kanban/web/src/features/drawer/IssueSurface.test.tsx
-index 96b2792..77e0655 100644
+index 96b2792..f8a46f0 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.test.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.test.tsx
 @@ -11,6 +11,7 @@ import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
@@ -2200,7 +2967,7 @@ index 96b2792..77e0655 100644
      });
  
      it('covers opener element capture, full mode toggle, non-image paste, and without router assign', async () => {
-@@ -1209,5 +1200,79 @@ describe('IssueSurface', () => {
+@@ -1209,5 +1200,119 @@ describe('IssueSurface', () => {
        unmount();
        localStorage.getItem = originalGetItem;
      });
@@ -2278,10 +3045,50 @@ index 96b2792..77e0655 100644
 +      uploadSpy.mockRestore();
 +      unmount();
 +    });
++
++    it('clicking [aria-label="Insert Mermaid diagram"] twice consecutively produces exact 2-block output', async () => {
++      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
++      const { Harness } = createTestHarness(['/projects/KAN/issues?peek=KAN-142']);
++      render(<Harness />);
++
++      await waitFor(() => {
++        expect(screen.getByRole('button', { name: 'Edit description' })).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
++      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
++      const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
++
++      // Clear description
++      fireEvent.change(textarea, { target: { value: '' } });
++      textarea.setSelectionRange(0, 0);
++
++      // First click
++      fireEvent.click(mermaidBtn);
++      const expectedBlock1 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
++      expect(textarea.value).toBe(expectedBlock1);
++      expect(textarea.selectionStart).toBe(expectedBlock1.length);
++      expect(textarea.selectionEnd).toBe(expectedBlock1.length);
++
++      // Second click: immediately click again with cursor at end of first block
++      fireEvent.click(mermaidBtn);
++      const expectedBlock2 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
++      const expectedFull = `${expectedBlock1}\n${expectedBlock2}`;
++      expect(textarea.value).toBe(expectedFull);
++      expect(textarea.selectionStart).toBe(expectedFull.length);
++      expect(textarea.selectionEnd).toBe(expectedFull.length);
++
++      const matches = Array.from(textarea.value.matchAll(/```mermaid\n([\s\S]*?)```/g));
++      expect(matches).toHaveLength(2);
++      expect(textarea.value).not.toContain(';');
++      expect(textarea.value).toBe(
++        '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
++      );
++    });
    });
  });
 diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
-index 6f476d2..b04b15b 100644
+index 6f476d2..d0b2dfd 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.tsx
 @@ -146,30 +146,6 @@ function IssueSurfaceContent({
@@ -2389,19 +3196,29 @@ index 6f476d2..b04b15b 100644
      if (!issue) {
        return <></>;
      }
-@@ -455,12 +402,26 @@ function IssueSurfaceContent({
+@@ -454,14 +401,50 @@ function IssueSurfaceContent({
+       const start = textarea.selectionStart;
        const end = textarea.selectionEnd;
        const current = textarea.value;
-       const selected = current.slice(start, end) || placeholder;
+-      const selected = current.slice(start, end) || placeholder;
 -      const replacement = `${before}${selected}${after}`;
++      const hasSelection = start !== end;
++      const selected = hasSelection ? current.slice(start, end) : placeholder;
 +
 +      let effBefore = before;
 +      let effAfter = after;
 +      const isFence = effBefore.startsWith('```') || effAfter.includes('```');
 +
 +      if (isFence) {
-+        if (start > 0 && current[start - 1] !== '\n') {
-+          effBefore = `\n${effBefore}`;
++        if (start > 0) {
++          const textBefore = current.slice(0, start);
++          if (textBefore.endsWith('\n\n')) {
++            // already preceded by blank line
++          } else if (textBefore.endsWith('\n')) {
++            effBefore = `\n${effBefore}`;
++          } else {
++            effBefore = `\n\n${effBefore}`;
++          }
 +        }
 +        if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
 +          effAfter = `${effAfter}\n`;
@@ -2411,14 +3228,30 @@ index 6f476d2..b04b15b 100644
 +      const replacement = `${effBefore}${selected}${effAfter}`;
        const next = current.slice(0, start) + replacement + current.slice(end);
        setDescriptionDraft(next);
++
++      const newCursor = isFence && !hasSelection
++        ? start + replacement.length
++        : start + effBefore.length + selected.length;
++
++      try {
++        textarea.setSelectionRange(newCursor, newCursor);
++      } catch {
++        // ignore
++      }
++
        setTimeout(() => {
          textarea.focus();
 -        const newCursor = start + before.length + selected.length;
-+        const newCursor = start + effBefore.length + selected.length;
-         textarea.setSelectionRange(newCursor, newCursor);
+-        textarea.setSelectionRange(newCursor, newCursor);
++        try {
++          textarea.setSelectionRange(newCursor, newCursor);
++        } catch {
++          // ignore
++        }
        }, 0);
      };
-@@ -578,11 +539,6 @@ function IssueSurfaceContent({
+ 
+@@ -578,11 +561,6 @@ function IssueSurfaceContent({
        }
      };
  
@@ -2430,7 +3263,7 @@ index 6f476d2..b04b15b 100644
      const RailSlotWithMeta = RailSlot as
        | ComponentType<{
            issue: IssueDetail;
-@@ -732,7 +688,7 @@ function IssueSurfaceContent({
+@@ -732,7 +710,7 @@ function IssueSurfaceContent({
                  accept="image/*,.svg"
                  tabIndex={-1}
                  aria-hidden="true"
@@ -2439,16 +3272,16 @@ index 6f476d2..b04b15b 100644
                  onChange={(e) => { void handleDescFileSelected(e); }}
                  data-testid="desc-file-input"
                />
-@@ -741,7 +697,7 @@ function IssueSurfaceContent({
+@@ -741,7 +719,7 @@ function IssueSurfaceContent({
                  className="composer-tool-btn"
                  aria-label="Insert Mermaid diagram"
                  data-testid="description-editor-tool-mermaid"
 -                onClick={() => { insertTextInDesc('```mermaid\ngraph TD;\n  A-->B;\n```\n', '', ''); }}
-+                onClick={() => { insertTextInDesc('```mermaid\ngraph TD;\n  ', '\n```', 'A-->B;'); }}
++                onClick={() => { insertTextInDesc('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
                >
                  📊
                </button>
-@@ -823,16 +779,6 @@ function IssueSurfaceContent({
+@@ -823,16 +801,6 @@ function IssueSurfaceContent({
              >
                <SafeMarkdownPreview markdown={currentIssue.description_markdown ?? ''} />
              </div>
@@ -2465,7 +3298,7 @@ index 6f476d2..b04b15b 100644
              {(currentIssue.capabilities === undefined || currentIssue.capabilities.includes('EDIT') || currentIssue.capabilities.includes('ADMIN')) && (
                <button
                  type="button"
-@@ -853,21 +799,6 @@ function IssueSurfaceContent({
+@@ -853,21 +821,6 @@ function IssueSurfaceContent({
        <>
          {mode === 'split' ? (
            <header className="surface__header surface__header--split">
@@ -2487,7 +3320,7 @@ index 6f476d2..b04b15b 100644
              <a
                href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
                target="_blank"
-@@ -903,7 +834,6 @@ function IssueSurfaceContent({
+@@ -903,7 +856,6 @@ function IssueSurfaceContent({
                  projectMetadata={{
                    key: currentIssue.project_key || resolvedProjectForAux,
                    name: currentIssue.project_name ?? currentIssue.project_key,
