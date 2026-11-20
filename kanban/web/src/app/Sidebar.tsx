@@ -1,6 +1,6 @@
 /**
  * Sidebar Navigation Rail (KB-P3-34, S6.3, KANBA-166, KANBA-167).
- * 256px collapsible navigation rail with Plane parity, [👍] 👍kanban branding,
+ * 256px collapsible navigation rail with [👍] 👍kanban branding,
  * dynamic project list, project creation modal, and accessible keyboard focus trapping.
  */
 
@@ -798,12 +798,12 @@ export function Sidebar({
                                   ? 'kb-subnav-active'
                                   : ''
                               }`}
-                              aria-label="List view"
+                              aria-label="Issues view"
                             >
                               <span className="kb-sidebar-icon" aria-hidden="true">
                                 <ListTodo size={14} />
                               </span>
-                              <span>📋 List</span>
+                              <span>📋 Issues</span>
                             </NavLink>
                           </li>
                           <li>

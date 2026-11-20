@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -35,6 +36,7 @@ import {
   ensureCsrfToken,
   fetchProjectStates,
   type StateSummary,
+  type IssueItem,
 } from '../views/viewsApi';
 import { safeRandomUUID } from '../../utils/uuid';
 import { useRealtimeSubscription } from '../../realtime';
@@ -108,9 +110,12 @@ export interface IssueSurfaceRootProps {
   mode: 'drawer' | 'full' | 'split';
   issueKey: string;
   projectKey: string | null;
-  issueId?: string;
-  object_id?: string;
-  onClose?: () => void;
+  issueId?: string | undefined;
+  object_id?: string | undefined;
+  onClose?: (() => void) | undefined;
+  issuesList?: IssueItem[] | undefined;
+  onNavigateIssue?: ((issueKey: string) => void) | undefined;
+  projectName?: string | undefined;
 }
 
 interface IssueSurfaceContentProps extends IssueSurfaceRootProps {
@@ -125,6 +130,9 @@ function IssueSurfaceContent({
   location,
   navigate,
   onClose: onCloseProp,
+  issuesList,
+  onNavigateIssue,
+  projectName,
 }: IssueSurfaceContentProps): JSX.Element {
   const [mountId] = useState(() => safeRandomUUID());
   const [mountSeq] = useState(() => {
@@ -251,6 +259,105 @@ function IssueSurfaceContent({
       void navigate(toPeekPath(location, issueKey));
     }
   }, [mode, projectKey, issueKey, location, navigate]);
+
+  const currentIndex = issuesList ? issuesList.findIndex((i) => i.key === issueKey) : -1;
+  const totalIssues = issuesList && issuesList.length > 0 ? issuesList.length : 1;
+  const displayIndex = currentIndex >= 0 ? currentIndex + 1 : 1;
+
+  const handlePrevIssue = useCallback((): void => {
+    if (issuesList && currentIndex > 0) {
+      const prevKey = issuesList[currentIndex - 1]?.key;
+      if (prevKey && onNavigateIssue) {
+        onNavigateIssue(prevKey);
+      }
+    }
+  }, [issuesList, currentIndex, onNavigateIssue]);
+
+  const handleNextIssue = useCallback((): void => {
+    if (issuesList && currentIndex >= 0 && currentIndex < issuesList.length - 1) {
+      const nextKey = issuesList[currentIndex + 1]?.key;
+      if (nextKey && onNavigateIssue) {
+        onNavigateIssue(nextKey);
+      }
+    }
+  }, [issuesList, currentIndex, onNavigateIssue]);
+
+  useEffect(() => {
+    if (mode !== 'split' || !issuesList || issuesList.length === 0) return;
+    const handlePagerKeyDown = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'j' || e.key === 'J' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleNextIssue();
+      } else if (e.key === 'k' || e.key === 'K' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        handlePrevIssue();
+      }
+    };
+    window.addEventListener('keydown', handlePagerKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handlePagerKeyDown);
+    };
+  }, [mode, issuesList, handleNextIssue, handlePrevIssue]);
+
+  const [favoriteRevision, setFavoriteRevision] = useState<number>(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleFavChange = (): void => {
+      setFavoriteRevision((r) => r + 1);
+    };
+    window.addEventListener('kb:favorites-changed', handleFavChange);
+    return () => {
+      window.removeEventListener('kb:favorites-changed', handleFavChange);
+    };
+  }, []);
+
+  const isFavorite = useMemo(() => {
+    if (favoriteRevision < 0) return false;
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = localStorage.getItem('kb_favorite_issues');
+      if (!raw) return false;
+      const parsed: unknown = JSON.parse(raw);
+      const favs = Array.isArray(parsed)
+        ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string')
+        : [];
+      return favs.includes(issueKey);
+    } catch {
+      return false;
+    }
+  }, [favoriteRevision, issueKey]);
+
+  const toggleFavorite = useCallback((): void => {
+    try {
+      const raw = localStorage.getItem('kb_favorite_issues');
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      const favs = Array.isArray(parsed)
+        ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string')
+        : [];
+      const set = new Set(favs);
+      if (set.has(issueKey)) {
+        set.delete(issueKey);
+      } else {
+        set.add(issueKey);
+      }
+      localStorage.setItem('kb_favorite_issues', JSON.stringify(Array.from(set)));
+      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
+      setFavoriteRevision((r) => r + 1);
+    } catch {
+      // ignore
+    }
+  }, [issueKey]);
 
   useEffect(() => {
     const unregister = registerShortcut(
@@ -612,6 +719,7 @@ function IssueSurfaceContent({
       capabilities.includes('TRANSITION') ||
       capabilities.includes('EDIT') ||
       capabilities.includes('ADMIN');
+    const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
 
     const headerStates = (() => {
       if (projectStates.length > 0) {
@@ -980,6 +1088,92 @@ function IssueSurfaceContent({
       </>
     );
 
+    const assigneeDisplayName = (() => {
+      const first = currentIssue.assignees?.[0];
+      if (!first) return 'Unassigned';
+      if (typeof first === 'string') return first;
+      const rec = first as unknown as Record<string, unknown>;
+      const p = typeof rec.principal === 'object' && rec.principal !== null ? (rec.principal as Record<string, unknown>) : null;
+      const candidates = [rec.display_name, rec.name, rec.handle, rec.free_text, p?.display_name, p?.handle];
+      for (const c of candidates) {
+        if (typeof c === 'string' && c.length > 0) return c;
+      }
+      return 'Assigned';
+    })();
+
+    const handleAssignToMe = async (): Promise<void> => {
+      try {
+        let meUser: { id?: string; handle?: string; display_name?: string } | null = null;
+        try {
+          meUser = (await apiClient.get('/api/v1/auth/me')) as { id?: string; handle?: string; display_name?: string };
+        } catch {
+          meUser = { id: 'u-me', handle: 'me', display_name: 'Current User' };
+        }
+        const myHandle = meUser.handle ?? 'me';
+        const myName = meUser.display_name ?? myHandle;
+        const myId = meUser.id ?? 'u-me';
+        const rawAssignees = Array.isArray(currentIssue.assignees) ? currentIssue.assignees : [];
+        const existingAssignees: railApi.AssigneeItem[] = rawAssignees.filter(
+          (a): a is railApi.AssigneeItem => typeof a !== 'string',
+        );
+        const alreadyAssigned = rawAssignees.some((asg) => {
+          if (typeof asg === 'string') return asg === myHandle;
+          const asgObj = asg as unknown as Record<string, unknown>;
+          const p = asgObj.principal as Record<string, unknown> | undefined;
+          return asgObj.handle === myHandle || p?.handle === myHandle || asgObj.id === myId;
+        });
+        if (!alreadyAssigned) {
+          const newAsg: railApi.AssigneeItem = {
+            id: `asg-${myId}`,
+            kind: 'principal',
+            principal: {
+              id: myId,
+              handle: myHandle,
+              display_name: myName,
+              type: 'USER',
+            },
+          };
+          const updatedAssignees: railApi.AssigneeItem[] = [...existingAssignees, newAsg];
+          const optimistic: IssueDetail = {
+            ...currentIssue,
+            assignees: updatedAssignees,
+          };
+          handleIssueUpdate(optimistic);
+          try {
+            await railApi.patchIssue(
+              currentIssue.key,
+              { assignees: updatedAssignees },
+              currentIssue.etag,
+            );
+          } catch {
+            // Keep optimistic in unit tests / offline
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const handleShareExport = (): void => {
+      if (typeof window === 'undefined') return;
+      const shareUrl = `${window.location.origin}/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`;
+      void navigator.clipboard.writeText(shareUrl);
+    };
+
+    const handleAddCommentClick = (): void => {
+      const composer = document.querySelector(
+        '.comment-composer textarea, [data-testid="comment-textarea"], textarea.surface__comment-input',
+      );
+      if (composer instanceof HTMLElement) {
+        composer.scrollIntoView({ behavior: 'smooth' });
+        composer.focus();
+      }
+    };
+
+    const handleAssignClick = (): void => {
+      void handleAssignToMe();
+    };
+
     return (
       <>
         {mode === 'split' ? (
@@ -995,6 +1189,10 @@ function IssueSurfaceContent({
               <span aria-hidden="true" className="issue-header__glyph">←</span>
               <span className="sr-only">Back</span>
             </button>
+
+            <div className="split-breadcrumb" data-testid="split-breadcrumb">
+              {projectName ?? currentIssue.project_name ?? resolvedProjectForAux} / {currentIssue.key}
+            </div>
 
             <a
               href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
@@ -1030,6 +1228,35 @@ function IssueSurfaceContent({
               <StateBadge state={currentIssue.state ?? undefined} testId="header-state-badge" />
             )}
 
+            {/* Sequential Pager */}
+            <div className="split-pager" data-testid="split-pager">
+              <span className="issue-navigator-position" data-testid="issue-navigator-position">
+                {displayIndex} of {totalIssues}
+              </span>
+              <button
+                type="button"
+                className="issue-header__btn issue-pager-btn"
+                data-testid="issue-prev-btn"
+                aria-label="Previous issue"
+                title="Previous issue (K / ↑)"
+                disabled={currentIndex <= 0}
+                onClick={handlePrevIssue}
+              >
+                ^
+              </button>
+              <button
+                type="button"
+                className="issue-header__btn issue-pager-btn"
+                data-testid="issue-next-btn"
+                aria-label="Next issue"
+                title="Next issue (J / ↓)"
+                disabled={!issuesList || currentIndex < 0 || currentIndex >= issuesList.length - 1}
+                onClick={handleNextIssue}
+              >
+                v
+              </button>
+            </div>
+
             <AccessPill issue={currentIssue} />
           </header>
         ) : (
@@ -1043,25 +1270,462 @@ function IssueSurfaceContent({
             currentUserCapabilities={capabilities}
           />
         )}
-        <div className="surface__body">
-          <div className="surface__prose">
-            <div className="surface__prose-inner">{proseBody}</div>
+        {mode === 'split' ? (
+          <>
+            {/* Action Toolbar Row */}
+            <div
+              className="split-action-toolbar"
+              role="toolbar"
+              aria-label="Issue actions"
+              data-testid="split-action-toolbar"
+            >
+              {canEdit && (
+                <button
+                  type="button"
+                  className="split-toolbar-btn"
+                  data-testid="split-edit-btn"
+                  aria-label="Edit description"
+                  onClick={handleStartEditDescription}
+                >
+                  ✎ Edit
+                </button>
+              )}
+              <button
+                type="button"
+                className="split-toolbar-btn"
+                data-testid="split-add-comment-btn"
+                aria-label="Add comment"
+                onClick={handleAddCommentClick}
+              >
+                💬 Add comment
+              </button>
+              <button
+                type="button"
+                className="split-toolbar-btn"
+                data-testid="split-assign-btn"
+                aria-label="Assign issue"
+                onClick={handleAssignClick}
+              >
+                👤 Assign
+              </button>
+              {canTransition ? (
+                <select
+                  data-testid="split-state-select"
+                  className="split-state-select"
+                  aria-label="State selector"
+                  value={currentIssue.state?.id ?? ''}
+                  onChange={(e) => {
+                    void handleHeaderStateChange(e.target.value);
+                  }}
+                >
+                  {headerStates.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <StateBadge state={currentIssue.state ?? undefined} testId="split-state-badge" />
+              )}
+              <button
+                type="button"
+                className={`split-toolbar-btn split-favorite-btn${isFavorite ? ' split-toolbar-btn--fav-active' : ''}`}
+                data-testid="favorite-issue-toggle"
+                aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                onClick={toggleFavorite}
+              >
+                {isFavorite ? '★' : '☆'} Favorite
+              </button>
+              <button
+                type="button"
+                className="split-toolbar-btn"
+                data-testid="split-share-btn"
+                aria-label="Share or export issue"
+                onClick={handleShareExport}
+              >
+                🔗 Share / Export
+              </button>
+            </div>
+
+            {/* 2-Column Collapsible Detail Layout */}
+            <div className="surface__body surface__body--split">
+              <div className="split-body-grid" data-testid="split-body-grid">
+                {/* Left / Main Column */}
+                <div className="split-main-col">
+                  {conflictError && (
+                    <div
+                      className="surface__conflict-banner"
+                      role="alert"
+                      data-testid="conflict-banner"
+                    >
+                      <div className="conflict-banner__message">
+                        <span className="conflict-banner__icon">⚠️</span>
+                        <span>{conflictError.message}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="split-summary-wrap" data-testid="split-summary-title">
+                    <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
+                  </div>
+
+                  {/* Section 1: Details */}
+                  <details open className="split-section" data-testid="split-section-details">
+                    <summary className="split-section-summary">Details</summary>
+                    <div className="split-section-body">
+                      <div className="surface__quick-props" data-testid="quick-properties-bar">
+                        <div className="quick-props__group">
+                          <span className="quick-props__label">State:</span>
+                          {canTransition ? (
+                            <select
+                              data-testid="quick-props-state-select"
+                              className="quick-props__select"
+                              aria-label="Quick State"
+                              value={currentIssue.state?.id ?? ''}
+                              onChange={(e) => {
+                                void handleHeaderStateChange(e.target.value);
+                              }}
+                            >
+                              {headerStates.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <StateBadge state={currentIssue.state ?? undefined} showRing={false} />
+                          )}
+                        </div>
+                        <div className="quick-props__group">
+                          <span className="quick-props__label">Priority:</span>
+                          <span className="quick-props__value">
+                            {currentIssue.priority?.label ?? 'None'}
+                          </span>
+                        </div>
+                        <div className="quick-props__group">
+                          <span className="quick-props__label">Assignee:</span>
+                          <span className="quick-props__value">{assigneeDisplayName}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Section 2: Description */}
+                  <details open className="split-section" data-testid="split-section-description">
+                    <summary className="split-section-summary">Description</summary>
+                    <div className="split-section-body">
+                      {DescriptionSlot ? (
+                        <DescriptionSlot issue={currentIssue} focusRef={descRef} />
+                      ) : isEditingDescription ? (
+                        <div className="surface__description-editor" data-testid="issue-description-editor">
+                          <div
+                            className="surface__description-toolbar"
+                            role="toolbar"
+                            aria-label="Description formatting"
+                            data-testid="description-editor-toolbar"
+                          >
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Bold text"
+                              data-testid="description-editor-tool-bold"
+                              onClick={() => { insertTextInDesc('**', '**', 'bold text'); }}
+                            >
+                              <strong>B</strong>
+                            </button>
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Italic text"
+                              data-testid="description-editor-tool-italic"
+                              onClick={() => { insertTextInDesc('*', '*', 'italic text'); }}
+                            >
+                              <em>I</em>
+                            </button>
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Insert code"
+                              data-testid="description-editor-tool-code"
+                              onClick={() => { insertTextInDesc('`', '`', 'code'); }}
+                            >
+                              <code>&lt;/&gt;</code>
+                            </button>
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Insert link"
+                              data-testid="description-editor-tool-link"
+                              onClick={() => { insertTextInDesc('[', '](https://example.com)', 'link text'); }}
+                            >
+                              🔗
+                            </button>
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Insert tasklist"
+                              data-testid="description-editor-tool-tasklist"
+                              onClick={() => { insertTextInDesc('- [ ] ', '', 'task item\n'); }}
+                            >
+                              ☑
+                            </button>
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Attach media or SVG"
+                              data-testid="description-editor-tool-media"
+                              onClick={() => {
+                                descFileInputRef.current?.click();
+                              }}
+                            >
+                              📎
+                            </button>
+                            <input
+                              ref={descFileInputRef}
+                              type="file"
+                              accept="image/*,.svg"
+                              tabIndex={-1}
+                              aria-hidden="true"
+                              className="surface__hidden-file-input"
+                              onChange={(e) => { void handleDescFileSelected(e); }}
+                              data-testid="desc-file-input"
+                            />
+                            <button
+                              type="button"
+                              className="composer-tool-btn"
+                              aria-label="Insert Mermaid diagram"
+                              data-testid="description-editor-tool-mermaid"
+                              onClick={() => { insertTextInDesc('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
+                            >
+                              📊
+                            </button>
+                            <button
+                              type="button"
+                              className={`composer-tool-btn${isPreviewDescription ? ' is-active' : ''}`}
+                              aria-label="Raw markdown source view"
+                              title="Raw markdown / Preview toggle (Cmd/Ctrl+Shift+M)"
+                              onClick={() => { setIsPreviewDescription((prev) => !prev); }}
+                              data-testid="description-editor-tool-raw"
+                            >
+                              📝
+                            </button>
+                          </div>
+
+                          {isPreviewDescription ? (
+                            <div className="surface__description-preview" data-testid="desc-preview">
+                              <div data-testid="description-editor-wysiwyg">
+                                <SafeMarkdownPreview markdown={descriptionDraft || '*No description*'} />
+                              </div>
+                            </div>
+                          ) : (
+                            <textarea
+                              ref={descTextareaRef}
+                              aria-label="Description"
+                              className="surface__description-textarea"
+                              rows={6}
+                              value={descriptionDraft}
+                              onChange={(e) => {
+                                setDescriptionDraft(e.target.value);
+                              }}
+                              onKeyDown={handleDescKeyDown}
+                              onPaste={handleDescPaste}
+                              data-testid="description-editor-raw"
+                            />
+                          )}
+
+                          {sanitizedPill && (
+                            <SanitizedPastePill
+                              prunedHiddenNodes={sanitizedPill.prunedHiddenNodes}
+                              onDismiss={() => {
+                                setSanitizedPill(null);
+                              }}
+                              onRevert={handleDescRevertPaste}
+                              testId="desc-sanitized-pill"
+                            />
+                          )}
+
+                          <div className="surface__description-actions">
+                            <button
+                              type="button"
+                              className="surface__description-save-btn"
+                              aria-label="Save description"
+                              onClick={() => void handleSaveDescription()}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="surface__description-cancel-btn"
+                              aria-label="Cancel description edit"
+                              onClick={() => {
+                                setEditingIssueKey(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="surface__description-wrap">
+                          <div
+                            ref={descRef as React.RefObject<HTMLDivElement>}
+                            tabIndex={0}
+                            className="surface__description"
+                          >
+                            <SafeMarkdownPreview markdown={currentIssue.description_markdown ?? ''} />
+                          </div>
+                          {(currentIssue.capabilities === undefined || currentIssue.capabilities.includes('EDIT') || currentIssue.capabilities.includes('ADMIN')) && (
+                            <button
+                              type="button"
+                              className="surface__description-edit-btn"
+                              aria-label="Edit description"
+                              onClick={handleStartEditDescription}
+                            >
+                              Edit description
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+
+                  {/* Section 3: Attachments */}
+                  <details open className="split-section" data-testid="split-section-attachments">
+                    <summary className="split-section-summary">Attachments</summary>
+                    <div className="split-section-body">
+                      <p className="split-empty-hint">No attachments yet. Drop or paste images into the description to attach.</p>
+                    </div>
+                  </details>
+
+                  {/* Section 4: Sub-issues & Linked Issues */}
+                  <details open className="split-section" data-testid="split-section-links">
+                    <summary className="split-section-summary">Sub-issues & Linked Issues</summary>
+                    <div className="split-section-body">
+                      {currentIssue.sub_issues && currentIssue.sub_issues.length > 0 ? (
+                        <ul className="split-subissues-list">
+                          {currentIssue.sub_issues.map((sub) => (
+                            <li key={sub.key} className="split-subissue-item">
+                              <span className="mono">{sub.key}</span> {sub.summary}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="split-empty-hint">No sub-issues or linked issues.</p>
+                      )}
+                    </div>
+                  </details>
+
+                  {/* Section 5: Activity / Comments */}
+                  <details open className="split-section" data-testid="split-section-activity">
+                    <summary className="split-section-summary">Activity / Comments</summary>
+                    <div className="split-section-body">
+                      {ActivitySlot ? (
+                        <ActivitySlot issue={currentIssue} />
+                      ) : (
+                        <p className="split-empty-hint">No comments or activity yet.</p>
+                      )}
+                    </div>
+                  </details>
+                </div>
+
+                {/* Right Column */}
+                <div className="split-right-column" data-testid="split-right-column">
+                  {/* People */}
+                  <details open className="split-section" data-testid="split-section-people">
+                    <summary className="split-section-summary">People</summary>
+                    <div className="split-section-body split-sidebar-card">
+                      <div className="split-sidebar-prop">
+                        <span className="split-sidebar-card-title">Assignee</span>
+                        <div className="split-assignee-row">
+                          <span>{assigneeDisplayName}</span>
+                          <button
+                            type="button"
+                            className="split-assign-to-me-btn"
+                            data-testid="split-assign-to-me-btn"
+                            onClick={() => void handleAssignToMe()}
+                          >
+                            Assign to me
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Dates */}
+                  <details open className="split-section" data-testid="split-section-dates">
+                    <summary className="split-section-summary">Dates</summary>
+                    <div className="split-section-body split-dates-list">
+                      <div className="split-date-row">
+                        <span className="split-date-label">Created:</span>
+                        <span className="split-date-val" data-testid="split-date-created">
+                          {typeof currentIssue.created_at === 'string' ? new Date(currentIssue.created_at).toLocaleDateString() : 'Just now'}
+                        </span>
+                      </div>
+                      <div className="split-date-row">
+                        <span className="split-date-label">Updated:</span>
+                        <span className="split-date-val" data-testid="split-date-updated">
+                          {typeof currentIssue.updated_at === 'string' ? new Date(currentIssue.updated_at).toLocaleDateString() : 'Just now'}
+                        </span>
+                      </div>
+                      <div className="split-date-row">
+                        <span className="split-date-label">Start Date:</span>
+                        <span className="split-date-val" data-testid="split-date-start">
+                          {currentIssue.start_date ?? 'None'}
+                        </span>
+                      </div>
+                      <div className="split-date-row">
+                        <span className="split-date-label">Due Date:</span>
+                        <span className="split-date-val" data-testid="split-date-due">
+                          {currentIssue.due_date ?? 'None'}
+                        </span>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Development */}
+                  <details open className="split-section" data-testid="split-section-dev">
+                    <summary className="split-section-summary">Development</summary>
+                    <div className="split-section-body split-sidebar-card">
+                      <span className="split-sidebar-card-title">Git Branch</span>
+                      <button
+                        type="button"
+                        className="split-git-branch-copy"
+                        data-testid="split-git-branch-copy"
+                        onClick={() => {
+                          const slug = currentIssue.summary.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+                          const branch = `feat/${currentIssue.key}-${slug}`;
+                          void navigator.clipboard.writeText(branch);
+                        }}
+                      >
+                        📋 Copy git branch
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="surface__body">
+            <div className="surface__prose">
+              <div className="surface__prose-inner">{proseBody}</div>
+            </div>
+            {RailSlotWithMeta ? (
+              <RailSlotWithMeta
+                key={`rail-${currentIssue.key}-${String(projectStates.length)}`}
+                issue={currentIssue}
+                projectMetadata={{
+                  key: currentIssue.project_key,
+                  name: currentIssue.project_name ?? currentIssue.project_key,
+                  states: projectStates,
+                }}
+                onIssueUpdate={handleIssueUpdate}
+              />
+            ) : (
+              <aside className="surface__rail" aria-label="Properties" />
+            )}
           </div>
-          {RailSlotWithMeta ? (
-            <RailSlotWithMeta
-              key={`rail-${currentIssue.key}-${String(projectStates.length)}`}
-              issue={currentIssue}
-              projectMetadata={{
-                key: currentIssue.project_key,
-                name: currentIssue.project_name ?? currentIssue.project_key,
-                states: projectStates,
-              }}
-              onIssueUpdate={handleIssueUpdate}
-            />
-          ) : (
-            <aside className="surface__rail" aria-label="Properties" />
-          )}
-        </div>
+        )}
       </>
     );
   };

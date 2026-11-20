@@ -1,5 +1,13 @@
-import React, { useState, useMemo, useEffect, useRef, type JSX } from 'react';
-import { ListRow } from './ListRow';
+/**
+ * Left Master Rail Issue List View (KAN-52 Problem 2).
+ * Replaces x/y-flipped Kanban status folding sections with compact 2-line cards,
+ * rail header with Order by sorting and refresh, and mobile touch state controls.
+ */
+
+import React, { useState, useMemo, useEffect, useCallback, type JSX } from 'react';
+import { PriorityIcon } from '../../components/icons/KanbanIcons';
+import { StateBadge } from '../../components/state/StateBadge';
+import { QuickFieldPopover } from '../views/QuickFieldPopover';
 import type { IssueItem, StateSummary } from '../views/viewsApi';
 import '../views/listTable.css';
 
@@ -20,20 +28,35 @@ export interface ListViewProps {
   canManageWorkflows?: boolean | undefined;
   onOpenFieldPopover?: ((field: 'state', issue: IssueItem, rect: DOMRect) => void) | undefined;
   onStateSelect?: ((issueKey: string, stateId: string) => void) | undefined;
+  onRefresh?: (() => void) | undefined;
 }
 
-interface GroupSection {
-  id: string;
-  name: string;
-  sortOrder: number;
-  items: IssueItem[];
+export type IssueSortOption =
+  | 'updated'
+  | 'created'
+  | 'priority'
+  | 'state'
+  | 'key'
+  | 'due_date'
+  | 'rank';
+
+const PRIORITY_WEIGHTS: Record<string, number> = {
+  urgent: 5,
+  high: 4,
+  medium: 3,
+  low: 2,
+  none: 1,
+};
+
+function parseIssueNumber(key: string): number {
+  const parts = key.split('-');
+  const num = parseInt(parts[1] ?? '0', 10);
+  return isNaN(num) ? 0 : num;
 }
 
 export function ListView({
   issues,
-  projectKey = 'KAN',
-  projectStates,
-  modulesEnabled = true,
+  projectStates = [],
   selectedIds = [],
   onToggleSelect,
   onCreateIssue,
@@ -43,272 +66,125 @@ export function ListView({
   focusedKey,
   onOpenPeek,
   activeKey,
-  canManageWorkflows = true,
   onOpenFieldPopover,
   onStateSelect,
+  onRefresh,
 }: ListViewProps): JSX.Element {
-  // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const [focusedIndex, setFocusedIndex] = useState<number>(0);
+  const [sortBy, setSortBy] = useState<IssueSortOption>('updated');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // Single-card filter dropdown state (KANBA-174)
-  const [filterCardOpen, setFilterCardOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedState, setSelectedState] = useState('all');
-  const [selectedPriority, setSelectedPriority] = useState('all');
-  const [groupByOption, setGroupByOption] = useState<'state' | 'priority' | 'cycle' | 'module' | 'none'>('state');
+  // Favorites tracking (persisted in localStorage)
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('kb_favorite_issues');
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        return new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+      }
+    } catch {
+      // ignore localStorage errors in hermetic tests
+    }
+    return new Set<string>();
+  });
 
-  const filterCardRef = useRef<HTMLDivElement>(null);
-
-  // Close filter popover on outside click or Escape
   useEffect(() => {
-    if (!filterCardOpen) return;
-    const handleOutsideClick = (e: MouseEvent): void => {
-      if (
-        filterCardRef.current &&
-        !filterCardRef.current.contains(e.target as Node)
-      ) {
-        setFilterCardOpen(false);
+    if (typeof window === 'undefined') return;
+    const handleFavChange = (): void => {
+      try {
+        const stored = localStorage.getItem('kb_favorite_issues');
+        if (stored) {
+          const parsed: unknown = JSON.parse(stored);
+          setFavoriteKeys(new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []));
+        }
+      } catch {
+        // ignore
       }
     };
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        setFilterCardOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('kb:favorites-changed', handleFavChange);
     return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('kb:favorites-changed', handleFavChange);
     };
-  }, [filterCardOpen]);
+  }, []);
 
-  // Filter issues based on single-card filter controls
-  const filteredIssues = useMemo(() => {
-    return issues.filter((issue) => {
-      // 1. Text Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesSummary = issue.summary.toLowerCase().includes(q);
-        const matchesKey = issue.key.toLowerCase().includes(q);
-        if (!matchesSummary && !matchesKey) return false;
-      }
-
-      // 2. Workflow State Filter
-      if (selectedState !== 'all') {
-        const group = issue.state.group.toLowerCase();
-        const name = issue.state.name.toLowerCase();
-        const stateId = issue.state.id.toLowerCase();
-        const target = selectedState.toLowerCase();
-        if (
-          group !== target &&
-          name !== target &&
-          stateId !== target &&
-          !name.includes(target)
-        ) {
-          return false;
-        }
-      }
-
-      // 3. Priority Filter
-      if (selectedPriority !== 'all') {
-        const slug = issue.priority.slug.toLowerCase();
-        if (slug !== selectedPriority) return false;
-      }
-
-      return true;
-    });
-  }, [issues, searchQuery, selectedState, selectedPriority]);
-
-  // Default workflow state sections order
-  const defaultStates: { name: string; sortOrder: number }[] = useMemo(
-    () => [
-      { name: 'Backlog', sortOrder: 10 },
-      { name: 'Todo', sortOrder: 20 },
-      { name: 'In Progress', sortOrder: 30 },
-      { name: 'In Review', sortOrder: 40 },
-      { name: 'Done', sortOrder: 50 },
-      { name: 'Cancelled', sortOrder: 60 },
-    ],
-    []
-  );
-
-  const resolvedWorkflowStates = useMemo(() => {
-    if (projectStates && projectStates.length > 0) {
-      return projectStates.map((st, idx) => ({
-        id: st.id,
-        name: st.name,
-        sortOrder: st.sort_order ?? (idx + 1) * 10,
-      }));
-    }
-    return defaultStates.map((def) => ({
-      id: def.name.toLowerCase().replace(/\s+/g, '-'),
-      name: def.name,
-      sortOrder: def.sortOrder,
-    }));
-  }, [projectStates, defaultStates]);
-
-  // Group issues by state, priority, or none
-  const sections = useMemo(() => {
-    if (groupByOption === 'priority') {
-      const priorityOrder = [
-        { name: 'Urgent', slug: 'urgent', sortOrder: 10 },
-        { name: 'High', slug: 'high', sortOrder: 20 },
-        { name: 'Medium', slug: 'medium', sortOrder: 30 },
-        { name: 'Low', slug: 'low', sortOrder: 40 },
-        { name: 'None', slug: 'none', sortOrder: 50 },
-      ];
-      const prioMap = new Map<string, GroupSection>();
-      for (const p of priorityOrder) {
-        prioMap.set(p.slug, {
-          id: `prio-${p.slug}`,
-          name: p.name,
-          sortOrder: p.sortOrder,
-          items: [],
-        });
-      }
-      for (const issue of filteredIssues) {
-        const slug = issue.priority.slug.toLowerCase();
-        const existing = prioMap.get(slug);
-        if (existing) {
-          existing.items.push(issue);
-        } else {
-          prioMap.set(slug, {
-            id: `prio-${slug}`,
-            name: issue.priority.label || slug,
-            sortOrder: 99,
-            items: [issue],
-          });
-        }
-      }
-      return Array.from(prioMap.values()).filter((s) => s.items.length > 0);
-    }
-
-    if (groupByOption === 'cycle') {
-      const cycleMap = new Map<string, GroupSection>();
-      for (const issue of filteredIssues) {
-        const cId = issue.cycle_id ?? 'no-cycle';
-        const cName = issue.cycle?.name ?? (cId === 'no-cycle' ? 'No Cycle' : `Cycle ${cId.slice(0, 6)}`);
-        const existing = cycleMap.get(cId);
-        if (existing) {
-          existing.items.push(issue);
-        } else {
-          cycleMap.set(cId, {
-            id: `cycle-${cId}`,
-            name: cName,
-            sortOrder: cId === 'no-cycle' ? 9999 : 10,
-            items: [issue],
-          });
-        }
-      }
-      return Array.from(cycleMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
-    }
-
-    if (groupByOption === 'module') {
-      const modMap = new Map<string, GroupSection>();
-      for (const issue of filteredIssues) {
-        const mods =
-          issue.modules && issue.modules.length > 0
-            ? issue.modules
-            : issue.module_ids && issue.module_ids.length > 0
-            ? issue.module_ids.map((id) => ({ id, name: `Module ${id.slice(0, 6)}` }))
-            : [{ id: 'no-module', name: 'No Module' }];
-        for (const m of mods) {
-          const existing = modMap.get(m.id);
-          if (existing) {
-            existing.items.push(issue);
-          } else {
-            modMap.set(m.id, {
-              id: `module-${m.id}`,
-              name: m.name,
-              sortOrder: m.id === 'no-module' ? 9999 : 10,
-              items: [issue],
-            });
-          }
-        }
-      }
-      return Array.from(modMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
-    }
-
-    if (groupByOption === 'none') {
-      return [
-        {
-          id: 'all-items',
-          name: 'All Work Items',
-          sortOrder: 1,
-          items: filteredIssues,
-        },
-      ];
-    }
-
-    // Default: Group issues by state, preserving known states with 0 items
-    const sectionMap = new Map<string, GroupSection>();
-
-    // Seed sections
-    for (const def of resolvedWorkflowStates) {
-      sectionMap.set(def.id, {
-        id: def.id,
-        name: def.name,
-        sortOrder: def.sortOrder,
-        items: [],
-      });
-    }
-
-    // Populate issues
-    for (const issue of filteredIssues) {
-      const stateId = issue.state.id;
-      const stateName = issue.state.name;
-      let targetSection = stateId ? sectionMap.get(stateId) : undefined;
-      targetSection ??= Array.from(sectionMap.values()).find((s) => s.name === stateName);
-      if (targetSection) {
-        targetSection.items.push(issue);
+  const toggleFavorite = useCallback((key: string) => {
+    setFavoriteKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        const fallbackId = stateId ? stateId : stateName.toLowerCase().replace(/\s+/g, '-');
-        sectionMap.set(fallbackId, {
-          id: fallbackId,
-          name: stateName,
-          sortOrder: issue.state.sort_order ?? 999,
-          items: [issue],
-        });
+        next.add(key);
       }
-    }
+      try {
+        localStorage.setItem('kb_favorite_issues', JSON.stringify(Array.from(next)));
+        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
-    // Convert to sorted array
-    return Array.from(sectionMap.values()).sort(
-      (a, b) => a.sortOrder - b.sortOrder
-    );
-  }, [filteredIssues, resolvedWorkflowStates, groupByOption]);
-
-  const toggleSection = (sectionName: string) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [sectionName]: !prev[sectionName],
-    }));
-  };
+  // QuickFieldPopover local fallback state
+  const [localPopoverIssue, setLocalPopoverIssue] = useState<IssueItem | null>(null);
+  const [localAnchor, setLocalAnchor] = useState<DOMRect | null>(null);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
-  // Flattened visible items for keyboard navigation
-  const visibleIssues = useMemo(() => {
-    const list: IssueItem[] = [];
-    for (const s of sections) {
-      if (!collapsedSections[s.name]) {
-        list.push(...s.items);
+  // Sort issues according to sortBy and sortDir
+  const sortedIssues = useMemo(() => {
+    const sorted = [...issues].sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case 'updated': {
+          const aUp = a.updated_at ?? '';
+          const bUp = b.updated_at ?? '';
+          cmp = aUp.localeCompare(bUp);
+          break;
+        }
+        case 'created': {
+          const aCr = a.created_at ?? '';
+          const bCr = b.created_at ?? '';
+          cmp = aCr.localeCompare(bCr);
+          break;
+        }
+        case 'priority': {
+          const wA = PRIORITY_WEIGHTS[a.priority.slug.toLowerCase()] ?? 0;
+          const wB = PRIORITY_WEIGHTS[b.priority.slug.toLowerCase()] ?? 0;
+          cmp = wA - wB;
+          break;
+        }
+        case 'state': {
+          const orderA = a.state.sort_order ?? 999;
+          const orderB = b.state.sort_order ?? 999;
+          cmp = orderA - orderB;
+          if (cmp === 0) {
+            cmp = a.state.name.localeCompare(b.state.name);
+          }
+          break;
+        }
+        case 'key': {
+          cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+          break;
+        }
+        case 'due_date': {
+          const dA = a.due_date ?? '';
+          const dB = b.due_date ?? '';
+          cmp = dA.localeCompare(dB);
+          break;
+        }
+        case 'rank': {
+          const rA = a.board_rank ?? '';
+          const rB = b.board_rank ?? '';
+          cmp = rA.localeCompare(rB);
+          break;
+        }
+        default:
+          cmp = 0;
       }
-    }
-    return list;
-  }, [sections, collapsedSections]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setFocusedIndex((prev) => Math.min(prev + 1, visibleIssues.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setFocusedIndex((prev) => Math.max(prev - 1, 0));
-    }
-  };
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [issues, sortBy, sortDir]);
 
   if (issues.length === 0) {
     return (
@@ -329,239 +205,175 @@ export function ListView({
   }
 
   return (
-    <div className="list-view" onKeyDown={handleKeyDown}>
-      {/* Compact Top Bar with Single Filter Card Dropdown and + New (KANBA-174) */}
-      <div className="list-compact-topbar" data-testid="list-compact-topbar">
-        <div className="list-filter-card-wrapper" ref={filterCardRef}>
-          <button
-            type="button"
-            className="list-filter-dropdown-btn"
-            aria-expanded={filterCardOpen}
-            aria-haspopup="dialog"
-            aria-label="Filter & Group"
-            onClick={() => { setFilterCardOpen((prev) => !prev); }}
+    <div className="list-view issue-master-rail" data-testid="issue-list-rail">
+      {/* Rail Header (Order by + Direction + Refresh) */}
+      <div className="issue-rail-header" data-testid="issue-rail-header">
+        <div className="issue-rail-sort-group">
+          <label htmlFor="issue-order-by" className="issue-rail-sort-label">
+            Order by
+          </label>
+          <select
+            id="issue-order-by"
+            className="issue-rail-sort-select"
+            data-testid="issue-sort-select"
+            aria-label="Order by"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value as IssueSortOption);
+            }}
           >
-            <span>🔍 Filter & Group</span>
-            <span aria-hidden="true">▾</span>
-          </button>
-
-          {filterCardOpen && (
-            <div
-              className="list-filter-popover"
-              role="dialog"
-              aria-label="Filter and Group options"
-            >
-              <div className="list-filter-popover-header">
-                <span className="list-filter-popover-title">Filter & Group Work Items</span>
-                <button
-                  type="button"
-                  className="list-filter-popover-close"
-                  aria-label="Close filter popover"
-                  onClick={() => { setFilterCardOpen(false); }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Text Search */}
-              <div className="list-filter-field">
-                <label htmlFor="list-search-input" className="list-filter-label">Search</label>
-                <input
-                  id="list-search-input"
-                  type="search"
-                  placeholder="Filter by title or key..."
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); }}
-                  className="list-filter-input"
-                />
-              </div>
-
-              {/* Workflow State */}
-              <div className="list-filter-field">
-                <label htmlFor="list-state-select" className="list-filter-label">State</label>
-                <select
-                  id="list-state-select"
-                  value={selectedState}
-                  onChange={(e) => { setSelectedState(e.target.value); }}
-                  className="list-filter-select"
-                >
-                  <option value="all">All States</option>
-                  {projectStates && projectStates.length > 0 ? (
-                    projectStates.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="backlog">Backlog</option>
-                      <option value="unstarted">Unstarted / Todo</option>
-                      <option value="started">Started / In Progress</option>
-                      <option value="completed">Completed / Done</option>
-                      <option value="cancelled">Cancelled</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* Priority */}
-              <div className="list-filter-field">
-                <label htmlFor="list-priority-select" className="list-filter-label">Priority</label>
-                <select
-                  id="list-priority-select"
-                  value={selectedPriority}
-                  onChange={(e) => { setSelectedPriority(e.target.value); }}
-                  className="list-filter-select"
-                >
-                  <option value="all">All Priorities</option>
-                  <option value="urgent">🔥 Urgent</option>
-                  <option value="high">⚡ High</option>
-                  <option value="medium">🔹 Medium</option>
-                  <option value="low">🔽 Low</option>
-                  <option value="none">➖ None</option>
-                </select>
-              </div>
-
-              {/* Group By */}
-              <div className="list-filter-field">
-                <label htmlFor="list-groupby-select" className="list-filter-label">Group By</label>
-                <select
-                  id="list-groupby-select"
-                  value={groupByOption}
-                  onChange={(e) => {
-                    setGroupByOption(e.target.value as 'state' | 'priority' | 'cycle' | 'module' | 'none');
-                  }}
-                  className="list-filter-select"
-                >
-                  <option value="state">Workflow State</option>
-                  <option value="priority">Priority</option>
-                  <option value="cycle">Cycle</option>
-                  {modulesEnabled && <option value="module">Module</option>}
-                  <option value="none">None (Flat list)</option>
-                </select>
-              </div>
-
-              {(searchQuery || selectedState !== 'all' || selectedPriority !== 'all' || groupByOption !== 'state') && (
-                <div className="list-filter-footer">
-                  <button
-                    type="button"
-                    className="list-filter-reset-btn"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSelectedState('all');
-                      setSelectedPriority('all');
-                      setGroupByOption('state');
-                    }}
-                  >
-                    Reset filters
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+            <option value="updated">Updated</option>
+            <option value="created">Created</option>
+            <option value="priority">Priority</option>
+            <option value="state">State</option>
+            <option value="key">Key</option>
+            <option value="due_date">Due Date</option>
+            <option value="rank">Rank</option>
+          </select>
         </div>
+
+        <button
+          type="button"
+          className="issue-sort-dir-btn"
+          data-testid="issue-sort-dir-btn"
+          aria-label={`Sort direction: ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+          onClick={() => {
+            setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+          }}
+        >
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
+
+        <button
+          type="button"
+          className="issue-rail-refresh-btn"
+          data-testid="issue-rail-refresh-btn"
+          aria-label="Refresh issue list"
+          onClick={() => {
+            if (onRefresh) {
+              onRefresh();
+            } else if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('kb:refresh-issues'));
+            }
+          }}
+        >
+          ↻
+        </button>
 
         {onCreateIssue && (
           <button
             type="button"
-            className="list-new-btn"
-            onClick={onCreateIssue}
+            className="issue-rail-new-btn"
+            data-testid="issue-rail-new-btn"
             aria-label="New work item"
+            onClick={onCreateIssue}
           >
-            <span aria-hidden="true">+</span>
-            <span>New</span>
+            +
           </button>
         )}
       </div>
 
-      {sections.map((section) => {
-        const isCollapsed = Boolean(collapsedSections[section.name]);
+      {/* 2-Line Issue List Cards */}
+      <div className="issue-card-list list-rows" role="rowgroup">
+        {sortedIssues.map((issue) => {
+          const isFav = favoriteKeys.has(issue.key);
+          const isSelected = selectedSet.has(issue.key);
+          const isActive = activeKey === issue.key || focusedKey === issue.key;
 
-        return (
-          <section
-            key={section.id}
-            className="list-section"
-            data-section-name={section.name}
-            aria-labelledby={`heading-${section.id}`}
-          >
-            <div className="list-section-header">
-              <button
-                type="button"
-                id={`heading-${section.id}`}
-                className="list-section-toggle"
-                aria-expanded={!isCollapsed}
-                onClick={() => { toggleSection(section.name); }}
-              >
-                <span className="list-section-toggle-icon" aria-hidden="true">
-                  ▼
-                </span>
-                <span>{section.name}</span>
-                <span className="list-section-count">{section.items.length}</span>
-              </button>
+          const handleStateClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            if (onOpenFieldPopover) {
+              onOpenFieldPopover('state', issue, rect);
+            } else {
+              setLocalAnchor(rect);
+              setLocalPopoverIssue(issue);
+            }
+          };
 
-              <div className="list-section-actions">
-                {canManageWorkflows && (
+          return (
+            <div
+              key={issue.id || issue.key}
+              role="row"
+              tabIndex={focusedKey === issue.key ? 0 : -1}
+              className={`issue-list-card list-row ${isSelected ? 'list-row--selected' : ''} ${
+                isActive ? 'list-row--active' : ''
+              }`}
+              data-issue-key={issue.key}
+              data-testid={`issue-list-card-${issue.key}`}
+              onClick={(e) => {
+                const target = e.target as HTMLElement;
+                if (target.closest('input, button, a')) return;
+                onOpenPeek?.(issue.key);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onOpenPeek?.(issue.key);
+                }
+              }}
+            >
+              {/* Line 1: Priority Icon, Monospace Key, Right-aligned interactive state pill & Favorite star */}
+              <div className="issue-card-line-1">
+                <div className="issue-card-meta-left">
+                  {onToggleSelect && (
+                    <input
+                      type="checkbox"
+                      className="issue-card-checkbox"
+                      aria-label={`Select ${issue.key}`}
+                      checked={isSelected}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        onToggleSelect(issue.key, e.target.checked);
+                      }}
+                    />
+                  )}
+                  <PriorityIcon
+                    priority={issue.priority.slug}
+                    size={14}
+                    className="list-row-priority-icon"
+                  />
+                  <span className="mono issue-card-key">{issue.key}</span>
+                </div>
+
+                <div className="issue-card-meta-right">
                   <button
                     type="button"
-                    className="list-section-add-workflow-btn"
-                    data-testid={`section-add-workflow-btn-${section.name}`}
-                    title={`Attach workflow transition to ${section.name}`}
+                    className="list-row-state-btn"
+                    data-testid={`list-row-state-btn-${issue.key}`}
+                    aria-label={`Status: ${issue.state.name}`}
+                    title={`Status: ${issue.state.name}`}
+                    onClick={handleStateClick}
+                  >
+                    <StateBadge
+                      state={issue.state}
+                      showLabel={false}
+                      className="list-row-state-icon"
+                    />
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`issue-card-star-btn ${isFav ? 'issue-card-star-btn--active' : ''}`}
+                    data-testid="favorite-issue-toggle"
+                    aria-label={isFav ? `Unfavorite ${issue.key}` : `Favorite ${issue.key}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (typeof window !== 'undefined') {
-                        window.location.assign(
-                          `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(section.name)}&attach=1`,
-                        );
-                      }
+                      toggleFavorite(issue.key);
                     }}
                   >
-                    + Workflow
+                    {isFav ? '⭐' : '☆'}
                   </button>
-                )}
-                {onCreateIssue && (
-                  <button
-                    type="button"
-                    className="list-section-new-btn"
-                    onClick={onCreateIssue}
-                    aria-label={`New work item in ${section.name}`}
-                  >
-                    + New work item
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {!isCollapsed && (
-              <div
-                className="list-table"
-                role="table"
-                aria-label={`${section.name} work items`}
-              >
-                <div className="list-rows" role="rowgroup">
-                  {section.items.map((issue) => {
-                    const itemIndex = visibleIssues.indexOf(issue);
-                    return (
-                      <ListRow
-                        key={issue.id || issue.key}
-                        issue={issue}
-                        isSelected={selectedSet.has(issue.key)}
-                        onToggleSelect={onToggleSelect}
-                        modulesEnabled={modulesEnabled}
-                        isFocused={itemIndex === focusedIndex || focusedKey === issue.key}
-                        onOpenPeek={onOpenPeek}
-                        isActive={activeKey === issue.key}
-                        onOpenFieldPopover={onOpenFieldPopover}
-                        onStateSelect={onStateSelect}
-                        projectStates={projectStates}
-                      />
-                    );
-                  })}
                 </div>
               </div>
-            )}
-          </section>
-        );
-      })}
+
+              {/* Line 2: Summary */}
+              <div className="issue-card-line-2">
+                <span className="issue-card-summary">{issue.summary}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {nextCursor && (
         <div className="view-load-more">
@@ -574,6 +386,25 @@ export function ListView({
             {isLoading ? 'Loading...' : 'Load more'}
           </button>
         </div>
+      )}
+
+      {/* Local State Popover Fallback (preserving KAN-44) */}
+      {localPopoverIssue && (
+        <QuickFieldPopover
+          isOpen={Boolean(localPopoverIssue)}
+          field="state"
+          anchorRect={localAnchor}
+          issue={localPopoverIssue}
+          onClose={() => {
+            setLocalPopoverIssue(null);
+          }}
+          onSelect={(field, value) => {
+            if (field === 'state' && typeof value === 'string') {
+              onStateSelect?.(localPopoverIssue.key, value);
+            }
+          }}
+          states={projectStates}
+        />
       )}
     </div>
   );

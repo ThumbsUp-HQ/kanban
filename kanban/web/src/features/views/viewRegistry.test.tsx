@@ -80,7 +80,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       />
     );
 
-    expect(screen.getByText('Backlog')).toBeDefined();
+    expect(screen.getByTestId('issue-list-rail')).toBeDefined();
   });
 
   it('renders TableView when layout is table', () => {
@@ -133,7 +133,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       />
     );
 
-    expect(screen.getByText('Backlog')).toBeDefined();
+    expect(screen.getByTestId('issue-list-rail')).toBeDefined();
   });
 
   it('IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority', async () => {
@@ -198,11 +198,12 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
 
     // Fill in summary, description, and module
-    const summaryInput = screen.getByLabelText(/summary/i);
+    const createDialog = screen.getByRole('dialog', { name: /create work item in KAN/i });
+    const summaryInput = within(createDialog).getByLabelText(/summary/i);
     fireEvent.change(summaryInput, { target: { value: 'Newly Created Task' } });
-    const descInput = screen.getByLabelText(/description/i);
+    const descInput = within(createDialog).getByLabelText(/description/i);
     fireEvent.change(descInput, { target: { value: 'Detailed task description' } });
-    const modSelect = screen.getByLabelText(/module/i);
+    const modSelect = within(createDialog).getByLabelText(/module/i);
     fireEvent.change(modSelect, { target: { value: 'mod-1' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
@@ -321,7 +322,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
   it('IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date', () => {
     // 1. Priority filter: urgent
-    window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+    window.history.pushState({}, '', '/projects/KAN/issues?layout=table');
 
     render(
       <IssuesWorkspaceRoute
@@ -537,6 +538,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
   });
 
   it('IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut', () => {
+    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
     render(
       <IssuesWorkspaceRoute
         projectKey="KAN"
@@ -605,7 +607,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     window.history.pushState(
       {},
       '',
-      '/projects/KAN/issues?filter_state=in_progress&filter_priority=high&filter_label=Frontend&gate_status=pending'
+      '/projects/KAN/issues?layout=board&filter_state=in_progress&filter_priority=high&filter_label=Frontend&gate_status=pending'
     );
 
     render(
@@ -919,7 +921,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       render(
         <IssuesWorkspaceRoute
           projectKey="KAN"
-          initialLayout="list"
+          initialLayout="board"
           initialIssues={FIXTURE_12_ISSUES}
         />,
       );
@@ -1565,7 +1567,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       window.history.pushState({}, '', '/');
     });
 
-    it('handles states fetch failure in live mode', () => {
+    it('handles states fetch failure in live mode', async () => {
       const origFetch = globalThis.fetch;
       globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -1578,8 +1580,14 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         });
       });
 
-      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
-      globalThis.fetch = origFetch;
+      try {
+        await act(async () => {
+          render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
+          await Promise.resolve();
+        });
+      } finally {
+        globalThis.fetch = origFetch;
+      }
     });
 
     it('covers onCreateIssue from ViewHost table layout empty state', () => {
@@ -1770,7 +1778,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         <IssuesWorkspaceRoute
           projectKey="KAN"
           initialIssues={FIXTURE_12_ISSUES}
-          initialLayout="list"
+          initialLayout="board"
           queryClient={qc}
         />,
       );
@@ -2078,7 +2086,8 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       // 1. Prompt returns null (user cancelled)
       promptSpy.mockReturnValueOnce(null);
-      const inReviewOpt = screen.getByRole('option', { name: 'In Review' });
+      const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      const inReviewOpt = within(statePop).getByRole('option', { name: 'In Review' });
       fireEvent.click(inReviewOpt);
       expect(promptSpy).toHaveBeenCalled();
 

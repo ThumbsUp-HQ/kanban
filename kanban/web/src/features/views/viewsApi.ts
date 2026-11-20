@@ -84,6 +84,8 @@ export interface IssueItem {
   modules?: ModuleSummary[];
   assignees?: AssigneeItem[];
   board_rank?: string;
+  created_at?: string;
+  updated_at?: string;
   created_by_id?: string;
   created_by_handle?: string;
   has_explicit_acl?: boolean;

@@ -736,9 +736,9 @@
 }
 
 .kb-split-list-pane {
-  flex: 1 1 50%;
-  width: 50%;
-  min-width: 320px;
+  flex: 0 0 300px;
+  min-width: 260px;
+  max-width: 340px;
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
@@ -965,4 +965,163 @@
   .kb-split-list-pane .list-row-right .module-pill {
     display: none;
   }
+}
+
+/* ==========================================================================
+   Left Master Rail & Compact 2-Line Cards (KAN-52)
+   ========================================================================== */
+
+.issue-rail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) 0;
+  border-bottom: 1px solid var(--border-subtle, #333842);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.issue-rail-sort-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex: 1 1 auto;
+}
+
+.issue-rail-sort-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-muted, #94a3b8);
+  white-space: nowrap;
+}
+
+.issue-rail-sort-select {
+  height: 26px;
+  padding: 0 var(--space-2, 8px);
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-primary, #f8fafc);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.issue-sort-dir-btn,
+.issue-rail-refresh-btn,
+.issue-rail-new-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 var(--space-1, 4px);
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-secondary, #cbd5e1);
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 120ms ease;
+}
+
+.issue-sort-dir-btn:hover,
+.issue-rail-refresh-btn:hover,
+.issue-rail-new-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.issue-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.issue-list-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  min-height: 52px;
+  box-sizing: border-box;
+}
+
+.issue-list-card:hover {
+  background: var(--bg-hover, #2c313a);
+}
+
+.issue-list-card.list-row--active {
+  background: var(--bg-hover, #2c313a);
+  border-color: var(--accent-primary);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.issue-card-line-1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.issue-card-meta-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  min-width: 0;
+}
+
+.issue-card-checkbox {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent-primary, #6366f1);
+}
+
+.issue-card-key {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-secondary, #cbd5e1);
+}
+
+.issue-card-meta-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex-shrink: 0;
+}
+
+.issue-card-star-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  color: var(--fg-muted, #94a3b8);
+  transition: transform 120ms ease;
+}
+
+.issue-card-star-btn--active {
+  color: #fbbf24;
+}
+
+.issue-card-line-2 {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+  width: 100%;
+}
+
+.issue-card-summary {
+  font-size: 12px;
+  color: var(--fg-primary, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
 }
