@@ -27,7 +27,7 @@ import base64
 import binascii
 import hashlib
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import delete, select, text, update
@@ -658,6 +658,9 @@ async def serialize_issue(
 
     obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
     archived_at = obj.archived_at if obj is not None else None
+    now_utc = datetime.now(UTC)
+    issue_created_at = obj.created_at if obj is not None else now_utc
+    issue_updated_at = obj.updated_at if obj is not None else now_utc
     archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
 
     pending_gate = await resolve_pending_gate(session, issue)
@@ -697,6 +700,8 @@ async def serialize_issue(
         provenance=provenance,
         access_manifest=manifest,
         capabilities=capabilities_to_names(caps),
+        created_at=issue_created_at,
+        updated_at=issue_updated_at,
         archived_at=archived_at,
         archive_eligibility=archive_eligibility,
         pending_gate=pending_gate,

@@ -16,6 +16,7 @@ export interface UseIssueKeyboardMapOptions {
     rect: DOMRect | null
   ) => void) | undefined;
   onToggleAssigneeMe?: ((issue: IssueItem) => void) | undefined;
+  onOpenPeek?: ((issueKey: string) => void) | undefined;
   isPopoverOrModalOpen?: boolean | undefined;
 }
 
@@ -42,6 +43,7 @@ export function useIssueKeyboardMap({
   onOpenFilter,
   onOpenFieldPopover,
   onToggleAssigneeMe,
+  onOpenPeek,
   isPopoverOrModalOpen = false,
 }: UseIssueKeyboardMapOptions): UseIssueKeyboardMapReturn {
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
@@ -174,8 +176,8 @@ export function useIssueKeyboardMap({
         ? issues.findIndex((i) => i.key === focusedKey)
         : -1;
 
-      // Shortcut: 'J' -> move down
-      if (lowerKey === 'j') {
+      // Shortcut: 'J' or 'ArrowDown' -> move down
+      if (lowerKey === 'j' || key === 'ArrowDown') {
         e.preventDefault();
         const nextIndex =
           currentIndex === -1 || currentIndex >= issues.length - 1
@@ -184,17 +186,23 @@ export function useIssueKeyboardMap({
         const nextItem = issues[nextIndex] ?? firstIssue;
         setFocusedKey(nextItem.key);
         if (!anchorKey) setAnchorKey(nextItem.key);
+        if (layout === 'list' && onOpenPeek) {
+          onOpenPeek(nextItem.key);
+        }
         return;
       }
 
-      // Shortcut: 'K' -> move up
-      if (lowerKey === 'k') {
+      // Shortcut: 'K' or 'ArrowUp' -> move up
+      if (lowerKey === 'k' || key === 'ArrowUp') {
         e.preventDefault();
         const prevIndex =
           currentIndex <= 0 ? issues.length - 1 : currentIndex - 1;
         const prevItem = issues[prevIndex] ?? firstIssue;
         setFocusedKey(prevItem.key);
         if (!anchorKey) setAnchorKey(prevItem.key);
+        if (layout === 'list' && onOpenPeek) {
+          onOpenPeek(prevItem.key);
+        }
         return;
       }
 
@@ -243,12 +251,20 @@ export function useIssueKeyboardMap({
         return;
       }
 
-      // Shortcut: 'Enter' or 'Space' -> peek issue
+      // Shortcut: 'Enter' or 'Space' -> peek issue (SPA navigation)
       if (key === 'Enter' || key === ' ') {
-        if (focusedKey) {
+        const targetKey = focusedKey ?? firstIssue.key;
+        if (targetKey) {
           e.preventDefault();
-          const targetUrl = `?layout=${encodeURIComponent(layout)}&peek=${encodeURIComponent(focusedKey)}`;
-          window.location.href = targetUrl;
+          if (onOpenPeek) {
+            onOpenPeek(targetKey);
+          } else if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('layout', layout);
+            url.searchParams.set('peek', targetKey);
+            window.history.pushState({}, '', url.toString());
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
         }
         return;
       }
@@ -319,6 +335,7 @@ export function useIssueKeyboardMap({
     onOpenCreateModal,
     onOpenFilter,
     onOpenFieldPopover,
+    onOpenPeek,
     onToggleAssigneeMe,
     selectRange,
     setSelectedIds,

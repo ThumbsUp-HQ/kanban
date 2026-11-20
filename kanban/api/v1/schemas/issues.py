@@ -291,6 +291,8 @@ class IssueResponse(BaseModel):
     capabilities: list[str] = Field(
         description="Effective capabilities held by the calling principal on this issue"
     )
+    created_at: datetime = Field(description="Issue creation timestamp")
+    updated_at: datetime = Field(description="Issue last updated timestamp")
     archived_at: datetime | None = Field(
         default=None, description="Timestamp when the issue was archived, if archived"
     )

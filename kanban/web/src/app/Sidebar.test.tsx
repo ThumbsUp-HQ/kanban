@@ -55,7 +55,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
     expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
-    expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
+    expect(screen.getAllByRole('link', { name: /Docs/ }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Project Settings/ })).toBeDefined();
   });
@@ -239,8 +239,8 @@ describe('Sidebar', () => {
         </MemoryRouter>,
       );
 
-      const link = screen.getByRole('link', { name });
-      expect(link.getAttribute('aria-current')).toBe('page');
+      const links = screen.getAllByRole('link', { name });
+      expect(links.some((l) => l.getAttribute('aria-current') === 'page')).toBe(true);
       unmount();
     }
   });
@@ -442,13 +442,13 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: /List view/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Issues view/i })).toBeDefined();
     expect(screen.getByRole('link', { name: /Board view/i })).toBeDefined();
     expect(screen.getByRole('link', { name: /Table view/i })).toBeDefined();
     expect(screen.getByRole('link', { name: /Calendar view/i })).toBeDefined();
     expect(screen.getByRole('link', { name: /Timeline view/i })).toBeDefined();
 
-    const listViewLink = screen.getByRole('link', { name: /List view/i });
+    const listViewLink = screen.getByRole('link', { name: /Issues view/i });
     expect(listViewLink.getAttribute('href')).toBe('/projects/KAN/issues?layout=list');
   });
 

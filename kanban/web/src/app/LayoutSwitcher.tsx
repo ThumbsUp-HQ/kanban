@@ -1,6 +1,6 @@
 /**
- * Board Layout Switcher (KB-P3-34, S6.3).
- * Accessible radiogroup with 5 views (List, Board, Table, Calendar, Timeline) and responsive collapse.
+ * Board Layout Switcher (KB-P3-34, S6.3, KAN-52).
+ * Accessible radiogroup with 5 views (Issues, Board, Table, Calendar, Timeline) and responsive collapse.
  */
 
 import React, {
@@ -11,6 +11,7 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import { useSearchParams } from 'react-router';
+import './LayoutSwitcher.css';
 
 export type LayoutOption = 'list' | 'board' | 'table' | 'calendar' | 'timeline';
 
@@ -20,7 +21,7 @@ export interface LayoutConfig {
 }
 
 export const LAYOUT_OPTIONS: readonly LayoutConfig[] = [
-  { id: 'list', label: 'List' },
+  { id: 'list', label: 'Issues' },
   { id: 'board', label: 'Board' },
   { id: 'table', label: 'Table' },
   { id: 'calendar', label: 'Calendar' },
@@ -102,27 +103,18 @@ export function LayoutSwitcher({
 
   const activeConfig =
     LAYOUT_OPTIONS.find((o) => o.id === activeLayout) ??
-    (LAYOUT_OPTIONS[0] ?? { id: 'list', label: 'List' });
+    (LAYOUT_OPTIONS[0] ?? { id: 'list', label: 'Issues' });
 
   return (
     <div
       ref={containerRef}
       className={`kb-layout-switcher ${className ?? ''}`}
-      style={{ display: 'inline-flex', alignItems: 'center' }}
     >
       {/* Desktop Segmented Control */}
       <div
         className="kb-layout-switcher-desktop"
         role="radiogroup"
         aria-label="Layout"
-        style={{
-          display: 'flex',
-          background: 'var(--bg-surface-raised, #24272f)',
-          borderRadius: 'var(--radius-md, 6px)',
-          padding: '2px',
-          gap: '2px',
-          border: '1px solid var(--border-subtle, #333842)',
-        }}
       >
         {LAYOUT_OPTIONS.map((opt, i) => {
           const isSelected = opt.id === activeLayout;
@@ -138,20 +130,7 @@ export function LayoutSwitcher({
               tabIndex={isSelected ? 0 : -1}
               onClick={() => { handleSelect(opt.id); }}
               onKeyDown={(e) => { handleKeyDown(e, i); }}
-              style={{
-                background: isSelected ? 'var(--bg-hover, #2c313a)' : 'transparent',
-                color: isSelected
-                  ? 'var(--fg-primary, #f8fafc)'
-                  : 'var(--fg-muted, #94a3b8)',
-                padding: 'var(--space-1, 4px) var(--space-3, 12px)',
-                borderRadius: 'var(--radius-sm, 4px)',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: isSelected ? 600 : 400,
-                outline: 'none',
-                transition: 'background 120ms ease, color 120ms ease',
-              }}
+              className={`kb-layout-switcher-btn ${isSelected ? 'kb-layout-switcher-btn--selected' : ''}`}
             >
               {opt.label}
             </button>
@@ -160,25 +139,14 @@ export function LayoutSwitcher({
       </div>
 
       {/* Responsive Collapsed Dropdown (<= 1279px) */}
-      <div className="kb-layout-switcher-mobile" style={{ position: 'relative' }}>
+      <div className="kb-layout-switcher-mobile">
         <button
           type="button"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label={`Layout: ${activeConfig.label}`}
           onClick={() => { setMenuOpen(!menuOpen); }}
-          style={{
-            background: 'var(--bg-surface-raised, #24272f)',
-            color: 'var(--fg-primary, #f8fafc)',
-            border: '1px solid var(--border-subtle, #333842)',
-            borderRadius: 'var(--radius-md, 6px)',
-            padding: 'var(--space-1, 4px) var(--space-3, 12px)',
-            cursor: 'pointer',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
+          className="kb-layout-switcher-mobile-btn"
         >
           <span>Layout: {activeConfig.label}</span>
           <span aria-hidden="true">▾</span>
@@ -188,48 +156,23 @@ export function LayoutSwitcher({
           <div
             role="menu"
             aria-label="Layout menu"
-            style={{
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              right: 0,
-              background: 'var(--bg-surface-raised, #24272f)',
-              border: '1px solid var(--border-subtle, #333842)',
-              borderRadius: 'var(--radius-md, 6px)',
-              boxShadow: 'var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5))',
-              zIndex: 100,
-              minWidth: '140px',
-              padding: '4px',
-            }}
+            className="kb-layout-switcher-menu"
           >
-            {LAYOUT_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={opt.id === activeLayout}
-                onClick={() => { handleSelect(opt.id); }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  background:
-                    opt.id === activeLayout
-                      ? 'var(--bg-hover, #2c313a)'
-                      : 'transparent',
-                  color:
-                    opt.id === activeLayout
-                      ? 'var(--fg-primary, #f8fafc)'
-                      : 'var(--fg-secondary, #cbd5e1)',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-sm, 4px)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
+            {LAYOUT_OPTIONS.map((opt) => {
+              const isSelected = opt.id === activeLayout;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={isSelected}
+                  onClick={() => { handleSelect(opt.id); }}
+                  className={`kb-layout-switcher-menu-item ${isSelected ? 'kb-layout-switcher-menu-item--selected' : ''}`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

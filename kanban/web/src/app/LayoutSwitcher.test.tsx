@@ -30,7 +30,7 @@ describe('LayoutSwitcher', () => {
     const radios = screen.getAllByRole('radio');
     expect(radios).toHaveLength(5);
     expect(radios.map((r) => r.textContent.trim())).toEqual([
-      'List',
+      'Issues',
       'Board',
       'Table',
       'Calendar',
@@ -48,8 +48,8 @@ describe('LayoutSwitcher', () => {
     const boardRadio = screen.getByRole('radio', { name: 'Board' });
     expect(boardRadio.getAttribute('aria-checked')).toBe('true');
 
-    const listRadio = screen.getByRole('radio', { name: 'List' });
-    expect(listRadio.getAttribute('aria-checked')).toBe('false');
+    const issuesRadio = screen.getByRole('radio', { name: 'Issues' });
+    expect(issuesRadio.getAttribute('aria-checked')).toBe('false');
   });
 
   it('handles arrow key navigation across options including ArrowDown, ArrowUp, and ignore other keys', () => {
@@ -60,23 +60,23 @@ describe('LayoutSwitcher', () => {
       </MemoryRouter>,
     );
 
-    const listRadio = screen.getByRole('radio', { name: 'List' });
-    listRadio.focus();
+    const issuesRadio = screen.getByRole('radio', { name: 'Issues' });
+    issuesRadio.focus();
 
-    fireEvent.keyDown(listRadio, { key: 'ArrowRight' });
+    fireEvent.keyDown(issuesRadio, { key: 'ArrowRight' });
     expect(onChange).toHaveBeenCalledWith('board');
 
-    fireEvent.keyDown(listRadio, { key: 'ArrowDown' });
+    fireEvent.keyDown(issuesRadio, { key: 'ArrowDown' });
     expect(onChange).toHaveBeenCalledWith('board');
 
-    fireEvent.keyDown(listRadio, { key: 'ArrowLeft' });
+    fireEvent.keyDown(issuesRadio, { key: 'ArrowLeft' });
     expect(onChange).toHaveBeenCalledWith('timeline');
 
-    fireEvent.keyDown(listRadio, { key: 'ArrowUp' });
+    fireEvent.keyDown(issuesRadio, { key: 'ArrowUp' });
     expect(onChange).toHaveBeenCalledWith('timeline');
 
     // Other keys do nothing
-    fireEvent.keyDown(listRadio, { key: 'Tab' });
+    fireEvent.keyDown(issuesRadio, { key: 'Tab' });
     expect(onChange).toHaveBeenCalledTimes(4);
   });
 

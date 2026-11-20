@@ -1,0 +1,194 @@
+/**
+ * Issue Navigator Bar styling (KAN-52).
+ * Replaces double-stacked FilterDisplayBar + Filter & Group bars in list layout.
+ */
+
+.issue-navigator-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-md, 6px);
+  margin-bottom: var(--space-3, 12px);
+  box-sizing: border-box;
+}
+
+.navigator-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
+.navigator-search-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex: 1 1 320px;
+  min-width: 240px;
+}
+
+.navigator-search-input,
+.navigator-query-input {
+  flex: 1 1 auto;
+  min-width: 180px;
+  height: 32px;
+  padding: 0 var(--space-3, 12px);
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-primary, #f8fafc);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 120ms ease;
+}
+
+.navigator-query-input {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.navigator-search-input:focus,
+.navigator-query-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.navigator-search-btn {
+  height: 32px;
+  padding: 0 var(--space-3, 12px);
+  background: var(--accent-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 120ms ease;
+}
+
+.navigator-search-btn:hover {
+  opacity: 0.9;
+}
+
+.navigator-mode-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px;
+  gap: 2px;
+}
+
+.navigator-mode-btn {
+  background: transparent;
+  color: var(--fg-muted, #94a3b8);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.navigator-mode-btn--active {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  font-weight: 600;
+}
+
+.navigator-filters-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-wrap: wrap;
+}
+
+.navigator-filter-select {
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-secondary, #cbd5e1);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.navigator-filter-select:focus {
+  border-color: var(--accent-primary);
+}
+
+.navigator-fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-secondary, #cbd5e1);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.navigator-fav-toggle--active {
+  background: var(--bg-hover, #2c313a);
+  color: #fbbf24;
+  border-color: #fbbf24;
+}
+
+.navigator-saved-views-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle, #333842);
+}
+
+.navigator-saved-views-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.navigator-view-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: 9999px;
+  color: var(--fg-secondary, #cbd5e1);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 120ms ease;
+}
+
+.navigator-view-chip:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.navigator-view-chip--active {
+  background: var(--accent-primary);
+  color: #ffffff;
+  border-color: var(--accent-primary);
+}

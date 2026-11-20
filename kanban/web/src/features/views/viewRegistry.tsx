@@ -8,6 +8,8 @@ import { TableView } from '../table/TableView';
 import { CalendarView } from '../calendar/CalendarView';
 import { TimelineView } from '../timeline/TimelineView';
 import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
+import { IssueNavigatorBar } from './IssueNavigatorBar';
+import { matchesIssueQuery } from './predicateParser';
 import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
 import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
@@ -18,6 +20,7 @@ import { announce } from '../../realtime';
 import {
   fetchProjectIssues,
   fetchProjectStates,
+  fetchProjectSavedViews,
   createProjectIssue,
   patchProjectIssue,
   deleteProjectIssue,
@@ -26,6 +29,7 @@ import {
   type IssueItem,
   type StateSummary,
   type GroupAxis,
+  type SavedView,
 } from './viewsApi';
 import { IssueSurfaceRoot } from '../drawer/IssueSurface';
 import './filterBulk.css';
@@ -189,14 +193,14 @@ export function IssuesWorkspaceRoute({
 }: IssuesWorkspaceRouteProps): JSX.Element {
   const isLiveMode = initialIssues === undefined;
 
-  const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean } | null>(() => {
-    return queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]) ?? null;
+  const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean; name?: string } | null>(() => {
+    return queryClient.getQueryData<{ modules_enabled?: boolean; name?: string }>(['project', projectKey]) ?? null;
   });
 
   useEffect(() => {
     if (!projectKey) return;
     const updateFromCache = (): void => {
-      const data = queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]);
+      const data = queryClient.getQueryData<{ modules_enabled?: boolean; name?: string }>(['project', projectKey]);
       setProjectMetadata(data ?? null);
     };
     updateFromCache();
@@ -379,6 +383,50 @@ export function IssuesWorkspaceRoute({
     return filters;
   });
 
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [queryMode, setQueryMode] = useState<'basic' | 'query'>('basic');
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(() => searchParams.get('view'));
+
+  useEffect(() => {
+    if (!projectKey) return;
+    let active = true;
+    void fetchProjectSavedViews(projectKey)
+      .then((views) => {
+        if (active && Array.isArray(views)) {
+          setSavedViews(views);
+          const viewParam = new URLSearchParams(window.location.search).get('view');
+          if (viewParam) {
+            const matched = views.find((v) => v.id === viewParam);
+            if (matched) {
+              setActiveViewId(viewParam);
+              setGroupBy(matched.group_by);
+              setSubGroupBy(matched.sub_group_by);
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // unit test or offline fallback
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectKey]);
+
+  const handleSelectSavedView = useCallback((viewId: string) => {
+    setActiveViewId(viewId);
+    const view = savedViews.find((v) => v.id === viewId);
+    if (view) {
+      setGroupBy(view.group_by);
+      setSubGroupBy(view.sub_group_by);
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', viewId);
+    window.history.pushState({}, '', url.toString());
+  }, [savedViews]);
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -511,9 +559,35 @@ export function IssuesWorkspaceRoute({
         if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
       }
 
+      // 9. Favorites-only filter
+      if (favoritesOnly) {
+        try {
+          const raw = typeof window !== 'undefined' ? localStorage.getItem('kb_favorite_issues') : null;
+          const parsed: unknown = raw ? JSON.parse(raw) : [];
+          const favs = Array.isArray(parsed)
+            ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string')
+            : [];
+          if (!favs.includes(issue.key)) return false;
+        } catch {
+          // ignore
+        }
+      }
+
+      // 10. Text / Query search filter
+      if (searchQuery.trim().length > 0) {
+        if (queryMode === 'query') {
+          if (!matchesIssueQuery(searchQuery, issue, projectKey)) return false;
+        } else {
+          const lower = searchQuery.toLowerCase();
+          const matchesKey = issue.key.toLowerCase().includes(lower);
+          const matchesSummary = issue.summary.toLowerCase().includes(lower);
+          if (!matchesKey && !matchesSummary) return false;
+        }
+      }
+
       return true;
     });
-  }, [issues, activeFilters, modulesEnabled, projectStates]);
+  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey]);
 
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
   const boardStates: BoardWorkflowState[] = useMemo(() => {
@@ -557,6 +631,7 @@ export function IssuesWorkspaceRoute({
     selectedIds,
     setSelectedIds,
     modulesEnabled,
+    onOpenPeek: handleOpenPeek,
     onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
     onOpenFilter: () => { setIsFilterOpen(true); },
     onOpenFieldPopover: (field, issue, rect) => {
@@ -869,20 +944,42 @@ export function IssuesWorkspaceRoute({
         data-layout={layout}
       >
         {/* 1. Filter and Display Bar */}
-      <FilterDisplayBar
-        activeFilters={activeFilters}
-        onFiltersChange={setActiveFilters}
-        groupBy={groupBy}
-        onGroupByChange={setGroupBy}
-        subGroupBy={subGroupBy}
-        onSubGroupByChange={setSubGroupBy}
-        modulesEnabled={modulesEnabled}
-        isFilterOpen={isFilterOpen}
-        onToggleFilterOpen={setIsFilterOpen}
-        projectKey={projectKey}
-        issues={issues}
-        onSaveView={() => { setIsSaveViewModalOpen(true); }}
-      />
+      {layout === 'list' ? (
+        <IssueNavigatorBar
+          projectKey={projectKey}
+          issues={issues}
+          projectStates={projectStates}
+          modulesEnabled={modulesEnabled}
+          activeFilters={activeFilters}
+          onFiltersChange={setActiveFilters}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          queryMode={queryMode}
+          onQueryModeChange={setQueryMode}
+          favoritesOnly={favoritesOnly}
+          onToggleFavoritesOnly={() => {
+            setFavoritesOnly((prev) => !prev);
+          }}
+          savedViews={savedViews}
+          activeViewId={activeViewId}
+          onSelectSavedView={handleSelectSavedView}
+        />
+      ) : (
+        <FilterDisplayBar
+          activeFilters={activeFilters}
+          onFiltersChange={setActiveFilters}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          subGroupBy={subGroupBy}
+          onSubGroupByChange={setSubGroupBy}
+          modulesEnabled={modulesEnabled}
+          isFilterOpen={isFilterOpen}
+          onToggleFilterOpen={setIsFilterOpen}
+          projectKey={projectKey}
+          issues={issues}
+          onSaveView={() => { setIsSaveViewModalOpen(true); }}
+        />
+      )}
 
       {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
       {is2DSwimlane ? (
@@ -937,6 +1034,11 @@ export function IssuesWorkspaceRoute({
               mode="split"
               issueKey={activePeekKey}
               projectKey={projectKey}
+              issuesList={filteredIssues}
+              onNavigateIssue={(key: string) => {
+                handleOpenPeek(key);
+              }}
+              projectName={typeof projectMetadata?.name === 'string' ? projectMetadata.name : undefined}
               onClose={() => {
                 setClosedSplitKey(activePeekKey);
                 handleOpenPeek(null);

@@ -1,0 +1,84 @@
+/**
+ * Layout Switcher styles using canonical CSS tokens (KAN-52).
+ */
+
+.kb-layout-switcher {
+  display: inline-flex;
+  align-items: center;
+}
+
+.kb-layout-switcher-desktop {
+  display: flex;
+  background: var(--bg-surface-raised, #24272f);
+  border-radius: var(--radius-md, 6px);
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border-subtle, #333842);
+}
+
+.kb-layout-switcher-btn {
+  background: transparent;
+  color: var(--fg-muted, #94a3b8);
+  padding: var(--space-1, 4px) var(--space-3, 12px);
+  border-radius: var(--radius-sm, 4px);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+  outline: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.kb-layout-switcher-btn--selected {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  font-weight: 600;
+}
+
+.kb-layout-switcher-mobile {
+  position: relative;
+}
+
+.kb-layout-switcher-mobile-btn {
+  background: var(--bg-surface-raised, #24272f);
+  color: var(--fg-primary, #f8fafc);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-md, 6px);
+  padding: var(--space-1, 4px) var(--space-3, 12px);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kb-layout-switcher-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
+  z-index: 100;
+  min-width: 140px;
+  padding: 4px;
+}
+
+.kb-layout-switcher-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--fg-secondary, #cbd5e1);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 4px);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.kb-layout-switcher-menu-item--selected {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
