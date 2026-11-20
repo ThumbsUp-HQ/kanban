@@ -133,7 +133,7 @@ describe('DocsCenter & Help System (KAN-16)', () => {
       expect(resolveChapterSlug('mcp-server')).toBe('three-surface-mcp-server-architecture');
       expect(resolveChapterSlug('api')).toBe('rest-api-architecture-and-openapi-guide');
       expect(resolveChapterSlug('workflows')).toBe(
-        'scriptrunner-workflows-and-transition-interceptors',
+        'scripted-workflows-and-transition-helpers',
       );
       expect(resolveChapterSlug('ai')).toBe('multi-provider-ai-engine-and-runners');
       expect(resolveChapterSlug('standalone')).toBe('production-promotion-and-backup-runbook');
