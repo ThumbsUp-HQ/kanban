@@ -1,0 +1,97 @@
+====================================================================
+LIVE FULL-STACK VERIFICATION PROOF: KAN-26 ([KB-P3-AUDIT-20])
+Target: http://localhost:18951 (container: kanban-liveqa-1)
+Zero-Mock Mandate: 0 mockApi, 0 page.route, 0 context.route
+====================================================================
+
+--- Execution Transcript ---
+[2026-11-20T02:53:30.279Z] === Step 1: Authenticate @admin (AAL2) via real /login ===
+[2026-11-20T02:53:31.932Z] Authenticated cleanly, current URL: http://localhost:18951/
+[2026-11-20T02:53:31.932Z] === Step 2: Open /settings/profile & verify real OIDC identity rendering ===
+[2026-11-20T02:53:31.951Z] GET /api/v1/auth/identities -> HTTP 200 | {"identities":[{"id":"01a1f6dc-0000-7000-8000-000000000002","card_slug":"acme-oidc","card_display_name":"Acme Corporate SSO","provider_kind":"OIDC","subject_email_at_link":"admin-sso@acme.example","created_at":"2026-11-20T02:49:05.898242+00:00","last_login_at":"2026-11-20T02:49:05.898242+00:00","immutable_subject_id":"oidc-sub-liveqa-admin-001"}]}
+[2026-11-20T02:53:31.951Z] PASS: GET /api/v1/auth/identities returned live OIDC identity
+[2026-11-20T02:53:31.951Z] PASS: Identity payload matches live DB OIDC row
+[2026-11-20T02:53:32.586Z] Rendered [data-testid="identities-table"] text:
+PROVIDER	SUBJECT / ACCOUNT	LINKED	ACTIONS
+acme-oidc (OIDC)	admin-sso@acme.example	11/19/2026	Unlink
+[2026-11-20T02:53:32.586Z] PASS: Identities table rendered OIDC & admin-sso@acme.example without .toUpperCase() crash
+[2026-11-20T02:53:32.586Z] PASS: 0 pageErrors on /settings/profile
+[2026-11-20T02:53:33.467Z] Captured all 4 live-01-profile-identities-*.png screenshots
+[2026-11-20T02:53:33.789Z] POST avatar upload -> HTTP 200
+[2026-11-20T02:53:33.789Z] PASS: Real avatar PNG uploaded successfully
+[2026-11-20T02:53:33.795Z] Topbar .kb-avatar-button img.kb-avatar-img rendered live avatar
+[2026-11-20T02:53:33.795Z] === Step 3: Trigger real AppErrorModal & check Report Link + Copy Contrast ===
+[2026-11-20T02:53:33.819Z] AppErrorModal report link href: https://github.com/ThumbsUp-HQ/kanban/issues/new?title=%5BBug%5D%3A%20Application%20Error%3A%20LiveQA%20synthetic%20unhandled%20error%20check&body=%23%23%23%20Application%20Error%20Detected%0A%0A**URL%3A**%20http%3A%2F%2Flocalhost%3A18951%2Fsettings%2Fprofile%0A**Error%3A**%20LiveQA%20synthetic%20unhandled%20error%20check%0A%0A%60%60%60%0AError%3A%20LiveQA%20synthetic%20unhandled%20error%20check%0A%20%20%20%20at%20eval%20(eval%20at%20evaluate%20(%3A370%3A30)%2C%20%3Canonymous%3E%3A4%3A14)%0A%20%20%20%20at%20UtilityScript.evaluate%20(%3Canonymous%3E%3A372%3A16)%0A%20%20%20%20at%20UtilityScript.%3Canonymous%3E%20(%3Canonymous%3E%3A1%3A44)%0A%60%60%60
+[2026-11-20T02:53:33.819Z] PASS: AppErrorModal report link points to https://github.com/ThumbsUp-HQ/kanban/issues/new?...
+[2026-11-20T02:53:33.975Z] Light theme .app-error-modal__btn--copy contrast: {"fg":"rgb(17, 24, 39)","bg":"rgb(255, 255, 255)","ratio":17.74}
+[2026-11-20T02:53:33.975Z] PASS: Light theme copy button contrast >= 4.5:1 (actual 17.74:1)
+[2026-11-20T02:53:34.213Z] Dark theme .app-error-modal__btn--copy contrast: {"fg":"rgb(242, 243, 245)","bg":"rgb(38, 42, 49)","ratio":12.97}
+[2026-11-20T02:53:34.214Z] PASS: Dark theme copy button contrast >= 4.5:1 (actual 12.97:1)
+[2026-11-20T02:53:34.727Z] Captured all 4 live-02-app-error-modal-*.png screenshots
+[2026-11-20T02:53:34.786Z] === Step 4: Topbar circular avatar userSelect & clipPath + selectAllChildren ===
+[2026-11-20T02:53:34.789Z] Topbar circular avatar & selection computed styles: {"btnFound":true,"imgFound":true,"btnUserSelect":"none","btnClipPath":"circle(50%)","btnBorderRadius":"50%","imgUserSelect":"none","imgClipPath":"circle(50%)","imgBorderRadius":"50%","topbarUserSelect":"none"}
+[2026-11-20T02:53:34.789Z] PASS: userSelect === none on .kb-avatar-button and .kb-avatar-img
+[2026-11-20T02:53:34.789Z] PASS: clipPath contains circle(50%) on .kb-avatar-button / .kb-avatar-img
+[2026-11-20T02:53:35.633Z] Captured all 4 live-03-topbar-selection-*.png screenshots
+[2026-11-20T02:53:35.654Z] Authenticated /settings/profile consoleErrors=0, pageErrors=0
+[2026-11-20T02:53:35.654Z] Pre-login /login console errors (realtime.ts unauth): 2
+
+--- Live HTTP Transcript ---
+GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":false,"principal_id":null,"workspace_id":null,"session_id":null,"aal_level":0,"mfa_pending":false,"csrf_token":"ZD0gt502UOYV4hv3AstTMQ.3nql6z_uiuTH_Sk5-cvy5inu_SsQ31V4jMnnKZmnLq4","idle_expires_at":null,"absolute_expires_at":null,"remember_me":false}
+GET http://localhost:18951/api/v1/auth/cards -> 200 | {"cards":[{"id":"01a1f6d9-454f-7818-b5b7-6eea75a76f80","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","provider_kind":"LOCAL_ADMIN"}]}
+POST http://localhost:18951/api/v1/auth/local/login -> 200 | {"authenticated":true,"status":"mfa_required","challenge_id":"4ab0c6ff-8ba3-4c2f-b995-328797191460","methods":["totp","webauthn","recovery"],"session_id":"4ab0c6ff-8ba3-4c2f-b995-328797191460","aal_level":1,"mfa_pending":true,"csrf_token":"cEzD5cE52kYNJopxiMW1Iw.RHb_uqhHqJLYMpsg6uPWtfVsJatqfR9Ohz3O0UT_bOI"}
+POST http://localhost:18951/api/v1/auth/totp/verify -> 200 | 
+GET http://localhost:18951/api/v1/workspaces -> 200 | [{"id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","name":"Kanban","slug":"kanban","is_current":true,"role":"SERVER_ADMIN"}]
+GET http://localhost:18951/api/v1/setup/status -> 200 | {"initialized":true}
+GET http://localhost:18951/api/v1/notifications?limit=30 -> 200 | {"items":[],"next_cursor":null}
+GET http://localhost:18951/api/v1/system/status -> 200 | {"deployment_mode":"standalone_embedded_pg","persistent_volume":false,"data_mount_point":"/var/lib/kanban/data","data_mount_fstype":"ext4","tier_b_sandbox_available":false,"air_gap_mode":false,"local_llm_endpoint_host":null,"is_server_admin":true,"allow_unlimited_mcp_keys":true}
+GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6df-990f-79fd-ae88-8598519696be","aal_level":2,"mfa_pending":false,"csrf_token":"VSkULuuvBb7uvZm_obKq2A.iO14CMfhEN73haL39oNOpqyLWYzF4VoqRDubMeRm78k","idle_expires_at":"2026-11-27T02:53:31.279223+00:00","absolute_expires_at":"2026-12-20T02:53:31.148491
+GET http://localhost:18951/api/v1/setup/status -> 200 | {"initialized":true}
+GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6df-990f-79fd-ae88-8598519696be","aal_level":2,"mfa_pending":false,"csrf_token":"VSkULuuvBb7uvZm_obKq2A.iO14CMfhEN73haL39oNOpqyLWYzF4VoqRDubMeRm78k","idle_expires_at":"2026-11-27T02:53:31.279223+00:00","absolute_expires_at":"2026-12-20T02:53:31.148491
+GET http://localhost:18951/api/v1/users/01a1f6d9-4550-7899-8ce2-b3728b21291b/avatar?v=480b6e5f66e3 -> 200 | �PNG
+
+IHDR�x���IDATx���10��1/S6��|$z5��:�*W0�`�0�`�0`�0�`�0�`�0�`�0�`��`�0�`�0��0�`�0�`@0�`�0�
+GET http://localhost:18951/api/v1/projects -> 200 | {"items":[{"id":"01a1f6d9-455d-7b9b-a250-15b8e972282f","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","workspace_name"
+GET http://localhost:18951/api/v1/projects -> 200 | {"items":[{"id":"01a1f6d9-455d-7b9b-a250-15b8e972282f","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","workspace_name"
+GET http://localhost:18951/api/v1/auth/identities -> 200 | {"identities":[{"id":"01a1f6dc-0000-7000-8000-000000000002","card_slug":"acme-oidc","card_display_name":"Acme Corporate SSO","provider_kind":"OIDC","subject_email_at_link":"admin-sso@acme.example","created_at":"2026-11-20T02:49:05.898242+00:00","last_login_at":"2026-11-20T02:49:05.898242+00:00","immutable_subject_id":"oidc-sub-liveqa-admin-001"}]}
+GET http://localhost:18951/api/v1/workspaces -> 200 | [{"id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","name":"Kanban","slug":"kanban","is_current":true,"role":"SERVER_ADMIN"}]
+GET http://localhost:18951/api/v1/system/status -> 200 | {"deployment_mode":"standalone_embedded_pg","persistent_volume":false,"data_mount_point":"/var/lib/kanban/data","data_mount_fstype":"ext4","tier_b_sandbox_available":false,"air_gap_mode":false,"local_llm_endpoint_host":null,"is_server_admin":true,"allow_unlimited_mcp_keys":true}
+GET http://localhost:18951/api/v1/auth/mfa/status -> 200 | {"totp_enabled":true,"passkeys_count":1,"recovery_codes_remaining":8}
+GET http://localhost:18951/api/v1/notifications?limit=30 -> 200 | {"items":[],"next_cursor":null}
+GET http://localhost:18951/api/v1/setup/status -> 200 | {"initialized":true}
+GET http://localhost:18951/api/v1/auth/webauthn/credentials -> 200 | [{"id":"01a1f6db-0aab-7843-b864-44f316fc473a","nickname":"YubiKey USB FIDO2","sign_count":2,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T02:48:32.683620+00:00","last_used_at":"2026-11-20T02:48:33.011410+00:00"}]
+GET http://localhost:18951/api/v1/auth/identities -> 200 | {"identities":[{"id":"01a1f6dc-0000-7000-8000-000000000002","card_slug":"acme-oidc","card_display_name":"Acme Corporate SSO","provider_kind":"OIDC","subject_email_at_link":"admin-sso@acme.example","created_at":"2026-11-20T02:49:05.898242+00:00","last_login_at":"2026-11-20T02:49:05.898242+00:00","immutable_subject_id":"oidc-sub-liveqa-admin-001"}]}
+GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+GET http://localhost:18951/api/v1/users/01a1f6d9-4550-7899-8ce2-b3728b21291b/avatar?v=480b6e5f66e3 -> 200 | �PNG
+
+IHDR�x���IDATx���10��1/S6��|$z5��:�*W0�`�0�`�0`�0�`�0�`�0�`�0�`��`�0�`�0��0�`�0�`@0�`�0�
+GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6df-990f-79fd-ae88-8598519696be","aal_level":2,"mfa_pending":false,"csrf_token":"VSkULuuvBb7uvZm_obKq2A.iO14CMfhEN73haL39oNOpqyLWYzF4VoqRDubMeRm78k","idle_expires_at":"2026-11-27T02:53:31.279223+00:00","absolute_expires_at":"2026-12-20T02:53:31.148491
+GET http://localhost:18951/api/v1/projects -> 200 | {"items":[{"id":"01a1f6d9-455d-7b9b-a250-15b8e972282f","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","workspace_name"
+GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+PUT http://localhost:18951/api/v1/auth/me/avatar -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+GET http://localhost:18951/api/v1/workspaces -> 200 | [{"id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","name":"Kanban","slug":"kanban","is_current":true,"role":"SERVER_ADMIN"}]
+GET http://localhost:18951/api/v1/auth/mfa/status -> 200 | {"totp_enabled":true,"passkeys_count":1,"recovery_codes_remaining":8}
+GET http://localhost:18951/api/v1/auth/webauthn/credentials -> 200 | [{"id":"01a1f6db-0aab-7843-b864-44f316fc473a","nickname":"YubiKey USB FIDO2","sign_count":2,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T02:48:32.683620+00:00","last_used_at":"2026-11-20T02:48:33.011410+00:00"}]
+GET http://localhost:18951/api/v1/notifications?limit=30 -> 200 | {"items":[],"next_cursor":null}
+GET http://localhost:18951/api/v1/setup/status -> 200 | {"initialized":true}
+GET http://localhost:18951/api/v1/auth/identities -> 200 | {"identities":[{"id":"01a1f6dc-0000-7000-8000-000000000002","card_slug":"acme-oidc","card_display_name":"Acme Corporate SSO","provider_kind":"OIDC","subject_email_at_link":"admin-sso@acme.example","created_at":"2026-11-20T02:49:05.898242+00:00","last_login_at":"2026-11-20T02:49:05.898242+00:00","immutable_subject_id":"oidc-sub-liveqa-admin-001"}]}
+GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJE
+GET http://localhost:18951/api/v1/projects -> 200 | {"items":[{"id":"01a1f6d9-455d-7b9b-a250-15b8e972282f","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","workspace_name"
+GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6df-990f-79fd-ae88-8598519696be","aal_level":2,"mfa_pending":false,"csrf_token":"VSkULuuvBb7uvZm_obKq2A.iO14CMfhEN73haL39oNOpqyLWYzF4VoqRDubMeRm78k","idle_expires_at":"2026-11-27T02:53:31.279223+00:00","absolute_expires_at":"2026-12-20T02:53:31.148491
+
+--- Console & PageError Summary (Authenticated /settings/profile) ---
+console_errors: 0
+page_errors: 0
+(none)
+(none)
+
+--- Scoped Problem Verdicts ---
+Problem 1 (/settings/profile External Identity list rendering without .toUpperCase() crash): PASS
+Problem 2 (AppErrorModal report link points to https://github.com/ThumbsUp-HQ/kanban/issues/new?...): PASS
+Problem 3 (.app-error-modal__btn--copy contrast >= 4.5:1 Light=17.74:1, Dark=12.97:1): PASS
+Problem 4 (Circular avatar userSelect=none & clipPath=circle(50%) on selectAllChildren): PASS
+
+LIVE_STACK_VERDICT: PASS

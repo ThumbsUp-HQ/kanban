@@ -1,0 +1,71 @@
+====================================================================
+LIVE FULL-STACK VERIFICATION PROOF: KAN-24 ([KB-P3-AUDIT-18])
+Target: http://localhost:18951 (container: kanban-liveqa-1, rp.id=localhost)
+Zero-Mock Mandate: 0 mockApi, 0 page.route, 0 context.route
+====================================================================
+
+--- Real HTTP & CDP WebAuthn Ceremony Transcript ---
+[2026-11-20T02:48:32.279Z] === PART 1: Admin AAL2 login, SERVER_ADMIN LAST_FACTOR guard, USB cross-platform key ===
+[2026-11-20T02:48:32.585Z] Admin local/login -> HTTP 200 | {"authenticated":true,"status":"mfa_required","challenge_id":"c6b8042c-f66a-4edb-8484-a67adce0d753","methods":["totp","webauthn","recovery"],"session_id":"c6b8042c-f66a-4edb-8484-a67adce0d753","aal_level":1,"mfa_pending":true,"csrf_token":"bFcsGIbggULA8J066YT8Ng.Gv46ewlKcOtTJXAd5uko-hRvRjzN6YFGHXYIfnfEUc0"}
+[2026-11-20T02:48:32.586Z] PASS: Admin local login returned mfa_required
+[2026-11-20T02:48:32.612Z] Admin TOTP verify -> HTTP 200 | {"verified":true,"status":"authenticated","aal_level":2,"session_id":"01a1f6db-0a5b-7934-8452-32662b036315","csrf_token":"zAIpGzXyWC6BN8Lbl4QF6w.f8gyj-UzpEXBEGCctexZ-3bhErIsWtX_vrtlQ6U_GGU"}
+[2026-11-20T02:48:32.612Z] PASS: Admin elevated to AAL2 via TOTP
+[2026-11-20T02:48:32.621Z] SERVER_ADMIN DELETE /api/v1/auth/mfa/totp (sole factor) -> HTTP 409 | {"type":"urn:kanban:problem:LAST_FACTOR","title":"Cannot Delete Last Factor","status":409,"code":"LAST_FACTOR","detail":"Administrators must retain at least one active AAL2 authentication factor.","request_id":"7876015bfdbe48fc8dadc9fe9dadb7c0"}
+[2026-11-20T02:48:32.621Z] PASS: SERVER_ADMIN sole TOTP delete blocked with 409 LAST_FACTOR
+[2026-11-20T02:48:32.625Z] Attached CDP virtual USB FIDO2 authenticator: bb10e1d1-b8e0-4460-87f6-3675f7b8a06a (hasResidentKey=false, hasUserVerification=false, isUserVerified=false)
+[2026-11-20T02:48:32.650Z] POST /api/v1/auth/webauthn/register/options (cross-platform) -> HTTP 200 | {"rp":{"name":"👍kanban","id":"localhost"},"user":{"id":"AaH22UVQeJmM4rNyiyEpGw","name":"admin","displayName":"Server Administrator"},"challenge":"dZATXXMwP3wsCnV1VIze0b5vh603kAtryhzVfKsMS7w","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[],"authenticatorSelection":{"authenticatorAttachment":"cross-platform","residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
+[2026-11-20T02:48:32.651Z] PASS: USB cross-platform register/options returned 200
+[2026-11-20T02:48:32.651Z] PASS: userVerification == preferred
+[2026-11-20T02:48:32.651Z] PASS: authenticatorSelection.authenticatorAttachment == cross-platform
+[2026-11-20T02:48:32.651Z] PASS: rp.id == localhost
+[2026-11-20T02:48:32.663Z] Browser navigator.credentials.create() with USB key succeeded: id=jJEYP3H30gj1JS5SzGpLb7IhN0dXCL9Tjo31gvi3aHs
+[2026-11-20T02:48:32.694Z] POST /api/v1/auth/webauthn/register/verify -> HTTP 200 | {"verified":true,"credential_id":"01a1f6db-0aab-7843-b864-44f316fc473a","nickname":"YubiKey USB FIDO2"}
+[2026-11-20T02:48:32.694Z] PASS: USB FIDO2 key registered with uv=false
+[2026-11-20T02:48:32.712Z] GET /api/v1/auth/webauthn/credentials -> HTTP 200 | [{"id":"01a1f6db-0aab-7843-b864-44f316fc473a","nickname":"YubiKey USB FIDO2","sign_count":1,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T02:48:32.683620+00:00","last_used_at":null}]
+[2026-11-20T02:48:32.712Z] PASS: Credentials list returned >= 1 credential
+[2026-11-20T02:48:32.712Z] PASS: Credential record includes aaguid, transports, suspect_clone_at
+[2026-11-20T02:48:32.712Z] Exported 1 credential(s) from USB virtual authenticator
+[2026-11-20T02:48:32.974Z] PASS: Second admin login returned mfa_required
+[2026-11-20T02:48:32.989Z] POST /api/v1/auth/webauthn/authenticate/options -> HTTP 200 | {"challenge":"iA0uHwPBg_XCsk28f7FY7mGV0vAZCF0UDYZBHrdRqW0","timeout":300000,"rpId":"localhost","allowCredentials":[{"id":"jJEYP3H30gj1JS5SzGpLb7IhN0dXCL9Tjo31gvi3aHs","type":"public-key"}],"userVerification":"preferred"}
+[2026-11-20T02:48:32.989Z] PASS: authenticate/options returned userVerification == preferred
+[2026-11-20T02:48:33.021Z] POST /api/v1/auth/webauthn/authenticate/verify (uv=false) -> HTTP 200 | {"verified":true,"aal_level":2,"session_id":"01a1f6db-0bf4-7b3c-9004-c88fff90ff85","csrf_token":"gYaC0-0sKW3ceYkgZlj5Tg.T-BDH855pRTOW6-6eMRObfi9VLaQIT2xMiYCWf7d96w","credential_id":"01a1f6db-0aab-7843-b864-44f316fc473a"}
+[2026-11-20T02:48:33.022Z] PASS: USB FIDO2 authentication with uv=false elevated session to AAL2
+[2026-11-20T02:48:33.028Z] === PART 2: Provision @member and WORKSPACE_ADMIN via /api/v1/admin/principals ===
+[2026-11-20T02:48:33.097Z] Provision WORKSPACE_MEMBER -> HTTP 201 | {"id":"764e780c-5a8c-4911-b180-6ed837793042","principal":"@liveqa_member_mwodqolg","type":"USER","handle":"@liveqa_member_mwodqolg","display_name":"Live QA Member","email":"liveqa_member_mwodqolg@local.kanban","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+[2026-11-20T02:48:33.097Z] PASS: Provisioned WORKSPACE_MEMBER
+[2026-11-20T02:48:33.169Z] Provision WORKSPACE_ADMIN -> HTTP 201 | {"id":"938b4309-98c3-46d0-adc3-9f7155ffd590","principal":"@liveqa_wsadmin_mwodqond","type":"USER","handle":"@liveqa_wsadmin_mwodqond","display_name":"Live QA Workspace Admin","email":"liveqa_wsadmin_mwodqond@local.kanban","status":"active","role":"WORKSPACE_ADMIN","provider":"LOCAL"}
+[2026-11-20T02:48:33.169Z] PASS: Provisioned WORKSPACE_ADMIN
+[2026-11-20T02:48:33.172Z] === PART 3: @member AAL1 first-factor enrollment & 2nd key AAL2_REQUIRED ===
+[2026-11-20T02:48:33.425Z] @member local/login (0 MFA) -> HTTP 200 | {"authenticated":true,"status":"authenticated","challenge_id":"a2fa5eb9-79dd-49c7-aec0-14cfc46849e6","methods":["totp","webauthn","recovery"],"session_id":"a2fa5eb9-79dd-49c7-aec0-14cfc46849e6","aal_level":1,"mfa_pending":false,"csrf_token":"4QgtJXorbPk9f0L_E0wyww.BzPaThKw4ZN_fAGKyJIhntCaP9xCXd92Yk3eGI8PHyw"}
+[2026-11-20T02:48:33.425Z] PASS: @member logged in at AAL1 with 0 MFA factors
+[2026-11-20T02:48:33.444Z] @member 1st register/options (platform) at AAL1 -> HTTP 200 | {"rp":{"name":"👍kanban","id":"localhost"},"user":{"id":"dk54DFqMSRGxgG7YN3kwQg","name":"liveqa_member_mwodqolg","displayName":"Live QA Member"},"challenge":"dSoM9JyEEh_7rHgRSHuTCAk58XFcVUCpq7HEt1WuIEY","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[],"authenticatorSelection":{"authenticatorAttachment":"platform","residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
+[2026-11-20T02:48:33.444Z] PASS: @member 1st factor register/options allowed from AAL1 (no deadlock)
+[2026-11-20T02:48:33.558Z] @member 1st register/verify -> HTTP 200 | {"verified":true,"aal_level":2,"session_id":"01a1f6db-0e0a-7923-a29a-d8cdf52ed85e","csrf_token":"xUT8L7GXkI45beR50CO_pg.y62iZqnkBpyx--S2kskeTss_YIgqKosT6r3jyANQ7ls","credential_id":"01a1f6db-0e08-7465-b7eb-171ee05e5479","nickname":"Member Platform Passkey"}
+[2026-11-20T02:48:33.558Z] PASS: @member 1st factor register/verify succeeded and elevated session to AAL2
+[2026-11-20T02:48:33.565Z] @member session after 1st enrollment -> HTTP 200 | {"authenticated":true,"principal_id":"764e780c-5a8c-4911-b180-6ed837793042","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6db-0e0a-7923-a29a-d8cdf52ed85e","aal_level":2,"mfa_pending":false,"csrf_token":"xUT8L7GXkI45beR50CO_pg.y62iZqnkBpyx--S2kskeTss_YIgqKosT6r3jyANQ7ls","idle_expires_at":"2026-11-27T02:48:33.546165+00:00","absolute_expires_at":"2026-12-20T02:48:33.415222+00:00","remember_me":true}
+[2026-11-20T02:48:33.565Z] PASS: @member active session confirmed AAL2
+[2026-11-20T02:48:33.837Z] @member 2nd login (AAL1) -> HTTP 200 | {"authenticated":true,"status":"mfa_required","challenge_id":"c57368d4-d81f-4b97-a909-efb5d8c7c017","methods":["totp","webauthn","recovery"],"session_id":"c57368d4-d81f-4b97-a909-efb5d8c7c017","aal_level":1,"mfa_pending":true,"csrf_token":"QmHi5I5G2J9cHFCozmgvDQ.Bje_XJE8TYwypF22rN0cFPNvI3ROvvB7utyhQ-gc-fY"}
+[2026-11-20T02:48:33.837Z] PASS: @member 2nd session started at AAL1
+[2026-11-20T02:48:33.845Z] @member 2nd key register/options at AAL1 -> HTTP 403 | {"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Registering additional factors requires an active AAL2 session.","request_id":"c64910b1b97a4f3cabcaf638903e91c6","methods":["webauthn"]}
+[2026-11-20T02:48:33.845Z] PASS: @member 2nd key without AAL2 returned 403 AAL2_REQUIRED with methods populated
+[2026-11-20T02:48:33.847Z] === PART 4: WORKSPACE_ADMIN LAST_FACTOR guard on sole WebAuthn key ===
+[2026-11-20T02:48:34.105Z] WORKSPACE_ADMIN login (0 MFA) -> HTTP 200 | {"authenticated":true,"status":"authenticated","challenge_id":"73e06f33-b7eb-4603-b67f-85da6c0194e8","methods":["totp","webauthn","recovery"],"session_id":"73e06f33-b7eb-4603-b67f-85da6c0194e8","aal_level":1,"mfa_pending":false,"csrf_token":"jtEQmBYs2jU2iNiCwit-yw.hgItDrFXC1UI97Ofsts3br29v8Q2FX-VDDDAc2XabMQ"}
+[2026-11-20T02:48:34.105Z] PASS: WORKSPACE_ADMIN logged in at AAL1
+[2026-11-20T02:48:34.128Z] PASS: WORKSPACE_ADMIN register/options succeeded
+[2026-11-20T02:48:34.163Z] WORKSPACE_ADMIN register/verify -> HTTP 200 | {"verified":true,"aal_level":2,"session_id":"01a1f6db-1068-75f5-8638-43785cadaaaa","csrf_token":"LpIxXnt-G9HcGDObQTb3Dg.IUei-qBA3Ccy1dn5W9nHj7CX5fJZIs_FQhL_u4owt1I","credential_id":"01a1f6db-1065-7ece-b1e7-fb20a232660c","nickname":"WS Admin Sole Passkey"}
+[2026-11-20T02:48:34.163Z] PASS: WORKSPACE_ADMIN passkey enrolled and elevated to AAL2
+[2026-11-20T02:48:34.177Z] WORKSPACE_ADMIN DELETE /api/v1/auth/webauthn/credentials/01a1f6db-1065-7ece-b1e7-fb20a232660c (sole factor) -> HTTP 409 | {"type":"urn:kanban:problem:LAST_FACTOR","title":"Cannot Delete Last Factor","status":409,"code":"LAST_FACTOR","detail":"Administrators must retain at least one active AAL2 authentication factor.","request_id":"35d0ef4441a8459ab94466bc67b80a89"}
+[2026-11-20T02:48:34.177Z] PASS: WORKSPACE_ADMIN sole WebAuthn delete blocked with 409 LAST_FACTOR
+
+--- PageError Summary ---
+page_errors: 0
+(none)
+
+--- Scoped Problem Verdicts ---
+Problem 1 (Cross-platform USB FIDO2 key uv=false + attachment hint): PASS
+Problem 2 (Member first-factor AAL1->AAL2 + 2nd key 403 AAL2_REQUIRED + methods): PASS
+Problem 3a (SERVER_ADMIN LAST_FACTOR guard on sole TOTP delete): PASS
+Problem 3b (WORKSPACE_ADMIN LAST_FACTOR guard on sole WebAuthn delete): PASS
+Problem 4 (GET /api/v1/auth/webauthn/credentials aaguid, transports, suspect_clone_at): PASS
+
+LIVE_STACK_VERDICT: PASS

@@ -1,0 +1,61 @@
+LIVE FULL-STACK BLACK-BOX QA PROOF - KAN-23 ([KB-P3-AUDIT-17])
+Target Container: kanban-liveqa-2 (image: thumbs-up-kanban:local-qa)
+Base URL: http://localhost:18952
+Mocking Policy: 0 mockApi, 0 page.route, 0 context.route stubs
+Timestamp: 2026-11-20T02:56:00Z
+
+========================================================================
+COMMAND EXECUTED
+========================================================================
+node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-2/qa_kan23.mjs
+
+========================================================================
+RAW EXECUTION LOG & LIVE HTTP TRANSCRIPTS
+========================================================================
+[2026-11-20T02:55:41.434Z] Initial Display Name input value: "Admin Architect"
+[2026-11-20T02:55:41.449Z] Typed unsaved edit into Display Name input: "Admin Edited Unsaved"
+[2026-11-20T02:55:41.775Z] AvatarCropModal inline style check: {"hasCanvas":true,"hasGuide":true,"guideInlineStyle":null,"canvasInlineStyle":null,"nodesWithInlineStyle":[]}
+[2026-11-20T02:55:41.777Z] Crop zoom at open: 1.0x
+[2026-11-20T02:55:42.289Z] Crop zoom after slider + pan: 2.5x
+[2026-11-20T02:55:42.436Z] PUT /api/v1/auth/me/avatar status=200 keys(17)=["id","principal_id","workspace_id","handle","username","display_name","email","is_server_admin","is_workspace_admin","is_project_admin","workspace_role","workspace_capabilities","timezone","avatar_url","has_local_password","aal_level","mfa_pending"]
+[2026-11-20T02:55:42.437Z] PUT /api/v1/auth/me/avatar body={"id":"01a1f6da-e582-75c5-b366-fe2d53afc781","principal_id":"01a1f6da-e582-75c5-b366-fe2d53afc781","workspace_id":"01a1f6da-e581-7515-a46d-e468a57dcb81","handle":"admin","username":"admin","display_name":"Admin Architect","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJECT","MANAGE_WORKSPACE_SETTINGS","MANAGE_WORKSPACE_MCP_KEYS","MANAGE_SERVER_ADMIN","ADMIN_AUTH_STUDIO","ADMIN_MCP_KEYS","SYSTEM_STORAGE"],"timezone":"UTC","avatar_url":"/api/v1/users/01a1f6da-e582-75c5-b366-fe2d53afc781/avatar?v=3384d8095707","has_local_password":true,"aal_level":2,"mfa_pending":false}
+[2026-11-20T02:55:42.941Z] Post-save Display Name input (no reload, unsaved preserved): "Admin Edited Unsaved"
+[2026-11-20T02:55:42.941Z] Post-save Topbar & page <img> elements: [{"alt":"Admin Architect","src":"/api/v1/users/01a1f6da-e582-75c5-b366-fe2d53afc781/avatar?v=3384d8095707","complete":true,"naturalWidth":512},{"alt":"Admin Architect's avatar","src":"/api/v1/users/01a1f6da-e582-75c5-b366-fe2d53afc781/avatar?v=3384d8095707","complete":true,"naturalWidth":512}]
+[2026-11-20T02:55:43.527Z] AvatarLightboxModal opened and zoomed to: 1.4x
+[2026-11-20T02:55:43.821Z] AvatarLightboxModal count after Escape: 0
+[2026-11-20T02:55:43.835Z] GET /api/v1/users/01a1f6da-e582-75c5-b366-fe2d53afc781/avatar status=200 r304=304
+  headers={"cache-control":"public, max-age=3600","content-length":"12111","content-security-policy":"default-src 'none'; sandbox","content-type":"image/png","cross-origin-opener-policy":"same-origin","cross-origin-resource-policy":"same-origin","date":"Fri, 20 Nov 2026 02:55:43 GMT","etag":"\"3384d8095707ccbb455ec105a14f49634e2477625ef85f25e3eefb413fbb889d\"","permissions-policy":"camera=(), microphone=(), geolocation=()","referrer-policy":"no-referrer","server":"uvicorn","x-content-type-options":"nosniff","x-frame-options":"DENY","x-request-id":"6fd104f8b764448ea206ed3d01df7f8e"}
+[2026-11-20T02:55:43.881Z] Fetched cropped avatar image check: format=PNG size=(512, 512) exif_len=0 has_secret=False
+[2026-11-20T02:55:44.003Z] Direct oversized 1400x1400 PUT status=200 body={"id":"01a1f6da-e582-75c5-b366-fe2d53afc781","principal_id":"01a1f6da-e582-75c5-b366-fe2d53afc781","workspace_id":"01a1f6da-e581-7515-a46d-e468a57dcb81","handle":"admin","username":"admin","display_name":"Admin Architect","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJECT","MANAGE_WORKSPACE_SETTINGS","MANAGE_WORKSPACE_MCP_KEYS","MANAGE_SERVER_ADMIN","ADMIN_AUTH_STUDIO","ADMIN_MCP_KEYS","SYSTEM_STORAGE"],"timezone":"UTC","avatar_url":"/api/v1/users/01a1f6da-e582-75c5-b366-fe2d53afc781/avatar?v=9469a074ed8c","has_local_password":true,"aal_level":2,"mfa_pending":false}
+[2026-11-20T02:55:44.047Z] Fetched oversized avatar image check: format=PNG size=(512, 512) exif_len=0 has_secret=False
+[2026-11-20T02:55:44.250Z] Animated WebP PUT status=422 body={"type":"urn:kanban:problem:ANIMATED_AVATAR_NOT_ALLOWED","title":"Animated Avatar Not Allowed","status":422,"code":"ANIMATED_AVATAR_NOT_ALLOWED","detail":"Only single-frame static PNG, JPEG, and WebP avatars are allowed.","request_id":"f40fc22900f14689b20b82a6e355cec8"}
+[2026-11-20T02:55:44.250Z] Animated APNG PUT status=422 body={"type":"urn:kanban:problem:ANIMATED_AVATAR_NOT_ALLOWED","title":"Animated Avatar Not Allowed","status":422,"code":"ANIMATED_AVATAR_NOT_ALLOWED","detail":"Only single-frame static PNG, JPEG, and WebP avatars are allowed.","request_id":"5fccb0830dd6481ba39990cfcb4990cf"}
+[2026-11-20T02:55:44.250Z] Animated GIF PUT status=415 body={"type":"urn:kanban:problem:UNSUPPORTED_MEDIA_TYPE","title":"Unsupported Media Type","status":415,"code":"UNSUPPORTED_MEDIA_TYPE","detail":"Only PNG, JPEG, and WebP raster avatars are supported.","request_id":"eac98e36f29942e4d88831f4e4bbfd3ca"}
+[2026-11-20T02:55:44.250Z] SVG PUT status=415 body={"type":"urn:kanban:problem:UNSUPPORTED_MEDIA_TYPE","title":"Unsupported Media Type","status":415,"code":"UNSUPPORTED_MEDIA_TYPE","detail":"SVG avatars are not allowed. Please upload PNG, JPEG, or WebP.","request_id":"e023e9a617f44d63bff49fca02f03d32"}
+
+========================================================================
+CONSOLE / PAGEERROR COUNT
+========================================================================
+consoleErrors: 0
+pageErrors: 0
+
+========================================================================
+SCREENSHOT ARTIFACTS (UNMOCKED)
+========================================================================
+- docs/qa/KAN-23/screenshots/live-kan23-crop-1x-desktop-light.png
+- docs/qa/KAN-23/screenshots/live-kan23-crop-2_5x-desktop-light.png
+- docs/qa/KAN-23/screenshots/live-kan23-profile-after-upload-desktop-light.png
+- docs/qa/KAN-23/screenshots/live-kan23-lightbox-desktop-light.png
+- docs/qa/KAN-23/screenshots/live-kan23-profile-desktop-dark.png
+- docs/qa/KAN-23/screenshots/live-kan23-profile-mobile-light.png
+- docs/qa/KAN-23/screenshots/live-kan23-profile-mobile-dark.png
+
+========================================================================
+PER-PROBLEM VERDICTS
+========================================================================
+- Problem 1 (/settings/profile Display Name + unsaved edit preservation): LIVE_STACK_VERDICT: PASS
+- Problem 2 (AvatarCropModal with <canvas> circular crop guide, 0 inline styles, 1.0x & 2.5x zoom + pan, Save Picture): LIVE_STACK_VERDICT: PASS
+- Problem 3 (PUT /api/v1/auth/me/avatar 200 with full UserProfileResponse + ?v=<12-hex>, immediate Topbar & profile update with 0 reload, never blanks display_name): LIVE_STACK_VERDICT: PASS
+- Problem 4 (GET /api/v1/users/{id}/avatar CSP sandbox, nosniff, same-origin CORP, ETag 304, <=1024x1024 downscaling from 1400x1400, EXIF stripped, 422 on animated WebP/APNG, 415 on GIF/SVG): LIVE_STACK_VERDICT: PASS
+- Problem 5 (AvatarLightboxModal via [aria-label="Zoom profile picture"], zoom & Escape close): LIVE_STACK_VERDICT: PASS
+- Problem 6 (0 console/pageerror + Desktop & Mobile Light & Dark visual contrast): LIVE_STACK_VERDICT: PASS
