@@ -51,13 +51,47 @@ export function formatHandle(handle?: string | null): string {
   return clean ? `@${clean}` : '';
 }
 
-export function parseTabFromHash(hash?: string | null): 'general' | 'members' | 'groups' | null {
+export type WorkspaceTab = 'general' | 'members' | 'groups' | 'trash';
+
+export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (!hash) return null;
   const clean = hash.trim().replace(/^#+/, '');
   if (clean === 'tab-general' || clean === 'general') return 'general';
   if (clean === 'tab-members' || clean === 'members') return 'members';
   if (clean === 'tab-groups' || clean === 'groups') return 'groups';
+  if (clean === 'tab-trash' || clean === 'trash') return 'trash';
   return null;
+}
+
+export interface WorkspaceTrashedItem {
+  id: string;
+  kind: string;
+  key?: string | null;
+  title?: string | null;
+  deleted_at: string;
+  purge_after?: string;
+  remaining_days: number;
+  project_id?: string | null;
+}
+
+const TRASH_KIND_LABELS: Record<string, string> = {
+  project: '📁 Project',
+  issue: '📋 Issue',
+  doc: '📄 Doc',
+  page: '📃 Page',
+  sticky: '🟨 Sticky',
+  cycle: '🔄 Cycle',
+  module: '🧩 Module',
+  view: '👁️ View',
+};
+
+function getTrashError(err: unknown, fallback: string): string {
+  const o = err as { detail?: string; message?: string } | undefined;
+  return o?.detail ?? o?.message ?? fallback;
+}
+
+export function formatTrashKind(kind: string): string {
+  return TRASH_KIND_LABELS[kind.toLowerCase()] ?? kind;
 }
 
 export function WorkspaceSettingsPage(): JSX.Element {
@@ -65,7 +99,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const queryClient = useQueryClient();
   const locationHash = location.hash;
 
-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>(() => {
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => {
     const rawHash = window.location.hash || locationHash;
     return parseTabFromHash(rawHash) ?? 'general';
   });
@@ -84,15 +118,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
       }
     };
 
-    syncFromHash();
-
     window.addEventListener('hashchange', syncFromHash);
     return () => {
       window.removeEventListener('hashchange', syncFromHash);
     };
   }, []);
 
-  const handleTabChange = (tab: 'general' | 'members' | 'groups'): void => {
+  const handleTabChange = (tab: WorkspaceTab): void => {
     setActiveTab(tab);
     const targetHash = `#tab-${tab}`;
     if (window.location.hash !== targetHash) {
@@ -134,6 +166,23 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const [isCreatingGroup, setIsCreatingGroup] = useState<boolean>(false);
   const [selectedAddMemberId, setSelectedAddMemberId] = useState<string>('');
   const [groupActionError, setGroupActionError] = useState<string | null>(null);
+
+  // Form Fields - Trash & Retention
+  const [trashedItems, setTrashedItems] = useState<WorkspaceTrashedItem[]>([]);
+  const [trashKindFilter, setTrashKindFilter] = useState<string>('all');
+  const [trashSearchQuery, setTrashSearchQuery] = useState<string>('');
+  const [isLoadingTrash, setIsLoadingTrash] = useState<boolean>(false);
+  const [trashActionError, setTrashActionError] = useState<string | null>(null);
+  const [trashActionSuccess, setTrashActionSuccess] = useState<string | null>(null);
+  const [isSavingRetention, setIsSavingRetention] = useState<boolean>(false);
+
+  // 2-stage permanent purge state (SERVER_ADMIN only)
+  const [purgeTarget, setPurgeTarget] = useState<WorkspaceTrashedItem | null>(null);
+  const [purgeConfirmationToken, setPurgeConfirmationToken] = useState<string | null>(null);
+  const [purgeBlastHash, setPurgeBlastHash] = useState<string | null>(null);
+  const [purgeReason, setPurgeReason] = useState<string>('Permanent cryptographic purge');
+  const [isRequestingPurge, setIsRequestingPurge] = useState<boolean>(false);
+  const [isExecutingPurge, setIsExecutingPurge] = useState<boolean>(false);
 
   const [currentUser, setCurrentUser] = useState<{
     is_server_admin?: boolean;
@@ -242,6 +291,162 @@ export function WorkspaceSettingsPage(): JSX.Element {
       void loadGroupMembers(selectedGroupId);
     }
   }, [selectedGroupId, activeTab]);
+
+  const loadWorkspaceTrash = async (
+    kind: string = trashKindFilter,
+    query: string = trashSearchQuery,
+  ): Promise<void> => {
+    setIsLoadingTrash(true);
+    setTrashActionError(null);
+    try {
+      const params = new URLSearchParams();
+      if (kind && kind !== 'all') params.set('kind', kind);
+      if (query.trim()) params.set('q', query.trim());
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+
+      const res = (await apiFetch('GET', `/api/v1/admin/trash${queryStr}` as never)) as {
+        items?: WorkspaceTrashedItem[];
+        retention_days?: number;
+        total?: number;
+      };
+      setTrashedItems(res.items ?? []);
+      if (res.retention_days != null) {
+        setTrashRetention(res.retention_days);
+      }
+    } catch (err: unknown) {
+      setTrashActionError(getTrashError(err, 'Failed to load trashed items.'));
+    } finally {
+      setIsLoadingTrash(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'trash') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadWorkspaceTrash();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, trashKindFilter]);
+
+  const handleSaveRetention = (e: SyntheticEvent): void => {
+    e.preventDefault();
+    void (async () => {
+      setIsSavingRetention(true);
+      setTrashActionError(null);
+      setTrashActionSuccess(null);
+      try {
+        const csrf = await ensureSessionCsrfToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+
+        const payload = {
+          trash_retention_days: trashRetention,
+        };
+        await apiFetch('PATCH', '/api/v1/admin/workspace-settings' as never, {
+          headers,
+          body: JSON.stringify(payload),
+        });
+        setTrashActionSuccess(`Trash retention policy updated to ${String(trashRetention)} days.`);
+        await loadWorkspaceTrash();
+      } catch (err: unknown) {
+        setTrashActionError(getTrashError(err, 'Failed to update trash retention policy.'));
+      } finally {
+        setIsSavingRetention(false);
+      }
+    })();
+  };
+
+  const handleRestoreItem = async (item: WorkspaceTrashedItem): Promise<void> => {
+    setTrashActionError(null);
+    setTrashActionSuccess(null);
+    try {
+      const csrf = await ensureSessionCsrfToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (csrf) headers['X-CSRF-Token'] = csrf;
+
+      await apiFetch(
+        'POST',
+        `/api/v1/admin/trash/${item.id}:restore?reason=${encodeURIComponent('Restored from workspace trash studio')}` as never,
+        { headers },
+      );
+      setTrashActionSuccess(`Restored ${(item.title ?? item.key) ?? item.kind} successfully.`);
+      await loadWorkspaceTrash();
+    } catch (err: unknown) {
+      setTrashActionError(getTrashError(err, 'Failed to restore item.'));
+    }
+  };
+
+  const handleRequestPurge = async (item: WorkspaceTrashedItem): Promise<void> => {
+    setTrashActionError(null);
+    setTrashActionSuccess(null);
+    setPurgeTarget(item);
+    setIsRequestingPurge(true);
+    try {
+      const csrf = await ensureSessionCsrfToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (csrf) headers['X-CSRF-Token'] = csrf;
+
+      const body = {
+        target_kind: item.kind,
+        target_ref: item.id,
+        mode: 'permanent_purge',
+        reason: 'Permanent cryptographic purge request',
+      };
+      const res = (await apiFetch('POST', '/api/v1/admin/destructive:request' as never, {
+        headers,
+        body: JSON.stringify(body),
+      })) as { confirmation_token?: string; blast_hash?: string };
+
+      setPurgeConfirmationToken(res.confirmation_token ?? null);
+      setPurgeBlastHash(res.blast_hash ?? null);
+    } catch (err: unknown) {
+      setTrashActionError(getTrashError(err, 'Failed to request permanent purge.'));
+      setPurgeTarget(null);
+    } finally {
+      setIsRequestingPurge(false);
+    }
+  };
+
+  const handleExecutePurge = async (): Promise<void> => {
+    if (!purgeConfirmationToken || !purgeBlastHash || !purgeTarget) return;
+    setIsExecutingPurge(true);
+    setTrashActionError(null);
+    setTrashActionSuccess(null);
+    try {
+      const csrf = await ensureSessionCsrfToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (csrf) headers['X-CSRF-Token'] = csrf;
+
+      const body = {
+        confirmation_token: purgeConfirmationToken,
+        blast_hash: purgeBlastHash,
+        reason: purgeReason.trim() !== '' ? purgeReason : 'Permanent cryptographic purge',
+      };
+      await apiFetch('POST', '/api/v1/admin/destructive:execute' as never, {
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      setTrashActionSuccess(
+        `Permanently purged ${(purgeTarget.title ?? purgeTarget.key) ?? purgeTarget.kind}.`,
+      );
+      setPurgeTarget(null);
+      setPurgeConfirmationToken(null);
+      setPurgeBlastHash(null);
+      setPurgeReason('');
+      await loadWorkspaceTrash();
+    } catch (err: unknown) {
+      setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
+    } finally {
+      setIsExecutingPurge(false);
+    }
+  };
+
+  const handleCancelPurge = (): void => {
+    setPurgeTarget(null);
+    setPurgeConfirmationToken(null);
+    setPurgeBlastHash(null);
+  };
 
   const handleSaveGeneral = (e: SyntheticEvent) => {
     e.preventDefault();
@@ -561,6 +766,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
         >
           Groups & Governance
         </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-trash"
+          aria-selected={activeTab === 'trash'}
+          data-testid="tab-trash"
+          className={`kb-settings-tab ${activeTab === 'trash' ? 'kb-settings-tab-active' : ''}`}
+          onClick={() => { handleTabChange('trash'); }}
+        >
+          Trash &amp; Retention
+        </button>
       </nav>
 
       <div className="kb-settings-panel">
@@ -654,7 +870,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 type="number"
                 data-testid="workspace-trash-retention-input"
                 className="kb-input"
-                min="1"
+                min="7"
+                max="365"
                 value={trashRetention}
                 onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
                 required
@@ -987,7 +1204,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           type="button"
                           data-testid="add-group-member-btn"
                           className="kb-btn kb-btn-primary"
-                          disabled={!selectedAddMemberId}
                           onClick={() => {
                             void handleAddGroupMember(selectedGroup.id, selectedAddMemberId);
                           }}
@@ -1068,6 +1284,235 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'trash' && (
+          <div className="kb-members-section" data-testid="workspace-trash-studio">
+            <div className="kb-settings-header">
+              <h2 className="kb-settings-title">Workspace Trash &amp; Retention Studio</h2>
+              <p className="kb-settings-subtitle">
+                Manage retention policies, browse soft-deleted workspace items, restore entities, or execute permanent purges.
+              </p>
+            </div>
+
+            {trashActionError && (
+              <div className="kb-settings-alert kb-settings-alert-error" role="alert">
+                {trashActionError}
+              </div>
+            )}
+
+            {trashActionSuccess && (
+              <div className="kb-settings-alert kb-settings-alert-success" role="status">
+                {trashActionSuccess}
+              </div>
+            )}
+
+            {/* Retention Policy Card */}
+            <div className="kb-retention-settings-card" data-testid="workspace-trash-retention-card">
+              <h3 className="kb-settings-title">Retention Policy</h3>
+              <p className="kb-settings-subtitle">
+                Set how long soft-deleted items remain in trash before automated multi-object sweep (7 to 365 days).
+              </p>
+              <form onSubmit={handleSaveRetention} className="kb-edit-cell-row">
+                <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-visually-hidden">
+                  Trash Retention Days
+                </label>
+                <input
+                  id="ws-trash-retention-input-trash-tab"
+                  type="number"
+                  data-testid="workspace-trash-retention-input-trash-tab"
+                  className="kb-input"
+                  min="7"
+                  max="365"
+                  value={trashRetention}
+                  onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
+                  required
+                />
+                <button
+                  type="submit"
+                  data-testid="save-trash-retention-btn"
+                  className="kb-btn kb-btn-primary"
+                  disabled={isSavingRetention}
+                >
+                  {isSavingRetention ? 'Saving...' : 'Save Retention Policy'}
+                </button>
+              </form>
+            </div>
+
+            {/* Toolbar: Filter Pills + Search */}
+            <div className="kb-trash-toolbar">
+              <div className="kb-trash-filters">
+                {['all', 'project', 'issue', 'doc', 'page', 'sticky', 'cycle', 'module', 'view'].map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    data-testid={`trash-filter-${kind}`}
+                    className={`kb-trash-filter-btn ${trashKindFilter === kind ? 'kb-trash-filter-btn-active' : ''}`}
+                    onClick={() => { setTrashKindFilter(kind); }}
+                  >
+                    {kind === 'all'
+                      ? 'All'
+                      : kind.charAt(0).toUpperCase() + kind.slice(1) + 's'}
+                  </button>
+                ))}
+              </div>
+              <div className="kb-trash-search-box">
+                <input
+                  type="text"
+                  data-testid="trash-search-input"
+                  className="kb-input"
+                  placeholder="Search trashed items by key or title..."
+                  value={trashSearchQuery}
+                  onChange={(e) => { setTrashSearchQuery(e.target.value); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      void loadWorkspaceTrash(trashKindFilter, trashSearchQuery);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  data-testid="trash-search-btn"
+                  className="kb-btn kb-btn-secondary"
+                  onClick={() => { void loadWorkspaceTrash(trashKindFilter, trashSearchQuery); }}
+                >
+                  Search
+                </button>
+              </div>
+            </div>
+
+            {/* Permanent Purge Confirmation Modal / Box */}
+            {purgeTarget && (
+              <div className="kb-danger-purge-container" data-testid="permanent-purge-confirmation-dialog">
+                <div className="kb-settings-alert kb-settings-alert-error" role="alert">
+                  <strong>Permanent Cryptographic Purge (Stage 2)</strong>
+                  <p className="kb-danger-purge-hint">
+                    You are about to permanently purge &quot;{(purgeTarget.title ?? purgeTarget.key) ?? purgeTarget.kind}&quot; (ID: {purgeTarget.id}). This action immediately destroys all links, embeddings, and database rows with cryptographic certainty and CANNOT be undone.
+                  </p>
+                  {purgeBlastHash && (
+                    <p className="kb-danger-purge-hint">
+                      Blast Hash: <code>{purgeBlastHash}</code>
+                    </p>
+                  )}
+                  <div className="kb-form-group kb-danger-reason-input">
+                    <label htmlFor="ws-purge-reason-input">Reason for Purge</label>
+                    <input
+                      id="ws-purge-reason-input"
+                      type="text"
+                      className="kb-input"
+                      data-testid="permanent-purge-reason-input"
+                      value={purgeReason}
+                      onChange={(e) => { setPurgeReason(e.target.value); }}
+                    />
+                  </div>
+                  <div className="kb-danger-buttons-row">
+                    <button
+                      type="button"
+                      data-testid="confirm-permanent-purge-btn"
+                      className="kb-btn kb-btn-purge"
+                      disabled={isExecutingPurge || isRequestingPurge || !purgeConfirmationToken}
+                      onClick={() => { void handleExecutePurge(); }}
+                    >
+                      {isExecutingPurge ? 'Purging...' : 'Confirm Permanent Purge'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cancel-permanent-purge-btn"
+                      className="kb-btn kb-btn-secondary"
+                      onClick={handleCancelPurge}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Trashed Items List / Table */}
+            {isLoadingTrash ? (
+              <div className="kb-trash-empty" data-testid="trash-loading-state">
+                Loading trashed items...
+              </div>
+            ) : trashedItems.length === 0 ? (
+              <div className="kb-trash-empty" data-testid="trash-empty-state">
+                No trashed items in this workspace.
+              </div>
+            ) : (
+              <div className="kb-table-scroll-container">
+                <table className="kb-table" data-testid="trash-items-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Item</th>
+                      <th>Deleted At</th>
+                      <th>Days Remaining</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trashedItems.map((item) => (
+                      <tr key={item.id} data-testid={`trash-row-${item.id}`}>
+                        <td>
+                          <span className="kb-role-badge kb-role-member">
+                            {formatTrashKind(item.kind)}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="kb-member-info">
+                            {item.key && (
+                              <strong className="kb-member-name" data-testid="trash-item-key">
+                                {item.key}
+                              </strong>
+                            )}
+                            <span className="kb-member-handle" data-testid="trash-item-title">
+                              {item.title ?? item.id}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span data-testid="trash-deleted-at">
+                            {new Date(item.deleted_at).toLocaleString()}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            data-testid="trash-remaining-days"
+                            className={`kb-retention-pill ${item.remaining_days <= 3 ? 'kb-retention-pill-expired' : ''}`}
+                          >
+                            {item.remaining_days > 0
+                              ? `${String(item.remaining_days)} days remaining`
+                              : 'Expires today'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="kb-edit-cell-row">
+                            <button
+                              type="button"
+                              data-testid={`restore-btn-${item.id}`}
+                              className="kb-btn kb-btn-secondary"
+                              onClick={() => { void handleRestoreItem(item); }}
+                            >
+                              Restore
+                            </button>
+                            {Boolean(currentUser?.is_server_admin) && (
+                              <button
+                                type="button"
+                                data-testid={`permanent-purge-btn-${item.id}`}
+                                className="kb-btn kb-btn-purge"
+                                onClick={() => { void handleRequestPurge(item); }}
+                              >
+                                Permanent Purge
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

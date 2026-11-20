@@ -1,0 +1,104 @@
+commit 899dec9b21c9993d4b63c7045a52240e39a9b5d3
+Author: Adam Outler <adamoutler@gmail.com>
+Date:   Fri Nov 20 09:50:58 2026 -0500
+
+    docs: publish Role and Permission Matrix for KAN-30
+
+diff --git a/Role-and-Permission-Matrix.md b/Role-and-Permission-Matrix.md
+new file mode 100644
+index 0000000..d2ff159
+--- /dev/null
++++ b/Role-and-Permission-Matrix.md
+@@ -0,0 +1,80 @@
++# Role and Permission Matrix
++
++This document defines the authoritative, fine-grained access control model across all 7 principal tiers in the 👍kanban platform.
++
++The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database layer, capability bitmasks with explicit DENY precedence, multi-factor AAL2 step-up authentication, and strict cryptographic scoping for agents and custom scripts.
++
++---
++
++## Legend
++
++| Symbol | Status | Description |
++| :---: | :--- | :--- |
++| **●** | **Allowed by Role** | Operation is natively permitted by the principal tier without extra elevation. |
++| **◐** | **Conditional** | Operation requires an explicit ACL share, matching token scope, project assignment, or fresh AAL2 step-up verification. |
++| **○** | **Never Allowed** | Operation is strictly forbidden by policy and rejected by database RLS or API gatekeepers. |
++
++---
++
++## The 7 Principal Tiers
++
++1. **Guest (`WORKSPACE_GUEST` / `PROJECT_GUEST`):** Ephemeral or external collaborator. Confined strictly to explicitly shared objects with zero ambient project or workspace visibility.
++2. **Viewer (`WORKSPACE_VIEWER` / `PROJECT_VIEWER`):** Read-only stakeholder. Permitted to inspect un-restricted workspace or project assets, but cannot author or modify data.
++3. **Member (`WORKSPACE_MEMBER` / `PROJECT_MEMBER`):** Standard day-to-day engineer or contributor. Can author and manage issues, docs, stickies, and views in assigned projects.
++4. **Project Admin (`PROJECT_ADMIN`):** Lead for a specific project. Controls project configuration, workflow state transitions, WIP limits, project member bindings, and project trash.
++5. **Workspace Admin (`WORKSPACE_ADMIN`):** Organization administrator. Governs workspace settings, groups, user provisioning, retention policy, and workspace trash studio.
++6. **Server Admin (`SERVER_ADMIN`):** Root platform operator. Manages global server topology, multi-card authentication, air-gap flags, and cryptographic permanent purge.
++7. **Scoped MCP Agent (Service Principal):** Autonomous or assisted agent accessing `/mcp/agent`, `/mcp/docs`, or `/mcp/admin` bound to an API key or OAuth 2.0 PKCE token.
++
++---
++
++## Master Capability Matrix
++
++| Operational Capability | Guest | Viewer | Member | Project Admin | Workspace Admin | Server Admin | Scoped MCP Agent |
++| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
++| **Viewing Workspace-Public Objects** | ○ | ● | ● | ● | ● | ● | ◐ (1) |
++| **Viewing Private Project Objects** | ◐ (2) | ◐ (2) | ◐ (2) | ● | ● | ● | ◐ (1, 2) |
++| **Explicit ACL DENY Precedence** | ● (3) | ● (3) | ● (3) | ● (3) | ● (3) | ● (3) | ● (3) |
++| **Authoring Issues, Stickies, and Docs** | ○ | ○ | ● | ● | ● | ● | ◐ (1) |
++| **Editing and Versioning Pages** | ○ | ○ | ● | ● | ● | ● | ◐ (1) |
++| **Managing Resource ACLs (Share / Revoke)** | ○ | ○ | ◐ (4) | ● | ● | ● | ◐ (1, 4) |
++| **Project Studio and Workflow Management** | ○ | ○ | ○ | ● | ● | ● | ◐ (1) |
++| **Custom Field and Script Definition** | ○ | ○ | ○ | ○ | ◐ (5) | ● | ◐ (1, 5) |
++| **Soft-Trash Project Objects** | ○ | ○ | ◐ (6) | ● | ● | ● | ◐ (1, 6) |
++| **Workspace Trash Studio Inspection** | ○ | ○ | ○ | ◐ (7) | ● (8) | ● (8) | ◐ (1, 8) |
++| **Restoring Soft-Deleted Objects** | ○ | ○ | ○ | ◐ (7) | ● (8) | ● (8) | ◐ (1, 8) |
++| **Workspace Retention Policy (7 to 365 Days)** | ○ | ○ | ○ | ○ | ● (8) | ● (8) | ○ |
++| **Automated Multi-Object Sweep (trash_purge)** | ○ | ○ | ○ | ○ | ○ | ● (9) | ○ |
++| **2-Stage Permanent Purge (Cryptographic)** | ○ | ○ | ○ | ○ | ○ | ● (8, 10) | ○ |
++| **Local User Provisioning and Password Reset** | ○ | ○ | ○ | ○ | ● (8) | ● (8) | ○ |
++| **Role Bindings and Group Hierarchy CRUD** | ○ | ○ | ○ | ◐ (11) | ● (8) | ● (8) | ○ |
++| **Multi-Card Auth Studio and Passkey Config** | ○ | ○ | ○ | ○ | ○ | ● (8) | ○ |
++| **Minting Scoped MCP API Keys** | ○ | ○ | ○ | ○ | ● (8) | ● (8) | ○ |
++| **Immutable Audit Ledger (Inspection Only)** | ○ | ○ | ○ | ○ | ● (8) | ● (8) | ◐ (1) |
++| **Tampering with Audit Ledger Records** | ○ | ○ | ○ | ○ | ○ | ○ (12) | ○ |
++
++---
++
++## Detailed Condition Notes
++
++1. **Token Scope Restriction:** Scoped MCP Agents can only exercise capabilities explicitly included in their minted token scopes (`read:issues`, `write:issues`, `read:docs`, `write:docs`, `admin`, etc.). Unscoped tools are rejected with `403 FORBIDDEN`.
++2. **Explicit Project Membership / ACL Share:** Guests and Viewers cannot see private project entities unless explicitly added to the project role bindings or granted a specific `ALLOW` entry in `resource_acl_entries`.
++3. **Absolute DENY Precedence:** If an explicit `DENY` entry exists for a principal on an object (or inherited group), effective capability bitmasks collapse immediately (`allow & (~deny)`). Even Workspace Admins cannot view or manage objects guarded by an explicit `DENY`.
++4. **Ownership Share Delegation:** Standard Members can only share objects they originally authored, provided project policy permits user-level ACL delegation.
++5. **Admin Approval Gate:** Custom fields and scripts can only be defined by administrators. Executing a script with Workspace or Server token escalation requires cryptographic approval from an administrator of that tier.
++6. **Author Deletion Scope:** Members may soft-delete their own drafts, comments, and un-assigned stickies if granted DELETE capability mask. Project-wide item soft-deletion requires Project Admin.
++7. **Project Scope Isolation:** Project Admins in the Trash Studio can only view and restore items belonging to projects where they hold explicit `PROJECT_ADMIN` authority.
++8. **Fresh AAL2 Step-Up Requirement:** All administrative endpoints (`/api/v1/admin/*`, retention settings, user provisioning, trash operations, key minting) enforce `Depends(require_admin_aal2)`. The session must have verified MFA within the last 900 seconds (`aal2_verified_at <= 900s`).
++9. **Daemon Background Job Authority:** The trash purge runner executes with dedicated system worker identity and sweeps expired entities strictly past their per-workspace `trash_retention_days` threshold.
++10. **2-Stage Destructive Confirmation:** Permanent purge is exclusively gated to `SERVER_ADMIN` + fresh AAL2. It requires `POST /api/v1/admin/destructive:request` to compute blast radius and mint an ephemeral HMAC `confirmation_token` + `blast_hash`, followed by `POST /api/v1/admin/destructive:execute` with a mandatory human reason (10 to 500 characters).
++11. **Project-Level Role Delegation:** Project Admins may manage role bindings within their designated project only. They cannot elevate users to Workspace Admin or Server Admin.
++12. **Cryptographic Immutability:** Audit ledger tables (`activity_ledger`) have no `UPDATE` or `DELETE` grants for any database role (including `kanban_app` and `kanban_migrator`). Triggers prevent tampering.
++
++---
++
++## Architectural Security Invariants
++
++- **Hostile Wire Invariant:** Every input is validated with strict Pydantic schemas and UTF-8 surrogate checks. Cleartext transmission of tokens is prohibited.
++- **Walled Component Garden:** Row-Level Security (`FORCE ROW LEVEL SECURITY`) is always active on all database sessions. Dropping session authorization to unprivileged users is mandatory in application flows.
++- **Volatile State Sanitization:** Ephemeral tokens and secrets exist only in memory during execution and are erased immediately after verification.
++- **Supply Chain Paranoia:** Zero external cloud runtime dependencies for core authentication, authorization, or search.
+diff --git a/_Sidebar.md b/_Sidebar.md
+index 54a1d72..7ea0da5 100644
+--- a/_Sidebar.md
++++ b/_Sidebar.md
+@@ -27,6 +27,7 @@
+   - [18. Custom Scripts and JSON Security](Custom-Scripts-and-JSON-Security-Architecture)
+ 
+ - **Reference Guides**
++  - [Role and Permission Matrix](Role-and-Permission-Matrix)
+   - [Feature Comparison Matrix (35 Features)](Feature-Comparison)
+   - [Guide: How to Use Custom Fields](Guide-Custom-Fields)
+   - [MCP Tools Reference (24 Tools)](MCP-Tools-Reference)

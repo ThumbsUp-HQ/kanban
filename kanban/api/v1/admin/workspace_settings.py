@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid  # noqa: TC003
-from datetime import datetime  # noqa: TC003
+from datetime import UTC, datetime
 from typing import Annotated, Any, Final, Literal
 
 from fastapi import APIRouter, Depends
@@ -25,6 +25,7 @@ from kanban.services.activity import ActivityEventType, record_activity
 logger = logging.getLogger(__name__)
 
 _AAL2_MIN_LEVEL: Final[int] = 2
+_AAL2_FRESHNESS_MAX_AGE_SECONDS: Final[int] = 900
 
 
 class WorkspaceSettingsResponse(BaseModel):
@@ -56,7 +57,7 @@ class WorkspaceSettingsUpdate(BaseModel):
     default_project_visibility: Literal["private", "workspace"] | None = None
     session_idle_timeout_min: int | None = Field(default=None, ge=5, le=720)
     session_absolute_timeout_min: int | None = Field(default=None, ge=60, le=10080)
-    trash_retention_days: int | None = Field(default=None, ge=1, le=365)
+    trash_retention_days: int | None = Field(default=None, ge=7, le=365)
     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
     air_gap_mode: bool | None = None
 
@@ -197,6 +198,43 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             detail="Toggling air_gap_mode requires AAL2 authentication.",
         )
 
+    # Check fresh AAL2 (<= 900s) when updating trash_retention_days
+    retention_changed = (
+        body.trash_retention_days is not None
+        and body.trash_retention_days != settings.trash_retention_days
+    )
+    if retention_changed:
+        if caller.aal_level < _AAL2_MIN_LEVEL:
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Required",
+                detail="Updating trash_retention_days requires AAL2 authentication.",
+            )
+        verified_at = caller.aal2_verified_at
+        if verified_at is None:
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail="AAL2 verification timestamp is missing or stale.",
+            )
+        now_utc = datetime.now(UTC)
+        if verified_at.tzinfo is None:
+            verified_at = verified_at.replace(tzinfo=UTC)
+        age_sec = (now_utc - verified_at).total_seconds()
+        if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
+            stale_msg = (
+                f"AAL2 verification is stale ({int(age_sec)}s > "
+                f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
+            )
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail=stale_msg,
+            )
+
     before: dict[str, Any] = {
         "name": ws.name if ws else settings.display_name,
         "slug": ws.slug if ws else "default",
@@ -324,6 +362,31 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
                 actor_principal_id=caller.principal_id,
                 event_type=ActivityEventType.AIR_GAP_MODE_CHANGED,
                 payload={"air_gap_mode": settings.air_gap_mode, "previous": old_air_gap},
+            )
+
+        if (
+            body.trash_retention_days is not None
+            and body.trash_retention_days < before["trash_retention_days"]
+        ):
+            logger.warning(
+                "Trash retention shortened for workspace %s: %d -> %d days",
+                caller.workspace_id,
+                before["trash_retention_days"],
+                body.trash_retention_days,
+            )
+            await record_activity(
+                session,
+                workspace_id=caller.workspace_id,
+                actor_principal_id=caller.principal_id,
+                event_type=ActivityEventType.TRASH_RETENTION_SHORTENED_WARN,
+                payload={
+                    "previous_retention_days": before["trash_retention_days"],
+                    "new_retention_days": body.trash_retention_days,
+                    "warning": (
+                        "Shortening trash retention accelerates permanent deletion "
+                        "of soft-trashed items."
+                    ),
+                },
             )
 
     return WorkspaceSettingsResponse(

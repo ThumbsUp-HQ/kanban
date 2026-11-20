@@ -1837,6 +1837,8 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(parseTabFromHash('#members')).toBe('members');
     expect(parseTabFromHash('#tab-groups')).toBe('groups');
     expect(parseTabFromHash('#groups')).toBe('groups');
+    expect(parseTabFromHash('#tab-trash')).toBe('trash');
+    expect(parseTabFromHash('#trash')).toBe('trash');
     expect(parseTabFromHash('#unknown')).toBeNull();
     expect(parseTabFromHash('')).toBeNull();
     expect(parseTabFromHash(null)).toBeNull();
@@ -1884,5 +1886,467 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(dispatchEventSpy).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'kb:system-status-changed' }),
     );
+  });
+
+  it('supports Trash & Retention tab navigation, retention policy update, and filterable table (KAN-30)', async () => {
+    let patchedRetention: number | null = null;
+    let requestedKind: string | null = null;
+    let requestedQuery: string | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const m = method.toUpperCase();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        if (m === 'PATCH') {
+          const bodyVal = options && 'body' in options ? options.body : undefined;
+          const parsed = typeof bodyVal === 'string'
+            ? (JSON.parse(bodyVal) as Record<string, unknown>)
+            : ((bodyVal as Record<string, unknown> | undefined) ?? {});
+          if (typeof parsed.trash_retention_days === 'number') {
+            patchedRetention = parsed.trash_retention_days;
+          }
+          return { name: 'WS', slug: 'ws', trash_retention_days: patchedRetention ?? 45 };
+        }
+        return { name: 'WS', slug: 'ws', trash_retention_days: 30 };
+      }
+      if (path.includes('/api/v1/admin/trash')) {
+        const url = new URL(`http://localhost${path}`);
+        requestedKind = url.searchParams.get('kind');
+        requestedQuery = url.searchParams.get('q');
+        return {
+          items: [
+            {
+              id: 'trash-item-1',
+              kind: 'issue',
+              key: 'KAN-99',
+              title: 'Expired Issue',
+              deleted_at: '2026-11-19T10:00:00Z',
+              remaining_days: 28,
+              project_id: 'proj-1',
+            },
+            {
+              id: 'trash-item-2',
+              kind: 'doc',
+              key: 'DOC-1',
+              title: 'Architecture Doc',
+              deleted_at: '2026-11-18T10:00:00Z',
+              remaining_days: 27,
+              project_id: null,
+            },
+            {
+              id: 'trash-item-3',
+              kind: 'sticky',
+              key: null,
+              title: 'Expired Sticky',
+              deleted_at: '2026-11-17T10:00:00Z',
+              remaining_days: 0,
+              project_id: null,
+            },
+            {
+              id: 'trash-item-4',
+              kind: 'unknown_kind',
+              key: 'UNK-1',
+              title: null,
+              deleted_at: '2026-11-16T10:00:00Z',
+              remaining_days: 2,
+              project_id: null,
+            },
+          ],
+          retention_days: 30,
+          total: 4,
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const trashTab = await screen.findByTestId('tab-trash');
+    expect(trashTab).toBeDefined();
+
+    // Click trash tab
+    fireEvent.click(trashTab);
+    expect(window.location.hash).toBe('#tab-trash');
+
+    // Studio rendered
+    expect(await screen.findByTestId('workspace-trash-studio')).toBeDefined();
+    expect(screen.getByTestId('workspace-trash-retention-card')).toBeDefined();
+    expect(screen.getByTestId('trash-items-table')).toBeDefined();
+
+    // Update retention policy
+    const retentionInput = screen.getByTestId('workspace-trash-retention-input-trash-tab');
+    fireEvent.change(retentionInput, { target: { value: '45' } });
+    const saveRetentionBtn = screen.getByTestId('save-trash-retention-btn');
+    fireEvent.click(saveRetentionBtn);
+
+    await waitFor(() => {
+      expect(patchedRetention).toBe(45);
+      expect(screen.getByText('Trash retention policy updated to 45 days.')).toBeDefined();
+    });
+
+    // Test filter pills
+    const docFilter = screen.getByTestId('trash-filter-doc');
+    fireEvent.click(docFilter);
+    await waitFor(() => {
+      expect(requestedKind).toBe('doc');
+    });
+
+    // Click trash tab again to cover hash equality branch
+    fireEvent.click(trashTab);
+
+    // Test search box
+    const searchInput = screen.getByTestId('trash-search-input');
+    fireEvent.change(searchInput, { target: { value: 'Architecture' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+    const searchBtn = screen.getByTestId('trash-search-btn');
+    fireEvent.click(searchBtn);
+    await waitFor(() => {
+      expect(requestedQuery).toBe('Architecture');
+    });
+  });
+
+  it('handles item restoration and 2-stage permanent purge in Workspace Trash Studio (KAN-30)', async () => {
+    let restoredId: string | null = null;
+    let purgeRequestedId: string | null = null;
+    let purgeExecutedToken: string | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const m = method.toUpperCase();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return { name: 'WS', slug: 'ws', trash_retention_days: 30 };
+      }
+      if (path.includes('/api/v1/admin/trash') && path.includes(':restore') && m === 'POST') {
+        const match = /\/admin\/trash\/([^:]+):restore/.exec(path);
+        restoredId = match ? (match[1] ?? null) : null;
+        return { status: 'restored', target_id: restoredId };
+      }
+      if (path.includes('/api/v1/admin/trash') && m === 'GET') {
+        return {
+          items: [
+            {
+              id: 'trash-item-1',
+              kind: 'project',
+              key: 'PROJ',
+              title: 'Project To Purge',
+              deleted_at: '2026-11-19T10:00:00Z',
+              remaining_days: 28,
+            },
+          ],
+          retention_days: 30,
+          total: 1,
+        };
+      }
+      if (path.includes('/api/v1/admin/destructive:request') && m === 'POST') {
+        const bodyVal = options && 'body' in options ? options.body : undefined;
+        const parsed = typeof bodyVal === 'string'
+          ? (JSON.parse(bodyVal) as Record<string, unknown>)
+          : ((bodyVal as Record<string, unknown> | undefined) ?? {});
+        purgeRequestedId = String(parsed.target_ref);
+        return {
+          confirmation_token: 'token-xyz-123',
+          blast_hash: 'blast-hash-789',
+          target_id: purgeRequestedId,
+        };
+      }
+      if (path.includes('/api/v1/admin/destructive:execute') && m === 'POST') {
+        const bodyVal = options && 'body' in options ? options.body : undefined;
+        const parsed = typeof bodyVal === 'string'
+          ? (JSON.parse(bodyVal) as Record<string, unknown>)
+          : ((bodyVal as Record<string, unknown> | undefined) ?? {});
+        purgeExecutedToken = String(parsed.confirmation_token);
+        return { status: 'purged', target_id: 'trash-item-1' };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const trashTab = await screen.findByTestId('tab-trash');
+    fireEvent.click(trashTab);
+
+    expect(await screen.findByTestId('trash-items-table')).toBeDefined();
+
+    // 1. Restore item
+    const restoreBtn = screen.getByTestId('restore-btn-trash-item-1');
+    fireEvent.click(restoreBtn);
+
+    await waitFor(() => {
+      expect(restoredId).toBe('trash-item-1');
+      expect(screen.getByText('Restored Project To Purge successfully.')).toBeDefined();
+    });
+
+    // 2. Permanent Purge (Stage 1 Request)
+    const purgeBtn = screen.getByTestId('permanent-purge-btn-trash-item-1');
+    fireEvent.click(purgeBtn);
+
+    await waitFor(() => {
+      expect(purgeRequestedId).toBe('trash-item-1');
+      expect(screen.getByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    });
+
+    // 3. Permanent Purge (Stage 2 Confirm)
+    const reasonInput = screen.getByTestId('permanent-purge-reason-input');
+    fireEvent.change(reasonInput, { target: { value: 'Compliance retention expired' } });
+    const confirmPurgeBtn = screen.getByTestId('confirm-permanent-purge-btn');
+    fireEvent.click(confirmPurgeBtn);
+
+    await waitFor(() => {
+      expect(purgeExecutedToken).toBe('token-xyz-123');
+      expect(screen.getByText('Permanently purged Project To Purge.')).toBeDefined();
+    });
+  });
+
+  it('handles trash error states, empty search results, and purge cancellation (KAN-30)', async () => {
+    let shouldFailRetention = false;
+    let shouldFailRestore = false;
+    let shouldFailPurgeRequest = false;
+    let shouldFailPurgeExecute = false;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const m = method.toUpperCase();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        if (m === 'PATCH' && shouldFailRetention) {
+          throw Object.assign(new Error('Retention save failed.'), { detail: 'Retention save failed.' });
+        }
+        return { name: 'WS', slug: 'ws', trash_retention_days: 30 };
+      }
+      if (path.includes('/api/v1/admin/trash') && path.includes(':restore') && m === 'POST') {
+        if (shouldFailRestore) {
+          throw Object.assign(new Error('Restore failed.'), { detail: 'Restore failed.' });
+        }
+        return { status: 'restored' };
+      }
+      if (path.includes('/api/v1/admin/destructive:request') && m === 'POST') {
+        if (shouldFailPurgeRequest) {
+          throw Object.assign(new Error('Purge request failed.'), { detail: 'Purge request failed.' });
+        }
+        return {
+          confirmation_token: 'token-err-1',
+          blast_hash: 'blast-err-1',
+          target_id: 'trash-err-1',
+        };
+      }
+      if (path.includes('/api/v1/admin/destructive:execute') && m === 'POST') {
+        if (shouldFailPurgeExecute) {
+          throw Object.assign(new Error('Purge execute failed.'), { detail: 'Purge execute failed.' });
+        }
+        return { status: 'purged' };
+      }
+      if (path.includes('/api/v1/admin/trash') && m === 'GET') {
+        return {
+          items: [
+            {
+              id: 'trash-err-1',
+              kind: 'issue',
+              key: 'ERR-1',
+              title: 'Error Test Item',
+              deleted_at: '2026-11-19T10:00:00Z',
+              remaining_days: 10,
+            },
+          ],
+          retention_days: 30,
+          total: 1,
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const trashTab = await screen.findByTestId('tab-trash');
+    fireEvent.click(trashTab);
+
+    expect(await screen.findByTestId('trash-items-table')).toBeDefined();
+
+    // 1. Retention update error
+    shouldFailRetention = true;
+    const saveRetentionBtn = screen.getByTestId('save-trash-retention-btn');
+    fireEvent.click(saveRetentionBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Retention save failed.')).toBeDefined();
+    });
+
+    // 2. Restore error
+    shouldFailRestore = true;
+    const restoreBtn = screen.getByTestId('restore-btn-trash-err-1');
+    fireEvent.click(restoreBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Restore failed.')).toBeDefined();
+    });
+
+    // 3. Purge request error
+    shouldFailPurgeRequest = true;
+    const purgeBtn = screen.getByTestId('permanent-purge-btn-trash-err-1');
+    fireEvent.click(purgeBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Purge request failed.')).toBeDefined();
+    });
+
+    // 4. Purge cancellation
+    shouldFailPurgeRequest = false;
+    fireEvent.click(purgeBtn);
+    expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    const cancelPurgeBtn = screen.getByTestId('cancel-permanent-purge-btn');
+    fireEvent.click(cancelPurgeBtn);
+    await waitFor(() => {
+      expect(screen.queryByTestId('permanent-purge-confirmation-dialog')).toBeNull();
+    });
+
+    // 5. Purge execute error
+    shouldFailPurgeExecute = true;
+    fireEvent.click(purgeBtn);
+    expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    const confirmPurgeBtn = screen.getByTestId('confirm-permanent-purge-btn');
+    fireEvent.click(confirmPurgeBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Purge execute failed.')).toBeDefined();
+    });
+  });
+
+  it('handles empty trash items response and load failure (KAN-30)', async () => {
+    let shouldFailTrashLoad = false;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const m = method.toUpperCase();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return { name: 'WS', slug: 'ws', trash_retention_days: 30 };
+      }
+      if (path.includes('/api/v1/admin/trash') && m === 'GET') {
+        if (shouldFailTrashLoad) {
+          throw Object.assign(new Error(''), { detail: undefined, message: undefined });
+        }
+        return { items: [], total: 0 };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const trashTab = await screen.findByTestId('tab-trash');
+    fireEvent.click(trashTab);
+
+    // Empty state rendered
+    expect(await screen.findByTestId('trash-empty-state')).toBeDefined();
+    expect(screen.getByText('No trashed items in this workspace.')).toBeDefined();
+
+    // Trigger load error with empty error object (covers fallback error string)
+    shouldFailTrashLoad = true;
+    const searchBtn = screen.getByTestId('trash-search-btn');
+    fireEvent.click(searchBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load trashed items.')).toBeDefined();
+    });
+  });
+
+  it('covers remaining defensive branches in WorkspaceSettingsPage (KAN-30)', async () => {
+    // 1. Hash change with invalid tab
+    window.location.hash = '#invalid-tab-xyz';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+
+    // 2. ensureSessionCsrfToken returning null
+    vi.spyOn(sessionGuardModule, 'ensureSessionCsrfToken').mockResolvedValue(null);
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const m = method.toUpperCase();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return { name: 'WS', slug: 'ws', trash_retention_days: 30 };
+      }
+      if (path.includes('/api/v1/admin/trash') && path.includes(':restore') && m === 'POST') {
+        return { status: 'restored' };
+      }
+      if (path.includes('/api/v1/admin/destructive:request') && m === 'POST') {
+        return { confirmation_token: 'tok-1', blast_hash: 'hash-1' };
+      }
+      if (path.includes('/api/v1/admin/destructive:execute') && m === 'POST') {
+        return { status: 'purged' };
+      }
+      if (path.includes('/api/v1/admin/trash') && m === 'GET') {
+        return {
+          items: [
+            {
+              id: 'trash-bare-1',
+              kind: 'issue',
+              key: 'BARE-1',
+              title: null,
+              deleted_at: '2026-11-19T10:00:00Z',
+              remaining_days: 5,
+            },
+            {
+              id: 'trash-bare-2',
+              kind: 'doc',
+              key: null,
+              title: null,
+              deleted_at: '2026-11-19T10:00:00Z',
+              remaining_days: 5,
+            },
+          ],
+          retention_days: 30,
+          total: 2,
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const trashTab = await screen.findByTestId('tab-trash');
+    fireEvent.click(trashTab);
+
+    expect(await screen.findByTestId('trash-items-table')).toBeDefined();
+
+    // Search input keydown non-Enter (e.g. Tab)
+    const searchInput = screen.getByTestId('trash-search-input');
+    fireEvent.keyDown(searchInput, { key: 'Tab' });
+
+    // Restore item with key only (no title)
+    const restoreBtn1 = screen.getByTestId('restore-btn-trash-bare-1');
+    fireEvent.click(restoreBtn1);
+    await waitFor(() => {
+      expect(screen.getByText('Restored BARE-1 successfully.')).toBeDefined();
+    });
+
+    // Restore item with neither title nor key (falls back to kind)
+    const restoreBtn2 = screen.getByTestId('restore-btn-trash-bare-2');
+    fireEvent.click(restoreBtn2);
+    await waitFor(() => {
+      expect(screen.getByText('Restored doc successfully.')).toBeDefined();
+    });
+
+    // Purge item with key only (no title) without providing a custom reason
+    const purgeBtn1 = screen.getByTestId('permanent-purge-btn-trash-bare-1');
+    fireEvent.click(purgeBtn1);
+    expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    const confirmBtn = screen.getByTestId('confirm-permanent-purge-btn');
+    fireEvent.click(confirmBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Permanently purged BARE-1.')).toBeDefined();
+    });
+
+    // Purge item with neither title nor key
+    const purgeBtn2 = screen.getByTestId('permanent-purge-btn-trash-bare-2');
+    fireEvent.click(purgeBtn2);
+    expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    fireEvent.click(screen.getByTestId('confirm-permanent-purge-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Permanently purged doc.')).toBeDefined();
+    });
   });
 });

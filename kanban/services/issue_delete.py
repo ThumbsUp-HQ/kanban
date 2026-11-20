@@ -17,6 +17,7 @@ from database.models import (
     Project,
     ProjectPriority,
     WorkflowState,
+    Workspace,
 )
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.issue_delete import (
@@ -138,7 +139,12 @@ async def compute_blast_radius(
     else:
         not_found()
 
-    retention_days = get_settings().trash_retention_days
+    ws = await session.get(Workspace, issue.workspace_id)
+    retention_days = (
+        ws.trash_retention_days
+        if ws and ws.trash_retention_days
+        else get_settings().trash_retention_days or 30
+    )
 
     # Canonical JSON for blast hash:
     # {issue_id, description_sha256, sorted child ids, sorted inbound link ids,
@@ -304,7 +310,12 @@ async def list_trash(
     stmt = stmt.order_by(Issue.sequence_id.desc()).limit(limit + 1)
     rows = (await session.execute(stmt)).all()
 
-    retention_days = get_settings().trash_retention_days
+    ws = await session.get(Workspace, caller.workspace_id)
+    retention_days = (
+        ws.trash_retention_days
+        if ws and ws.trash_retention_days
+        else get_settings().trash_retention_days or 30
+    )
     items: list[TrashedIssueItem] = []
     has_more = len(rows) > limit
     page_rows = rows[:limit]
@@ -365,7 +376,12 @@ async def restore_issue(
             detail="Issue is not in trash",
         )
 
-    retention_days = get_settings().trash_retention_days
+    ws = await session.get(Workspace, caller.workspace_id)
+    retention_days = (
+        ws.trash_retention_days
+        if ws and ws.trash_retention_days
+        else get_settings().trash_retention_days or 30
+    )
     now_ts = datetime.now(UTC)
     if obj.deleted_at + timedelta(days=retention_days) < now_ts:
         raise ProblemException(
@@ -402,7 +418,12 @@ async def list_trash_items(
     project = await get_project_or_404(session, caller, project_ref)
     await require_capability(session, caller, project.id, Capability.VIEW)
 
-    retention_days = get_settings().trash_retention_days
+    ws = await session.get(Workspace, caller.workspace_id)
+    retention_days = (
+        ws.trash_retention_days
+        if ws and ws.trash_retention_days
+        else get_settings().trash_retention_days or 30
+    )
     now_ts = datetime.now(UTC)
 
     stmt = (

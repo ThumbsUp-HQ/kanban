@@ -35,7 +35,7 @@ from database.models.projects import (
     View,
     WorkflowState,
 )
-from database.models.spine import ObjectLink, ObjectRecord
+from database.models.spine import ObjectLink, ObjectRecord, Workspace
 from kanban.api.problems import ProblemException, not_found
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
@@ -213,7 +213,10 @@ async def _resolve_target_entity(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if target_kind == "issue":
         if parsed_uuid is not None:
             stmt = select(Issue, Project.identifier).join(Project, Project.id == Issue.project_id)
-            stmt = stmt.where(Issue.id == parsed_uuid)
+            stmt = stmt.where(
+                Issue.id == parsed_uuid,
+                Issue.workspace_id == caller.workspace_id,
+            )
         elif "-" in ref:
             parts = ref.split("-", 1)
             prefix, seq_str = parts[0].upper(), parts[1]
@@ -1179,9 +1182,11 @@ async def restore_object(
             detail=f"{target_kind} is not in trash",
         )
 
-    # 30-day retention window
+    # Per-workspace retention window
+    ws = await session.get(Workspace, obj.workspace_id)
+    retention_days = ws.trash_retention_days if ws and ws.trash_retention_days else 30
     now_ts = datetime.now(UTC)
-    if obj.deleted_at + timedelta(days=30) < now_ts:
+    if obj.deleted_at + timedelta(days=retention_days) < now_ts:
         raise ProblemException(
             code="RETENTION_EXPIRED",
             status=409,

@@ -643,7 +643,8 @@ async def test_list_trash_items_endpoint(
 ) -> None:
     """Test GET /api/v1/projects/{project_ref}/trash-items returns all soft-deleted items."""
     admin = await make_user("tr_items_admin", workspace_role="WORKSPACE_ADMIN")
-    await make_project("TITM", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    viewer = await make_user("tr_viewer", workspace_role="WORKSPACE_MEMBER")
+    await make_project("TITM", created_by=admin, roles={admin: "PROJECT_ADMIN", viewer: "VIEWER"})
     client = as_principal(admin)
 
     # 1. Create an issue and soft delete it
@@ -673,3 +674,38 @@ async def test_list_trash_items_endpoint(
     resp_other = await client.get("/api/v1/projects/TITM/trash-items?kind=cycle")
     assert resp_other.status_code == 200
     assert len(resp_other.json()["items"]) == 0
+
+    # 4. Query /projects/TITM/trash with priority and pagination limit=1
+    r_issue2 = await client.post(
+        "/api/v1/projects/TITM/issues",
+        json={"summary": "Item 2 for Trash", "priority": "urgent"},
+    )
+    assert r_issue2.status_code == 201
+    issue2_key = r_issue2.json()["key"]
+    prev2 = (await client.get(f"/api/v1/issues/{issue2_key}/delete-preview")).json()
+    await client.delete(
+        f"/api/v1/issues/{issue2_key}", headers={"Kb-Blast-Hash": prev2["blast_hash"]}
+    )
+
+    resp_trash = await client.get("/api/v1/projects/TITM/trash?limit=1")
+    assert resp_trash.status_code == 200
+    trash_data = resp_trash.json()
+    assert trash_data["next_cursor"] is not None
+    assert len(trash_data["items"]) == 1
+    assert trash_data["items"][0]["state"] is not None
+    assert trash_data["items"][0]["priority"] is not None
+
+    # Full list to test both issues (with and without priority)
+    resp_trash_all = await client.get("/api/v1/projects/TITM/trash")
+    assert resp_trash_all.status_code == 200
+    assert len(resp_trash_all.json()["items"]) >= 2
+
+    # Query with non-matching kind
+    resp_unknown_kind = await client.get("/api/v1/projects/TITM/trash-items?kind=unknown_kind")
+    assert resp_unknown_kind.status_code == 200
+
+    # Query as viewer without delete capabilities
+    viewer_client = as_principal(viewer)
+    resp_viewer_trash = await viewer_client.get("/api/v1/projects/TITM/trash-items")
+    assert resp_viewer_trash.status_code == 200
+    assert len(resp_viewer_trash.json()["items"]) == 0

@@ -17,6 +17,8 @@ __all__ = [
     "IssueDeleteResponse",
     "TrashedIssueItem",
     "TrashedIssueList",
+    "TrashedObjectItem",
+    "TrashedObjectList",
 ]
 
 
@@ -71,7 +73,7 @@ class TrashedIssueList(BaseModel):
 
 
 class TrashedObjectItem(BaseModel):
-    """Unified representation of any soft-deleted entity in project trash."""
+    """Unified representation of any soft-deleted entity in project or workspace trash."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -83,12 +85,14 @@ class TrashedObjectItem(BaseModel):
     purge_after: datetime
     remaining_days: int
     capabilities: list[str] = Field(default_factory=list)
+    project_id: uuid.UUID | None = None
 
 
 class TrashedObjectList(BaseModel):
-    """Listing of all soft-deleted objects in project trash."""
+    """Listing of all soft-deleted objects in project or workspace trash."""
 
     model_config = ConfigDict(extra="ignore")
 
     items: list[TrashedObjectItem]
     retention_days: int
+    total: int = 0

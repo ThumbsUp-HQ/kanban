@@ -781,4 +781,39 @@
   gap: 8px;
 }
 
+.kb-trash-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.kb-trash-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kb-retention-settings-card {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+  border-radius: 8px;
+  background: var(--bg-surface-raised, var(--kb-color-bg-surface, #ffffff));
+}
+
+.kb-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 
