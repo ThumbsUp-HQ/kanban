@@ -4738,6 +4738,1406 @@ index 0000000..edaaf99
 +    </div>
 +  );
 +}
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 683a41f..1e5d28a 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -256,6 +256,10 @@
+   line-height: 1.4;
+ }
+ 
++.kb-mcp-mint-error--banner {
++  margin: var(--space-3, 12px) 0;
++}
++
+ .kb-mcp-form-row {
+   display: flex;
+   flex-direction: column;
+@@ -344,7 +348,183 @@
+   font-weight: 500;
+ }
+ 
++/* Scope Filter Pills & Governance View Switch */
++.kb-mcp-filter-bar {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 16px;
++  flex-wrap: wrap;
++  margin-bottom: 16px;
++}
++
++.kb-mcp-pills-group {
++  display: inline-flex;
++  gap: 6px;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #161b22));
++  padding: 4px;
++  border-radius: 8px;
++  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++}
++
++.kb-mcp-filter-pill {
++  padding: 6px 14px;
++  font-size: 0.8125rem;
++  font-weight: 500;
++  border-radius: 6px;
++  border: none;
++  background: transparent;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  cursor: pointer;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-mcp-filter-pill:hover {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++  background-color: rgba(110, 118, 129, 0.1);
++}
++
++.kb-mcp-filter-pill-active {
++  background-color: var(--brand-primary, #1f6feb) !important;
++  color: #ffffff !important;
++  font-weight: 600;
++}
++
++.kb-mcp-project-selector {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 0.875rem;
++}
++
++.kb-mcp-project-selector label {
++  font-weight: 500;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++.kb-mcp-view-toggle {
++  display: inline-flex;
++  border-radius: 8px;
++  overflow: hidden;
++  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  margin-bottom: 20px;
++  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #161b22));
++}
++
++.kb-mcp-view-btn {
++  padding: 8px 18px;
++  font-size: 0.875rem;
++  font-weight: 500;
++  border: none;
++  background: transparent;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  cursor: pointer;
++  transition: all 0.15s ease-in-out;
++}
++
++.kb-mcp-view-btn:hover {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++}
++
++.kb-mcp-view-btn-active {
++  background-color: var(--brand-primary, #238636) !important;
++  color: #ffffff !important;
++  font-weight: 600;
++}
++
++.kb-mcp-explainer-card {
++  margin-bottom: 20px;
++  background-color: var(--bg-surface-raised, rgba(56, 139, 253, 0.05));
++  border: 1px solid var(--kb-color-border-subtle, rgba(56, 139, 253, 0.2));
++  border-radius: 8px;
++  padding: 12px 16px;
++  font-size: 0.8125rem;
++  line-height: 1.5;
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++.kb-mcp-explainer-item strong {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++}
++
+ /* Mobile Responsiveness (<= 768px, KANBA-213) */
++.kb-mcp-section-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 16px;
++  flex-wrap: wrap;
++  gap: 12px;
++}
++
++.kb-mcp-header-actions {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-wrap: wrap;
++}
++
++.kb-mcp-connect-btn {
++  height: var(--prop-row-h);
++  padding: 0 14px;
++  min-height: 36px;
++  background-color: var(--brand-primary, #238636);
++  border: 1px solid rgba(255, 255, 255, 0.1);
++  color: #ffffff;
++  border-radius: 6px;
++  font-weight: 600;
++  font-size: 0.8125rem;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  transition: background-color 0.15s;
++}
++
++.kb-mcp-connect-btn:hover {
++  background-color: #2ea043;
++}
++
++.kb-mcp-enter-device-code-btn {
++  height: var(--prop-row-h);
++  padding: 0 14px;
++  min-height: 36px;
++  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  color: var(--kb-color-text-primary, #f0f6fc);
++  border-radius: 6px;
++  font-weight: 500;
++  font-size: 0.8125rem;
++  text-decoration: none;
++  display: inline-flex;
++  align-items: center;
++  transition: all 0.15s;
++}
++
++.kb-mcp-enter-device-code-btn:hover {
++  background-color: var(--bg-hover, #30363d);
++}
++
++.kb-mcp-empty-content {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 12px;
++  padding: 16px 0;
++}
++
++.kb-mcp-empty-content p {
++  margin: 0;
++}
++
++.kb-mcp-empty-actions {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
+ @media (max-width: 768px) {
+   .kb-mcp-studio-container {
+     padding: 16px 12px;
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 30817b9..693cca5 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -1,19 +1,27 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, useEffect, type JSX } from 'react';
+-import { useParams, Link } from 'react-router';
++import React, { useState, useEffect, useCallback, useContext, type JSX } from 'react';
++import { useParams, useSearchParams, Link } from 'react-router';
++import { useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
++import { qk } from '../../api/queryKeys';
+ import {
+-  fetchPersonalMcpKeys,
+-  mintPersonalMcpKey,
+-  revokePersonalMcpKey,
+   fetchConnectedApps,
+   revokeConnectedApp,
++  fetchUnifiedMcpKeys,
++  mintUnifiedMcpKey,
++  revokeUnifiedMcpKey,
+   type McpApiKeyItem,
+   type OAuthConnectedApp,
+   type ScopeTier,
++  type OwnerKind,
++  type MintMcpKeyRequest,
+ } from './settingsApi';
+ import { McpConfigSnippetModal } from './McpConfigSnippetModal';
++import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
++import { SecondFactorStep } from '../auth/SecondFactorStep';
++import type { MfaMethod } from '../auth/authApi';
++import { ApiProblem } from '../../api/problem';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { useSystemStatus } from '../../app/useSystemStatus';
+ import { apiFetch } from '../../api/client';
+@@ -78,20 +86,68 @@ export const WRITE_MCP_TOOLS = new Set([
+   'destructive_lifecycle',
+ ]);
+ 
++export type ActiveScopeFilter = 'all' | 'project' | 'workspace' | 'server';
++export type ActiveView = 'mine' | 'governance';
++
+ export interface McpAccessStudioProps {
+   tier?: ('personal' | 'project' | 'workspace' | 'global') | undefined;
+   allowUnlimitedKeys?: boolean | undefined;
+-  user?: { is_server_admin?: boolean; is_workspace_admin?: boolean; workspace_role?: string } | null | undefined;
++  user?: {
++    is_server_admin?: boolean;
++    is_workspace_admin?: boolean;
++    is_project_admin?: boolean;
++    workspace_role?: string;
++  } | null | undefined;
+ }
+ 
++interface ProjectOption {
++  id: string;
++  identifier: string;
++  name: string;
++}
++
++const fallbackQueryClient = new QueryClient({
++  defaultOptions: { queries: { retry: false } },
++});
++
+ export function McpAccessStudio({
+-  tier = 'personal',
++  tier,
+   allowUnlimitedKeys,
+   user: propUser,
+ }: McpAccessStudioProps): JSX.Element {
++  const contextClient = useContext(QueryClientContext);
++  const queryClient = contextClient ?? fallbackQueryClient;
++
++  const [searchParams, setSearchParams] = useSearchParams();
++  const routeParams = useParams<{ projectKey?: string; workspaceSlug?: string }>();
++
++  // Determine initial scope filter from props or query
++  const queryScope = searchParams.get('scope');
++  const queryProject = searchParams.get('project');
++  const queryView = searchParams.get('view');
++
++  const resolvedInitialScope: ActiveScopeFilter = (() => {
++    if (tier === 'global') return 'server';
++    if (tier === 'workspace') return 'workspace';
++    if (tier === 'project') return 'project';
++    if (queryScope === 'server' || queryScope === 'global') return 'server';
++    if (queryScope === 'workspace') return 'workspace';
++    if (queryScope === 'project') return 'project';
++    return 'all';
++  })();
++
++  const [activeScope, setActiveScope] = useState<ActiveScopeFilter>(resolvedInitialScope);
++  const [selectedProject, setSelectedProject] = useState<string | null>(
++    queryProject ?? routeParams.projectKey ?? null,
++  );
++  const [activeView, setActiveView] = useState<ActiveView>(
++    queryView === 'governance' ? 'governance' : 'mine',
++  );
++
+   const [fetchedUser, setFetchedUser] = useState<{
+     is_server_admin?: boolean;
+     is_workspace_admin?: boolean;
++    is_project_admin?: boolean;
+     workspace_role?: string;
+   } | null>(null);
+ 
+@@ -103,6 +159,7 @@ export function McpAccessStudio({
+         const u = (await apiFetch('GET', '/api/v1/auth/me')) as {
+           is_server_admin?: boolean;
+           is_workspace_admin?: boolean;
++          is_project_admin?: boolean;
+           workspace_role?: string;
+         };
+         if (isMounted.current) setFetchedUser(u);
+@@ -118,27 +175,117 @@ export function McpAccessStudio({
+   const currentUser = propUser ?? fetchedUser;
+   const isServerAdmin = currentUser?.is_server_admin === true;
+   const isWorkspaceAdmin = currentUser?.is_workspace_admin === true || isServerAdmin;
+-  const isViewer = currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
++  const isProjectAdmin = currentUser?.is_project_admin === true || isWorkspaceAdmin;
++  const canAccessGovernance = isServerAdmin || isWorkspaceAdmin || isProjectAdmin;
++  const isViewer =
++    currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
++
++  const isDenied =
++    currentUser !== null &&
++    ((tier === 'global' && !isServerAdmin) || (tier === 'workspace' && !isWorkspaceAdmin));
++
++  const projectsQuery = useQuery<ProjectOption[]>(
++    {
++      queryKey: qk.projects(),
++      queryFn: async () => {
++        try {
++          const res = await apiFetch('GET', '/api/v1/projects');
++          const data = res as unknown as
++            | { items?: { id: string; identifier?: string; key?: string; name?: string }[] }
++            | { id: string; identifier?: string; key?: string; name?: string }[];
++          const rawList = Array.isArray(data) ? data : (data.items ?? []);
++          return rawList.map((p) => {
++            const ident = p.identifier ?? p.key ?? '';
++            return {
++              id: p.id,
++              identifier: ident,
++              name: p.name ?? ident,
++            };
++          });
++        } catch {
++          return [];
++        }
++      },
++      staleTime: 30000,
++      enabled: !isDenied,
++    },
++    queryClient,
++  );
++
++  const workspacesQuery = useQuery<{ id: string; name: string; slug: string; is_current?: boolean }[]>(
++    {
++      queryKey: ['workspaces'],
++      queryFn: async () => {
++        try {
++          const res = await apiFetch('GET', '/api/v1/workspaces');
++          return Array.isArray(res) ? res : [];
++        } catch {
++          return [];
++        }
++      },
++      staleTime: 60000,
++      enabled: !isDenied,
++    },
++    queryClient,
++  );
++
++  const currentWorkspaceSlug =
++    routeParams.workspaceSlug ??
++    (/^\/w\/([^/]+)/.exec(typeof window !== 'undefined' ? window.location.pathname : '')?.[1]) ??
++    workspacesQuery.data?.find((w) => w.is_current)?.slug ??
++    workspacesQuery.data?.[0]?.slug ??
++    'kanban';
+ 
+   const systemStatusQuery = useSystemStatus();
+   const allowUnlimited =
+     allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
+ 
+-  const { projectKey = 'KANBA' } = useParams<{ projectKey?: string }>();
+   const [keys, setKeys] = useState<McpApiKeyItem[]>([]);
++
++  const projects = React.useMemo<ProjectOption[]>(() => {
++    if (projectsQuery.data && projectsQuery.data.length > 0) {
++      return projectsQuery.data;
++    }
++    const fromKeys = Array.from(
++      new Set(
++        keys
++          .flatMap((k) => k.allowed_projects ?? [])
++          .filter((p): p is string => Boolean(p.trim())),
++      ),
++    );
++    return fromKeys.map((p) => ({
++      id: p,
++      identifier: p,
++      name: p,
++    }));
++  }, [projectsQuery.data, keys]);
++
++  const effectiveProjectKey =
++    selectedProject ??
++    queryProject ??
++    routeParams.projectKey ??
++    projects[0]?.identifier ??
++    '';
+   const [connectedApps, setConnectedApps] = useState<OAuthConnectedApp[]>([]);
+   const [loading, setLoading] = useState<boolean>(true);
++  const [showConnectOAuthModal, setShowConnectOAuthModal] = useState<boolean>(false);
+ 
+   // Mint modal state
+   const [showMintModal, setShowMintModal] = useState<boolean>(false);
+   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
+   const [newKeySurface, setNewKeySurface] = useState<'agent' | 'docs' | 'admin'>('agent');
++  const [newKeyOwnerKind, setNewKeyOwnerKind] = useState<OwnerKind>('personal_user');
++  const [newKeyScopeTier, setNewKeyScopeTier] = useState<ScopeTier>(
++    activeScope === 'server' ? 'global' : activeScope === 'project' ? 'project' : 'workspace',
++  );
++  const [newKeyProject, setNewKeyProject] = useState<string>(effectiveProjectKey);
+   const [newKeyExpiry, setNewKeyExpiry] = useState<number>(60);
+   const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
+   const [confirmUnlimited, setConfirmUnlimited] = useState<boolean>(false);
+   const [disabledTools, setDisabledTools] = useState<string[]>([]);
+   const [minting, setMinting] = useState<boolean>(false);
+   const [mintError, setMintError] = useState<string | null>(null);
++  const [studioError, setStudioError] = useState<string | null>(null);
+ 
+   // Snippet modal state (ephemeral secret)
+   const [activeSnippetKey, setActiveSnippetKey] = useState<string | undefined>(undefined);
+@@ -148,30 +295,112 @@ export function McpAccessStudio({
+   const [confirmRevokeKeyId, setConfirmRevokeKeyId] = useState<string | null>(null);
+   const [confirmRevokeAppId, setConfirmRevokeAppId] = useState<string | null>(null);
+ 
+-  useEffect(() => {
+-    const isMounted = { current: true };
+-    void (async () => {
+-      try {
++  // Inline AAL2 challenge state
++  const [aal2Challenge, setAal2Challenge] = useState<{
++    challengeId: string;
++    methods: MfaMethod[];
++  } | null>(null);
++  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
++
++  const loadData = useCallback(async (): Promise<void> => {
++    if (isDenied) {
++      setLoading(false);
++      return;
++    }
++    setLoading(true);
++    try {
++      if (activeView === 'governance') {
++        const fetched = await fetchUnifiedMcpKeys({
++          view: 'governance',
++          scope_tier: activeScope !== 'all' ? activeScope : undefined,
++          project_ref: activeScope === 'project' ? effectiveProjectKey : undefined,
++        });
++        setKeys(fetched);
++        setConnectedApps([]);
++      } else {
+         const [fetchedKeys, fetchedApps] = await Promise.all([
+-          tier === 'global' ? fetchPersonalMcpKeys('global') : fetchPersonalMcpKeys(),
++          fetchUnifiedMcpKeys({
++            view: 'mine',
++            scope_tier: tier === 'global' ? 'global' : activeScope !== 'all' ? activeScope : undefined,
++            project_ref: activeScope === 'project' ? effectiveProjectKey : undefined,
++          }),
+           fetchConnectedApps(),
+         ]);
+-        if (isMounted.current) {
+-          setKeys(fetchedKeys);
+-          setConnectedApps(fetchedApps);
+-          setLoading(false);
+-        }
+-      } catch {
+-        if (isMounted.current) {
+-          setLoading(false);
+-        }
++        setKeys(fetchedKeys);
++        setConnectedApps(fetchedApps);
+       }
+-    })();
++    } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++        const data = err.data;
++        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++        const methods = Array.isArray(data.methods)
++          ? (data.methods as MfaMethod[])
++          : (['webauthn', 'totp'] as MfaMethod[]);
++        setAal2Challenge({ challengeId, methods });
++        setPendingAction(() => async () => {
++          await loadData();
++        });
++      }
++    } finally {
++      setLoading(false);
++    }
++  }, [activeView, activeScope, effectiveProjectKey, tier, isDenied]);
+ 
+-    return () => {
+-      isMounted.current = false;
+-    };
+-  }, [tier, projectKey]);
++  useEffect(() => {
++    void loadData();
++  }, [loadData]);
++
++  const handleScopeFilterChange = (newScope: ActiveScopeFilter): void => {
++    setActiveScope(newScope);
++    setSearchParams((prev) => {
++      const updated = new URLSearchParams(prev);
++      if (newScope === 'all') {
++        updated.delete('scope');
++      } else {
++        updated.set('scope', newScope);
++      }
++      return updated;
++    });
++  };
++
++  const handleProjectSelectChange = (newProject: string): void => {
++    setSelectedProject(newProject);
++    setSearchParams((prev) => {
++      const updated = new URLSearchParams(prev);
++      updated.set('project', newProject);
++      return updated;
++    });
++  };
++
++  const handleViewToggle = (newView: ActiveView): void => {
++    setActiveView(newView);
++    setSearchParams((prev) => {
++      const updated = new URLSearchParams(prev);
++      if (newView === 'governance') {
++        updated.set('view', 'governance');
++      } else {
++        updated.delete('view');
++      }
++      return updated;
++    });
++  };
++
++  const handleOpenMintModal = (): void => {
++    let initialTier: ScopeTier = 'workspace';
++    if (activeScope === 'server' || tier === 'global') {
++      initialTier = 'global';
++    } else if (activeScope === 'project' || tier === 'project') {
++      initialTier = 'project';
++    } else if (activeScope === 'workspace' || tier === 'workspace') {
++      initialTier = 'workspace';
++    } else {
++      initialTier = 'workspace';
++    }
++    setNewKeyOwnerKind('personal_user');
++    setNewKeyScopeTier(initialTier);
++    setNewKeyProject(effectiveProjectKey);
++    setShowMintModal(true);
++  };
+ 
+   const handleMintSubmit = async (e: React.SyntheticEvent): Promise<void> => {
+     e.preventDefault();
+@@ -183,24 +412,45 @@ export function McpAccessStudio({
+     }
+     setMinting(true);
+     setMintError(null);
+-    try {
+-      const minted = await mintPersonalMcpKey({
++
++    const mintAction = async (): Promise<void> => {
++      const resolvedScopeTier: ScopeTier =
++        tier === 'global'
++          ? 'global'
++          : tier === 'project'
++          ? 'project'
++          : newKeyScopeTier === 'global'
++          ? 'global'
++          : newKeyScopeTier === 'project'
++          ? 'project'
++          : 'workspace';
++
++      const targetProject = newKeyProject.trim() || effectiveProjectKey;
++
++      const payload: MintMcpKeyRequest = {
+         label: newKeyLabel.trim(),
+         surface: newKeySurface,
+         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
+-        scope_tier:
+-          tier === 'global' ? 'global' : tier === 'project' ? 'project' : 'workspace',
+-        ...(tier === 'project' ? { allowed_projects: [projectKey] } : {}),
++        scope_tier: resolvedScopeTier,
++        owner_kind: newKeyOwnerKind,
++        ...(resolvedScopeTier === 'project'
++          ? {
++              project_ref: targetProject,
++              allowed_projects: targetProject ? [targetProject] : undefined,
++            }
++          : {}),
+         ...(isUnlimited
+           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
+           : { expires_in_days: newKeyExpiry }),
+         ...(disabledTools.length > 0 ? { disabled_tools: disabledTools } : {}),
+-      });
++      };
++
++      const minted = await mintUnifiedMcpKey(payload);
+ 
+-      // Update keys table (table receives key item with display_hint only)
+-      setKeys((prev) => [minted, ...prev]);
++      await queryClient.invalidateQueries({ queryKey: ['mcp-keys'] });
++      await queryClient.invalidateQueries({ queryKey: qk.projects() });
+ 
+-      // Open Snippet modal with ephemeral plaintext key
++      setKeys((prev) => [minted, ...prev.filter((k) => k.id !== minted.id)]);
+       setActiveSnippetKey(minted.raw_key);
+       setShowMintModal(false);
+       setShowSnippetModal(true);
+@@ -210,7 +460,23 @@ export function McpAccessStudio({
+       setDisabledTools([]);
+       setNewKeyExpiry(60);
+       setMintError(null);
++    };
++
++    try {
++      await mintAction();
+     } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++        const data = err.data;
++        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++        const methods = Array.isArray(data.methods)
++          ? (data.methods as MfaMethod[])
++          : (['webauthn', 'totp'] as MfaMethod[]);
++        setAal2Challenge({ challengeId, methods });
++        setPendingAction(() => async () => {
++          await mintAction();
++        });
++        return;
++      }
+       if (err instanceof Error) {
+         setMintError(err.message);
+       } else {
+@@ -222,19 +488,34 @@ export function McpAccessStudio({
+   };
+ 
+   const handleConfirmRevokeKey = async (keyId: string): Promise<void> => {
++    setStudioError(null);
++    const revokeAction = async (): Promise<void> => {
++      await revokeUnifiedMcpKey(keyId);
++      setKeys((prev) =>
++        prev.map((k) => (k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k)),
++      );
++    };
++
+     try {
+-      if (tier === 'global') {
+-        await revokePersonalMcpKey(keyId, 'global');
++      await revokeAction();
++    } catch (err: unknown) {
++      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++        const data = err.data;
++        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++        const methods = Array.isArray(data.methods)
++          ? (data.methods as MfaMethod[])
++          : (['webauthn', 'totp'] as MfaMethod[]);
++        setAal2Challenge({ challengeId, methods });
++        setPendingAction(() => async () => {
++          await revokeAction();
++        });
++        return;
++      }
++      if (err instanceof Error) {
++        setStudioError(err.message);
+       } else {
+-        await revokePersonalMcpKey(keyId);
++        setStudioError('Failed to revoke MCP key.');
+       }
+-      setKeys((prev) =>
+-        prev.map((k) =>
+-          k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k,
+-        ),
+-      );
+-    } catch {
+-      // Handle error
+     } finally {
+       setConfirmRevokeKeyId(null);
+     }
+@@ -251,6 +532,15 @@ export function McpAccessStudio({
+     }
+   };
+ 
++  const handleAal2Success = async (): Promise<void> => {
++    const action = pendingAction;
++    setAal2Challenge(null);
++    setPendingAction(null);
++    if (action) {
++      await action();
++    }
++  };
++
+   const getTierBadge = (
+     keyTier: ScopeTier,
+     allowedProjects?: string[] | null,
+@@ -265,7 +555,7 @@ export function McpAccessStudio({
+     if (keyTier === 'workspace') {
+       return (
+         <span className="kb-mcp-tier-badge kb-mcp-tier-workspace" data-testid="tier-badge-workspace">
+-          <EmojiHint kind="access" /> Workspace: kanban
++          <EmojiHint kind="access" /> Workspace: {currentWorkspaceSlug}
+         </span>
+       );
+     }
+@@ -273,7 +563,7 @@ export function McpAccessStudio({
+       const projLabel =
+         allowedProjects && allowedProjects.length > 0
+           ? allowedProjects.join(', ')
+-          : projectKey;
++          : effectiveProjectKey;
+       return (
+         <span className="kb-mcp-tier-badge kb-mcp-tier-project" data-testid="tier-badge-project">
+           <EmojiHint kind="access" /> Project: {projLabel}
+@@ -287,15 +577,35 @@ export function McpAccessStudio({
+     );
+   };
+ 
+-  const titleForTier = {
++  const titleForTier: Record<string, string> = {
+     personal: 'Personal MCP Keys & Connected Apps',
+-    project: `Project (${projectKey}) MCP Bot Keys`,
++    project: `Project (${effectiveProjectKey}) MCP Bot Keys`,
+     workspace: 'Workspace MCP Bot Keys & Client Approvals',
+     global: 'Global Cross-Workspace Bot Keys (meatloaf-bot)',
+-  }[tier];
++  };
++
++  const displayedTitle =
++    activeView === 'governance'
++      ? 'MCP Key Governance (All Scoped Keys)'
++      : (tier ? titleForTier[tier] : 'Personal MCP Keys & Connected Apps');
++
++  // Filter keys for display based on activeScope when in 'mine' view
++  const displayedKeys = keys.filter((k) => {
++    if (activeView === 'governance') return true;
++    if (activeScope === 'all') return true;
++    if (activeScope === 'project') {
++      if (k.scope_tier !== 'project') return false;
++      if (effectiveProjectKey && k.allowed_projects && k.allowed_projects.length > 0) {
++        return k.allowed_projects.includes(effectiveProjectKey);
++      }
++      return true;
++    }
++    if (activeScope === 'workspace') {
++      return k.scope_tier === 'workspace';
++    }
++    return k.scope_tier === 'global';
++  });
+ 
+-  // If tier is global (admin/mcp), require server admin. If workspace (workspaces/settings/mcp), require workspace admin.
+-  // In offline/mocked unit tests without currentUser data or user mock, fall back gracefully if not specified.
+   if (currentUser !== null) {
+     if (tier === 'global' && !isServerAdmin) {
+       return <NotFoundView />;
+@@ -309,7 +619,7 @@ export function McpAccessStudio({
+     <div className="kb-mcp-studio-container" data-testid="mcp-access-studio">
+       <header className="kb-mcp-studio-header">
+         <div>
+-          <h1 className="kb-mcp-studio-title" data-testid="studio-title">{titleForTier}</h1>
++          <h1 className="kb-mcp-studio-title" data-testid="studio-title">{displayedTitle}</h1>
+           <p className="kb-mcp-studio-subtitle">
+             Mint and manage Model Context Protocol API keys with explicit scope tiers and one-click revocation.
+           </p>
+@@ -318,14 +628,19 @@ export function McpAccessStudio({
+           type="button"
+           className="kb-mcp-studio-mint-btn"
+           data-testid="mint-key-button"
+-          onClick={() => {
+-            setShowMintModal(true);
+-          }}
++          onClick={handleOpenMintModal}
+         >
+           + Mint MCP Key
+         </button>
+       </header>
+ 
++      {studioError && (
++        <div className="kb-mcp-mint-error kb-mcp-mint-error--banner" role="alert" data-testid="studio-error-banner">
++          {studioError}
++        </div>
++      )}
++
++      {/* Admin subnav for global tier */}
+       {tier === 'global' && (
+         <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
+           <Link
+@@ -352,10 +667,116 @@ export function McpAccessStudio({
+         </nav>
+       )}
+ 
++      {/* Admin View Switch (My Keys vs Governance) */}
++      {canAccessGovernance && (
++        <div className="kb-mcp-view-toggle" data-testid="admin-view-toggle">
++          <button
++            type="button"
++            className={`kb-mcp-view-btn ${activeView === 'mine' ? 'kb-mcp-view-btn-active' : ''}`}
++            data-testid="view-mine-btn"
++            onClick={() => {
++              handleViewToggle('mine');
++            }}
++          >
++            My Keys & Connected Apps
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-view-btn ${activeView === 'governance' ? 'kb-mcp-view-btn-active' : ''}`}
++            data-testid="view-governance-btn"
++            onClick={() => {
++              handleViewToggle('governance');
++            }}
++          >
++            Governance (All Scoped Keys)
++          </button>
++        </div>
++      )}
++
++      {/* Explanatory Architecture Card */}
++      <div className="kb-mcp-explainer-card" data-testid="mcp-scope-explainer">
++        <div className="kb-mcp-explainer-item">
++          <strong>Personal Keys vs Service Bot Keys:</strong> Personal keys act on your behalf across permitted surfaces, while Service Bot keys provide dedicated automation identities tied to project, workspace, or server scopes.
++        </div>
++        <div className="kb-mcp-explainer-item">
++          <strong>Scope Tiers:</strong> Project keys are confined to tickets and docs in designated projects. Workspace keys cover all projects in this workspace. Server keys have system-wide privileges for administrative orchestration.
++        </div>
++      </div>
++
++      {/* Scope Filter Pills & Project Selector */}
++      <div className="kb-mcp-filter-bar" data-testid="mcp-filter-bar">
++        <div className="kb-mcp-pills-group" data-testid="mcp-pills-group">
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'all' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-all"
++            onClick={() => {
++              handleScopeFilterChange('all');
++            }}
++          >
++            All
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'project' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-project"
++            onClick={() => {
++              handleScopeFilterChange('project');
++            }}
++          >
++            Project
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'workspace' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-workspace"
++            onClick={() => {
++              handleScopeFilterChange('workspace');
++            }}
++          >
++            Workspace
++          </button>
++          <button
++            type="button"
++            className={`kb-mcp-filter-pill ${activeScope === 'server' ? 'kb-mcp-filter-pill-active' : ''}`}
++            data-testid="scope-pill-server"
++            onClick={() => {
++              handleScopeFilterChange('server');
++            }}
++          >
++            Server
++          </button>
++        </div>
++
++        {activeScope === 'project' && (
++          <div className="kb-mcp-project-selector" data-testid="scope-project-container">
++            <label htmlFor="scope-project-select">Target Project:</label>
++            <select
++              id="scope-project-select"
++              className="kb-mcp-form-select"
++              data-testid="scope-project-select"
++              value={effectiveProjectKey}
++              onChange={(e) => {
++                handleProjectSelectChange(e.target.value);
++              }}
++            >
++              {projects.map((p) => (
++                <option key={p.id} value={p.identifier}>
++                  {p.name && p.name !== p.identifier ? `${p.identifier} - ${p.name}` : p.identifier}
++                </option>
++              ))}
++              {effectiveProjectKey && !projects.some((p) => p.identifier === effectiveProjectKey) && (
++                <option value={effectiveProjectKey}>{effectiveProjectKey}</option>
++              )}
++            </select>
++          </div>
++        )}
++      </div>
++
+       {/* MCP Keys Table Section */}
+       <section className="kb-mcp-studio-section" data-testid="mcp-keys-section">
+         <h2 className="kb-mcp-section-title">
+-          <EmojiHint kind="agent" /> Active MCP Keys
++          <EmojiHint kind="agent" /> {activeView === 'governance' ? 'Governance Scoped Keys' : 'Active MCP Keys'}
+         </h2>
+         <div className="kb-mcp-table-wrap">
+           <table className="kb-mcp-table" data-testid="mcp-keys-table">
+@@ -371,14 +792,14 @@ export function McpAccessStudio({
+               </tr>
+             </thead>
+             <tbody>
+-              {keys.length === 0 && !loading && (
++              {displayedKeys.length === 0 && !loading && (
+                 <tr>
+                   <td colSpan={7} className="kb-mcp-empty-state">
+                     No active MCP keys configured. Click "+ Mint MCP Key" to create one.
+                   </td>
+                 </tr>
+               )}
+-              {keys.map((k) => {
++              {displayedKeys.map((k) => {
+                 const isRevoked = Boolean(k.revoked_at);
+                 const isConfirming = confirmRevokeKeyId === k.id;
+                 const prefix = k.surface === 'agent' ? 'kb_agt_' : k.surface === 'docs' ? 'kb_doc_' : 'kb_adm_';
+@@ -461,91 +882,135 @@ export function McpAccessStudio({
+         </div>
+       </section>
+ 
+-      {/* Connected OAuth Apps Section */}
+-      <section className="kb-mcp-studio-section" data-testid="connected-apps-section">
+-        <h2 className="kb-mcp-section-title">
+-          <EmojiHint kind="restricted" /> Connected OAuth Apps
+-        </h2>
+-        <div className="kb-mcp-table-wrap">
+-          <table className="kb-mcp-table" data-testid="connected-apps-table">
+-            <thead>
+-              <tr>
+-                <th className="kb-mcp-th">Application</th>
+-                <th className="kb-mcp-th">Client ID</th>
+-                <th className="kb-mcp-th">Surface</th>
+-                <th className="kb-mcp-th">Connected Date</th>
+-                <th className="kb-mcp-th">Actions</th>
+-              </tr>
+-            </thead>
+-            <tbody>
+-              {connectedApps.length === 0 && !loading && (
++      {/* Connected OAuth Apps Section (in mine view) */}
++      {activeView === 'mine' && (
++        <section className="kb-mcp-studio-section" data-testid="connected-apps-section">
++          <div className="kb-mcp-section-header">
++            <h2 className="kb-mcp-section-title">
++              <EmojiHint kind="restricted" /> Connected OAuth Apps
++            </h2>
++            <div className="kb-mcp-header-actions">
++              <button
++                type="button"
++                className="kb-mcp-connect-btn"
++                data-testid="connect-oauth-app-btn"
++                onClick={() => {
++                  setShowConnectOAuthModal(true);
++                }}
++              >
++                + Connect OAuth App
++              </button>
++              <Link
++                to="/oauth/device"
++                className="kb-mcp-enter-device-code-btn"
++                data-testid="enter-device-code-btn"
++              >
++                Enter Device Code
++              </Link>
++            </div>
++          </div>
++          <div className="kb-mcp-table-wrap">
++            <table className="kb-mcp-table" data-testid="connected-apps-table">
++              <thead>
+                 <tr>
+-                  <td colSpan={5} className="kb-mcp-empty-state">
+-                    No external OAuth applications currently connected.
+-                  </td>
++                  <th className="kb-mcp-th">Application</th>
++                  <th className="kb-mcp-th">Client ID</th>
++                  <th className="kb-mcp-th">Surface</th>
++                  <th className="kb-mcp-th">Connected Date</th>
++                  <th className="kb-mcp-th">Actions</th>
+                 </tr>
+-              )}
+-              {connectedApps.map((app) => {
+-                const isConfirming = confirmRevokeAppId === app.id;
+-
+-                return (
+-                  <tr key={app.id} className="kb-mcp-tr" data-testid={`app-row-${app.id}`}>
+-                    <td className="kb-mcp-td" data-testid={`app-name-${app.id}`}>
+-                      {/* Render client_name strictly as text node against XSS */}
+-                      <span>{app.client_name ?? app.client_id}</span>
+-                    </td>
+-                    <td className="kb-mcp-td">
+-                      <code>{app.client_id}</code>
+-                    </td>
+-                    <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
+-                    <td className="kb-mcp-td">
+-                      {new Date(app.created_at).toLocaleDateString()}
+-                    </td>
+-                    <td className="kb-mcp-td">
+-                      {isConfirming ? (
+-                        <div className="kb-mcp-confirm-bar" data-testid="confirm-disconnect-bar">
++              </thead>
++              <tbody>
++                {connectedApps.length === 0 && !loading && (
++                  <tr>
++                    <td colSpan={5} className="kb-mcp-empty-state">
++                      <div className="kb-mcp-empty-content">
++                        <p>No external OAuth applications currently connected.</p>
++                        <div className="kb-mcp-empty-actions">
+                           <button
+                             type="button"
+-                            className="kb-mcp-cancel-btn"
+-                            data-testid="cancel-disconnect-btn"
+-                            autoFocus
++                            className="kb-mcp-connect-btn"
++                            data-testid="empty-connect-oauth-app-btn"
+                             onClick={() => {
+-                              setConfirmRevokeAppId(null);
++                              setShowConnectOAuthModal(true);
+                             }}
+                           >
+-                            Cancel
++                            + Connect OAuth App
+                           </button>
++                          <Link
++                            to="/oauth/device"
++                            className="kb-mcp-enter-device-code-btn"
++                            data-testid="empty-enter-device-code-btn"
++                          >
++                            Enter Device Code
++                          </Link>
++                        </div>
++                      </div>
++                    </td>
++                  </tr>
++                )}
++                {connectedApps.map((app) => {
++                  const isConfirming = confirmRevokeAppId === app.id;
++
++                  return (
++                    <tr key={app.id} className="kb-mcp-tr" data-testid={`app-row-${app.id}`}>
++                      <td className="kb-mcp-td" data-testid={`app-name-${app.id}`}>
++                        {/* Render client_name strictly as text node against XSS */}
++                        <span>{app.client_name ?? app.client_id}</span>
++                      </td>
++                      <td className="kb-mcp-td">
++                        <code>{app.client_id}</code>
++                      </td>
++                      <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
++                      <td className="kb-mcp-td">
++                        {new Date(app.created_at).toLocaleDateString()}
++                      </td>
++                      <td className="kb-mcp-td">
++                        {isConfirming ? (
++                          <div className="kb-mcp-confirm-bar" data-testid="confirm-disconnect-bar">
++                            <button
++                              type="button"
++                              className="kb-mcp-cancel-btn"
++                              data-testid="cancel-disconnect-btn"
++                              autoFocus
++                              onClick={() => {
++                                setConfirmRevokeAppId(null);
++                              }}
++                            >
++                              Cancel
++                            </button>
++                            <button
++                              type="button"
++                              className="kb-mcp-confirm-revoke-btn"
++                              data-testid="confirm-disconnect-btn"
++                              onClick={() => {
++                                void handleConfirmRevokeApp(app.id);
++                              }}
++                            >
++                              Confirm Disconnect
++                            </button>
++                          </div>
++                        ) : (
+                           <button
+                             type="button"
+-                            className="kb-mcp-confirm-revoke-btn"
+-                            data-testid="confirm-disconnect-btn"
++                            className="kb-mcp-action-btn"
++                            data-testid={`disconnect-btn-${app.id}`}
+                             onClick={() => {
+-                              void handleConfirmRevokeApp(app.id);
++                              setConfirmRevokeAppId(app.id);
+                             }}
+                           >
+-                            Confirm Disconnect
++                            Disconnect
+                           </button>
+-                        </div>
+-                      ) : (
+-                        <button
+-                          type="button"
+-                          className="kb-mcp-action-btn"
+-                          data-testid={`disconnect-btn-${app.id}`}
+-                          onClick={() => {
+-                            setConfirmRevokeAppId(app.id);
+-                          }}
+-                        >
+-                          Disconnect
+-                        </button>
+-                      )}
+-                    </td>
+-                  </tr>
+-                );
+-              })}
+-            </tbody>
+-          </table>
+-        </div>
+-      </section>
++                        )}
++                      </td>
++                    </tr>
++                  );
++                })}
++              </tbody>
++            </table>
++          </div>
++        </section>
++      )}
+ 
+       {/* Mint Key Modal */}
+       {showMintModal && (
+@@ -608,6 +1073,81 @@ export function McpAccessStudio({
+                 />
+               </div>
+ 
++              {/* Key Type Selector in Mint Modal */}
++              <div className="kb-mcp-form-row">
++                <label htmlFor="mint-owner-kind-select" className="kb-mcp-form-label">
++                  Key Type:
++                </label>
++                <select
++                  id="mint-owner-kind-select"
++                  className="kb-mcp-form-select"
++                  data-testid="mint-owner-kind-select"
++                  value={newKeyOwnerKind}
++                  onChange={(e) => {
++                    setNewKeyOwnerKind(e.target.value as OwnerKind);
++                  }}
++                >
++                  <option value="personal_user">Personal User Key</option>
++                  <option value="service_bot">Service Bot Key</option>
++                </select>
++              </div>
++
++              {/* Scope Tier Selector in Mint Modal */}
++              <div className="kb-mcp-form-row">
++                <label htmlFor="mint-scope-select" className="kb-mcp-form-label">
++                  Scope Tier:
++                </label>
++                <select
++                  id="mint-scope-select"
++                  className="kb-mcp-form-select"
++                  data-testid="mint-scope-select"
++                  value={newKeyScopeTier === 'personal_user' ? 'workspace' : newKeyScopeTier}
++                  onChange={(e) => {
++                    const val = e.target.value;
++                    if (val === 'personal_user') {
++                      setNewKeyOwnerKind('personal_user');
++                      setNewKeyScopeTier('workspace');
++                    } else {
++                      setNewKeyScopeTier(val as ScopeTier);
++                    }
++                  }}
++                >
++                  <option value="workspace">Workspace</option>
++                  <option value="project">Project</option>
++                  {isServerAdmin && <option value="global">Server / Global</option>}
++                  <option value="personal_user">Personal User Key</option>
++                </select>
++              </div>
++
++              {newKeyScopeTier === 'project' && (
++                <div className="kb-mcp-form-row">
++                  <label htmlFor="mint-project-input" className="kb-mcp-form-label">
++                    Allowed Project:
++                  </label>
++                  <input
++                    id="mint-project-input"
++                    type="text"
++                    className="kb-mcp-form-input"
++                    data-testid="mint-project-input"
++                    list="mint-project-datalist"
++                    value={newKeyProject}
++                    onChange={(e) => {
++                      setNewKeyProject(e.target.value);
++                    }}
++                    required
++                  />
++                  {projects.length > 0 && (
++                    <datalist id="mint-project-datalist">
++                      {projects.map((p) => (
++                        <option key={p.id} value={p.identifier}>
++                          {p.name && p.name !== p.identifier ? `${p.identifier} - ${p.name}` : p.identifier}
++                        </option>
++                      ))}
++                    </datalist>
++                  )}
++                </div>
++              )}
++
+               <div className="kb-mcp-form-row">
+                 <label htmlFor="mint-surface-select" className="kb-mcp-form-label">
+                   Target Surface:
+@@ -747,14 +1287,73 @@ export function McpAccessStudio({
+         <McpConfigSnippetModal
+           rawKey={activeSnippetKey}
+           surface={newKeySurface}
+-          projectKey={projectKey}
++          workspaceSlug={currentWorkspaceSlug}
++          projectKey={newKeyProject.trim() || effectiveProjectKey}
+           onClose={() => {
+-            // Memory wipe: clear plaintext secret from state upon close
+             setActiveSnippetKey(undefined);
+             setShowSnippetModal(false);
+           }}
+         />
+       )}
++
++      {/* Inline AAL2 Step-Up Modal */}
++      {aal2Challenge && (
++        <div className="kb-snippet-modal-backdrop" data-testid="aal2-modal-backdrop">
++          <div
++            className="kb-snippet-modal-card"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="aal2-modal-title"
++            data-testid="aal2-modal-card"
++          >
++            <div className="kb-snippet-modal-header">
++              <h2 id="aal2-modal-title" className="kb-snippet-modal-title">
++                Admin Verification Required (AAL2)
++              </h2>
++              <button
++                type="button"
++                className="kb-snippet-modal-close-btn"
++                onClick={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              >
++                x
++              </button>
++            </div>
++            <div className="kb-mcp-studio-section">
++              <SecondFactorStep
++                challengeId={aal2Challenge.challengeId}
++                methods={aal2Challenge.methods}
++                onSuccess={() => {
++                  void handleAal2Success();
++                }}
++                onError={() => {
++                  // Handled inside SecondFactorStep
++                }}
++                onSessionExpired={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++                onCancel={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              />
++            </div>
++          </div>
++        </div>
++      )}
++      {showConnectOAuthModal && (
++        <ConnectOAuthAppModal
++          user={propUser ?? fetchedUser}
++          workspaceSlug={currentWorkspaceSlug}
++          projectKey={effectiveProjectKey}
++          onClose={() => {
++            setShowConnectOAuthModal(false);
++          }}
++        />
++      )}
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.tsx b/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
+index 6ab66ab..a82a6cb 100644
+--- a/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
++++ b/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
+@@ -13,14 +13,14 @@ export interface McpConfigSnippetModalProps {
+   onClose: () => void;
+ }
+ 
+-type ClientTab = 'claude' | 'cursor' | 'gemini' | 'antigravity' | 'codex';
++type ClientTab = 'claude' | 'cursor' | 'gemini' | 'antigravity' | 'codex' | 'oauth';
+ type UrlScope = 'global' | 'workspace' | 'project';
+ 
+ export function McpConfigSnippetModal({
+   rawKey,
+   surface = 'agent',
+   workspaceSlug = 'kanban',
+-  projectKey = 'KANBA',
++  projectKey = '',
+   onClose,
+ }: McpConfigSnippetModalProps): JSX.Element {
+   const [activeTab, setActiveTab] = useState<ClientTab>('claude');
+@@ -46,7 +46,9 @@ export function McpConfigSnippetModal({
+   if (urlScope === 'workspace') {
+     path = `/mcp/${surface}/w/${workspaceSlug}`;
+   } else if (urlScope === 'project') {
+-    path = `/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`;
++    path = projectKey
++      ? `/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`
++      : `/mcp/${surface}/w/${workspaceSlug}`;
+   }
+   const endpointUrl = `${origin}${path}`;
+   const effectiveKey = rawKey ?? '<your-mcp-key>';
+@@ -102,7 +104,7 @@ export function McpConfigSnippetModal({
+     );
+     const agyCmd = `agy mcp add --header "Authorization: Bearer ${effectiveKey}" kanban ${endpointUrl}`;
+     snippet = `${agyJson}\n\n# Or add via agy CLI:\n${agyCmd}`;
+-  } else {
++  } else if (activeTab === 'codex') {
+     const codexJson = JSON.stringify(
+       {
+         mcpServers: {
+@@ -119,6 +121,30 @@ export function McpConfigSnippetModal({
+     );
+     const codexCmd = `codex mcp add kanban ${endpointUrl} --header "Authorization: Bearer ${effectiveKey}"`;
+     snippet = `${codexJson}\n\n# Or add via OpenAI Codex CLI:\n${codexCmd}`;
++  } else {
++    const rfc8414Url = `${origin}/.well-known/oauth-authorization-server`;
++    snippet = `# OAuth 2.1 + PKCE S256 Connect
++# RFC 8414 Authorization Server Discovery:
++# ${rfc8414Url}
++# Target Resource Indicator:
++# ${endpointUrl}
++
++# Claude Code CLI:
++claude mcp add --transport http kanban ${endpointUrl}
++
++# Cursor / VS Code Configuration:
++{
++  "mcpServers": {
++    "kanban": {
++      "url": "${endpointUrl}",
++      "auth": "oauth"
++    }
++  }
++}
++
++# Codex / Antigravity CLI:
++codex mcp add kanban ${endpointUrl} --auth oauth
++agy mcp add kanban ${endpointUrl} --auth oauth`;
+   }
+ 
+   const handleCopy = async (text: string, isKey: boolean): Promise<void> => {
+@@ -209,7 +235,9 @@ export function McpConfigSnippetModal({
+               setUrlScope(e.target.value as UrlScope);
+             }}
+           >
+-            <option value="project">Project ({`/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`})</option>
++            <option value="project">
++              Project ({projectKey ? `/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}` : `/mcp/${surface}/w/${workspaceSlug}`})
++            </option>
+             <option value="workspace">Workspace ({`/mcp/${surface}/w/${workspaceSlug}`})</option>
+             <option value="global">Global ({`/mcp/${surface}`})</option>
+           </select>
+@@ -276,6 +304,18 @@ export function McpConfigSnippetModal({
+           >
+             OpenAI Codex
+           </button>
++          <button
++            type="button"
++            role="tab"
++            aria-selected={activeTab === 'oauth'}
++            className={`kb-snippet-tab-btn ${activeTab === 'oauth' ? 'kb-snippet-tab-active' : ''}`}
++            data-testid="tab-oauth"
++            onClick={() => {
++              setActiveTab('oauth');
++            }}
++          >
++            OAuth 2.1
++          </button>
+         </div>
+ 
+         <pre className="kb-snippet-code-box" data-testid="snippet-code-box">
 diff --git a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
 new file mode 100644
 index 0000000..747dbab
@@ -5176,6 +6576,716 @@ index 0000000..747dbab
 +    vi.unstubAllGlobals();
 +  });
 +});
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index c344ced..1b7c2d1 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
+ import { MemoryRouter, Routes, Route } from 'react-router';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { McpAccessStudio } from '../McpAccessStudio';
+ import * as settingsApi from '../settingsApi';
+ import * as clientModule from '../../../api/client';
+@@ -111,14 +112,26 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+   beforeEach(() => {
+     vi.restoreAllMocks();
+-    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+-      is_server_admin: true,
+-      is_workspace_admin: true,
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
++      if (path === '/api/v1/projects') {
++        return Promise.resolve({
++          items: [
++            { id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' },
++            { id: 'proj-ops', identifier: 'OPS', name: 'Operations' },
++          ],
++        });
++      }
++      return Promise.resolve({
++        is_server_admin: true,
++        is_workspace_admin: true,
++      });
+     });
+   });
+ 
+   it('renders scope tiers correctly across all 4 mount routes', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+ 
+     // Personal tier
+@@ -193,7 +206,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       revoked_at: null,
+     };
+ 
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([qaadmKey]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([qaadmKey]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+     render(
+@@ -220,17 +233,18 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     expect(screen.getByText('Not found or no access')).toBeDefined();
+     u1();
+ 
+-    render(
++    const { unmount: u2 } = render(
+       <MemoryRouter initialEntries={['/workspaces/settings/mcp']}>
+         <McpAccessStudio tier="workspace" user={standardUser} />
+       </MemoryRouter>,
+     );
+     expect(screen.getByTestId('not-found-view')).toBeDefined();
+     expect(screen.getByText('Not found or no access')).toBeDefined();
++    u2();
+   });
+ 
+   it('mints key, opens snippet modal with plaintext, copies, and wipes secret on close (Test Case 3)', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+     const newlyMintedKey: settingsApi.McpApiKeyItem = {
+@@ -248,7 +262,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       raw_key: 'kb_agt_mock_key',
+     };
+ 
+-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue(newlyMintedKey);
++    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue(newlyMintedKey);
+ 
+     const writeTextMock = vi.fn().mockResolvedValue(undefined);
+     Object.assign(navigator, {
+@@ -287,14 +301,16 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     fireEvent.click(submitBtn);
+ 
+     await waitFor(() => {
+-      expect(settingsApi.mintPersonalMcpKey).toHaveBeenCalledWith({
+-        label: 'CI Bot Token',
+-        surface: 'agent',
+-        scopes: ['agent:read', 'agent:write'],
+-        scope_tier: 'project',
+-        allowed_projects: ['KANBA'],
+-        expires_in_days: 60,
+-      });
++      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalledWith(
++        expect.objectContaining({
++          label: 'CI Bot Token',
++          surface: 'agent',
++          scopes: ['agent:read', 'agent:write'],
++          scope_tier: 'project',
++          allowed_projects: ['KANBA'],
++          expires_in_days: 60,
++        }),
++      );
+       // Plaintext key modal rendered
+       expect(screen.getByTestId('raw-key-banner')).not.toBeNull();
+     });
+@@ -322,6 +338,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     fireEvent.click(screen.getByTestId('tab-claude'));
+     expect(snippetCode.textContent).toContain('mcpServers');
+ 
++    // Switch to OAuth tab (RFC 8414 Discovery)
++    fireEvent.click(screen.getByTestId('tab-oauth'));
++    expect(snippetCode.textContent).toContain('/.well-known/oauth-authorization-server');
++
+     // Switch URL scope to Workspace
+     const urlSelect = screen.getByTestId('url-scope-select');
+     fireEvent.change(urlSelect, { target: { value: 'workspace' } });
+@@ -352,9 +372,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('performs 2-step inline revocation and deauth (Test Case 4)', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+-    vi.spyOn(settingsApi, 'revokePersonalMcpKey').mockResolvedValue(undefined);
++    vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockResolvedValue(undefined);
+     vi.spyOn(settingsApi, 'revokeConnectedApp').mockResolvedValue(undefined);
+ 
+     render(
+@@ -380,7 +400,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+ 
+     await waitFor(() => {
+-      expect(settingsApi.revokePersonalMcpKey).toHaveBeenCalledWith('key-1');
++      expect(settingsApi.revokeUnifiedMcpKey).toHaveBeenCalledWith('key-1');
+       expect(screen.getAllByTestId('status-revoked').length).toBe(2);
+     });
+ 
+@@ -405,7 +425,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('renders hostile app names strictly as escaped text nodes (Anti-XSS)', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+ 
+     render(
+@@ -424,7 +444,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('closes snippet modal on Escape key press and backdrop click', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+     const newlyMintedKey: settingsApi.McpApiKeyItem = {
+@@ -432,7 +452,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       label: 'Esc Test Key',
+       display_hint: '1234',
+       surface: 'agent',
+-      scope_tier: 'personal_user',
++      scope_tier: 'workspace',
+       scopes: ['agent:read'],
+       allowed_projects: null,
+       created_at: new Date().toISOString(),
+@@ -441,7 +461,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       revoked_at: null,
+       raw_key: 'raw_key_esc',
+     };
+-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue(newlyMintedKey);
++    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue(newlyMintedKey);
+ 
+     render(
+       <MemoryRouter initialEntries={['/settings/mcp']}>
+@@ -472,7 +492,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+   it('closes mint modal via cancel button and backdrop click, handles empty label and load error', async () => {
+     // 1. Initial fetch failure
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockRejectedValueOnce(new Error('Network error'));
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockRejectedValueOnce(new Error('Network error'));
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+     const { unmount } = render(
+@@ -487,7 +507,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     unmount();
+ 
+     // 2. Normal render
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+     render(
+@@ -530,15 +550,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('supports unlimited key minting with friction checkbox and disables button until confirmed', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
++    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+       id: 'key-unlimited',
+       label: 'Unlimited Token',
+       display_hint: 'unl1',
+       surface: 'agent',
+-      scope_tier: 'personal_user',
++      scope_tier: 'workspace',
+       scopes: ['agent:read', 'agent:write'],
+       allowed_projects: null,
+       created_at: new Date().toISOString(),
+@@ -583,14 +603,17 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     fireEvent.click(submitBtn);
+ 
+     await waitFor(() => {
+-      expect(mintSpy).toHaveBeenCalledWith({
+-        label: 'Unlimited Token',
+-        surface: 'agent',
+-        scopes: ['agent:read', 'agent:write'],
+-        scope_tier: 'workspace',
+-        unlimited: true,
+-        confirm_unlimited: true,
+-      });
++      expect(mintSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          label: 'Unlimited Token',
++          surface: 'agent',
++          scopes: ['agent:read', 'agent:write'],
++          scope_tier: 'workspace',
++          owner_kind: 'personal_user',
++          unlimited: true,
++          confirm_unlimited: true,
++        }),
++      );
+     });
+ 
+     // Keys table should render 'Never (Unlimited)' for expires_at: null
+@@ -599,7 +622,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('hides unlimited option when allow_unlimited_mcp_keys is false', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+     render(
+@@ -617,15 +640,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('supports granular tool disabling into disabled_tools on minting', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+ 
+-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
++    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+       id: 'key-narrow',
+       label: 'Narrowed Agent Key',
+       display_hint: 'nar1',
+       surface: 'agent',
+-      scope_tier: 'personal_user',
++      scope_tier: 'workspace',
+       scopes: ['agent:read', 'agent:write'],
+       allowed_projects: null,
+       created_at: new Date().toISOString(),
+@@ -660,21 +683,24 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     fireEvent.click(screen.getByTestId('mint-submit-btn'));
+ 
+     await waitFor(() => {
+-      expect(mintSpy).toHaveBeenCalledWith({
+-        label: 'Narrowed Agent Key',
+-        surface: 'agent',
+-        scopes: ['agent:read', 'agent:write'],
+-        scope_tier: 'workspace',
+-        expires_in_days: 60,
+-        disabled_tools: ['complete_work', 'add_comment'],
+-      });
++      expect(mintSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          label: 'Narrowed Agent Key',
++          surface: 'agent',
++          scopes: ['agent:read', 'agent:write'],
++          scope_tier: 'workspace',
++          owner_kind: 'personal_user',
++          expires_in_days: 60,
++          disabled_tools: ['complete_work', 'add_comment'],
++        }),
++      );
+     });
+   });
+ 
+   it('renders visible role="alert" error banner inside mint modal when API fails', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValue(
++    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValue(
+       new Error('Forbidden: Insufficient privileges to mint key'),
+     );
+ 
+@@ -703,9 +729,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('covers unlimited without confirm, unchecking disabled tools, and non-Error mint error fallback', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('raw-string-error');
++    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce('raw-string-error');
+ 
+     const { container } = render(
+       <MemoryRouter initialEntries={['/settings/mcp']}>
+@@ -755,9 +781,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('covers minting under tier="global" and tier="project"', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
++    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+       id: 'key-g1',
+       label: 'Global Test Key',
+       display_hint: 'g1g1',
+@@ -790,13 +816,13 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+     await waitFor(() => {
+       expect(mintSpy).toHaveBeenCalledWith(
+-        expect.objectContaining({ scope_tier: 'global' }),
++        expect.objectContaining({ scope_tier: 'global', owner_kind: 'personal_user' }),
+       );
+     });
+     u1();
+ 
+     // Now test project tier
+-    const mintProjectSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
++    const mintProjectSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+       id: 'key-p1',
+       label: 'Project Test Key',
+       display_hint: 'p1p1',
+@@ -813,7 +839,12 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+     render(
+       <MemoryRouter initialEntries={['/projects/KANBA/settings/mcp']}>
+-        <McpAccessStudio tier="project" />
++        <Routes>
++          <Route
++            path="/projects/:projectKey/settings/mcp"
++            element={<McpAccessStudio tier="project" />}
++          />
++        </Routes>
+       </MemoryRouter>,
+     );
+ 
+@@ -835,7 +866,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   });
+ 
+   it('covers tier badge edge cases, viewer tool narrowing, and non-Error rejections', async () => {
+-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([
+       {
+         id: 'key-edge-1',
+         label: 'Edge Tier Key',
+@@ -866,12 +897,22 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+     // Mock viewer role
+     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+-    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+-      id: 'u-viewer',
+-      handle: 'viewer_user',
+-      workspace_role: 'VIEWER',
+-      is_workspace_admin: false,
+-      is_server_admin: false,
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
++      if (path === '/api/v1/projects') {
++        return Promise.resolve({
++          items: [
++            { id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' },
++            { id: 'proj-ops', identifier: 'OPS', name: 'Operations' },
++          ],
++        });
++      }
++      return Promise.resolve({
++        id: 'u-viewer',
++        handle: 'viewer_user',
++        workspace_role: 'VIEWER',
++        is_workspace_admin: false,
++        is_server_admin: false,
++      });
+     });
+ 
+     render(
+@@ -886,7 +927,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     });
+ 
+     // Revoke failure with non-Error string
+-    vi.spyOn(settingsApi, 'revokePersonalMcpKey').mockRejectedValueOnce('Plain revoke failure');
++    vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockRejectedValueOnce('Plain revoke failure');
+     fireEvent.click(screen.getByTestId('revoke-btn-key-edge-1'));
+     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+     await waitFor(() => {
+@@ -895,7 +936,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+ 
+     // Mint modal with viewer role and non-Error mint rejection
+     fireEvent.click(screen.getByTestId('mint-key-button'));
+-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('Plain mint failure');
++    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce('Plain mint failure');
+     fireEvent.change(screen.getByTestId('mint-label-input'), {
+       target: { value: 'Viewer Key' },
+     });
+@@ -904,4 +945,247 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       expect(screen.getByTestId('mint-error-banner').textContent).toContain('Failed to mint MCP key.');
+     });
+   });
++
++  it('renders dynamic KAN and OPS project options in scope-project-select with 0 hardcoded KANBA or QAADM options', async () => {
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
++      if (path === '/api/v1/projects') {
++        return Promise.resolve({
++          items: [
++            { id: 'p-kan', identifier: 'KAN', name: 'Kanban Core' },
++            { id: 'p-ops', identifier: 'OPS', name: 'Operations' },
++          ],
++        });
++      }
++      return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/settings/mcp?scope=project']}>
++          <McpAccessStudio tier="personal" />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('scope-project-select')).toBeDefined();
++    });
++
++    const select = screen.getByTestId<HTMLSelectElement>('scope-project-select');
++    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value);
++    expect(options).toEqual(['KAN', 'OPS']);
++    expect(options).not.toContain('KANBA');
++    expect(options).not.toContain('QAADM');
++  });
++
++  it('awaits queryClient.invalidateQueries and reloads data upon minting a key', async () => {
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
++    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
++      id: 'key-new',
++      label: 'Newly Minted Key',
++      display_hint: 'n3w1',
++      surface: 'agent',
++      scope_tier: 'workspace',
++      scopes: ['agent:read'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++      raw_key: 'mpk_live_secret_123',
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio tier="personal" />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++    fireEvent.change(screen.getByTestId('mint-label-input'), {
++      target: { value: 'Newly Minted Key' },
++    });
++    fireEvent.click(screen.getByTestId('mint-submit-btn'));
++
++    await waitFor(() => {
++      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['mcp-keys'] });
++    });
++  });
++
++  it('opens and closes ConnectOAuthAppModal from header button and empty state', async () => {
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('connect-oauth-app-btn')).toBeDefined();
++    });
++
++    // 1. Open modal via header button
++    fireEvent.click(screen.getByTestId('connect-oauth-app-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
++    });
++
++    // Close modal via close button
++    fireEvent.click(screen.getByTestId('close-connect-oauth-modal-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('connect-oauth-app-modal')).toBeNull();
++    });
++  });
++
++  it('handles projects returned as array or with key field, and covers modal backdrop close', async () => {
++    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
++      if (path === '/api/v1/projects') {
++        return Promise.resolve([
++          { id: 'p-direct', key: 'DIR', name: 'Direct Project' },
++        ]);
++      }
++      if (path === '/api/v1/workspaces') {
++        return Promise.resolve([{ id: 'w1', name: 'W1', slug: 'w1-slug', is_current: true }]);
++      }
++      return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/settings/mcp?scope=project']}>
++          <McpAccessStudio tier="personal" />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('scope-project-select')).toBeDefined();
++    });
++
++    const select = screen.getByTestId<HTMLSelectElement>('scope-project-select');
++    expect(select.value).toBe('DIR');
++
++    // Open connect modal and close via backdrop click
++    fireEvent.click(screen.getByTestId('empty-connect-oauth-app-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('connect-oauth-modal-backdrop'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('connect-oauth-app-modal')).toBeNull();
++    });
++  });
++
++  it('mints a service_bot key when Key Type is switched to Service Bot in mint modal', async () => {
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
++    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
++      id: 'key-bot-1',
++      label: 'Automation Bot Key',
++      display_hint: 'bot1',
++      surface: 'agent',
++      scope_tier: 'workspace',
++      owner_kind: 'service_bot',
++      scopes: ['agent:read', 'agent:write'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++      raw_key: 'kb_agt_bot_key_123',
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp']}>
++        <McpAccessStudio tier="personal" />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
++    });
++
++    fireEvent.click(screen.getByTestId('mint-key-button'));
++
++    const labelInput = screen.getByTestId('mint-label-input');
++    fireEvent.change(labelInput, { target: { value: 'Automation Bot Key' } });
++
++    // Switch Key Type to Service Bot
++    const ownerSelect = screen.getByTestId('mint-owner-kind-select');
++    fireEvent.change(ownerSelect, { target: { value: 'service_bot' } });
++
++    fireEvent.click(screen.getByTestId('mint-submit-btn'));
++
++    await waitFor(() => {
++      expect(mintSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          label: 'Automation Bot Key',
++          owner_kind: 'service_bot',
++          scope_tier: 'workspace',
++        }),
++      );
++    });
++  });
++
++  it('allows admin in governance view to revoke a service_bot or foreign key via revokeUnifiedMcpKey without 404', async () => {
++    const foreignBotKey: settingsApi.McpApiKeyItem = {
++      id: 'bot-foreign-999',
++      label: 'Foreign Service Bot',
++      display_hint: 'f999',
++      surface: 'agent',
++      scope_tier: 'workspace',
++      owner_kind: 'service_bot',
++      scopes: ['agent:read'],
++      allowed_projects: null,
++      created_at: new Date().toISOString(),
++      expires_at: null,
++      last_used_at: null,
++      revoked_at: null,
++    };
++
++    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([foreignBotKey]);
++    const revokeSpy = vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockResolvedValue(undefined);
++
++    render(
++      <MemoryRouter initialEntries={['/settings/mcp?view=governance']}>
++        <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('key-row-bot-foreign-999')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('revoke-btn-bot-foreign-999'));
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
++
++    await waitFor(() => {
++      expect(revokeSpy).toHaveBeenCalledWith('bot-foreign-999');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx b/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
+index 16930c9..212c5ac 100644
+--- a/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
+@@ -97,6 +97,9 @@ describe('McpConfigSnippetModal direct unit tests', () => {
+     fireEvent.click(screen.getByTestId('tab-codex'));
+     expect(screen.getByTestId('snippet-code-box').textContent).toContain('codex mcp add');
+ 
++    fireEvent.click(screen.getByTestId('tab-oauth'));
++    expect(screen.getByTestId('snippet-code-box').textContent).toContain('OAuth 2.1');
++
+     // Switch url scope
+     const urlSelect = screen.getByTestId('url-scope-select');
+     fireEvent.change(urlSelect, { target: { value: 'global' } });
+@@ -125,4 +128,36 @@ describe('McpConfigSnippetModal direct unit tests', () => {
+     });
+     fireEvent.click(screen.getByTestId('copy-key-button'));
+   });
++
++  it('renders dynamic projectKey in snippet URLs and omits hardcoded KANBA fallback', () => {
++    const handleClose = vi.fn();
++    const { unmount } = render(
++      <McpConfigSnippetModal
++        surface="agent"
++        workspaceSlug="engineering"
++        projectKey="OPS"
++        rawKey="kb_ops_key"
++        onClose={handleClose}
++      />,
++    );
++
++    const snippetBox = screen.getByTestId('snippet-code-box');
++    expect(snippetBox.textContent).toContain('/mcp/agent/w/engineering/p/OPS');
++    expect(snippetBox.textContent).not.toContain('KANBA');
++    unmount();
++
++    // When projectKey is omitted / empty
++    render(
++      <McpConfigSnippetModal
++        surface="agent"
++        workspaceSlug="engineering"
++        rawKey="kb_anon_key"
++        onClose={handleClose}
++      />,
++    );
++
++    const anonBox = screen.getByTestId('snippet-code-box');
++    expect(anonBox.textContent).not.toContain('KANBA');
++    expect(anonBox.textContent).toContain('/mcp/agent/w/engineering');
++  });
+ });
 diff --git a/kanban/web_static.py b/kanban/web_static.py
 index aaacbaf..674271b 100644
 --- a/kanban/web_static.py

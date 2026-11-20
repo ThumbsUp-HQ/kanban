@@ -1,18 +1,25 @@
 === PYTEST UNIT TESTS & COVERAGE ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc4-6bab3503
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 65 items
+collected 71 items
 
-kanban/tests/oauth/test_oauth_flow.py ..............                     [ 21%]
-kanban/tests/oauth/test_oauth_unit.py ....................               [ 52%]
-kanban/tests/test_web_static.py ........                                 [ 64%]
-kanban/tests/auth/test_csrf.py ...........                               [ 81%]
+kanban/tests/oauth/test_device_flow.py ......                            [  8%]
+kanban/tests/oauth/test_oauth_flow.py ..............                     [ 28%]
+kanban/tests/oauth/test_oauth_unit.py ....................               [ 56%]
+kanban/tests/test_web_static.py ........                                 [ 67%]
+kanban/tests/auth/test_csrf.py ...........                               [ 83%]
 kanban/tests/api/test_projects.py ............                           [100%]
 
+=============================== warnings summary ===============================
+kanban/tests/auth/test_csrf.py: 18 warnings
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
@@ -24,34 +31,46 @@ kanban/oauth/server.py           202      3     64      3    97%   220, 340-341,
 kanban/web_static.py             163      0     58      0   100%
 --------------------------------------------------------------------------
 TOTAL                            659     12    220     11    97%
-======================= 65 passed, 18 warnings in 27.95s =======================
+======================= 71 passed, 18 warnings in 31.62s =======================
 
 === VITEST UNIT TESTS & COVERAGE ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc4-6bab3503/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
 
- ✓ src/features/oauth/__tests__/oauthApi.test.ts (5 tests) 19ms
- ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (10 tests) 252ms
- ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (13 tests) 333ms
- ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (17 tests) 980ms
+ ✓ src/features/oauth/__tests__/oauthApi.test.ts (5 tests) 20ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 24ms
+ ✓ src/features/settings/__tests__/McpConfigSnippetModal.test.tsx (4 tests) 190ms
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (10 tests) 455ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (13 tests) 519ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (17 tests) 1393ms
+   ✓ OAuthClientGovernanceStudio (17)
+     ✓ inspects client details in modal and closes modal 417ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (21 tests) 1592ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (16 tests) 1849ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ handles MFA challenge cancel and session expired 315ms
+ ✓ src/app/routes.test.tsx (35 tests) 3718ms
+   ✓ routes and AppShell integration (14)
+     ✓ renders AppShell with sidebar items, breadcrumb, and layout=board selection 615ms
+     ✓ renders various project routes, auth routes, and dev story routes 679ms
 
- Test Files  4 passed (4)
-      Tests  45 passed (45)
-   Start at  01:28:13
-   Duration  2.16s (environment 59%, tests 30%, import 9%, transform 1%, worker 1%)
+ Test Files  9 passed (9)
+      Tests  125 passed (125)
+   Start at  02:12:02
+   Duration  6.40s (tests 41%, environment 38%, import 14%, transform 6%, worker 2%)
 
-=== CSS TOKENS AUDIT ===
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc4-6bab3503/kanban/web
-
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 11ms
-   ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
-     ✓ verifies 100% of var(--*) usages across all CSS files resolve to canonical tokens 6ms
-     ✓ verifies all static auth-* classes in AuthStudioPage.tsx and AuthCardEditorDrawer.tsx exist in adminAuth.css 1ms
-     ✓ verifies base.css defines color-scheme and button/input/select/textarea color inheritance 1ms
-     ✓ ensures simulated undefined token reference is caught by audit scanner 1ms
-
- Test Files  1 passed (1)
-      Tests  4 passed (4)
-   Start at  01:37:08
-   Duration  922ms (environment 90%, transform 4%, import 2%, tests 2%, worker 1%)
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.31 |    96.22 |   99.51 |   99.42 |                   
+ oauth             |   99.63 |    96.25 |   98.82 |     100 |                   
+  ...ivatePage.tsx |   99.27 |    93.96 |   97.14 |     100 | 51-52,109         
+  ...nceStudio.tsx |     100 |      100 |     100 |     100 |                   
+  oauthApi.ts      |     100 |      100 |     100 |     100 |                   
+ settings          |   99.12 |    96.21 |     100 |   99.08 |                   
+  ...hAppModal.tsx |     100 |    96.77 |     100 |     100 | 65,80             
+  ...essStudio.tsx |   98.78 |     95.8 |     100 |    98.7 | 515,601,1108-1109 
+  ...ppetModal.tsx |     100 |    98.03 |     100 |     100 | 43                
+-------------------|---------|----------|---------|---------|-------------------
