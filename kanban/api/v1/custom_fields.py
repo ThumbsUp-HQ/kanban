@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -45,17 +45,18 @@ async def list_custom_fields(
     response_model=CustomFieldResponse,
     summary="Create a custom field definition",
 )
-async def create_custom_field(
+async def create_custom_field(  # noqa: PLR0913, PLR0917
     project: str,
     body: CustomFieldCreateRequest,
     caller: Caller,
     session: Session,
     response: Response,
+    request: Request,
 ) -> CustomFieldResponse:
     """Create a new custom field definition (admin-only, requires AAL2 and CSRF)."""
     async with timing_floor(floor_ms=25.0):
         result = await CustomFieldDefinitionService.create_definition(
-            session, caller, project, body
+            session, caller, project, body, request=request
         )
         response.headers["Location"] = f"/api/v1/projects/{project}/custom-fields/{result.id}"
         return result
@@ -66,17 +67,18 @@ async def create_custom_field(
     response_model=CustomFieldResponse,
     summary="Update a custom field definition",
 )
-async def update_custom_field(
+async def update_custom_field(  # noqa: PLR0913, PLR0917
     project: str,
     field_id: str,
     body: CustomFieldUpdateRequest,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> CustomFieldResponse:
     """Update an existing custom field definition (admin-only, requires AAL2 and CSRF)."""
     async with timing_floor(floor_ms=25.0):
         return await CustomFieldDefinitionService.update_definition(
-            session, caller, project, field_id, body
+            session, caller, project, field_id, body, request=request
         )
 
 

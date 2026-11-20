@@ -3,9 +3,20 @@
  * Queries /api/v1/system/status to determine deployment mode, air-gap, and persistence.
  */
 
-import { useEffect } from 'react';
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useContext, useEffect } from 'react';
+import {
+  QueryClient,
+  QueryClientContext,
+  useQuery,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
+
+let fallbackClient: QueryClient | null = null;
+function getFallbackQueryClient(): QueryClient {
+  fallbackClient ??= new QueryClient();
+  return fallbackClient;
+}
 
 export interface SystemStatus {
   readonly deployment_mode:
@@ -21,6 +32,8 @@ export interface SystemStatus {
   readonly data_mount_point?: string | null;
   readonly data_mount_fstype?: string | null;
   readonly tier_b_sandbox_available?: boolean;
+  readonly supported_custom_field_tiers?: readonly string[];
+  readonly sandbox_unavailable_reason?: string | null;
 }
 
 export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
@@ -37,9 +50,11 @@ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemSta
 }
 
 export function useSystemStatus(): UseQueryResult<SystemStatus> {
-  const queryClient = useQueryClient();
+  const contextClient = useContext(QueryClientContext);
+  const queryClient = contextClient ?? getFallbackQueryClient();
 
   useEffect(() => {
+    if (!contextClient) return;
     const handleStatusChanged = (): void => {
       void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
     };
@@ -47,11 +62,15 @@ export function useSystemStatus(): UseQueryResult<SystemStatus> {
     return () => {
       window.removeEventListener('kb:system-status-changed', handleStatusChanged);
     };
-  }, [queryClient]);
+  }, [contextClient, queryClient]);
 
-  return useQuery({
-    queryKey: qk.systemStatus(),
-    queryFn: ({ signal }) => fetchSystemStatus(signal),
-    staleTime: 60000,
-  });
+  return useQuery(
+    {
+      queryKey: qk.systemStatus(),
+      queryFn: ({ signal }) => fetchSystemStatus(signal),
+      staleTime: 60000,
+      enabled: Boolean(contextClient),
+    },
+    queryClient,
+  );
 }

@@ -61,6 +61,10 @@ class SystemStatusResponse(BaseModel):
     local_llm_endpoint_host: str | None = None
     is_server_admin: bool
     allow_unlimited_mcp_keys: bool = True
+    supported_custom_field_tiers: list[str] = Field(
+        default_factory=lambda: ["scalar", "formula", "wasm", "nsjail"]
+    )
+    sandbox_unavailable_reason: str | None = None
 
 
 class StandaloneBackupRequest(BaseModel):
@@ -181,16 +185,33 @@ async def get_system_status_endpoint(
             ws_air_gap = False
     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
 
+    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
+    supported_tiers = (
+        ["scalar", "formula", "wasm", "nsjail"]
+        if tier_b_avail
+        else ["scalar", "formula", "wasm"]
+    )
+    sandbox_reason = (
+        None
+        if tier_b_avail
+        else (
+            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
+            "Multi-container compose deployment is required."
+        )
+    )
+
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
         persistent_volume=status_data["persistent_volume"],
         data_mount_point=mount_point,
         data_mount_fstype=mount_fstype,
-        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
+        tier_b_sandbox_available=tier_b_avail,
         air_gap_mode=effective_air_gap,
         local_llm_endpoint_host=local_llm_host,
         is_server_admin=is_server_admin,
         allow_unlimited_mcp_keys=not disable_unlimited,
+        supported_custom_field_tiers=supported_tiers,
+        sandbox_unavailable_reason=sandbox_reason,
     )
 
 
@@ -230,16 +251,33 @@ async def get_admin_standalone_status_endpoint(
             ws_air_gap = False
     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
 
+    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
+    supported_tiers = (
+        ["scalar", "formula", "wasm", "nsjail"]
+        if tier_b_avail
+        else ["scalar", "formula", "wasm"]
+    )
+    sandbox_reason = (
+        None
+        if tier_b_avail
+        else (
+            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
+            "Multi-container compose deployment is required."
+        )
+    )
+
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
         persistent_volume=status_data["persistent_volume"],
         data_mount_point=mount_point,
         data_mount_fstype=mount_fstype,
-        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
+        tier_b_sandbox_available=tier_b_avail,
         air_gap_mode=effective_air_gap,
         local_llm_endpoint_host=local_llm_host,
         is_server_admin=is_server_admin,
         allow_unlimited_mcp_keys=not disable_unlimited,
+        supported_custom_field_tiers=supported_tiers,
+        sandbox_unavailable_reason=sandbox_reason,
     )
 
 

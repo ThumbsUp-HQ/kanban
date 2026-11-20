@@ -63,6 +63,7 @@ export interface FlavorDecisionMatrixProps {
   onSelectFlavor?: (flavor: FieldFlavor) => void;
   isOpen?: boolean;
   onToggle?: () => void;
+  tierBAvailable?: boolean;
 }
 
 /**
@@ -74,6 +75,7 @@ export function FlavorDecisionMatrix({
   onSelectFlavor,
   isOpen: controlledIsOpen,
   onToggle,
+  tierBAvailable = true,
 }: FlavorDecisionMatrixProps): JSX.Element {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen ?? internalIsOpen;
@@ -135,6 +137,14 @@ export function FlavorDecisionMatrix({
                     >
                       {item.latency}
                     </span>
+                    {item.flavor === 'nsjail' && !tierBAvailable && (
+                      <span
+                        className="flavor-matrix-unavailable-badge"
+                        data-testid="flavor-nsjail-unavailable-badge"
+                      >
+                        Multi-Container Compose Required
+                      </span>
+                    )}
                   </div>
 
                   <dl className="flavor-matrix-card-dl">
@@ -169,6 +179,12 @@ export function FlavorDecisionMatrix({
                       onClick={() => {
                         onSelectFlavor(item.flavor);
                       }}
+                      disabled={item.flavor === 'nsjail' && !tierBAvailable}
+                      title={
+                        item.flavor === 'nsjail' && !tierBAvailable
+                          ? 'Multi-Container Compose Required'
+                          : undefined
+                      }
                       data-testid={`select-flavor-btn-${item.flavor}`}
                     >
                       {isSelected ? 'Selected' : `Use ${item.title}`}

@@ -142,4 +142,48 @@ describe('PresetGallery Component (KAN-15, KB-P3-AUDIT-09)', () => {
     });
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it('disables nsjail presets and renders Multi-Container Compose Required badge when tierBAvailable is false', () => {
+    const handleApply = vi.fn();
+    render(<PresetGallery onApplyPreset={handleApply} tierBAvailable={false} />);
+
+    // nsjail presets should have unavailable badge
+    const rollupBadge = screen.getByTestId('preset-unavailable-total-project-issues');
+    expect(rollupBadge).toBeDefined();
+    expect(rollupBadge.textContent).toContain('Multi-Container Compose Required');
+
+    const gitPrBadge = screen.getByTestId('preset-unavailable-git-pr-link');
+    expect(gitPrBadge).toBeDefined();
+    expect(gitPrBadge.textContent).toContain('Multi-Container Compose Required');
+
+    // Use button should be disabled for nsjail presets
+    const rollupBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-total-project-issues');
+    expect(rollupBtn.disabled).toBe(true);
+
+    const gitPrBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-git-pr-link');
+    expect(gitPrBtn.disabled).toBe(true);
+
+    // Non-nsjail presets remain enabled
+    const cvssBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-cvss-score');
+    expect(cvssBtn.disabled).toBe(false);
+    expect(screen.queryByTestId('preset-unavailable-cvss-score')).toBeNull();
+
+    const blockerBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-blocker-count');
+    expect(blockerBtn.disabled).toBe(false);
+    expect(screen.queryByTestId('preset-unavailable-blocker-count')).toBeNull();
+  });
+
+  it('enables nsjail presets when tierBAvailable is true', () => {
+    const handleApply = vi.fn();
+    render(<PresetGallery onApplyPreset={handleApply} tierBAvailable={true} />);
+
+    expect(screen.queryByTestId('preset-unavailable-total-project-issues')).toBeNull();
+    expect(screen.queryByTestId('preset-unavailable-git-pr-link')).toBeNull();
+
+    const rollupBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-total-project-issues');
+    expect(rollupBtn.disabled).toBe(false);
+
+    const gitPrBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-git-pr-link');
+    expect(gitPrBtn.disabled).toBe(false);
+  });
 });

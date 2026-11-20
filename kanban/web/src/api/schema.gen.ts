@@ -10661,6 +10661,10 @@ export interface components {
             persistent_volume: boolean;
             /** Tier B Sandbox Available */
             tier_b_sandbox_available: boolean;
+            /** Supported Custom Field Tiers */
+            supported_custom_field_tiers?: string[];
+            /** Sandbox Unavailable Reason */
+            sandbox_unavailable_reason?: string | null;
         };
         /**
          * TimelineLink

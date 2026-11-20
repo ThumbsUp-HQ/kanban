@@ -25,8 +25,10 @@ from kanban.custom_fields.output_formats import parse_output_format_metadata
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.projects import get_project_or_404
+from kanban.standalone.export_service import get_standalone_status
 
 if TYPE_CHECKING:
+    from fastapi import Request
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from database.models.projects import Project
@@ -34,6 +36,46 @@ if TYPE_CHECKING:
 
 AAL2_MIN_LEVEL: Final[int] = 2
 SHA256_BYTE_LEN: Final[int] = 32
+
+
+def is_tier_b_available(
+    request: Request | None = None,
+    *,
+    override: bool | None = None,
+) -> bool:
+    """Return True if Tier B nsjail sandbox is available in the current environment."""
+    if override is not None:
+        return override
+    if request is not None:
+        if hasattr(request.app.state, "tier_b_sandbox_available"):
+            return bool(request.app.state.tier_b_sandbox_available)
+        settings = getattr(request.app.state, "settings", None)
+        status_data = get_standalone_status(settings=settings)
+        return bool(status_data.get("tier_b_sandbox_available", True))
+    status_data = get_standalone_status()
+    return bool(status_data.get("tier_b_sandbox_available", True))
+
+
+def assert_tier_available(
+    tier: str,
+    *,
+    request: Request | None = None,
+    tier_b_sandbox_available: bool | None = None,
+) -> None:
+    """Validate that requested execution tier is supported in the current environment."""
+    if tier == "nsjail" and not is_tier_b_available(
+        request=request, override=tier_b_sandbox_available
+    ):
+        raise ProblemException(
+            status=422,
+            code="SANDBOX_UNAVAILABLE_IN_STANDALONE",
+            title="Sandbox Unavailable In Standalone",
+            detail=(
+                "Isolated nsjail sandbox execution is unavailable in standalone mode. "
+                "Use scalar, formula, or wasm execution tiers instead, "
+                "or promote to multi-container compose."
+            ),
+        )
 
 
 def _parse_wasm_sha256(hex_str: str) -> bytes:
@@ -162,14 +204,22 @@ class CustomFieldDefinitionService:
         return [cls.serialize(row, is_admin=is_adm) for row in rows]
 
     @classmethod
-    async def create_definition(
+    async def create_definition(  # noqa: PLR0913
         cls,
         session: AsyncSession,
         caller: PrincipalContext,
         project_ref: str,
         payload: CustomFieldCreateRequest,
+        *,
+        request: Request | None = None,
+        tier_b_sandbox_available: bool | None = None,
     ) -> CustomFieldResponse:
         """Create a new custom field definition with validation and activity recording."""
+        assert_tier_available(
+            payload.tier,
+            request=request,
+            tier_b_sandbox_available=tier_b_sandbox_available,
+        )
         project = await get_project_or_404(session, caller, project_ref)
         await cls.require_admin_and_aal2(session, caller, project)
 
@@ -315,15 +365,24 @@ class CustomFieldDefinitionService:
         return spec_changed
 
     @classmethod
-    async def update_definition(
+    async def update_definition(  # noqa: PLR0913
         cls,
         session: AsyncSession,
         caller: PrincipalContext,
         project_ref: str,
         field_id: str,
         payload: CustomFieldUpdateRequest,
+        *,
+        request: Request | None = None,
+        tier_b_sandbox_available: bool | None = None,
     ) -> CustomFieldResponse:
         """Update an existing custom field definition."""
+        if payload.tier is not None:
+            assert_tier_available(
+                payload.tier,
+                request=request,
+                tier_b_sandbox_available=tier_b_sandbox_available,
+            )
         project = await get_project_or_404(session, caller, project_ref)
         await cls.require_admin_and_aal2(session, caller, project)
 

@@ -100,12 +100,24 @@ if (!def0 || !def1) {
   throw new Error('mockDefinitions missing expected entries');
 }
 
-function renderEditor(isAdmin = true) {
+function renderEditor(
+  isAdmin = true,
+  systemStatus?: { tier_b_sandbox_available?: boolean },
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Infinity },
     },
   });
+  if (systemStatus) {
+    queryClient.setQueryData(['system', 'status'], {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: false,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      ...systemStatus,
+    });
+  }
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -952,5 +964,71 @@ describe('CustomFieldDefinitionEditor', () => {
         }),
       );
     });
+  });
+
+  it('renders standalone guidance callout and disables nsjail options when tier_b_sandbox_available is false', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+
+    renderEditor(true, { tier_b_sandbox_available: false });
+
+    // 1. Guidance callout with links
+    const callout = screen.getByTestId('standalone-guidance-callout');
+    expect(callout).toBeDefined();
+    expect(callout.textContent).toContain('Standalone Mode Active:');
+    expect(callout.textContent).toContain('Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms)');
+
+    const guideLink = screen.getByTestId<HTMLAnchorElement>('link-guide-custom-fields');
+    expect(guideLink.getAttribute('href')).toBe('/docs/Guide-Custom-Fields');
+
+    const promoteLink = screen.getByTestId<HTMLAnchorElement>('link-promote-multi-container');
+    expect(promoteLink.getAttribute('href')).toBe('/admin/standalone');
+
+    // 2. Field flavor nsjail option disabled with badge
+    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+    const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+    expect(nsjailFlavorOpt?.disabled).toBe(true);
+    expect(screen.getByTestId('flavor-nsjail-disabled-badge')).toBeDefined();
+
+    // 3. Execution tier nsjail option disabled with badge in Advanced tab
+    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+    const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
+    const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+    expect(nsjailTierOpt?.disabled).toBe(true);
+    expect(screen.getByTestId('tier-nsjail-disabled-badge')).toBeDefined();
+
+    // 4. Pre-existing nsjail field selection shows warning banner
+    await waitFor(() => {
+      expect(screen.getByTestId('field-item-deploy-target')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('field-item-deploy-target'));
+
+    const warningBanner = screen.getByTestId('preexisting-nsjail-warning-banner');
+    expect(warningBanner).toBeDefined();
+    expect(warningBanner.textContent).toContain('Pre-Existing nsjail Field (Imported from Backup)');
+  });
+
+  it('enables nsjail options and hides guidance callout when tier_b_sandbox_available is true', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+
+    renderEditor(true, { tier_b_sandbox_available: true });
+
+    // Callout not present
+    expect(screen.queryByTestId('standalone-guidance-callout')).toBeNull();
+
+    // Flavor nsjail option enabled and badge not present
+    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+    const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+    expect(nsjailFlavorOpt?.disabled).toBe(false);
+    expect(screen.queryByTestId('flavor-nsjail-disabled-badge')).toBeNull();
+
+    // Tier nsjail option enabled and badge not present in Advanced tab
+    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+    const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
+    const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+    expect(nsjailTierOpt?.disabled).toBe(false);
+    expect(screen.queryByTestId('tier-nsjail-disabled-badge')).toBeNull();
+
+    // Pre-existing warning banner not present
+    expect(screen.queryByTestId('preexisting-nsjail-warning-banner')).toBeNull();
   });
 });

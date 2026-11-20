@@ -1,0 +1,273 @@
+diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
+new file mode 100644
+index 0000000..b2f6bd6
+--- /dev/null
++++ b/Guide-Custom-Fields.md
+@@ -0,0 +1,256 @@
++# [Guide] How to Use Custom Fields
++
++Custom Fields extend your projects and issues with dynamic calculations, computed business metrics, compliance indicators, and metadata without modifying the core database schema or writing custom server plugins.
++
++This comprehensive guide covers how Custom Fields work, where their values surface across the UI, how to choose the right execution tier for your deployment mode (Standalone vs Multi-Container Compose), step-by-step walkthroughs with copy-paste examples, and the required governance and dual-control approval workflows.
++
++---
++
++## 1. What Custom Fields Do and Where Values Appear
++
++Custom Fields allow project administrators and server administrators to attach computed or scalar attributes to issues. Whenever an issue is viewed, edited, or evaluated in a workflow, Custom Fields are resolved and formatted according to their output specifications.
++
++Custom field values automatically surface across the following surfaces in the web interface:
++
++- **Issue Properties Rail:** Located in the right sidebar of the issue detail screen. Displays the custom field label, current value (formatted as text, number, badge, severity pill, link, markdown snippet, or table), and cache status with an instant recalculate trigger.
++- **Table View:** Embedded as sortable, custom columns in the project Table View. Allows rapid scanning and comparison of computed metrics (such as SLA deadlines or sub-issue progress percentages) across dozens of work items.
++- **Board Cards:** Rendered as compact badges, severity pills, or monospace tags directly on Kanban board cards, providing immediate visual cues to team members during daily standups and cycle reviews.
++- **Filters and Search:** Filter work items by custom field values, enabling targeted views such as finding all issues with a `CRITICAL` severity pill or projects with overdue SLA days.
++
++---
++
++## 2. Choosing Between Execution Tiers
++
++👍kanban provides four distinct execution tiers for custom fields, balanced across performance, security isolation, and deployment modes:
++
++| Tier | Engine / Flavor | Latency Budget | Standalone Mode | Multi-Container Compose | Best Used For |
++| :--- | :--- | :--- | :--- | :--- | :--- |
++| **Scalar** | Static metadata | `<1ms` | Supported | Supported | Static tags, manual attributes, default strings, constant numbers |
++| **Safe Formula** | In-process Python AST | `<5ms` | Supported | Supported | Math, date arithmetic, conditionals, sub-issue rollups, SLA days |
++| **WebAssembly** | `wasmtime` runtime | `<25ms` | Supported | Supported | Compiled C, Rust, or AssemblyScript logic with strict memory sandboxing |
++| **Isolated Sandbox** | `nsjail` Linux container | `<250ms` | **Gated (Unavailable)** | Supported | Complex Python/Rust scripts requiring full network egress allowlists or multi-entity queries |
++
++### Standalone Mode vs Multi-Container Compose Gating
++
++In **Standalone mode** (running via a single container or single process):
++- `Scalar`, `Safe Formula`, and `WebAssembly (wasmtime)` run natively out of the box with zero external dependencies.
++- `Isolated Sandbox (nsjail)` is **fail-closed and rejected**. Attempting to create or execute an `nsjail` custom field in Standalone mode returns an actionable HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE` error recommending `scalar`, `formula`, or `wasm`. In the web editor and preset gallery, `nsjail` options are disabled and badged with `Multi-Container Compose Required`.
++- **Pre-existing nsjail fields:** If you import a workspace backup containing pre-existing `nsjail` fields into Standalone mode, definitions remain inspectable and editable, with an informational warning banner reminding you that multi-container compose is required for execution.
++- **Promoting to Multi-Container:** To unlock `nsjail` container sandboxes, promote your installation to multi-container compose via the administrator portal at `/admin/standalone` or follow the Production Promotion and Backup Runbook.
++
++---
++
++## 3. Step-by-Step Walkthroughs and Copy-Paste Examples
++
++### Example 1: Priority SLA Days (Safe Formula)
++
++Compute the remaining service level agreement (SLA) target turnaround days based on the issue priority.
++
++- **Name:** Priority SLA Days
++- **Slug:** `priority-sla-days`
++- **Flavor / Tier:** Safe Formula (`formula`)
++- **Target Scope:** `PROJECT`
++- **Formula Expression:**
++  ```python
++  1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14
++  ```
++- **Output Format:** `number`
++- **Format Metadata JSON:**
++  ```json
++  {
++    "format": "number",
++    "maximum_fraction_digits": 0,
++    "unit_suffix": "d",
++    "min_value": 1,
++    "max_value": 30
++  }
++  ```
++
++### Example 2: Sub-Issue Progress Percentage (Safe Formula)
++
++Calculate the completion percentage of sub-issues for epic or parent issue tracking.
++
++- **Name:** Sub-Issue Progress %
++- **Slug:** `sub-issue-progress`
++- **Flavor / Tier:** Safe Formula (`formula`)
++- **Target Scope:** `PROJECT`
++- **Formula Expression:**
++  ```python
++  round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0
++  ```
++- **Output Format:** `number`
++- **Format Metadata JSON:**
++  ```json
++  {
++    "format": "number",
++    "maximum_fraction_digits": 1,
++    "unit_suffix": "%",
++    "min_value": 0.0,
++    "max_value": 100.0
++  }
++  ```
++
++### Example 3: CVSS Severity Pill (Safe Formula / Dynamic Severity)
++
++Map issue priority and due date urgency to a standardized security vulnerability pill.
++
++- **Name:** Incident Severity Pill
++- **Slug:** `incident-severity-pill`
++- **Flavor / Tier:** Safe Formula (`formula`)
++- **Target Scope:** `PROJECT`
++- **Formula Expression:**
++  ```python
++  'CRITICAL' if (days_until_due is not None and days_until_due < 0) else 'HIGH' if priority == 'URGENT' else 'MEDIUM' if priority == 'HIGH' else 'LOW'
++  ```
++- **Output Format:** `severity_pill`
++- **Format Metadata JSON:**
++  ```json
++  {
++    "format": "severity_pill"
++  }
++  ```
++
++### Example 4: Total Project Issues Rollup (WebAssembly or Multi-Container nsjail)
++
++Roll up total project issues and blockers using WebAssembly or Multi-Container nsjail.
++
++- **Name:** Total Project Issues
++- **Slug:** `total-project-issues`
++- **Flavor / Tier:** WebAssembly (`wasm`) or Isolated Sandbox (`nsjail` in Multi-Container Compose)
++- **Target Scope:** `PROJECT` (or `WORKSPACE` with AAL2 dual control)
++- **Output Format:** `number`
++- **Format Metadata JSON:**
++  ```json
++  {
++    "format": "number",
++    "maximum_fraction_digits": 0,
++    "unit_suffix": " issues"
++  }
++  ```
++
++---
++
++## 4. All Seven Supported Output Formats and Schemas
++
++Every custom field produces output formatted according to one of seven canonical schemas:
++
++### 1. `text`
++Single-line formatted string with optional prefix and monospace font.
++```json
++{
++  "format": "text",
++  "max_length": 128,
++  "prefix": "REF-",
++  "monospace": true
++}
++```
++
++### 2. `number`
++Floating point or integer numeric value with precision limits, suffix, and range bounds.
++```json
++{
++  "format": "number",
++  "maximum_fraction_digits": 2,
++  "unit_suffix": " hrs",
++  "min_value": 0.0,
++  "max_value": 1000.0
++}
++```
++
++### 3. `badge`
++Visual status badge with color token and strict label allowlist. Supported color tokens: `neutral`, `info`, `success`, `warning`, `danger`, `accent`.
++```json
++{
++  "format": "badge",
++  "color_token": "success",
++  "allowed_labels": ["Passed", "Failed", "In Progress", "Pending"]
++}
++```
++
++### 4. `severity_pill`
++Standardized vulnerability and risk assessment pill. Accepts severity levels (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) or numeric CVSS scores from 0.0 to 10.0.
++```json
++{
++  "format": "severity_pill"
++}
++```
++
++### 5. `url`
++Sanitized hyperlink validated against allowed schemes and host suffixes.
++```json
++{
++  "format": "url",
++  "allowed_schemes": ["https"],
++  "allowed_host_suffixes": ["github.com", "gitlab.com"]
++}
++```
++
++### 6. `markdown_snippet`
++Sanitized canonical Markdown snippet rendered inline up to 2000 characters.
++```json
++{
++  "format": "markdown_snippet",
++  "max_chars": 2000
++}
++```
++
++### 7. `json_table`
++Structured 2-dimensional tabular data rendered directly in the issue details view.
++```json
++{
++  "format": "json_table",
++  "columns": [
++    {"key": "test_name", "label": "Test Suite"},
++    {"key": "duration_ms", "label": "Duration (ms)"},
++    {"key": "status", "label": "Status"}
++  ],
++  "max_rows": 25
++}
++```
++
++---
++
++## 5. Safe Formula Context Reference
++
++When writing Safe Formulas, expressions have access to the active issue attributes without executing arbitrary code:
++
++| Variable | Type | Description |
++| :--- | :--- | :--- |
++| `id` | `str` | Issue unique identifier (UUID) |
++| `key` | `str` | Human-readable issue key (e.g. `KAN-32`) |
++| `summary` | `str` | Issue title / summary |
++| `description_markdown` | `str` | Raw Markdown body of the issue |
++| `state` | `str` | Name of current workflow state (e.g. `In Progress`) |
++| `state_group` | `str` | Workflow state category (`backlog`, `unstarted`, `started`, `completed`, `cancelled`) |
++| `priority` | `str` | Normalized uppercase priority (`URGENT`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) |
++| `priority_slug` | `str` | Lowercase priority slug (`urgent`, `high`, `medium`, `low`, `none`) |
++| `priority_label` | `str` | Display label of priority (`Urgent`, `High`, etc.) |
++| `start_date` | `str` or `None` | ISO-formatted start date |
++| `due_date` | `str` or `None` | ISO-formatted due date |
++| `days_until_due` | `int` or `None` | Days until due date (negative values indicate overdue) |
++| `blocker_count` | `int` | Number of active blocking dependencies on this issue |
++| `sub_issue_count` | `int` | Total count of child sub-issues |
++| `completed_sub_issue_count`| `int` | Count of sub-issues in `completed` state group |
++| `labels` | `list[str]` | List of tag names assigned to the issue |
++
++### Safe Built-in Functions
++Safe formulas allow standard deterministic operations: `round`, `int`, `float`, `min`, `max`, `len`, `abs`, `str`. Arbitrary imports, file system access, and network sockets are strictly prohibited at the Python AST parser layer.
++
++---
++
++## 6. Testing, Dry-Running, and Scope Escalation
++
++### Dry-Running with Test Execute
++Before saving any custom field definition, use the **Test Execute** button in the Custom Field Definition Editor or send a POST request to:
++```http
++POST /api/v1/projects/{project_ref}/custom-fields/test-execute
++```
++This evaluates your formula or script against a mock issue payload or existing issue key in memory without persisting values or polluting the audit ledger. In Standalone mode, Test Execute verifies that your script does not request unavailable sandbox tiers.
++
++### Scope Escalation and AAL2 Dual-Control Approval
++Custom fields can be scoped at three tiers:
++- **`PROJECT` Scope:** Can only read and affect issues within the parent project. Requires Project Administrator privileges.
++- **`WORKSPACE` Scope:** Can read issues across all projects in the workspace.
++- **`SERVER` Scope:** Global fields available across all workspaces.
++
++**Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Account credentials rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
+diff --git a/_Sidebar.md b/_Sidebar.md
+index 6b7c13b..54a1d72 100644
+--- a/_Sidebar.md
++++ b/_Sidebar.md
+@@ -28,5 +28,6 @@
+ 
+ - **Reference Guides**
+   - [Feature Comparison Matrix (35 Features)](Feature-Comparison)
++  - [Guide: How to Use Custom Fields](Guide-Custom-Fields)
+   - [MCP Tools Reference (24 Tools)](MCP-Tools-Reference)
+   - [REST API and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide)
