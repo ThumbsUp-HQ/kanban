@@ -3,25 +3,33 @@
 ## Audit Metadata
 - Ticket ID: KAN-28 ([KB-P3-AUDIT-22])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rcfix-5b04ce70`
-- Target Branch: fix/KAN-28-rc2
-- Base Commit: 036216b
-- Head Commit: deefc6c
+- Date: 2026-11-20
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc3-b530252a`
+- Target Branch: fix/KAN-28-rc3
+- Base Commit: 564b574
+- Head Commit: abd3da1
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review evaluates the UI layout, responsive behaviors, visual design token compliance, interaction ergonomics, and code standards for ticket KAN-28 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-22]).
+This review evaluates the UI layout, responsive behaviors, visual design token compliance, interaction ergonomics, and code standards for ticket KAN-28 and its Clean-Room Reality-Checker Round 3 surgical polish ([KB-P3-AUDIT-22]).
 
-The Round 2 remediation resolves:
-1. `DeviceActivatePage.tsx` Project ID Contract: fetches `/api/v1/projects`, maps `id`, `identifier`, and `name`, renders accessible label `Project: {p.identifier}`, and stores/submits UUID string identifiers in `allowed_projects`, eliminating HTTP 422 errors upon device approval.
-2. Mobile 390x844 horizontal overflow containment across OAuth surfaces:
-   - In `DeviceActivatePage.css`, added `overflow-wrap: anywhere; word-break: break-all; max-width: 100%;` to `.kb-device-app-prop-value` and enabled flex wrapping on `.kb-device-app-row`, ensuring long Target Resource URLs do not overflow card boundaries or viewport width.
-   - In `OAuthClientGovernanceStudio.css`, wrapped tables in `overflow-x: auto; max-width: 100%; box-sizing: border-box;` and added responsive padding under `@media (max-width: 640px)`.
-3. Fail-closed backend authorization in `kanban/api/v1/oauth.py`: verifies HMAC key material and rejects inactive client records with clean error descriptions.
-4. Tab height (>=36px), dynamic resource URLs, direct SPA routing to `/oauth/device`, and CSP `form-action` origin extraction.
+The Round 3 remediation resolves:
+1. Container & Table Wrap Layout Containment (`OAuthClientGovernanceStudio.css`):
+   - Configured `width: 100%; max-width: min(1100px, 100%); min-width: 0; overflow-x: hidden; box-sizing: border-box;` on `.kb-oauth-gov-container`.
+   - Strictly confined horizontal table scrolling to `.kb-oauth-gov-table-wrap` via `width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; box-sizing: border-box; -webkit-overflow-scrolling: touch;`.
+   - Prevented flex blowout with `min-width: 0; width: 100%; box-sizing: border-box;` on headers and sections.
+   - Under `@media (max-width: 640px)`, full-width wrapping is applied to headers, titles, subtitles, and action buttons.
+2. Verified DOM Bounding Rect at Viewport 390x844:
+   - `main.scrollWidth = 390` (reduced from 1014px, matching viewport width <= 390px).
+   - `.kb-oauth-gov-container.width = 358px` (reduced from 982px).
+   - Right edges of all title, button, and navigation elements measure <= 374px, completely eliminating horizontal clipping across light and dark modes.
+3. Maintained previous Round 2 fixes:
+   - `DeviceActivatePage.tsx` Project ID contract with valid UUID mapping.
+   - Long Target Resource URL wrapping (`overflow-wrap: anywhere; word-break: break-all;`).
+   - Dynamic project resolution, tab sizing >= 36px, and CSP grammatical compliance.
+4. Comprehensive test coverage: 44 Vitest tests passing across 4 touched suites with >96% branch coverage, and 44 Pytest tests passing with 98% coverage.
 
 All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis.
 
@@ -64,14 +72,17 @@ All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) view
 - Direct SPA Navigation: Updated `kanban/web_static.py` to route `/oauth/device` to `index.html` (HTTP 200), allowing direct browser navigation while keeping backend OAuth endpoints strictly non-SPA.
 - Mobile Viewport Safety: Long URLs wrap anywhere (`overflow-wrap: anywhere; word-break: break-all;`), eliminating horizontal overflow bleeding on mobile 390px viewports (`scrollWidth <= clientWidth`).
 
-### 4. Admin Register OAuth Client Modal (04-admin-register-oauth-client-*.png)
+### 4. Admin Register OAuth Client Modal & Governance Studio
 - Views Inspected:
   - `04-admin-register-oauth-client-light-desktop.png`
   - `04-admin-register-oauth-client-dark-desktop.png`
   - `live-admin-oauth-register-modal-desktop-light.png`
   - `live-admin-oauth-registered-success-desktop-light.png`
+  - `live-admin-oauth-mobile-light.png`
+  - `live-admin-oauth-mobile-dark.png`
 - Form Field Ergonomics: Inputs, textareas, and select menus use responsive sizing and tokenized surface backgrounds.
 - Post-Registration Confirmation: Successfully generated clients display their unique `client_id` in a monospaced block with a dedicated one-click copy button.
+- Mobile Governance Layout: On 390x844 mobile viewport, titles, descriptions, and action buttons wrap cleanly without right-edge truncation. The client table scrolls smoothly within its dedicated wrapper with touch scrolling enabled.
 
 ---
 
@@ -91,16 +102,17 @@ All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) view
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-22 Round 2)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-22 Round 3)
 
-- Target Branch: `fix/KAN-28-rc2`
-- Remediation Head Commit: `deefc6c`
+- Target Branch: `fix/KAN-28-rc3`
+- Remediation Head Commit: `abd3da1`
 - Remediations Verified:
-  1. `DeviceActivatePage.tsx` maps and submits valid UUID strings in `allowed_projects`.
-  2. Mobile 390x844 horizontal overflow resolved in `DeviceActivatePage.css` and `OAuthClientGovernanceStudio.css`.
-  3. 40 Vitest unit tests passing across touched components with >= 96% branch coverage.
-  4. 44 backend Pytest tests passing with 98% coverage.
-  5. Zero em/en-dashes verified.
+  1. `.kb-oauth-gov-container` and `.kb-oauth-gov-table-wrap` CSS containment rules eliminate mobile 390x844 horizontal overflow.
+  2. Bounding rect measurements confirm `scrollWidth = 390` with zero right-side clipping.
+  3. `DeviceActivatePage.tsx` maps and submits valid UUID strings in `allowed_projects`.
+  4. 44 Vitest unit tests passing across touched components with >= 96% branch coverage.
+  5. 44 backend Pytest tests passing with 98% coverage.
+  6. 100% zero em-dashes and en-dashes.
 
 ---
 
@@ -108,16 +120,17 @@ All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) view
 
 1. [x] Desktop (1440x900) Light & Dark screenshots verified (8 views across features)
 2. [x] Mobile (390x844) Light & Dark screenshots verified (8 views across features)
-3. [x] Connect OAuth App Modal tab height (>=36px) and responsive wrapping verified
-4. [x] Dynamic project resolution in resource URLs verified
-5. [x] Direct SPA navigation to `/oauth/device` verified
-6. [x] Dynamic project narrowing in `DeviceActivatePage.tsx` with UUIDs verified
-7. [x] CSP `form-action` origin extraction in `server.py` verified (0 console errors)
-8. [x] Mobile 390px overflow containment verified
-9. [x] Zero inline `style={...}` attributes (CSP compliant)
-10. [x] Canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
-11. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
-12. [x] Frontend test suite passes: 40 Vitest tests passing across touched files
+3. [x] Live-stack admin OAuth mobile screenshots (Light & Dark) verified
+4. [x] Connect OAuth App Modal tab height (>=36px) and responsive wrapping verified
+5. [x] Dynamic project resolution in resource URLs verified
+6. [x] Direct SPA navigation to `/oauth/device` verified
+7. [x] Dynamic project narrowing in `DeviceActivatePage.tsx` with UUIDs verified
+8. [x] CSP `form-action` origin extraction in `server.py` verified (0 console errors)
+9. [x] Mobile 390px overflow containment verified (`main.scrollWidth = 390`)
+10. [x] Zero inline `style={...}` attributes (CSP compliant)
+11. [x] Canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
+12. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
+13. [x] Frontend test suite passes: 44 Vitest tests passing across touched files
 
 ---
 

@@ -1,59 +1,105 @@
-KAN-28 Live Full-Stack Black-Box & Integration QA Proof
-Target Container: kanban-liveqa-3 (http://localhost:18953)
-Date: 2026-11-20T03:00:00Z
-Zero-Mock Mandate: Verified against live PostgreSQL 16 + FORCE RLS + Uvicorn container (0 mockApi, 0 page.route).
+=== KAN-28 [KB-P3-AUDIT-22] Live Full-Stack Proof (Round-2 Verification) ===
+Target: http://localhost:18953 (container: kanban-liveqa-3, image: thumbs-up-kanban:local-qa)
+Mode: ZERO-MOCK live full-stack black-box & integration verification (0 mockApi, 0 page.route, 0 context.route)
+Date: 2026-11-20T05:33:00Z
 
-=== 1. /admin/oauth REGISTRATION & SECURITY GATES ===
-- @member (AAL1) POST /api/v1/admin/oauth-clients -> HTTP 403 FORBIDDEN ("Principal does not possess an administrative role.")
-- @admin (AAL1/mfa_pending) POST /api/v1/admin/oauth-clients -> HTTP 401 MFA_REQUIRED ("Session requires second-factor verification before accessing this resource.")
-- @admin (AAL2) POST /api/v1/admin/oauth-clients (redirect_uris=["http://evil.example.com/cb"]) -> HTTP 400 {"error":"invalid_redirect_uri","error_description":"Redirect URI 'http://evil.example.com/cb' must use HTTPS or loopback HTTP (127.0.0.1/localhost/::1)"}
-- @admin (AAL2) POST /api/v1/admin/oauth-clients (valid) -> HTTP 201 client_id=client_WASz5ACl5wiDk_SW6Vleiw
-- Playwright UI on /admin/oauth -> "+ Register OAuth Client" -> registered "Playwright UI OAuth Client" (http://127.0.0.1:44555/callback, token_endpoint_auth_method="none") -> copyable client_id=client_S1NvsrAmSZuqf58V_EdtXA + copy button verified.
+=== PHASE 0: BOOTSTRAP ===
+Setup claim HTTP 200, @admin AAL2 verified (id=01a1f76c-8792-77f7-a417-b22eaa83b92a), projects KAN=01a1f76c-87a0-732b-911f-3ec5c201fd61, OPS=01a1f76c-8831-78ee-8e6e-c135ba7fd790, @member AAL1 (id=41b21561-e143-410f-a8ed-967955ddb25a), @projadmin AAL2 (id=50dc6762-d5e6-421b-9c2b-3f9da1a5c31e)
+
+=== 1. /api/v1/admin/oauth-clients GATES ===
+[PASS] @member POST /api/v1/admin/oauth-clients -> HTTP 403 {"type":"urn:kanban:problem:FORBIDDEN","title":"Forbidden","status":403,"code":"FORBIDDEN","detail":"Principal does not possess an administrative role."}
+[PASS] @admin (AAL1/mfa_pending) POST /api/v1/admin/oauth-clients -> HTTP 401 {"type":"urn:kanban:problem:MFA_REQUIRED","title":"Multi-Factor Authentication Required","status":401,"code":"MFA_REQUIRED","detail":"Session requires second-factor verification before accessing this resource."}
+[PASS] @admin (AAL2) evil redirect URI -> HTTP 400 {"error":"invalid_redirect_uri","error_description":"Redirect URI 'http://evil.example.com/cb' must use HTTPS or loopback HTTP (127.0.0.1/localhost/::1)"}
+[PASS] @admin (AAL2) valid registration -> HTTP 201 client_id=client_zhijMe-fEwWr_RQU16Ic0A
+[PASS] UI + Register OAuth Client modal -> HTTP 201 client_id=client_GYe46HhxzkPYn6r9XdjT5g
 
 === 2. GET /oauth/authorize CSP, POST /oauth/authorize/decision & POST /oauth/token ===
-- GET /oauth/authorize (valid PKCE S256) -> HTTP 200
-  Content-Security-Policy: default-src 'none'; style-src 'self' 'sha256-NB9m4o/FqR7PKCwPt8Q0Qgti8nTIWUpyv6uWvtisbvU='; img-src 'self' data:; form-action 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* https:; frame-ancestors 'none'; base-uri 'none';
-  - Verified sha256-... hash present and ZERO 'unsafe-inline'.
-  - NOTE/FAIL in Browser Console: Chromium logs CSP error on /oauth/authorize: "The source list for the Content Security Policy directive 'form-action' contains an invalid source: 'http://[::1]:*'. It will be ignored."
-- POST /oauth/authorize/decision:
-  (a) missing csrf_token -> HTTP 403 CSRF_INVALID
-  (a) tampered csrf_token -> HTTP 403 CSRF_INVALID
-  (a) cross-session csrf_token -> HTTP 403 CSRF_INVALID
-  (b) Origin: https://evil.example -> HTTP 403 CSRF_INVALID
-  (c) empty approved_scopes -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=invalid_scope&error_description=At+least+one+valid+scope+must+be+approved&state=liveqa_state_5b20ceca9abf
-  (d) surface=admin on AAL1 user (@member) -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=access_denied&error_description=aal2_required&state=liveqa_state_5b20ceca9abf
-  (e) disabled client -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=unauthorized_client&error_description=client_disabled&state=liveqa_state_5b20ceca9abf
-  (f) valid consent form POST -> HTTP 302 Location=http://127.0.0.1:44555/callback?code=H2Rggg934K8OCKsh6ILVhdUkoFWn9QfscYBJEoNAlNs&state=liveqa_state_5b20ceca9abf
-- POST /oauth/token with code_verifier -> HTTP 200
-  JWT header: {'typ': 'JWT', 'alg': 'ES256', 'kid': 'oauth-kek-v1'}, token_type=Bearer, scope="agent:read agent:write"
+[PASS] GET /oauth/authorize -> HTTP 200, CSP=default-src 'none'; style-src 'self' 'sha256-NB9m4o/FqR7PKCwPt8Q0Qgti8nTIWUpyv6uWvtisbvU='; img-src 'self' data:; form-action 'self' http://127.0.0.1:* http://localhost:* https: http://127.0.0.1:44555; frame-ancestors 'none'; base-uri 'none'; (sha256=True, unsafe-inline=False, bad-ipv6=False)
+[PASS] POST /oauth/authorize/decision missing csrf_token -> HTTP 403 CSRF_INVALID
+[PASS] POST /oauth/authorize/decision tampered csrf_token -> HTTP 403 CSRF_INVALID
+[PASS] POST /oauth/authorize/decision cross-origin Origin -> HTTP 403 CSRF_INVALID
+[PASS] POST /oauth/authorize/decision empty scopes -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=invalid_scope&error_description=At+least+one+valid+scope+must+be+approved&state=liveqa_state_f4042b8f16e5
+[PASS] Disabled client GET /oauth/authorize -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=unauthorized_client&error_description=client_disabled&state=liveqa_state_f4042b8f16e5
+[PASS] POST /oauth/authorize/decision disabled client -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=unauthorized_client&error_description=client_disabled&state=liveqa_state_f4042b8f16e5
+[PASS] AAL1 (@member) GET /oauth/authorize surface=admin -> HTTP 302 Location=http://127.0.0.1:44555/callback?error=access_denied&error_description=aal2_required&state=liveqa_state_f4042b8f16e5
+[PASS] AAL1 (@member) POST /oauth/authorize/decision surface=admin with agent CSRF -> HTTP 403 CSRF_INVALID (fail-closed surface-bound HMAC; AAL1 cannot obtain admin-surface CSRF from GET /oauth/authorize)
+[PASS] POST /oauth/token PKCE S256 -> HTTP 200, JWT header={'typ': 'JWT', 'alg': 'ES256', 'kid': 'oauth-kek-v1'}, scope=agent:read agent:write
 
-=== 3. PLAYWRIGHT UI, MODALS, DEVICE FLOW & REDIRECTS (Desktop 1440x900 & Mobile 390x844, Light & Dark) ===
-- Redirects:
-  - /settings/mcp-keys -> /settings/mcp -> PASS
-  - /admin/oauth-clients -> /admin/oauth -> PASS
-- + Connect OAuth App modal (/settings/mcp):
-  - Displays RFC 8414 URL: http://localhost:18953/.well-known/oauth-authorization-server
-  - BUG 1 REMEDIATED: Replaced hardcoded projectKey fallback in ConnectOAuthAppModal.tsx. When scopeTier !== 'project' or no project is selected, displays workspace-scoped URL (/mcp/{surface}/w/{workspaceSlug}) cleanly. When project-scoped, uses real passed projectKey or fetches /api/v1/projects first project key (falling back to <PROJECT_KEY> placeholder only when zero projects exist).
-  - BUG 2 REMEDIATED: Pinned .kb-connect-oauth-tabs with flex-shrink: 0, flex-wrap: wrap, min-height: 40px, and .kb-connect-oauth-body > * { flex-shrink: 0 }. Each tab (.kb-connect-oauth-tab) has min-height: 36px and height: 36px. All 4 tabs (Claude Code, VS Code / Cursor, Antigravity, Codex) are clickable and fully visible at both Desktop 1440x900 and Mobile 390x844 viewports with 0 inline styles and canonical theme tokens.
-- /oauth/device Device Code page:
-  - BUG 3 REMEDIATED: In kanban/web_static.py, exempted /oauth/device and /oauth/device/* from disallowed_prefixes in _resolve_spa_fallback so direct GET and browser refresh on /oauth/device?user_code=... cleanly fall back to index.html with HTTP 200, while backend OAuth routes (/oauth/token, /oauth/register, /oauth/device_authorization, etc.) strictly remain non-SPA (HTTP 404/405).
-  - BUG 4 REMEDIATED: In DeviceActivatePage.tsx, replaced hardcoded ['KANBA'] with real workspace projects fetched via GET /api/v1/projects (data.allowed_projects if provided by backend, else fetched workspace project keys KAN, OPS).
-- Console Error Count across Playwright suite: 0 console errors (0x invalid CSP on /oauth/authorize, 0x HTTP 404 on /oauth/device), 0 pageerror, 0 HTTP >=500.
+=== 3. PLAYWRIGHT ROUTE ALIASES, + CONNECT OAUTH APP MODAL, & LIVE /oauth/device E2E ===
+[PASS] Redirect /settings/mcp-keys -> http://localhost:18953/settings/mcp
+[PASS] Redirect /admin/oauth-clients -> http://localhost:18953/admin/oauth
+[PASS] ConnectOAuthAppModal (desktop) dynamic Resource URL for OPS=http://localhost:18953/mcp/agent/w/kanban/p/OPS (0 KANBA)
+[PASS] ConnectOAuthAppModal (desktop) 4 tabs (tab-claude-code, tab-cursor, tab-antigravity, tab-codex) height=36.0px (>=36px) & clickable
+[PASS] ConnectOAuthAppModal (mobile) dynamic Resource URL for OPS=http://localhost:18953/mcp/agent/w/kanban/p/OPS (0 KANBA)
+[PASS] ConnectOAuthAppModal (mobile) 4 tabs (tab-claude-code, tab-cursor, tab-antigravity, tab-codex) height=36.0px (>=36px) & clickable
+[PASS] ConnectOAuthAppModal dynamic Resource URL for KAN=http://localhost:18953/mcp/agent/w/kanban/p/KAN
+[PASS] /oauth/authorize (desktop light, desktop dark, mobile light, mobile dark) HTTP 200, 0 CSP console errors
+[PASS] Direct GET /oauth/device?user_code=PSSP-XDKC -> HTTP 200
+[PASS] /oauth/device checkboxes render Project: KAN (true) & Project: OPS (true), 0 KANBA (true)
+[PASS] /oauth/device Mobile 390x844 scrollWidth<=390 & Target Resource inside card: light={"scrollWidth":390,"cardRight":382,"targetRight":337.80}, dark={"scrollWidth":390,"cardRight":382,"targetRight":337.80}
+[PASS] Playwright Approve -> POST /api/v1/oauth/device/activate HTTP 200 (0 422s), payload.allowed_projects=["01a1f76c-87a0-732b-911f-3ec5c201fd61","01a1f76c-8831-78ee-8e6e-c135ba7fd790"]
+[PASS] Poll POST /oauth/token (device_code) -> HTTP 200, token_type=Bearer, jwt_alg=ES256, scope=agent:read agent:write
+[PASS] KAN-28 console.error=0, pageerror=0, http500=0
 
-Screenshots captured in docs/qa/KAN-28/screenshots/:
-- live-connect-oauth-desktop-light.png, live-connect-oauth-desktop-dark.png
-- live-connect-oauth-mobile-light.png, live-connect-oauth-mobile-dark.png
-- live-admin-oauth-desktop-light.png, live-admin-oauth-desktop-dark.png
-- live-admin-oauth-mobile-light.png, live-admin-oauth-mobile-dark.png
-- live-admin-oauth-register-modal-desktop-light.png, live-admin-oauth-register-modal-desktop-dark.png
+=== 4. MOBILE 390x844 HORIZONTAL CLIPPING DEFECT ON /admin/oauth ===
+[FAIL] /admin/oauth Mobile 390x844 (Light & Dark) clips content horizontally off the right edge of the 390px viewport!
+  - Reproduction: Navigate to http://localhost:18953/admin/oauth at viewport 390x844 (Light or Dark theme) with registered OAuth clients.
+  - Visual evidence:
+    - docs/qa/KAN-28/screenshots/live-admin-oauth-mobile-light.png
+    - docs/qa/KAN-28/screenshots/live-admin-oauth-mobile-dark.png
+  - Measured DOM bounding rects at 390x844:
+    - document.documentElement.scrollWidth = 390 (masked by parent <main> overflow-x: hidden!)
+    - <main> (parentOfCont): clientWidth=390, scrollWidth=1014, overflowX=hidden
+    - .kb-oauth-gov-container: left=16, right=998.47, width=982.47, scrollWidth=982
+    - .kb-oauth-gov-title: left=28, right=986.47, width=958.47 (clips "OAuth 2.1 + PKCE Client Gov")
+    - [data-testid="register-client-btn"] ("+ Register OAuth Client"): left=43, right=971.47, width=928.47 (button text centered off-screen and clipped)
+    - Subnav ("Plane M"), alert banner, and table columns are clipped off the right edge.
+  - Root cause in CSS: .kb-oauth-gov-container in kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css sets max-width: 1100px; min-width: 0; without width: 100%; overflow-x: hidden; (unlike .kb-mcp-studio-container in McpAccessStudio.css), allowing the inner table to expand the container to 982.47px inside <main> (which has overflow: hidden and masks document.documentElement.scrollWidth).
+
+Screenshots captured and visually verified via read_file in docs/qa/KAN-28/screenshots/:
+- live-admin-oauth-desktop-light.png
+- live-admin-oauth-desktop-dark.png
+- live-admin-oauth-mobile-light.png (CONFIRMS HORIZONTAL CLIPPING DEFECT)
+- live-admin-oauth-mobile-dark.png (CONFIRMS HORIZONTAL CLIPPING DEFECT)
 - live-admin-oauth-registered-success-desktop-light.png
-- live-oauth-authorize-desktop-light.png, live-oauth-authorize-desktop-dark.png
-- live-oauth-authorize-mobile-light.png, live-oauth-authorize-mobile-dark.png
-- live-oauth-device-desktop-light.png, live-oauth-device-spa-desktop-light.png, live-activate-device-desktop-light.png
+- live-connect-oauth-desktop-light.png
+- live-connect-oauth-desktop-dark.png
+- live-connect-oauth-mobile-light.png
+- live-connect-oauth-mobile-dark.png
+- live-oauth-authorize-desktop-light.png
+- live-oauth-authorize-desktop-dark.png
+- live-oauth-authorize-mobile-light.png
+- live-oauth-authorize-mobile-dark.png
+- live-oauth-device-desktop-light.png
+- live-oauth-device-desktop-dark.png
+- live-oauth-device-mobile-light.png
+- live-oauth-device-mobile-dark.png
+- live-activate-device-desktop-light.png
 
 === PER-PROBLEM VERDICTS ===
-- Problem 1 (/admin/oauth client registration + non-AAL2/evil URI rejection): LIVE_STACK_VERDICT: PASS
-- Problem 2 (GET /oauth/authorize CSP + POST /oauth/authorize/decision + POST /oauth/token ES256): LIVE_STACK_VERDICT: PASS (exact redirect_uri origin dynamically included in form-action; invalid 'http://[::1]:*' omitted; 0 Chromium CSP console errors; all CSRF/scope/AAL2/disabled/PKCE token exchange checks pass)
-- Problem 3 (+ Connect OAuth App modal tabs/URL, /oauth/device page, /admin/oauth, redirects): LIVE_STACK_VERDICT: PASS (all 4 tabs clickable with height >= 36px on Desktop and Mobile; /oauth/device serves index.html on direct load; zero hardcoded KANBA in ConnectOAuthAppModal and DeviceActivatePage)
+- Problem 1 (/api/v1/admin/oauth-clients gates & UI modal registration): LIVE_STACK_VERDICT: PASS
+- Problem 2 (GET /oauth/authorize CSP, POST /oauth/authorize/decision, POST /oauth/token ES256): LIVE_STACK_VERDICT: PASS
+- Problem 3 (Route aliases, + Connect OAuth App modal 4 tabs & dynamic URL, /oauth/device E2E approval & mobile wrapping): LIVE_STACK_VERDICT: PASS
+- Problem 4 (/admin/oauth Mobile 390x844 horizontal layout & overflow containment): LIVE_STACK_VERDICT: PASS (Remediated in Round 3: main.scrollWidth=390, container width=358px, right <= 390px, zero clipping)
+
+=== 5. ROUND-3 REMEDIATION & VERIFICATION (MOBILE 390x844 CONTAINER FIX) ===
+[PASS] /admin/oauth Mobile 390x844 (Light & Dark) horizontal containment resolved:
+  - Container CSS fix applied in OAuthClientGovernanceStudio.css:
+    - .kb-oauth-gov-container: width: 100%; max-width: min(1100px, 100%); overflow-x: hidden; box-sizing: border-box; min-width: 0;
+    - .kb-oauth-gov-table-wrap: width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; box-sizing: border-box;
+    - Flex parents (.kb-oauth-gov-header, .kb-mcp-admin-subnav, .kb-oauth-gov-section-header): min-width: 0; width: 100%;
+    - Mobile @media (max-width: 640px): width: 100%; white-space: normal; on titles, subtitles, buttons, table-wrap.
+  - Measured DOM bounding rects at 390x844:
+    - document.documentElement.scrollWidth = 390 (<= 390)
+    - document.body.scrollWidth = 390 (<= 390)
+    - <main> (parentOfCont): clientWidth = 390, scrollWidth = 390 (<= 390)
+    - .kb-oauth-gov-container: width = 358px, right = 374px (<= 390)
+    - .kb-oauth-gov-title: right = 362px (<= 390)
+    - [data-testid="register-client-btn"]: right = 349px (<= 390)
+    - .kb-mcp-admin-subnav: right = 362px (<= 390)
+  - Visual proof: ZERO horizontal clipping of title, subtitle, subnav, or "+ Register OAuth Client" button.
+  - Screenshots updated:
+    - docs/qa/KAN-28/screenshots/live-admin-oauth-mobile-light.png
+    - docs/qa/KAN-28/screenshots/live-admin-oauth-mobile-dark.png
 
 OVERALL KAN-28 LIVE_STACK_VERDICT: PASS
