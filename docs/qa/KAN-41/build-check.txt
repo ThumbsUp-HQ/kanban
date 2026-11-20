@@ -1,0 +1,48 @@
+=== 1. RUFF CHECK ===
+All checks passed!
+
+=== 2. MYPY MCP ===
+Success: no issues found in 113 source files
+
+=== 3. LINT IMPORTS ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 964 files, 3396 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== 4. CHECK NO DASHES ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan41-3ac81419/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== 5. UNIT TESTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan41-3ac81419
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 43 items
+
+mcp/tests/agent/test_create_ticket.py .............                      [ 30%]
+mcp/tests/test_protocol.py ............                                  [ 58%]
+mcp/tests/test_lod_help.py ................                              [ 95%]
+mcp/tests/test_schema_budget.py ..                                       [100%]
+
+============================== 43 passed in 3.99s ==============================

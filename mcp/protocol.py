@@ -535,6 +535,13 @@ class McpProtocolHandler:
                 "version": "0.0.0",
             },
         }
+        if self.surface == Surface.AGENT:
+            result["instructions"] = (
+                "Use human keys (e.g. KAN, KAN-142, @handle). Pass identifier='help' "
+                "(or project='help' on create_ticket) for live project options. "
+                "On create_ticket, set 'project' and optional 'parent' on the root object only; "
+                "omit 'project' and 'parent' inside children[]."
+            )
         return JSONResponse(
             {"jsonrpc": "2.0", "id": req_id, "result": result},
             headers={"Mcp-Session-Id": session.session_id},

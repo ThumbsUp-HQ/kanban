@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -598,3 +599,26 @@ async def test_build_help_workflow_tools() -> None:
     assert cw_help["params"]["identifier"] == "KAN-142 | uuid"
     assert cw_help["params"]["summary_markdown"] == "str"
     assert cw_help["params"]["verification_proof"] == "object"
+
+
+@pytest.mark.asyncio
+async def test_build_help_edge_cases() -> None:
+    """Verify build_help branches for client=None, missing params, and metadata fallbacks."""
+    # 1. Project specified with client=None
+    h1 = await build_help("create_ticket", project="CUSTOM")
+    assert h1["project"] == "CUSTOM"
+
+    # 2. Tool without default params
+    h2 = await build_help("nonexistent_tool_without_defaults")
+    assert "params" not in h2
+
+    # 3. _resolve_live_metadata with resolve returning dict without 'key' and non-dict fetch
+    mock_client = MagicMock()
+    mock_client.request = AsyncMock(
+        side_effect=[
+            {"no_key": 1},
+            "not-a-dict",
+        ]
+    )
+    h3 = await build_help("create_ticket", project="PRJ", client=mock_client)
+    assert h3["project"] == "PRJ"

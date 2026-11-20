@@ -1,0 +1,34 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan41-3ac81419
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 43 items
+
+mcp/tests/agent/test_create_ticket.py .............                      [ 30%]
+mcp/tests/test_protocol.py ............                                  [ 58%]
+mcp/tests/test_lod_help.py ................                              [ 95%]
+mcp/tests/test_schema_budget.py ..                                       [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+mcp/help.py                                  48      0     18      0   100%
+mcp/protocol.py                             497     12    252     19    96%   102->101, 342, 396-397, 616->641, 719-720, 839->964, 851, 966->1043, 1000->1003, 1189, 1193->1192, 1221->1217, 1224, 1262->exit, 1279->1286, 1285, 1288, 1326, 1335, 1342->1344, 1356->1263
+mcp/surfaces/agent/__init__.py               24      0      0      0   100%
+mcp/surfaces/agent/add_comment.py            86     74     36      0    10%   51-95, 100-182
+mcp/surfaces/agent/begin_work.py             71     59     28      0    12%   44-72, 81-156
+mcp/surfaces/agent/complete_work.py          91     77     36      0    11%   58-112, 121-202
+mcp/surfaces/agent/create_ticket.py         121      2     62      2    98%   310->317, 340-341
+mcp/surfaces/agent/link_objects.py          124    110     68      0     7%   57-105, 110-117, 122-257
+mcp/surfaces/agent/proof.py                   5      0      0      0   100%
+mcp/surfaces/agent/read_ticket.py           243    216    124      0     7%   62-92, 97-104, 109-121, 126-131, 136-142, 146-155, 163-171, 176-212, 217-222, 227-241, 248-266, 271-282, 287-303, 308-326, 331-465
+mcp/surfaces/agent/search_tickets.py        166    114     80     10    27%   116-117, 129-130, 134-139, 143-148, 155-156, 160-161, 165-166, 175-184, 188-189, 204-213, 218-225, 234-272, 281-311, 327-368
+mcp/surfaces/agent/transition_ticket.py      94     80     38      0    11%   56-103, 112-197
+mcp/surfaces/agent/update_ticket.py         251    235    160      0     4%   125-132, 137-153, 158-550
+-------------------------------------------------------------------------------------
+TOTAL                                      1821    979    902     31    43%
+============================== 43 passed in 9.17s ==============================

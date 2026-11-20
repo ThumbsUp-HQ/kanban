@@ -513,3 +513,195 @@ async def test_create_ticket_handler_validation_branches() -> None:
         assert exc3.value.code == McpErrorCode.UPSTREAM_ERROR
     finally:
         reset_current_mcp_context(token)
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_schema_defs_and_descriptions() -> None:
+    """Verify $defs.child schema structure, root descriptions, and ToolSpec."""
+    from mcp.surfaces.agent import create_agent_registry
+    from mcp.surfaces.agent.create_ticket import (
+        _ALLOWED_CHILD_KEYS,
+        _ALLOWED_ROOT_KEYS,
+        CREATE_TICKET_SCHEMA,
+    )
+
+    defs = CREATE_TICKET_SCHEMA.get("$defs", {})
+    assert "child" in defs
+    child_def = defs["child"]
+    assert child_def["type"] == "object"
+    assert child_def["required"] == ["summary"]
+    assert child_def["additionalProperties"] is False
+
+    expected_child_keys = {
+        "summary",
+        "description_markdown",
+        "state",
+        "priority",
+        "assignees",
+        "labels",
+        "cycle",
+        "modules",
+        "start_date",
+        "due_date",
+        "children",
+    }
+    assert set(child_def["properties"].keys()) == expected_child_keys
+    assert "project" not in child_def["properties"]
+    assert "parent" not in child_def["properties"]
+    assert "description" not in child_def["properties"]
+
+    assert frozenset(expected_child_keys) == _ALLOWED_CHILD_KEYS
+    assert "project" in _ALLOWED_ROOT_KEYS
+    assert "parent" in _ALLOWED_ROOT_KEYS
+
+    child_children = child_def["properties"]["children"]
+    assert child_children["type"] == "array"
+    assert child_children["maxItems"] == 49
+    assert child_children["items"] == {"$ref": "#/$defs/child"}
+
+    props = CREATE_TICKET_SCHEMA["properties"]
+    assert props["project"]["description"] == "Project ref (root only; inherited by children)"
+    assert props["parent"]["description"] == "Parent issue ref (root only; omit in children)"
+    assert props["children"]["description"] == (
+        "Child sub-issues (inherit root project and enclosing parent; omit project and parent)"
+    )
+
+    registry = create_agent_registry()
+    spec = registry.get("create_ticket")
+    assert spec is not None
+    assert spec.description == (
+        "Create ticket or atomic child tree "
+        "(max 50 nodes, depth <=6; omit project and parent inside children)."
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_child_inheritance_hints(agent_test_env: AgentTestEnv) -> None:
+    """Verify child project, parent, and unknown keys produce actionable inheritance hints."""
+    env = agent_test_env
+
+    # 1. Child with project -> specific inheritance hint
+    res_proj = await _call_create_ticket(
+        env,
+        {
+            "project": "KAN",
+            "summary": "Root Ticket",
+            "children": [{"summary": "Child Issue", "project": "KAN"}],
+        },
+        subject_token=env.token_adam,
+    )
+    assert res_proj["isError"] is True
+    err_proj = yaml.safe_load(res_proj["content"][0]["text"])["error"]
+    assert err_proj["code"] == "VALIDATION_FAILED"
+    assert err_proj["message"] == "Parameter 'project' is only allowed on the root ticket"
+    assert err_proj["hint"] == (
+        "Omit 'project' inside children[]; child issues automatically inherit the root project."
+    )
+    assert "kanban-cli-agent create_ticket" in str(err_proj.get("cli_example", ""))
+
+    # 2. Child with parent -> specific inheritance hint
+    res_parent = await _call_create_ticket(
+        env,
+        {
+            "project": "KAN",
+            "summary": "Root Ticket",
+            "children": [{"summary": "Child Issue", "parent": "KAN-142"}],
+        },
+        subject_token=env.token_adam,
+    )
+    assert res_parent["isError"] is True
+    err_parent = yaml.safe_load(res_parent["content"][0]["text"])["error"]
+    assert err_parent["code"] == "VALIDATION_FAILED"
+    assert err_parent["message"] == "Parameter 'parent' is only allowed on the root ticket"
+    assert err_parent["hint"] == (
+        "Omit 'parent' inside children[]; each child's parent is its enclosing node in children[]."
+    )
+    assert "kanban-cli-agent create_ticket" in str(err_parent.get("cli_example", ""))
+
+    # 3. Child with unknown key -> allowed child parameters hint
+    res_unknown = await _call_create_ticket(
+        env,
+        {
+            "project": "KAN",
+            "summary": "Root Ticket",
+            "children": [{"summary": "Child Issue", "disallowed_field": "val"}],
+        },
+        subject_token=env.token_adam,
+    )
+    assert res_unknown["isError"] is True
+    err_unknown = yaml.safe_load(res_unknown["content"][0]["text"])["error"]
+    assert err_unknown["code"] == "VALIDATION_FAILED"
+    assert "disallowed_field" in err_unknown["message"]
+    assert "Allowed parameters:" in err_unknown["hint"]
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_utf16_lone_surrogates() -> None:
+    """Verify UTF-16 lone surrogates in summary and description are rejected before encode."""
+    from mcp.errors import KbMcpError, McpErrorCode
+    from mcp.surfaces.agent.create_ticket import _validate_node_scalars
+
+    # 1. Lone surrogate in summary
+    with pytest.raises(KbMcpError) as exc_sum:
+        _validate_node_scalars({"summary": "Invalid \ud800 summary"})
+    assert exc_sum.value.code == McpErrorCode.VALIDATION_FAILED
+    assert exc_sum.value.message == "INVALID_UTF8_SURROGATE"
+
+    # 2. Lone surrogate in description
+    with pytest.raises(KbMcpError) as exc_desc:
+        _validate_node_scalars({
+            "summary": "Valid summary",
+            "description_markdown": "Invalid \udfff description",
+        })
+    assert exc_desc.value.code == McpErrorCode.VALIDATION_FAILED
+    assert exc_desc.value.message == "INVALID_UTF8_SURROGATE"
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_deep_nesting_fails_closed() -> None:
+    """Verify deep payloads fail closed with VALIDATION_FAILED instead of RecursionError."""
+    from mcp.errors import KbMcpError, McpErrorCode
+    from mcp.surfaces.agent.create_ticket import _validate_tree_node
+
+    # Construct 100-level deep nesting
+    curr: dict[str, Any] = {"summary": "Leaf"}
+    for i in range(99):
+        curr = {"summary": f"Level {i}", "children": [curr]}
+    tree = {"project": "KAN", **curr}
+
+    with pytest.raises(KbMcpError) as exc:
+        _validate_tree_node(tree, is_root=True)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+    assert "maximum hierarchy depth of 6" in exc.value.message
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_help_params_and_project_arg() -> None:
+    """Verify create_ticket help defaults and project argument forwarding to build_help."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
+    from mcp.help import _TOOL_PARAM_DEFAULTS
+    from mcp.registry import Surface
+    from mcp.surfaces.agent.create_ticket import create_ticket
+
+    defaults = _TOOL_PARAM_DEFAULTS["create_ticket"]
+    assert defaults["parent"] == "KAN-142 | uuid (root only)"
+    assert defaults["children"] == (
+        "array of child objects "
+        "(require summary; omit project and parent; max 49/node, <=50 total, depth <=6)"
+    )
+
+    mock_client = MagicMock()
+    mock_client.request = AsyncMock(return_value={"key": "KAN", "states": ["Todo", "Done"]})
+    ctx = McpRequestContext(
+        surface=Surface.AGENT, client=mock_client, subject_token="token", session_id="session"
+    )
+    token = set_current_mcp_context(ctx)
+    try:
+        help_res = await create_ticket({"project": "KAN", "summary": "help"})
+        assert help_res["tool"] == "create_ticket"
+        assert help_res["project"] == "KAN"
+        assert "params" in help_res
+    finally:
+        reset_current_mcp_context(token)
