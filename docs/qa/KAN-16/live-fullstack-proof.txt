@@ -1,0 +1,79 @@
+================================================================================
+KAN-16 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
+Container: kanban-liveqa-3 (standalone_embedded_pg, PostgreSQL 16 + FORCE RLS)
+================================================================================
+
+1. PRE-BOOTSTRAP UNAUTHENTICATED PUBLIC ACCESS & ZERO-EGRESS CHECK
+--------------------------------------------------------------------------------
+Script: kan16_prebootstrap.mjs (executed BEFORE /setup claim, unauthenticated browser context)
+- Target 1: GET http://127.0.0.1:18963/docs
+  * Load latency: 1023 ms
+  * Final URL: http://127.0.0.1:18963/docs (0 redirects to /login or /setup)
+  * Bundled wiki chapters in left category rail ([data-testid="docs-categories-sidebar"] a.kb-docs-nav-link): 27
+  * Rendered MermaidBlockView blob SVGs on Home chapter: 1 (2 Mermaid blocks detected)
+  * Desktop 1440x900 horizontal overflow: false
+- Target 2: GET http://127.0.0.1:18963/help/Guide-Custom-Fields
+  * Load latency: 605 ms
+  * Final URL: http://127.0.0.1:18963/help/Guide-Custom-Fields (0 redirects to /login or /setup)
+  * Heading H1: "[Guide] How to Use Custom Fields"
+- Instant Client-Side Search Listbox:
+  * Query: "Mermaid" -> [data-testid="docs-search-results"] [role="option"] count: 8
+  * First snippet: "...n interactive test execution modal: ```mermaid sequenceDiagram     autonumber     actor Admin as Project A..."
+- Mermaid & Right TOC Rail & Prev/Next Pagination:
+  * Chapter: /docs/system-topology-and-multi-container-architecture
+  * Rendered MermaidBlockView blob SVGs: 2, fallbacks: 0
+  * Right TOC rail links ([data-testid="docs-toc-rail"] a.kb-docs-toc-link): 9
+  * TOC #anchor click URL: http://127.0.0.1:18963/docs/system-topology-and-multi-container-architecture#monorepo-code-organization
+  * Next Chapter URL: http://127.0.0.1:18963/docs/three-surface-mcp-server-architecture
+  * Prev Chapter URL: http://127.0.0.1:18963/docs/system-topology-and-multi-container-architecture
+- Responsive Viewports:
+  * Desktop 1440x900 Light & Dark: horizontal overflow = false
+  * Tablet 768x1024 Light: horizontal overflow = false
+  * Mobile 390x844 Light: horizontal overflow = false
+- Telemetry:
+  * External egress requests: 0
+  * Console errors: 0
+  * Page errors: 0
+  * HTTP 5xx responses: 0
+
+2. AUTHENTICATED CONTEXTUAL HelpDrawer, FieldHelpHint (?), AND StudioDocLink
+--------------------------------------------------------------------------------
+Script: kan16_auth_ui.mjs (authenticated @admin AAL2 session against live http://127.0.0.1:18963)
+- Studio 1: /projects/KAN/settings (load latency: 1111 ms)
+  * Entered unsaved draft "UNSAVED-DRAFT-42" into [data-testid="project-name-input"].
+  * Clicked (?) [data-testid="proj-modules-help"] -> popover opened with [data-testid="proj-modules-help-doc-link"] ("More info ->").
+  * Clicked "More info ->":
+    - HelpDrawer [data-testid="help-drawer"] opened at 480px width on Desktop (1440x900).
+    - Background URL remained http://127.0.0.1:18963/projects/KAN/settings (no navigation).
+    - Input [data-testid="project-name-input"] retained "UNSAVED-DRAFT-42" 100% intact.
+  * Verified Dark theme on HelpDrawer + blurred backdrop.
+  * Pressed Escape -> HelpDrawer count = 0, input retained "UNSAVED-DRAFT-42".
+  * Clicked <StudioDocLink> [data-testid="project-settings-doc-link"]:
+    - HelpDrawer opened chapter "Ticket Screen, Peek Drawer, and Work Item Architecture".
+    - Input retained "UNSAVED-DRAFT-42".
+  * Mobile 390x844 HelpDrawer check:
+    - HelpDrawer width = 390px (100vw), horizontal overflow = false.
+- Studio 2: /admin/ai
+  * Clicked <StudioDocLink> [data-testid="ai-studio-doc-link"]:
+    - HelpDrawer opened chapter "Multi-Provider AI Engine, Execution Harnesses, and Runners".
+- Telemetry:
+  * External egress requests: 0
+  * Console errors: 0
+  * Page errors: 0
+  * HTTP 5xx responses: 0
+
+3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
+--------------------------------------------------------------------------------
+- docs/qa/KAN-16/screenshots/live-docs-desktop-light.png
+- docs/qa/KAN-16/screenshots/live-docs-desktop-dark.png
+- docs/qa/KAN-16/screenshots/live-docs-tablet-light.png
+- docs/qa/KAN-16/screenshots/live-docs-mobile-light.png
+- docs/qa/KAN-16/screenshots/live-help-guide-custom-fields-light.png
+- docs/qa/KAN-16/screenshots/live-docs-search-listbox-light.png
+- docs/qa/KAN-16/screenshots/live-project-settings-field-help-popover-light.png
+- docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-light.png
+- docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-dark.png
+- docs/qa/KAN-16/screenshots/live-help-drawer-mobile-light.png
+- docs/qa/KAN-16/screenshots/live-admin-ai-help-drawer-light.png
+
+LIVE_STACK_VERDICT: PASS
