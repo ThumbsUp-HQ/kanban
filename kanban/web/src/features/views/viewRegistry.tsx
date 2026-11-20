@@ -725,10 +725,11 @@ export function IssuesWorkspaceRoute({
     return item;
   };
 
-  const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
-    const currentIssue = popoverState.issue;
+  const handleFieldSelect = (field: QuickFieldType, value: unknown, targetKeyOverride?: string) => {
+    const targetKey = targetKeyOverride ?? popoverState.issue?.key;
+    if (!targetKey) return;
+    const currentIssue = issues.find((i) => i.key === targetKey) ?? popoverState.issue;
     if (!currentIssue) return;
-    const targetKey = currentIssue.key;
     let overrideReason: string | undefined;
 
     if (field === 'state') {
@@ -788,6 +789,10 @@ export function IssuesWorkspaceRoute({
       }
     }
 
+    const prevIssue = issues.find((i) => i.key === targetKey);
+    const prevPriority = prevIssue?.priority;
+    const prevState = prevIssue?.state;
+
     setIssues((prev) =>
       prev.map((i) => {
         if (i.key !== targetKey) return i;
@@ -825,7 +830,17 @@ export function IssuesWorkspaceRoute({
 
     if (isLiveMode) {
       if (field === 'priority') {
-        void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
+        void patchProjectIssue(targetKey, { priority: String(value) }).catch((err: unknown) => {
+          if (prevPriority) {
+            setIssues((p) =>
+              p.map((it) => (it.key === targetKey ? { ...it, priority: prevPriority } : it)),
+            );
+          }
+          const msg = err instanceof Error ? err.message : 'Failed to update priority';
+          window.dispatchEvent(
+            new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
+          );
+        });
       } else if (field === 'state') {
         const sId = String(value);
         const desired = computeStateSummary(sId, projectStates);
@@ -836,7 +851,17 @@ export function IssuesWorkspaceRoute({
             patchPayload.override_wip = true;
             patchPayload.wip_override_reason = overrideReason;
           }
-          void patchProjectIssue(targetKey, patchPayload).catch(() => undefined);
+          void patchProjectIssue(targetKey, patchPayload).catch((err: unknown) => {
+            if (prevState) {
+              setIssues((p) =>
+                p.map((it) => (it.key === targetKey ? { ...it, state: prevState } : it)),
+              );
+            }
+            const msg = err instanceof Error ? err.message : 'Failed to transition state';
+            window.dispatchEvent(
+              new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
+            );
+          });
         }
       }
     }
@@ -994,6 +1019,15 @@ export function IssuesWorkspaceRoute({
           onToggleSelect={canEdit ? handleToggleSelect : undefined}
           focusedKey={focusedKey}
           onCardClick={handleRowClick}
+          currentUserCapabilities={effectiveCaps}
+          onStateTransition={(issueKey, targetStateId) => {
+            handleFieldSelect('state', targetStateId, issueKey);
+          }}
+          onCardMove={(issueKey, targetColId) => {
+            if (groupBy === 'state') {
+              handleFieldSelect('state', targetColId, issueKey);
+            }
+          }}
         />
       ) : layout === 'board' ? (
         <BoardView
@@ -1016,6 +1050,7 @@ export function IssuesWorkspaceRoute({
               onToggleSelect={canEdit ? handleToggleSelect : undefined}
               onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
               focusedKey={focusedKey}
+              capabilities={effectiveCaps}
               onOpenPeek={handleOpenPeek}
               activeKey={activePeekKey}
               canManageWorkflows={canAdmin}
@@ -1071,11 +1106,18 @@ export function IssuesWorkspaceRoute({
           onClearSelection={() => { setSelectedIds([]); }}
           modulesEnabled={modulesEnabled}
           onBatchUpdateState={(targetStateSlug) => {
-            const matchedSt = projectStates.find((s) => s.id === targetStateSlug || s.group === (targetStateSlug === 'done' ? 'completed' : 'unstarted'));
+            const matchedSt = projectStates.find(
+              (s) =>
+                s.id === targetStateSlug ||
+                s.group === (targetStateSlug === 'done' ? 'completed' : 'unstarted'),
+            );
             const desiredState: StateSummary = {
-              id: `state-${targetStateSlug}`,
-              name: targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1),
-              group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
+              id: matchedSt?.id ?? `state-${targetStateSlug}`,
+              name:
+                matchedSt?.name ??
+                (targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1)),
+              group:
+                matchedSt?.group ?? (targetStateSlug === 'done' ? 'completed' : 'unstarted'),
               color_hex: matchedSt?.color_hex ?? null,
             };
             setIssues((prev) =>

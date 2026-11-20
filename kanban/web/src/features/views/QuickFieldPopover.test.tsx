@@ -277,5 +277,51 @@ describe('QuickFieldPopover (KB-P3-40, S6.4 item 4, S1.3 item 3, S7.2 8f)', () =
       expect(popover.style.getPropertyValue('--popover-top')).toBeTruthy();
       expect(popover.style.getPropertyValue('--popover-left')).toBeTruthy();
     });
+
+    it('guards against negative clamping on short viewports and resets focusedIndex on prop change', () => {
+      const origHeight = window.innerHeight;
+      const origWidth = window.innerWidth;
+      try {
+        Object.defineProperty(window, 'innerHeight', { value: 200, configurable: true });
+        Object.defineProperty(window, 'innerWidth', { value: 200, configurable: true });
+
+        const { rerender } = render(
+          <QuickFieldPopover
+            isOpen={true}
+            field="priority"
+            anchorRect={dummyRect}
+            issue={FIXTURE_12_ISSUES[0]}
+            onClose={vi.fn()}
+            onSelect={vi.fn()}
+          />,
+        );
+
+        const popover = screen.getByTestId('quick-field-popover');
+        expect(popover.style.getPropertyValue('--popover-top')).toBe('8px');
+        expect(popover.style.getPropertyValue('--popover-left')).toBe('8px');
+
+        // Navigate with ArrowDown
+        fireEvent.keyDown(window, { key: 'ArrowDown' });
+        const options = screen.getAllByRole('option');
+        expect(options[1]?.classList.contains('quick-field-option--focused')).toBe(true);
+
+        // Change field to state: focusedIndex should reset to 0
+        rerender(
+          <QuickFieldPopover
+            isOpen={true}
+            field="state"
+            anchorRect={dummyRect}
+            issue={FIXTURE_12_ISSUES[0]}
+            onClose={vi.fn()}
+            onSelect={vi.fn()}
+          />,
+        );
+        const stateOptions = screen.getAllByRole('option');
+        expect(stateOptions[0]?.classList.contains('quick-field-option--focused')).toBe(true);
+      } finally {
+        Object.defineProperty(window, 'innerHeight', { value: origHeight, configurable: true });
+        Object.defineProperty(window, 'innerWidth', { value: origWidth, configurable: true });
+      }
+    });
   });
 });

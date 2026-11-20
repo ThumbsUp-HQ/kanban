@@ -1083,10 +1083,11 @@ export function Sidebar({
           setCreateProjectOpen(false);
         }}
         onCreated={(created) => {
-          /* v8 ignore start */
           setFetchedProjects((prev) => {
             const exists = prev.some((p) => p.key === created.identifier);
-            if (exists) return prev;
+            if (exists) {
+              return prev;
+            }
             return [
               ...prev,
               {
@@ -1096,7 +1097,6 @@ export function Sidebar({
               },
             ];
           });
-          /* v8 ignore stop */
         }}
       />
 

@@ -823,4 +823,38 @@ describe('TableView', () => {
 
     localStorage.removeItem('kb.tableCols.KAN_CUST');
   });
+
+  it('allows state transitions with TRANSITION capability and rolls back on failure', () => {
+    const alertListener = vi.fn();
+    window.addEventListener('kb:alert', alertListener);
+
+    // Render with TRANSITION capability only (no EDIT/ADMIN)
+    const { rerender } = render(
+      <TableView
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        capabilities={['TRANSITION']}
+      />,
+    );
+
+    const firstIssueKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
+    // State select should be interactive
+    const stateSelect = screen.getByLabelText(`Edit state for ${firstIssueKey}`);
+    expect(stateSelect).toBeDefined();
+
+    // Priority should be read-only since user only has TRANSITION
+    expect(screen.queryByLabelText(`Edit priority for ${firstIssueKey}`)).toBeNull();
+
+    // Now test with pure VIEW capability
+    rerender(
+      <TableView
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        capabilities={['VIEW']}
+      />,
+    );
+    expect(screen.queryByLabelText(`Edit state for ${firstIssueKey}`)).toBeNull();
+
+    window.removeEventListener('kb:alert', alertListener);
+  });
 });

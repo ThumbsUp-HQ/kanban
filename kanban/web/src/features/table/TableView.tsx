@@ -61,6 +61,8 @@ export function TableView({
   }
 
   const effectiveCaps = capabilities ?? currentUserCapabilities;
+  const hasTransitionOrEdit = (caps: string[]): boolean =>
+    caps.includes('TRANSITION') || caps.includes('EDIT') || caps.includes('ADMIN');
   const hasEditOrAdmin = (caps: string[]): boolean =>
     caps.includes('EDIT') || caps.includes('ADMIN');
   const isViewerOnly = Boolean(
@@ -75,7 +77,16 @@ export function TableView({
     return true;
   };
 
+  const canTransitionIssue = (issue: IssueItem): boolean => {
+    const caps = issue.capabilities ?? effectiveCaps;
+    if (caps && caps.length > 0) {
+      return hasTransitionOrEdit(caps);
+    }
+    return true;
+  };
+
   const handleInlineStateChange = (issue: IssueItem, newStateIdOrName: string) => {
+    const previousState = issue.state;
     let resolvedState: StateSummary | undefined;
     if (projectStates && projectStates.length > 0) {
       resolvedState = projectStates.find(
@@ -99,7 +110,16 @@ export function TableView({
         prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
       );
       void onUpdateIssue?.(issue.key, patch);
-      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch(() => undefined);
+      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch((err: unknown) => {
+        setLocalIssues((prev) =>
+          prev.map((i) => (i.key === issue.key ? { ...i, state: previousState } : i)),
+        );
+        void onUpdateIssue?.(issue.key, { state: previousState });
+        const msg = err instanceof Error ? err.message : 'Failed to transition state';
+        window.dispatchEvent(
+          new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
+        );
+      });
       window.dispatchEvent(
         new CustomEvent('kb:issue-updated', {
           detail: { issueKey: issue.key, patch },
@@ -129,7 +149,16 @@ export function TableView({
       prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
     );
     void onUpdateIssue?.(issue.key, patch);
-    void patchProjectIssue(issue.key, { state_id: stateId }).catch(() => undefined);
+    void patchProjectIssue(issue.key, { state_id: stateId }).catch((err: unknown) => {
+      setLocalIssues((prev) =>
+        prev.map((i) => (i.key === issue.key ? { ...i, state: previousState } : i)),
+      );
+      void onUpdateIssue?.(issue.key, { state: previousState });
+      const msg = err instanceof Error ? err.message : 'Failed to transition state';
+      window.dispatchEvent(
+        new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
+      );
+    });
     window.dispatchEvent(
       new CustomEvent('kb:issue-updated', {
         detail: { issueKey: issue.key, patch },
@@ -506,7 +535,8 @@ export function TableView({
                         );
                       }
                       if (colId === 'state') {
-                        if (!canEdit) {
+                        const canTrans = canTransitionIssue(issue);
+                        if (!canTrans) {
                           return (
                             <td key={colId} className="table-state-cell" data-col="state">
                               <StateBadge state={issue.state} className="status-pill" />

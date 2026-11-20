@@ -29,11 +29,11 @@ In `api_admin_list_trash`:
 limit: Annotated[
     int,
     Query(ge=1, le=500, description="Page size limit (1-500)"),
-] = 100,
+] = (100,)
 offset: Annotated[
     int,
     Query(ge=0, description="Page offset"),
-] = 0,
+] = (0,)
 ```
 - **Query Wiring**:
   ```python

@@ -13,7 +13,7 @@
  * 8. Danger Zone: 2-stage Project deletion with blast radius computation, sending mode: 'trash' and SERVER_ADMIN-only permanent purge.
  */
 
-import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent } from 'react';
+import React, { useContext, useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
@@ -176,6 +176,20 @@ export function ProjectSettingsPage(): JSX.Element {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const alertRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (errorMessage && alertRef.current && typeof alertRef.current.scrollIntoView === 'function') {
+      alertRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [errorMessage]);
+
+  const handleTabSwitch = (tab: SettingsTab) => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setActiveTab(tab);
+  };
 
   // General Tab State
   const [name, setName] = useState<string>('');
@@ -627,6 +641,8 @@ export function ProjectSettingsPage(): JSX.Element {
 
     void (async () => {
       try {
+        setErrorMessage(null);
+        setSuccessMessage(null);
         const csrf = await ensureSessionCsrfToken();
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
@@ -663,8 +679,12 @@ export function ProjectSettingsPage(): JSX.Element {
 
         invalidateProjectCaches();
       } catch (err: unknown) {
-        const errObj = err as { message?: string };
-        setErrorMessage(errObj.message ?? 'Failed to reorder state.');
+        const errObj = err as { message?: string; detail?: string; code?: string };
+        const rawMsg =
+          err instanceof ApiProblem
+            ? (err.detail ?? err.message)
+            : (errObj.detail ?? errObj.message);
+        setErrorMessage(rawMsg ?? errObj.message ?? 'Failed to reorder state.');
       }
     })();
   };
@@ -1311,24 +1331,12 @@ export function ProjectSettingsPage(): JSX.Element {
         />
       </header>
 
-      {errorMessage && (
-        <div className="kb-settings-alert kb-settings-alert-error" role="alert">
-          {errorMessage}
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="kb-settings-alert kb-settings-alert-success" role="status">
-          {successMessage}
-        </div>
-      )}
-
       <nav className="kb-settings-tabs" aria-label="Project Settings Tabs">
         <button
           type="button"
           data-testid="tab-general"
           className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('general'); }}
+          onClick={() => { handleTabSwitch('general'); }}
         >
           General
         </button>
@@ -1336,7 +1344,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-states"
           className={`kb-settings-tab ${activeTab === 'states' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('states'); }}
+          onClick={() => { handleTabSwitch('states'); }}
         >
           Workflow States
         </button>
@@ -1344,7 +1352,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-priorities"
           className={`kb-settings-tab ${activeTab === 'priorities' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('priorities'); }}
+          onClick={() => { handleTabSwitch('priorities'); }}
         >
           Priorities
         </button>
@@ -1352,7 +1360,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-labels"
           className={`kb-settings-tab ${activeTab === 'labels' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('labels'); }}
+          onClick={() => { handleTabSwitch('labels'); }}
         >
           Labels
         </button>
@@ -1360,7 +1368,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-members"
           className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('members'); }}
+          onClick={() => { handleTabSwitch('members'); }}
         >
           Members & Access
         </button>
@@ -1368,7 +1376,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-integrations"
           className={`kb-settings-tab ${activeTab === 'integrations' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('integrations'); }}
+          onClick={() => { handleTabSwitch('integrations'); }}
         >
           Automation & Integrations
         </button>
@@ -1376,7 +1384,7 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-trash"
           className={`kb-settings-tab ${activeTab === 'trash' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('trash'); }}
+          onClick={() => { handleTabSwitch('trash'); }}
         >
           Trash & Retention
         </button>
@@ -1384,13 +1392,24 @@ export function ProjectSettingsPage(): JSX.Element {
           type="button"
           data-testid="tab-danger"
           className={`kb-settings-tab ${activeTab === 'danger' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('danger'); }}
+          onClick={() => { handleTabSwitch('danger'); }}
         >
           Danger Zone
         </button>
       </nav>
 
       <div className="kb-settings-panel">
+        {errorMessage && (
+          <div ref={alertRef} className="kb-settings-alert kb-settings-alert-error" role="alert">
+            {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="kb-settings-alert kb-settings-alert-success" role="status">
+            {successMessage}
+          </div>
+        )}
         {/* 1. General Tab */}
         {activeTab === 'general' && (
           <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
