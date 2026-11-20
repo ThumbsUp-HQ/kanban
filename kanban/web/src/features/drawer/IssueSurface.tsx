@@ -160,15 +160,20 @@ function IssueSurfaceContent({
     message: string;
   } | null>(null);
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyBranchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyShareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copiedBranch, setCopiedBranch] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
 
   useEffect(() => {
     return () => {
-      if (copyTimeoutRef.current !== null) {
-        clearTimeout(copyTimeoutRef.current);
-        copyTimeoutRef.current = null;
+      if (copyBranchTimeoutRef.current !== null) {
+        clearTimeout(copyBranchTimeoutRef.current);
+        copyBranchTimeoutRef.current = null;
+      }
+      if (copyShareTimeoutRef.current !== null) {
+        clearTimeout(copyShareTimeoutRef.current);
+        copyShareTimeoutRef.current = null;
       }
     };
   }, []);
@@ -1235,12 +1240,12 @@ function IssueSurfaceContent({
       const shareUrl = `${window.location.origin}/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`;
       await safeCopyToClipboard(shareUrl);
       setCopiedShare(true);
-      if (copyTimeoutRef.current !== null) {
-        clearTimeout(copyTimeoutRef.current);
+      if (copyShareTimeoutRef.current !== null) {
+        clearTimeout(copyShareTimeoutRef.current);
       }
-      copyTimeoutRef.current = setTimeout(() => {
+      copyShareTimeoutRef.current = setTimeout(() => {
         setCopiedShare(false);
-        copyTimeoutRef.current = null;
+        copyShareTimeoutRef.current = null;
       }, 2000);
     };
 
@@ -1249,12 +1254,12 @@ function IssueSurfaceContent({
       const branch = `feat/${currentIssue.key}-${slug}`;
       await safeCopyToClipboard(branch);
       setCopiedBranch(true);
-      if (copyTimeoutRef.current !== null) {
-        clearTimeout(copyTimeoutRef.current);
+      if (copyBranchTimeoutRef.current !== null) {
+        clearTimeout(copyBranchTimeoutRef.current);
       }
-      copyTimeoutRef.current = setTimeout(() => {
+      copyBranchTimeoutRef.current = setTimeout(() => {
         setCopiedBranch(false);
-        copyTimeoutRef.current = null;
+        copyBranchTimeoutRef.current = null;
       }, 2000);
     };
 

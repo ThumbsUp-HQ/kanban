@@ -206,4 +206,28 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
     expect(screen.queryByTestId('list-row-state-readonly-KAN-101')).toBeNull();
   });
+
+  it('supports controlled sortBy and sortDir props with change callbacks', () => {
+    const onSortByChange = vi.fn();
+    const onSortDirChange = vi.fn();
+    render(
+      <ListView
+        issues={mockIssues}
+        sortBy="priority"
+        onSortByChange={onSortByChange}
+        sortDir="asc"
+        onSortDirChange={onSortDirChange}
+      />,
+    );
+
+    const sortSelect = screen.getByTestId<HTMLSelectElement>('issue-sort-select');
+    expect(sortSelect.value).toBe('priority');
+
+    fireEvent.change(sortSelect, { target: { value: 'created' } });
+    expect(onSortByChange).toHaveBeenCalledWith('created');
+
+    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
+    fireEvent.click(dirBtn);
+    expect(onSortDirChange).toHaveBeenCalledWith('desc');
+  });
 });

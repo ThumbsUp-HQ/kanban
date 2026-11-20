@@ -30,6 +30,10 @@ export interface ListViewProps {
   onOpenFieldPopover?: ((field: 'state', issue: IssueItem, rect: DOMRect) => void) | undefined;
   onStateSelect?: ((issueKey: string, stateId: string) => void) | undefined;
   onRefresh?: (() => void) | undefined;
+  sortBy?: IssueSortOption | undefined;
+  onSortByChange?: ((sortBy: IssueSortOption) => void) | undefined;
+  sortDir?: ('asc' | 'desc') | undefined;
+  onSortDirChange?: ((sortDir: 'asc' | 'desc') => void) | undefined;
 }
 
 export type IssueSortOption =
@@ -55,6 +59,65 @@ function parseIssueNumber(key: string): number {
   return isNaN(num) ? 0 : num;
 }
 
+export function sortIssuesList<T extends IssueItem>(
+  issues: readonly T[],
+  sortBy: IssueSortOption,
+  sortDir: 'asc' | 'desc',
+): T[] {
+  const sorted = [...issues].sort((a, b) => {
+    let cmp = 0;
+    switch (sortBy) {
+      case 'updated': {
+        const aUp = a.updated_at ?? '';
+        const bUp = b.updated_at ?? '';
+        cmp = aUp.localeCompare(bUp);
+        break;
+      }
+      case 'created': {
+        const aCr = a.created_at ?? '';
+        const bCr = b.created_at ?? '';
+        cmp = aCr.localeCompare(bCr);
+        break;
+      }
+      case 'priority': {
+        const wA = PRIORITY_WEIGHTS[a.priority.slug.toLowerCase()] ?? 0;
+        const wB = PRIORITY_WEIGHTS[b.priority.slug.toLowerCase()] ?? 0;
+        cmp = wA - wB;
+        break;
+      }
+      case 'state': {
+        const orderA = a.state.sort_order ?? 999;
+        const orderB = b.state.sort_order ?? 999;
+        cmp = orderA - orderB;
+        if (cmp === 0) {
+          cmp = a.state.name.localeCompare(b.state.name);
+        }
+        break;
+      }
+      case 'key': {
+        cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+        break;
+      }
+      case 'due_date': {
+        const dA = a.due_date ?? '';
+        const dB = b.due_date ?? '';
+        cmp = dA.localeCompare(dB);
+        break;
+      }
+      case 'rank': {
+        const rA = a.board_rank ?? '';
+        const rB = b.board_rank ?? '';
+        cmp = rA.localeCompare(rB);
+        break;
+      }
+      default:
+        cmp = 0;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+  return sorted;
+}
+
 export function ListView({
   issues,
   projectStates = [],
@@ -71,9 +134,27 @@ export function ListView({
   onOpenFieldPopover,
   onStateSelect,
   onRefresh,
+  sortBy: sortByProp,
+  onSortByChange,
+  sortDir: sortDirProp,
+  onSortDirChange,
 }: ListViewProps): JSX.Element {
-  const [sortBy, setSortBy] = useState<IssueSortOption>('updated');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [internalSortBy, setInternalSortBy] = useState<IssueSortOption>('updated');
+  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const sortBy = sortByProp ?? internalSortBy;
+  const sortDir = sortDirProp ?? internalSortDir;
+
+  const handleSortByChange = (val: IssueSortOption): void => {
+    setInternalSortBy(val);
+    onSortByChange?.(val);
+  };
+
+  const handleSortDirToggle = (): void => {
+    const next = sortDir === 'asc' ? 'desc' : 'asc';
+    setInternalSortDir(next);
+    onSortDirChange?.(next);
+  };
 
   // Favorites tracking (persisted in localStorage)
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => {
@@ -134,58 +215,7 @@ export function ListView({
 
   // Sort issues according to sortBy and sortDir
   const sortedIssues = useMemo(() => {
-    const sorted = [...issues].sort((a, b) => {
-      let cmp = 0;
-      switch (sortBy) {
-        case 'updated': {
-          const aUp = a.updated_at ?? '';
-          const bUp = b.updated_at ?? '';
-          cmp = aUp.localeCompare(bUp);
-          break;
-        }
-        case 'created': {
-          const aCr = a.created_at ?? '';
-          const bCr = b.created_at ?? '';
-          cmp = aCr.localeCompare(bCr);
-          break;
-        }
-        case 'priority': {
-          const wA = PRIORITY_WEIGHTS[a.priority.slug.toLowerCase()] ?? 0;
-          const wB = PRIORITY_WEIGHTS[b.priority.slug.toLowerCase()] ?? 0;
-          cmp = wA - wB;
-          break;
-        }
-        case 'state': {
-          const orderA = a.state.sort_order ?? 999;
-          const orderB = b.state.sort_order ?? 999;
-          cmp = orderA - orderB;
-          if (cmp === 0) {
-            cmp = a.state.name.localeCompare(b.state.name);
-          }
-          break;
-        }
-        case 'key': {
-          cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
-          break;
-        }
-        case 'due_date': {
-          const dA = a.due_date ?? '';
-          const dB = b.due_date ?? '';
-          cmp = dA.localeCompare(dB);
-          break;
-        }
-        case 'rank': {
-          const rA = a.board_rank ?? '';
-          const rB = b.board_rank ?? '';
-          cmp = rA.localeCompare(rB);
-          break;
-        }
-        default:
-          cmp = 0;
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return sorted;
+    return sortIssuesList(issues, sortBy, sortDir);
   }, [issues, sortBy, sortDir]);
 
   if (issues.length === 0) {
@@ -221,7 +251,7 @@ export function ListView({
             aria-label="Order by"
             value={sortBy}
             onChange={(e) => {
-              setSortBy(e.target.value as IssueSortOption);
+              handleSortByChange(e.target.value as IssueSortOption);
             }}
           >
             <option value="updated">Updated</option>
@@ -239,9 +269,7 @@ export function ListView({
           className="issue-sort-dir-btn"
           data-testid="issue-sort-dir-btn"
           aria-label={`Sort direction: ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
-          onClick={() => {
-            setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-          }}
+          onClick={handleSortDirToggle}
         >
           {sortDir === 'asc' ? '↑' : '↓'}
         </button>

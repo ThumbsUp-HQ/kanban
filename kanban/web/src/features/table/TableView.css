@@ -122,12 +122,17 @@
     white-space: nowrap;
   }
 
+  .table-scroll-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   /* State pill column */
   .table-col-header--state,
   .table-state-cell {
-    width: 78px;
-    min-width: 74px;
-    max-width: 82px;
+    width: 124px;
+    min-width: 124px;
+    max-width: 150px;
     padding: 0 var(--space-1, 4px);
   }
 
@@ -144,9 +149,9 @@
   /* Priority column */
   .table-col-header--priority,
   .table-priority-cell-wrap {
-    width: 70px;
-    min-width: 66px;
-    max-width: 76px;
+    width: 96px;
+    min-width: 96px;
+    max-width: 110px;
     padding: 0 var(--space-1, 4px);
   }
 

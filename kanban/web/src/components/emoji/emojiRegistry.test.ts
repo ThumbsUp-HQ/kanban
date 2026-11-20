@@ -87,7 +87,7 @@ describe('emojiRegistry', () => {
     expect(entry.domain).toBe('Agent-Safe Sequence Numbering');
     expect(entry.ariaLabel).toBe('Agent-safe sequence numbering');
     expect(entry.defaultHint).toBe(
-      'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)',
+      'Skips culturally loaded and superstitious sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) to prevent autonomous LLM context drift, safety-filter refusals, and associative hallucination.',
     );
     expect(Object.isFrozen(entry)).toBe(true);
     // Strict invariant: EMOJI_REGISTRY remains exactly 21 keys

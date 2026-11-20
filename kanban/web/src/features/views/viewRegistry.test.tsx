@@ -2093,5 +2093,51 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       promptSpy.mockRestore();
     });
+
+    it('automatically synchronizes activePeekKey and URL peek to first matching issue when peek issue is excluded by filter', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?peek=KAN-NONEXISTENT');
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      // Verify that activePeekKey auto-selected the first issue in FIXTURE_12_ISSUES
+      await waitFor(() => {
+        const params = new URLSearchParams(window.location.search);
+        expect(params.get('peek')).toBe(FIXTURE_12_ISSUES[0]?.key);
+      });
+    });
+
+    it('re-evaluates favorites-only filter when kb:favorites-changed event fires', async () => {
+      const favKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
+      localStorage.setItem('kb_favorite_issues', JSON.stringify([favKey]));
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      // Toggle Favorites only button on
+      const favOnlyBtn = screen.getByRole('button', { name: /Favorites only/i });
+      fireEvent.click(favOnlyBtn);
+
+      // Now remove from favorites in localStorage and dispatch kb:favorites-changed
+      localStorage.setItem('kb_favorite_issues', JSON.stringify([]));
+      act(() => {
+        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
+      });
+
+      // Rail now has zero favorites matching
+      await waitFor(() => {
+        expect(screen.getByText('No work items found')).toBeDefined();
+      });
+    });
   });
 });

@@ -193,7 +193,7 @@ export const EXTENDED_EMOJI_REGISTRY: Readonly<Record<string, EmojiEntry>> = Obj
     domain: 'Agent-Safe Sequence Numbering',
     ariaLabel: 'Agent-safe sequence numbering',
     defaultHint:
-      'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)',
+      'Skips culturally loaded and superstitious sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) to prevent autonomous LLM context drift, safety-filter refusals, and associative hallucination.',
   }),
 });
 

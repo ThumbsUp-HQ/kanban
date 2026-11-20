@@ -658,47 +658,22 @@ describe('Phase 5 Branch Coverage Booster', () => {
       fireEvent.keyDown(listView, { key: 'ArrowDown' });
       fireEvent.keyDown(listView, { key: 'ArrowUp' });
 
-      const backlogToggle = must(document.getElementById('heading-backlog'));
-      fireEvent.click(backlogToggle);
-      fireEvent.click(backlogToggle);
+      // Test Order by sorting selector
+      const sortSelect = screen.getByTestId('issue-sort-select');
+      fireEvent.change(sortSelect, { target: { value: 'priority' } });
+      expect(screen.getByText('Unique summary token')).toBeDefined();
+      fireEvent.change(sortSelect, { target: { value: 'created' } });
+      fireEvent.change(sortSelect, { target: { value: 'state' } });
+      fireEvent.change(sortSelect, { target: { value: 'key' } });
 
-      const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
-      fireEvent.click(filterBtn);
-      expect(screen.getByRole('dialog', { name: 'Filter and Group options' })).toBeDefined();
+      // Test Sort direction toggle
+      const dirBtn = screen.getByTestId('issue-sort-dir-btn');
+      fireEvent.click(dirBtn);
+      fireEvent.click(dirBtn);
 
-      const searchInput = screen.getByLabelText('Search');
-      fireEvent.change(searchInput, { target: { value: 'KAN-999' } });
-
-      const stateSelect = screen.getByLabelText('State');
-      fireEvent.change(stateSelect, { target: { value: 'started' } });
-
-      const prioSelect = screen.getByLabelText('Priority');
-      fireEvent.change(prioSelect, { target: { value: 'high' } });
-
-      const groupBySelect = screen.getByLabelText('Group By');
-      fireEvent.change(groupBySelect, { target: { value: 'priority' } });
-
-      fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
-
-      fireEvent.change(groupBySelect, { target: { value: 'priority' } });
-      expect(screen.getByText('Custom Prio')).toBeDefined();
-
-      fireEvent.change(groupBySelect, { target: { value: 'none' } });
-      expect(screen.getByText('All Work Items')).toBeDefined();
-
-      // Close popover via close button
-      fireEvent.click(screen.getByRole('button', { name: 'Close filter popover' }));
-      expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
-
-      // Reopen and close with Escape
-      fireEvent.click(filterBtn);
-      fireEvent.keyDown(window, { key: 'Escape' });
-      expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
-
-      // Reopen and close via outside mousedown
-      fireEvent.click(filterBtn);
-      fireEvent.mouseDown(document.body);
-      expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
+      // Test Refresh button
+      const refreshBtn = screen.getByTestId('issue-rail-refresh-btn');
+      fireEvent.click(refreshBtn);
 
       fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
       expect(onLoadMore).toHaveBeenCalledTimes(1);
@@ -1161,9 +1136,9 @@ describe('Phase 5 Branch Coverage Booster', () => {
       });
 
       // Edit description, cancel, then edit and save
-      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      fireEvent.click(must(screen.getAllByRole('button', { name: 'Edit description' })[0]));
       fireEvent.click(screen.getByRole('button', { name: 'Cancel description edit' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      fireEvent.click(must(screen.getAllByRole('button', { name: 'Edit description' })[0]));
       const descTextarea = screen.getByLabelText('Description');
       fireEvent.change(descTextarea, { target: { value: 'Updated markdown' } });
       fireEvent.click(screen.getByRole('button', { name: 'Save description' }));

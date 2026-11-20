@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { qk } from '../../api/queryKeys';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
 import type { BoardIssue, BoardWorkflowState, StateGroup } from '../board/boardApi.ts';
-import { ListView } from './ListView';
+import { ListView, type IssueSortOption, sortIssuesList } from './ListView';
 import { TableView } from '../table/TableView';
 import { CalendarView } from '../calendar/CalendarView';
 import { TimelineView } from '../timeline/TimelineView';
@@ -384,6 +384,18 @@ export function IssuesWorkspaceRoute({
   });
 
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favVersion, setFavVersion] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleFavChange = (): void => {
+      setFavVersion((v) => v + 1);
+    };
+    window.addEventListener('kb:favorites-changed', handleFavChange);
+    return () => {
+      window.removeEventListener('kb:favorites-changed', handleFavChange);
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [queryMode, setQueryMode] = useState<'basic' | 'query'>('basic');
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
@@ -561,6 +573,7 @@ export function IssuesWorkspaceRoute({
 
       // 9. Favorites-only filter
       if (favoritesOnly) {
+        if (favVersion < 0) return false;
         try {
           const raw = typeof window !== 'undefined' ? localStorage.getItem('kb_favorite_issues') : null;
           const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -587,7 +600,7 @@ export function IssuesWorkspaceRoute({
 
       return true;
     });
-  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey]);
+  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey, favVersion]);
 
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
   const boardStates: BoardWorkflowState[] = useMemo(() => {
@@ -947,19 +960,53 @@ export function IssuesWorkspaceRoute({
 
   const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
 
+  const [railSortBy, setRailSortBy] = useState<IssueSortOption>('updated');
+  const [railSortDir, setRailSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const sortedRailIssues = useMemo(() => {
+    return sortIssuesList(filteredIssues, railSortBy, railSortDir);
+  }, [filteredIssues, railSortBy, railSortDir]);
+
   // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
   const activePeekKey = useMemo(() => {
+    if (sortedRailIssues.length === 0) {
+      return peekParam ?? null;
+    }
     if (peekParam) {
-      return peekParam;
+      const existsInList = sortedRailIssues.some((i) => i.key === peekParam);
+      if (existsInList) {
+        return peekParam;
+      }
+      if (isMobileViewport) {
+        return null;
+      }
+      return sortedRailIssues[0]?.key ?? null;
     }
     if (isMobileViewport) {
       return null;
     }
-    if (closedSplitKey && closedSplitKey === filteredIssues[0]?.key) {
+    if (closedSplitKey && closedSplitKey === sortedRailIssues[0]?.key) {
       return null;
     }
-    return filteredIssues[0]?.key ?? null;
-  }, [peekParam, isMobileViewport, closedSplitKey, filteredIssues]);
+    return sortedRailIssues[0]?.key ?? null;
+  }, [peekParam, isMobileViewport, closedSplitKey, sortedRailIssues]);
+
+  useEffect(() => {
+    if (
+      layout === 'list' &&
+      !isMobileViewport &&
+      peekParam &&
+      sortedRailIssues.length > 0 &&
+      !sortedRailIssues.some((i) => i.key === peekParam)
+    ) {
+      const firstIssueKey = sortedRailIssues[0]?.key;
+      if (firstIssueKey) {
+        queueMicrotask(() => {
+          handleOpenPeek(firstIssueKey);
+        });
+      }
+    }
+  }, [layout, isMobileViewport, peekParam, sortedRailIssues, handleOpenPeek]);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -1042,7 +1089,7 @@ export function IssuesWorkspaceRoute({
         <div className="kb-split-layout" data-testid="split-list-layout">
           <div className="kb-split-list-pane">
             <ListView
-              issues={filteredIssues}
+              issues={sortedRailIssues}
               projectKey={projectKey}
               projectStates={projectStates}
               modulesEnabled={modulesEnabled}
@@ -1054,6 +1101,10 @@ export function IssuesWorkspaceRoute({
               onOpenPeek={handleOpenPeek}
               activeKey={activePeekKey}
               canManageWorkflows={canAdmin}
+              sortBy={railSortBy}
+              onSortByChange={setRailSortBy}
+              sortDir={railSortDir}
+              onSortDirChange={setRailSortDir}
               onOpenFieldPopover={(field, issue, rect) => {
                 setPopoverState({
                   isOpen: true,
@@ -1069,7 +1120,7 @@ export function IssuesWorkspaceRoute({
               mode="split"
               issueKey={activePeekKey}
               projectKey={projectKey}
-              issuesList={filteredIssues}
+              issuesList={sortedRailIssues}
               onNavigateIssue={(key: string) => {
                 handleOpenPeek(key);
               }}
