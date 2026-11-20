@@ -36,6 +36,7 @@ async def create_project(
     Requires workspace admin or server admin role.
     """
     result = await svc.create_project(session, caller, body)
+    await session.commit()
     response.headers["Location"] = f"/api/v1/projects/{result.identifier}"
     return result
 
@@ -74,7 +75,9 @@ async def patch_project(
     Requires project ADMIN role.
     """
     async with timing_floor(floor_ms=25.0):
-        return await svc.update_project(session, caller, project_ref, body)
+        result = await svc.update_project(session, caller, project_ref, body)
+        await session.commit()
+        return result
 
 
 @router.put(
@@ -90,7 +93,9 @@ async def put_module_defaults(
     Requires project ADMIN role.
     """
     async with timing_floor(floor_ms=25.0):
-        return await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
+        result = await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
+        await session.commit()
+        return result
 
 
 @router.get(
@@ -120,7 +125,9 @@ async def add_project_member(
     Requires project ADMIN role.
     """
     async with timing_floor(floor_ms=25.0):
-        return await svc.add_project_member(session, caller, project_ref, body)
+        result = await svc.add_project_member(session, caller, project_ref, body)
+        await session.commit()
+        return result
 
 
 @router.delete(
@@ -137,4 +144,5 @@ async def delete_project_member(
     """
     async with timing_floor(floor_ms=25.0):
         await svc.delete_project_member(session, caller, project_ref, principal_id)
+        await session.commit()
         return Response(status_code=204)
