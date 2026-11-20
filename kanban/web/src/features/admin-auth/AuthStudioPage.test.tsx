@@ -1673,5 +1673,43 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(testSpy).toHaveBeenCalledWith('c-okta');
       });
     });
+
+    it('covers role change in add user modal and cancelling reset password modal', async () => {
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      // Switch to Users tab
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+      await waitFor(() => {
+        expect(screen.getByText('Local User')).toBeDefined();
+      });
+
+      // Open Add Principal modal and change role
+      fireEvent.click(screen.getByRole('button', { name: /\+ Add Local User/i }));
+      expect(screen.getByRole('heading', { name: /\+ Add Local User/i })).toBeDefined();
+
+      const roleSelect = screen.getByLabelText(/Initial Role Grant/i);
+      fireEvent.change(roleSelect, { target: { value: 'SERVER_ADMIN' } });
+      expect((roleSelect as HTMLSelectElement).value).toBe('SERVER_ADMIN');
+
+      fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+
+      // Open Reset Password and cancel via button then close via X
+      const resetBtns = screen.getAllByRole('button', { name: /^Reset Password$/i });
+      if (resetBtns[0]) fireEvent.click(resetBtns[0]);
+      expect(screen.getByRole('heading', { name: /Reset Password: @local\.user/i })).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+      expect(screen.queryByRole('heading', { name: /Reset Password: @local\.user/i })).toBeNull();
+
+      if (resetBtns[0]) fireEvent.click(resetBtns[0]);
+      expect(screen.getByRole('heading', { name: /Reset Password: @local\.user/i })).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: /Close/i }));
+      expect(screen.queryByRole('heading', { name: /Reset Password: @local\.user/i })).toBeNull();
+    });
   });
 });

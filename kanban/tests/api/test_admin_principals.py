@@ -998,3 +998,88 @@ async def test_principal_service_unit_edge_cases(  # noqa: PLR0915
     with pytest.raises(ProblemException) as depth_exc:
         await _exhaust_group_depth()
     assert depth_exc.value.code in ("GROUP_DEPTH_EXCEEDED", "GROUP_CYCLE_REJECTED")
+
+
+@pytest.mark.asyncio
+async def test_provision_group_with_handle_slug(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test provisioning a GROUP with an explicit handle slug normalizes and persists handle."""
+    admin = await make_user("admin_user_grp", workspace_role="WORKSPACE_ADMIN")
+    await _as_admin_aal2(api_env, admin)
+
+    resp = await api_env.client.post(
+        "/api/v1/admin/principals",
+        json={
+            "type": "GROUP",
+            "handle": "@infra-team",
+            "display_name": "Infra Team",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["principal"] == "infra-team"
+    assert data["handle"] == "@infra-team"
+    assert data["display_name"] == "Infra Team"
+
+    # Verify listing includes the normalized handle
+    resp_list = await api_env.client.get("/api/v1/admin/principals")
+    assert resp_list.status_code == 200
+    p_list = resp_list.json()
+    group_entry = next((p for p in p_list if p["id"] == data["id"]), None)
+    assert group_entry is not None
+    assert group_entry["principal"] == "infra-team"
+    assert group_entry["display_name"] == "Infra Team"
+
+
+@pytest.mark.asyncio
+async def test_admin_principals_endpoints_additional_coverage(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test filter=ALL, password reset, patch with password, and group member endpoints."""
+    admin = await make_user("admin_coverage", workspace_role="WORKSPACE_ADMIN")
+    target_user = await make_user("target_cov_user", workspace_role="WORKSPACE_MEMBER")
+    await _as_admin_aal2(api_env, admin)
+
+    # 1. Filter = ALL
+    resp_all = await api_env.client.get("/api/v1/admin/principals?filter=ALL")
+    assert resp_all.status_code == 200
+    assert len(resp_all.json()) >= 2
+
+    # 2. Patch with password
+    patch_resp = await api_env.client.patch(
+        f"/api/v1/admin/principals/{target_user.id}",
+        json={"display_name": "Updated Cov User", "password": "NewSecretPassword123!"},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["display_name"] == "Updated Cov User"
+
+    # 3. Direct reset password endpoint
+    pwd_resp = await api_env.client.post(
+        f"/api/v1/admin/principals/{target_user.id}/password",
+        json={"password": "AnotherSecretPassword456!"},
+    )
+    assert pwd_resp.status_code == 200
+
+    # 4. Group members GET endpoint
+    grp_resp = await api_env.client.post(
+        "/api/v1/admin/principals",
+        json={"type": "GROUP", "display_name": "Cov Test Group"},
+    )
+    assert grp_resp.status_code == 201
+    grp_id = grp_resp.json()["id"]
+
+    members_resp = await api_env.client.get(f"/api/v1/admin/groups/{grp_id}/members")
+    assert members_resp.status_code == 200
+    assert members_resp.json() == []
+
+    # 5. RoleBindingRequest validation error when role is missing
+    role_invalid = await api_env.client.post(
+        "/api/v1/admin/role-bindings",
+        json={"principal_id": str(target_user.id), "scope_type": "workspace"},
+    )
+    assert role_invalid.status_code == 422
+
+

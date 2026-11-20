@@ -218,6 +218,16 @@
   flex-wrap: wrap;
 }
 
+.kb-table-scroll-container,
+.kb-members-table-wrapper,
+.kb-group-members-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+}
+
 .kb-table {
   width: 100%;
   border-collapse: collapse;
@@ -450,6 +460,35 @@
 @media (max-width: 768px) {
   .kb-groups-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .kb-settings-container {
+    padding: 1.5rem 1rem;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .kb-settings-panel,
+  .kb-members-section,
+  .kb-add-member-form {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .kb-add-member-form .kb-form-row {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .kb-add-member-form .kb-form-row > * {
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 

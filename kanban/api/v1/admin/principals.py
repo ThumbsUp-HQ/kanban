@@ -207,13 +207,21 @@ async def provision_principal_endpoint(
             role=body.role,
         )
     if body.type == "GROUP":
-        return await principal_service.provision_group(
+        group_name = (
+            principal_service.normalize_handle(body.handle)
+            if body.handle
+            else body.display_name
+        )
+        res = await principal_service.provision_group(
             session,
             caller.workspace_id,
             caller.principal_id,
-            name=body.display_name,
+            name=group_name,
             display_name=body.display_name,
         )
+        if body.handle:
+            res["handle"] = f"@{group_name}"
+        return res
     agent_handle = body.handle or body.display_name.lower().replace(" ", "-")
     return await principal_service.provision_agent(
         session,
