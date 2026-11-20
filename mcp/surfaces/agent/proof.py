@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Verification proof model and path invariants for MCP agent workflows (KB-P4-06)."""
+"""Verification proof model and path invariants for MCP agent workflows (KB-P4-06, KAN-45)."""
 
 from __future__ import annotations
 
@@ -10,19 +10,25 @@ from kanban.issues.proof import (
     ARTIFACT_PATH_REGEX,
     CI_RUN_URL_REGEX,
     QA_DIR_REGEX,
+    REPORT_PATH_REGEX,
     RealityCheckerProof,
     VerificationProof,
+    validate_ci_run_url,
     validate_proof_ticket_key,
+    validate_reality_checker_report,
 )
 
 __all__ = [
     "ARTIFACT_PATH_REGEX",
     "CI_RUN_URL_REGEX",
     "QA_DIR_REGEX",
+    "REPORT_PATH_REGEX",
     "VERIFICATION_PROOF_SCHEMA",
     "RealityCheckerProof",
     "VerificationProof",
+    "validate_ci_run_url",
     "validate_proof_ticket_key",
+    "validate_reality_checker_report",
 ]
 
 VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
@@ -31,11 +37,17 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "qa_dir": {
             "type": "string",
+            "pattern": r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$",
             "description": "QA directory path",
         },
         "artifacts": {
             "type": "array",
-            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+                "type": "string",
+                "pattern": r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$",
+            },
             "description": "QA artifact paths",
         },
         "reality_checker": {
@@ -48,10 +60,13 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
                 },
                 "grade": {
                     "type": "string",
-                    "pattern": "^[A-F]$",
+                    "pattern": r"^[A-F]$",
                 },
                 "report_path": {
                     "type": "string",
+                    "pattern": (
+                        r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/reality-checker-report\.md$"
+                    ),
                     "description": "Report path",
                 },
             },
@@ -60,6 +75,7 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
         },
         "ci_run_url": {
             "type": "string",
+            "maxLength": 2048,
             "description": "CI run URL",
         },
     },

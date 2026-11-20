@@ -43,12 +43,9 @@ class WasmModuleSummaryResponse(BaseModel):
 
 
 # Pre-compiled verified WebAssembly bytecode producing JSON responses:
-# 1. qa-proof-validator (176 bytes) -> outputs {"allow": true}
+# 1. qa-proof-validator (1097 bytes) -> verified O(N) report & READY scanner
 _QA_PROOF_VALIDATOR_BYTES: Final[bytes] = (
-    b"\x00asm\x01\x00\x00\x00\x01\x0c\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f"
-    b"\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x01\x07\x19\x03"
-    b"\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\x13\x02\x05\x00A\x80\x10\x0b"
-    b'\x0b\x00A\x80\x08A\x0f\x10\x00A\x00\x0b\x0b\x17\x01\x00A\x80\x08\x0b\x0f{"allow": true}'
+    b'\x00asm\x01\x00\x00\x00\x01\x11\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x06\x07\x1e\x03\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\xb9\x04\x02\x05\x00A\x80 \x0b\xb0\x04\x01\t\x7f \x00 \x01j!\x02 \x00!\x03\x02@\x03@ \x03 \x02A\x07kH\x04@ \x03-\x00\x00A"F \x03A\x01j-\x00\x00A\xeb\x00Fq \x03A\x02j-\x00\x00A\xe5\x00F \x03A\x03j-\x00\x00A\xf9\x00F \x03A\x04j-\x00\x00A"Fqqq\x04@ \x03A\x05j!\x08\x03@ \x08 \x02H\x04@ \x08-\x00\x00!\n \nA F \nA:F \nA\tF \nA\nF \nA\rFrrrr\x04@ \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0b \x08 \x02H\x04@ \x08-\x00\x00A"F\x04@ \x08A\x01j!\x06 \x06!\t\x03@ \t \x02H\x04@ \t-\x00\x00A"F\x04@ \t \x06k!\x07\x0c\x08\x05 \tA\x01j!\t\x0c\x02\x0b\x0b\x0b\x0b\x0b\x0b \x03A\x01j!\x03\x0c\x01\x0b\x0b\x0b \x00!\x03\x03@ \x03 \x02H\x04@ \x04E\x04@ \x03A\x05j \x02L\x04@ \x03-\x00\x00A\xd2\x00F \x03A\x01j-\x00\x00A\xc5\x00F \x03A\x02j-\x00\x00A\xc1\x00F \x03A\x03j-\x00\x00A\xc4\x00F \x03A\x04j-\x00\x00A\xd9\x00Fqqqq\x04@A\x01!\x04\x0b\x0b\x0b \x05E \x07A\x00Jq\x04@ \x03A"j \x07j \x02L\x04@\x02@A\x00!\x08\x03@ \x08A\x08H\x04@ \x03 \x08j-\x00\x00A\x80\x18 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x00!\x08\x03@ \x08 \x07H\x04@ \x03A\x08j \x08j-\x00\x00 \x06 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x00!\x08\x03@ \x08A\x1aH\x04@ \x03A\x08j \x07j \x08j-\x00\x00A\x88\x18 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x01!\x05\x0b\x0b\x0b \x03A\x01j!\x03\x0c\x01\x0b\x0b \x04 \x05q\x04@A\x80\x08A#\x10\x00\x05A\x80\x10A\xf2\x00\x10\x00\x0bA\x00\x0b\x0b\xd0\x01\x04\x00A\x80\x08\x0b#{"decision":"allow","allowed":true}\x00A\x80\x10\x0br{"decision":"reject","allowed":false,"reason":"Missing required QA report or READY verdict in verification proof"}\x00A\x80\x18\x0b\x08docs/qa/\x00A\x88\x18\x0b\x1a/reality-checker-report.md\x00\xdf\x01\x04name\x01\x0c\x01\x00\tkb_output\x02U\x02\x01\x01\x00\x03len\x02\x0b\x00\x03ptr\x01\x03len\x02\x03end\x03\x01i\x04\x0bfound_ready\x05\x0cfound_report\x06\tkey_start\x07\x07key_len\x08\x01j\t\x01k\n\x02ch\x03s\x01\x02\t\x00\tfound_key\x01\rfind_key_loop\x04\x07skip_ws\t\x0cfind_key_end\x0c\tmain_scan\x13\x0bcheck_block\x14\x0ccheck_prefix\x17\tcheck_key\x1a\x0ccheck_suffix'  # noqa: E501
 )
 
 # 2. security-invariant-validator (197 bytes) -> outputs {"allow": true, "decision": "allow"}
@@ -68,7 +65,6 @@ _AUTO_LABEL_MUTATOR_BYTES: Final[bytes] = (
     b"\x0b\x00A\x80\x08A \x10\x00A\x00\x0b\x0b\x1e\x01\x00A\x80\x08\x0b "
     b'{"allow": true, "mutations": {}}'
 )
-
 _QA_SHA256 = hashlib.sha256(_QA_PROOF_VALIDATOR_BYTES).digest()
 _SEC_SHA256 = hashlib.sha256(_SEC_INVARIANT_BYTES).digest()
 _MUT_SHA256 = hashlib.sha256(_AUTO_LABEL_MUTATOR_BYTES).digest()
@@ -110,6 +106,9 @@ BUILTIN_WASM_BY_SHA: Final[dict[bytes, BuiltinWasmFormula]] = {
 # Also support legacy placeholder presets by mapping them to verified formulas
 _LEGACY_PRESETS: Final[dict[str, BuiltinWasmFormula]] = {
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": BUILTIN_WASM_FORMULAS[0],
+    "92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968": BUILTIN_WASM_FORMULAS[0],
+    "8a8ad03aa46429682f7bf0c20085a596579611451351923ddf811f1581ed4620": BUILTIN_WASM_FORMULAS[0],
+    "9d10223f7debd9a61367004d44a2f8a78f882cc5c83f43d3e458fc7b0324252d": BUILTIN_WASM_FORMULAS[0],
     "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08": BUILTIN_WASM_FORMULAS[1],
     "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e": BUILTIN_WASM_FORMULAS[2],
 }
@@ -178,9 +177,15 @@ async def ensure_approved_wasm_modules(
     existing_names = {mod.name for mod in existing_mods}
     existing_shas = {mod.sha256 for mod in existing_mods}
 
-    # 2. Seed any missing built-in formulas
+    # 2. Seed any missing built-in formulas or update outdated sha for existing built-ins
     for formula in BUILTIN_WASM_FORMULAS:
-        if formula.name not in existing_names and formula.sha256_bytes not in existing_shas:
+        matching = next((m for m in existing_mods if m.name == formula.name), None)
+        if matching is not None:
+            if matching.sha256 != formula.sha256_bytes:
+                matching.sha256 = formula.sha256_bytes
+                matching.wasm_bytes = formula.wasm_bytes
+                existing_shas.add(formula.sha256_bytes)
+        elif formula.sha256_bytes not in existing_shas:
             new_mod = ApprovedWasmModule(
                 id=uuid.uuid4(),
                 workspace_id=workspace_id,

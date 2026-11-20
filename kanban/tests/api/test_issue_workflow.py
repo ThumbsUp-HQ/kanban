@@ -52,6 +52,35 @@ def _make_valid_proof(key: str) -> dict[str, Any]:
     }
 
 
+def _make_valid_report(verdict: str = "READY", grade: str = "A") -> str:
+    return f"""# Integration Agent Reality-Based Report
+
+## Reality Check Validation
+- Verified all deliverables against acceptance criteria.
+- Complete audit of all source files and assets.
+
+## Complete System Evidence
+- System running smoothly with zero errors.
+- Verification artifacts collected in docs/qa.
+
+## Integration Testing Results
+- All unit and integration test suites executed cleanly.
+- Full regression suite passing.
+
+## Comprehensive Issue Assessment
+- Root cause identified and systematically resolved.
+- Security and performance invariants verified.
+
+## Realistic Quality Certification
+- Verdict: {verdict}
+- Grade: {grade}
+
+## Deployment Readiness Assessment
+- Ready for immediate production deployment.
+- No rollback concerns or migration locks.
+"""
+
+
 async def test_begin_work_positive(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
@@ -280,7 +309,7 @@ async def test_transition_ticket_pending_gate_hold(
         proof = _make_valid_proof(issue_cw_key)
         cw_held = await client.post(
             f"/api/v1/issues/{issue_cw_key}/complete-work",
-            json={"summary_markdown": "Summary for held issue", "verification_proof": proof},
+            json={"summary_markdown": _make_valid_report(), "verification_proof": proof},
         )
         assert cw_held.status_code == 202
         assert cw_held.json()["status"] == "pending_agent_gate"
@@ -316,7 +345,7 @@ async def test_complete_work_positive(
     comp_resp = await client.post(
         f"/api/v1/issues/{issue_key}/complete-work",
         json={
-            "summary_markdown": "Completed all work successfully.",
+            "summary_markdown": _make_valid_report(),
             "verification_proof": proof,
         },
     )
@@ -410,7 +439,7 @@ async def test_complete_work_open_child_and_link_blockers(
     proof = _make_valid_proof(parent_key)
     comp_resp = await client.post(
         f"/api/v1/issues/{parent_key}/complete-work",
-        json={"summary_markdown": "Trying to complete parent", "verification_proof": proof},
+        json={"summary_markdown": _make_valid_report(), "verification_proof": proof},
     )
     assert comp_resp.status_code == 409
     body = comp_resp.json()
@@ -421,7 +450,7 @@ async def test_complete_work_open_child_and_link_blockers(
     child_proof = _make_valid_proof(child_key)
     child_comp_resp = await client.post(
         f"/api/v1/issues/{child_key}/complete-work",
-        json={"summary_markdown": "Child done", "verification_proof": child_proof},
+        json={"summary_markdown": _make_valid_report(), "verification_proof": child_proof},
     )
     assert child_comp_resp.status_code == 200
 
@@ -444,7 +473,7 @@ async def test_complete_work_open_child_and_link_blockers(
     # Attempt complete parent -> blocked by BLOCKS link
     comp_resp2 = await client.post(
         f"/api/v1/issues/{parent_key}/complete-work",
-        json={"summary_markdown": "Trying again", "verification_proof": proof},
+        json={"summary_markdown": _make_valid_report(), "verification_proof": proof},
     )
     assert comp_resp2.status_code == 409
     body2 = comp_resp2.json()
@@ -501,7 +530,7 @@ async def test_complete_work_redacted_foreign_blocker(
     proof = _make_valid_proof(pub_key)
     comp_resp = await client_member.post(
         f"/api/v1/issues/{pub_key}/complete-work",
-        json={"summary_markdown": "Member completing work", "verification_proof": proof},
+        json={"summary_markdown": _make_valid_report(), "verification_proof": proof},
     )
     assert comp_resp.status_code == 409
     body = comp_resp.json()
@@ -633,7 +662,7 @@ async def test_transition_held_conflict_on_all_endpoints(
     proof = _make_valid_proof(issue_key)
     res3 = await client.post(
         f"/api/v1/issues/{issue_key}/complete-work",
-        json={"summary_markdown": "Done", "verification_proof": proof},
+        json={"summary_markdown": _make_valid_report(), "verification_proof": proof},
     )
     assert res3.status_code == 409
     assert res3.json()["code"] == "TRANSITION_HELD"
@@ -687,7 +716,7 @@ async def test_state_resolution_and_custom_to_state(
     comp_inv_resp = await client.post(
         f"/api/v1/issues/{issue_key}/complete-work",
         json={
-            "summary_markdown": "Completing work",
+            "summary_markdown": _make_valid_report(),
             "verification_proof": proof,
             "to_state": "Todo",
         },
@@ -699,7 +728,7 @@ async def test_state_resolution_and_custom_to_state(
     comp_ok_resp = await client.post(
         f"/api/v1/issues/{issue_key}/complete-work",
         json={
-            "summary_markdown": "Completing work",
+            "summary_markdown": _make_valid_report(),
             "verification_proof": proof,
             "to_state": str(done_state[0]),
         },
@@ -735,7 +764,7 @@ async def test_complete_work_no_completed_state_error(
     proof = _make_valid_proof(issue_key)
     cw_resp = await client.post(
         f"/api/v1/issues/{issue_key}/complete-work",
-        json={"summary_markdown": "Completing work", "verification_proof": proof},
+        json={"summary_markdown": _make_valid_report(), "verification_proof": proof},
     )
     assert cw_resp.status_code == 422
     assert cw_resp.json()["code"] == "INVALID_TRANSITION"

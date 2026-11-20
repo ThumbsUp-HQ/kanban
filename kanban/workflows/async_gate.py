@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_VETO_COMMENT_BYTES: Final[int] = 16384
+MAX_APPROVE_COMMENT_BYTES: Final[int] = 65536
 MAX_REASON_PREVIEW_CHARS: Final[int] = 280
 
 
@@ -83,6 +84,27 @@ def format_veto_comment(
     normalized = normalize_to_markdown(reason_markdown)
     scrubbed = scrub_text(normalized)
     capped = scrubbed[:MAX_VETO_COMMENT_BYTES]
+    return f"{header}\n\n{capped}"
+
+
+def format_approve_comment(
+    hook_name: str,
+    harness_label: str,
+    from_state_name: str,
+    to_state_name: str,
+    reason_markdown: str,
+) -> str:
+    """Format normalized, scrubbed approve comment capped at 65,536 bytes."""
+    header = (
+        f"## ✅🤖 Workflow Transition Gate Approved\n\n"
+        f"- **Hook:** `{hook_name}`\n"
+        f"- **Harness:** `{harness_label}`\n"
+        f"- **Transition:** `{from_state_name}` -> `{to_state_name}`\n\n"
+        f"### Reality Check / Gate Rationale"
+    )
+    normalized = normalize_to_markdown(reason_markdown)
+    scrubbed = scrub_text(normalized)
+    capped = scrubbed[:MAX_APPROVE_COMMENT_BYTES]
     return f"{header}\n\n{capped}"
 
 
@@ -566,6 +588,8 @@ class GateCoordinator:
 
         # 7. TOCTOU verified: COMMIT TRANSITION!
         duration_us = int(decision.latency_ms * 1000)
+        bounded_reason = (decision.reason_markdown or "")[:16384]
+        reason_preview = format_reason_preview(decision.reason_markdown or "")
         invocation.status = "allowed"
         invocation.duration_us = duration_us
         invocation.completed_at = now
@@ -573,6 +597,8 @@ class GateCoordinator:
             "decision": "approve",
             "field_updates": dict(decision.field_updates),
             "verdict_sha256": verdict_hex,
+            "reason": bounded_reason,
+            "reason_preview": reason_preview,
         }
 
         # Apply accumulated field updates across all hook invocations
@@ -625,8 +651,40 @@ class GateCoordinator:
             "verdict_sha256": verdict_hex,
             "latency_ms": decision.latency_ms,
             "cited_files": list(decision.cited_files),
+            "reason": bounded_reason,
+            "reason_preview": reason_preview,
         }
         execution.completed_at = now
+
+        # Format and persist approval comment authored by agent principal
+        approve_author_id = (
+            agent_def.principal_id
+            if agent_def and agent_def.principal_id is not None
+            else execution.invoking_principal_id
+        )
+        approve_comment_body = format_approve_comment(
+            hook.name,
+            harness_label,
+            from_name,
+            to_name,
+            decision.reason_markdown or "",
+        )
+        comment = IssueComment(
+            id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
+            workspace_id=issue.workspace_id,
+            issue_id=issue.id,
+            author_id=approve_author_id,
+            body_markdown=approve_comment_body,
+        )
+        session.add(comment)
+        await record_activity(
+            session=session,
+            workspace_id=execution.workspace_id,
+            object_id=issue.id,
+            actor_principal_id=approve_author_id,
+            event_type=ActivityEventType.COMMENT_CREATED,
+            payload={"comment_id": str(comment.id)},
+        )
 
         # Record GATE_APPROVED and ISSUE_STATE_CHANGED activities
         await record_activity(
@@ -758,8 +816,9 @@ class GateCoordinator:
 
         is_timeout = code in {"TIMED_OUT", "GATE_TIMEOUT"}
 
-        # Check failure_policy: fail_open_warn vs fail_closed
-        if hook.failure_policy == "fail_open_warn":
+        # Check failure_policy: fail_open_warn vs fail_closed (completed state MUST fail closed)
+        is_completed_target = to_state is not None and to_state.state_group == "completed"
+        if hook.failure_policy == "fail_open_warn" and not is_completed_target:
             inv_status = "timed_out" if is_timeout else "error"
             invocation.status = inv_status
             invocation.error_code = code

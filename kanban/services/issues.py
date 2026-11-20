@@ -882,6 +882,14 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
             detail="Archived issues are read-only and cannot be modified",
         )
 
+    if issue.pending_transition_exec_id is not None:
+        raise _problem(
+            code="TRANSITION_HELD",
+            status=409,
+            title="Transition Held",
+            detail="Issue modification is blocked while an asynchronous transition gate is pending",
+        )
+
     project = await session.get(Project, issue.project_id)
     if project is None:  # pragma: no cover
         not_found()

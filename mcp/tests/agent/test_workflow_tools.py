@@ -41,6 +41,35 @@ def _make_proof(ticket_key: str, verdict: str = "READY", grade: str = "A") -> di
     }
 
 
+def _make_report(verdict: str = "READY", grade: str = "A") -> str:
+    return f"""# Integration Agent Reality-Based Report
+
+## Reality Check Validation
+- Verified all deliverables against acceptance criteria.
+- Complete audit of all source files and assets.
+
+## Complete System Evidence
+- System running smoothly with zero errors.
+- Verification artifacts collected in docs/qa.
+
+## Integration Testing Results
+- All unit and integration test suites executed cleanly.
+- Full regression suite passing.
+
+## Comprehensive Issue Assessment
+- Root cause identified and systematically resolved.
+- Security and performance invariants verified.
+
+## Realistic Quality Certification
+- Verdict: {verdict}
+- Grade: {grade}
+
+## Deployment Readiness Assessment
+- Ready for immediate production deployment.
+- No rollback concerns or migration locks.
+"""
+
+
 async def _call_tool(
     env: AgentTestEnv,
     tool_name: str,
@@ -280,7 +309,7 @@ async def test_complete_work_positive_execution(agent_test_env: AgentTestEnv) ->
         "complete_work",
         {
             "identifier": "KAN-150",
-            "summary_markdown": "All deliverables and automated tests complete.",
+            "summary_markdown": _make_report(),
             "verification_proof": proof,
         },
         subject_token=env.token_adam,

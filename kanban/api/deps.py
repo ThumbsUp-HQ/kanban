@@ -42,6 +42,8 @@ class PrincipalContext:
     scoped_project_id: uuid.UUID | None = None
     user_access_hash: bytes | None = None
     is_server_admin: bool = False
+    principal_type: str | None = None
+    is_mcp_credential: bool = False
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
@@ -56,6 +58,17 @@ class PrincipalContext:
                 raise TypeError(msg)
             converted: tuple[object, ...] = tuple(raw_scopes)
             object.__setattr__(self, "token_scopes", converted)
+
+    @property
+    def is_agent_or_mcp_caller(self) -> bool:
+        """Return True if caller is an AI agent, MCP client, or service principal."""
+        if self.principal_type in ("AGENT", "SERVICE_PRINCIPAL", "agent", "service_principal"):
+            return True
+        if self.agent_principal_id is not None:
+            return True
+        if self.is_mcp_credential:
+            return True
+        return any(scope.startswith(("agent:", "docs:", "admin:")) for scope in self.token_scopes)
 
 
 class PrincipalResolver(Protocol):

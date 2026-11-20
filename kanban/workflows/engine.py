@@ -33,6 +33,9 @@ from kanban.services.issue_keys import resolve_issue_ref
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 from kanban.workflows.mutations import apply_field_updates, validate_field_updates
 
+_MAX_DESC_BYTES: Final[int] = 131072
+_TRUNC_DESC_CHARS: Final[int] = 65536
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -149,6 +152,8 @@ class TransitionEngine:
         parent_execution_id: uuid.UUID | None = None,
         comment_markdown: str | None = None,
         *,
+        verification_proof: dict[str, Any] | None = None,
+        is_complete_work: bool = False,
         wasm_runner: WasmRunnerProtocol | None = None,
         async_dispatcher: AsyncGateDispatcher | None = None,
     ) -> TransitionOutcome:
@@ -161,6 +166,8 @@ class TransitionEngine:
             if_match=if_match,
             parent_execution_id=parent_execution_id,
             comment_markdown=comment_markdown,
+            verification_proof=verification_proof,
+            is_complete_work=is_complete_work,
         )
 
     async def execute_transition(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
@@ -171,6 +178,9 @@ class TransitionEngine:
         if_match: str | None = None,
         parent_execution_id: uuid.UUID | None = None,
         comment_markdown: str | None = None,
+        *,
+        verification_proof: dict[str, Any] | None = None,
+        is_complete_work: bool = False,
     ) -> TransitionOutcome:
         """Execute state transition pipeline under S14.1 / S14.2 invariants."""
         session = self.session
@@ -229,6 +239,22 @@ class TransitionEngine:
                 status=422,
                 title="Invalid State",
                 detail="Current issue state could not be found",
+            )
+
+        # Agent completed state bypass guard (KB-P3-GATE-ENFORCE Problem 4)
+        if (
+            not is_complete_work
+            and target_state.state_group == "completed"
+            and actor.is_agent_or_mcp_caller
+        ):
+            raise ProblemException(
+                code="USE_COMPLETE_WORK",
+                status=422,
+                title="Use Complete Work",
+                detail=(
+                    "Agents and MCP callers must complete issues using the "
+                    "complete_work tool or canonical completion flow"
+                ),
             )
 
         # 2. Hop depth calculation
@@ -313,6 +339,7 @@ class TransitionEngine:
             from_state=from_state,
             to_state=target_state,
             actor=actor,
+            verification_proof=verification_proof,
         )
         hook_input_bytes = json.dumps(hook_input_dict, sort_keys=True).encode("utf-8")
 
@@ -445,9 +472,17 @@ class TransitionEngine:
                 continue
 
             # Evaluate guest decision
-            is_allow = output_json.get("decision") == "allow" or output_json.get("allowed") is True
+            is_allow = (
+                output_json.get("verdict") == "allow"
+                or output_json.get("decision") == "allow"
+                or output_json.get("allowed") is True
+                or output_json.get("allow") is True
+            )
             is_reject = (
-                output_json.get("decision") == "reject" or output_json.get("allowed") is False
+                output_json.get("verdict") == "reject"
+                or output_json.get("decision") == "reject"
+                or output_json.get("allowed") is False
+                or output_json.get("allow") is False
             )
 
             if not (is_allow or is_reject):
@@ -747,13 +782,14 @@ class TransitionEngine:
         )
         session.add(inv)
 
-    async def _build_hook_input(
+    async def _build_hook_input(  # noqa: PLR0913, PLR0917
         self,
         session: AsyncSession,
         issue: Issue,
         from_state: WorkflowState,
         to_state: WorkflowState,
         actor: PrincipalContext,
+        verification_proof: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Construct the kb-sync-hook-input/v1 JSON input payload."""
         prio = await session.get(ProjectPriority, issue.priority_id)
@@ -773,11 +809,34 @@ class TransitionEngine:
             for a in assignees
         ]
 
+        # Fetch recent non-deleted comments (KB-P3-GATE-ENFORCE Problem 3)
+        comments_stmt = (
+            select(IssueComment)
+            .where(IssueComment.issue_id == issue.id, IssueComment.deleted_at.is_(None))
+            .order_by(IssueComment.created_at.desc())
+            .limit(10)
+        )
+        comment_rows = list((await session.execute(comments_stmt)).scalars().all())
+        comments_list: list[dict[str, Any]] = [
+            {
+                "id": str(c.id),
+                "author_id": str(c.author_id),
+                "body_markdown": (c.body_markdown or "")[:16384],
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in reversed(comment_rows)
+        ]
+
         # Fetch project identifier for issue key
         proj_ident = (
             await session.execute(select(Project.identifier).where(Project.id == issue.project_id))
         ).scalar_one_or_none()
         issue_key = f"{proj_ident}-{issue.sequence_id}" if proj_ident else str(issue.id)
+
+        desc = issue.description_markdown or ""
+        # Cap description if needed to fit 256 KiB Wasm input limit
+        if len(desc.encode("utf-8")) > _MAX_DESC_BYTES:
+            desc = desc[:_TRUNC_DESC_CHARS]
 
         return {
             "contract": "kb-sync-hook-input/v1",
@@ -786,10 +845,12 @@ class TransitionEngine:
                 "id": str(issue.id),
                 "key": issue_key,
                 "summary": issue.summary,
-                "description_markdown": issue.description_markdown,
+                "description_markdown": desc,
                 "priority": prio_slug,
                 "labels": labels,
                 "assignees": assignees_list,
+                "comments": comments_list,
+                "verification_proof": verification_proof,
                 "custom_fields": {},
             },
             "transition": {

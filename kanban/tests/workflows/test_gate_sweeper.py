@@ -268,8 +268,8 @@ async def test_sweeper_fail_open_warn(
     client = as_principal(admin)
 
     states = await _get_states(api_env.seed, proj_id)
+    todo_id = states["Todo"]
     in_prog_id = states["In Progress"]
-    done_id = states["Done"]
 
     agent_def, _ = await create_agent_definition(
         api_env.seed, api_env.workspace_id, proj_id, slug="warn-agent", timeout_ms=3000
@@ -279,7 +279,7 @@ async def test_sweeper_fail_open_warn(
         api_env.workspace_id,
         proj_id,
         agent_def.id,
-        to_state_id=done_id,
+        to_state_id=in_prog_id,
         failure_policy="fail_open_warn",
         name="warn_gate",
     )
@@ -289,7 +289,7 @@ async def test_sweeper_fail_open_warn(
         json={
             "summary": "Fail Open Issue",
             "description_markdown": "Test",
-            "state_id": str(in_prog_id),
+            "state_id": str(todo_id),
         },
     )
     issue_key = create_resp.json()["key"]
@@ -298,7 +298,7 @@ async def test_sweeper_fail_open_warn(
 
     t_resp = await client.post(
         f"/api/v1/issues/{issue_key}/transitions",
-        json={"to_state": "Done"},
+        json={"to_state": "In Progress"},
     )
     assert t_resp.status_code == 202
     exec_id = uuid.UUID(t_resp.json()["execution_id"])
@@ -319,7 +319,7 @@ async def test_sweeper_fail_open_warn(
     await api_env.seed.commit()
     assert swept == 1
 
-    # In fail_open_warn on single hook, transition is allowed to commit to Done!
+    # In fail_open_warn on single hook, transition is allowed to commit to In Progress!
     await api_env.seed.rollback()
     exec_post = (
         await api_env.seed.execute(
@@ -331,7 +331,7 @@ async def test_sweeper_fail_open_warn(
     issue_post = (
         await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
     ).scalar_one()
-    assert issue_post.state_id == done_id
+    assert issue_post.state_id == in_prog_id
     assert issue_post.pending_transition_exec_id is None
 
 
