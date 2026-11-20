@@ -8,7 +8,7 @@
 - Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2`
 - Target Branch: fix/KAN-25-rc1
 - Base Commit: cd89d77
-- Head Commit: 6dad2ff
+- Head Commit: 1508e3e
 - STATUS: APPROVED
 
 ---
@@ -25,8 +25,9 @@ The Round 1 remediation addresses all 5 specific accessibility, visual, and cred
    - Row actions group inside `.kb-passkey-actions` with `gap: var(--space-2); flex-wrap: wrap;`, keeping touch targets accessible (>= 44px) without horizontal clipping.
 3. **In-Context Section-Level `👍 Key verified` Notification Banner:**
    - Rendered `[data-testid="passkey-verified-banner"]` directly inside Section 3 immediately above the passkeys table. Operators see immediate tactile feedback in context alongside the updated `Last Used` timestamp rather than off-screen at the page top.
-4. **Scoped `[Test Key]` Credential Verification:**
+4. **Scoped `[Test Key]` Credential Verification & Backend Alignment:**
    - `handleTestKey(cred)` scopes `optionsJson.allowCredentials` strictly to the clicked credential (`cred.credential_id ?? cred.id`) and verifies that the returned credential ID matches, preventing cross-credential misattribution.
+   - Verified backend alignment in `kanban/api/v1/auth_webauthn.py:579` exposing `credential_id` base64url string in `list_credentials`, ensuring reliable matching during multi-key testing.
 5. **Modal Accessibility & Focus Trapping (`PasskeyEnrollModal.tsx`):**
    - Replaced duplicate header Cancel button with an accessible `✕` close button (`aria-label="Close"`, min 44x44px tap target).
    - Added `Escape` key dismiss listener when `!isSubmitting`.
