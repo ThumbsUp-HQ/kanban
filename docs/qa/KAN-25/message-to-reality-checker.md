@@ -3,7 +3,7 @@
 ## Ticket Information
 - Ticket ID: KAN-25 ([KB-P3-AUDIT-19])
 - Title: Add Self-Service Passkey & FIDO2 Security Key Registration, Key Testing, and AAL2 Step-Up Handling on Profile Settings
-- Branch: fix/KAN-25-rc1
+- Branch: fix/KAN-25-rc2
 - Base Commit: 887e7e029127b77b5868a4d7c35dd2b818d3a4e5
 - Scoped Files Touched:
   - `kanban/api/v1/auth_webauthn.py`
@@ -21,13 +21,14 @@
 
 ---
 
-## Remediation of Reality-Checker Items (5 Concrete Fixes)
+## Remediation of Reality-Checker Items (Concrete Fixes)
 
 ### 1. Defined `.kb-personal-settings-alert-warning` in `PersonalSettingsPage.css`
 - Root cause: `PersonalSettingsPage.tsx` applied `className="kb-personal-settings-alert kb-personal-settings-alert-warning"` to `webauthn-insecure-context-notice`, but `.kb-personal-settings-alert-warning` was not defined in `PersonalSettingsPage.css`.
 - Fix: Defined `.kb-personal-settings-alert-warning` with canonical CSS variables `var(--warn-bg)` and `var(--warn-fg)`. Verified against `cssTokensAudit.test.ts`.
 
-### 2. Badge Wrapping & Desktop/Mobile Action Layout (`PersonalSettingsPage.css` & `PersonalSettingsPage.tsx`)
+### 2. Mobile td Flex Specificity, Badge Wrapping & Card Layout (`PersonalSettingsPage.css` & `PersonalSettingsPage.tsx`)
+- Fixed mobile td flex specificity bug: `.kb-personal-settings-table td { display: block; }` had specificity `(0, 1, 1)` which previously overrode `.kb-personal-settings-td` `(0, 1, 0)`. Removed `.kb-personal-settings-table td` from `display: block;` and styled `.kb-personal-settings-table td.kb-personal-settings-td` with `display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); width: 100%; box-sizing: border-box;` so `CREATED` / `11/20/2026` and `LAST USED` / `11/20/2026` render separated cleanly on opposite sides of each mobile card without concatenation.
 - Added `white-space: nowrap; flex-shrink: 0;` to both `.kb-passkey-badge` and `.kb-passkey-clone-warning`, and added `aria-label="Suspected cloned credential"` to the clone warning pill so badges never wrap on mobile viewports (e.g. 390x844).
 - Added `.kb-passkey-actions` with `display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-2); flex-wrap: nowrap; white-space: nowrap;` keeping `Test Key`, `Rename`, `Remove` buttons on a single clean row on desktop.
 - Added responsive card layout for viewports `<= 640px` converting the passkeys table rows into stacked cards with `data-label="Created"` and `data-label="Last Used"` so `LAST USED`, `Never`, and action buttons are fully visible without horizontal clipping.
@@ -59,7 +60,7 @@
 
 ### Pytest Backend Test Coverage
 - Test Suites: `kanban/tests/auth/test_webauthn.py` and `test_kan24_fido2_enrollment_and_guards.py`
-- Tests: 23 passed in 9.96s (0 failed)
+- Tests: 23 passed in 9.97s (0 failed)
 - Coverage on `kanban/api/v1/auth_webauthn.py`: 98% (target >= 95%)
 
 ### Unit Test Coverage (Vitest v8)
@@ -77,12 +78,12 @@
 
 ### Static Analysis & Linters (0 Errors)
 - Python Ruff (`uv run ruff check .`): All checks passed!
-- Python Format (`uv run ruff format --check .`): 1878 files already formatted.
-- Python MyPy (`uv run mypy`): Success: no issues found in 1095 source files.
+- Python Format (`uv run ruff format --check .`): 1880 files already formatted.
+- Python MyPy (`uv run mypy`): Success: no issues found in 1096 source files.
 - Python Imports (`uv run lint-imports`): Contracts: 2 kept, 0 broken.
 - TypeScript (`pnpm --dir kanban/web exec tsc -b --noEmit`): 0 errors.
 - ESLint (`pnpm --dir kanban/web exec eslint . --max-warnings 0`): 0 errors, 0 warnings.
-- Web Production Build (`pnpm --dir kanban/web build`): Clean Vite 8.3.8 build in 1.09s.
+- Web Production Build (`pnpm --dir kanban/web build`): Clean Vite 8.3.8 build in 1.17s.
 - CSS Tokens Audit (`cssTokensAudit.test.ts`): 4 tests passed, 100% canonical tokens.
 - Punctuation & Style (`python3 -m scripts.check_no_dashes --all`): 0 em-dash / en-dash errors.
 
@@ -94,7 +95,7 @@
 - `unit-test-results.txt` (verbatim Pytest and Vitest coverage output)
 - `build-or-typecheck.txt` (verbatim output of ruff, mypy, lint-imports, typecheck, lint, build, check_no_dashes)
 - `live-fullstack-proof.txt` (verbatim zero-mock CDP Playwright CTAP2 live execution proof)
-- `screenshots/` (7 live unmocked screenshots on desktop 1440x900 and mobile 390x844 light/dark modes)
+- `screenshots/` (9 live unmocked screenshots on desktop 1440x900 and mobile 390x844 light/dark modes, including live-kan25-clone-warning-desktop-light.png and live-kan25-insecure-context-desktop-light.png)
 - `message-to-reality-checker.md`
 - `api-specialist-review.md`
 - `ui-specialist-review.md`

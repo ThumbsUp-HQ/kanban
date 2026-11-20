@@ -889,7 +889,7 @@ index 0000000..48215be
 +  );
 +}
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
-index c125dad..c69b058 100644
+index c125dad..6cd483e 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.css
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
 @@ -4,6 +4,9 @@
@@ -998,7 +998,7 @@ index c125dad..c69b058 100644
  }
  
  .kb-personal-settings-mfa-actions {
-@@ -719,3 +804,84 @@
+@@ -719,3 +804,88 @@
    text-align: right;
    font-variant-numeric: tabular-nums;
  }
@@ -1006,8 +1006,7 @@ index c125dad..c69b058 100644
 +@media (max-width: 640px) {
 +  .kb-personal-settings-table,
 +  .kb-personal-settings-table tbody,
-+  .kb-personal-settings-table tr,
-+  .kb-personal-settings-table td {
++  .kb-personal-settings-table tr {
 +    display: block;
 +    width: 100%;
 +    box-sizing: border-box;
@@ -1025,7 +1024,10 @@ index c125dad..c69b058 100644
 +    background-color: var(--bg-surface);
 +  }
 +
++  .kb-personal-settings-table td.kb-personal-settings-td,
 +  .kb-personal-settings-td {
++    width: 100%;
++    box-sizing: border-box;
 +    padding: var(--space-1) 0;
 +    border-bottom: none;
 +    display: flex;
@@ -1045,6 +1047,7 @@ index c125dad..c69b058 100644
 +    flex-shrink: 0;
 +  }
 +
++  .kb-personal-settings-table td.kb-personal-settings-td.kb-personal-settings-td--title,
 +  .kb-personal-settings-td.kb-personal-settings-td--title {
 +    display: block;
 +    padding-bottom: var(--space-2);
@@ -1056,6 +1059,7 @@ index c125dad..c69b058 100644
 +    display: none;
 +  }
 +
++  .kb-personal-settings-table td.kb-personal-settings-td-right,
 +  .kb-personal-settings-td-right {
 +    text-align: left;
 +    margin-top: var(--space-2);

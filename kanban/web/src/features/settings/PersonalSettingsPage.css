@@ -808,8 +808,7 @@
 @media (max-width: 640px) {
   .kb-personal-settings-table,
   .kb-personal-settings-table tbody,
-  .kb-personal-settings-table tr,
-  .kb-personal-settings-table td {
+  .kb-personal-settings-table tr {
     display: block;
     width: 100%;
     box-sizing: border-box;
@@ -827,7 +826,10 @@
     background-color: var(--bg-surface);
   }
 
+  .kb-personal-settings-table td.kb-personal-settings-td,
   .kb-personal-settings-td {
+    width: 100%;
+    box-sizing: border-box;
     padding: var(--space-1) 0;
     border-bottom: none;
     display: flex;
@@ -847,6 +849,7 @@
     flex-shrink: 0;
   }
 
+  .kb-personal-settings-table td.kb-personal-settings-td.kb-personal-settings-td--title,
   .kb-personal-settings-td.kb-personal-settings-td--title {
     display: block;
     padding-bottom: var(--space-2);
@@ -858,6 +861,7 @@
     display: none;
   }
 
+  .kb-personal-settings-table td.kb-personal-settings-td-right,
   .kb-personal-settings-td-right {
     text-align: left;
     margin-top: var(--space-2);
