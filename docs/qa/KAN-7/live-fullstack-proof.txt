@@ -1,123 +1,230 @@
-=== KAN-7 ZERO-MOCK LIVE FULL-STACK VERIFICATION (ROUND 2) ===
-Target: http://localhost:18951 (container: kanban-liveqa-1)
-Timestamp: 2026-11-20T05:27:45Z
+=== KAN-7 ZERO-MOCK LIVE FULL-STACK VERIFICATION (ROUND 4) ===
+Target: http://localhost:18951 (container: kanban-liveqa-1, image: thumbs-up-kanban:local-qa)
+Git Commit: c43f9461c183006f95fd8a33a1216efcf38d58dc
+Timestamp: 2026-11-20T06:11:38Z
+Runner: Headless Chromium Playwright (ZERO mockApi, ZERO page.route, ZERO context.route)
 
-[CHECK 0] Container /run/kanban/setup_token & Pre-Claim API Status
-  stat /run/kanban/setup_token -> 65532:65532 600 /run/kanban/setup_token
-  setup_token length -> 52 (prefix=kb_setup_...)
-  GET /api/v1/setup/status -> HTTP 200 {"initialized":false}
-  CHECK 0 VERDICT: PASS
+-------------------------------------------------------------------------------
+[CHECK 0] Container Startup, UID 65532 Runtime & Setup Token Permissions
+-------------------------------------------------------------------------------
+Command:
+  docker exec kanban-liveqa-1 stat /run/kanban/setup_token
+Output:
+  File: /run/kanban/setup_token
+  Size: 52
+  Access: (0600/-rw-------)  Uid: (65532/  kanban)   Gid: (65532/  kanban)
 
-[CHECK 1] Unauthenticated Root / Pre-Claim Fail-Closed Check
-  Action: Brand-new unauthenticated Chromium context (1440x900) navigated directly to http://localhost:18951/
-  Observed redirect: / -> /setup (useSessionGuard)
-  RealtimeProvider check: wsOrSseRequests=0 wsOpened=0 realtimeClientState=closed
-  pageErrors=0
-  consoleErrors=6 (FAIL - 0 required):
-    1. Failed to load resource: the server responded with a status of 401 (Unauthorized)
-    2. Failed to load resource: the server responded with a status of 401 (Unauthorized)
-    3. Failed to load resource: the server responded with a status of 401 (Unauthorized)
-    4. Failed to load resource: the server responded with a status of 401 (Unauthorized)
-    5. Failed to load resource: the server responded with a status of 401 (Unauthorized)
-    6. Failed to load resource: the server responded with a status of 401 (Unauthorized)
-  Root Cause (verified in post-claim unauthenticated & container uvicorn logs):
-    AppShell and WorkspaceHomeInner mount and immediately fire protected API requests before useSessionGuard completes /api/v1/setup/status and /api/v1/auth/session:
-      - GET /api/v1/notifications?limit=30 -> HTTP 401
-      - GET /api/v1/workspaces -> HTTP 401
-      - GET /api/v1/auth/me -> HTTP 401
-      - GET /api/v1/projects -> HTTP 401
-      - GET /api/v1/system/status -> HTTP 401
-      - GET /api/v1/projects -> HTTP 401
-  CHECK 1 VERDICT: FAIL (redirect & wsOrSse=0 passed, consoleErrors=6 failed 0-error gate)
+Pre-claim probe:
+  GET http://localhost:18951/api/v1/setup/status -> HTTP 200 {"initialized":false}
 
-[CHECK 2] Setup Claim, TOTP, Recovery Codes & Virtual WebAuthn Passkey Enrollment
-  /setup (light-desktop 1440x900): search="" docScroll=1440/1440 data-theme=light consoleErrors=0 pageErrors=0 wsOrSse=0
-  /setup (dark-desktop 1440x900): search="" docScroll=1440/1440 data-theme=dark consoleErrors=0 pageErrors=0 wsOrSse=0
-  /setup (light-mobile 390x844): search="" docScroll=390/390 data-theme=light consoleErrors=0 pageErrors=0 wsOrSse=0
-  /setup (dark-mobile 390x844): search="" docScroll=390/390 data-theme=dark consoleErrors=0 pageErrors=0 wsOrSse=0
-  POST /api/v1/setup/claim -> HTTP 200 {"status":"enrollment_required","principal_id":"01a1f76c-0302-7597-810c-50077a14fd2a","enrollment_id":"8270a45f-c1f4-467e-950d-a7307caed532","csrf_token":"_NrW4z9M01BjGBAMO1WMbw.SHp35FN5Uwoz3-iuIJQfny5ZSVUTg0OoB1Ehupwk1g8"}
-  POST /api/v1/auth/mfa/totp/enroll -> HTTP 200 has_secret=true has_uri=true
-  POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 verified=true aal_level=2 recovery_count=10
-  Step 3 recovery codes rendered: count=10 first=CN5JP-3H25A
-  GET /api/v1/auth/session (after setup) -> HTTP 200 {"authenticated":true,"principal_id":"01a1f76c-0302-7597-810c-50077a14fd2a","workspace_id":"01a1f76c-0301-721e-b84a-3a305354543f","session_id":"01a1f76c-03a0-7905-8171-671e24d20204","aal_level":2,"mfa_pending":false,"csrf_token":"fYVqK0UEYybYPdFKoaTnTw.LcXIEJmgLVCf_XQyMejrKpVOTcqRnpthpELcLCAV7aw","idle_expires_at":"2026-11-27T05:26:53.599634+00:00","absolute_expires_at":"2026-12-20T05:26:53.463546+00:00","remember_me":true}
-  WebAuthn Virtual Passkey enrollment (Chromium CDP ctap2/internal):
-    POST /api/v1/auth/webauthn/register/options -> HTTP 200
-    POST /api/v1/auth/webauthn/register/verify -> HTTP 200 {"verified":true,"credential_id":"01a1f76c-0898-70ec-9cc2-713494d37cb2","nickname":"LiveQA Virtual Passkey"}
-    GET /api/v1/auth/mfa/status -> HTTP 200 {"totp_enabled":true,"passkeys_count":1,"recovery_codes_remaining":10}
-  CHECK 2 VERDICT: PASS
+Container Startup Excerpt (ANSI-stripped):
+  [kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
+  [kanban-standalone] [00051ms] keyring: keyring loaded from /var/lib/kanban/data/secrets/keyring.json
+  [kanban-standalone] [00051ms] initdb: initializing new database cluster
+  [kanban-standalone] [00697ms] pg_start: starting embedded PostgreSQL
+  [kanban-standalone] [00917ms] pg_start: PostgreSQL is ready on /run/postgresql
+  [kanban-standalone] [00917ms] bootstrap_sql: creating roles and kanban database
+  [kanban-standalone] [01161ms] bootstrap_sql: roles, database, and extensions initialized
+  [kanban-standalone] [01161ms] migrations: running alembic upgrade head
+  [kanban-standalone] [09549ms] migrations: schema migrations applied successfully
+  [kanban-standalone] [09580ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
+  [kanban-standalone] [09594ms] backup_grants: granted SELECT on alembic_version to kanban_app
+  [kanban-standalone] [09594ms] uvicorn_spawn: spawning uvicorn as UID 65532
+  2026-11-20 06:11:32,844 [INFO] [user=-] [kanban.app] Database schema head verified: {'p4_21_workspace_project_rbac_fix'}
+  First-boot setup URL: http://localhost:18951/setup?token=[REDACTED:SETUP_TOKEN] (claim token written to /run/kanban/setup_token)
+  2026-11-20 06:11:32,861 [INFO] [user=-] [uvicorn.error] Uvicorn running on http://0.0.0.0:8080
 
-[CHECK 3] Topbar Client-Side Logout Sync
-  Clicked [data-testid="topbar-avatar-button"] -> [data-testid="logout-button"]
-  POST /api/v1/auth/logout -> HTTP 200
-  Immediate SPA navigation to: /login
-  GET /api/v1/auth/session (after logout) -> HTTP 200 {"authenticated":false,"principal_id":null,"workspace_id":null,"session_id":null,"aal_level":0,"mfa_pending":false,"csrf_token":"FgY69Fkxpv3st6Aw8FlbEw.7W8EaMnkLja_bj3hmsAdBbVdAl7NF5NQaKBcLPCeAl0","idle_expires_at":null,"absolute_expires_at":null,"remember_me":false}
-  Post-logout wsOrSseRequests=0 wsOpened=0 realtimeClientState=closed consoleErrors=0 pageErrors=0
-  CHECK 3 VERDICT: PASS
+LIVE_STACK_VERDICT (Check 0): PASS
 
-[CHECK 4] Unauthenticated Root / & mfa_pending: true Root / Fail-Closed Checks
-  4a. Unauthenticated GET / (post-claim, across all 4 theme/viewport contexts):
-    - [light-desktop 1440x900] GET / -> /login consoleErrors=6 pageErrors=0 wsOrSse=0
-    - [dark-desktop 1440x900] GET / -> /login consoleErrors=6 pageErrors=0 wsOrSse=0
-    - [light-mobile 390x844] GET / -> /login consoleErrors=6 pageErrors=0 wsOrSse=0
-    - [dark-mobile 390x844] GET / -> /login consoleErrors=6 pageErrors=0 wsOrSse=0
-    Diagnostic HTTP 401 URLs on unauthenticated GET /:
-      - HTTP 401 GET http://localhost:18951/api/v1/notifications?limit=30
-      - HTTP 401 GET http://localhost:18951/api/v1/workspaces
-      - HTTP 401 GET http://localhost:18951/api/v1/auth/me
-      - HTTP 401 GET http://localhost:18951/api/v1/projects
-      - HTTP 401 GET http://localhost:18951/api/v1/system/status
-      - HTTP 401 GET http://localhost:18951/api/v1/projects
+-------------------------------------------------------------------------------
+[CHECK 1] Pre-Claim GET / Fail-Closed Redirect & Zero-401 Verification
+-------------------------------------------------------------------------------
+Action:
+  Fresh unauthenticated Chromium context (1440x900, light) visited http://localhost:18951/
+Observed Behavior:
+  - DOM telemetry: sawAuthLoading=true ([data-testid="app-shell-auth-loading"] mounted before redirect)
+  - DOM telemetry: sawShellChromeOnRoot=false (Topbar and Sidebar did NOT mount on /)
+  - Final URL: http://localhost:18951/setup
+  - API responses observed:
+      GET /api/v1/auth/session -> HTTP 200
+      GET /api/v1/setup/status -> HTTP 200
+      GET /api/v1/auth/session -> HTTP 200
+      GET /api/v1/auth/session -> HTTP 200
+  - Protected API calls (/api/v1/notifications, /api/v1/workspaces, /api/v1/auth/me, /api/v1/projects, /api/v1/system/status): 0
+  - HTTP 401 responses: 0
+  - SSE (/api/v1/events/stream) / WebSocket (/ws) attempts: 0
+  - console.error count: 0
+  - pageerror count: 0
+  - Layout: innerWidth=1440, scrollWidth=1440, horizontalOverflow=false, authPanels=1, nestedAuthPanels=0
 
-  4b. Local Admin First-Factor Login -> SecondFactorStep (mfa_pending: true):
-    - [light-desktop] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required methods=["totp","webauthn","recovery"]
-      Tabs=["Authenticator code","Passkey","Recovery code"] docScroll=1440/1440 panelScroll=478/478 tablistScroll=430/430 pattern="[A-Za-z0-9\-]{8,32}" regexVValid=true theme=light
-    - [dark-desktop] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required methods=["totp","webauthn","recovery"]
-      Tabs=["Authenticator code","Passkey","Recovery code"] docScroll=1440/1440 panelScroll=478/478 tablistScroll=430/430 pattern="[A-Za-z0-9\-]{8,32}" regexVValid=true theme=dark
-    - [light-mobile] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required methods=["totp","webauthn","recovery"]
-      Tabs=["Authenticator code","Passkey","Recovery code"] docScroll=390/390 panelScroll=320/320 tablistScroll=272/272 pattern="[A-Za-z0-9\-]{8,32}" regexVValid=true theme=light
-    - [dark-mobile] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required methods=["totp","webauthn","recovery"]
-      Tabs=["Authenticator code","Passkey","Recovery code"] docScroll=390/390 panelScroll=320/320 tablistScroll=272/272 pattern="[A-Za-z0-9\-]{8,32}" regexVValid=true theme=dark
+LIVE_STACK_VERDICT (Check 1): PASS
 
-  4c. mfa_pending: true Direct Navigation to Root /:
-    - [light-desktop] mfa_pending=true GET / -> redirected to /login (SecondFactorStep visible) consoleErrors=5 pageErrors=0 wsOrSse=0
-    - [dark-desktop] mfa_pending=true GET / -> redirected to /login (SecondFactorStep visible) consoleErrors=5 pageErrors=0 wsOrSse=0
-    - [light-mobile] mfa_pending=true GET / -> redirected to /login (SecondFactorStep visible) consoleErrors=5 pageErrors=0 wsOrSse=0
-    - [dark-mobile] mfa_pending=true GET / -> redirected to /login (SecondFactorStep visible) consoleErrors=5 pageErrors=0 wsOrSse=0
-    Diagnostic HTTP 401 (MFA_REQUIRED) URLs on mfa_pending=true GET /:
-      - HTTP 401 GET http://localhost:18951/api/v1/workspaces
-      - HTTP 401 GET http://localhost:18951/api/v1/system/status
-      - HTTP 401 GET http://localhost:18951/api/v1/projects
-      - HTTP 401 GET http://localhost:18951/api/v1/notifications?limit=30
-      - HTTP 401 GET http://localhost:18951/api/v1/projects
-    Note: Notice also in kanban-liveqa-1 logs that GET /api/v1/auth/me returned HTTP 200 even during mfa_pending=true while the 5 endpoints above returned HTTP 401 MFA_REQUIRED, triggering 5 console.error entries in Chromium.
+-------------------------------------------------------------------------------
+[CHECK 2] Setup Claim (FORCE RLS), CTAP2 Passkey Enrollment, Recovery Codes & Workspace
+-------------------------------------------------------------------------------
+Action:
+  Chromium virtual authenticator configured via CDP:
+    protocol=ctap2, transport=internal, hasResidentKey=true (rk=true), hasUserVerification=true (uv=true)
+  Visited http://localhost:18951/setup?token=<SETUP_TOKEN>
+Observed Behavior:
+  - URL query string immediately scrubbed on load: window.location.search === ""
+  - Screenshot captured: live-01-setup-claim-light-desktop.png (1440x900, light)
+  - POST /api/v1/setup/claim -> HTTP 200
+      {"status":"enrollment_required","principal_id":"01a1f795-063f-78a0-b6c4-9245f62b56cb","enrollment_id":"dd99f9ac-4069-4e96-8a52-fd884d383b0b"}
+  - Step 2 rendered with Passkey (Recommended) tab selected (aria-selected="true")
+  - Screenshot captured: live-01b-setup-passkey-enrolled-light.png (1440x900, light)
+  - Clicked "Register a passkey" -> virtual authenticator completed CTAP2 makeCredential:
+      POST /api/v1/auth/webauthn/registration/options -> HTTP 200
+      POST /api/v1/auth/webauthn/registration/verify -> HTTP 200
+        {"verified":true,"aal_level":2,"session_id":"01a1f795-0706-7774-b244-979f945f8187","credential_id":"01a1f795-06fb-7e97-a602-21a659b46cee","nickname":null}
+      Virtual authenticator credential verified: rpId="localhost", isResidentCredential=true, signCount=1, credentialIdLen=44
+      POST /api/v1/auth/mfa/recovery-codes/generate -> HTTP 200 (10 recovery codes returned)
+  - Step 3 rendered 10 recovery codes; saved code #1 (preview: FHEE-****)
+  - Screenshot captured: live-02-setup-recovery-codes-light.png (1440x900, light)
+  - Confirmed recovery codes saved and clicked "Continue to workspace" -> landed on http://localhost:18951/
+  - GET /api/v1/auth/session -> HTTP 200:
+      {"authenticated":true,"principal_id":"01a1f795-063f-78a0-b6c4-9245f62b56cb","workspace_id":"01a1f795-063e-7d9a-97a8-2d4270f67c11","session_id":"01a1f795-0706-7774-b244-979f945f8187","aal_level":2,"mfa_pending":false,"remember_me":true}
+  - Realtime connection observed in container logs:
+      "WebSocket /ws" [accepted] / connection open (note: app uses /ws WebSocket transport; 0 /api/v1/events/stream requests)
+  - Workspace screenshots & layout checks:
+      live-03-workspace-light-desktop.png (1440x900, data-theme=system/light, bodyBg=rgb(247, 248, 250), bodyColor=rgb(17, 24, 39), overflow=false)
+      live-04-workspace-dark-desktop.png  (1440x900, data-theme=dark, bodyBg=rgb(15, 17, 21), bodyColor=rgb(249, 250, 251), overflow=false)
+      live-05-workspace-light-mobile.png  (390x844, data-theme=light, bodyBg=rgb(247, 248, 250), bodyColor=rgb(17, 24, 39), overflow=false)
+  - HTTP 401 responses: 0
+  - console.error count: 0
+  - pageerror count: 0
 
-  CHECK 4 VERDICT: FAIL (redirects, layout bounds, 3 MFA tabs, /v regex, and wsOrSse=0 passed; consoleErrors=6 on unauthenticated / and consoleErrors=5 on mfa_pending=true / failed 0-error gate)
+LIVE_STACK_VERDICT (Check 2): PASS
 
-[CHECK 5] Recovery Code /v Regex & Login Completion (Dark Mobile 390x844)
-  #recovery-code-input /v check: {"pattern":"[A-Za-z0-9\\-]{8,32}","valid":true,"matchesSample":true}
-  Submitted recovery code CN5JP-3H25A -> server log confirmed:
-    2026-11-20 05:27:13,618 [INFO] [user=01a1f76c-0302-7597-810c-50077a14fd2a:mfa_pending] [uvicorn.access] [req=64fb4cc9ce224a77b52ab57fbcff20b9] 172.17.0.1:56288 - "POST /api/v1/auth/recovery/verify HTTP/1.1" 200
-    2026-11-20 05:27:13,623 [INFO] [user=anon] [uvicorn.access] [req=45e5e81dcd884daab6eb599b335e48fa] 172.17.0.1:56288 - "GET / HTTP/1.1" 304
-  Script note: verify_kan7_live.mjs threw Protocol error on recRes.text() because handleAuthSuccess() triggered window.location.assign('/') immediately upon HTTP 200 before Playwright read the response body, preventing automated post-recovery session/mfa-status JSON capture and live-03-workspace-dark-mobile.png capture in that run.
-  CHECK 5 VERDICT: INCOMPLETE / PARTIAL PASS (POST /api/v1/auth/recovery/verify -> HTTP 200 & redirect to / observed in server logs; post-recovery /api/v1/auth/session check blocked by script navigation race)
+-------------------------------------------------------------------------------
+[CHECK 3] Logout, Unauthenticated GET /, mfa_pending GET /, & Recovery Code Login
+-------------------------------------------------------------------------------
+3A. Clean Logout & Unauthenticated GET / Fail-Closed Check:
+  - Topbar Log out button -> POST /api/v1/auth/logout -> HTTP 200
+  - Fresh unauthenticated context visited http://localhost:18951/:
+      sawAuthLoading=true, sawShellChromeOnRoot=false, finalUrl=http://localhost:18951/login
+      HTTP 401 responses: 0
+      Protected API calls before redirect: 0
+      SSE/WS attempts: 0
+      console.error count: 0
+      pageerror count: 0
+  - Screenshots captured:
+      live-06-login-light-desktop.png (1440x900, overflow=false, authPanels=1, nestedAuthPanels=0)
+      live-06b-login-light-mobile.png (390x844, overflow=false, authPanels=1, nestedAuthPanels=0)
 
-=== SUMMARY ===
-  check0_setup_token_and_preclaim_api: PASS
-  check1_preclaim_root: FAIL (consoleErrors=6 from premature 401 API calls before useSessionGuard redirect)
-  check2_setup_mfa_webauthn: PASS
-  check3_topbar_logout_sync: PASS
-  check4_root_fail_closed_mfa_pending: FAIL (consoleErrors=6 on unauth GET /, consoleErrors=5 on mfa_pending=true GET /)
-  check5_recovery_regex_login: INCOMPLETE (POST /api/v1/auth/recovery/verify 200 + redirect verified; post-redirect session assertion interrupted by script navigation race)
+3B. Password Login -> mfa_pending=true & SecondFactorStep Views:
+  - Expanded Local Admin disclosure and submitted admin credentials:
+      POST /api/v1/auth/local/login -> HTTP 200
+        {"authenticated":true,"status":"mfa_required","challenge_id":"a8acde32-58cd-46ee-bc85-456f86ce8387","methods":["totp","webauthn","recovery"],"session_id":"a8acde32-58cd-46ee-bc85-456f86ce8387","aal_level":1,"mfa_pending":true}
+  - GET /api/v1/auth/session -> HTTP 200:
+      {"authenticated":true,"principal_id":"01a1f795-063f-78a0-b6c4-9245f62b56cb","workspace_id":"01a1f795-063e-7d9a-97a8-2d4270f67c11","session_id":"a8acde32-58cd-46ee-bc85-456f86ce8387","aal_level":1,"mfa_pending":true,"remember_me":true}
+  - Note on default tab order (pre-existing auth_local.py behavior, outside KAN-7 diff):
+      POST /api/v1/auth/local/login returns hardcoded methods=["totp","webauthn","recovery"] so SecondFactorStep selects "Authenticator code" first while rendering Passkey and Recovery code tabs cleanly inside a single card shell (authPanels=1, nestedAuthPanels=0).
+  - Screenshots captured:
+      live-07-second-factor-initial-light.png (1440x900, light, authPanels=1, nestedAuthPanels=0, overflow=false)
+      live-08-second-factor-totp-tab-dark.png          (1440x900, dark,  authPanels=1, nestedAuthPanels=0, overflow=false)
+      live-09-second-factor-recovery-tab-light.png     (1440x900, light, authPanels=1, nestedAuthPanels=0, overflow=false)
+      live-10-second-factor-mobile-dark.png            (390x844,  dark,  authPanels=1, nestedAuthPanels=0, overflow=false)
 
-Saved fresh screenshots in this run (9):
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-light-desktop.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-dark-desktop.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-light-mobile.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-dark-mobile.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-light-desktop.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-dark-desktop.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-light-mobile.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-dark-mobile.png
-  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-03-workspace-light-desktop.png
+3C. mfa_pending=true Direct Navigation to GET / Fail-Closed Check:
+  - While mfa_pending=true, navigated directly to http://localhost:18951/
+  - Observed Behavior:
+      sawAuthLoading=true ([data-testid="app-shell-auth-loading"] mounted before redirect)
+      sawShellChromeOnRoot=false (Topbar and Sidebar did NOT mount on /)
+      Redirected back to /login (waitForURL **/login* succeeded; [data-testid="second-factor-step"] visible)
+      API responses observed:
+        GET /api/v1/auth/session -> HTTP 200
+        GET /api/v1/setup/status -> HTTP 200
+        GET /api/v1/auth/session -> HTTP 200
+        GET /api/v1/auth/session -> HTTP 200
+        GET /api/v1/auth/session -> HTTP 200
+        GET /api/v1/auth/cards   -> HTTP 200
+      Protected API calls before redirect: 0
+      HTTP 401 responses: 0
+      SSE (/api/v1/events/stream) attempts: 0
+      WebSocket (/ws) attempts: 0
+      console.error count: 0
+      pageerror count: 0
 
-LIVE_STACK_VERDICT: FAIL
+3D. Recovery Code Login Completion & Final AAL2 Session Verification:
+  - Selected "Recovery code" tab, entered saved recovery code (FHEE-****), clicked "Verify recovery code"
+  - POST /api/v1/auth/recovery/verify -> HTTP 200
+  - Redirected to http://localhost:18951/ authenticated workspace with WebSocket /ws [accepted] / connection open
+  - Final GET /api/v1/auth/session -> HTTP 200:
+      {
+        "authenticated": true,
+        "principal_id": "01a1f795-063f-78a0-b6c4-9245f62b56cb",
+        "workspace_id": "01a1f795-063e-7d9a-97a8-2d4270f67c11",
+        "session_id": "01a1f795-228b-7e90-aa58-85f3927d6cf9",
+        "aal_level": 2,
+        "mfa_pending": false,
+        "csrf_token": "y1-4-YN5_SgJFbvd02Ki_g.rKBYXoJ6BrDEmrpWEWcKj55hSp2tsI7typ0dLrjsju0",
+        "idle_expires_at": "2026-11-27T06:11:48.490704+00:00",
+        "absolute_expires_at": "2026-12-20T06:11:46.188450+00:00",
+        "remember_me": true
+      }
+  - Final GET /api/v1/auth/me -> HTTP 200:
+      {
+        "id": "01a1f795-063f-78a0-b6c4-9245f62b56cb",
+        "handle": "admin",
+        "username": "admin",
+        "display_name": "Server Administrator",
+        "email": "admin@kanban.local",
+        "is_server_admin": true,
+        "workspace_role": "SERVER_ADMIN",
+        "aal_level": 2,
+        "mfa_pending": false
+      }
+  - HTTP 401 responses: 0
+  - console.error count: 0
+  - pageerror count: 0
+
+LIVE_STACK_VERDICT (Check 3): PASS
+
+-------------------------------------------------------------------------------
+[CONTAINER LOG EXCERPT - ZERO 401/403/404/500 ERRORS]
+-------------------------------------------------------------------------------
+Total log lines: 101 | 401/403/404/500 responses: 0
+  2026-11-20 06:11:39,003 [user=anon] "GET / HTTP/1.1" 200
+  2026-11-20 06:11:39,144 [user=anon] "GET /api/v1/setup/status HTTP/1.1" 200
+  2026-11-20 06:11:41,278 [user=anon] "POST /api/v1/setup/claim HTTP/1.1" 200
+  2026-11-20 06:11:41,415 [user=01a1f795-...:mfa_pending] "POST /api/v1/auth/webauthn/registration/options HTTP/1.1" 200
+  2026-11-20 06:11:41,455 [user=01a1f795-...:mfa_pending] "POST /api/v1/auth/webauthn/registration/verify HTTP/1.1" 200
+  2026-11-20 06:11:41,478 [user=01a1f795-...] "POST /api/v1/auth/mfa/recovery-codes/generate HTTP/1.1" 200
+  2026-11-20 06:11:41,671 "WebSocket /ws" [accepted] / connection open
+  2026-11-20 06:11:44,417 [user=01a1f795-...] "POST /api/v1/auth/logout HTTP/1.1" 200
+  2026-11-20 06:11:44,462 [user=anon] "GET / HTTP/1.1" 200
+  2026-11-20 06:11:44,640 [user=anon] "GET /api/v1/auth/cards HTTP/1.1" 200
+  2026-11-20 06:11:46,209 [user=anon] "POST /api/v1/auth/local/login HTTP/1.1" 200
+  2026-11-20 06:11:47,296 [user=anon] "GET / HTTP/1.1" 304
+  2026-11-20 06:11:47,359 [user=anon] "GET /api/v1/auth/cards HTTP/1.1" 200
+  2026-11-20 06:11:48,498 [user=01a1f795-...:mfa_pending] "POST /api/v1/auth/recovery/verify HTTP/1.1" 200
+  2026-11-20 06:11:48,539 "WebSocket /ws" [accepted] / connection open
+  2026-11-20 06:11:48,580 [user=01a1f795-...] "GET /api/v1/auth/me HTTP/1.1" 200
+  2026-11-20 06:11:48,583 [user=01a1f795-...] "GET /api/v1/notifications?limit=30 HTTP/1.1" 200
+  2026-11-20 06:11:48,595 [user=01a1f795-...] "GET /api/v1/projects HTTP/1.1" 200
+
+-------------------------------------------------------------------------------
+[SCREENSHOT INVENTORY] (docs/qa/KAN-7/screenshots/)
+-------------------------------------------------------------------------------
+1.  live-01-setup-claim-light-desktop.png (1440x900 Light)
+2.  live-01b-setup-passkey-enrolled-light.png (1440x900 Light)
+3.  live-02-setup-recovery-codes-light.png (1440x900 Light)
+4.  live-03-workspace-light-desktop.png (1440x900 Light)
+5.  live-04-workspace-dark-desktop.png (1440x900 Dark)
+6.  live-05-workspace-light-mobile.png (390x844 Light)
+7.  live-06-login-light-desktop.png (1440x900 Light)
+8.  live-06b-login-light-mobile.png (390x844 Light)
+9.  live-07-second-factor-initial-light.png (1440x900 Light)
+10. live-08-second-factor-totp-tab-dark.png (1440x900 Dark)
+11. live-09-second-factor-recovery-tab-light.png (1440x900 Light)
+12. live-10-second-factor-mobile-dark.png (390x844 Dark)
+
+-------------------------------------------------------------------------------
+OVERALL LIVE_STACK_VERDICT: PASS
+- Pre-claim GET / -> /setup: PASS (app-shell-auth-loading=true, 401=0, console.error=0, pageerror=0)
+- Setup claim + CTAP2 Passkey + Recovery codes + Workspace: PASS (401=0, console.error=0, pageerror=0, WS connected)
+- Unauth GET / -> /login: PASS (app-shell-auth-loading=true, 401=0, console.error=0, pageerror=0)
+- mfa_pending GET / -> /login: PASS (app-shell-auth-loading=true, 401=0, SSE=0, WS=0, console.error=0, pageerror=0)
+- Recovery code login -> AAL2 workspace: PASS (session authenticated=true, mfa_pending=false, aal_level=2, 401=0, console.error=0, pageerror=0)
+-------------------------------------------------------------------------------
