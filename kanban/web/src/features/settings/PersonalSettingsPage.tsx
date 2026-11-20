@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useRef, useEffect, type JSX, type SyntheticEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchMyProfile,
@@ -163,6 +163,42 @@ export function PersonalSettingsPage(): JSX.Element {
   const [ldapUsername, setLdapUsername] = useState('');
   const [ldapPassword, setLdapPassword] = useState('');
   const [isSubmittingLdap, setIsSubmittingLdap] = useState(false);
+  const [ldapErrorMsg, setLdapErrorMsg] = useState<string | null>(null);
+  const ldapTriggerRef = useRef<HTMLElement | null>(null);
+  const ldapUsernameInputRef = useRef<HTMLInputElement>(null);
+
+  const closeLdapModal = useCallback(() => {
+    setLdapModalCard(null);
+    setLdapUsername('');
+    setLdapPassword('');
+    setLdapErrorMsg(null);
+    ldapTriggerRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (ldapModalCard) {
+      const timer = setTimeout(() => {
+        ldapUsernameInputRef.current?.focus();
+      }, 0);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [ldapModalCard]);
+
+  useEffect(() => {
+    if (!ldapModalCard) return;
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !isSubmittingLdap) {
+        e.preventDefault();
+        closeLdapModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [ldapModalCard, isSubmittingLdap, closeLdapModal]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -500,6 +536,7 @@ export function PersonalSettingsPage(): JSX.Element {
     const action = async (): Promise<void> => {
       try {
         setIsSubmittingLdap(true);
+        setLdapErrorMsg(null);
         const startRes = await startLinkIdentity(targetCard.slug);
         if (!startRes.link_intent_id) {
           throw new Error('Missing link intent ID from server.');
@@ -508,12 +545,15 @@ export function PersonalSettingsPage(): JSX.Element {
         setLdapModalCard(null);
         setLdapUsername('');
         setLdapPassword('');
+        setLdapErrorMsg(null);
         setSuccessMsg(`Account successfully linked (${targetCard.display_name}).`);
         setErrorMsg(null);
+        ldapTriggerRef.current?.focus();
         void queryClient.invalidateQueries({ queryKey: ['myIdentities'] });
       } catch (err) {
         if (!handleInterceptAal2(err, action)) {
-          setErrorMsg(err instanceof Error ? err.message : 'Failed to link LDAP account.');
+          const message = err instanceof Error ? err.message : 'Failed to link LDAP account.';
+          setLdapErrorMsg(message);
         }
       } finally {
         setIsSubmittingLdap(false);
@@ -1025,9 +1065,11 @@ export function PersonalSettingsPage(): JSX.Element {
                 type="button"
                 className="kb-personal-settings-btn kb-personal-settings-btn-primary"
                 data-testid={`connect-provider-${card.slug}`}
-                onClick={() => {
+                onClick={(e) => {
                   if (card.provider_kind === 'LDAP') {
+                    ldapTriggerRef.current = e.currentTarget;
                     setLdapModalCard(card);
+                    setLdapErrorMsg(null);
                   } else {
                     void handleConnectOidc(card.slug);
                   }
@@ -1072,16 +1114,16 @@ export function PersonalSettingsPage(): JSX.Element {
             <tbody>
               {identities.map((ident) => (
                 <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
-                  <td className="kb-personal-settings-td">
+                  <td className="kb-personal-settings-td" data-label="Provider">
                     <strong>{ident.card_slug}</strong> ({(ident.provider_kind ?? ident.provider_type ?? '').toUpperCase()})
                   </td>
-                  <td className="kb-personal-settings-td">
+                  <td className="kb-personal-settings-td" data-label="Subject / Email">
                     {ident.subject_email_at_link ?? ident.immutable_subject_id ?? ident.card_display_name ?? ident.display_name ?? ident.email ?? ident.subject_id ?? 'Unknown'}
                   </td>
-                  <td className="kb-personal-settings-td">
+                  <td className="kb-personal-settings-td" data-label="Linked">
                     {ident.created_at ? new Date(ident.created_at).toLocaleDateString() : 'N/A'}
                   </td>
-                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
+                  <td className="kb-personal-settings-td kb-personal-settings-td-right" data-label="Actions">
                     <button
                       type="button"
                       className="kb-personal-settings-btn kb-personal-settings-btn-danger"
@@ -1381,18 +1423,25 @@ export function PersonalSettingsPage(): JSX.Element {
               </h3>
               <button
                 type="button"
-                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
-                onClick={() => {
-                  setLdapModalCard(null);
-                  setLdapUsername('');
-                  setLdapPassword('');
-                }}
+                className="kb-personal-settings-modal-close-btn"
+                aria-label="Close LDAP modal"
+                disabled={isSubmittingLdap}
+                onClick={closeLdapModal}
               >
-                Cancel
+                ✕
               </button>
             </div>
             <form onSubmit={(e) => { void handleLdapLinkSubmit(e); }}>
               <div className="kb-personal-settings-modal-body">
+                {ldapErrorMsg && (
+                  <div
+                    role="alert"
+                    className="kb-personal-settings-alert kb-personal-settings-alert-error"
+                    data-testid="ldap-modal-error"
+                  >
+                    <span>{ldapErrorMsg}</span>
+                  </div>
+                )}
                 <p className="kb-personal-settings-modal-text">
                   Enter your directory credentials for {ldapModalCard.display_name} to link your account.
                 </p>
@@ -1401,6 +1450,7 @@ export function PersonalSettingsPage(): JSX.Element {
                     Username
                   </label>
                   <input
+                    ref={ldapUsernameInputRef}
                     id="ldap-link-username"
                     data-testid="ldap-link-username-input"
                     type="text"
@@ -1431,11 +1481,8 @@ export function PersonalSettingsPage(): JSX.Element {
                 <button
                   type="button"
                   className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
-                  onClick={() => {
-                    setLdapModalCard(null);
-                    setLdapUsername('');
-                    setLdapPassword('');
-                  }}
+                  disabled={isSubmittingLdap}
+                  onClick={closeLdapModal}
                 >
                   Cancel
                 </button>

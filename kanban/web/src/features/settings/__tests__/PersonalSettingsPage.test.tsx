@@ -2412,7 +2412,7 @@ describe('PersonalSettingsPage', () => {
       fireEvent.click(screen.getByTestId('connect-provider-github'));
     });
 
-    it('cancels LDAP linking modal and handles LDAP error conditions', async () => {
+    it('cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore', async () => {
       vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
       renderComponent();
 
@@ -2420,6 +2420,53 @@ describe('PersonalSettingsPage', () => {
         expect(screen.getByTestId('connect-provider-corp-ldap')).toBeDefined();
       });
 
+      const ldapTriggerBtn = screen.getByTestId('connect-provider-corp-ldap');
+      ldapTriggerBtn.focus();
+
+      // 1. Open modal and dismiss via header Close button
+      fireEvent.click(ldapTriggerBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+      // Initial focus on username input
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByTestId('ldap-link-username-input'));
+      });
+
+      const closeBtn = screen.getByRole('button', { name: 'Close LDAP modal' });
+      fireEvent.click(closeBtn);
+      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+      expect(document.activeElement).toBe(ldapTriggerBtn);
+
+      // 2. Open again and dismiss via footer Cancel button
+      fireEvent.click(ldapTriggerBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+      const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+      fireEvent.click(cancelBtn);
+      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+      expect(document.activeElement).toBe(ldapTriggerBtn);
+
+      // 3. Open again and dismiss via Escape key
+      fireEvent.click(ldapTriggerBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+      expect(document.activeElement).toBe(ldapTriggerBtn);
+    });
+
+    it('displays inline role="alert" ldap-modal-error on failed LDAP link and prevents backdrop error bleed', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-corp-ldap')).toBeDefined();
+      });
+
+      // Open modal
       fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
       await waitFor(() => {
         expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
@@ -2428,49 +2475,57 @@ describe('PersonalSettingsPage', () => {
       fireEvent.change(screen.getByTestId('ldap-link-username-input'), { target: { value: 'testuser' } });
       fireEvent.change(screen.getByTestId('ldap-link-password-input'), { target: { value: 'testpass' } });
 
-      // Click top Cancel button
-      const cancelBtns = screen.getAllByRole('button', { name: 'Cancel' });
-      const topCancel = cancelBtns[0];
-      if (topCancel) {
-        fireEvent.click(topCancel);
-      }
-      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
-
-      // Open again and test bottom Cancel button
-      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
-      await waitFor(() => {
-        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
-      });
-      const cancelBtns2 = screen.getAllByRole('button', { name: 'Cancel' });
-      const bottomCancel = cancelBtns2[1];
-      if (bottomCancel) {
-        fireEvent.click(bottomCancel);
-      }
-      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
-
-      // Open again and test missing link_intent_id
-      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
-      await waitFor(() => {
-        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
-      });
-      fireEvent.change(screen.getByTestId('ldap-link-username-input'), { target: { value: 'testuser' } });
-      fireEvent.change(screen.getByTestId('ldap-link-password-input'), { target: { value: 'testpass' } });
+      // Missing link_intent_id from server
       vi.mocked(api.startLinkIdentity).mockResolvedValueOnce({ mode: 'redirect' });
       fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('alert-error')).toBeDefined();
+        expect(screen.getByTestId('ldap-modal-error')).toBeDefined();
       });
-      expect(screen.getByTestId('alert-error').textContent).toContain('Missing link intent ID from server.');
+      expect(screen.getByTestId('ldap-modal-error').textContent).toContain('Missing link intent ID from server.');
+      // Modal remains open and no error rendered on page behind backdrop
+      expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      expect(screen.queryByTestId('alert-error')).toBeNull();
 
-      // Test LDAP string error
+      // Next failure: linkLdapIdentity rejects with string error
       vi.mocked(api.startLinkIdentity).mockResolvedValueOnce({ mode: 'redirect', link_intent_id: 'intent-ldap' });
       vi.mocked(api.linkLdapIdentity).mockRejectedValueOnce('Directory unreachable');
       fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('alert-error').textContent).toContain('Failed to link LDAP account.');
+        expect(screen.getByTestId('ldap-modal-error').textContent).toContain('Failed to link LDAP account.');
       });
+      expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      expect(screen.queryByTestId('alert-error')).toBeNull();
+    });
+
+    it('renders identities table cells with responsive data-label attributes matching columns', async () => {
+      const testIdentities: api.ExternalIdentityItem[] = [
+        {
+          id: 'ident-1',
+          card_slug: 'github-corp',
+          card_display_name: 'GitHub Enterprise',
+          provider_kind: 'oauth2',
+          immutable_subject_id: 'gh-123',
+          subject_email_at_link: 'jane@github.example',
+          created_at: '2026-01-15T00:00:00Z',
+          last_login_at: '2026-01-15T00:00:00Z',
+        },
+      ];
+      vi.mocked(api.fetchExternalIdentities).mockResolvedValue(testIdentities);
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('identities-table')).toBeDefined();
+      });
+
+      const row = screen.getByTestId('identity-row-ident-1');
+      const cells = row.querySelectorAll('td');
+      expect(cells.length).toBe(4);
+      expect(cells[0]?.getAttribute('data-label')).toBe('Provider');
+      expect(cells[1]?.getAttribute('data-label')).toBe('Subject / Email');
+      expect(cells[2]?.getAttribute('data-label')).toBe('Linked');
+      expect(cells[3]?.getAttribute('data-label')).toBe('Actions');
     });
 
     it('renders provider card key with card.slug fallback when card.id is empty', async () => {
