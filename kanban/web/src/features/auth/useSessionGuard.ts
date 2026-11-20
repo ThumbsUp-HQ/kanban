@@ -45,6 +45,8 @@ const PUBLIC_PATH_PREFIXES: readonly string[] = [
   '/setup',
   '/activate',
   '/__dev',
+  '/docs',
+  '/help',
 ];
 
 export function isPublicPath(pathname: string): boolean {

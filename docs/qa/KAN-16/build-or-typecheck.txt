@@ -1,0 +1,58 @@
+=== 1. TYPESCRIPT TYPECHECK (tsc -b --noEmit) ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan16-5d599aed/kanban/web
+> tsc -b --noEmit
+
+
+=== 2. ESLINT (--max-warnings 0) ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan16-5d599aed/kanban/web
+> eslint . --max-warnings 0
+
+
+=== 3. VITE PRODUCTION BUILD ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan16-5d599aed/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 720 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-DI3NXiBk.css            454.96 kB │ gzip:  64.03 kB
+dist/assets/index-D2fdqT_5.js           2,369.70 kB │ gzip: 658.37 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.62s
+
+=== 4. CSS TOKENS AUDIT (cssTokensAudit.test.ts) ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan16-5d599aed/kanban/web
+> vitest run src/styles/__tests__/cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan16-5d599aed/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 11ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  12:21:29
+   Duration  907ms (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
+
+
+=== 5. RUFF CHECK (scripts/sync_wiki_bundle.py) ===
+All checks passed!
+
+=== 6. MYPY (scripts/sync_wiki_bundle.py) ===
+Success: no issues found in 1 source file
+
+=== 7. CHECK NO DASHES (0 em/en-dashes) ===
+check_no_dashes passed with 0 forbidden unicode dashes.

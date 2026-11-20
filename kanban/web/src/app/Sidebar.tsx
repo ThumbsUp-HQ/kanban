@@ -702,6 +702,19 @@ export function Sidebar({
                   <span>Stickies</span>
                 </NavLink>
               </li>
+              <li>
+                <NavLink
+                  to="/docs"
+                  className="kb-sidebar-nav-item"
+                  data-testid="sidebar-docs-link"
+                  aria-current={currentPath === '/docs' || currentPath.startsWith('/docs/') || currentPath.startsWith('/help') ? 'page' : undefined}
+                >
+                  <span className="kb-sidebar-icon" aria-hidden="true">
+                    📖
+                  </span>
+                  <span>Docs</span>
+                </NavLink>
+              </li>
             </ul>
           </nav>
         </div>
@@ -987,6 +1000,17 @@ export function Sidebar({
           </nav>
 
           <div className="kb-sidebar-footer">
+            <Link
+              to="/docs"
+              className="kb-sidebar-about-link"
+              data-testid="sidebar-footer-docs-link"
+              title="Documentation Center"
+            >
+              <span className="kb-sidebar-icon" aria-hidden="true">
+                📖
+              </span>
+              <span>Docs</span>
+            </Link>
             <Link
               to="/about"
               className="kb-sidebar-about-link"

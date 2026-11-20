@@ -27,6 +27,7 @@ import { IssueSurfaceSlotsContext } from '../features/drawer/slots';
 import { issueSurfaceSlots } from '../features/drawer/slotRegistry';
 import { AccessInspectorHost } from '../features/access/useAccessInspector';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+import { HelpDrawer } from '../features/docs-center/HelpDrawer';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useQuery } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
@@ -35,6 +36,7 @@ import type { TopbarUser } from './Topbar';
 import './AppShell.css';
 
 registerShellPanel('standalone', StandaloneStatusPanel);
+registerShellPanel('help', HelpDrawer);
 
 export interface AppShellProps {
   children?: ReactNode;

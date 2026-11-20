@@ -67,6 +67,7 @@ import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage'
 import { AboutPage } from '../features/about/AboutPage';
 import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+import { DocsCenterPage } from '../features/docs-center/DocsCenterPage';
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
 import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
@@ -1990,6 +1991,22 @@ export const appRoutes: RouteObject[] = [
         element: <SetupClaimPage />,
       },
       {
+        path: 'docs',
+        element: <DocsCenterPage />,
+      },
+      {
+        path: 'docs/:slug',
+        element: <DocsCenterPage />,
+      },
+      {
+        path: 'help',
+        element: <DocsCenterPage />,
+      },
+      {
+        path: 'help/:slug',
+        element: <DocsCenterPage />,
+      },
+      {
         element: <RootShellLayout />,
         children: [
           {
@@ -2015,6 +2032,22 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'about',
             element: <AboutPage />,
+          },
+          {
+            path: 'docs',
+            element: <DocsCenterPage />,
+          },
+          {
+            path: 'docs/:slug',
+            element: <DocsCenterPage />,
+          },
+          {
+            path: 'help',
+            element: <DocsCenterPage />,
+          },
+          {
+            path: 'help/:slug',
+            element: <DocsCenterPage />,
           },
           {
             path: 'settings/about',

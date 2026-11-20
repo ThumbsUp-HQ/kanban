@@ -36,6 +36,42 @@
   margin: 0;
 }
 
+.kb-agent-studio-error {
+  color: var(--danger-fg);
+}
+
+.kb-agent-drawer-error {
+  color: var(--danger-fg);
+  margin: var(--space-2) 0;
+}
+
+.kb-agent-cli-validation-error {
+  color: var(--danger-fg);
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
+}
+
+.kb-agent-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.kb-agent-tool-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.kb-modal-title {
+  margin: 0 0 12px 0;
+}
+
+.kb-modal-desc {
+  margin: 0 0 20px 0;
+}
+
 /* Agents Grid & Cards */
 .kb-agents-grid {
   display: grid;

@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, type JSX } from 'react';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   mintEnrollmentToken,
   type EnrollmentTokenResponse,
@@ -86,7 +87,7 @@ function MintEnrollmentTokenContent({
       </div>
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444', margin: '8px 0' }} data-testid="mint-token-error">
+        <div className="kb-form-hint kb-mint-token-error" data-testid="mint-token-error">
           {error}
         </div>
       )}
@@ -97,9 +98,16 @@ function MintEnrollmentTokenContent({
             Mint a single-use cryptographically signed enrollment token for an autonomous remote mTLS runner daemon.
           </p>
 
-          <div className="kb-form-group" style={{ marginTop: '16px' }}>
+          <div className="kb-form-group kb-mint-form-group-spaced">
             <label htmlFor="token-pool-slug-input" className="kb-form-label">
               Target Runner Pool Slug
+              <FieldHelpHint
+                title="Target Runner Pool Slug"
+                fieldKey="runner_pool_slug"
+                docHref="/docs/multi-provider-ai-engine-and-runners#remote-runners"
+                summary="Slug of runner pool that this daemon enrolls into (e.g. default, gpu-cluster, linux-x86)."
+                defaultValue="default"
+              />
             </label>
             <input
               id="token-pool-slug-input"
@@ -162,8 +170,7 @@ function MintEnrollmentTokenContent({
               <span data-testid="token-plaintext">{mintedToken.enrollment_token}</span>
               <button
                 type="button"
-                className="kb-btn kb-btn-primary"
-                style={{ minWidth: '80px', padding: '6px 12px' }}
+                className="kb-btn kb-btn-primary kb-copy-token-btn"
                 onClick={() => { void handleCopy(mintedToken.enrollment_token); }}
                 data-testid="copy-token-btn"
               >
@@ -172,22 +179,13 @@ function MintEnrollmentTokenContent({
             </div>
           </div>
 
-          <div className="kb-form-hint" style={{ marginBottom: '16px' }}>
+          <div className="kb-form-hint kb-mint-expires-hint">
             Expires at: {new Date(mintedToken.expires_at).toLocaleString()} | Pool: <code>{mintedToken.pool_slug}</code>
           </div>
 
           <div className="kb-form-group">
             <label className="kb-form-label">Example Runner CLI Ingestion:</label>
-            <pre
-              style={{
-                backgroundColor: '#1f2937',
-                color: '#e5e7eb',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                overflowX: 'auto',
-              }}
-            >
+            <pre className="kb-runner-cli-pre">
               {`echo "${mintedToken.enrollment_token}" | uv run kanban-runner enroll --token-stdin --pool ${mintedToken.pool_slug}`}
             </pre>
           </div>

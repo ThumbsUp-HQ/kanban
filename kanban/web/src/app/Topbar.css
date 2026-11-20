@@ -125,6 +125,27 @@
   -webkit-user-select: none;
 }
 
+.kb-topbar-docs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-secondary);
+  border: 1px solid var(--border-subtle);
+  font-size: 1rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.kb-topbar-docs-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+  border-color: var(--border-strong);
+}
+
 .kb-avatar-wrapper {
   position: relative;
 }
