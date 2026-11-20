@@ -4,6 +4,9 @@
 .kb-personal-settings-container {
   padding: var(--prose-pad);
   max-width: 900px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
   margin: 0 auto;
   color: var(--fg-primary);
   font-family: var(--font-sans);
@@ -377,6 +380,69 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.kb-personal-settings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.kb-table-scroll-container {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kb-passkey-cell-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.kb-passkey-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.kb-passkey-badge--passkey {
+  background-color: var(--bg-secondary);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.kb-passkey-badge--security-key {
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-strong);
+}
+
+.kb-passkey-clone-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-danger-subtle);
+  color: var(--text-danger);
+  border: 1px solid var(--border-danger);
+}
+
+.kb-personal-settings-modal-backdrop--stepup {
+  z-index: 1100;
 }
 
 .kb-personal-settings-mfa-actions {

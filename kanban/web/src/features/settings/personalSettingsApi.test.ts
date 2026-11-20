@@ -13,6 +13,10 @@ import {
   fetchPasskeys,
   renamePasskey,
   deletePasskey,
+  fetchWebauthnRegistrationOptions,
+  verifyWebauthnRegistration,
+  fetchWebauthnAuthenticationOptions,
+  verifyWebauthnAuthentication,
   enrollTotp,
   confirmTotp,
   deleteTotp,
@@ -141,6 +145,98 @@ describe('personalSettingsApi', () => {
         params: { credential_id: 'pk-2' },
       },
     );
+  });
+
+  it('fetchWebauthnRegistrationOptions invokes POST with attachment hint or empty body', async () => {
+    const mockOpts = { challenge: 'chall1', rp: { name: 'KB' }, user: { id: 'u1', name: 'u', displayName: 'U' }, pubKeyCredParams: [] };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockOpts);
+
+    const resWithAttach = await fetchWebauthnRegistrationOptions('platform');
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/auth/webauthn/register/options',
+      {
+        body: JSON.stringify({ authenticator_attachment: 'platform' }),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+    expect(resWithAttach).toEqual(mockOpts);
+
+    const resWithoutAttach = await fetchWebauthnRegistrationOptions();
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/auth/webauthn/register/options',
+      {
+        body: JSON.stringify({}),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+    expect(resWithoutAttach).toEqual(mockOpts);
+  });
+
+  it('verifyWebauthnRegistration invokes POST /api/v1/auth/webauthn/register/verify', async () => {
+    const mockVerifyRes = { verified: true, credential_id: 'cred-123', nickname: 'My Key' };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockVerifyRes);
+
+    const payload = {
+      nickname: 'My Key',
+      credential: {
+        id: 'c1',
+        rawId: 'c1',
+        type: 'public-key',
+        response: { clientDataJSON: 'cd', attestationObject: 'att' },
+      },
+    };
+    const res = await verifyWebauthnRegistration(payload);
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/auth/webauthn/register/verify',
+      {
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+    expect(res).toEqual(mockVerifyRes);
+  });
+
+  it('fetchWebauthnAuthenticationOptions invokes POST /api/v1/auth/webauthn/authenticate/options', async () => {
+    const mockAuthOpts = { challenge: 'chall-auth', rpId: 'localhost' };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockAuthOpts);
+
+    const res = await fetchWebauthnAuthenticationOptions();
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/auth/webauthn/authenticate/options',
+      {
+        body: JSON.stringify({}),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+    expect(res).toEqual(mockAuthOpts);
+  });
+
+  it('verifyWebauthnAuthentication invokes POST /api/v1/auth/webauthn/authenticate/verify', async () => {
+    const mockAuthVerify = { verified: true, credential_id: 'c1', aal_level: 2 };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockAuthVerify);
+
+    const payload = {
+      credential: {
+        id: 'c1',
+        rawId: 'c1',
+        type: 'public-key',
+        response: { clientDataJSON: 'cd', authenticatorData: 'ad', signature: 'sig', userHandle: null },
+      },
+    };
+    const res = await verifyWebauthnAuthentication(payload);
+    expect(apiFetchSpy).toHaveBeenCalledWith(
+      'POST',
+      '/api/v1/auth/webauthn/authenticate/verify',
+      {
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+    expect(res).toEqual(mockAuthVerify);
   });
 
   it('enrollTotp invokes POST /api/v1/auth/mfa/totp/enroll', async () => {

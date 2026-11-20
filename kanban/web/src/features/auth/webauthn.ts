@@ -117,15 +117,94 @@ export function serializeRegistrationCredential(
   };
 }
 
+export interface PublicKeyCredentialRequestOptionsJSON {
+  challenge: string;
+  timeout?: number;
+  rpId?: string;
+  allowCredentials?: { id: string; type: string; transports?: string[] }[];
+  userVerification?: UserVerificationRequirement;
+}
+
+export interface PublicKeyCredentialCreationOptionsJSON {
+  rp: { name: string; id?: string };
+  user: { id: string; name: string; displayName: string };
+  challenge: string;
+  pubKeyCredParams: { alg: number; type: string }[];
+  timeout?: number;
+  excludeCredentials?: { id: string; type: string; transports?: string[] }[];
+  authenticatorSelection?: AuthenticatorSelectionCriteria;
+  attestation?: AttestationConveyancePreference;
+}
+
+/**
+ * Prepares browser PublicKeyCredentialCreationOptions from raw wire JSON.
+ */
+export function prepareCreationOptions(
+  options: PublicKeyCredentialCreationOptionsJSON,
+): PublicKeyCredentialCreationOptions {
+  return {
+    rp: options.rp,
+    user: {
+      ...options.user,
+      id: base64urlToBuffer(options.user.id),
+    },
+    challenge: base64urlToBuffer(options.challenge),
+    pubKeyCredParams: options.pubKeyCredParams.map((p) => ({
+      alg: p.alg,
+      type: p.type as PublicKeyCredentialType,
+    })),
+    timeout: options.timeout ?? 60000,
+    ...(options.excludeCredentials
+      ? {
+          excludeCredentials: options.excludeCredentials.map((c) => ({
+            id: base64urlToBuffer(c.id),
+            type: c.type as PublicKeyCredentialType,
+            ...(c.transports ? { transports: c.transports as AuthenticatorTransport[] } : {}),
+          })),
+        }
+      : {}),
+    ...(options.authenticatorSelection
+      ? { authenticatorSelection: options.authenticatorSelection }
+      : {}),
+    ...(options.attestation ? { attestation: options.attestation } : {}),
+  };
+}
+
+/**
+ * Prepares browser PublicKeyCredentialRequestOptions from raw wire JSON.
+ */
+export function prepareRequestOptions(
+  options: PublicKeyCredentialRequestOptionsJSON,
+): PublicKeyCredentialRequestOptions {
+  return {
+    challenge: base64urlToBuffer(options.challenge),
+    timeout: options.timeout ?? 60000,
+    userVerification: options.userVerification ?? 'preferred',
+    ...(options.rpId ? { rpId: options.rpId } : {}),
+    ...(options.allowCredentials
+      ? {
+          allowCredentials: options.allowCredentials.map((c) => ({
+            id: base64urlToBuffer(c.id),
+            type: c.type as PublicKeyCredentialType,
+            ...(c.transports ? { transports: c.transports as AuthenticatorTransport[] } : {}),
+          })),
+        }
+      : {}),
+  };
+}
+
 /**
  * Checks whether the current browser environment supports WebAuthn Passkeys.
+ * Verifies window.isSecureContext, window.PublicKeyCredential, and navigator.credentials.
  */
 export function isWebAuthnSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
+    window.isSecureContext &&
     typeof window.PublicKeyCredential !== 'undefined' &&
     typeof navigator !== 'undefined' &&
     typeof navigator.credentials !== 'undefined' &&
+    typeof navigator.credentials.create === 'function' &&
     typeof navigator.credentials.get === 'function'
   );
 }

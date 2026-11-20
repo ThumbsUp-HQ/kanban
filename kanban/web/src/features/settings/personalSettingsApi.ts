@@ -2,6 +2,19 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { apiFetch } from '../../api/client';
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  SerializedRegistrationCredential,
+  SerializedAssertionCredential,
+} from '../auth/webauthn';
+
+export type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  SerializedRegistrationCredential,
+  SerializedAssertionCredential,
+};
 
 export interface UserProfileResponse {
   id?: string;
@@ -40,6 +53,9 @@ export interface WebauthnCredentialItem {
   created_at: string;
   last_used_at: string | null;
   aaguid: string | null;
+  transports?: string[] | null;
+  sign_count?: number;
+  suspect_clone_at?: string | null;
 }
 
 export interface MfaStatusResponse {
@@ -124,6 +140,42 @@ export async function deletePasskey(credentialId: string): Promise<void> {
   await apiFetch('DELETE', '/api/v1/auth/webauthn/credentials/{credential_id}' as never, {
     params: { credential_id: credentialId },
   });
+}
+
+export async function fetchWebauthnRegistrationOptions(
+  attachment?: 'platform' | 'cross-platform',
+): Promise<PublicKeyCredentialCreationOptionsJSON> {
+  const body = attachment ? { authenticator_attachment: attachment } : {};
+  return (await apiFetch('POST', '/api/v1/auth/webauthn/register/options' as never, {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  })) as PublicKeyCredentialCreationOptionsJSON;
+}
+
+export async function verifyWebauthnRegistration(payload: {
+  nickname?: string;
+  credential: SerializedRegistrationCredential;
+}): Promise<{ verified: boolean; credential_id: string; nickname?: string }> {
+  return (await apiFetch('POST', '/api/v1/auth/webauthn/register/verify' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as { verified: boolean; credential_id: string; nickname?: string };
+}
+
+export async function fetchWebauthnAuthenticationOptions(): Promise<PublicKeyCredentialRequestOptionsJSON> {
+  return (await apiFetch('POST', '/api/v1/auth/webauthn/authenticate/options' as never, {
+    body: JSON.stringify({}),
+    headers: { 'Content-Type': 'application/json' },
+  })) as PublicKeyCredentialRequestOptionsJSON;
+}
+
+export async function verifyWebauthnAuthentication(payload: {
+  credential: SerializedAssertionCredential;
+}): Promise<{ verified: boolean; credential_id?: string; aal_level?: number }> {
+  return (await apiFetch('POST', '/api/v1/auth/webauthn/authenticate/verify' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as { verified: boolean; credential_id?: string; aal_level?: number };
 }
 
 export async function enrollTotp(): Promise<TotpEnrollResponse> {
