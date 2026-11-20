@@ -41,4 +41,6 @@ async def post_issue_move(  # noqa: PLR0913, PLR0917
     async with timing_floor(floor_ms=25.0):
         issue = await resolve_issue_ref(session, caller, issue_ref)
         await taint_guard.check_write(issue.project_id, tool_name="move_issue")
-        return await move_issue(session, caller, issue_ref, body, response=response)
+        res = await move_issue(session, caller, issue_ref, body, response=response)
+        await session.commit()
+        return res

@@ -430,6 +430,7 @@ export function CommandPalette({
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
+      setLiveSearchResults([]);
       return;
     }
 

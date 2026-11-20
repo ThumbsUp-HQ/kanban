@@ -153,9 +153,12 @@ async def post_issue_transition(
         state=outcome.state,
         sync_duration_ms=outcome.sync_duration_ms,
     )
+    content_dict = resp_data.model_dump(mode="json")
+    if "ETag" in headers:
+        content_dict["etag"] = headers["ETag"]
     return JSONResponse(
         status_code=200,
-        content=resp_data.model_dump(mode="json"),
+        content=content_dict,
         headers=headers or None,
     )
 
@@ -177,6 +180,7 @@ async def cancel_transition(
     from kanban.workflows.async_gate import GateCoordinator  # noqa: PLC0415
 
     execution = await GateCoordinator.cancel(session, execution_id, caller)
+    await session.commit()
     return CancelTransitionResponse(
         status="cancelled",
         execution_id=execution.id,

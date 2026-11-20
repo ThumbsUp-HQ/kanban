@@ -22,6 +22,7 @@ from kanban.api.v1.schemas.search import (
     IssueSearchRequest,
     KnowledgeSearchRequest,
 )
+from kanban.api.v1.schemas.views import FilterSpec
 from kanban.services.search import (
     _get_query_embedding,
     _parse_target_kinds,
@@ -1067,3 +1068,120 @@ async def test_hybrid_search_vector_only_hydration_and_pagination(
         assert res_k.executed_mode == "hybrid"
         assert res_k.total >= 1
         assert res_k.items[0].title == "Completely Unrelated Pears"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_issues_enforces_filters_and_workspace(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """Verify search_issues in hybrid mode filters candidates against FilterSpec and workspace.
+
+    Proves vector/synaptic candidates matching query NEVER bypass filters (e.g. state, workspace).
+    """
+    admin = await make_user("admin_flt", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("FLT", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    ws_id = api_env.workspace_id
+
+    st_rows = (
+        await api_env.seed.execute(
+            text("SELECT id, name FROM workflow_states WHERE project_id = :p ORDER BY sort_order"),
+            {"p": proj_id},
+        )
+    ).all()
+    st_open = st_rows[0][0]
+    st_done = st_rows[-1][0]
+    pri_id = (
+        await api_env.seed.execute(
+            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
+            {"p": proj_id},
+        )
+    ).scalar_one()
+
+    iss1_id = await _seed_issue(
+        api_env.seed,
+        ws_id,
+        proj_id,
+        "FLT",
+        1,
+        "Quantum Neural Kernel Alpha",
+        "Deep synaptic learning component.",
+        admin.id,
+        st_open,
+        pri_id,
+    )
+    iss2_id = await _seed_issue(
+        api_env.seed,
+        ws_id,
+        proj_id,
+        "FLT",
+        2,
+        "Quantum Neural Kernel Beta",
+        "Completed synaptic learning component.",
+        admin.id,
+        st_done,
+        pri_id,
+    )
+
+    other_ws_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, 'ws-other-filter', 'Other WS')"),
+        {"id": other_ws_id},
+    )
+
+    test_vec = [0.0] * 384
+    test_vec[0] = 1.0
+    for iss_id, key in [(iss1_id, "FLT-1"), (iss2_id, "FLT-2")]:
+        await api_env.seed.execute(
+            text(
+                "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+                "workspace_id, project_id, content_sha256, model_id, embedding) "
+                "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+            ),
+            {
+                "oid": iss_id,
+                "ws": ws_id,
+                "proj": proj_id,
+                "sha": hashlib.sha256(key.encode()).digest(),
+                "emb": str(test_vec),
+            },
+        )
+    await rebuild_era(api_env.seed, ws_id)
+    await api_env.seed.commit()
+
+    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
+    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
+        # 1. Unfiltered hybrid search returns both
+        res_all = await search_issues(
+            api_env.seed, caller, IssueSearchRequest(query="Quantum", mode="hybrid")
+        )
+        assert res_all.total == 2
+        keys_all = {item.key for item in res_all.items}
+        assert keys_all == {"FLT-1", "FLT-2"}
+
+        # 2. Filter by state_ids=[st_open] -> FLT-2 (Done) excluded despite vector match
+        res_open = await search_issues(
+            api_env.seed,
+            caller,
+            IssueSearchRequest(
+                query="Quantum",
+                mode="hybrid",
+                filters=FilterSpec(state_ids=[st_open]),
+            ),
+        )
+        assert res_open.total == 1
+        assert res_open.items[0].key == "FLT-1"
+
+        # 3. Filter by workspace="ws-other-filter" -> both excluded
+        res_other_ws = await search_issues(
+            api_env.seed,
+            caller,
+            IssueSearchRequest(
+                query="Quantum",
+                mode="hybrid",
+                workspace="ws-other-filter",
+            ),
+        )
+        assert res_other_ws.total == 0
+        assert len(res_other_ws.items) == 0

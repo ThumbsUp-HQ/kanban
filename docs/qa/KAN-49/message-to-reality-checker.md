@@ -3,8 +3,8 @@
 ## Ticket Overview
 - Identifier: KAN-49 ([KB-AGENT-SEQ-01])
 - Title: Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event
-- Branch: feat/KAN-49
-- Base Commit: 837f657d (Wave P3-8)
+- Branch: fix/KAN-20-36-rc2
+- Base Commit: 7913c2c8 (main)
 
 ## Scope & Implementation Summary
 
@@ -30,12 +30,14 @@
   - Backward compatibility:
     - `allocate_issue_sequence(p_project_id UUID)` delegates directly to `allocate_issue_sequences(p_project_id, 1, TRUE)` and returns single `BIGINT`, preserving existing callers.
 
-### 2. Service Callers & Audit Event
+### 2. Service Callers, Router Commits & Audit Event
 - Added `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` mapped to `ActivityCategory.SYSTEM` in `kanban/services/activity.py`.
 - Refactored callers to allocate in single batches:
-  - `kanban/services/issues.py` (`create_issue`): Calls `allocate_issue_sequences(..., 1, false)` and records `SEQUENCE_SKIPPED` when sequences were skipped. (Strict boundary maintained: zero edits to `serialize_issue`).
+  - `kanban/services/issues.py` (`create_issue`): Calls `allocate_issue_sequences(..., 1, false)` and records `SEQUENCE_SKIPPED` when sequences were skipped. `serialize_issue` and `update_issue` incorporate upstream schema enhancements (`populate_existing=True`, `now_utc`, `created_at`, `updated_at`, `color_hex=state.color_hex`, and `pending_transition_exec_id` `TRANSITION_HELD` 409 guard).
   - `kanban/issues/tree_service.py` (`create_issue_tree`): Computes tree size N, calls `allocate_issue_sequences(..., N, false)` once, distributes sequences sequentially in breadth-first traversal, and emits a single `SEQUENCE_SKIPPED` audit event.
   - `kanban/services/issue_copy.py` (`copy_issue`): Computes total copy batch size (1 + sub-issues count), calls `allocate_issue_sequences(..., total_count, false)` once, assigns sequence IDs, and emits a single `SEQUENCE_SKIPPED` audit event.
+  - `kanban/services/projects.py`: Inherits `WorkspaceSettings.default_skip_loaded_sequence_numbers` upon project creation, and supports `skip_loaded_sequence_numbers` in project update and serialization.
+  - `kanban/api/v1/{issues,issue_copy,issue_trees}.py`: Added explicit `await session.commit()` before returning responses to eliminate the 0ms post-response commit race.
 - Cryptographic activity chain verified via `verify_activity_chain(workspace_id)`.
 
 ## Test Verification & Quality Gates
@@ -54,15 +56,19 @@
   - `create_issue_tree` single batch allocation with skipping.
   - `copy_issue` single batch allocation with skipping.
 - Regression test suite:
-  - 42/42 existing issue, tree, copy, and activity tests passed without failure.
-  - 14/14 model and RLS catalog tests (`test_p1_17_models.py`, `test_p1_14_rls_catalog.py`) passed without failure.
-  - **Backend Coverage: >=95% across ALL 6 KAN-49 modified modules (TOTAL 96%)**:
+  - 65/65 issue, tree, copy, project, archive, and activity tests passed without failure.
+  - 12/12 model, migration, and RLS catalog tests (`test_p1_17_models.py`, `test_p1_14_rls_catalog.py`, `test_p1_05_sequence_concurrency.py`, `test_p4_24_agent_safe_sequences_migration.py`) passed without failure.
+  - **Backend Coverage: >=95% across ALL 10 KAN-49 modified modules (TOTAL 98%)**:
     * `database/models/projects.py`: 99%
     * `database/models/workspace_settings.py`: 100%
+    * `kanban/api/v1/issue_copy.py`: 100%
+    * `kanban/api/v1/issue_trees.py`: 100%
+    * `kanban/api/v1/issues.py`: 100%
     * `kanban/issues/tree_service.py`: 95%
     * `kanban/services/activity.py`: 99%
     * `kanban/services/issue_copy.py`: 100%
-    * `kanban/services/issues.py`: 95%
+    * `kanban/services/issues.py`: 97%
+    * `kanban/services/projects.py`: 99%
 
 
 ## Static Verification

@@ -89,6 +89,7 @@ async def create_issue_comment(  # noqa: PLR0913, PLR0917
         )
         response.headers["Location"] = result.permalink
         response.headers["ETag"] = etag
+        await session.commit()
         return result
 
 
@@ -115,6 +116,7 @@ async def update_comment(  # noqa: PLR0913, PLR0917
             if_match=if_match,
         )
         response.headers["ETag"] = new_etag
+        await session.commit()
         return result
 
 
@@ -135,6 +137,7 @@ async def delete_comment(
             caller=caller,
             comment_id=comment_id,
         )
+        await session.commit()
 
 
 @router.put(
@@ -150,12 +153,14 @@ async def add_reaction(
 ) -> ReactionResponse:
     """Idempotently add an allowlisted emoji reaction to a visible comment."""
     async with timing_floor(floor_ms=25.0):
-        return await svc.add_reaction(
+        res = await svc.add_reaction(
             session=session,
             caller=caller,
             comment_id=comment_id,
             emoji=emoji,
         )
+        await session.commit()
+        return res
 
 
 @router.delete(
@@ -177,3 +182,4 @@ async def delete_reaction(
             comment_id=comment_id,
             emoji=emoji,
         )
+        await session.commit()

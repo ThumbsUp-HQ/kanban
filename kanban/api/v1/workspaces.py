@@ -454,6 +454,7 @@ async def update_workspace_endpoint(
             ws.slug = cleaned_slug
 
     await session.flush()
+    await session.commit()
     return WorkspaceResponse(
         id=ws.id,
         name=ws.name,
@@ -515,7 +516,7 @@ async def bind_workspace_role_endpoint(
             title="Insufficient Capability",
             detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
         )
-    return await principal_service.bind_role(
+    res = await principal_service.bind_role(
         session,
         workspace_id,
         caller.principal_id,
@@ -524,6 +525,8 @@ async def bind_workspace_role_endpoint(
         scope_type=body.scope_type,
         project_id=body.scope_id,
     )
+    await session.commit()
+    return res
 
 
 @router.delete(
@@ -547,7 +550,7 @@ async def unbind_workspace_role_endpoint(
             title="Insufficient Capability",
             detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
         )
-    return await principal_service.unbind_role(
+    res = await principal_service.unbind_role(
         session,
         workspace_id,
         caller.principal_id,
@@ -556,3 +559,5 @@ async def unbind_workspace_role_endpoint(
         scope_type=body.scope_type,
         project_id=body.scope_id,
     )
+    await session.commit()
+    return res
