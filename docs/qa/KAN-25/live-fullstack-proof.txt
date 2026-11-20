@@ -1,69 +1,99 @@
-KAN-25 [KB-P3-AUDIT-19] LIVE FULL-STACK VERIFICATION PROOF
-Target: http://localhost:18951 (container kanban-liveqa-1, commit cd89d77)
-Timestamp: 2026-11-20T08:48:46.857Z
-Mode: ZERO-MOCK real headless Chromium Playwright + CDP CTAP2 Virtual Authenticators
-
---- EXECUTION LOG ---
-CDP Setup Platform Virtual Authenticator added: 6565f7b1-2fa9-4a04-96e3-a6f184246093 (ctap2/internal)
-GET /api/v1/setup/status -> 200 {"initialized":false}
-Setup claim + WebAuthn MFA completed with initial project ACME
-GET /api/v1/auth/me -> 200 aal_level=2 is_server_admin=true
-Desktop 1440x900: + Add Passkey enabled=true, + Add FIDO2 Security Key enabled=true
-Mobile 390x844 (initial profile): document.documentElement.scrollWidth=390
-Captured live-kan25-enroll-modal-mobile-light.png
-Captured live-kan25-enroll-modal-desktop-light.png
-Captured live-kan25-enroll-modal-desktop-dark.png
-CDP Platform Virtual Authenticator (MacBook Touch ID) added: 2697cd53-e1f4-4dc7-a256-991cc48b41bc (ctap2/internal)
-Passkey 1 (MacBook Touch ID): register/options -> 200, register/verify -> 200
-CDP USB Virtual Authenticator added: 8df1536d-be84-4dcb-9c58-8cbcc79c52c7 (ctap2/usb)
-FIDO2 Key 2 (YubiKey 5C NFC): register/options -> 200, register/verify -> 200
-Passkeys table check: hasTouchId=true, hasYubiKey=true, hasPasskeyBadge=true, hasFido2Badge=true
-GET /api/v1/auth/webauthn/credentials (before Test Key) -> 200 count=3
-Test Key: authenticate/options -> 200, authenticate/verify -> 200
-Success alert banner text: "👍 Key verified\nDismiss"
-GET /api/v1/auth/webauthn/credentials (after Test Key) -> 200, creds with last_used_at=1
-  Credential id=01a1f824-bc58-7277-b50f-5131dfe94514 nickname="YubiKey 5C NFC" transports=["usb"] last_used_at=null
-  Credential id=01a1f824-bbc4-70ac-b01d-caff862b659f nickname="MacBook Touch ID" transports=["internal"] last_used_at=2026-11-20T08:48:39.639536+00:00
-  Credential id=01a1f824-b201-764b-88eb-041cccc52020 nickname=null transports=["internal"] last_used_at=null
-Captured live-kan25-profile-verified-desktop-light.png
-Captured live-kan25-profile-verified-desktop-dark.png
-Mobile 390x844 (verified profile): document.documentElement.scrollWidth=390
-Captured live-kan25-profile-mobile-light.png
-Captured live-kan25-profile-mobile-dark.png
-KAN-25 telemetry: console.error=0, pageerror=0
-
---- HTTP TELEMETRY ---
-  POST /api/v1/setup/claim -> 200
-  POST /api/v1/auth/webauthn/registration/options -> 200
-  POST /api/v1/auth/webauthn/registration/verify -> 200
-  GET /api/v1/setup/status -> 200
-  GET /api/v1/setup/status -> 200
-  GET /api/v1/auth/webauthn/credentials -> 200
-  GET /api/v1/auth/me -> 200
-  GET /api/v1/auth/me -> 200
-  POST /api/v1/auth/webauthn/register/options -> 200
-  POST /api/v1/auth/webauthn/register/verify -> 200
-  GET /api/v1/auth/webauthn/credentials -> 200
-  GET /api/v1/auth/me -> 200
-  GET /api/v1/auth/me -> 200
-  POST /api/v1/auth/webauthn/register/options -> 200
-  POST /api/v1/auth/webauthn/register/verify -> 200
-  GET /api/v1/auth/webauthn/credentials -> 200
-  GET /api/v1/auth/me -> 200
-  GET /api/v1/auth/me -> 200
-  POST /api/v1/auth/webauthn/authenticate/options -> 200
-  POST /api/v1/auth/webauthn/authenticate/verify -> 200
-  GET /api/v1/auth/webauthn/credentials -> 200
-  GET /api/v1/setup/status -> 200
-  GET /api/v1/auth/me -> 200
-  GET /api/v1/setup/status -> 200
-  GET /api/v1/auth/me -> 200
-  GET /api/v1/setup/status -> 200
-  GET /api/v1/auth/me -> 200
-  GET /api/v1/auth/me -> 200
-
---- ERROR TELEMETRY ---
-console.error count: 0
-pageerror count: 0
-
-LIVE_STACK_VERDICT: PASS
+[2026-11-20T09:42:56.651Z] === KAN-25 LIVE FULL-STACK QA ROUND 2 ===
+[2026-11-20T09:42:56.656Z] Workspace git HEAD: 3c0f368
+[2026-11-20T09:42:56.672Z] --- docker logs kanban-liveqa-1 (tail) ---
+[2026-11-20T09:42:56.672Z] 👍 [kanban-standalone] [00000ms] mode: MODE=standalone_embedded_pg
+⚠️ Ephemeral Storage: Mount -v kanban_data:/var/lib/kanban/data to persist data across container removal
+👍 [kanban-standalone] [00052ms] keyring: keyring loaded from /var/lib/kanban/data/secrets/keyring.json
+👍 [kanban-standalone] [00052ms] initdb: initializing new database cluster
+👍 [kanban-standalone] [00745ms] pg_start: starting embedded PostgreSQL
+👍 [kanban-standalone] [00979ms] pg_start: PostgreSQL is ready on /run/postgresql
+👍 [kanban-standalone] [00979ms] bootstrap_sql: creating roles and kanban database
+👍 [kanban-standalone] [01273ms] bootstrap_sql: roles, database, and extensions initialized
+👍 [kanban-standalone] [01273ms] migrations: running alembic upgrade head
+👍 [kanban-standalone] [09502ms] migrations: schema migrations applied successfully
+👍 [kanban-standalone] [09534ms] migrations: privilege dropped: kanban_migrator set to NOLOGIN
+👍 [kanban-standalone] [09549ms] backup_grants: granted SELECT on alembic_version to kanban_app
+👍 [kanban-standalone] [09549ms] uvicorn_spawn: spawning uvicorn as UID 65532
+2026-11-20 09:42:55.353035360 [W:onnxruntime:Default, telemetry_1ds.cc:600 operator()] Failed to persist telemetry device ID; using an in-memory identifier
+👍 2026-11-20 09:42:55,537 [INFO] [user=-] [uvicorn.error] [req=-] Started server process [51]
+👍 2026-11-20 09:42:55,537 [INFO] [user=-] [uvicorn.error] [req=-] Waiting for application startup.
+👍 2026-11-20 09:42:55,606 [INFO] [user=-] [kanban.app] [req=-] Database schema head verified: {'p4_21_workspace_project_rbac_fix'}
+👍 First-boot setup URL: http://localhost:18951/setup?token=[REDACTED:SETUP_TOKEN] (claim token written to /run/kanban/setup_token)
+👍 2026-11-20 09:42:55,623 [INFO] [user=-] [uvicorn.error] [req=-] Application startup complete.
+👍 2026-11-20 09:42:55,625 [INFO] [user=-] [uvicorn.error] [req=-] Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+👍 2026-11-20 09:42:56,161 [INFO] [user=anon] [uvicorn.access] [req=96acaf7501044ecda9332ba1add55abb] 172.17.0.1:45922 - "GET /api/v1/setup/status HTTP/1.1" 200
+[2026-11-20T09:42:56.716Z] Extracted setup token from /run/kanban/setup_token: kb_setup_PlFEm...[redacted]
+[2026-11-20T09:42:56.802Z] Added CDP CTAP2 internal virtual authenticator for /setup: a3ece11b-df11-4025-9a37-365000687dc1
+[2026-11-20T09:42:56.802Z] --- Step 1: /setup Claim + Passkey Enrollment (AAL2) ---
+[2026-11-20T09:42:58.006Z] [HTTP] POST http://localhost:18951/api/v1/setup/claim -> HTTP 200 | body={"status":"enrollment_required","principal_id":"01a1f856-74ae-79b7-af8b-e6236a1f76c9","enrollment_id":"cdc86d13-c332-4525-a936-ccb290306dd1","csrf_token":"pOcY8ZyI0Wxg3H4ATKzLTw.GLnBQ7p5-theyTTplIZaoeVDEngB6BEZw_y9ifb8-34"}
+[2026-11-20T09:42:58.144Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/registration/options -> HTTP 200 | body={"rp":{"name":"👍kanban","id":"localhost"},"user":{"id":"AaH4VnSuebevi-Yjah92yQ","name":"admin","displayName":"LiveQA Admin"},"challenge":"U_VJISIzaPT9n37INA0aLpvHiTspZDey2VtPxUNtYxs","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[],"authenticatorSelection":{"residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
+[2026-11-20T09:42:58.184Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/registration/verify -> HTTP 200 | body={"verified":true,"aal_level":2,"session_id":"01a1f856-757d-71e1-b4f6-9ad1e6117b8f","csrf_token":"1SDagLJvMeaEVN3gZQeXnw.RX-cUGozJf65WQOg3GAdu9EayQX6tNUw2LGqBKgXSN8","credential_id":"01a1f856-7576-73ed-befe-3609ba6b9692","nickname":null}
+[2026-11-20T09:42:58.262Z] Setup enrolled initial AAL2 passkey. Recovery codes count: 10
+[2026-11-20T09:42:58.407Z] [HTTP] GET http://localhost:18951/api/v1/setup/status -> HTTP 200 | body={"initialized":true}
+[2026-11-20T09:42:58.607Z] [HTTP] GET http://localhost:18951/api/v1/setup/status -> HTTP 200 | body={"initialized":true}
+[2026-11-20T09:42:59.168Z] GET /api/v1/auth/me -> HTTP 200 {"id":"01a1f856-74ae-79b7-af8b-e6236a1f76c9","principal_id":"01a1f856-74ae-79b7-af8b-e6236a1f76c9","workspace_id":"01a1f856-74ac-7430-94d3-93ab2eb6c00c","handle":"admin","username":"admin","display_name":"LiveQA Admin","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJECT","MANAGE_WORKSPACE_SETTINGS","MANAGE_WORKSPACE_MCP_KEYS","MANAGE_SERVER_ADMIN","ADMIN_AUTH_STUDIO","ADMIN_MCP_KEYS","SYSTEM_STORAGE"],"timezone":"UTC","avatar_url":null,"has_local_password":true,"aal_level":2,"mfa_pending":false}
+[2026-11-20T09:42:59.168Z] --- Step 2: /settings/profile Modal UX, Escape, & Light/Dark/Mobile Screenshots ---
+[2026-11-20T09:42:59.199Z] [HTTP] GET http://localhost:18951/api/v1/setup/status -> HTTP 200 | body={"initialized":true}
+[2026-11-20T09:42:59.245Z] [HTTP] GET http://localhost:18951/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:00.219Z] Modal header buttons: [{"text":"✕","ariaLabel":"Close","testId":"passkey-enroll-close-btn"}]
+[2026-11-20T09:43:00.223Z] Verified Escape key dismissed PasskeyEnrollModal cleanly.
+[2026-11-20T09:43:00.507Z] Captured live-kan25-enroll-modal-desktop-light.png
+[2026-11-20T09:43:00.726Z] Enroll modal mobile viewport check: {"scrollWidth":390,"innerWidth":390}
+[2026-11-20T09:43:00.755Z] Captured live-kan25-enroll-modal-mobile-light.png
+[2026-11-20T09:43:01.288Z] Captured live-kan25-enroll-modal-desktop-dark.png
+[2026-11-20T09:43:01.721Z] Swapped to fresh CDP CTAP2 internal virtual authenticator for MacBook Touch ID: ca3647d2-28af-4826-94bf-c4844bf498c8
+[2026-11-20T09:43:01.817Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/register/options -> HTTP 200 | body={"rp":{"name":"👍kanban","id":"localhost"},"user":{"id":"AaH4VnSuebevi-Yjah92yQ","name":"admin","displayName":"LiveQA Admin"},"challenge":"cAl0JTxvGgo_BFxKPf6saLBt_XyJqV4xWpIklo90I3E","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[{"id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","type":"public-key"}],"authenticatorSelection":{"authenticatorAttachment":"platform","residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
+[2026-11-20T09:43:01.850Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/register/verify -> HTTP 200 | body={"verified":true,"credential_id":"01a1f856-83c8-758f-af3d-0a6f97be3545","nickname":"MacBook Touch ID"}
+[2026-11-20T09:43:01.862Z] [HTTP] GET http://localhost:18951/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:01.878Z] Enrolled MacBook Touch ID (platform).
+[2026-11-20T09:43:01.878Z] Added SECOND CDP CTAP2 usb virtual authenticator (both active): 8801b1ff-8c20-492d-91ec-12cf95516cb1
+[2026-11-20T09:43:01.991Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/register/options -> HTTP 200 | body={"rp":{"name":"👍kanban","id":"localhost"},"user":{"id":"AaH4VnSuebevi-Yjah92yQ","name":"admin","displayName":"LiveQA Admin"},"challenge":"YS3O6PT7Jzkf9DgEG276tLgXDHdrgcMXF8cwXskCXqo","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[{"id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","type":"public-key"},{"id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","type":"public-key"}],"authenticatorSelection":{"authenticatorAttachment":"cross-platform","residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
+[2026-11-20T09:43:02.022Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/register/verify -> HTTP 200 | body={"verified":true,"credential_id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","nickname":"YubiKey 5C NFC"}
+[2026-11-20T09:43:02.033Z] [HTTP] GET http://localhost:18951/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","credential_id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","nickname":"YubiKey 5C NFC","sign_count":1,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:02.009300+00:00","last_used_at":null},{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:02.046Z] Enrolled YubiKey 5C NFC (cross-platform USB).
+[2026-11-20T09:43:02.053Z] GET /api/v1/auth/webauthn/credentials -> HTTP 200 [{"id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","credential_id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","nickname":"YubiKey 5C NFC","sign_count":1,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:02.009300+00:00","last_used_at":null},{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:02.054Z] Verified credential_id base64url on all 3 rows. yubikeyCred.id=01a1f856-8479-76ff-a9f4-71ed01fa21a7
+[2026-11-20T09:43:02.054Z] --- Step 3: Scoped [Test Key] on YubiKey 5C NFC (both CDP authenticators active) ---
+[2026-11-20T09:43:02.055Z] [HTTP] GET http://localhost:18951/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","credential_id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","nickname":"YubiKey 5C NFC","sign_count":1,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:02.009300+00:00","last_used_at":null},{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:02.056Z] YubiKey 5C NFC Last Used before Test Key: Never
+[2026-11-20T09:43:02.115Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/authenticate/options -> HTTP 200 | body={"challenge":"cks7kymK3vQBVHhvUOZmFU1h0cfZOXTpJC9ZbVvgFmw","timeout":300000,"rpId":"localhost","allowCredentials":[{"id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","type":"public-key"},{"id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","type":"public-key"},{"id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","type":"public-key"}],"userVerification":"preferred"}
+[2026-11-20T09:43:02.151Z] [HTTP] POST http://localhost:18951/api/v1/auth/webauthn/authenticate/verify -> HTTP 200 | body={"verified":true,"aal_level":2,"session_id":"01a1f856-84fb-7074-8aed-1eaba35d7f50","csrf_token":"PI2QYtRDGgxWiY1mIxfzPQ.CWpUSU0dwdwW5qpe5el04YjEDHWMRJf9Ux1rOvOcIp0","credential_id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7"}
+[2026-11-20T09:43:02.152Z] POST /api/v1/auth/webauthn/authenticate/verify -> HTTP 200 {"verified":true,"aal_level":2,"session_id":"01a1f856-84fb-7074-8aed-1eaba35d7f50","csrf_token":"PI2QYtRDGgxWiY1mIxfzPQ.CWpUSU0dwdwW5qpe5el04YjEDHWMRJf9Ux1rOvOcIp0","credential_id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7"}
+[2026-11-20T09:43:02.156Z] [HTTP] GET http://localhost:18951/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","credential_id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","nickname":"YubiKey 5C NFC","sign_count":2,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:02.009300+00:00","last_used_at":"2026-11-20T09:43:02.131700+00:00"},{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:02.158Z] Verified banner text: "👍 Key verified (YubiKey 5C NFC)Dismiss"
+[2026-11-20T09:43:02.160Z] Banner placement check: {"ok":true,"insideSection":true,"bannerAboveTable":true,"bannerTop":226.65625,"tableTop":306.65625}
+[2026-11-20T09:43:02.163Z] YubiKey 5C NFC Last Used after Test Key: 11/20/2026
+[2026-11-20T09:43:02.367Z] Desktop action button row alignment: [{"rowTestId":"passkey-row-01a1f856-8479-76ff-a9f4-71ed01fa21a7","buttonTexts":["Test Key","Rename","Remove"],"singleRow":true,"tops":[403,403,403]},{"rowTestId":"passkey-row-01a1f856-83c8-758f-af3d-0a6f97be3545","buttonTexts":["Test Key","Rename","Remove"],"singleRow":true,"tops":[475,475,475]},{"rowTestId":"passkey-row-01a1f856-7576-73ed-befe-3609ba6b9692","buttonTexts":["Test Key","Rename","Remove"],"singleRow":true,"tops":[538,538,538]}]
+[2026-11-20T09:43:02.404Z] Captured live-kan25-profile-verified-desktop-light.png
+[2026-11-20T09:43:02.874Z] Captured live-kan25-profile-verified-desktop-dark.png
+[2026-11-20T09:43:02.874Z] --- Step 4: Mobile 390x844 Stacked Cards & Non-Wrapping Badges ---
+[2026-11-20T09:43:03.294Z] Mobile 390x844 (Dark) metrics: scrollWidth=390, innerWidth=390
+[2026-11-20T09:43:03.294Z] Mobile (Dark) badges: [{"text":"🔑 FIDO2 Security Key","offsetHeight":27,"width":151,"left":102,"right":253},{"text":"📱 Passkey","offsetHeight":27,"width":87,"left":102,"right":189},{"text":"📱 Passkey","offsetHeight":27,"width":87,"left":167,"right":254}]
+[2026-11-20T09:43:03.318Z] Captured live-kan25-profile-mobile-dark.png
+[2026-11-20T09:43:03.938Z] Mobile 390x844 (Light) metrics: scrollWidth=390, innerWidth=390
+[2026-11-20T09:43:03.938Z] Mobile (Light) badges: [{"text":"🔑 FIDO2 Security Key","offsetHeight":27,"width":151,"left":102,"right":253},{"text":"📱 Passkey","offsetHeight":27,"width":87,"left":102,"right":189},{"text":"📱 Passkey","offsetHeight":27,"width":87,"left":167,"right":254}]
+[2026-11-20T09:43:03.969Z] Captured live-kan25-profile-mobile-light.png
+[2026-11-20T09:43:03.969Z] --- Step 5: Live Clone Warning Badge (PostgreSQL suspect_clone_at = NOW()) ---
+[2026-11-20T09:43:04.074Z] PostgreSQL UPDATE output: UPDATE 1
+[2026-11-20T09:43:04.109Z] [HTTP] GET http://localhost:18951/api/v1/setup/status -> HTTP 200 | body={"initialized":true}
+[2026-11-20T09:43:04.164Z] [HTTP] GET http://localhost:18951/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","credential_id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","nickname":"YubiKey 5C NFC","sign_count":2,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:02.009300+00:00","last_used_at":"2026-11-20T09:43:02.131700+00:00"},{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":"2026-11-20T09:43:04.062920+00:00","created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:04.924Z] Clone warning badge text: "⚠️ Suspected Clone"
+[2026-11-20T09:43:04.971Z] Captured live-kan25-clone-warning-desktop-light.png
+[2026-11-20T09:43:04.971Z] --- Step 6: Real !window.isSecureContext check at http://172.17.0.4:8080 ---
+[2026-11-20T09:43:04.974Z] Cookies on http://localhost:18951: [{"name":"__Host-kb_session","domain":"localhost","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax"},{"name":"__Host-kb_csrf","domain":"localhost","path":"/","secure":true,"httpOnly":false,"sameSite":"Strict"},{"name":"kb_session","domain":"localhost","path":"/","secure":false,"httpOnly":true,"sameSite":"Lax"},{"name":"kb_csrf","domain":"localhost","path":"/","secure":false,"httpOnly":false,"sameSite":"Strict"}]
+[2026-11-20T09:43:05.123Z] [HTTP] GET http://172.17.0.4:8080/api/v1/setup/status -> HTTP 200 | body={"initialized":true}
+[2026-11-20T09:43:05.277Z] [HTTP] GET http://172.17.0.4:8080/api/v1/auth/webauthn/credentials -> HTTP 200 | body=[{"id":"01a1f856-8479-76ff-a9f4-71ed01fa21a7","credential_id":"TOFhTA78o4M0HgcfD-LIpcL-YraiBvp2xZf7nrL7TVE","nickname":"YubiKey 5C NFC","sign_count":2,"aaguid":"00000000-0000-0000-0000-000000000000","transports":["usb"],"suspect_clone_at":null,"created_at":"2026-11-20T09:43:02.009300+00:00","last_used_at":"2026-11-20T09:43:02.131700+00:00"},{"id":"01a1f856-83c8-758f-af3d-0a6f97be3545","credential_id":"A1vImO2Fm6zLB7KfulMAmjuMJPk_OE4BxY6WTSbhK6c","nickname":"MacBook Touch ID","sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":"2026-11-20T09:43:04.062920+00:00","created_at":"2026-11-20T09:43:01.833246+00:00","last_used_at":null},{"id":"01a1f856-7576-73ed-befe-3609ba6b9692","credential_id":"Z0sutfodm6TaINQO24uldwMf8n-K5kGbOY3v9alH_Hg","nickname":null,"sign_count":1,"aaguid":"01020304-0506-0708-0102-030405060708","transports":["internal"],"suspect_clone_at":null,"created_at":"2026-11-20T09:42:58.166573+00:00","last_used_at":null}]
+[2026-11-20T09:43:06.021Z] Insecure context info: {"origin":"http://172.17.0.4:8080","isSecureContext":false,"noticeText":"Browser WebAuthn requires HTTPS or localhost to register and use passkeys or security keys.","noticeClass":"kb-personal-settings-alert kb-personal-settings-alert-warning","noticeBg":"rgb(254, 243, 199)","noticeColor":"rgb(120, 53, 15)","noticeBorder":"rgb(120, 53, 15)","addPasskeyDisabled":true,"addFido2Disabled":true}
+[2026-11-20T09:43:06.070Z] Captured live-kan25-insecure-context-desktop-light.png
+[2026-11-20T09:43:06.071Z] console.error count (http://localhost:18951): 0
+[2026-11-20T09:43:06.071Z] console.error count (http://172.17.0.4:8080 raw): 1
+[2026-11-20T09:43:06.071Z] consoleErrorsInsecure (browser untrustworthy-origin COOP header notice): ["The Cross-Origin-Opener-Policy header has been ignored, because the URL's origin was untrustworthy. It was defined either in the final response or a redirect. Please deliver the response using the HTTPS protocol. You can also use the 'localhost' origin instead. See https://www.w3.org/TR/powerful-features/#potentially-trustworthy-origin and https://html.spec.whatwg.org/#the-cross-origin-opener-policy-header."]
+[2026-11-20T09:43:06.071Z] console.error count (http://172.17.0.4:8080 app-only): 0
+[2026-11-20T09:43:06.071Z] pageerror count (all origins): 0
+[2026-11-20T09:43:06.071Z] --- PER-REQUIREMENT VERDICTS ---
+[2026-11-20T09:43:06.071Z] Problem 1 (Bootstrap, Modal Single Close + Escape, Multi-Authenticator Enrollment, credential_id): LIVE_STACK_VERDICT: PASS
+[2026-11-20T09:43:06.071Z] Problem 2 (Scoped Test Key on Second Authenticator YubiKey 5C NFC + Section-3 Banner): LIVE_STACK_VERDICT: PASS
+[2026-11-20T09:43:06.071Z] Problem 3 (Mobile 390x844 Stacked Cards, Single-Line Badges, Zero Clipping): LIVE_STACK_VERDICT: PASS
+[2026-11-20T09:43:06.071Z] Problem 4 (Live DB Clone Warning Badge + Real !window.isSecureContext Banner): LIVE_STACK_VERDICT: PASS
+[2026-11-20T09:43:06.071Z] Problem 5 (Zero Application Console Errors & Zero Page Errors): LIVE_STACK_VERDICT: PASS
+[2026-11-20T09:43:06.071Z] OVERALL KAN-25 LIVE_STACK_VERDICT: PASS
