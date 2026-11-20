@@ -1,0 +1,572 @@
+diff --git a/.agents/skills/kanban-ticket/SKILL.md b/.agents/skills/kanban-ticket/SKILL.md
+index ec9b9684..4e443d7d 100644
+--- a/.agents/skills/kanban-ticket/SKILL.md
++++ b/.agents/skills/kanban-ticket/SKILL.md
+@@ -40,7 +40,7 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
+ 
+ ## Mandatory Ticket Template
+ 
+-Every ticket created or updated in Plane MUST use the following Markdown structure:
++Every ticket created or updated in 👍kanban MUST use the following Markdown structure:
+ 
+ ```markdown
+ ### User Story
+diff --git a/AGENTS.md b/AGENTS.md
+index 29f4cc3c..315082a4 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -19,7 +19,7 @@ This repository implements **`👍kanban`** (`thumbs-up-kanban`), an open-source
+   - `kanban/` - Web UI & HTTP/WebSocket application server (Enterprise multi-layout board & 17-feature ticket screen competing globally against Jira and Vibe Kanban, breathable whitespace + semantic emojis with hover elaboration, Multi-Card OAuth/LDAP/Local authentication, blinking cursor Sparkle completion + right-click accept, auto-detected & auto-converted canonical Markdown with Mermaid/Pictures/SVG rendering, Project Stickies with smart Doc promotion, and standalone `docker run` + multi-container deployment modes).
+   - `database/` - PostgreSQL Universal Object Graph (`Issues`, `Stickies`, `Docs`, `Users`, `Projects`, `Cycles`, `Modules`, `Views`, `Pages`) storing canonical UTF-8 Markdown only, typed `object_links`, Invalid Object Link Auditor & Purger, Row-Level Security (`FORCE RLS`), and immutable Activity & Audit Ledger.
+   - `mcp/` - Multi-surface Model Context Protocol server (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with OAuth 2.0 + PKCE (`S256`) + scoped API keys, `EntityResolver` human-readable keys, LOD tiers (`summary`, `standard`, `full`), compact `InlineSafeDumper` YAML output, and refined 12-tool intent-based Admin catalog with 2-stage destructive confirmation.
+-  - `agent/` - Native multi-provider LLM & autonomous agent runtime (`openai`, `ollama`, `gemini`, plus zero-shell CLI pipe harnesses `agy -p` / `codex exec -s read-only -` and outbound mTLS remote read-only repo runners) powering ScriptRunner-style workflow transition interceptors, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
++  - `agent/` - Native multi-provider LLM & autonomous agent runtime (`openai`, `ollama`, `gemini`, plus zero-shell CLI pipe harnesses `agy -p` / `codex exec -s read-only -` and outbound mTLS remote read-only repo runners) powering scripted workflow transition helpers, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
+ 
+ ---
+ 
+diff --git a/agent/GEMINI.md b/agent/GEMINI.md
+index 72f60b16..6433c68f 100644
+--- a/agent/GEMINI.md
++++ b/agent/GEMINI.md
+@@ -1,7 +1,7 @@
+ # Agent Runtime Module Manifest (`kanban-agent`)
+ 
+ ## Responsibility
+-Multi-provider LLM and autonomous agent runtime supporting OpenAI, Ollama, and Gemini providers, as well as zero-shell CLI pipe harnesses (agy -p, codex exec -s read-only -) and outbound mTLS remote repository runners. Powers ScriptRunner-style workflow transition interceptors, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
++Multi-provider LLM and autonomous agent runtime supporting OpenAI, Ollama, and Gemini providers, as well as zero-shell CLI pipe harnesses (agy -p, codex exec -s read-only -) and outbound mTLS remote repository runners. Powers scripted workflow transition helpers, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
+ 
+ ## Depends On
+ - `mcp` (`kanban-mcp` package for invoking platform MCP tools and resources).
+@@ -345,9 +345,9 @@ The `InAppSdkHarness` implements an in-process, sandboxed SDK execution harness
+   - Ephemeral bearer tokens are injected into headers without persistence.
+   - All returned payloads are recursively scrubbed for secrets and credentials.
+ 
+-## Transition Interceptor Validation Workbench (`kanban-agent validate-transition`, KB-P5-23, S15.3)
++## Transition Helper Validation Workbench (`kanban-agent validate-transition`, KB-P5-23, S15.3)
+ 
+-The `kanban-agent validate-transition` subcommand provides an end-to-end, multi-harness offline and loopback validation workbench for workflow transition interceptors across `in_app_sdk`, `cli_pipe`, and `remote_runner` harnesses:
++The `kanban-agent validate-transition` subcommand provides an end-to-end, multi-harness offline and loopback validation workbench for workflow transition helpers across `in_app_sdk`, `cli_pipe`, and `remote_runner` harnesses:
+ 
+ ### Supported Harnesses & Modes
+ - `in_app_sdk`: Sandboxed in-process LLM loop execution with bare-Git read tools and ephemeral MCP tools. Supported offline via `--cassette` (replayed via `ExplicitFixtureLLMProvider`) and `--mcp-fixture`.
+diff --git a/agent/__init__.py b/agent/__init__.py
+index b724ef1a..af7c2943 100644
+--- a/agent/__init__.py
++++ b/agent/__init__.py
+@@ -1,4 +1,4 @@
+ # Copyright 2026 Kanban Platform Contributors
+-"""Agent runtime, LLM providers, CLI harnesses, and workflow transition interceptors."""
++"""Agent runtime, LLM providers, CLI harnesses, and workflow transition helpers."""
+ 
+ __version__: str = "0.0.0"
+diff --git a/agent/cli_commands/validate_transition.py b/agent/cli_commands/validate_transition.py
+index bf765d9c..51e5c46c 100644
+--- a/agent/cli_commands/validate_transition.py
++++ b/agent/cli_commands/validate_transition.py
+@@ -1,7 +1,7 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+ # ruff: noqa: E501, ANN401, PLR0911, PLR0912, PLR0915, C901, ASYNC240, ARG001, TRY004, S603, S607
+-"""CLI command validate-transition: workbench for transition interceptor testing (S15.3)."""
++"""CLI command validate-transition: workbench for transition helper testing (S15.3)."""
+ 
+ from __future__ import annotations
+ 
+diff --git a/agent/harnesses/in_app_sdk.py b/agent/harnesses/in_app_sdk.py
+index 64da1126..cfbb17cf 100644
+--- a/agent/harnesses/in_app_sdk.py
++++ b/agent/harnesses/in_app_sdk.py
+@@ -175,7 +175,7 @@ class InAppSdkHarness:
+         raise RepoToolPolicyError(code, msg)
+ 
+     async def run(self, ctx: RenderedContext, agent_def: object) -> bytes:  # noqa: C901, PLR0912, PLR0915
+-        """Execute the transition interceptor tool loop and return canonical verdict JSON."""
++        """Execute the transition helper tool loop and return canonical verdict JSON."""
+         self.last_tool_traces = []
+         self.last_report = None
+ 
+diff --git a/agent/providers/base.py b/agent/providers/base.py
+index eab531c4..47f01a0a 100644
+--- a/agent/providers/base.py
++++ b/agent/providers/base.py
+@@ -267,7 +267,7 @@ class CLIRunResult(BaseModel):
+ 
+ @runtime_checkable
+ class CLIRunner(Protocol):
+-    """Zero-shell CLI harness protocol for transition interceptors."""
++    """Zero-shell CLI harness protocol for transition helpers."""
+ 
+     async def run(self, req: CLIRunRequest) -> CLIRunResult:
+         """Execute a CLI request returning raw stdout, stderr, and exit code."""
+diff --git a/agent/pyproject.toml b/agent/pyproject.toml
+index 8cd95a70..1c3abb89 100644
+--- a/agent/pyproject.toml
++++ b/agent/pyproject.toml
+@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
+ [project]
+ name = "kanban-agent"
+ version = "0.0.0"
+-description = "Agent runtime, LLM providers, CLI harnesses, and workflow transition interceptors"
++description = "Agent runtime, LLM providers, CLI harnesses, and workflow transition helpers"
+ requires-python = ">=3.12,<3.13"
+ license = "Apache-2.0"
+ dependencies = [
+diff --git a/agent/tools/mcp_read_tools.py b/agent/tools/mcp_read_tools.py
+index 30bbce42..5e96c085 100644
+--- a/agent/tools/mcp_read_tools.py
++++ b/agent/tools/mcp_read_tools.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Ephemeral MCP read toolkit for transition interceptors (S14.2, S14.3)."""
++"""Ephemeral MCP read toolkit for transition helpers (S14.2, S14.3)."""
+ 
+ from __future__ import annotations
+ 
+diff --git a/agent/tools/repo_tools.py b/agent/tools/repo_tools.py
+index f98fb0f7..dc07dc6e 100644
+--- a/agent/tools/repo_tools.py
++++ b/agent/tools/repo_tools.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Read-only bare Git repository toolkit for SDK transition interceptors (S14.2)."""
++"""Read-only bare Git repository toolkit for SDK transition helpers (S14.2)."""
+ 
+ from __future__ import annotations
+ 
+diff --git a/database/tests/test_p1_04_projects.py b/database/tests/test_p1_04_projects.py
+index ab637da5..259306c2 100644
+--- a/database/tests/test_p1_04_projects.py
++++ b/database/tests/test_p1_04_projects.py
+@@ -67,7 +67,7 @@ async def _create_test_project(
+ 
+ 
+ async def test_01_project_creation_and_seeding(app_session: AsyncSession) -> None:
+-    """Test project insertion seeds exactly 5 states and 5 priorities with Plane defaults."""
++    """Test project insertion seeds exactly 5 states and 5 priorities with standard defaults."""
+     ws_id = await _create_workspace(app_session)
+     proj_id = await _create_test_project(app_session, ws_id, identifier="KAN", name="Core Project")
+ 
+diff --git a/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md b/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
+index d9d0dd66..2f12f58d 100644
+--- a/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
++++ b/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
+@@ -29,7 +29,7 @@
+ 11. [Three-Surface Intent-Driven MCP Server (`#12`: `mcp/` - Agent, Docs, Admin)](#11-three-surface-intent-driven-mcp-server-12-mcp---agent-docs-admin)
+ 12. [Universal Object Graph Canonical Markdown DDL & Invalid Link Auditor (`#13a` - `#13j`)](#12-universal-object-graph-canonical-markdown-ddl--invalid-link-auditor-13a---13j)
+ 13. [Admin-Only Custom Scripted Fields & Tiered Privilege Escalation (`#14`)](#13-admin-only-custom-scripted-fields--tiered-privilege-escalation-14)
+-14. [ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)](#14-scriptrunner-workflows--remotecli-agent-transition-interceptors-agy--p-codex--p-gemini-ollama)
++14. [Scripted Workflows & Remote/CLI Agent Transition Helpers (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)](#14-scripted-workflows--remotecli-agent-transition-helpers-agy--p-codex-exec--s-read-only---gemini-ollama)
+ 15. [`>=95%` Clean-DB Testing, Pluggable AI Fixtures, Local Agent CLI & Governance Gates](#15-95-clean-db-testing-pluggable-ai-fixtures-local-agent-cli--governance-gates)
+ 
+ ---
+@@ -52,7 +52,7 @@
+ | **12. MCP (`agent`, `docs`, `admin`; 100% admin tasks via refined intent tools)** | Section 11.1 - 11.4 | `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 orthogonal intent tools covering 100% of admin, workflow-interceptor, and runner tasks + 2-stage `request_delete` -> `execute_delete`). |
+ | **13. Universal Object Graph (`a` - `i`) + Invalid Link Audit & Delete (`13j`)** | Section 12.1 - 12.3 | Shared-PK UUIDv7 `objects` spine + composite type-pinned FKs (`ON DELETE RESTRICT`) + `object_links` snapshots + `audit_object_links()` 6-reason detector + `invalid_object_link_audits` ledger + `purge_invalid_object_links()`. |
+ | **14. Admin-only Custom Scripts + Output Format + Tiered Escalation** | Section 13.1 - 13.3 | Admin-only `custom_field_definitions`, strict `output_format_metadata`, `manifest_sha256` AAL2 cryptographic escalation (`PROJECT` -> `WORKSPACE` -> `SERVER`; `INVOKING_USER` vs Admin SP), Wasmtime + `nsjail` + Token-Injecting Egress Proxy. |
+-| **ScriptRunner Workflows & Remote/CLI Agent Interceptors** | Section 14.1 - 14.4 | Sync Wasm validators/mutators (`<25ms`) + Two-Phase Async Agent Transition Gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) supporting `gemini`, `ollama`, `${context} \| agy -p`, and `${context} \| codex exec -s read-only -` via zero-shell `execve` `stdin` pipes, `:ro` repo mounts, and scoped MCP ticket lookup. |
++| **Scripted Workflows & Remote/CLI Agent Transition Helpers** | Section 14.1 - 14.4 | Sync Wasm validators/mutators (`<25ms`) + Two-Phase Async Agent Transition Gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) supporting `gemini`, `ollama`, `${context} \| agy -p`, and `${context} \| codex exec -s read-only -` via zero-shell `execve` `stdin` pipes, `:ro` repo mounts, and scoped MCP ticket lookup. |
+ | **`>=95%` Unit Coverage, Fast Clean DB, Pluggable AI Fixtures & Manual CLI Validation** | Section 15.1 - 15.4 | `>=95%` coverage gate; `tmpfs` PG16 template DB + `0.3ms` `SAVEPOINT` per-test clean rollback; `FixtureLLMProvider`/`FixtureCLIRunner` deterministic cassettes; `kanban-agent validate-*` local CLI testbench. |
+ 
+ ---
+@@ -80,7 +80,7 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
+ | **RBAC & Sharing Transparency** | Coarse roles; opaque permission inheritance | **Bus/Ent:** Custom RBAC, permission schemes | **Hybrid RBAC + Resource ACLs + Postgres `FORCE RLS`:** Ubiquitous **`🛡️` Shared-With Emoji Pill** + Effective Access Inspector on every object. |
+ | **Audit Logs & Provenance** | Mutable/basic issue activity | **Enterprise:** Workspace Audit Logs | **Immutable SHA-256 Hash-Chained Ledger:** Monthly-partitioned `activity_records` covering human edits, `🔄` creator overrides, ACL diffs, and agent/script runs. |
+ | **AI & Agent Capabilities** | Severely restricted / cloud-locked | **Paid:** Metered AI credits (`1,000/seat`), cloud lock-in | **Native `agent/` + 3-Surface `mcp/`:** `openai`, air-gapped `ollama`, `gemini`, plus CLI harnesses (`agy -p`, `codex exec -s read-only -`); `<150ms` `✨` cursor completion. |
+-| **Workflows & ScriptRunner** | Basic state groups + simple auto-archive | **Bus/Ent:** Basic approval rules & triggers | **Full ScriptRunner + Agent Transition Interceptors:** Sync Wasm validators/mutators + async `gemini`/`ollama`/`agy -p`/`codex exec -s read-only -` gates with `:ro` repo access. |
++| **Workflows & Scripts** | Basic state groups + simple auto-archive | **Bus/Ent:** Basic approval rules & triggers | **Full Scripted Workflows + Agent Transition Helpers:** Sync Wasm validators/mutators + async `gemini`/`ollama`/`agy -p`/`codex exec -s read-only -` gates with `:ro` repo access. |
+ | **Markdown, Diagrams & Graph** | HTML/JSON storage drift; basic relations | **Pro/Bus:** Custom properties, Wiki spaces, Gantt | **100% Canonical Markdown DB + Universal Object Graph:** Auto-converts HTML/Rich -> Markdown; safe Mermaid, Pictures & SVGs; proactive `💡📄` Sticky-to-Doc promotion; Invalid Link Auditor. |
+ 
+ ---
+@@ -461,7 +461,7 @@ Content-Security-Policy:
+ 
+ ### 6.1 Generous Breathable Whitespace Spatial Tokens (`#15`)
+ 
+-Rather than squeezing noisy metadata into cramped rows, the UI combines **generous Jira-surpassing breathable whitespace** with **crisp semantic emojis whose hover/focus tooltips carry rich technical elaboration** (`kanban/web/src/styles/tokens.css`):
++Rather than squeezing noisy metadata into cramped rows, the UI combines **generous breathable whitespace** with **crisp semantic emojis whose hover/focus tooltips carry rich technical elaboration** (`kanban/web/src/styles/tokens.css`):
+ 
+ ```css
+ :root {
+@@ -721,7 +721,7 @@ Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isola
+ 
+ | Surface | Key Prefix | Tool Count | Schema Budget | Target Persona & Hard Boundary |
+ | :--- | :--- | :---: | :---: | :--- |
+-| **`/mcp/agent`** | `kb_agt_*` | **8** | `~1,850` tokens | Execution & QA sub-agents (`OBO` intersection, zero delete/admin tools). *(Ephemeral `kb_agt_eph_*` tokens issued to transition interceptors expose only read-only tools).* |
++| **`/mcp/agent`** | `kb_agt_*` | **8** | `~1,850` tokens | Execution & QA sub-agents (`OBO` intersection, zero delete/admin tools). *(Ephemeral `kb_agt_eph_*` tokens issued to transition helpers expose only read-only tools).* |
+ | **`/mcp/docs`** | `kb_doc_*` | **6** | `~1,350` tokens | Knowledge, Sticky-to-Doc promotion & semantic spec search. |
+ | **`/mcp/admin`** | `kb_adm_*` | **12** | `~3,100` tokens | **100% of Project, Workspace, Workflow-Gate, Agent-Runner & Server Admin operations** via intent tools + 2-stage destructive confirmation. |
+ 
+@@ -751,7 +751,7 @@ Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isola
+ 3. **`create_ticket`**: Creates single or parent+sub-issue trees using human names (`project="KAN"`, `priority="high"`, `assignees=["@adam", "Vendor QA"]`, `modules=[...]`).
+ 4. **`update_ticket`**: Intent-based atomic patch for summary, canonical Markdown description (`append` or `replace`), assignees, priority, dates, cycle, modules, parent, labels, and custom fields.
+ 5. **`begin_work`**: Single-call workflow starter - assigns caller, transitions to active `started` state, attaches active cycle, and posts opening plan comment.
+-6. **`transition_ticket`**: Moves ticket across workflow states with comment + structured `verification_proof` packet; cleanly reports `status: pending_agent_gate` (`execution_id`, `active_agent`) when an async transition interceptor holds the move for inspection!
++6. **`transition_ticket`**: Moves ticket across workflow states with comment + structured `verification_proof` packet; cleanly reports `status: pending_agent_gate` (`execution_id`, `active_agent`) when an async transition helper holds the move for inspection!
+ 7. **`complete_work`**: Terminal QA-gated closure verifying open child blockers, recording `reality-checker` verdict artifact links, transitioning to `completed`, and posting closing summary.
+ 8. **`link_objects` & `add_comment`**: Posts Markdown/Mermaid comments and manages typed `object_links` (`BLOCKS`, `RELATES_TO`, `DUPLICATES`, `VERIFIED_BY_DOC`) without raw UUID lookups.
+ 
+@@ -770,7 +770,7 @@ Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isola
+ 
+ ### 11.4 `/mcp/admin` Surface (12 Refined Intent Tools = 100% Admin Coverage)
+ 
+-Covers **100% of administrative tasks** (including v2 ScriptRunner workflow interceptors, CLI/remote agents, and read-only repo bindings) in **12 orthogonal tools** instead of `90+` brittle REST endpoints:
++Covers **100% of administrative tasks** (including v2 scripted workflow transition helpers, CLI/remote agents, and read-only repo bindings) in **12 orthogonal tools** instead of `90+` brittle REST endpoints:
+ 
+ | # | Admin Tool | Consolidated Administrative Capabilities |
+ | :-: | :--- | :--- |
+@@ -781,7 +781,7 @@ Covers **100% of administrative tasks** (including v2 ScriptRunner workflow inte
+ | **5** | `architect_project` | Create/configure Projects, `modules_enabled` + `default_module_ids`, **states**, **custom priorities**, **labels**, and **auto-archive rules** in one declarative payload. |
+ | **6** | `manage_cycles_and_modules` | Create/update/rollover `Cycles` (`upcoming`/`active`/`completed`), configure `Modules`, and manage saved `Views` + `bind_project_repo` (`:ro` Git mirror / VFS bindings for workflow gates). |
+ | **7** | `manage_custom_fields_and_scripts` | Define Admin-only custom fields (`output_format_metadata`, script source) and execute cryptographic `AAL2` scope/credential approvals (`PROJECT` -> `WORKSPACE` -> `SERVER`). |
+-| **8** | `manage_workflow_interceptors` | **ScriptRunner + Agent Gates:** Attach, order, enable/disable, or dry-run `sync_validator`, `sync_mutator` (Tier A Wasm), and `agent_interceptor` hooks on `(from_state -> to_state)` transitions. |
++| **8** | `manage_workflow_interceptors` | **Scripted Workflows + Agent Gates:** Attach, order, enable/disable, or dry-run `sync_validator`, `sync_mutator` (Tier A Wasm), and `agent_interceptor` hooks on `(from_state -> to_state)` transitions. |
+ | **9** | `manage_ai_and_agent_runners` | Configure `openai`/`ollama`/`gemini` providers, token budgets, `agent_definitions` (`in_app_sdk`, `cli_pipe` for `agy -p`/`codex exec -s read-only -`, `remote_runner`), and `kanban-agent-runner` mTLS enrollment tokens. |
+ | **10** | `override_ticket_provenance` | Project/Server Admin tool to modify `Created by` (`#8d`), unlock Hard WIP overrides, or unarchive items with mandatory `reason`. |
+ | **11** | `audit_and_purge_object_links` | Run the Universal Object Graph Auditor (`#13j`), inspect broken/unauthorized links, and purge audited entries. |
+@@ -950,11 +950,11 @@ Every scripted field defaults to **zero-privilege (`PROJECT` scope + `INVOKING_U
+ 
+ ---
+ 
+-## 14. ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)
++## 14. Scripted Workflows & Remote/CLI Agent Transition Helpers (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)
+ 
+-### 14.1 How ScriptRunner + Agent Transition Interceptors Fit into `[kanban, database, mcp, agent]`
++### 14.1 How Scripted Workflows & Transition Helpers Fit into `[kanban, database, mcp, agent]`
+ 
+-Inspired by Jira ScriptRunner - hardened for autonomous agents - any workflow transition `(from_state -> to_state)` (or `* -> Done`) can attach an ordered pipeline of **Synchronous Deterministic Scripts** (`sync_validator`, `sync_mutator`) followed by **Asynchronous AI/CLI Agent Interceptors** (`agent_interceptor`) defined in `agent/`:
++Engineered for scripted workflows - hardened for autonomous agents - any workflow transition `(from_state -> to_state)` (or `* -> Done`) can attach an ordered pipeline of **Synchronous Deterministic Scripts** (`sync_validator`, `sync_mutator`) followed by **Asynchronous AI/CLI Agent Transition Helpers** (`agent_interceptor`) defined in `agent/`:
+ 
+ ```mermaid
+ sequenceDiagram
+@@ -1090,7 +1090,7 @@ ticket_snapshot:
+ 
+ ```text
+ +---------------------------------------------------------------------------------------------------+
+-|  ⚙️ Project KAN > Workflow & Transition Interceptors                     [+ Add Transition Rule]  |
++|  ⚙️ Project KAN > Scripted Workflows & Transition Helpers                     [+ Add Transition Rule]  |
+ +---------------------------------------------------------------------------------------------------+
+ |  Transition:  [ 🟣 In Review ]  ========( 3 Active Hooks )========>  [ 🟢 Done ]                  |
+ |                                                                                                   |
+@@ -1159,7 +1159,7 @@ final_verdict:
+ Every AI agent and workflow interceptor can be invoked, inspected, and tuned **manually and locally from the terminal** with explicit input parameters - against **either** live local/cloud providers (`ollama`, `gemini`, `openai`, local `agy -p`, `codex exec -s read-only -`) **or** deterministic YAML cassettes (`--provider fixture`) - without clicking through the browser UI:
+ 
+ ```bash
+-# 1. Manually validate a Transition Interceptor (`agy -p`, `codex exec -s read-only -`, `ollama`, or `gemini`) against a local repo & sample ticket:
++# 1. Manually validate a Transition Helper (`agy -p`, `codex exec -s read-only -`, `ollama`, or `gemini`) against a local repo & sample ticket:
+ uv run kanban-agent validate-transition \
+   --agent-config ./examples/agents/agy-gate.yaml \
+   --ticket-file  ./examples/tickets/kan-142.yaml \
+@@ -1209,5 +1209,5 @@ Every ticket executed on this repository enforces five non-bypassable gates:
+ 3. **Phase 2 - Multi-Card Auth Studio & Sanitization/Media Shield (`kanban/`):** Envelope-encrypted `OIDC`/`OAuth2`/`LDAPS`/`Local Admin` cards, `LOCKOUT_PREVENTED`, Rust `nh3` + hidden-DOM pruner, SVG scrubber, and `/api/v1/media-proxy`.
+ 4. **Phase 3 - Breathable Whitespace UI, `<EmojiHint>`, Enterprise Board/Ticket & Safe Mermaid/Pictures/SVG (`kanban/web`):** Spatial tokens, 21-emoji `<EmojiHint>` system, 5 board views, `960px` Drawer + Full Screen (`8a`-`8q`), `beautiful-mermaid` Worker, `<MediaViewport>`, and `Docs` + `Stickies` (`💡📄`).
+ 5. **Phase 4 - Three-Surface Intent MCP Server (`mcp/`):** `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 tools + 2-stage `destructive_lifecycle`), OAuth 2.1 + PKCE, `EntityResolver`, and `InlineSafeDumper` YAML.
+-6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & ScriptRunner/CLI Transition Interceptors (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex exec -s read-only -` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
++6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & Scripted/CLI Transition Helpers (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex exec -s read-only -` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
+ 7. **Phase 6 - Cutover Import from `https://kanban.hackedyour.info/kanban/`:** Lossless `KANBA-*` migration, Link Auditor zero-invalid check, and full self-hosted dogfooding.
+diff --git a/docs/ARCHITECTURE_DELTA.md b/docs/ARCHITECTURE_DELTA.md
+index 0ac446f5..e1e870cb 100644
+--- a/docs/ARCHITECTURE_DELTA.md
++++ b/docs/ARCHITECTURE_DELTA.md
+@@ -6,7 +6,7 @@ This document presents a section-by-section architectural delta and gap analysis
+ 
+ Overall Implementation Status:
+ - 15 of 15 specification sections possess active, production-grade implementations in the codebase.
+-- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and ScriptRunner agent workflow interceptors are fully implemented.
++- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and scripted agent workflow transition helpers are fully implemented.
+ - Key gaps and deviations identified:
+   1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
+   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex exec -s read-only -`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
+@@ -37,7 +37,7 @@ Overall Implementation Status:
+ | **Section 11** | Three-Surface Intent-Driven MCP Server | `mcp/surfaces/agent/`, `docs/`, `admin/` | **COMPLETE (100%)** | **VERIFIED** | 27 total tools (9 agent, 6 docs, 12 admin with action-aware scope checks), OpenAPI sync verified. |
+ | **Section 12** | Universal Object Graph DDL & Link Auditor | `database/models/spine.py`, `base.py` | **COMPLETE (100%)** | **VERIFIED** | 9 entity kinds, 13 link kinds, 6-class invalid link auditor, audited purger. |
+ | **Section 13** | Custom Scripted Fields & Sandbox | `kanban/custom_fields/`, `kanban/sandbox/` | **COMPLETE (100%)** | **VERIFIED** | Admin-only definition gate, Wasmtime (Tier A), nsjail (Tier B sandbox), cryptographic AAL2 escalation. |
+-| **Section 14** | ScriptRunner & Transition Interceptors | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
++| **Section 14** | Scripted Workflows & Transition Helpers | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
+ | **Section 15** | >=95% Clean-DB Testing & Governance Gates | `agent/testing/`, `agent/cli_commands/` | **COMPLETE (100%)** | **VERIFIED** | Clean-DB SAVEPOINT isolation, 6 kanban-agent validate-* CLI tools, 3 governance gates, >=95% unit coverage. |
+ 
+ ---
+@@ -153,7 +153,7 @@ Overall Implementation Status:
+ ### Section 6: Breathable Enterprise Whitespace, <EmojiHint> Hover System & Kanban Board (#9, #15)
+ 
+ - **Target Architectural Contract:**
+-  - Spatial tokens: generous Jira- and Vibe-Kanban-surpassing breathable whitespace (`tokens.css`, `324px` lanes, `16px 18px` card padding, `960px` drawer).
++  - Spatial tokens: generous breathable whitespace (`tokens.css`, `324px` lanes, `16px 18px` card padding, `960px` drawer).
+   - `<EmojiHint>` semantic hover system: 21-emoji vocabulary (`🛡️`, `🔒`, `⚠️`, `📴`, `🔥`, `⚡`, `🔹`, `💤`, `🤖`, `⏳🤖`, `🛑🤖`, `✅🤖`, `🏷️`, `🔄`, `✨`, `🧼`, `💡📄`, `📎`, `🔒📄`, `🔗`, `📝`), 180ms entry delay, 0ms neighbor warmup (400ms window), 120ms hover bridge, instant Tab focus, instant Escape.
+   - Board ergonomics: sub-16ms optimistic drag-and-drop (`@atlaskit/pragmatic-drag-and-drop` + Base-62 fractional ranks).
+   - 5 native views: Kanban, List, Table, Calendar, Timeline (Gantt).
+@@ -345,10 +345,10 @@ Overall Implementation Status:
+ 
+ ---
+ 
+-### Section 14: ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors
++### Section 14: Scripted Workflows & Remote/CLI Agent Transition Helpers
+ 
+ - **Target Architectural Contract:**
+-  - Transition interceptors attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
++  - Transition helpers attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
+   - 3 Interceptor Kinds:
+     - `sync_validator`: Tier A Wasm, blocks invalid moves with structured reason.
+     - `sync_mutator`: Tier A Wasm, updates mutable fields on transition.
+diff --git a/docs/MCP_TOOLS_EVALUATION.md b/docs/MCP_TOOLS_EVALUATION.md
+index dce14ca4..98460b21 100644
+--- a/docs/MCP_TOOLS_EVALUATION.md
++++ b/docs/MCP_TOOLS_EVALUATION.md
+@@ -31,7 +31,7 @@ When evaluating an MCP ticketing server, standard assumptions often anticipate c
+ | **Docs** | `list_stickies`, `update_sticky` | `manage_stickies` | Unified sticky scratchpad tool computing live `promotion_recommended` complexity signals. |
+ | **Docs** | `convert_sticky_to_issue` | `promote_sticky_to_doc` | Atomic lossless promotion of complex scratchpads into permanent Docs with ACL preservation. |
+ | **Admin** | `admin_principals`, `admin_groups` | `manage_principals_and_groups` | Consolidates user, group, agent service-principal provisioning and role binding with cycle detection. |
+-| **Admin** | `admin_workflows` | `manage_workflow_interceptors` | Configures ScriptRunner Tier A Wasm validators/mutators and Tier B async agent gates on state transitions. |
++| **Admin** | `admin_workflows` | `manage_workflow_interceptors` | Configures Scripted Workflow Tier A Wasm validators/mutators and Tier B async agent gates on state transitions. |
+ | **Admin** | `admin_ai_providers` | `manage_ai_and_agent_runners` | Manages LLM endpoints, token caps, and CLI pipe (`agy -p` / `codex exec -s read-only -`) execution profiles. |
+ | **Admin** | `admin_destructive` | `destructive_lifecycle` | Mandatory 2-stage blast-radius preview (`request_delete`) and tokenized execution (`execute_delete`). |
+ 
+@@ -52,7 +52,7 @@ The overall architecture represents an enterprise-grade, security-hardened break
+ ### Three-Surface Separation and Least Privilege Isolation
+ 
+ The codebase enforces strict network and surface isolation across three independent mounting points in `mcp/app.py`:
+-- `/mcp/agent` mounts execution and QA tools. Tokens issued to this surface use prefix `kb_agt_*`. Ephemeral tokens (`kb_agt_eph_*`) minted for workflow transition interceptors automatically restrict access to read-only tools (`read_ticket`, `search_tickets`), preventing rogue agents from modifying unrelated state.
++- `/mcp/agent` mounts execution and QA tools. Tokens issued to this surface use prefix `kb_agt_*`. Ephemeral tokens (`kb_agt_eph_*`) minted for workflow transition helpers automatically restrict access to read-only tools (`read_ticket`, `search_tickets`), preventing rogue agents from modifying unrelated state.
+ - `/mcp/docs` mounts knowledge tools (`kb_doc_*`), enabling technical writers and documentation bots to manage specs without gaining ticket mutation privileges.
+ - `/mcp/admin` mounts administrative tools (`kb_adm_*`), requiring Server Admin or Workspace Admin credentials and enforcing Authenticator Assurance Level 2 (`AAL2`) verification.
+ 
+@@ -159,7 +159,7 @@ Budget Consumption: 95.1% (PASSED)
+ - **Required Parameters:** `identifier` (str), `to_state` (str).
+ - **Optional Parameters:** `comment_markdown` (str), `verification_proof` (object).
+ - **Usability Analysis:**
+-  - *Strengths:* First-class support for async transition interceptors. When an agent gate (such as reality-checker) intercepts the move, the tool cleanly returns `status: pending_agent_gate` with `execution_id` and `active_agent`.
++  - *Strengths:* First-class support for async transition helpers. When an agent gate (such as reality-checker) intercepts the move, the tool cleanly returns `status: pending_agent_gate` with `execution_id` and `active_agent`.
+   - *Clarity Gaps:* If an agent attempts to transition directly to a completed state, the server rejects the call with error code `USE_COMPLETE_WORK`, directing the agent to use `complete_work`. However, this requirement is not documented in the schema description. `verification_proof` is an untyped `object`.
+   - *Agent Ergonomics:* High. Clear separation of non-terminal transitions from terminal QA completions.
+ 
+@@ -338,7 +338,7 @@ Variance: +2,629 tokens (+84.8%)
+   - *Agent Ergonomics:* Strong security guardrails prevent unauthorized privilege escalation.
+ 
+ #### 23. `manage_workflow_interceptors`
+-- **Purpose:** Configure ScriptRunner transition hooks (sync validators, mutators, and async agent gates).
++- **Purpose:** Configure scripted workflow transition hooks (sync validators, mutators, and async agent gates).
+ - **Required Parameters:** `action` (str enum: `help`, `list`, `attach`, `update`, `reorder`, `enable`, `disable`, `detach`, `dry_run`).
+ - **Optional Parameters:** `project` (str), `hook` (str), `name` (str), `from_state` (str), `to_state` (str), `hook_kind` (str enum: `sync_validator`, `sync_mutator`, `agent_interceptor`), `failure_policy` (str), `wasm_module_sha256` (str), `agent` (str), `allowed_mutable_fields` (array of str), `ordered_hook_ids` (array of str), `issue` (str), `sample_ticket` (object), `confirm` (bool), `lod` (str).
+ - **Usability Analysis:**
+@@ -461,7 +461,7 @@ A forensic comparison between `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` Section 11
+ | Topic | Specification (Spec §11) | Actual Implementation (`/tmp/mcp_tools_actual.json`) | Root Cause Analysis & Verdict |
+ | :--- | :--- | :--- | :--- |
+ | **Agent Tool Count** | Spec §11.1 stated 8 tools. Bullet 8 in §11.2 grouped `link_objects & add_comment` together. | Implementation provides 9 distinct tools (`add_comment` and `link_objects` are separate). | **Superior Implementation:** Separating commenting from graph linking is cleaner and more modular. The schema budget test (`test_schema_budget.py`) explicitly expects 9 tools and confirms they use 1,759 tokens (under the 1,850 budget). |
+-| **Admin Schema Budget** | Spec §11.1 projected ~3,100 tokens for the admin surface. | Actual admin schema consumes 5,729 tokens (184.8% of estimate). | **Justified Expansion:** Admin tools consolidated v2 ScriptRunner workflows, Wasm sandboxes, runner pools, and git bindings. The richer descriptions prevent critical admin errors. |
++| **Admin Schema Budget** | Spec §11.1 projected ~3,100 tokens for the admin surface. | Actual admin schema consumes 5,729 tokens (184.8% of estimate). | **Justified Expansion:** Admin tools consolidated v2 scripted workflows, Wasm sandboxes, runner pools, and git bindings. The richer descriptions prevent critical admin errors. |
+ | **Repo Binding Placement** | Spec §11.4 mentioned repo bindings under `manage_cycles_and_modules`. | Actions `bind_project_repo`, `list_repo_bindings`, `refresh_repo_binding`, and `unbind_project_repo` are housed in `manage_cycles_and_modules`. | **Fully Aligned:** The implementation places repo bindings inside `manage_cycles_and_modules`, providing `:ro` Git context for workflow gates. |
+ 
+ ---
+diff --git a/docs/USER_TASKS.md b/docs/USER_TASKS.md
+index 98c2612c..029963de 100644
+--- a/docs/USER_TASKS.md
++++ b/docs/USER_TASKS.md
+@@ -52,7 +52,7 @@
+ 
+ ---
+ 
+-### Group D: MCP Access Studio, Custom Scripted Fields & Workflow Transition Interceptors (Spec S11, S13, S14)
++### Group D: MCP Access Studio, Custom Scripted Fields & Workflow Transition Helpers (Spec S11, S13, S14)
+ 
+ | Task ID | Spec Ref | User Persona | Task Title | Step-by-Step Human / Browser Verification Actions | Expected Outcome & Screenshot Target |
+ | :--- | :---: | :--- | :--- | :--- | :--- |
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+index d7056980..bf3d25d1 100644
+--- a/kanban/issues/workflow_service.py
++++ b/kanban/issues/workflow_service.py
+@@ -52,7 +52,7 @@ class GateHoldResult:
+ 
+ @runtime_checkable
+ class WorkflowGateHook(Protocol):
+-    """Protocol for pluggable workflow transition interceptors and gates."""
++    """Protocol for pluggable workflow transition helpers and gates."""
+ 
+     async def evaluate_transition(  # noqa: PLR0913, PLR0917
+         self,
+diff --git a/kanban/services/issue_archive.py b/kanban/services/issue_archive.py
+index 5caaa0b0..ace50081 100644
+--- a/kanban/services/issue_archive.py
++++ b/kanban/services/issue_archive.py
+@@ -33,7 +33,7 @@ async def archive_issue(
+     caller: PrincipalContext,
+     issue_ref: str,
+ ) -> IssueResponse:
+-    """Archive an issue enforcing Plane rule and checking for open sub-issues.
++    """Archive an issue enforcing completion rules and checking for open sub-issues.
+ 
+     Enforces:
+     1. Issue resolution through RLS (404 on non-existent, cross-workspace, deleted, unreadable).
+diff --git a/kanban/web/e2e/editor/markdown-editor.spec.ts b/kanban/web/e2e/editor/markdown-editor.spec.ts
+index a0e2f6d3..ba545ac5 100644
+--- a/kanban/web/e2e/editor/markdown-editor.spec.ts
++++ b/kanban/web/e2e/editor/markdown-editor.spec.ts
+@@ -109,7 +109,7 @@ test.describe('ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45
+     // Assert untouched blocks remain byte-for-byte identical
+     await expect(serializedOutput).toContainText('| Component | Status | Latency |');
+     await expect(serializedOutput).toContainText('| Database | Active | 0.8ms |');
+-    await expect(serializedOutput).toContainText('Check [Plane parity][1] for reference implementation.');
++    await expect(serializedOutput).toContainText('Check [platform architecture][1] for reference implementation.');
+     await expect(serializedOutput).toContainText('[1]: https://kanban.hackedyour.info');
+     await expect(serializedOutput).toContainText('4-backtick fence');
+ 
+diff --git a/kanban/web/e2e/mcp-access-studio.spec.ts b/kanban/web/e2e/mcp-access-studio.spec.ts
+index 48d88931..55b069ac 100644
+--- a/kanban/web/e2e/mcp-access-studio.spec.ts
++++ b/kanban/web/e2e/mcp-access-studio.spec.ts
+@@ -165,7 +165,7 @@ test.describe('MCP Access Studio & Device Flow E2E Proofs (KB-P4-16)', () => {
+         {
+           selector: '[data-testid="mcp-keys-section"]',
+           label: 'Breathable --prop-row-h Spacing',
+-          note: 'S6.1 ergonomics conforming to Jira/Plane whitespace tokens',
++          note: 'S6.1 ergonomics conforming to breathable whitespace tokens',
+         },
+       ],
+     });
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 0b8bc7d1..c6c5c4b1 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -1,6 +1,6 @@
+ /**
+  * Breathable Application Shell (KB-P3-34, S6.3).
+- * Plane-parity grid layout hosting collapsible sidebar rail, calm topbar, command palette, and surface anchors.
++ * Breathable grid layout hosting collapsible sidebar rail, calm topbar, command palette, and surface anchors.
+  */
+ 
+ import React, {
+diff --git a/kanban/web/src/dev/EditorStory.tsx b/kanban/web/src/dev/EditorStory.tsx
+index d72c6d4b..f0dc2f92 100644
+--- a/kanban/web/src/dev/EditorStory.tsx
++++ b/kanban/web/src/dev/EditorStory.tsx
+@@ -16,7 +16,7 @@ export const INITIAL_STORY_MARKDOWN = `# Architectural Specification
+ 
+ Fix teh typo in this paragraph to verify surgical update.
+ 
+-Check [Plane parity][1] for reference implementation.
++Check [platform architecture][1] for reference implementation.
+ 
+ \`\`\`\`ts
+ export function demo(): string {
+diff --git a/kanban/web/src/editor/mermaid/MermaidBlockView.css b/kanban/web/src/editor/mermaid/MermaidBlockView.css
+index 3af739b1..00257962 100644
+--- a/kanban/web/src/editor/mermaid/MermaidBlockView.css
++++ b/kanban/web/src/editor/mermaid/MermaidBlockView.css
+@@ -1,6 +1,6 @@
+ /**
+  * Mermaid Block View Styles (KB-P3-47, S5.3).
+- * Clean, calm Jira/Plane-style whitespace with responsive MediaViewport
++ * Clean, calm breathable whitespace with responsive MediaViewport
+  * embedding and non-crashing fallback source view.
+  */
+ 
+diff --git a/kanban/web/src/editor/sourceSlice.test.ts b/kanban/web/src/editor/sourceSlice.test.ts
+index 3f57b519..e34f1a0a 100644
+--- a/kanban/web/src/editor/sourceSlice.test.ts
++++ b/kanban/web/src/editor/sourceSlice.test.ts
+@@ -80,7 +80,7 @@ export function computeSlice(input: string): string {
+ 
+ Fix teh typo in this paragraph to verify surgical update.
+ 
+-Check [Plane parity][1] for reference implementation.
++Check [platform architecture][1] for reference implementation.
+ 
+ \`\`\`python
+ def hello():
+@@ -145,7 +145,7 @@ def hello():
+       originalSource.slice(b1Slice.from, b1Slice.to),
+     );
+     expect(serialized).toContain('| Component    | Parity |');
+-    expect(serialized).toContain('Check [Plane parity][1] for reference implementation.');
++    expect(serialized).toContain('Check [platform architecture][1] for reference implementation.');
+     expect(serialized).toContain('```python\ndef hello():\n    return "python"\n```');
+   });
+ 
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.css b/kanban/web/src/features/access/AccessInspectorPopover.css
+index aa67d2fc..92cea975 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.css
++++ b/kanban/web/src/features/access/AccessInspectorPopover.css
+@@ -1,6 +1,6 @@
+ /**
+  * Effective Access Inspector Popover styles (KB-P3-49, S3.4, S6.1, S6.2).
+- * Breathable Jira/Plane spatial rhythm, strict CSSOM positioning, CSP clean.
++ * Breathable spatial rhythm, strict CSSOM positioning, CSP clean.
+  */
+ 
+ :root {
+diff --git a/kanban/web/src/features/access/ManageAccessModal.css b/kanban/web/src/features/access/ManageAccessModal.css
+index 165ba4dd..f76ceca9 100644
+--- a/kanban/web/src/features/access/ManageAccessModal.css
++++ b/kanban/web/src/features/access/ManageAccessModal.css
+@@ -1,6 +1,6 @@
+ /**
+  * Manage Access Modal styles (KANBA-220, KB-AUDIT-14, S3.4).
+- * Clean Jira/Plane spatial rhythm, dark-theme resilient, mobile responsive.
++ * Clean breathable spatial rhythm, dark-theme resilient, mobile responsive.
+  */
+ 
+ .manage-access-backdrop {
+diff --git a/kanban/web/src/features/board/BoardCard.tsx b/kanban/web/src/features/board/BoardCard.tsx
+index b8d45906..e23ea6b2 100644
+--- a/kanban/web/src/features/board/BoardCard.tsx
++++ b/kanban/web/src/features/board/BoardCard.tsx
+@@ -87,7 +87,7 @@ function getUserHandle(a: BoardAssignee): string {
+ }
+ 
+ /**
+- * Accessible, draggable Plane-parity Kanban card (KB-P3-37, S6.3).
++ * Accessible, draggable enterprise Kanban card (KB-P3-37, S6.3).
+  */
+ export function BoardCard({
+   issue,
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 62c903a9..59f55069 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -2323,7 +2323,7 @@ export function ProjectSettingsPage(): JSX.Element {
+               <div className="kb-card-icon">🔀</div>
+               <div className="kb-card-content">
+                 <h3>Workflows &amp; States</h3>
+-                <p>Configure lifecycle hooks, state transition interceptors, and automated scripts.</p>
++                <p>Configure lifecycle hooks, state transition helpers, and automated scripts.</p>
+               </div>
+             </Link>
+ 
+diff --git a/kanban/web/src/styles/tokens.css b/kanban/web/src/styles/tokens.css
+index 7d862460..16daeab8 100644
+--- a/kanban/web/src/styles/tokens.css
++++ b/kanban/web/src/styles/tokens.css
+@@ -13,7 +13,7 @@
+   --board-col-gap: 20px;          /* Clear visual gutter between state columns */
+   --card-pad: 16px 18px;          /* Airy internal card padding */
+   --card-gap: 12px;               /* Vertical breathing room between cards */
+-  --list-row-h: 46px;             /* Calm Plane-style list row height */
++  --list-row-h: 46px;             /* Calm breathable list row height */
+ 
+   /* Ticket Drawer & Full-Screen Editorial Breathing Room */
+   --drawer-w: min(960px, 68vw);   /* 640px spacious prose + 320px properties rail */
+diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
+index 8b7142d0..8ad83ec0 100644
+--- a/kanban/workflows/async_gate.py
++++ b/kanban/workflows/async_gate.py
+@@ -87,7 +87,7 @@ def format_veto_comment(
+ 
+ 
+ class AgentGateDispatcher:
+-    """Dispatches asynchronous AI/CLI agent transition interceptors (KB-P5-18)."""
++    """Dispatches asynchronous AI/CLI agent transition helpers (KB-P5-18)."""
+ 
+     async def dispatch(
+         self,
+diff --git a/kanban/workflows/engine.py b/kanban/workflows/engine.py
+index 470582af..7afeb733 100644
+--- a/kanban/workflows/engine.py
++++ b/kanban/workflows/engine.py
+@@ -64,7 +64,7 @@ class TransitionOutcome:
+ 
+ 
+ class AsyncGateDispatcher(Protocol):
+-    """Protocol for dispatching asynchronous AI/CLI agent transition interceptors."""
++    """Protocol for dispatching asynchronous AI/CLI agent transition helpers."""
+ 
+     async def dispatch(
+         self,

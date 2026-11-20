@@ -52,7 +52,7 @@ class GateHoldResult:
 
 @runtime_checkable
 class WorkflowGateHook(Protocol):
-    """Protocol for pluggable workflow transition interceptors and gates."""
+    """Protocol for pluggable workflow transition helpers and gates."""
 
     async def evaluate_transition(  # noqa: PLR0913, PLR0917
         self,

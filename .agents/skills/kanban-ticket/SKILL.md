@@ -40,7 +40,7 @@ Use this skill together with [`kanban-agent-manager`](../kanban-agent-manager/SK
 
 ## Mandatory Ticket Template
 
-Every ticket created or updated in Plane MUST use the following Markdown structure:
+Every ticket created or updated in 👍kanban MUST use the following Markdown structure:
 
 ```markdown
 ### User Story

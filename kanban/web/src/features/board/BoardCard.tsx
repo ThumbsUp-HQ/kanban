@@ -87,7 +87,7 @@ function getUserHandle(a: BoardAssignee): string {
 }
 
 /**
- * Accessible, draggable Plane-parity Kanban card (KB-P3-37, S6.3).
+ * Accessible, draggable enterprise Kanban card (KB-P3-37, S6.3).
  */
 export function BoardCard({
   issue,

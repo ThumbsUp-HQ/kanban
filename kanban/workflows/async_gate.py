@@ -87,7 +87,7 @@ def format_veto_comment(
 
 
 class AgentGateDispatcher:
-    """Dispatches asynchronous AI/CLI agent transition interceptors (KB-P5-18)."""
+    """Dispatches asynchronous AI/CLI agent transition helpers (KB-P5-18)."""
 
     async def dispatch(
         self,

@@ -109,7 +109,7 @@ test.describe('ProseMirror GFM Editor E2E Verification & Design Proofs (KB-P3-45
     // Assert untouched blocks remain byte-for-byte identical
     await expect(serializedOutput).toContainText('| Component | Status | Latency |');
     await expect(serializedOutput).toContainText('| Database | Active | 0.8ms |');
-    await expect(serializedOutput).toContainText('Check [Plane parity][1] for reference implementation.');
+    await expect(serializedOutput).toContainText('Check [platform architecture][1] for reference implementation.');
     await expect(serializedOutput).toContainText('[1]: https://kanban.hackedyour.info');
     await expect(serializedOutput).toContainText('4-backtick fence');
 

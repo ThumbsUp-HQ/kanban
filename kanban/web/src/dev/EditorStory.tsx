@@ -16,7 +16,7 @@ export const INITIAL_STORY_MARKDOWN = `# Architectural Specification
 
 Fix teh typo in this paragraph to verify surgical update.
 
-Check [Plane parity][1] for reference implementation.
+Check [platform architecture][1] for reference implementation.
 
 \`\`\`\`ts
 export function demo(): string {

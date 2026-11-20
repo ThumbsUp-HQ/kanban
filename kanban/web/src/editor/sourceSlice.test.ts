@@ -80,7 +80,7 @@ export function computeSlice(input: string): string {
 
 Fix teh typo in this paragraph to verify surgical update.
 
-Check [Plane parity][1] for reference implementation.
+Check [platform architecture][1] for reference implementation.
 
 \`\`\`python
 def hello():
@@ -145,7 +145,7 @@ def hello():
       originalSource.slice(b1Slice.from, b1Slice.to),
     );
     expect(serialized).toContain('| Component    | Parity |');
-    expect(serialized).toContain('Check [Plane parity][1] for reference implementation.');
+    expect(serialized).toContain('Check [platform architecture][1] for reference implementation.');
     expect(serialized).toContain('```python\ndef hello():\n    return "python"\n```');
   });
 

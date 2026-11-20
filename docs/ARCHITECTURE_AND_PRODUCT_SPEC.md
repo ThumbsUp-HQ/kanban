@@ -29,7 +29,7 @@
 11. [Three-Surface Intent-Driven MCP Server (`#12`: `mcp/` - Agent, Docs, Admin)](#11-three-surface-intent-driven-mcp-server-12-mcp---agent-docs-admin)
 12. [Universal Object Graph Canonical Markdown DDL & Invalid Link Auditor (`#13a` - `#13j`)](#12-universal-object-graph-canonical-markdown-ddl--invalid-link-auditor-13a---13j)
 13. [Admin-Only Custom Scripted Fields & Tiered Privilege Escalation (`#14`)](#13-admin-only-custom-scripted-fields--tiered-privilege-escalation-14)
-14. [ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)](#14-scriptrunner-workflows--remotecli-agent-transition-interceptors-agy--p-codex--p-gemini-ollama)
+14. [Scripted Workflows & Remote/CLI Agent Transition Helpers (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)](#14-scripted-workflows--remotecli-agent-transition-helpers-agy--p-codex-exec--s-read-only---gemini-ollama)
 15. [`>=95%` Clean-DB Testing, Pluggable AI Fixtures, Local Agent CLI & Governance Gates](#15-95-clean-db-testing-pluggable-ai-fixtures-local-agent-cli--governance-gates)
 
 ---
@@ -52,7 +52,7 @@
 | **12. MCP (`agent`, `docs`, `admin`; 100% admin tasks via refined intent tools)** | Section 11.1 - 11.4 | `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 orthogonal intent tools covering 100% of admin, workflow-interceptor, and runner tasks + 2-stage `request_delete` -> `execute_delete`). |
 | **13. Universal Object Graph (`a` - `i`) + Invalid Link Audit & Delete (`13j`)** | Section 12.1 - 12.3 | Shared-PK UUIDv7 `objects` spine + composite type-pinned FKs (`ON DELETE RESTRICT`) + `object_links` snapshots + `audit_object_links()` 6-reason detector + `invalid_object_link_audits` ledger + `purge_invalid_object_links()`. |
 | **14. Admin-only Custom Scripts + Output Format + Tiered Escalation** | Section 13.1 - 13.3 | Admin-only `custom_field_definitions`, strict `output_format_metadata`, `manifest_sha256` AAL2 cryptographic escalation (`PROJECT` -> `WORKSPACE` -> `SERVER`; `INVOKING_USER` vs Admin SP), Wasmtime + `nsjail` + Token-Injecting Egress Proxy. |
-| **ScriptRunner Workflows & Remote/CLI Agent Interceptors** | Section 14.1 - 14.4 | Sync Wasm validators/mutators (`<25ms`) + Two-Phase Async Agent Transition Gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) supporting `gemini`, `ollama`, `${context} \| agy -p`, and `${context} \| codex exec -s read-only -` via zero-shell `execve` `stdin` pipes, `:ro` repo mounts, and scoped MCP ticket lookup. |
+| **Scripted Workflows & Remote/CLI Agent Transition Helpers** | Section 14.1 - 14.4 | Sync Wasm validators/mutators (`<25ms`) + Two-Phase Async Agent Transition Gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) supporting `gemini`, `ollama`, `${context} \| agy -p`, and `${context} \| codex exec -s read-only -` via zero-shell `execve` `stdin` pipes, `:ro` repo mounts, and scoped MCP ticket lookup. |
 | **`>=95%` Unit Coverage, Fast Clean DB, Pluggable AI Fixtures & Manual CLI Validation** | Section 15.1 - 15.4 | `>=95%` coverage gate; `tmpfs` PG16 template DB + `0.3ms` `SAVEPOINT` per-test clean rollback; `FixtureLLMProvider`/`FixtureCLIRunner` deterministic cassettes; `kanban-agent validate-*` local CLI testbench. |
 
 ---
@@ -80,7 +80,7 @@ Autonomous coding agents (`Gemini CLI / Antigravity`, `Claude Code`, `OpenAI Cod
 | **RBAC & Sharing Transparency** | Coarse roles; opaque permission inheritance | **Bus/Ent:** Custom RBAC, permission schemes | **Hybrid RBAC + Resource ACLs + Postgres `FORCE RLS`:** Ubiquitous **`🛡️` Shared-With Emoji Pill** + Effective Access Inspector on every object. |
 | **Audit Logs & Provenance** | Mutable/basic issue activity | **Enterprise:** Workspace Audit Logs | **Immutable SHA-256 Hash-Chained Ledger:** Monthly-partitioned `activity_records` covering human edits, `🔄` creator overrides, ACL diffs, and agent/script runs. |
 | **AI & Agent Capabilities** | Severely restricted / cloud-locked | **Paid:** Metered AI credits (`1,000/seat`), cloud lock-in | **Native `agent/` + 3-Surface `mcp/`:** `openai`, air-gapped `ollama`, `gemini`, plus CLI harnesses (`agy -p`, `codex exec -s read-only -`); `<150ms` `✨` cursor completion. |
-| **Workflows & ScriptRunner** | Basic state groups + simple auto-archive | **Bus/Ent:** Basic approval rules & triggers | **Full ScriptRunner + Agent Transition Interceptors:** Sync Wasm validators/mutators + async `gemini`/`ollama`/`agy -p`/`codex exec -s read-only -` gates with `:ro` repo access. |
+| **Workflows & Scripts** | Basic state groups + simple auto-archive | **Bus/Ent:** Basic approval rules & triggers | **Full Scripted Workflows + Agent Transition Helpers:** Sync Wasm validators/mutators + async `gemini`/`ollama`/`agy -p`/`codex exec -s read-only -` gates with `:ro` repo access. |
 | **Markdown, Diagrams & Graph** | HTML/JSON storage drift; basic relations | **Pro/Bus:** Custom properties, Wiki spaces, Gantt | **100% Canonical Markdown DB + Universal Object Graph:** Auto-converts HTML/Rich -> Markdown; safe Mermaid, Pictures & SVGs; proactive `💡📄` Sticky-to-Doc promotion; Invalid Link Auditor. |
 
 ---
@@ -461,7 +461,7 @@ Content-Security-Policy:
 
 ### 6.1 Generous Breathable Whitespace Spatial Tokens (`#15`)
 
-Rather than squeezing noisy metadata into cramped rows, the UI combines **generous Jira-surpassing breathable whitespace** with **crisp semantic emojis whose hover/focus tooltips carry rich technical elaboration** (`kanban/web/src/styles/tokens.css`):
+Rather than squeezing noisy metadata into cramped rows, the UI combines **generous breathable whitespace** with **crisp semantic emojis whose hover/focus tooltips carry rich technical elaboration** (`kanban/web/src/styles/tokens.css`):
 
 ```css
 :root {
@@ -721,7 +721,7 @@ Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isola
 
 | Surface | Key Prefix | Tool Count | Schema Budget | Target Persona & Hard Boundary |
 | :--- | :--- | :---: | :---: | :--- |
-| **`/mcp/agent`** | `kb_agt_*` | **8** | `~1,850` tokens | Execution & QA sub-agents (`OBO` intersection, zero delete/admin tools). *(Ephemeral `kb_agt_eph_*` tokens issued to transition interceptors expose only read-only tools).* |
+| **`/mcp/agent`** | `kb_agt_*` | **8** | `~1,850` tokens | Execution & QA sub-agents (`OBO` intersection, zero delete/admin tools). *(Ephemeral `kb_agt_eph_*` tokens issued to transition helpers expose only read-only tools).* |
 | **`/mcp/docs`** | `kb_doc_*` | **6** | `~1,350` tokens | Knowledge, Sticky-to-Doc promotion & semantic spec search. |
 | **`/mcp/admin`** | `kb_adm_*` | **12** | `~3,100` tokens | **100% of Project, Workspace, Workflow-Gate, Agent-Runner & Server Admin operations** via intent tools + 2-stage destructive confirmation. |
 
@@ -751,7 +751,7 @@ Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isola
 3. **`create_ticket`**: Creates single or parent+sub-issue trees using human names (`project="KAN"`, `priority="high"`, `assignees=["@adam", "Vendor QA"]`, `modules=[...]`).
 4. **`update_ticket`**: Intent-based atomic patch for summary, canonical Markdown description (`append` or `replace`), assignees, priority, dates, cycle, modules, parent, labels, and custom fields.
 5. **`begin_work`**: Single-call workflow starter - assigns caller, transitions to active `started` state, attaches active cycle, and posts opening plan comment.
-6. **`transition_ticket`**: Moves ticket across workflow states with comment + structured `verification_proof` packet; cleanly reports `status: pending_agent_gate` (`execution_id`, `active_agent`) when an async transition interceptor holds the move for inspection!
+6. **`transition_ticket`**: Moves ticket across workflow states with comment + structured `verification_proof` packet; cleanly reports `status: pending_agent_gate` (`execution_id`, `active_agent`) when an async transition helper holds the move for inspection!
 7. **`complete_work`**: Terminal QA-gated closure verifying open child blockers, recording `reality-checker` verdict artifact links, transitioning to `completed`, and posting closing summary.
 8. **`link_objects` & `add_comment`**: Posts Markdown/Mermaid comments and manages typed `object_links` (`BLOCKS`, `RELATES_TO`, `DUPLICATES`, `VERIFIED_BY_DOC`) without raw UUID lookups.
 
@@ -770,7 +770,7 @@ Instead of conventional `70-120+` 1:1 CRUD wrappers, `mcp/` mounts **three isola
 
 ### 11.4 `/mcp/admin` Surface (12 Refined Intent Tools = 100% Admin Coverage)
 
-Covers **100% of administrative tasks** (including v2 ScriptRunner workflow interceptors, CLI/remote agents, and read-only repo bindings) in **12 orthogonal tools** instead of `90+` brittle REST endpoints:
+Covers **100% of administrative tasks** (including v2 scripted workflow transition helpers, CLI/remote agents, and read-only repo bindings) in **12 orthogonal tools** instead of `90+` brittle REST endpoints:
 
 | # | Admin Tool | Consolidated Administrative Capabilities |
 | :-: | :--- | :--- |
@@ -781,7 +781,7 @@ Covers **100% of administrative tasks** (including v2 ScriptRunner workflow inte
 | **5** | `architect_project` | Create/configure Projects, `modules_enabled` + `default_module_ids`, **states**, **custom priorities**, **labels**, and **auto-archive rules** in one declarative payload. |
 | **6** | `manage_cycles_and_modules` | Create/update/rollover `Cycles` (`upcoming`/`active`/`completed`), configure `Modules`, and manage saved `Views` + `bind_project_repo` (`:ro` Git mirror / VFS bindings for workflow gates). |
 | **7** | `manage_custom_fields_and_scripts` | Define Admin-only custom fields (`output_format_metadata`, script source) and execute cryptographic `AAL2` scope/credential approvals (`PROJECT` -> `WORKSPACE` -> `SERVER`). |
-| **8** | `manage_workflow_interceptors` | **ScriptRunner + Agent Gates:** Attach, order, enable/disable, or dry-run `sync_validator`, `sync_mutator` (Tier A Wasm), and `agent_interceptor` hooks on `(from_state -> to_state)` transitions. |
+| **8** | `manage_workflow_interceptors` | **Scripted Workflows + Agent Gates:** Attach, order, enable/disable, or dry-run `sync_validator`, `sync_mutator` (Tier A Wasm), and `agent_interceptor` hooks on `(from_state -> to_state)` transitions. |
 | **9** | `manage_ai_and_agent_runners` | Configure `openai`/`ollama`/`gemini` providers, token budgets, `agent_definitions` (`in_app_sdk`, `cli_pipe` for `agy -p`/`codex exec -s read-only -`, `remote_runner`), and `kanban-agent-runner` mTLS enrollment tokens. |
 | **10** | `override_ticket_provenance` | Project/Server Admin tool to modify `Created by` (`#8d`), unlock Hard WIP overrides, or unarchive items with mandatory `reason`. |
 | **11** | `audit_and_purge_object_links` | Run the Universal Object Graph Auditor (`#13j`), inspect broken/unauthorized links, and purge audited entries. |
@@ -950,11 +950,11 @@ Every scripted field defaults to **zero-privilege (`PROJECT` scope + `INVOKING_U
 
 ---
 
-## 14. ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)
+## 14. Scripted Workflows & Remote/CLI Agent Transition Helpers (`agy -p`, `codex exec -s read-only -`, Gemini, Ollama)
 
-### 14.1 How ScriptRunner + Agent Transition Interceptors Fit into `[kanban, database, mcp, agent]`
+### 14.1 How Scripted Workflows & Transition Helpers Fit into `[kanban, database, mcp, agent]`
 
-Inspired by Jira ScriptRunner - hardened for autonomous agents - any workflow transition `(from_state -> to_state)` (or `* -> Done`) can attach an ordered pipeline of **Synchronous Deterministic Scripts** (`sync_validator`, `sync_mutator`) followed by **Asynchronous AI/CLI Agent Interceptors** (`agent_interceptor`) defined in `agent/`:
+Engineered for scripted workflows - hardened for autonomous agents - any workflow transition `(from_state -> to_state)` (or `* -> Done`) can attach an ordered pipeline of **Synchronous Deterministic Scripts** (`sync_validator`, `sync_mutator`) followed by **Asynchronous AI/CLI Agent Transition Helpers** (`agent_interceptor`) defined in `agent/`:
 
 ```mermaid
 sequenceDiagram
@@ -1090,7 +1090,7 @@ ticket_snapshot:
 
 ```text
 +---------------------------------------------------------------------------------------------------+
-|  ⚙️ Project KAN > Workflow & Transition Interceptors                     [+ Add Transition Rule]  |
+|  ⚙️ Project KAN > Scripted Workflows & Transition Helpers                     [+ Add Transition Rule]  |
 +---------------------------------------------------------------------------------------------------+
 |  Transition:  [ 🟣 In Review ]  ========( 3 Active Hooks )========>  [ 🟢 Done ]                  |
 |                                                                                                   |
@@ -1159,7 +1159,7 @@ final_verdict:
 Every AI agent and workflow interceptor can be invoked, inspected, and tuned **manually and locally from the terminal** with explicit input parameters - against **either** live local/cloud providers (`ollama`, `gemini`, `openai`, local `agy -p`, `codex exec -s read-only -`) **or** deterministic YAML cassettes (`--provider fixture`) - without clicking through the browser UI:
 
 ```bash
-# 1. Manually validate a Transition Interceptor (`agy -p`, `codex exec -s read-only -`, `ollama`, or `gemini`) against a local repo & sample ticket:
+# 1. Manually validate a Transition Helper (`agy -p`, `codex exec -s read-only -`, `ollama`, or `gemini`) against a local repo & sample ticket:
 uv run kanban-agent validate-transition \
   --agent-config ./examples/agents/agy-gate.yaml \
   --ticket-file  ./examples/tickets/kan-142.yaml \
@@ -1209,5 +1209,5 @@ Every ticket executed on this repository enforces five non-bypassable gates:
 3. **Phase 2 - Multi-Card Auth Studio & Sanitization/Media Shield (`kanban/`):** Envelope-encrypted `OIDC`/`OAuth2`/`LDAPS`/`Local Admin` cards, `LOCKOUT_PREVENTED`, Rust `nh3` + hidden-DOM pruner, SVG scrubber, and `/api/v1/media-proxy`.
 4. **Phase 3 - Breathable Whitespace UI, `<EmojiHint>`, Enterprise Board/Ticket & Safe Mermaid/Pictures/SVG (`kanban/web`):** Spatial tokens, 21-emoji `<EmojiHint>` system, 5 board views, `960px` Drawer + Full Screen (`8a`-`8q`), `beautiful-mermaid` Worker, `<MediaViewport>`, and `Docs` + `Stickies` (`💡📄`).
 5. **Phase 4 - Three-Surface Intent MCP Server (`mcp/`):** `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 tools + 2-stage `destructive_lifecycle`), OAuth 2.1 + PKCE, `EntityResolver`, and `InlineSafeDumper` YAML.
-6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & ScriptRunner/CLI Transition Interceptors (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex exec -s read-only -` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
+6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & Scripted/CLI Transition Helpers (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex exec -s read-only -` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
 7. **Phase 6 - Cutover Import from `https://kanban.hackedyour.info/kanban/`:** Lossless `KANBA-*` migration, Link Auditor zero-invalid check, and full self-hosted dogfooding.

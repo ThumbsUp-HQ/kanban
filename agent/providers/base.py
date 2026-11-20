@@ -267,7 +267,7 @@ class CLIRunResult(BaseModel):
 
 @runtime_checkable
 class CLIRunner(Protocol):
-    """Zero-shell CLI harness protocol for transition interceptors."""
+    """Zero-shell CLI harness protocol for transition helpers."""
 
     async def run(self, req: CLIRunRequest) -> CLIRunResult:
         """Execute a CLI request returning raw stdout, stderr, and exit code."""

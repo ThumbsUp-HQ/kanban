@@ -6,7 +6,7 @@ This document presents a section-by-section architectural delta and gap analysis
 
 Overall Implementation Status:
 - 15 of 15 specification sections possess active, production-grade implementations in the codebase.
-- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and ScriptRunner agent workflow interceptors are fully implemented.
+- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and scripted agent workflow transition helpers are fully implemented.
 - Key gaps and deviations identified:
   1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex exec -s read-only -`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
@@ -37,7 +37,7 @@ Overall Implementation Status:
 | **Section 11** | Three-Surface Intent-Driven MCP Server | `mcp/surfaces/agent/`, `docs/`, `admin/` | **COMPLETE (100%)** | **VERIFIED** | 27 total tools (9 agent, 6 docs, 12 admin with action-aware scope checks), OpenAPI sync verified. |
 | **Section 12** | Universal Object Graph DDL & Link Auditor | `database/models/spine.py`, `base.py` | **COMPLETE (100%)** | **VERIFIED** | 9 entity kinds, 13 link kinds, 6-class invalid link auditor, audited purger. |
 | **Section 13** | Custom Scripted Fields & Sandbox | `kanban/custom_fields/`, `kanban/sandbox/` | **COMPLETE (100%)** | **VERIFIED** | Admin-only definition gate, Wasmtime (Tier A), nsjail (Tier B sandbox), cryptographic AAL2 escalation. |
-| **Section 14** | ScriptRunner & Transition Interceptors | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
+| **Section 14** | Scripted Workflows & Transition Helpers | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
 | **Section 15** | >=95% Clean-DB Testing & Governance Gates | `agent/testing/`, `agent/cli_commands/` | **COMPLETE (100%)** | **VERIFIED** | Clean-DB SAVEPOINT isolation, 6 kanban-agent validate-* CLI tools, 3 governance gates, >=95% unit coverage. |
 
 ---
@@ -153,7 +153,7 @@ Overall Implementation Status:
 ### Section 6: Breathable Enterprise Whitespace, <EmojiHint> Hover System & Kanban Board (#9, #15)
 
 - **Target Architectural Contract:**
-  - Spatial tokens: generous Jira- and Vibe-Kanban-surpassing breathable whitespace (`tokens.css`, `324px` lanes, `16px 18px` card padding, `960px` drawer).
+  - Spatial tokens: generous breathable whitespace (`tokens.css`, `324px` lanes, `16px 18px` card padding, `960px` drawer).
   - `<EmojiHint>` semantic hover system: 21-emoji vocabulary (`🛡️`, `🔒`, `⚠️`, `📴`, `🔥`, `⚡`, `🔹`, `💤`, `🤖`, `⏳🤖`, `🛑🤖`, `✅🤖`, `🏷️`, `🔄`, `✨`, `🧼`, `💡📄`, `📎`, `🔒📄`, `🔗`, `📝`), 180ms entry delay, 0ms neighbor warmup (400ms window), 120ms hover bridge, instant Tab focus, instant Escape.
   - Board ergonomics: sub-16ms optimistic drag-and-drop (`@atlaskit/pragmatic-drag-and-drop` + Base-62 fractional ranks).
   - 5 native views: Kanban, List, Table, Calendar, Timeline (Gantt).
@@ -345,10 +345,10 @@ Overall Implementation Status:
 
 ---
 
-### Section 14: ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors
+### Section 14: Scripted Workflows & Remote/CLI Agent Transition Helpers
 
 - **Target Architectural Contract:**
-  - Transition interceptors attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
+  - Transition helpers attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
   - 3 Interceptor Kinds:
     - `sync_validator`: Tier A Wasm, blocks invalid moves with structured reason.
     - `sync_mutator`: Tier A Wasm, updates mutable fields on transition.

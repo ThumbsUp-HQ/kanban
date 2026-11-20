@@ -1,0 +1,50 @@
+=== VITEST UNIT TESTS ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan55-27834a27/kanban/web
+
+ ✓ src/styles/tokens.test.ts (4 tests) 9ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 12ms
+ ✓ src/editor/sourceSlice.test.ts (14 tests) 318ms
+
+ Test Files  3 passed (3)
+      Tests  22 passed (22)
+   Start at  14:18:55
+   Duration  1.42s (environment 81%, tests 12%, import 5%, worker 1%, transform 1%)
+
+
+=== PYTEST WORKFLOWS & PROJECTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan55-27834a27
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 71 items
+
+database/tests/test_p1_04_projects.py ........                           [ 11%]
+kanban/tests/workflows/test_async_gate.py ..............                 [ 30%]
+kanban/tests/workflows/test_dry_run.py .......                           [ 40%]
+kanban/tests/workflows/test_gate_sweeper.py ...                          [ 45%]
+kanban/tests/workflows/test_manifest.py ....                             [ 50%]
+kanban/tests/workflows/test_mutations.py ...                             [ 54%]
+kanban/tests/workflows/test_transition_engine.py ................        [ 77%]
+kanban/tests/workflows/test_workflow_hooks_api.py ................       [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/workflows/__init__.py            6      0      0      0   100%
+kanban/workflows/async_gate.py        353      9     78     13    95%   246, 281, 376->390, 587->586, 590, 594-600, 887->899, 963->966, 986->991, 995->998, 1035, 1050->1041, 1076-1077, 1105->1068
+kanban/workflows/builtins.py           83     17     14      3    77%   133-163, 183->182, 200-202, 215
+kanban/workflows/dry_run.py           202      7     46      5    95%   239, 361, 408, 489->258, 492, 533-535
+kanban/workflows/engine.py            261     10     64     11    94%   135->139, 183, 282, 362-371, 387, 413-414, 445, 463, 504->557, 581->590, 625->645, 627->645, 632->637, 660
+kanban/workflows/gate_sweeper.py       21      0      6      0   100%
+kanban/workflows/gate_types.py         25      0      0      0   100%
+kanban/workflows/hooks_service.py     400     14    116     12    95%   200->180, 325->328, 343->354, 350->352, 506->562, 542-545, 578-579, 582, 676->680, 709-710, 721, 747-750, 760->772
+kanban/workflows/manifest.py           17      0      4      0   100%
+kanban/workflows/mutations.py         140      0     66      4    98%   168->180, 180->116, 200->208, 266->116
+-------------------------------------------------------------------------------
+TOTAL                                1508     57    394     48    94%
+============================= 71 passed in 46.84s ==============================

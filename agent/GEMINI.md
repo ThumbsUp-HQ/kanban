@@ -1,7 +1,7 @@
 # Agent Runtime Module Manifest (`kanban-agent`)
 
 ## Responsibility
-Multi-provider LLM and autonomous agent runtime supporting OpenAI, Ollama, and Gemini providers, as well as zero-shell CLI pipe harnesses (agy -p, codex exec -s read-only -) and outbound mTLS remote repository runners. Powers ScriptRunner-style workflow transition interceptors, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
+Multi-provider LLM and autonomous agent runtime supporting OpenAI, Ollama, and Gemini providers, as well as zero-shell CLI pipe harnesses (agy -p, codex exec -s read-only -) and outbound mTLS remote repository runners. Powers scripted workflow transition helpers, permission-filtered inline cursor completions, sticky-to-doc synthesis, and semantic search.
 
 ## Depends On
 - `mcp` (`kanban-mcp` package for invoking platform MCP tools and resources).
@@ -345,9 +345,9 @@ The `InAppSdkHarness` implements an in-process, sandboxed SDK execution harness 
   - Ephemeral bearer tokens are injected into headers without persistence.
   - All returned payloads are recursively scrubbed for secrets and credentials.
 
-## Transition Interceptor Validation Workbench (`kanban-agent validate-transition`, KB-P5-23, S15.3)
+## Transition Helper Validation Workbench (`kanban-agent validate-transition`, KB-P5-23, S15.3)
 
-The `kanban-agent validate-transition` subcommand provides an end-to-end, multi-harness offline and loopback validation workbench for workflow transition interceptors across `in_app_sdk`, `cli_pipe`, and `remote_runner` harnesses:
+The `kanban-agent validate-transition` subcommand provides an end-to-end, multi-harness offline and loopback validation workbench for workflow transition helpers across `in_app_sdk`, `cli_pipe`, and `remote_runner` harnesses:
 
 ### Supported Harnesses & Modes
 - `in_app_sdk`: Sandboxed in-process LLM loop execution with bare-Git read tools and ephemeral MCP tools. Supported offline via `--cassette` (replayed via `ExplicitFixtureLLMProvider`) and `--mcp-fixture`.

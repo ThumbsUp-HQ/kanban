@@ -52,7 +52,7 @@
 
 ---
 
-### Group D: MCP Access Studio, Custom Scripted Fields & Workflow Transition Interceptors (Spec S11, S13, S14)
+### Group D: MCP Access Studio, Custom Scripted Fields & Workflow Transition Helpers (Spec S11, S13, S14)
 
 | Task ID | Spec Ref | User Persona | Task Title | Step-by-Step Human / Browser Verification Actions | Expected Outcome & Screenshot Target |
 | :--- | :---: | :--- | :--- | :--- | :--- |
