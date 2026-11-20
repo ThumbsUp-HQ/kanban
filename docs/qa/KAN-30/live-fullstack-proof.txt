@@ -1,35 +1,81 @@
+================================================================================
+KAN-30 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (main commit 837f657d)
+Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
+Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
+Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
+================================================================================
 
-=== Setup for KAN-30: Create WORKSPACE_ADMIN, Normal Issue, Secret ACL-DENY Issue, Doc, Sticky ===
-Provisioned WORKSPACE_ADMIN 'wsadmin_41405' -> HTTP 201 id=be50182d-2d4a-4107-bb5a-73a98df2553a
-wsadmin login -> HTTP 200 status=authenticated
-wsadmin AAL2 session -> HTTP 200 aal_level=2
-Created normalIssue=KAN-29 (01a1f9d3-5f36-7b62-a242-131261593b10), secretIssue=KAN-30 (01a1f9d3-5f6f-79e1-937b-808325e8a22b), doc=01a1f9d3-5faa-7efa-ae31-c791c0dd386f, sticky=5cf5181d-a234-4bb3-9cbc-541aaab82e6e
-Granted explicit ACL DENY for wsadmin on KAN-30 -> HTTP 200 body={"status":"granted","object_id":"01a1f9d3-5f6f-79e1-937b-808325e8a22b","principal_id":"be50182d-2d4a-4107-bb5a-73a98df2553a","effect":"DENY","capabilities":["VIEW","EDIT","DELETE","ADMIN"],"effective_capabilities":["COMMENT","TRANSITION","LINK","SHARE"]}
-Soft-trashed normalIssue, secretIssue, doc, and sticky successfully.
+1. TEST DATA PROVISIONING & SOFT-TRASH SETUP
+--------------------------------------------------------------------------------
+Created disposable issues as @admin (SERVER_ADMIN, AAL2):
+- pubIssue: KAN-7 (01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777) -> HTTP 201
+- secIssue: KAN-8 (01a1fa5c-8c7f-76ac-9da4-c22524fe2692) -> HTTP 201
+- restoreIssue: KAN-9 (01a1fa5c-8cba-7acc-9c3a-b2aadd625ae4) -> HTTP 201
+Granted explicit ACL DENY for @wsadmin (WORKSPACE_ADMIN) on KAN-8 via POST /api/v1/admin/acl-entries -> HTTP 200
+Soft-trashed KAN-7, KAN-8, KAN-9 (GET /delete-preview + DELETE /api/v1/issues/{key} with Kb-Blast-Hash) -> HTTP 200 each
 
-=== Problem 2: GET /api/v1/admin/trash RLS + ACL DENY Isolation & WORKSPACE_ADMIN 403 on permanent_purge ===
-SERVER_ADMIN GET /api/v1/admin/trash -> HTTP 200, count=18
-  items=[{"id":"5cf5181d-a234-4bb3-9cbc-541aaab82e6e","kind":"sticky","key":"stickies/5cf5181d-a234-4bb3-9cbc-541aaab82e6e","title":"KAN-30 Live QA Sticky Note for Trash Studio","remaining_days":13},{"id":"01a1f9d3-5faa-7efa-ae31-c791c0dd386f","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-41405","title":"KAN-30 Architecture Runbook Doc 41405","remaining_days":13},{"id":"01a1f9d3-5f6f-79e1-937b-808325e8a22b","kind":"issue","key":"KAN-30","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)","remaining_days":13},{"id":"01a1f9d3-5f36-7b62-a242-131261593b10","kind":"issue","key":"KAN-29","title":"KAN-30 Trashable Public Issue","remaining_days":13},{"id":"01a1f9ce-a68f-743b-87ca-993e4facb9f5","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-31988","title":"KAN-30 Architecture Runbook Doc 31988","remaining_days":13},{"id":"01a1f9ce-a668-7cc9-836f-85273d08ee05","kind":"issue","key":"KAN-23","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)","remaining_days":13},{"id":"01a1f9c8-1574-7f70-8cda-4dd26fcbeb58","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-01501","title":"KAN-30 Architecture Runbook Doc 01501","remaining_days":13},{"id":"01a1f9c8-153d-7737-b828-cc9e19caa3d2","kind":"issue","key":"KAN-20","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)","remaining_days":13},{"id":"01a1f9c8-1510-7269-937d-5d5233435e73","kind":"issue","key":"KAN-19","title":"KAN-30 Trashable Public Issue","remaining_days":13},{"id":"01a1f9c7-ac4e-7582-acf6-e41f2f34631c","kind":"issue","key":"KAN-16","title":"KAN-30 Trashable Public Issue","remaining_days":13},{"id":"26c062b2-f49f-47cd-ae18-2d2c11fef44e","kind":"sticky","key":"stickies/26c062b2-f49f-47cd-ae18-2d2c11fef44e","title":"KAN-30 Live QA Sticky Note for Trash Studio","remaining_days":13},{"id":"01a1f9c6-d14e-794d-b435-54a597325e8b","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-18644","title":"KAN-30 Architecture Runbook Doc 18644","remaining_days":13},{"id":"01a1f9c6-d12c-7a62-abda-f93aaeb20c37","kind":"issue","key":"KAN-14","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)","remaining_days":13},{"id":"01a1f9c6-d104-7f97-9179-3638c31a97de","kind":"issue","key":"KAN-13","title":"KAN-30 Trashable Public Issue","remaining_days":13},{"id":"29788af2-37e0-4ec7-b8b2-e03c5feb3dfe","kind":"sticky","key":"stickies/29788af2-37e0-4ec7-b8b2-e03c5feb3dfe","title":"KAN-30 Live QA Sticky Note for Trash Studio","remaining_days":13},{"id":"01a1f9c5-e2e9-7136-8c41-634d44bc58d2","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-1","title":"KAN-30 Architecture Runbook Doc","remaining_days":13},{"id":"01a1f9c5-e2a5-79bf-acb1-4d7bd4f2b5e0","kind":"issue","key":"KAN-8","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)","remaining_days":13},{"id":"01a1f9c5-e268-7c5f-b26c-c39a6f9302dd","kind":"issue","key":"KAN-7","title":"KAN-30 Trashable Public Issue","remaining_days":13}]
-WORKSPACE_ADMIN GET /api/v1/admin/trash -> HTTP 200, count=17
-  items=[{"id":"5cf5181d-a234-4bb3-9cbc-541aaab82e6e","kind":"sticky","key":"stickies/5cf5181d-a234-4bb3-9cbc-541aaab82e6e","title":"KAN-30 Live QA Sticky Note for Trash Studio"},{"id":"01a1f9d3-5faa-7efa-ae31-c791c0dd386f","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-41405","title":"KAN-30 Architecture Runbook Doc 41405"},{"id":"01a1f9d3-5f36-7b62-a242-131261593b10","kind":"issue","key":"KAN-29","title":"KAN-30 Trashable Public Issue"},{"id":"01a1f9ce-a68f-743b-87ca-993e4facb9f5","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-31988","title":"KAN-30 Architecture Runbook Doc 31988"},{"id":"01a1f9ce-a668-7cc9-836f-85273d08ee05","kind":"issue","key":"KAN-23","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)"},{"id":"01a1f9c8-1574-7f70-8cda-4dd26fcbeb58","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-01501","title":"KAN-30 Architecture Runbook Doc 01501"},{"id":"01a1f9c8-153d-7737-b828-cc9e19caa3d2","kind":"issue","key":"KAN-20","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)"},{"id":"01a1f9c8-1510-7269-937d-5d5233435e73","kind":"issue","key":"KAN-19","title":"KAN-30 Trashable Public Issue"},{"id":"01a1f9c7-ac4e-7582-acf6-e41f2f34631c","kind":"issue","key":"KAN-16","title":"KAN-30 Trashable Public Issue"},{"id":"26c062b2-f49f-47cd-ae18-2d2c11fef44e","kind":"sticky","key":"stickies/26c062b2-f49f-47cd-ae18-2d2c11fef44e","title":"KAN-30 Live QA Sticky Note for Trash Studio"},{"id":"01a1f9c6-d14e-794d-b435-54a597325e8b","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-18644","title":"KAN-30 Architecture Runbook Doc 18644"},{"id":"01a1f9c6-d12c-7a62-abda-f93aaeb20c37","kind":"issue","key":"KAN-14","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)"},{"id":"01a1f9c6-d104-7f97-9179-3638c31a97de","kind":"issue","key":"KAN-13","title":"KAN-30 Trashable Public Issue"},{"id":"29788af2-37e0-4ec7-b8b2-e03c5feb3dfe","kind":"sticky","key":"stickies/29788af2-37e0-4ec7-b8b2-e03c5feb3dfe","title":"KAN-30 Live QA Sticky Note for Trash Studio"},{"id":"01a1f9c5-e2e9-7136-8c41-634d44bc58d2","kind":"doc","key":"docs/kan-30-architecture-runbook-doc-1","title":"KAN-30 Architecture Runbook Doc"},{"id":"01a1f9c5-e2a5-79bf-acb1-4d7bd4f2b5e0","kind":"issue","key":"KAN-8","title":"KAN-30 Secret Executive Issue (ACL DENY wsadmin)"},{"id":"01a1f9c5-e268-7c5f-b26c-c39a6f9302dd","kind":"issue","key":"KAN-7","title":"KAN-30 Trashable Public Issue"}]
-WORKSPACE_ADMIN permanent_purge request -> HTTP 403 body={"type":"urn:kanban:problem:SERVER_ADMIN_REQUIRED","title":"Server Admin Required","status":403,"code":"SERVER_ADMIN_REQUIRED","detail":"Permanent purge is restricted strictly to SERVER_ADMIN.","request_id":"5269fe8aeea14a0eaa6401ece3cfe729"}
-LIVE_STACK_VERDICT [TRASH_ACL_DENY_ISOLATION_AND_PURGE_403]: PASS - serverAdminAll=true, secretHiddenFromWsAdmin=true, normalVisibleToWsAdmin=true, wsAdminPurge403=true
+2. WORKSPACE ADMIN TRASH & RETENTION STUDIO (/workspaces/settings#tab-trash)
+--------------------------------------------------------------------------------
+Loaded /workspaces/settings#tab-trash as @admin (795ms):
+- Desktop 1440x900 Light: docs/qa/KAN-30/screenshots/live-desktop-light.png
+- Desktop 1440x900 Dark: docs/qa/KAN-30/screenshots/live-desktop-dark.png
+- Tablet 768x1024 Light (scrollWidth=768, innerWidth=768, overflows=false): docs/qa/KAN-30/screenshots/live-tablet.png
+- Mobile 390x844 Light (scrollWidth=390, innerWidth=390, overflows=false): docs/qa/KAN-30/screenshots/live-mobile.png
 
-=== Problem 1 & 3: /workspaces/settings#tab-trash Retention Shorten + TRASH_RETENTION_SHORTENED_WARN + Restore + 2-Stage Permanent Purge Modal ===
-PATCH /api/v1/admin/workspace-settings (trash_retention_days=3) -> HTTP 422
-UI Save Retention 30 -> 14 days -> HTTP 200
-DB activity_events check -> TRASH_RETENTION_SHORTENED_WARN|{"warning": "Shortening trash retention accelerates permanent deletion of soft-trashed items.", "new_retention_days": 14, "previous_retention_days": 30}|2026-11-20 16:39:04.073326+00
-LIVE_STACK_VERDICT [RETENTION_UPDATE_AND_SHORTENED_WARN]: PASS - bad422=true, uiPatch200=true, dbAudit=true
-UI [Restore] sticky -> HTTP 200
-UI Stage 1 [Permanent Purge] click -> POST http://localhost:18963/api/v1/admin/destructive:request HTTP 422 body={"type":"urn:kanban:problem:VALIDATION_FAILED","title":"Validation Failed","status":422,"code":"VALIDATION_FAILED","detail":"Request validation failed","request_id":"e050c839603e4743a94df3c27a2bd44f","errors":[{"path":"target","message":"Field required"},{"path":"target_ref","message":"Extra inputs are not permitted"},{"path":"reason","message":"Extra inputs are not permitted"}]}
-UI 2-stage [Permanent Purge] FAILED at Stage 1 with HTTP 422; UI error alert: "Request validation failed"
-BUG DETAIL: WorkspaceSettingsPage.tsx handleRequestPurge sends {target_kind, target_ref, mode, reason} instead of DestructiveRequestIn {target_kind, target, mode}; handleExecutePurge also sends {confirmation_token, blast_hash, reason} instead of DestructiveExecuteIn {target_kind, target, mode, confirmation_token, confirm_phrase, reason}.
-Backend API canonical 2-stage permanent_purge -> stage1=200, stage2=200
-WORKSPACE_ADMIN UI check: permanent-purge buttons=0, secret issue rows=0
-Console errors: 1 | Page errors: 0 | 5xx responses: 0 | CSP violations: 0
-HTTP >=400 responses observed:
-[http 422] POST http://localhost:18963/api/v1/admin/destructive:request
-[console.error] Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)
-LIVE_STACK_VERDICT [TRASH_UI_RESTORE_AND_2STAGE_PURGE]: FAIL - restore200=true, uiPurgeStage1=422, uiPurgeStage2=0, backendApiPurge200=true, wsAdminZeroPurgeBtn=true, consoleErrors=1
+Per-workspace retention settings update:
+- Invalid retention (<7 days): PATCH /api/v1/admin/workspace-settings {trash_retention_days: 3} -> HTTP 422
+- Valid retention via UI Save Retention Policy (21 days): PATCH /api/v1/admin/workspace-settings -> HTTP 200 (55ms)
 
-OVERALL LIVE_STACK_VERDICT (KAN-30): FAIL
+UI Restore item:
+- Clicked [Restore] on KAN-9 -> POST /api/v1/admin/trash/01a1fa5c-8cba-7acc-9c3a-b2aadd625ae4:restore -> HTTP 200 (89ms)
+
+3. FULL LIVE 2-STAGE [PERMANENT PURGE] UI MODAL END-TO-END
+--------------------------------------------------------------------------------
+- Clicked [data-testid="permanent-purge-btn-01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777"] on KAN-7:
+  * Stage 1: POST /api/v1/admin/destructive:request (DestructiveRequestIn {target_kind:"issue", target:"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777", mode:"permanent_purge"})
+    -> HTTP 200 (57ms), confirm_phrase="PURGE ISSUE KAN-7"
+  * UI modal [data-testid="permanent-purge-confirmation-dialog"] opened and rendered:
+    [data-testid="permanent-purge-confirm-phrase"] = "Confirm Phrase: PURGE ISSUE KAN-7"
+    Screenshot: docs/qa/KAN-30/screenshots/live-purge-modal.png
+- Entered reason ("Live QA permanent purge verification for KAN-30") and clicked [data-testid="confirm-permanent-purge-btn"]:
+  * Stage 2: POST /api/v1/admin/destructive:execute (DestructiveExecuteIn {target_kind:"issue", target:"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777", mode:"permanent_purge", confirmation_token:"...", confirm_phrase:"PURGE ISSUE KAN-7", reason:"Live QA permanent purge verification for KAN-30"})
+    -> HTTP 200 (65ms) {"status":"executed","target":"KAN-7","target_kind":"issue","target_id":"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777","mode":"permanent_purge","reason":"Live QA permanent purge verification for KAN-30","blast_hash":"192640f97a9d700f5bce38727e5c86f3d4f9ca98da9287ce495df76e93a420f5"}
+  * Verified [data-testid="trash-row-01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777"] (KAN-7) disappeared from trash-items-table.
+
+4. RLS & ROLE ISOLATION (@member AND @wsadmin)
+--------------------------------------------------------------------------------
+- @member_r4 (WORKSPACE_MEMBER, non-admin):
+  * GET /api/v1/admin/trash -> HTTP 403
+  * POST /api/v1/admin/destructive:request (permanent_purge) -> HTTP 403
+  * UI /workspaces/settings#tab-trash -> renders [data-testid="access-denied-message"] (visible=true)
+- @wsadmin (WORKSPACE_ADMIN, AAL2):
+  * GET /api/v1/admin/trash -> HTTP 200, secret ACL-DENY issue KAN-8 excluded (secretHidden=true)
+  * POST /api/v1/admin/destructive:request (permanent_purge) -> HTTP 403 SERVER_ADMIN_REQUIRED
+  * UI /workspaces/settings#tab-trash -> [data-testid^="permanent-purge-btn-"] count = 0
+
+5. VISUAL ROLE & PERMISSION MATRIX (/docs/role-and-permission-matrix)
+--------------------------------------------------------------------------------
+- Loaded /docs/role-and-permission-matrix (843ms):
+  * Glyphs verified in DOM: filled circle (●)=true, half circle (◐)=true, empty circle (○)=true
+  * Desktop 1440x900 Light: scrollWidth=1440, innerWidth=1440 (zero horizontal overflow)
+  * Screenshot: docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png
+
+6. LATENCIES & ERROR COUNTS
+--------------------------------------------------------------------------------
+Latencies:
+- /workspaces/settings#tab-trash load: 795ms
+- Retention policy PATCH 200: 55ms
+- UI Restore POST 200: 89ms
+- Stage 1 destructive:request POST 200: 57ms
+- Stage 2 destructive:execute POST 200: 65ms
+- /docs/role-and-permission-matrix load: 843ms
+
+Unexpected Console Errors: 0 (Note: 1 expected resource log during @member negative RBAC visit to /workspaces/settings#tab-trash)
+Browser Page Errors: 0
+HTTP 5xx Server Errors: 0
+
+LIVE_STACK_VERDICT: PASS
+- Problem 1 (Per-workspace retention config & validation): PASS
+- Problem 2 (RLS + ACL DENY trash isolation & SERVER_ADMIN-only permanent purge): PASS
+- Problem 3 (Workspace Trash Studio UI & FULL 2-stage Permanent Purge UI modal): PASS
+- Problem 4 (Visual ●/◐/○ Role & Permission Matrix): PASS

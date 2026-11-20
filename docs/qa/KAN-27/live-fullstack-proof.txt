@@ -1,98 +1,129 @@
 ================================================================================
-KAN-27 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (R3 DELTA / commit b3b0f4ba)
-Target: http://localhost:18962 (container: kanban-liveqa-2)
+KAN-27 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (main commit 837f657d)
+Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 OIDC Provider: https://172.17.0.1:40185 (real HTTPS + RS256 JWKS + PKCE S256)
 LDAPS Provider: ldaps://172.17.0.1:40636 (real TLS + BER RFC 4511 responder)
-Database: Real PostgreSQL 16 with FORCE ROW LEVEL SECURITY
+Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
 1. SETUP & ADMIN AAL2 BOOTSTRAP
 --------------------------------------------------------------------------------
 GET /api/v1/setup/status -> HTTP 200 {"initialized":false}
-POST /api/v1/setup/claim -> HTTP 200 status=enrollment_required (workspace=kanban, project=KAN, user=admin)
+POST /api/v1/setup/claim -> HTTP 200 {"status":"enrollment_required","principal_id":"01a1fa3f-b4a1-7e77-b01a-f34782482c07",...}
 POST /api/v1/auth/mfa/totp/enroll -> HTTP 200
-POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 {"confirmed":true,"ok":true}
-POST /api/v1/auth/mfa/verify -> HTTP 200 (AAL2 session elevated)
-GET /api/v1/auth/session -> HTTP 200 {"authenticated":true,"principal_id":"01a1f9c0-2db5-7596-ad2e-0206445990fc","workspace_id":"01a1f9c0-2db3-7ffe-aeac-5fe2319e4d85","session_id":"01a1f9ca-999c-7903-9d5b-8d1a9ac18913","aal_level":2,"mfa_pending":false,...}
+POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 {"confirmed":true,"status":"enrolled","verified":true,"aal_level":2,...}
+GET /api/v1/auth/session -> HTTP 200 {"authenticated":true,"principal_id":"01a1fa3f-b4a1-7e77-b01a-f34782482c07","workspace_id":"01a1fa3f-b4a0-7a28-997e-803a04b184ee","aal_level":2,"mfa_pending":false,...}
 
-2. ENABLED OIDC (corp-sso) AND LDAPS (corp-ldap) AUTH CARDS
+2. EMPTY PROVIDERS NOTICE & AUTH CARDS CONFIGURATION
 --------------------------------------------------------------------------------
-POST /api/v1/admin/auth-cards (corp-sso, OIDC) -> HTTP 201 id=17b40415-2cf0-4ed5-a538-1f60b3777c10
-POST /api/v1/admin/auth-cards (corp-ldap, LDAP) -> HTTP 201 id=3c2b935f-49d5-41fe-87f3-4144254bfa50 (transport_mode=ldaps, ca_cert_pem attached)
+- Disabled external cards temporarily on /settings/profile (1440x900 Light, 731ms page load):
+  [data-testid="no-external-providers-notice"] visible ("No external identity providers (OIDC, OAuth2, LDAP) are currently enabled in this workspace. Configure Providers in Admin Auth Studio ->")
+  Screenshot: docs/qa/KAN-27/screenshots/live-kan27-empty-providers-desktop-light.png
+- Configured & enabled real OIDC (corp-sso-r4) and LDAPS (corp-ldap) auth cards via AAL2 @admin:
+  PATCH /api/v1/admin/auth-cards (corp-sso-r4) -> HTTP 200 (16ms)
+  PATCH /api/v1/admin/auth-cards (corp-ldap) -> HTTP 200 (21ms)
 
 3. BACKEND SECURITY INVARIANTS
 --------------------------------------------------------------------------------
-GET /api/v1/auth/oidc/corp-sso/start?link_intent_id=00000000-0000-0000-0000-000000000001 (unauth) -> HTTP 302 Location=https://172.17.0.1:40185/authorize?response_type=code&client_id=kanban-liveqa-client&redirect_uri=http%3A%2F%2Flocalhost%3A18962%2Fapi%2Fv1%2Fauth%2Foidc%2Fcorp-sso%2Fcallback&scope=openid+profile+email&state=OEL-dsP0oQoJM6-bbzvj_Q&code_challenge=HO2rkyl4mH_gazvirlh-fZXfueeMQR6zfr3TPIzQqbc&code_challenge_method=S256&nonce=cK9g-7ndLxq4bhm7FLTr-w
-GET /api/v1/auth/cards/corp-sso/start?link_intent_id=00000000-0000-0000-0000-000000000001 (unauth) -> HTTP 302 Location=https://172.17.0.1:40185/authorize?...
-PostgreSQL check: SELECT count(*) FROM oidc_auth_requests WHERE link_intent_id = '00000000-0000-0000-0000-000000000001' -> 0
+- Unauthenticated GET /api/v1/auth/oidc/corp-sso-r4/start?link_intent_id=00000000-0000-0000-0000-000000000001
+  -> HTTP 302 Location=https://172.17.0.1:40185/authorize?response_type=code&client_id=kanban-liveqa-client&redirect_uri=http%3A%2F%2F127.0.0.1%3A18961%2Fapi%2Fv1%2Fauth%2Foidc%2Fcorp-sso-r4%2Fcallback&scope=openid+profile+email&state=V6aA_0XUANFphpQFuzuP0Q&code_challenge=XOD1cfBT_Z1zpzssZf9AuyHl1rW7bePzNK7RshAxEx8&code_challenge_method=S256&nonce=o0NkM3mO1AYKmyKhQt7zsA
+- Provisioned @projadmin (PROJECT_ADMIN on KAN, zero-factor): HTTP 201
+- @projadmin (AAL1) POST /api/v1/auth/identities/link/start -> HTTP 403 {"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Authentication Required","status":403,"code":"AAL2_REQUIRED","detail":"This operation requires multi-factor authentication (AAL2).","request_id":"c8996d6d06d0446281b5806839632fc5"}
 
-Provisioned @projadmin (PROJECT_ADMIN on KAN): HTTP 201
-Provisioned @alice (WORKSPACE_MEMBER, zero-factor): HTTP 201
-@projadmin (PROJECT_ADMIN, AAL1) POST /api/v1/auth/identities/link/start -> HTTP 403 {"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Authentication Required","status":403,"code":"AAL2_REQUIRED","detail":"This operation requires multi-factor authentication (AAL2).","request_id":"35ddf605d3f7447eb71a71d4cc50f8b8"}
-
-4. ZERO-FACTOR @alice OIDC SELF-SERVICE LINK + MOBILE CARD TABLE (R3)
+4. ZERO-FACTOR @alice_r4_24513 CONNECT BUTTONS & OIDC SELF-SERVICE LINK
 --------------------------------------------------------------------------------
-Logged in as @alice in Playwright Chromium:
-- Pre-link session: session_id=0c6b0d7d-8e6c-489a-b038-83226b31bcbe, aal_level=1
-- Clicked [data-testid="connect-provider-corp-sso"] -> real HTTPS OIDC /authorize -> /api/v1/auth/oidc/corp-sso/callback -> 302 /settings/profile?linked=corp-sso
-- Post-link session: session_id=0c6b0d7d-8e6c-489a-b038-83226b31bcbe, aal_level=1 (preserved; no unearned AAL2 elevation)
-- Mobile 390x844 viewport metrics on linked identities-table:
-  scrollWidth=390, innerWidth=390
-  td[data-label] attributes: ["Provider", "Subject / Email", "Linked", "Actions", "Provider", "Subject / Email", "Linked", "Actions"]
-  Note: On 390x844, mobile data-label cards render cleanly with scrollWidth=390; long email values (e.g. alice.sso.r3@corp.example.test) clip at the right edge of the single-line flex row inside .kb-table-scroll-container.
-- Screenshot: docs/qa/KAN-27/screenshots/live-kan27-linked-identities-mobile-light.png (390x844 Light)
+Provisioned zero-factor @alice_r4_24513 (WORKSPACE_MEMBER) -> HTTP 201
+Loaded /settings/profile (653ms):
+- Connect Buttons viewports (scrollWidth <= innerWidth verified on all viewports):
+  * Desktop 1440x900 Light: docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-desktop-light.png
+  * Desktop 1440x900 Dark: docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-desktop-dark.png
+  * Tablet 768x1024 Light (scrollWidth=768, innerWidth=768, overflows=false): docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-tablet-light.png
+  * Mobile 390x844 Light (scrollWidth=390, innerWidth=390, overflows=false): docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-mobile-light.png
+- Pre-link session: session_id=c8fdfc04-5fea-4094-a90a-d4d7c02c3840, aal_level=1
+- Clicked [data-testid="connect-provider-corp-sso-r4"] -> real HTTPS OIDC /authorize -> /api/v1/auth/oidc/corp-sso-r4/callback -> 302 /settings/profile?linked=corp-sso-r4 (477ms total flow)
+- Post-link session: session_id=c8fdfc04-5fea-4094-a90a-d4d7c02c3840, aal_level=1 (preserved=true)
+- Linked identities table populated with alice.sso.r4@corp.example.test
+- Screenshots:
+  * docs/qa/KAN-27/screenshots/live-kan27-linked-banner-desktop-light.png
+  * docs/qa/KAN-27/screenshots/live-kan27-linked-banner-desktop-dark.png
 
-5. LDAP MODAL IN-MODAL ERROR, SINGLE CANCEL, ESCAPE FOCUS RESTORE & VALID LDAPS LINK (R3)
+5. LDAPS MODAL, 401 INLINE ERROR, ESCAPE FOCUS RESTORE, VALID LINK & MOBILE WRAPPING
 --------------------------------------------------------------------------------
-Opened [data-testid="ldap-credentials-modal"] as @alice at 1440x900 Light:
+- Opened [data-testid="ldap-credentials-modal"]:
+  * cancelCount=1 (single Cancel footer button), closeBtnCount=1 (top-right "✕" close button)
+  * Screenshots:
+    - docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-light.png
+    - docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-dark.png
 - Submitted invalid credentials (username=alice, password=WrongLdapPassword!):
-  LDAPS SearchRequest base=ou=people,dc=example,dc=test (alice) -> 1 entry + done(0)
-  LDAPS BindRequest dn=uid=alice,ou=people,dc=example,dc=test -> resultCode=49 (invalidCredentials)
-  POST /api/v1/auth/identities/link/ldap -> HTTP 401
-- Modal error verification:
-  data-testid="ldap-modal-error" visible INSIDE open modal ("Invalid credentials", not hidden behind backdrop)
-  errorInsideModal=true, cancelButtonCount=1 (single Cancel footer button), hasCloseButton=true (header Close button)
-- Screenshot: docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-error-desktop-light.png (1440x900 Light)
+  * POST /api/v1/auth/identities/link/ldap -> HTTP 401 (126ms)
+  * [data-testid="ldap-modal-error"] visible INSIDE open modal: "Invalid credentials"
+  * Screenshot: docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-error-desktop-light.png
 - Pressed Escape key:
-  Modal dismissed and focus restored to [data-testid="connect-provider-corp-ldap"] (document.activeElement data-testid="connect-provider-corp-ldap")
-- Reopened modal and submitted valid credentials (username=alice, password=AliceLdapPass123!):
-  LDAPS SearchRequest base=ou=people,dc=example,dc=test (alice) -> 1 entry + done(0)
-  LDAPS BindRequest dn=uid=alice,ou=people,dc=example,dc=test -> resultCode=0 (success)
-  POST /api/v1/auth/identities/link/ldap -> HTTP 200
-- Linked identities table text after OIDC + LDAPS links:
-  PROVIDER	SUBJECT / ACCOUNT	LINKED	ACTIONS
-  corp-sso (OIDC)	alice.sso.r3@corp.example.test	11/20/2026	Unlink
-  corp-ldap (LDAP)	alice.ldap.r3@corp.example.test	11/20/2026	Unlink
+  * Modal closed cleanly; document.activeElement restored to [data-testid="connect-provider-corp-ldap"]
+- Reopened modal & submitted valid credentials (username=alice, password=AliceLdapPass123!):
+  * POST /api/v1/auth/identities/link/ldap -> HTTP 200 (145ms)
+  * Linked identities table rows:
+    PROVIDER             SUBJECT / ACCOUNT                LINKED      ACTIONS
+    corp-sso-r4 (OIDC)   alice.sso.r4@corp.example.test   11/20/2026  Unlink
+    corp-ldap (LDAP)     alice.ldap.r4@corp.example.test  11/20/2026  Unlink
+- Mobile 390x844 wrapping verification on [data-testid="identities-table"]:
+  * docScrollWidth=390, innerWidth=390 (overflows=false)
+  * td[data-label="Subject / Account"] cells:
+    - alice.sso.r4@corp.example.test: scrollWidth=186, clientWidth=186, right=288, containerRight=301, clipped=false, height=78 (clean multi-line wrap!)
+    - alice.ldap.r4@corp.example.test: scrollWidth=186, clientWidth=186, right=288, containerRight=301, clipped=false, height=78 (clean multi-line wrap!)
+  * Screenshot: docs/qa/KAN-27/screenshots/live-kan27-linked-identities-mobile-light.png
 
-6. DUPLICATE (ISSUER, SUB) CONFLICT BANNER IN BROWSER AS @admin (R3)
+6. DUPLICATE SUBJECT CONFLICT BANNER (@admin AAL2)
 --------------------------------------------------------------------------------
-Logged in as @admin (AAL2) on /settings/profile at 1440x900 Light:
-- Clicked [data-testid="connect-provider-corp-sso"] -> real OIDC flow returned same sub=oidc-alice-sub-r3
-- GET /api/v1/auth/oidc/corp-sso/callback -> HTTP 302 Location=/settings/profile?link_error=IDENTITY_ALREADY_LINKED
-- Rendered alert banner text: "External identity is already linked to another account.\nDismiss"
-- Screenshot: docs/qa/KAN-27/screenshots/live-kan27-conflict-banner-desktop-light.png (1440x900 Light)
+- Logged in as @admin (AAL2, session_id=01a1fa5c-68ae-7361-ad99-572942e6bb7d) on /settings/profile:
+- Clicked [data-testid="connect-provider-corp-sso-r4"] -> OIDC returned sub=oidc-alice-sub-r4-v4
+- Callback returned 302 /settings/profile?link_error=IDENTITY_ALREADY_LINKED
+- Alert banner rendered: "External identity is already linked to another account.\nDismiss"
+- Screenshot: docs/qa/KAN-27/screenshots/live-kan27-conflict-banner-desktop-light.png
 
-7. OIDC & LDAPS SERVER TRANSCRIPTS (LIVE)
+7. LIVE UNLINK JOURNEY (WHILE KEEPING >=1 AUTH FACTOR)
 --------------------------------------------------------------------------------
-[2026-11-20T16:31:07.562219+00:00] OIDC GET /.well-known/openid-configuration -> 200
-[2026-11-20T16:31:07.619611+00:00] OIDC GET /authorize (client_id=kanban-liveqa-client, state=uelivWYKV0AwyQ_UYeaojw) -> 302 http://localhost:18962/api/v1/auth/oidc/corp-sso/callback?code=authcode_71630c290067d28be58167fd&state=uelivWYKV0AwyQ_UYeaojw
-[2026-11-20T16:31:07.697889+00:00] OIDC GET /.well-known/openid-configuration -> 200
-[2026-11-20T16:31:07.764666+00:00] OIDC POST /token (PKCE S256 verified, sub=oidc-alice-sub-r3) -> 200 id_token issued
-[2026-11-20T16:31:07.839429+00:00] OIDC GET /jwks.json -> 200
-[2026-11-20T16:31:08.776211+00:00] LDAPS SearchRequest base=ou=people,dc=example,dc=test (alice) -> 1 entry + done(0)
-[2026-11-20T16:31:08.816885+00:00] LDAPS BindRequest dn=uid=alice,ou=people,dc=example,dc=test -> resultCode=49 (invalidCredentials)
-[2026-11-20T16:31:09.025352+00:00] LDAPS SearchRequest base=ou=people,dc=example,dc=test (alice) -> 1 entry + done(0)
-[2026-11-20T16:31:09.060768+00:00] LDAPS BindRequest dn=uid=alice,ou=people,dc=example,dc=test -> resultCode=0 (success)
-[2026-11-20T16:34:25.685465+00:00] OIDC GET /.well-known/openid-configuration -> 200
-[2026-11-20T16:34:25.738358+00:00] OIDC GET /authorize (client_id=kanban-liveqa-client, state=_CqBF_j3l_KuxhYuVb38_Q) -> 302 http://localhost:18962/api/v1/auth/oidc/corp-sso/callback?code=authcode_459eab34406db6a42ca9b18e&state=_CqBF_j3l_KuxhYuVb38_Q
-[2026-11-20T16:34:25.886574+00:00] OIDC POST /token (PKCE S256 verified, sub=oidc-alice-sub-r3) -> 200 id_token issued
+- Enrolled TOTP + elevated @alice_r4_24513 to AAL2 (POST /api/v1/auth/mfa/totp/confirm -> HTTP 200, aal_level=2)
+- Accepted confirm dialog & clicked Unlink on corp-ldap row:
+  * DELETE /api/v1/auth/identities/{id} -> HTTP 200 {"unlinked":true} (72ms)
+  * Table updated immediately from 2 rows to 1 row:
+    corp-sso-r4 (OIDC)   alice.sso.r4@corp.example.test   11/20/2026  Unlink
+  * Screenshot: docs/qa/KAN-27/screenshots/live-kan27-unlink-desktop-light.png
 
-Browser Console Errors: 0
+8. LIVE OIDC & LDAPS SERVER TRANSCRIPTS
+--------------------------------------------------------------------------------
+[2026-11-20T19:08:43.661719+00:00] OIDC GET /.well-known/openid-configuration -> 200
+[2026-11-20T19:08:47.336719+00:00] OIDC GET /.well-known/openid-configuration -> 200
+[2026-11-20T19:08:47.387906+00:00] OIDC GET /authorize (client_id=kanban-liveqa-client, state=PPGORoJTjXiAnj-FiVSOww) -> 302 http://127.0.0.1:18961/api/v1/auth/oidc/corp-sso-r4/callback?code=authcode_6366ddbc75be8748a6188504&state=PPGORoJTjXiAnj-FiVSOww
+[2026-11-20T19:08:47.474028+00:00] OIDC GET /.well-known/openid-configuration -> 200
+[2026-11-20T19:08:47.540721+00:00] OIDC POST /token (PKCE S256 verified, sub=oidc-alice-sub-r4-v4) -> 200 id_token issued
+[2026-11-20T19:08:48.826318+00:00] LDAPS TCP/TLS connection accepted
+[2026-11-20T19:08:48.858422+00:00] LDAPS TCP/TLS connection accepted
+[2026-11-20T19:08:48.859494+00:00] LDAPS BindRequest dn=uid=alice,ou=people,dc=example,dc=test -> resultCode=49 (invalidCredentials)
+[2026-11-20T19:08:49.059690+00:00] LDAPS TCP/TLS connection accepted
+[2026-11-20T19:08:49.094172+00:00] LDAPS TCP/TLS connection accepted
+[2026-11-20T19:08:49.095702+00:00] LDAPS BindRequest dn=uid=alice,ou=people,dc=example,dc=test -> resultCode=0 (success)
+[2026-11-20T19:08:50.210962+00:00] OIDC GET /.well-known/openid-configuration -> 200
+[2026-11-20T19:08:50.258383+00:00] OIDC GET /authorize (client_id=kanban-liveqa-client, state=rxIZJ7adw23Qtkum3bXQFA) -> 302 http://127.0.0.1:18961/api/v1/auth/oidc/corp-sso-r4/callback?code=authcode_56e6444c3509413a03703643&state=rxIZJ7adw23Qtkum3bXQFA
+[2026-11-20T19:08:50.336656+00:00] OIDC GET /.well-known/openid-configuration -> 200
+[2026-11-20T19:08:50.402887+00:00] OIDC POST /token (PKCE S256 verified, sub=oidc-alice-sub-r4-v4) -> 200 id_token issued
+
+9. LATENCIES & ERROR COUNTS
+--------------------------------------------------------------------------------
+Latencies:
+- /settings/profile (empty providers): 731ms
+- /settings/profile (alice): 653ms
+- OIDC self-service link E2E: 477ms
+- LDAPS invalid credentials 401: 126ms
+- LDAPS valid link 200: 145ms
+- Identity Unlink DELETE 200: 72ms
+
+Unexpected Console Errors: 0 (Note: 1 expected resource log during intentional WrongLdapPassword! 401 negative test)
 Browser Page Errors: 0
 HTTP 5xx Server Errors: 0
 
 LIVE_STACK_VERDICT: PASS
-- Problem 1 (IdentityLinkService.start_link OIDC & LDAP flow): PASS (OIDC 200 + Set-Cookie; LDAP 401 on invalid creds + 200 on valid LDAPS bind)
-- Problem 2 (OIDC callback session preservation & conflict): PASS (302 /settings/profile?linked=corp-sso, session_id & aal_level=1 preserved, 403 AAL2_REQUIRED on PROJECT_ADMIN AAL1, duplicate (issuer, sub) -> IDENTITY_ALREADY_LINKED)
-- Problem 3 (Frontend Connect controls, LDAP modal & mobile cards): PASS (in-modal ldap-modal-error, single Cancel + Close header button, Escape focus restore, mobile data-label cards scrollWidth=390, conflict error banner)
+- Problem 1 (IdentityLinkService.start_link OIDC & LDAPS flow): PASS
+- Problem 2 (OIDC callback session_id/aal_level preservation, AAL2 checks, duplicate subject conflict): PASS
+- Problem 3 (Connect controls, single Cancel + X LDAP modal, inline error, Escape focus restore, mobile wrapping, live Unlink): PASS

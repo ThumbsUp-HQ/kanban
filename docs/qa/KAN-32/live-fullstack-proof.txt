@@ -1,34 +1,71 @@
-Uploaded approved WASM binary -> HTTP 201 sha256=62c44a61c7a501b4253818aa5ca5262959fdbd606d752b3f9e6a9c0f1139f00a
-Created real issue for custom-field test-execute -> HTTP 201 key=KAN-28
+================================================================================
+KAN-32 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (main commit 837f657d)
+Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
+Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
+Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
+================================================================================
 
-=== Problem 1: /api/v1/system/status Standalone Flags & Fail-Closed nsjail 422 ===
-GET /api/v1/system/status -> HTTP 200 body={"deployment_mode":"standalone_embedded_pg","persistent_volume":false,"data_mount_point":"/var/lib/kanban/data","data_mount_fstype":"ext4","tier_b_sandbox_available":false,"air_gap_mode":false,"local_llm_endpoint_host":null,"is_server_admin":true,"allow_unlimited_mcp_keys":true,"supported_custom_field_tiers":["scalar","formula","wasm"],"sandbox_unavailable_reason":"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."}
-POST /api/v1/projects/KAN/custom-fields (tier=nsjail) -> HTTP 422 body={"type":"urn:kanban:problem:SANDBOX_UNAVAILABLE_IN_STANDALONE","title":"Sandbox Unavailable In Standalone","status":422,"code":"SANDBOX_UNAVAILABLE_IN_STANDALONE","detail":"Isolated nsjail sandbox execution is unavailable in standalone mode. Use scalar, formula, or wasm execution tiers instead, or promote to multi-container compose.","request_id":"f536a152406d43d2b0c39831691a14ea"}
-POST /api/v1/projects/KAN/custom-fields/test-execute (tier=nsjail) -> HTTP 422 body={"type":"urn:kanban:problem:SANDBOX_UNAVAILABLE_IN_STANDALONE","title":"Sandbox Unavailable In Standalone","status":422,"code":"SANDBOX_UNAVAILABLE_IN_STANDALONE","detail":"Isolated nsjail sandbox execution is unavailable in standalone mode. Use scalar, formula, or wasm execution tiers instead, or promote to multi-container compose.","request_id":"fdc5e0a118d8472caeacaf988c467cea"}
-LIVE_STACK_VERDICT [STANDALONE_SYSTEM_STATUS_AND_NSJAIL_422]: PASS - statusOk=true, create422=true, testExec422=true
+1. STANDALONE SYSTEM STATUS & FAIL-CLOSED NSJAIL 422 GATING
+--------------------------------------------------------------------------------
+- GET /api/v1/system/status -> HTTP 200 (6ms)
+  {"deployment_mode":"standalone_embedded_pg","persistent_volume":false,"data_mount_point":"/var/lib/kanban/data","data_mount_fstype":"ext4","tier_b_sandbox_available":false,"air_gap_mode":false,"local_llm_endpoint_host":null,"is_server_admin":true,"allow_unlimited_mcp_keys":true,"supported_custom_field_tiers":["scalar","formula","wasm"],"sandbox_unavailable_reason":"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."}
+- Provisioned fresh project SEC2 (0 rows in approved_wasm_modules) and issue SEC2-3 -> HTTP 201
+- POST /api/v1/projects/SEC2/custom-fields (tier=nsjail) -> HTTP 422
+  {"type":"urn:kanban:problem:SANDBOX_UNAVAILABLE_IN_STANDALONE","title":"Sandbox Unavailable In Standalone","status":422,"code":"SANDBOX_UNAVAILABLE_IN_STANDALONE","detail":"Isolated nsjail sandbox execution is unavailable in standalone mode. Use scalar, formula, or wasm execution tiers instead, or promote to multi-container compose.","request_id":"27f29aa0fa854d958dbead75ebe7d296"}
+- POST /api/v1/projects/SEC2/custom-fields/test-execute (tier=nsjail) -> HTTP 422
+  {"type":"urn:kanban:problem:SANDBOX_UNAVAILABLE_IN_STANDALONE","title":"Sandbox Unavailable In Standalone","status":422,"code":"SANDBOX_UNAVAILABLE_IN_STANDALONE","detail":"Isolated nsjail sandbox execution is unavailable in standalone mode. Use scalar, formula, or wasm execution tiers instead, or promote to multi-container compose.","request_id":"8cf279f3e7bc46ed91115595a70ded98"}
 
-=== Problem 2: /projects/KAN/settings/custom-fields UI, Disabled nsjail Badges, Create & Execute wasm + formula (200 OK) ===
-standalone-guidance-callout visible: "💡 Standalone Mode Active: Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms) work out of the box in Standalone mode. [Guide] How to Use Custom Fields → Promote to Multi-Container →"
-FlavorDecisionMatrix nsjail badge: "Multi-Container Compose Required"
-Editor nsjail option disabled: flavor=true (Multi-Container Compose Required), tier=true (Multi-Container Compose Required)
-PresetGallery disabled: total-project-issues=true (Multi-Container Compose Required), git-pr-link=true (Multi-Container Compose Required)
-UI Test Execute wasm (cvss-score): HTTP 200 -> "8.8
-8.8 High"
-UI Save wasm (cvss-score): HTTP 201
-UI Test Execute formula (days-until-due-sla): HTTP 200 -> "2.0
-Within SLA"
-UI Save formula (days-until-due-sla): HTTP 201
-GET /api/v1/issues/KAN-28/custom-fields -> HTTP 200 body=[{"field_id":"01a1f9d3-5152-7027-8036-7aeae0c7583c","slug":"cvss-score","name":"CVSS 3.1 / 4.0 Score","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":8.8,"label":"8.8 High"},"computed_at":"2026-11-20T16:38:58.697847+00:00","last_latency_ms":0,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"},{"field_id":"01a1f9d3-535f-74ca-979f-4bb365bc91e2","slug":"days-until-due-sla","name":"Days Until Due / SLA Breach","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"low","score":2.0,"label":"Within SLA"},"computed_at":"2026-11-20T16:38:58.703987+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}]
-Console errors: 0 | Page errors: 0 | 5xx responses: 0 | CSP violations: 0
-LIVE_STACK_VERDICT [CUSTOM_FIELDS_STANDALONE_UI_AND_EXECUTION]: PASS (Functional) - callout+badges+disabledNsjail+wasm200+formula200+0errors=true
+2. CUSTOM FIELDS STUDIO UI (/projects/SEC2/settings/custom-fields) & BUILT-IN WASM FALLBACK
+--------------------------------------------------------------------------------
+(Note: Canonical frontend route in routes.tsx is /projects/:projectKey/settings/custom-fields)
+Loaded /projects/SEC2/settings/custom-fields (819ms):
+- [data-testid="standalone-guidance-callout"] visible:
+  "💡 Standalone Mode Active: Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms) work out of the box in Standalone mode. [Guide] How to Use Custom Fields → Promote to Multi-Container →"
+- Disabled nsjail option verified in both Basic Flavor select (flavorNsjailDisabled=true) and Advanced Execution Tier select (tierNsjailDisabled=true) with "Multi-Container Compose Required" badge.
+- Applied Starter Preset "cvss-score" ([data-testid="use-preset-btn-cvss-score"]) and clicked Save:
+  * POST /api/v1/projects/SEC2/custom-fields -> HTTP 201 (61ms)
+- Selected saved [data-testid="field-item-cvss-score"] and clicked [data-testid="test-execute-btn"] on SEC2-3 (with 0 manually uploaded Wasm modules in approved_wasm_modules):
+  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 (62ms)
+    {"output_format":"severity_pill","value":{"level":"high","score":8.8,"label":"8.8 High"},"latency_ms":10,"logs":"Draft test execution on SEC2-3 (flavor=wasm)\nExecuted Wasm module: fuel=7\nSuccess: validated format severity_pill\n","status":"SUCCESS","error":null}
+- GET /api/v1/issues/SEC2-3/custom-fields -> HTTP 200 (30ms)
+  [{"field_id":"01a1fa5c-ab6e-7d8e-bbe9-ec5c4383b958","slug":"cvss-score","name":"CVSS 3.1 / 4.0 Score","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":8.8,"label":"8.8 High"},"computed_at":"2026-11-20T19:08:59.791884+00:00","last_latency_ms":0,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}]
 
-=== Visual & WCAG Contrast Inspection Audit ===
-1. WCAG Dark Mode Contrast FAIL (docs/qa/KAN-32/screenshots/live-desktop-dark.png):
-   - In Dark Mode ([data-theme="dark"]), the active selected custom field item (.custom-fields-def-item--selected, kanban/web/src/features/custom-fields/custom-fields.css:401-404) hardcodes a light background (#eff6ff / border #bfdbfe) while inheriting dark-mode white text (color: var(--fg-primary)), resulting in unreadable white-on-light-blue contrast on "Days Until Due / SLA Breach". (Pre-existing CSS rule not modified by KAN-32 diff, surfaced on /projects/KAN/settings/custom-fields.)
-2. Minor Overflow Observation (docs/qa/KAN-32/screenshots/live-desktop-test-exec.png):
-   - pre.custom-field-test-logs overflows horizontally past its card border on long formula log lines.
-3. UX Observation (cvss-score preset):
-   - On a clean database with zero rows in approved_wasm_modules, clicking 1-Click Starter Preset "cvss-score" and clicking "Test Execute" fails with HTTP 404 WASM_MODULE_NOT_FOUND unless the WASM binary is first registered via POST /api/v1/projects/{project}/wasm-modules (no upload UI exists in CustomFieldDefinitionEditor).
-LIVE_STACK_VERDICT [VISUAL_WCAG_DARK_MODE_CONTRAST]: FAIL - .custom-fields-def-item--selected hardcodes #eff6ff in dark mode (white text on light blue)
+3. DARK MODE WCAG AA CONTRAST, LOG WRAPPING & RESPONSIVE SCREENSHOTS
+--------------------------------------------------------------------------------
+- pre.custom-field-test-logs wrapping metrics:
+  scrollWidth=742, clientWidth=742, overflowsSelf=false, overflowsCard=false, whiteSpace="pre-wrap", overflowWrap="anywhere"
+- Dark mode [data-theme="dark"] .custom-fields-def-item--selected computed styles:
+  backgroundColor="rgba(37, 99, 235, 0.25)", borderColor="rgba(96, 165, 250, 0.4)", textColor="rgb(249, 250, 251)" (crisp WCAG AA contrast; zero #eff6ff light-mode bleed)
+- Viewport overflow metrics:
+  * Tablet 768x1024: scrollWidth=768, innerWidth=768, overflows=false
+  * Mobile 390x844: scrollWidth=390, innerWidth=390, overflows=false
+- Screenshots:
+  * Desktop 1440x900 Light (callout + selected item): docs/qa/KAN-32/screenshots/live-desktop-light.png
+  * Desktop 1440x900 Light (Test Execute result + wrapped logs): docs/qa/KAN-32/screenshots/live-desktop-test-exec.png
+  * Desktop 1440x900 Dark (selected item + Test Execute): docs/qa/KAN-32/screenshots/live-desktop-dark.png
+  * Tablet 768x1024 Light: docs/qa/KAN-32/screenshots/live-tablet.png
+  * Mobile 390x844 Light: docs/qa/KAN-32/screenshots/live-mobile.png
 
-OVERALL LIVE_STACK_VERDICT (KAN-32): FAIL
+4. [GUIDE] HOW TO USE CUSTOM FIELDS (/docs/Guide-Custom-Fields)
+--------------------------------------------------------------------------------
+- Loaded /docs/Guide-Custom-Fields (877ms), hasExpectedContent=true
+- Screenshot: docs/qa/KAN-32/screenshots/live-guide-custom-fields-desktop-light.png
+
+5. LATENCIES & ERROR COUNTS
+--------------------------------------------------------------------------------
+Latencies:
+- GET /api/v1/system/status: 6ms
+- /projects/SEC2/settings/custom-fields load: 819ms
+- Save cvss-score preset POST 201: 61ms
+- Test Execute echo_cvss.wasm fallback POST 200: 62ms
+- GET /api/v1/issues/SEC2-3/custom-fields: 30ms
+- /docs/Guide-Custom-Fields load: 877ms
+
+Browser Console Errors: 0
+Browser Page Errors: 0
+HTTP 5xx Server Errors: 0
+
+LIVE_STACK_VERDICT: PASS
+- Problem 1 (Standalone Mode system/status flags & fail-closed nsjail 422): PASS
+- Problem 2 (Custom Fields Studio nsjail gating, Dark Mode WCAG AA contrast, pre.custom-field-test-logs wrapping, built-in echo_cvss.wasm fallback): PASS
+- Problem 3 ([Guide] How to Use Custom Fields rendered at /docs/Guide-Custom-Fields): PASS
