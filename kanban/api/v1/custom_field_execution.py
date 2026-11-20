@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import uuid
 from typing import Annotated
 
@@ -27,7 +28,6 @@ from kanban.api.v1.schemas.custom_fields import (
 from kanban.custom_fields.executor import CustomFieldExecutor
 from kanban.custom_fields.service import CustomFieldDefinitionService
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
-from kanban.security.permissions import Capability, require_capability
 from kanban.security.ratelimit.base import RateLimitPolicy
 from kanban.security.ratelimit.pg import PgRateLimiter
 from kanban.services.activity import ActivityEventType, record_activity
@@ -214,7 +214,7 @@ async def upload_wasm_module(
     response_model=CustomFieldTestExecuteResponse,
     summary="Evaluate custom field definition draft against an issue without saving",
 )
-async def test_execute_custom_field(
+async def test_execute_custom_field(  # noqa: C901
     project: str,
     body: CustomFieldTestExecuteRequest,
     caller: Caller,
@@ -226,7 +226,67 @@ async def test_execute_custom_field(
     """
     async with timing_floor(floor_ms=25.0):
         proj = await get_project_or_404(session, caller, project)
-        await require_capability(session, caller, proj.id, Capability.VIEW)
+        await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
+
+        if str(body.tier) == "wasm":
+            source = (body.script_source or "").strip()
+            is_interpreted = (
+                source.startswith(("scalar:", "formula:", "return "))
+                or bool(re.search(r"return\s+([^;]+)", source))
+            )
+            if not is_interpreted:
+                raw_sha: bytes | None = None
+                if body.wasm_module_sha256:
+                    try:
+                        raw_sha = bytes.fromhex(body.wasm_module_sha256)
+                    except ValueError as ex:
+                        raise ProblemException(
+                            status=422,
+                            code="INVALID_WASM_SHA256",
+                            title="Invalid WASM SHA256",
+                            detail=f"WASM SHA256 must be valid hex: {ex}",
+                        ) from ex
+                elif source:
+                    clean_lines = [
+                        line
+                        for line in source.splitlines()
+                        if not line.strip().startswith("//") and not line.strip().startswith("#")
+                    ]
+                    clean_source = "\n".join(clean_lines).strip()
+                    try:
+                        wasm_bytes = bytes.fromhex(clean_source)
+                    except ValueError:
+                        try:
+                            wasm_bytes = base64.b64decode(clean_source)
+                        except Exception as err:
+                            raise ProblemException(
+                                status=422,
+                                code="WASM_BINARY_INVALID",
+                                title="Invalid WebAssembly Binary",
+                                detail=f"Cannot decode WebAssembly module bytes: {err}",
+                            ) from err
+                    raw_sha = hashlib.sha256(wasm_bytes).digest()
+
+                if raw_sha is None:
+                    raise ProblemException(
+                        status=404,
+                        code="WASM_MODULE_NOT_FOUND",
+                        title="WebAssembly Module Not Found",
+                        detail="Approved WebAssembly module was not found in workspace",
+                    )
+
+                mod_stmt = select(ApprovedWasmModule).where(
+                    ApprovedWasmModule.workspace_id == caller.workspace_id,
+                    ApprovedWasmModule.sha256 == raw_sha,
+                )
+                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+                if wasm_mod is None:
+                    raise ProblemException(
+                        status=404,
+                        code="WASM_MODULE_NOT_FOUND",
+                        title="WebAssembly Module Not Found",
+                        detail="Approved WebAssembly module was not found in workspace",
+                    )
 
         rate_limiter = _execute_rate_limiter(session)
         policy = RateLimitPolicy(name="custom_field_test_execute", limit=10, window_seconds=60)

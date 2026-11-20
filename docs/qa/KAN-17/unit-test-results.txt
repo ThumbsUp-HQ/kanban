@@ -1,0 +1,58 @@
+=== KAN-17 Backend Unit Tests (Pytest) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan17-95a5fbf6
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 68 items
+
+kanban/tests/custom_fields/test_approvals_matrix.py .........            [ 13%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 25%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 35%]
+kanban/tests/custom_fields/test_execution_api.py ...                     [ 39%]
+kanban/tests/custom_fields/test_executor_cache.py ....                   [ 45%]
+kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 55%]
+                                                                         [ 55%]
+kanban/tests/custom_fields/test_output_formats.py ......                 [ 64%]
+kanban/tests/custom_fields/test_safe_formula_unit.py ......              [ 73%]
+kanban/tests/api/test_json_limits_middleware.py .........                [ 86%]
+kanban/tests/sandbox/test_script_depth_middleware.py .........           [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/middleware/json_limits.py        207      6     94      7    96%   159->166, 185->177, 188->144, 262->270, 292-295, 310, 358
+kanban/api/middleware/script_depth.py        47      0     20      0   100%
+kanban/api/v1/custom_field_execution.py     117      1     24      5    96%   71->74, 105->121, 231->291, 249->270, 271
+kanban/custom_fields/executor.py            394     65    142     13    84%   82->85, 144-145, 148->161, 159-160, 176-180, 188, 195-196, 207-208, 355-362, 364-368, 370-378, 427-428, 450-451, 495->528, 603-619, 705-710, 745-746, 774-775, 797-798, 811, 821-827, 849-863
+kanban/custom_fields/manifest.py             43      0     20      0   100%
+kanban/custom_fields/service.py             145      0     32      2    99%   305->309, 311->315
+-------------------------------------------------------------------------------------
+TOTAL                                       953     72    332     27    92%
+============================= 68 passed in 24.37s ==============================
+
+=== KAN-17 Frontend Unit Tests (Vitest) ===
+RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan17-95a5fbf6/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/utils/safeJson.test.ts (6 tests) 9ms
+ ✓ src/editor/clipboard/trustedTypes.test.ts (3 tests) 21ms
+
+ Test Files  2 passed (2)
+      Tests  9 passed (9)
+   Start at  03:18:59
+   Duration  1.00s (environment 89%, worker 6%, import 2%, tests 2%, transform 1%)
+
+ % Coverage report from v8
+------------------|---------|----------|---------|---------|-------------------
+File              | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+------------------|---------|----------|---------|---------|-------------------
+All files         |     100 |      100 |     100 |     100 |                   
+ editor/clipboard |     100 |      100 |     100 |     100 |                   
+  trustedTypes.ts |     100 |      100 |     100 |     100 |                   
+ utils            |     100 |      100 |     100 |     100 |                   
+  safeJson.ts     |     100 |      100 |     100 |     100 |                   
+------------------|---------|----------|---------|---------|-------------------

@@ -24,6 +24,7 @@ import {
 } from './api';
 import { CustomFieldValue } from './CustomFieldValue';
 import { EscalationApprovalPanel } from './EscalationApprovalPanel';
+import { safeJsonParse } from '../../utils/safeJson';
 import './custom-fields.css';
 
 export interface CustomFieldDefinitionEditorProps {
@@ -387,7 +388,7 @@ export function CustomFieldDefinitionEditor({
     let parsedMeta: Record<string, unknown> = {};
     try {
       if (metadataText.trim()) {
-        parsedMeta = JSON.parse(metadataText) as Record<string, unknown>;
+        parsedMeta = safeJsonParse<Record<string, unknown>>(metadataText);
       }
     } catch {
       setTestError('Invalid JSON in format metadata');
@@ -422,7 +423,7 @@ export function CustomFieldDefinitionEditor({
     let parsedMeta: Record<string, unknown> = {};
     try {
       if (metadataText.trim()) {
-        parsedMeta = JSON.parse(metadataText) as Record<string, unknown>;
+        parsedMeta = safeJsonParse<Record<string, unknown>>(metadataText);
       }
     } catch {
       setJsonError('Invalid JSON in format metadata');
@@ -803,7 +804,7 @@ export function CustomFieldDefinitionEditor({
                         value={testResult.value}
                         metadata={(() => {
                           try {
-                            return JSON.parse(metadataText) as Record<string, unknown>;
+                            return safeJsonParse<Record<string, unknown>>(metadataText);
                           } catch {
                             return {};
                           }

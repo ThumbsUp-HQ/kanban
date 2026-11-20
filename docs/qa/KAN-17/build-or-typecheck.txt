@@ -1,0 +1,60 @@
+=== uv run ruff check . [SUCCESS] ===
+All checks passed!
+
+=== uv run mypy [SUCCESS] ===
+Success: no issues found in 1095 source files
+
+=== uv run lint-imports [SUCCESS] ===
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 957 files, 3345 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== tsc -b --noEmit (kanban/web) [SUCCESS] ===
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+=== eslint . --max-warnings 0 (kanban/web) [SUCCESS] ===
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+=== vite build (kanban/web) [SUCCESS] ===
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 695 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-Dw6CVgUb.css            404.67 kB │ gzip:  57.28 kB
+dist/assets/index-CahKCvYj.js           1,917.90 kB │ gzip: 520.96 kB
+
+✓ built in 1.23s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+=== python3 -m scripts.check_no_dashes --all [SUCCESS] ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan17-95a5fbf6/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { safeJsonParse } from '../../utils/safeJson';
 import { safeRandomUUID } from '../../utils/uuid';
 
 export const DRAFTS_STORAGE_KEY = 'kb.drafts.v1';
@@ -35,7 +36,7 @@ export function getDrafts(): IssueDraft[] {
   try {
     const raw = window.localStorage.getItem(DRAFTS_STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed: unknown = safeJsonParse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed as IssueDraft[];
   } catch {
