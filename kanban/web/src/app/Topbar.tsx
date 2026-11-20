@@ -13,6 +13,7 @@ import React, {
   type JSX,
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from './Breadcrumb';
 import { HeaderPills, type AccessManifestData } from './HeaderPills';
 import { LayoutSwitcher } from './LayoutSwitcher';
@@ -109,6 +110,7 @@ export function Topbar({
 }: TopbarProps): JSX.Element {
   const loc = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const locationPathname = loc.pathname;
 
   const isIssuesRoute =
@@ -182,6 +184,10 @@ export function Topbar({
     } catch {
       // Proceed to login redirect even if network request fails
     } finally {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('kb:auth-logout'));
+      }
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
       setAvatarMenuOpen(false);
       void navigate('/login', { replace: true });
     }

@@ -220,6 +220,9 @@ describe('Topbar', () => {
       screen.getByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
     ).toBeDefined();
 
+    const logoutEventSpy = vi.fn();
+    window.addEventListener('kb:auth-logout', logoutEventSpy);
+
     const logoutBtn = screen.getByTestId('logout-button');
     await act(async () => {
       logoutBtn.click();
@@ -230,6 +233,41 @@ describe('Topbar', () => {
       '/api/v1/auth/logout',
       expect.objectContaining({ method: 'POST' }),
     );
+    expect(logoutEventSpy).toHaveBeenCalled();
+    window.removeEventListener('kb:auth-logout', logoutEventSpy);
+  });
+
+  it('navigates via avatar menu admin links and closes menu on click', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Topbar user={{ is_server_admin: true, is_workspace_admin: true }} />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    const linkNames = [
+      /MCP Keys & OAuth Apps/,
+      /Admin Auth Studio/,
+      /System Storage, Backups & Deployment/,
+      /AI Providers & Token Caps/,
+      /Autonomous Agents/,
+      /Remote mTLS Runners/,
+    ];
+
+    for (const name of linkNames) {
+      act(() => {
+        avatarBtn.click();
+      });
+      const link = screen.getByRole('menuitem', { name });
+      fireEvent.click(link);
+      expect(screen.queryByRole('menu')).toBeNull();
+    }
   });
 
   it('hides admin links in avatar menu when user is standard member', () => {
@@ -393,6 +431,8 @@ describe('Topbar', () => {
 
     // ArrowUp moves focus backward
     fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    fireEvent.keyDown(menu, { key: 'Tab' });
 
     // Escape closes menu
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -428,6 +468,9 @@ describe('Topbar', () => {
       avatarBtn.click();
     });
 
+    const logoutEventSpy = vi.fn();
+    window.addEventListener('kb:auth-logout', logoutEventSpy);
+
     const logoutBtn = screen.getByRole('menuitem', { name: /Log out/i });
     await act(async () => {
       logoutBtn.click();
@@ -435,7 +478,9 @@ describe('Topbar', () => {
     });
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
+    expect(logoutEventSpy).toHaveBeenCalled();
     expect(screen.queryByRole('menu')).toBeNull();
+    window.removeEventListener('kb:auth-logout', logoutEventSpy);
   });
 
   describe('resolveDisplayHandle and user profile rendering (KANBA-210)', () => {

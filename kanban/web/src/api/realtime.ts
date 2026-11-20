@@ -311,6 +311,9 @@ export class RealtimeClient {
   }
 
   private probeWebSocket(): void {
+    if (!this.isSessionAllowed()) {
+      return;
+    }
     if (this.state !== 'sse-fallback' || this.probe) {
       return;
     }

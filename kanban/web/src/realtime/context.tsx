@@ -97,7 +97,11 @@ export function RealtimeProvider({
     if (isPublicAuthRoute()) {
       return { authenticated: false, mfa_pending: false };
     }
-    return sessionQuery.data ?? { authenticated: true, mfa_pending: false };
+    const data = sessionQuery.data;
+    if (data?.authenticated === true && data.mfa_pending !== true) {
+      return data;
+    }
+    return { authenticated: false, mfa_pending: false };
   }, [propSession, sessionQuery.data]);
 
   const isPermitted =
@@ -141,7 +145,7 @@ export function RealtimeProvider({
     }
     const handleAuthChange = () => {
       void queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
-      if (isPublicAuthRoute() && client.state !== 'closed') {
+      if (client.state !== 'closed') {
         client.close();
       }
     };
