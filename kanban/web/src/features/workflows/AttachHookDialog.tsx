@@ -227,7 +227,7 @@ function AttachHookDialogInner({
                     { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
                     { label: 'Agent Transition Helper', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
                   ]}
-                  docHref="/docs/scriptrunner-workflows-and-transition-interceptors#interceptor-architecture"
+                  docHref="/docs/scripted-workflows-and-transition-helpers#helper-architecture"
                   testId="hook-kind-help"
                 />
               </label>
@@ -372,7 +372,7 @@ function AttachHookDialogInner({
                     { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
                     { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
                   ]}
-                  docHref="/docs/scriptrunner-workflows-and-transition-interceptors#failure-policies"
+                  docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
                   testId="failure-policy-help"
                 />
               </label>

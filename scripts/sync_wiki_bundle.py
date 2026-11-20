@@ -171,7 +171,7 @@ def build_configuration_reference() -> dict[str, list[dict[str, str]]]:
             {
                 "role": "PROJECT_ADMIN",
                 "scope": "Project",
-                "description": "Project workflows, transition interceptors, and custom fields.",
+                "description": "Project workflows, transition helpers, and custom fields.",
             },
             {
                 "role": "MEMBER",
@@ -414,7 +414,7 @@ def sync_wiki(
         "mcp": "mcp-tools-reference",
         "mcp-server": "three-surface-mcp-server-architecture",
         "api": "rest-api-architecture-and-openapi-guide",
-        "workflows": "scriptrunner-workflows-and-transition-interceptors",
+        "workflows": "scripted-workflows-and-transition-helpers",
         "ai": "multi-provider-ai-engine-and-runners",
         "standalone": "production-promotion-and-backup-runbook",
         "links": "universal-object-graph-and-link-auditor",

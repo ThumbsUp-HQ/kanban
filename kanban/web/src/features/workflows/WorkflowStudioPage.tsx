@@ -283,7 +283,7 @@ export function WorkflowStudioPage({
         </h1>
         <div className="workflow-studio-actions">
           <StudioDocLink
-            href="/docs/scriptrunner-workflows-and-transition-interceptors"
+            href="/docs/scripted-workflows-and-transition-helpers"
             title="Scripted Workflows &amp; Transition Helpers Documentation"
             testId="workflow-studio-doc-link"
           />

@@ -42,8 +42,9 @@ def pytest_configure(config: pytest.Config) -> None:
             normalized: list[str] = []
             changed = False
             for pkg in inorout.source_pkgs:
-                if isinstance(pkg, str) and pkg.endswith(".py"):
-                    normalized.append(pkg[:-3].replace("/", "."))
+                if isinstance(pkg, str) and (pkg.endswith(".py") or "/" in pkg):
+                    clean = pkg.removesuffix(".py")
+                    normalized.append(clean.replace("/", "."))
                     changed = True
                 else:
                     normalized.append(pkg)

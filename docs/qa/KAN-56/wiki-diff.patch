@@ -1,0 +1,267 @@
+commit c646b342bd5352cfb221d31b086e07aac68f51cd
+Author: Adam Outler <adamoutler@gmail.com>
+Date:   Fri Nov 20 14:40:22 2026 -0500
+
+    docs(wiki): rename Scripted-Workflows-and-Transition-Helpers and sync inbound links (KAN-56)
+
+diff --git a/Architecture-Delta-and-Missing-Features.md b/Architecture-Delta-and-Missing-Features.md
+index 380f440..555d640 100644
+--- a/Architecture-Delta-and-Missing-Features.md
++++ b/Architecture-Delta-and-Missing-Features.md
+@@ -6,7 +6,7 @@ This document presents a section-by-section architectural delta and gap analysis
+ 
+ Overall Implementation Status:
+ - 15 of 15 specification sections possess active, production-grade implementations in the codebase.
+-- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and ScriptRunner agent workflow interceptors are fully implemented.
++- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and scripted workflow transition helpers are fully implemented.
+ - Key gaps and deviations identified:
+   1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
+   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex -p`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
+@@ -33,7 +33,7 @@ flowchart TD
+         V2["Multi-Card Auth Studio (AAL2)"]
+         V3["17-Feature Ticket Peek Drawer"]
+         V4["Three-Surface Intent MCP (27 Tools)"]
+-        V5["ScriptRunner Workflow Interceptors"]
++        V5["Scripted Workflows & Transition Helpers"]
+     end
+ 
+     subgraph Backlog["Tracked Optimization Gaps"]
+@@ -83,7 +83,7 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
+ | **Section 11** | Three-Surface Intent-Driven MCP Server | `mcp/surfaces/agent/`, `docs/`, `admin/` | **COMPLETE (100%)** | **VERIFIED** | 27 total tools (9 agent, 6 docs, 12 admin with action-aware scope checks), OpenAPI sync verified. |
+ | **Section 12** | Universal Object Graph DDL & Link Auditor | `database/models/spine.py`, `base.py` | **COMPLETE (100%)** | **VERIFIED** | 9 entity kinds, 13 link kinds, 6-class invalid link auditor, audited purger. |
+ | **Section 13** | Custom Scripted Fields & Sandbox | `kanban/custom_fields/`, `kanban/sandbox/` | **COMPLETE (100%)** | **VERIFIED** | Admin-only definition gate, Wasmtime (Tier A), nsjail (Tier B sandbox), cryptographic AAL2 escalation. |
+-| **Section 14** | ScriptRunner & Transition Interceptors | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
++| **Section 14** | Scripted Workflows & Transition Helpers | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
+ | **Section 15** | >=95% Clean-DB Testing & Governance Gates | `agent/testing/`, `agent/cli_commands/` | **COMPLETE (100%)** | **VERIFIED** | Clean-DB SAVEPOINT isolation, 6 kanban-agent validate-* CLI tools, 3 governance gates, >=95% unit coverage. |
+ 
+ ---
+@@ -380,11 +380,11 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
+ 
+ ---
+ 
+-### Section 14: ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors
++### Section 14: Scripted Workflows & Remote/CLI Agent Transition Helpers
+ 
+ - **Target Architectural Contract:**
+-  - Transition interceptors attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
+-  - 3 Interceptor Kinds:
++  - Transition helpers attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
++  - 3 Transition Helper Kinds:
+     - `sync_validator`: Tier A Wasm, blocks invalid moves with structured reason.
+     - `sync_mutator`: Tier A Wasm, updates mutable fields on transition.
+     - `agent_interceptor`: Tier B async agent gate (`agy -p`, `codex -p`, `gemini`, `ollama`), sets `status: pending_agent_gate` (`issues.pending_transition_exec_id`), holds card provisionally with `⏳🤖`, snaps back with `🛑🤖` or confirms with `✅🤖`.
+diff --git a/Enterprise-Whitespace-and-Kanban-Board.md b/Enterprise-Whitespace-and-Kanban-Board.md
+index e66819d..2da2f53 100644
+--- a/Enterprise-Whitespace-and-Kanban-Board.md
++++ b/Enterprise-Whitespace-and-Kanban-Board.md
+@@ -24,7 +24,7 @@ To keep cards concise without sacrificing context, 👍kanban utilizes a standar
+ | `🏷️` | Issue Identifier | Human-readable issue key and ticket URL |
+ | `🔄` | Creator / Reporter | Author profile and ticket creation timestamp |
+ | `⚡` | Priority | Corporate priority tier (Urgent, High, Medium, Low, None) |
+-| `⏳` | Pending Transition | Active workflow interceptor or async gate |
++| `⏳` | Pending Transition | Active workflow transition helper or async gate |
+ | `🤖` | Autonomous Agent | Agent service principal assignment or execution |
+ | `🔒` | Parent Hierarchy | Parent issue or epic relationship |
+ | `🔗` | Linked Object | Bidirectional dependency or related entity |
+diff --git a/Home.md b/Home.md
+index 13e9a44..da0af86 100644
+--- a/Home.md
++++ b/Home.md
+@@ -27,7 +27,7 @@ flowchart TD
+     end
+ 
+     subgraph Runtimes["Execution Engines"]
+-        AIEngine["AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Interceptors"]
++        AIEngine["AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Helpers"]
+         Sandbox["Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens"]
+     end
+ 
+@@ -90,7 +90,7 @@ Platform administrators manage enterprise governance through dedicated studios:
+ | **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |
+ | **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |
+ | **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |
+-| **Workflow Interceptors** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |
++| **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |
+ | **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |
+ | **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |
+ 
+@@ -124,7 +124,7 @@ For an exhaustive feature-by-feature evaluation across 35 criteria, see the [Fea
+ 10. [Three-Surface MCP Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.
+ 11. [Universal Object Graph and Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.
+ 12. [Admin Custom Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.
+-13. [ScriptRunner Workflows and Transition Interceptors](ScriptRunner-Workflows-and-Transition-Interceptors) - Synchronous transition validators/mutators and asynchronous AI agent gates.
++13. [Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.
+ 14. [Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.
+ 15. [Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.
+ 16. [Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.
+diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
+index 422c815..ef78e64 100644
+--- a/MCP-Tools-Reference.md
++++ b/MCP-Tools-Reference.md
+@@ -306,7 +306,7 @@ sequenceDiagram
+ - **CLI Example:** `kanban-cli-admin manage_custom_fields_and_scripts --action="list" --project=KAN`
+ 
+ ### 8. `manage_workflow_interceptors`
+-- **Description:** Configure pre-transition interceptor hooks (validators, mutators, async agent gates).
++- **Description:** Configure pre-transition helper hooks (validators, mutators, async agent gates).
+ - **Required Parameters:**
+   - `action` (string): `list`, `create_hook`, `update_hook`, `reorder_pipeline`, `dry_run`.
+ - **Optional Parameters:**
+diff --git a/Multi-Provider-AI-Engine-and-Runners.md b/Multi-Provider-AI-Engine-and-Runners.md
+index 93a1c1c..02b4b36 100644
+--- a/Multi-Provider-AI-Engine-and-Runners.md
++++ b/Multi-Provider-AI-Engine-and-Runners.md
+@@ -220,10 +220,10 @@ In test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIR
+ - Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.
+ 
+ ### Local Agent CLI Diagnostics
+-Engineers can validate transition interceptors and AI workflows locally via the command line:
++Engineers can validate transition helpers and AI workflows locally via the command line:
+ 
+ ```bash
+-# Validate a transition interceptor against a ticket fixture
++# Validate a transition helper against a ticket fixture
+ kanban-agent validate-transition \
+   --ticket-file test_ticket.json \
+   --from-state in_progress \
+diff --git a/REST-API-Architecture-and-OpenAPI-Guide.md b/REST-API-Architecture-and-OpenAPI-Guide.md
+index 9ad558b..15be2a5 100644
+--- a/REST-API-Architecture-and-OpenAPI-Guide.md
++++ b/REST-API-Architecture-and-OpenAPI-Guide.md
+@@ -136,7 +136,7 @@ kanban/api/v1/
+ |-- docs.py             # Hierarchical technical documentation, ltree traversal, version diffs
+ |-- stickies.py         # Digital sticky notes, color categorization, smart promotion
+ |-- custom_fields.py    # Custom scripted field evaluation, Wasmtime/nsjail bindings
+-|-- workflows.py        # Transition interceptors, validator pipelines, dry-run testing
++|-- workflows.py        # Transition helpers, validator pipelines, dry-run testing
+ |-- search.py           # Hybrid lexical and semantic search endpoints
+ |-- admin.py            # Platform governance, auth cards, link auditor, system backup
+ `-- mcp_keys.py         # Scoped MCP token generation, tool toggles, device authorization
+diff --git a/ScriptRunner-Workflows-and-Transition-Interceptors.md b/Scripted-Workflows-and-Transition-Helpers.md
+similarity index 72%
+rename from ScriptRunner-Workflows-and-Transition-Interceptors.md
+rename to Scripted-Workflows-and-Transition-Helpers.md
+index b0d9e04..b300244 100644
+--- a/ScriptRunner-Workflows-and-Transition-Interceptors.md
++++ b/Scripted-Workflows-and-Transition-Helpers.md
+@@ -1,19 +1,19 @@
+-# ScriptRunner Workflows and Transition Interceptors
++# Scripted Workflows and Transition Helpers
+ 
+ ## Overview
+ 
+ In traditional project management tools, workflow rules are either simple notification triggers or inflexible webhooks that fire only *after* a change has occurred. If an issue is improperly moved to "Done" without meeting code coverage requirements or QA verification, the damage is already done.
+ 
+-👍kanban implements a **ScriptRunner-Style Workflow Engine** with **Pre-Transition Interceptors**. When an operator or agent attempts to move a work item between states (`from_state -> to_state`), the transition is intercepted and evaluated through an ordered pipeline of synchronous validators, field mutators, and asynchronous AI agent gates.
++👍kanban implements a **Scripted Workflow Engine** with **Pre-Transition Helpers**. When an operator or agent attempts to move a work item between states (`from_state -> to_state`), the transition is evaluated through an ordered pipeline of synchronous validators, field mutators, and asynchronous AI agent gates.
+ 
+ ---
+ 
+-## The Transition Interceptor Pipeline
++## The Transition Helper Pipeline
+ 
+ ```mermaid
+ flowchart TD
+-    Drag["User / Agent moves card: In Progress -> Done"] --> Interceptor["Transition Interceptor Engine"]
+-    Interceptor --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links"]
++    Drag["User / Agent moves card: In Progress -> Done"] --> HelperEngine["Transition Helper Engine"]
++    HelperEngine --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links"]
+     Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A)<br/>- Auto-set closed_at timestamp<br/>- Update cycle velocity counters"]
+     Stage1 -->|VETO| VetoInstant["Transition Rejected (422 Unprocessable)"]
+     Stage2 --> Stage3["Stage 3: Asynchronous Gate Hold (Tier B Async Agent)<br/>- Card enters pending_agent_gate hold (⏳🤖)<br/>- Dispatches forensic audit to agent"]
+@@ -23,6 +23,22 @@ flowchart TD
+ 
+ ---
+ 
++## Helper Architecture
++
++Transition helpers operate across two execution tiers to balance latency and verification depth:
++
++1. **Tier A (Synchronous Wasm / In-Process):** Fast sub-25ms validators and mutators executing in memory or within sandboxed WebAssembly runtimes. These guarantee instantaneous rejection or field stamping without network round-trips.
++2. **Tier B (Asynchronous Autonomous Agent Gates):** Non-blocking background gates dispatched to local CLI harnesses (`agy -p`, `codex -p`), in-app SDK runners, or remote bare Git mirrors. These run comprehensive multi-file audits, build verifications, and forensic QA checks before approving the transition.
++
++### Failure Policies
++
++Every attached transition helper specifies an explicit failure policy to determine behavior when a helper times out, errors, or fails execution:
++
++- **Fail-Closed:** Blocks the transition immediately. The card snaps back to its origin column and an itemized failure explanation is appended to the ticket timeline.
++- **Fail-Open (Warn):** Logs an audit warning to the activity feed and ledger while allowing the transition to proceed. This is reserved for non-critical informational checks.
++
++---
++
+ ## Admin Workflow Transition Studio
+ 
+ Project Administrators configure transition pipelines through the visual studio at `/projects/KAN/settings/workflows`.
+@@ -32,7 +48,7 @@ Project Administrators configure transition pipelines through the visual studio
+ ### Studio Capabilities
+ - **State Transition Matrix:** Select any valid transition path (e.g. `In Progress -> In Review`, `In Review -> Done`).
+ - **Pipeline Reordering:** Drag to reorder validators and mutators in the execution chain.
+-- **Mutable Field Checkboxes:** Explicitly define which fields the interceptor is permitted to modify, enforcing least-privilege mutation boundaries.
++- **Mutable Field Checkboxes:** Explicitly define which fields the transition helper is permitted to modify, enforcing least-privilege mutation boundaries.
+ 
+ ### The Non-Persistent Dry-Run Drawer
+ Testing workflow logic against live tickets risks corrupting sprint metrics. The Workflow Studio provides a **Zero-Persistence Dry-Run Drawer**:
+@@ -48,7 +64,7 @@ sequenceDiagram
+     actor Admin as Workflow Architect
+     participant Studio as Workflow Studio
+     participant Drawer as Dry-Run Drawer
+-    participant Engine as Interceptor Engine (Sandbox)
++    participant Engine as Helper Engine (Sandbox)
+ 
+     Admin->>Studio: Select "In Review -> Done" rule
+     Admin->>Studio: Click "Dry-Run Against Sample Ticket"
+@@ -84,7 +100,7 @@ When an issue transition requires complex verification (such as forensic QA cert
+ ```mermaid
+ stateDiagram-v2
+     [*] --> InProgress
+-    InProgress --> PendingGate: Move to Done (Trigger Interceptor)
++    InProgress --> PendingGate: Move to Done (Trigger Transition Helper)
+     PendingGate --> Done: Agent Certifies Criteria (✅🤖 Approved)
+     PendingGate --> InProgress: Agent Rejects (🛑🤖 240ms Snap-Back)
+     Done --> [*]
+diff --git a/Three-Surface-MCP-Server-Architecture.md b/Three-Surface-MCP-Server-Architecture.md
+index 3ab11d5..c9fe722 100644
+--- a/Three-Surface-MCP-Server-Architecture.md
++++ b/Three-Surface-MCP-Server-Architecture.md
+@@ -46,7 +46,7 @@ Dedicated to technical documentation, architecture research, and specification a
+ 
+ ### 3. `/mcp/admin` (12 Governance and Lifecycle Tools)
+ Dedicated to platform administrators and privileged automation operators.
+-- **Capabilities:** Project provisioning, member and group access binding, workflow interceptor configuration, AI runner setup, and system health checks.
++- **Capabilities:** Project provisioning, member and group access binding, workflow transition helper configuration, AI runner setup, and system health checks.
+ - **AAL2 Protection:** Every invocation requires Authenticator Assurance Level 2 credentials.
+ - **Two-Stage Destructive Safety:** Dangerous operations (`destructive_lifecycle`) require a two-stage process: first requesting a blast-radius preview and receiving a short-lived cryptographic confirmation token, then explicitly confirming execution with that token.
+ 
+diff --git a/User-Tasks-and-QA-Matrix.md b/User-Tasks-and-QA-Matrix.md
+index ac3c693..e639e48 100644
+--- a/User-Tasks-and-QA-Matrix.md
++++ b/User-Tasks-and-QA-Matrix.md
+@@ -88,13 +88,13 @@ flowchart TD
+ 
+ ---
+ 
+-### Group D: MCP Access Studio, Custom Scripted Fields & Workflow Transition Interceptors (Spec S11, S13, S14)
++### Group D: MCP Access Studio, Custom Scripted Fields & Scripted Workflows (Spec S11, S13, S14)
+ 
+ | Task ID | Spec Ref | User Persona | Task Title | Step-by-Step Human / Browser Verification Actions | Expected Outcome & Screenshot Target |
+ | :--- | :---: | :--- | :--- | :--- | :--- |
+ | **`UT-13`** | **S11.2, S11.3** | Developer / Admin | **Scopable MCP Keys, Per-Tool Toggles & Device Activation** | 1. Navigate to `/settings/mcp`, `/admin/mcp`, and `/activate` (RFC 8628 Device Flow).<br>2. Inspect hierarchical scoping (`Global`, `Workspace`, `Project`), expiration presets (including `Unlimited` with safety friction), and per-tool checkboxes across `/mcp/agent`, `/mcp/docs`, `/mcp/admin`. | Displays MCP Access Studio with copyable client config snippets and granular tool toggles.<br>[images/13-mcp-access-studio.png](images/13-mcp-access-studio.png) |
+ | **`UT-14`** | **S13.1-S13.3** | Project / Server Admin | **Custom Scripted Fields (`🧪`) & Tiered Privilege Escalation** | 1. Navigate to `/projects/KAN/settings/custom-fields`.<br>2. Inspect custom field definitions, Wasm/script bindings, `🧪` computed badge on ticket rail, and AAL2 approval banner for escalated scope (`Project` -> `Workspace` -> `Server`). | Renders Custom Fields Studio and cryptographic admin approval status.<br>[images/14-custom-fields-studio.png](images/14-custom-fields-studio.png) |
+-| **`UT-15`** | **S14.1-S14.4** | Workflow Architect | **Admin Workflow Transition Studio & Non-Persistent Dry-Run** | 1. Navigate to `/projects/KAN/settings/workflows`.<br>2. Select a `(from_state -> to_state)` rule, inspect ordered pipeline hooks (Tier A Wasm validator, Tier A mutator, Async Agent Interceptor `in_app_sdk` / `cli_pipe` / `remote_runner`, mutable field checkboxes).<br>3. Open the **Dry-Run Drawer**, test against a sample ticket, and inspect per-step execution results and copyable `kanban-agent validate-transition` CLI snippet. | Displays pipeline ordering studio and executes zero-persistence dry-run with step timings.<br>[images/15-workflow-transition-studio.png](images/15-workflow-transition-studio.png) |
++| **`UT-15`** | **S14.1-S14.4** | Workflow Architect | **Admin Workflow Transition Studio & Non-Persistent Dry-Run** | 1. Navigate to `/projects/KAN/settings/workflows`.<br>2. Select a `(from_state -> to_state)` rule, inspect ordered pipeline hooks (Tier A Wasm validator, Tier A mutator, Async Agent Transition Helper `in_app_sdk` / `cli_pipe` / `remote_runner`, mutable field checkboxes).<br>3. Open the **Dry-Run Drawer**, test against a sample ticket, and inspect per-step execution results and copyable `kanban-agent validate-transition` CLI snippet. | Displays pipeline ordering studio and executes zero-persistence dry-run with step timings.<br>[images/15-workflow-transition-studio.png](images/15-workflow-transition-studio.png) |
+ | **`UT-16`** | **S14.2** | Developer | **Async Agent Gate Lifecycle on Board (`⏳🤖` -> `🛑🤖` / `✅🤖`)** | 1. Inspect async agent gate card states (`/projects/KAN/issues?layout=board` or `/__dev/realtime`): live countdown timer (`⏳🤖`), `240ms` spring snap-back toast on veto (`🛑🤖`), and verified header badge (`✅🤖`). | Visualizes pending agent hold, countdown progress bar, and veto snap-back toast.<br>[images/16-async-agent-gate-states.png](images/16-async-agent-gate-states.png) |
+ 
+ ---
+diff --git a/_Sidebar.md b/_Sidebar.md
+index 7ea0da5..02ef97c 100644
+--- a/_Sidebar.md
++++ b/_Sidebar.md
+@@ -19,7 +19,7 @@
+   - [10. Three-Surface MCP Server](Three-Surface-MCP-Server-Architecture)
+   - [11. Universal Object Graph](Universal-Object-Graph-and-Link-Auditor)
+   - [12. Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox)
+-  - [13. ScriptRunner Interceptors](ScriptRunner-Workflows-and-Transition-Interceptors)
++  - [13. Scripted Workflows & Helpers](Scripted-Workflows-and-Transition-Helpers)
+   - [14. Clean-DB Testing and Gates](Clean-DB-Testing-and-Governance-Gates)
+   - [15. Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook)
+   - [16. Migration and Cutover Runbook](Migration-and-Cutover-Runbook)

@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-aa8b69bf
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 7 items
+
+kanban/tests/platform/test_brand_terminology_audit.py ...                [ 42%]
+kanban/tests/docs/test_wiki_media_audit.py ....                          [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                                    Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------
+kanban/tests/platform/test_brand_terminology_audit.py     128      1     44      2    98%   94->97, 107
+---------------------------------------------------------------------------------------------------
+TOTAL                                                     128      1     44      2    98%
+============================== 7 passed in 4.47s ===============================
