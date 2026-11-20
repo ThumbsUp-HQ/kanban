@@ -156,7 +156,7 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
                     return None
                 try:
                     return left**right
-                except (OverflowError, ValueError):
+                except (OverflowError, ValueError, ZeroDivisionError):
                     return None
         if isinstance(node, ast.Dict):
             return {
@@ -192,7 +192,7 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
 
     try:
         return _eval_node(parsed.body, {"issue": issue, **issue})
-    except (TypeError, ValueError, AttributeError, KeyError):
+    except (TypeError, ValueError, AttributeError, KeyError, ZeroDivisionError):
         return None
 
 

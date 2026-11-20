@@ -508,7 +508,7 @@ index 699c977..87f3e48 100644
      app.add_middleware(SecurityHeadersMiddleware, settings=settings)
  
 diff --git a/kanban/custom_fields/executor.py b/kanban/custom_fields/executor.py
-index f04ec22..75c0e87 100644
+index f04ec22..e3040dd 100644
 --- a/kanban/custom_fields/executor.py
 +++ b/kanban/custom_fields/executor.py
 @@ -49,9 +49,27 @@ if TYPE_CHECKING:
@@ -591,7 +591,7 @@ index f04ec22..75c0e87 100644
 +                    return None
 +                try:
 +                    return left**right
-+                except (OverflowError, ValueError):
++                except (OverflowError, ValueError, ZeroDivisionError):
 +                    return None
          if isinstance(node, ast.Dict):
              return {
@@ -612,6 +612,15 @@ index f04ec22..75c0e87 100644
          if isinstance(node, ast.Compare):
              left = _eval_node(node.left, ctx)
              for op, comparator in zip(node.ops, node.comparators, strict=False):
+@@ -139,7 +192,7 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901,
+ 
+     try:
+         return _eval_node(parsed.body, {"issue": issue, **issue})
+-    except (TypeError, ValueError, AttributeError, KeyError):
++    except (TypeError, ValueError, AttributeError, KeyError, ZeroDivisionError):
+         return None
+ 
+ 
 @@ -748,7 +801,20 @@ class CustomFieldExecutor:
                                  title="Invalid WebAssembly Binary",
                                  detail=f"Cannot decode WebAssembly module bytes: {err}",
@@ -1075,10 +1084,10 @@ index 0000000..fd32eb2
 +    assert any(m.get("status") == 413 for m in response_starts)
 diff --git a/kanban/tests/custom_fields/test_executor_unit.py b/kanban/tests/custom_fields/test_executor_unit.py
 new file mode 100644
-index 0000000..38c39ef
+index 0000000..bb995a4
 --- /dev/null
 +++ b/kanban/tests/custom_fields/test_executor_unit.py
-@@ -0,0 +1,625 @@
+@@ -0,0 +1,627 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Unit tests for CustomFieldExecutor and safe formula evaluation (KAN-17, KB-P3-AUDIT-11)."""
@@ -1154,6 +1163,8 @@ index 0000000..38c39ef
 +    assert _eval_safe_formula("2 ** -65", {}) is None  # Exponent < -64
 +    assert _eval_safe_formula("2000000 ** 2", {}) is None  # Base > 1_000_000
 +    assert _eval_safe_formula('"str" ** 2', {}) is None  # Non-numeric base
++    assert _eval_safe_formula("0 ** -1", {}) is None  # Negative-exponent zero power
++    assert _eval_safe_formula("0.0 ** -2", {}) is None
 +
 +    # Unary operators
 +    assert _eval_safe_formula("-42", {}) == -42
@@ -1706,10 +1717,10 @@ index 0000000..38c39ef
 +            assert "System fault" in (res_runtime_err["error"] or "")
 diff --git a/kanban/tests/custom_fields/test_manifest_and_formula_security.py b/kanban/tests/custom_fields/test_manifest_and_formula_security.py
 new file mode 100644
-index 0000000..79a2feb
+index 0000000..a4aed29
 --- /dev/null
 +++ b/kanban/tests/custom_fields/test_manifest_and_formula_security.py
-@@ -0,0 +1,465 @@
+@@ -0,0 +1,545 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Security tests for custom field manifests, AST bounds, and test-execute (KB-P3-AUDIT-11)."""
@@ -1817,6 +1828,8 @@ index 0000000..79a2feb
 +    assert _eval_safe_formula("2 ** 64", ctx) == 2**64
 +    assert _eval_safe_formula("2 ** 65", ctx) is None
 +    assert _eval_safe_formula("1000001 ** 2", ctx) is None
++    assert _eval_safe_formula("0 ** -1", ctx) is None
++    assert _eval_safe_formula("0.0 ** -2", ctx) is None
 +
 +    # ast.Mult bounds: sequence repetition <= 4096 chars/items
 +    assert len(_eval_safe_formula("'A' * 4096", ctx)) == 4096
@@ -2168,6 +2181,8 @@ index 0000000..79a2feb
 +    assert _eval_safe_formula("10 / 0", ctx) == 0
 +    assert _eval_safe_formula("2 ** -2", ctx) == 0.25
 +    assert _eval_safe_formula("2 ** -65", ctx) is None
++    assert _eval_safe_formula("0 ** -1", ctx) is None
++    assert _eval_safe_formula("0.0 ** -2", ctx) is None
 +    assert _eval_safe_formula("'a' ** 2", ctx) is None
 +    assert _eval_safe_formula("'a' * -1", ctx) is None
 +    assert _eval_safe_formula("-1 * 'a'", ctx) is None
@@ -2175,6 +2190,82 @@ index 0000000..79a2feb
 +
 +    # Dict literal
 +    assert _eval_safe_formula("{'key': 'val'}['key']", ctx) == "val"
++
++
++async def test_patch_wasm_module_sha256_revokes_approved_escalation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Verify PATCH changing wasm_module_sha256 revokes approval via tamper trigger."""
++    admin = await make_user("admin_tamper", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("TMPR", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++
++    # 1. Upload an approved wasm module
++    echo_bytes = _read_fixture("echo_cvss.wasm")
++    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
++    resp_wasm = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/TMPR/wasm-modules",
++        json={"name": "echo_cvss_tamper", "wasm_base64": echo_b64},
++    )
++    assert resp_wasm.status_code == 201
++    wasm_sha1 = resp_wasm.json()["sha256"]
++
++    # 2. Create escalated custom field (PROJECT_ADMIN_SP)
++    resp_create = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/TMPR/custom-fields",
++        json={
++            "slug": "escalated-wasm-field",
++            "name": "Escalated Wasm Field",
++            "tier": "wasm",
++            "output_format": "text",
++            "output_format_metadata": {"format": "text", "max_length": 50},
++            "script_source": "wasm:echo_cvss_tamper",
++            "target_scope": "PROJECT",
++            "credential_mode": "PROJECT_ADMIN_SP",
++            "wasm_module_sha256": wasm_sha1,
++        },
++    )
++    assert resp_create.status_code == 201
++    field_data = resp_create.json()
++    fid = field_data["id"]
++    m_sha = field_data["manifest_sha256"]
++
++    # 3. Request escalation approval and approve it
++    resp_req = await _as_admin_aal2(api_env, admin).post(
++        f"/api/v1/custom-fields/{fid}/approval-requests",
++        json={"manifest_sha256": m_sha, "justification": "Escalation for tamper test"},
++    )
++    assert resp_req.status_code == 201
++    appr_id = resp_req.json()["id"]
++
++    resp_appr = await _as_admin_aal2(api_env, admin).post(
++        f"/api/v1/custom-field-approvals/{appr_id}/approve",
++        json={"manifest_sha256": m_sha, "sp_warning_acknowledged": True},
++    )
++    assert resp_appr.status_code == 200
++    assert resp_appr.json()["status"] == "APPROVED"
++
++    # 4. PATCH changing wasm_module_sha256
++    wasm_sha2 = "aa" * 32
++    resp_patch = await _as_admin_aal2(api_env, admin).patch(
++        f"/api/v1/projects/TMPR/custom-fields/{fid}",
++        json={"wasm_module_sha256": wasm_sha2},
++    )
++    assert resp_patch.status_code == 200
++    assert resp_patch.json()["manifest_sha256"] != m_sha
++
++    # 5. Verify escalation row is REVOKED via custom_field_manifest_tamper_revoke trigger
++    resp_approvals = await _as_admin_aal2(api_env, admin).get(
++        f"/api/v1/custom-fields/{fid}/approvals",
++    )
++    assert resp_approvals.status_code == 200
++    items = resp_approvals.json()
++    appr_row = next((a for a in items if a["id"] == appr_id), None)
++    assert appr_row is not None
++    assert appr_row["status"] == "REVOKED"
++    assert appr_row["revoked_reason"] == "MANIFEST_SHA256_CHANGED"
++    assert appr_row["revoked_at"] is not None
 diff --git a/kanban/web/src/editor/clipboard/trustedTypes.ts b/kanban/web/src/editor/clipboard/trustedTypes.ts
 index a71c422..e9d589e 100644
 --- a/kanban/web/src/editor/clipboard/trustedTypes.ts

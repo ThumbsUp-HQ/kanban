@@ -105,6 +105,8 @@ def test_eval_safe_formula_pow_and_mult_dos_bounds() -> None:
     assert _eval_safe_formula("2 ** 64", ctx) == 2**64
     assert _eval_safe_formula("2 ** 65", ctx) is None
     assert _eval_safe_formula("1000001 ** 2", ctx) is None
+    assert _eval_safe_formula("0 ** -1", ctx) is None
+    assert _eval_safe_formula("0.0 ** -2", ctx) is None
 
     # ast.Mult bounds: sequence repetition <= 4096 chars/items
     assert len(_eval_safe_formula("'A' * 4096", ctx)) == 4096
@@ -456,6 +458,8 @@ def test_eval_safe_formula_comprehensive_coverage() -> None:
     assert _eval_safe_formula("10 / 0", ctx) == 0
     assert _eval_safe_formula("2 ** -2", ctx) == 0.25
     assert _eval_safe_formula("2 ** -65", ctx) is None
+    assert _eval_safe_formula("0 ** -1", ctx) is None
+    assert _eval_safe_formula("0.0 ** -2", ctx) is None
     assert _eval_safe_formula("'a' ** 2", ctx) is None
     assert _eval_safe_formula("'a' * -1", ctx) is None
     assert _eval_safe_formula("-1 * 'a'", ctx) is None
@@ -463,3 +467,79 @@ def test_eval_safe_formula_comprehensive_coverage() -> None:
 
     # Dict literal
     assert _eval_safe_formula("{'key': 'val'}['key']", ctx) == "val"
+
+
+async def test_patch_wasm_module_sha256_revokes_approved_escalation(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """Verify PATCH changing wasm_module_sha256 revokes approval via tamper trigger."""
+    admin = await make_user("admin_tamper", workspace_role="WORKSPACE_ADMIN")
+    _ = await make_project("TMPR", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+
+    # 1. Upload an approved wasm module
+    echo_bytes = _read_fixture("echo_cvss.wasm")
+    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
+    resp_wasm = await _as_admin_aal2(api_env, admin).post(
+        "/api/v1/projects/TMPR/wasm-modules",
+        json={"name": "echo_cvss_tamper", "wasm_base64": echo_b64},
+    )
+    assert resp_wasm.status_code == 201
+    wasm_sha1 = resp_wasm.json()["sha256"]
+
+    # 2. Create escalated custom field (PROJECT_ADMIN_SP)
+    resp_create = await _as_admin_aal2(api_env, admin).post(
+        "/api/v1/projects/TMPR/custom-fields",
+        json={
+            "slug": "escalated-wasm-field",
+            "name": "Escalated Wasm Field",
+            "tier": "wasm",
+            "output_format": "text",
+            "output_format_metadata": {"format": "text", "max_length": 50},
+            "script_source": "wasm:echo_cvss_tamper",
+            "target_scope": "PROJECT",
+            "credential_mode": "PROJECT_ADMIN_SP",
+            "wasm_module_sha256": wasm_sha1,
+        },
+    )
+    assert resp_create.status_code == 201
+    field_data = resp_create.json()
+    fid = field_data["id"]
+    m_sha = field_data["manifest_sha256"]
+
+    # 3. Request escalation approval and approve it
+    resp_req = await _as_admin_aal2(api_env, admin).post(
+        f"/api/v1/custom-fields/{fid}/approval-requests",
+        json={"manifest_sha256": m_sha, "justification": "Escalation for tamper test"},
+    )
+    assert resp_req.status_code == 201
+    appr_id = resp_req.json()["id"]
+
+    resp_appr = await _as_admin_aal2(api_env, admin).post(
+        f"/api/v1/custom-field-approvals/{appr_id}/approve",
+        json={"manifest_sha256": m_sha, "sp_warning_acknowledged": True},
+    )
+    assert resp_appr.status_code == 200
+    assert resp_appr.json()["status"] == "APPROVED"
+
+    # 4. PATCH changing wasm_module_sha256
+    wasm_sha2 = "aa" * 32
+    resp_patch = await _as_admin_aal2(api_env, admin).patch(
+        f"/api/v1/projects/TMPR/custom-fields/{fid}",
+        json={"wasm_module_sha256": wasm_sha2},
+    )
+    assert resp_patch.status_code == 200
+    assert resp_patch.json()["manifest_sha256"] != m_sha
+
+    # 5. Verify escalation row is REVOKED via custom_field_manifest_tamper_revoke trigger
+    resp_approvals = await _as_admin_aal2(api_env, admin).get(
+        f"/api/v1/custom-fields/{fid}/approvals",
+    )
+    assert resp_approvals.status_code == 200
+    items = resp_approvals.json()
+    appr_row = next((a for a in items if a["id"] == appr_id), None)
+    assert appr_row is not None
+    assert appr_row["status"] == "REVOKED"
+    assert appr_row["revoked_reason"] == "MANIFEST_SHA256_CHANGED"
+    assert appr_row["revoked_at"] is not None

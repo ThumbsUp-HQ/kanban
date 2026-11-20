@@ -73,6 +73,8 @@ def test_eval_safe_formula_edge_cases() -> None:
     assert _eval_safe_formula("2 ** -65", {}) is None  # Exponent < -64
     assert _eval_safe_formula("2000000 ** 2", {}) is None  # Base > 1_000_000
     assert _eval_safe_formula('"str" ** 2', {}) is None  # Non-numeric base
+    assert _eval_safe_formula("0 ** -1", {}) is None  # Negative-exponent zero power
+    assert _eval_safe_formula("0.0 ** -2", {}) is None
 
     # Unary operators
     assert _eval_safe_formula("-42", {}) == -42
