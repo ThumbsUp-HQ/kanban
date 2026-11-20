@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
-index 8263a3bf..95789e1e 100644
+index 8946c9ea..7668131f 100644
 --- a/kanban/web/src/app/Sidebar.test.tsx
 +++ b/kanban/web/src/app/Sidebar.test.tsx
 @@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
@@ -10,6 +10,15 @@ index 8263a3bf..95789e1e 100644
    SIDEBAR_STORAGE_KEY,
  } from './Sidebar';
  
+@@ -55,7 +56,7 @@ describe('Sidebar', () => {
+     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
+     expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
+-    expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
++    expect(screen.getAllByRole('link', { name: /Docs/ }).length).toBeGreaterThan(0);
+     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Project Settings/ })).toBeDefined();
+   });
 @@ -206,8 +207,8 @@ describe('Sidebar', () => {
      window.addEventListener('kb:create-issue', listener);
  
@@ -21,6 +30,17 @@ index 8263a3bf..95789e1e 100644
        </MemoryRouter>,
      );
  
+@@ -239,8 +240,8 @@ describe('Sidebar', () => {
+         </MemoryRouter>,
+       );
+ 
+-      const link = screen.getByRole('link', { name });
+-      expect(link.getAttribute('aria-current')).toBe('page');
++      const links = screen.getAllByRole('link', { name });
++      expect(links.some((l) => l.getAttribute('aria-current') === 'page')).toBe(true);
+       unmount();
+     }
+   });
 @@ -299,8 +300,10 @@ describe('Sidebar', () => {
      document.cookie = 'csrf_token=test-csrf-token';
      const nameInput = screen.getByLabelText(/Project Name/i);
@@ -34,7 +54,7 @@ index 8263a3bf..95789e1e 100644
      const form = screen.getByTestId('create-project-submit').closest('form');
      expect(form).not.toBeNull();
      if (form) {
-@@ -309,9 +312,16 @@ describe('Sidebar', () => {
+@@ -309,9 +312,103 @@ describe('Sidebar', () => {
        });
      }
  
@@ -48,10 +68,97 @@ index 8263a3bf..95789e1e 100644
 +    await waitFor(() => {
 +      expect(screen.getByText('Security')).toBeDefined();
 +    });
++  });
++
++  it('covers CreateProjectModal onCreated callback duplicate and modules_enabled branches', async () => {
++    let postCallCount = 0;
++    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/projects')) {
++        if (init?.method === 'POST') {
++          postCallCount++;
++          if (postCallCount === 1) {
++            return Promise.resolve(
++              new Response(
++                JSON.stringify({ identifier: 'ALPHA', name: 'Alpha Project' }),
++                { status: 201, headers: { 'Content-Type': 'application/json' } },
++              ),
++            );
++          }
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({ identifier: 'ALPHA', name: 'Alpha Project', modules_enabled: true }),
++              { status: 201, headers: { 'Content-Type': 'application/json' } },
++            ),
++          );
++        }
++        return Promise.resolve(
++          new Response(
++            JSON.stringify({
++              items: [{ identifier: 'KAN', name: 'kanban', modules_enabled: true }],
++            }),
++            { status: 200, headers: { 'Content-Type': 'application/json' } },
++          ),
++        );
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    const { unmount } = render(
++      <MemoryRouter initialEntries={['/']}>
++        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
++      </MemoryRouter>,
++    );
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
++    });
++    expect(screen.getByTestId('create-project-modal')).toBeDefined();
++
++    document.cookie = 'csrf_token=test-csrf-token';
++    const nameInput = screen.getByLabelText(/Project Name/i);
++    const idInput = screen.getByLabelText(/Identifier/i);
++    act(() => {
++      fireEvent.change(nameInput, { target: { value: 'Alpha Project' } });
++      fireEvent.change(idInput, { target: { value: 'ALPHA' } });
++    });
++    const form = screen.getByTestId('create-project-submit').closest('form');
++    expect(form).not.toBeNull();
++    if (form) {
++      act(() => {
++        fireEvent.submit(form);
++      });
++    }
++    await waitFor(() => {
++      expect(screen.queryByTestId('create-project-modal')).toBeNull();
++    });
++
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
++    });
++    expect(screen.getByTestId('create-project-modal')).toBeDefined();
++    const dupNameInput = screen.getByLabelText(/Project Name/i);
++    const dupIdInput = screen.getByLabelText(/Identifier/i);
++    act(() => {
++      fireEvent.change(dupNameInput, { target: { value: 'Alpha Project' } });
++      fireEvent.change(dupIdInput, { target: { value: 'ALPHA' } });
++    });
++    const dupForm = screen.getByTestId('create-project-submit').closest('form');
++    if (dupForm) {
++      act(() => {
++        fireEvent.submit(dupForm);
++      });
++    }
++    await waitFor(() => {
++      expect(screen.queryByTestId('create-project-modal')).toBeNull();
++    });
++
++    unmount();
++    fetchSpy.mockRestore();
    });
  
    it('fetches workspaces, toggles dropdown menu, switches workspace, and opens CreateWorkspaceModal', async () => {
-@@ -384,6 +394,9 @@ describe('Sidebar', () => {
+@@ -384,6 +481,9 @@ describe('Sidebar', () => {
      act(() => {
        fireEvent.click(targetWsBtn);
      });
@@ -61,7 +168,23 @@ index 8263a3bf..95789e1e 100644
    });
  
    it('independently toggles expand/collapse for multiple projects (KANBA-192 Positive Case 3)', async () => {
-@@ -593,7 +606,7 @@ describe('Sidebar', () => {
+@@ -442,13 +542,13 @@ describe('Sidebar', () => {
+       </MemoryRouter>,
+     );
+ 
+-    expect(screen.getByRole('link', { name: /List view/i })).toBeDefined();
++    expect(screen.getByRole('link', { name: /Issues view/i })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Board view/i })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Table view/i })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Calendar view/i })).toBeDefined();
+     expect(screen.getByRole('link', { name: /Timeline view/i })).toBeDefined();
+ 
+-    const listViewLink = screen.getByRole('link', { name: /List view/i });
++    const listViewLink = screen.getByRole('link', { name: /Issues view/i });
+     expect(listViewLink.getAttribute('href')).toBe('/projects/KAN/issues?layout=list');
+   });
+ 
+@@ -593,7 +693,7 @@ describe('Sidebar', () => {
      });
    });
  
@@ -70,7 +193,7 @@ index 8263a3bf..95789e1e 100644
      vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
        const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
        if (urlStr.includes('/switch')) {
-@@ -626,8 +639,14 @@ describe('Sidebar', () => {
+@@ -626,8 +726,14 @@ describe('Sidebar', () => {
  
      // Click workspace item if available
      const items = screen.getAllByRole('menuitem');
@@ -87,7 +210,7 @@ index 8263a3bf..95789e1e 100644
      }
    });
  
-@@ -728,6 +747,9 @@ describe('Sidebar', () => {
+@@ -728,6 +834,9 @@ describe('Sidebar', () => {
        act(() => {
          fireEvent.click(firstItem);
        });
@@ -97,7 +220,7 @@ index 8263a3bf..95789e1e 100644
      }
  
      await waitFor(() => {
-@@ -825,6 +847,9 @@ describe('Sidebar', () => {
+@@ -825,6 +934,9 @@ describe('Sidebar', () => {
        act(() => {
          fireEvent.click(firstItem);
        });
@@ -107,7 +230,7 @@ index 8263a3bf..95789e1e 100644
      }
    });
  
-@@ -863,6 +888,9 @@ describe('Sidebar', () => {
+@@ -863,6 +975,9 @@ describe('Sidebar', () => {
        act(() => {
          fireEvent.click(firstWs);
        });
@@ -117,7 +240,7 @@ index 8263a3bf..95789e1e 100644
      }
  
      // 2. Dispatch custom events
-@@ -955,4 +983,386 @@ describe('Sidebar', () => {
+@@ -955,4 +1070,386 @@ describe('Sidebar', () => {
      unmount();
      fetchSpy.mockRestore();
    });
@@ -505,9 +628,17 @@ index 8263a3bf..95789e1e 100644
 +  });
  });
 diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
-index 7a73dfae..8a9bc402 100644
+index 70329a68..84b5204f 100644
 --- a/kanban/web/src/app/Sidebar.tsx
 +++ b/kanban/web/src/app/Sidebar.tsx
+@@ -1,6 +1,6 @@
+ /**
+  * Sidebar Navigation Rail (KB-P3-34, S6.3, KANBA-166, KANBA-167).
+- * 256px collapsible navigation rail with Plane parity, [👍] 👍kanban branding,
++ * 256px collapsible navigation rail with [👍] 👍kanban branding,
+  * dynamic project list, project creation modal, and accessible keyboard focus trapping.
+  */
+ 
 @@ -74,6 +74,24 @@ export function sanitizeSidebarState(value: string | null): 'open' | 'collapsed'
    return 'open';
  }
@@ -573,7 +704,27 @@ index 7a73dfae..8a9bc402 100644
    const isViewer = user?.workspace_role === 'VIEWER' || user?.workspace_role === 'WORKSPACE_GUEST';
    const canCreateProject = user ? ((user.is_workspace_admin ?? false) || (user.is_server_admin ?? false)) : true;
    const canCreateWorkspace = user ? ((user.is_workspace_admin ?? false) || (user.is_server_admin ?? false)) : true;
-@@ -747,7 +791,9 @@ export function Sidebar({
+@@ -702,6 +746,19 @@ export function Sidebar({
+                   <span>Stickies</span>
+                 </NavLink>
+               </li>
++              <li>
++                <NavLink
++                  to="/docs"
++                  className="kb-sidebar-nav-item"
++                  data-testid="sidebar-docs-link"
++                  aria-current={currentPath === '/docs' || currentPath.startsWith('/docs/') || currentPath.startsWith('/help') ? 'page' : undefined}
++                >
++                  <span className="kb-sidebar-icon" aria-hidden="true">
++                    📖
++                  </span>
++                  <span>Docs</span>
++                </NavLink>
++              </li>
+             </ul>
+           </nav>
+         </div>
+@@ -734,7 +791,9 @@ export function Sidebar({
              ) : (
                projectList.map((proj) => {
                const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
@@ -584,7 +735,7 @@ index 7a73dfae..8a9bc402 100644
                return (
                  <div key={proj.key}>
                    <button
-@@ -770,7 +816,12 @@ export function Sidebar({
+@@ -757,7 +816,12 @@ export function Sidebar({
                    </button>
  
                    {isProjExpanded && (
@@ -598,22 +749,48 @@ index 7a73dfae..8a9bc402 100644
                        <li>
                          <NavLink
                            to={`/projects/${proj.key}/issues`}
-@@ -1032,9 +1083,9 @@ export function Sidebar({
-           setCreateProjectOpen(false);
-         }}
+@@ -785,12 +849,12 @@ export function Sidebar({
+                                   ? 'kb-subnav-active'
+                                   : ''
+                               }`}
+-                              aria-label="List view"
++                              aria-label="Issues view"
+                             >
+                               <span className="kb-sidebar-icon" aria-hidden="true">
+                                 <ListTodo size={14} />
+                               </span>
+-                              <span>📋 List</span>
++                              <span>📋 Issues</span>
+                             </NavLink>
+                           </li>
+                           <li>
+@@ -987,6 +1051,17 @@ export function Sidebar({
+           </nav>
+ 
+           <div className="kb-sidebar-footer">
++            <Link
++              to="/docs"
++              className="kb-sidebar-about-link"
++              data-testid="sidebar-footer-docs-link"
++              title="Documentation Center"
++            >
++              <span className="kb-sidebar-icon" aria-hidden="true">
++                📖
++              </span>
++              <span>Docs</span>
++            </Link>
+             <Link
+               to="/about"
+               className="kb-sidebar-about-link"
+@@ -1010,8 +1085,9 @@ export function Sidebar({
          onCreated={(created) => {
-+          /* v8 ignore start */
            setFetchedProjects((prev) => {
              const exists = prev.some((p) => p.key === created.identifier);
 -            /* v8 ignore next */
-             if (exists) return prev;
+-            if (exists) return prev;
++            if (exists) {
++              return prev;
++            }
              return [
                ...prev,
-@@ -1045,6 +1096,7 @@ export function Sidebar({
-               },
-             ];
-           });
-+          /* v8 ignore stop */
-         }}
-       />
- 
+               {

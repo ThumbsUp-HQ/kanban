@@ -1,40 +1,40 @@
 ================================================================================
 KAN-36 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 7913c2c8, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
 === KAN-36 SCENARIO (a): remember_me=false & absolute_expires_at on workspace switch ===
-Login (remember_me=false) status=200 Set-Cookie=['__Host-kb_session=pA4UIZYCXREm9Mry0--XzJnhscKOs3zGYyn7jHiV7zI.mHavO8FfjTWxbCmL9le5dlwyhYP1Eh8kpRnp8Rt-Zvw; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=RuGPBHYTS6sClef2BDj6ZQ.WtS6nmljmSyjUXWNGozNYDbVFGZNG40azvl8kUAyF68; Path=/; Secure; SameSite=Strict', 'kb_session=pA4UIZYCXREm9Mry0--XzJnhscKOs3zGYyn7jHiV7zI.mHavO8FfjTWxbCmL9le5dlwyhYP1Eh8kpRnp8Rt-Zvw; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=RuGPBHYTS6sClef2BDj6ZQ.WtS6nmljmSyjUXWNGozNYDbVFGZNG40azvl8kUAyF68; Path=/; SameSite=Strict']
-Post-MFA Set-Cookie=['__Host-kb_session=g3MS4Zo40e2e_jW_juRshI9YjANCWy1iA82gJNAOFH8.H5c6ouKOORFgFx4OG-UohZ5pSQJt16t76RyEXd_Isdo; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=Sy2woL68okpsLs3MhDWjvA.LNi86ITb3PVPyS8yFrZGLnDCN5qp27VhjBSep5jSF1U; Path=/; Secure; SameSite=Strict', 'kb_session=g3MS4Zo40e2e_jW_juRshI9YjANCWy1iA82gJNAOFH8.H5c6ouKOORFgFx4OG-UohZ5pSQJt16t76RyEXd_Isdo; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=Sy2woL68okpsLs3MhDWjvA.LNi86ITb3PVPyS8yFrZGLnDCN5qp27VhjBSep5jSF1U; Path=/; SameSite=Strict']
-Originating DB row before switch: 01a1faba-6795-7930-a79f-81db3db9d2f5|f|2026-11-27 20:51:22.615499+00|2026-11-21 04:51:22.645182+00||2|2026-11-20 20:51:22.645542+00
+Login (remember_me=false) status=200 Set-Cookie=['__Host-kb_session=c-FPd9xP7enytyFyr09Cxxzhs78ozWxfkeCEUFmOBaY.2yQUeerBqylBkzCAX2GPI163W0a8vBWtryVq99jd9BI; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=vZhvIapKRV1BVQEUE2-bGw.6cwv8GKyowpNm_9lK81ukc0z369ztCgeox5tT56Ro1A; Path=/; Secure; SameSite=Strict', 'kb_session=c-FPd9xP7enytyFyr09Cxxzhs78ozWxfkeCEUFmOBaY.2yQUeerBqylBkzCAX2GPI163W0a8vBWtryVq99jd9BI; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=vZhvIapKRV1BVQEUE2-bGw.6cwv8GKyowpNm_9lK81ukc0z369ztCgeox5tT56Ro1A; Path=/; SameSite=Strict']
+Post-MFA Set-Cookie=['__Host-kb_session=bM8nsh4fRn3BnwFA6Po-VdhgXAPyvSfTCzfg2I0iptQ.wZ4jFOX63mjNK37tiXrMplFXLN8PNN5oXvpimhK8WjQ; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=VYCDZPiHQ-r1y_9mHenVEQ.tx4I64ouSbRVGd0yeynr9mFKBinMglq03sMXz0C1dMM; Path=/; Secure; SameSite=Strict', 'kb_session=bM8nsh4fRn3BnwFA6Po-VdhgXAPyvSfTCzfg2I0iptQ.wZ4jFOX63mjNK37tiXrMplFXLN8PNN5oXvpimhK8WjQ; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=VYCDZPiHQ-r1y_9mHenVEQ.tx4I64ouSbRVGd0yeynr9mFKBinMglq03sMXz0C1dMM; Path=/; SameSite=Strict']
+Originating DB row before switch: 01a1fb01-ae3a-76c8-b147-a1fbc6b1b7e2|f|2026-11-27 22:09:13.750103+00|2026-11-21 06:09:13.786295+00||2|2026-11-20 22:09:13.786581+00
 GET /api/v1/admin/auth-cards on kanban BEFORE switch/aging: status=200
-Switch response status=200 body={'workspace_id': '01a1faac-6ca3-7ad0-ad75-d1d794aebfed', 'status': 'switched', 'csrf_token': 'wbTLplTz6NrWxwEK5SnaGg.wiebu-kHdAQAoqY-tVo9pzn4BxyJKBp0q6dOl851Dvs'}
-Rotated Set-Cookie=['__Host-kb_session=Z_8SbFZz8F2p_CroPufvBYfR9FS0NTVNa4KfBSPMNbs.bY71IASSLl_aEVofHBk08TAEKbazW3oVt0tAQo8iIB8; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=wbTLplTz6NrWxwEK5SnaGg.wiebu-kHdAQAoqY-tVo9pzn4BxyJKBp0q6dOl851Dvs; Path=/; Secure; SameSite=Strict', 'kb_session=Z_8SbFZz8F2p_CroPufvBYfR9FS0NTVNa4KfBSPMNbs.bY71IASSLl_aEVofHBk08TAEKbazW3oVt0tAQo8iIB8; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=wbTLplTz6NrWxwEK5SnaGg.wiebu-kHdAQAoqY-tVo9pzn4BxyJKBp0q6dOl851Dvs; Path=/; SameSite=Strict']
-Originating DB row after switch: 01a1faba-6795-7930-a79f-81db3db9d2f5|f|2026-11-27 20:51:22.615499+00|2026-11-20 20:51:22.786588+00
-New rotated DB row: 56b9e71c-2435-48f6-a15e-ad9fb19d54b2|f|2026-11-27 20:51:22.615499+00|2026-11-21 04:51:22.785797+00||01a1faba-6795-7930-a79f-81db3db9d2f5|2|2026-11-20 20:51:22.645542+00
+Switch response status=200 body={'workspace_id': '01a1fb00-3ea1-7b2a-875c-b2d47da36ef8', 'status': 'switched', 'csrf_token': 'sQbgb2EGBA2CO47md-J7jA.dk_uctkZv6DWbbz4BmQDfQE1T7zx8ocQt_7FJhLDdxw'}
+Rotated Set-Cookie=['__Host-kb_session=dddgvaVgkBHnY55XsrReGj9VB6hYg2o0L3UpWm9TaPc.qxCq3TNVTAtTiOIgul_vueTYUVu4RC-37Gvigdu0QXM; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=sQbgb2EGBA2CO47md-J7jA.dk_uctkZv6DWbbz4BmQDfQE1T7zx8ocQt_7FJhLDdxw; Path=/; Secure; SameSite=Strict', 'kb_session=dddgvaVgkBHnY55XsrReGj9VB6hYg2o0L3UpWm9TaPc.qxCq3TNVTAtTiOIgul_vueTYUVu4RC-37Gvigdu0QXM; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=sQbgb2EGBA2CO47md-J7jA.dk_uctkZv6DWbbz4BmQDfQE1T7zx8ocQt_7FJhLDdxw; Path=/; SameSite=Strict']
+Originating DB row after switch: 01a1fb01-ae3a-76c8-b147-a1fbc6b1b7e2|f|2026-11-27 22:09:13.750103+00|2026-11-20 22:09:13.882236+00
+New rotated DB row: 05c8485d-e4ad-42f6-8c32-917e67879d09|f|2026-11-27 22:09:13.750103+00|2026-11-21 06:09:13.881918+00||01a1fb01-ae3a-76c8-b147-a1fbc6b1b7e2|2|2026-11-20 22:09:13.786581+00
 
 === KAN-36 SCENARIO (b): Stale aal2_verified_at (>900s) -> switch -> 403 AAL2_STALE & /mcp/admin succeeds ===
-Aged session 56b9e71c-2435-48f6-a15e-ad9fb19d54b2 aal2_verified_at -> 2026-11-20 20:31:23.01287+00
-Rotated session after switch_b: 23683ef9-976a-4818-8538-42f296fd8787|2|2026-11-20 20:31:23.01287+00
-GET /api/v1/admin/auth-cards AFTER aging (>900s) & switch: status=403 body={"type":"urn:kanban:problem:AAL2_STALE","title":"AAL2 Session Stale","status":403,"code":"AAL2_STALE","detail":"AAL2 verification is stale (1200s > 900s).","request_id":"da29832ebe7d42f1b7528cb2e40332b3","methods":["totp","recovery"]}
+Aged session 05c8485d-e4ad-42f6-8c32-917e67879d09 aal2_verified_at -> 2026-11-20 21:49:14.098414+00
+Rotated session after switch_b: 1fbfd798-ecdd-4716-ad57-ca44eda91eb4|2|2026-11-20 21:49:14.098414+00
+GET /api/v1/admin/auth-cards AFTER aging (>900s) & switch: status=403 body={"type":"urn:kanban:problem:AAL2_STALE","title":"AAL2 Session Stale","status":403,"code":"AAL2_STALE","detail":"AAL2 verification is stale (1200s > 900s).","request_id":"67d373a00ec843b19d75341c8d9aa036","methods":["totp","recovery"]}
 Stateless /mcp/admin configure_workspace(get) status=200 isError=False
 
 === KAN-36 SCENARIO (c): Bearer / scoped API key workspace switch returns 401 SESSION_REQUIRED ===
-Bearer+CSRF switch status=401 set_cookie=[] body={"type":"urn:kanban:problem:SESSION_REQUIRED","title":"Session Required","status":401,"code":"SESSION_REQUIRED","detail":"Workspace switching requires an active browser session.","request_id":"6a928c7c8d444bfcb735790d1f72cd5e"}
-X-KB-Subject-Token switch status=401 set_cookie=[] body={"type":"urn:kanban:problem:SESSION_REQUIRED","title":"Session Required","status":401,"code":"SESSION_REQUIRED","detail":"Workspace switching requires an active browser session.","request_id":"49a843e04d5040258236711290983456"}
+Bearer+CSRF switch status=401 set_cookie=[] body={"type":"urn:kanban:problem:SESSION_REQUIRED","title":"Session Required","status":401,"code":"SESSION_REQUIRED","detail":"Workspace switching requires an active browser session.","request_id":"0287b4b417c54b5aae6ebaa07a026cb2"}
+X-KB-Subject-Token switch status=401 set_cookie=[] body={"type":"urn:kanban:problem:SESSION_REQUIRED","title":"Session Required","status":401,"code":"SESSION_REQUIRED","detail":"Workspace switching requires an active browser session.","request_id":"9550227d859f436790e013e6d03af930"}
 
 === KAN-36 SCENARIO (d): Immediate 0ms back-to-back TCP ETag parity ===
-Using fresh settled issue KAN-36 for Scenario (d)
-PATCH_1 hdr="9ce80d8434fd96624dca1de0c48511101e7e7702c5fa0bb7160f99748b742ee5" body="9ce80d8434fd96624dca1de0c48511101e7e7702c5fa0bb7160f99748b742ee5" | 0ms GET hdr="9ce80d8434fd96624dca1de0c48511101e7e7702c5fa0bb7160f99748b742ee5" body="9ce80d8434fd96624dca1de0c48511101e7e7702c5fa0bb7160f99748b742ee5" summary='KAN-36 Updated Step 1'
-0ms PATCH_2 (If-Match="9ce80d8434fd96624dca1de0c48511101e7e7702c5fa0bb7160f99748b742ee5") status=200 new_etag="f5a619eb7953a60f0630efb69b53bc4e7e57255a6a7751466b7e82ce0922dee2"
+Created issue KAN-6 (ETag="14883ca4c9932e04c3ff856d8f4d9a1178fc1b1990be28d90bb930666a83ba85"); executing immediate 0ms PATCH_1...
+PATCH_1 hdr="6de5286de0e672ae00396c7794792105bdb31bb3aa2962f5eba3bbf7b82bd7a8" body="6de5286de0e672ae00396c7794792105bdb31bb3aa2962f5eba3bbf7b82bd7a8" | 0ms GET hdr="6de5286de0e672ae00396c7794792105bdb31bb3aa2962f5eba3bbf7b82bd7a8" body="6de5286de0e672ae00396c7794792105bdb31bb3aa2962f5eba3bbf7b82bd7a8" summary='KAN-6 Updated Step 1'
+0ms PATCH_2 (If-Match="6de5286de0e672ae00396c7794792105bdb31bb3aa2962f5eba3bbf7b82bd7a8") status=200 new_etag="b6159589109fb33d508a19814bb1f1bea6d9fcfc707729ae019be589d970c302"
 Stale If-Match PATCH status=412
-begin-work hdr="1eb42f8aaa246e1412926341370cf62ee4ad1c3d10d6213e74fb514527611b7e" body="1eb42f8aaa246e1412926341370cf62ee4ad1c3d10d6213e74fb514527611b7e" | 0ms GET hdr="1eb42f8aaa246e1412926341370cf62ee4ad1c3d10d6213e74fb514527611b7e"
-transitions hdr=None body=None resp_state=Done | 0ms GET state=In Progress etag="1eb42f8aaa246e1412926341370cf62ee4ad1c3d10d6213e74fb514527611b7e" | 250ms GET state=Done etag="f63ed3f8126e82e7597a68f3173aca8a19d15084f597ae62dd6fd836fa9a37f9" | race=True
-MCP update_ticket etag=c208424dfcb73481efe34c833e47049f2b2db6bf18f269e45f6bd115f6ffa9fd | 0ms MCP read_ticket etag=c208424dfcb73481efe34c833e47049f2b2db6bf18f269e45f6bd115f6ffa9fd | REST GET etag=c208424dfcb73481efe34c833e47049f2b2db6bf18f269e45f6bd115f6ffa9fd
+begin-work hdr="8e973eb52c178d750545b4172f7ce95be2e2002f6ab4ed3bdf87a8614e0cd880" body="8e973eb52c178d750545b4172f7ce95be2e2002f6ab4ed3bdf87a8614e0cd880" | 0ms GET hdr="8e973eb52c178d750545b4172f7ce95be2e2002f6ab4ed3bdf87a8614e0cd880"
+transitions hdr="0d68e0e323638c80c51838e8f89d1c7a25eca3b41e00be7e79e18dec90476c0a" body=None resp_state=Done | 0ms GET state=Done etag="0d68e0e323638c80c51838e8f89d1c7a25eca3b41e00be7e79e18dec90476c0a" | 250ms GET state=Done etag="0d68e0e323638c80c51838e8f89d1c7a25eca3b41e00be7e79e18dec90476c0a" | race=False
+MCP update_ticket etag=1b15073bdbfcb176f18e197972a7b99011a9357b32d62b5ef577394c09ca984f | 0ms MCP read_ticket etag=1b15073bdbfcb176f18e197972a7b99011a9357b32d62b5ef577394c09ca984f | REST GET etag=1b15073bdbfcb176f18e197972a7b99011a9357b32d62b5ef577394c09ca984f
 
 --------------------------------------------------------------------------------
-LIVE_STACK_VERDICT: FAIL
+LIVE_STACK_VERDICT: PASS
 Scenario (a): PASS (remember_me=false omits Max-Age/Expires across login/MFA/switch, preserves absolute_expires_at, revokes old session)
 Scenario (b): PASS (aged aal2_verified_at > 900s preserved across switch, GET /api/v1/admin/auth-cards returns 403 AAL2_STALE; stateless /mcp/admin API key succeeds)
 Scenario (c): PASS (Bearer/X-KB-Subject-Token on /switch returns 401 SESSION_REQUIRED with 0 Set-Cookie headers)
-Scenario (d): FAIL - PATCH -> 0ms GET -> PATCH(If-Match), begin-work -> 0ms GET, and MCP update_ticket -> 0ms read_ticket all have 100% 0ms ETag parity; HOWEVER, POST /api/v1/issues/{key}/transitions (kanban/api/v1/transitions.py:130) lacks `await session.commit()` and omits ETag, so 0ms GET observes pre-commit state (In Progress instead of Done) and stale ETag.
+Scenario (d): PASS (0ms back-to-back TCP PATCH -> GET -> PATCH(If-Match), begin-work -> GET, transitions -> GET, MCP update_ticket -> read_ticket: 100% ETag parity, 0 commit race)

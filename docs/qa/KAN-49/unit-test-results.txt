@@ -1,88 +1,116 @@
-=== test_p4_24_agent_safe_sequences_migration.py ===
+=== Running Database Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/kanban
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 1 item
+collecting ... collecting 5 items                                                             collected 12 items                                                             
 
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  8%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 16%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 25%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 33%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 41%]
+database/tests/test_p1_14_rls_catalog.py::test_06_rls_catalog_gate PASSED [ 50%]
+database/tests/test_p1_05_sequence_concurrency.py::test_06_sequence_concurrency_20_connections PASSED [ 58%]
+database/tests/test_p1_05_sequence_concurrency.py::test_07_sequence_concurrency_150_connections_batches PASSED [ 66%]
+database/tests/test_p1_05_sequence_concurrency.py::test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500 PASSED [ 75%]
+database/tests/test_p1_05_sequence_concurrency.py::test_09_invalid_sequence_count_bounds PASSED [ 83%]
+database/tests/test_p1_05_sequence_concurrency.py::test_10_allocate_issue_sequences_and_verify_activity_chain PASSED [ 91%]
 database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py::test_p4_24_agent_safe_sequences_migration_lifecycle PASSED [100%]
 
-============================== 1 passed in 0.63s ===============================
+============================== 12 passed in 5.98s ==============================
 
-=== test_p1_05_sequence_concurrency.py ===
+=== Running Kanban Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/kanban
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 5 items
+collecting ... collecting 65 items                                                            collected 65 items                                                             
 
-database/tests/test_p1_05_sequence_concurrency.py::test_06_sequence_concurrency_20_connections PASSED [ 20%]
-database/tests/test_p1_05_sequence_concurrency.py::test_07_sequence_concurrency_150_connections_batches PASSED [ 40%]
-database/tests/test_p1_05_sequence_concurrency.py::test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500 PASSED [ 60%]
-database/tests/test_p1_05_sequence_concurrency.py::test_09_invalid_sequence_count_bounds PASSED [ 80%]
-database/tests/test_p1_05_sequence_concurrency.py::test_10_allocate_issue_sequences_and_verify_activity_chain PASSED [100%]
+kanban/tests/services/test_agent_safe_sequences.py::test_activity_event_type_registration PASSED [  1%]
+kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_skips_loaded_and_records_activity PASSED [  3%]
+kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_does_not_skip_when_disabled PASSED [  4%]
+kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_tree_batch_sequence_and_skip_activity PASSED [  6%]
+kanban/tests/services/test_agent_safe_sequences.py::test_copy_issue_batch_sequence_and_skip_activity PASSED [  7%]
+kanban/tests/services/test_activity.py::test_case_6a_payload_over_cap_raises PASSED [  9%]
+kanban/tests/services/test_activity.py::test_case_6b_raising_listener_rolls_back_insert PASSED [ 10%]
+kanban/tests/services/test_activity.py::test_listeners_run_in_order_with_envelope PASSED [ 12%]
+kanban/tests/services/test_activity.py::test_ephemeral_event_notifies_without_persisting PASSED [ 13%]
+kanban/tests/services/test_activity.py::test_unknown_object_raises PASSED [ 15%]
+kanban/tests/services/test_activity.py::test_every_event_type_has_a_category PASSED [ 16%]
+kanban/tests/api/test_issues.py::test_case_1_positive_create_get_etag_304_and_activity PASSED [ 18%]
+kanban/tests/api/test_issues.py::test_case_2_concurrency_if_match_428_412_and_race PASSED [ 20%]
+kanban/tests/api/test_issues.py::test_case_3_security_non_viewer_404_unreadable_parent_422_restricted_parent PASSED [ 21%]
+kanban/tests/api/test_issues.py::test_case_4_sanitization_hidden_html_and_zero_width_summary PASSED [ 23%]
+kanban/tests/api/test_issues.py::test_case_5_boundaries_summary_description_dates PASSED [ 24%]
+kanban/tests/api/test_issues.py::test_case_6_modules_enabled_defaults_and_disabled_rejection PASSED [ 26%]
+kanban/tests/api/test_issues.py::test_case_7_labels_exclusive_group_replacement_and_intra_request_conflict PASSED [ 27%]
+kanban/tests/api/test_issues.py::test_case_8_activity_scalar_patch_and_noop PASSED [ 29%]
+kanban/tests/api/test_issues.py::test_parent_cycle_and_depth_errors PASSED [ 30%]
+kanban/tests/api/test_issues.py::test_list_issues_keyset_pagination PASSED [ 32%]
+kanban/tests/api/test_issues.py::test_base62_and_rank_unit PASSED        [ 33%]
+kanban/tests/api/test_issues.py::test_comprehensive_field_patching_and_validation PASSED [ 35%]
+kanban/tests/api/test_issues.py::test_issues_unit_helpers_and_error_handling PASSED [ 36%]
+kanban/tests/api/test_issues.py::test_services_edge_cases_and_missing_branches PASSED [ 38%]
+kanban/tests/api/test_issues.py::test_issue_and_comment_free_text_secret_scrubbing PASSED [ 40%]
+kanban/tests/api/test_issues.py::test_issue_schema_dedupe_and_json_schema PASSED [ 41%]
+kanban/tests/api/test_issue_copy.py::test_case_1_positive_copy_defaults PASSED [ 43%]
+kanban/tests/api/test_issue_copy.py::test_case_2_security_restricted_sub_issue_tree PASSED [ 44%]
+kanban/tests/api/test_issue_copy.py::test_case_3_boundary_500_chars_copy_too_large_and_depth_6 PASSED [ 46%]
+kanban/tests/api/test_issue_copy.py::test_case_4_options_relates_to_attachments_modules_disabled PASSED [ 47%]
+kanban/tests/api/test_issue_copy.py::test_case_5_atomicity_transaction_rollback PASSED [ 49%]
+kanban/tests/api/test_issue_copy.py::test_case_6_auth_non_viewer_404_and_non_editor_403 PASSED [ 50%]
+kanban/tests/api/test_issue_copy.py::test_issue_copy_service_helpers_unit PASSED [ 52%]
+kanban/tests/api/test_issue_copy.py::test_get_default_state_fallback PASSED [ 53%]
+kanban/tests/api/test_issue_copy.py::test_copy_issue_defensive_view_check PASSED [ 55%]
+kanban/tests/api/test_issue_trees.py::test_case_1_positive_tree_creation PASSED [ 56%]
+kanban/tests/api/test_issue_trees.py::test_case_2_atomicity_and_security PASSED [ 58%]
+kanban/tests/api/test_issue_trees.py::test_case_4_boundary_conditions PASSED [ 60%]
+kanban/tests/api/test_issue_trees.py::test_case_5_modules_defaults_and_disabled PASSED [ 61%]
+kanban/tests/api/test_issue_trees.py::test_case_6_hostile_input_sanitization PASSED [ 63%]
+kanban/tests/api/test_issue_trees.py::test_tree_service_helpers_and_error_mappers PASSED [ 64%]
+kanban/tests/api/test_issue_trees.py::test_tree_service_edge_cases_and_references PASSED [ 66%]
+kanban/tests/api/test_issue_trees.py::test_tree_service_uuid_resolutions_and_joins PASSED [ 67%]
+kanban/tests/api/test_issue_trees.py::test_tree_service_direct_uuid_objects PASSED [ 69%]
+kanban/tests/api/test_projects.py::test_case_1_admin_create_seeds_defaults_and_activity PASSED [ 70%]
+kanban/tests/api/test_projects.py::test_case_2_unreadable_404_and_viewer_patch_403 PASSED [ 72%]
+kanban/tests/api/test_projects.py::test_case_3_validation_and_conflict PASSED [ 73%]
+kanban/tests/api/test_projects.py::test_case_4_boundaries PASSED         [ 75%]
+kanban/tests/api/test_projects.py::test_case_5_module_rules PASSED       [ 76%]
+kanban/tests/api/test_projects.py::test_patch_semantics_and_activity PASSED [ 78%]
+kanban/tests/api/test_projects.py::test_description_too_large PASSED     [ 80%]
+kanban/tests/api/test_projects.py::test_create_authorization PASSED      [ 81%]
+kanban/tests/api/test_list_pagination_and_cursor PASSED                  [ 83%]
+kanban/tests/api/test_cursor_round_trip_and_rejection PASSED             [ 84%]
+kanban/tests/api/test_patch_unchanged_description_and_module_toggle PASSED [ 86%]
+kanban/tests/api/test_projects.py::test_project_members_endpoints PASSED [ 87%]
+kanban/tests/api/test_projects.py::test_serialize_project_capability_fallbacks PASSED [ 89%]
+kanban/tests/api/test_projects.py::test_skip_loaded_sequences_inheritance_and_explicit_override PASSED [ 90%]
+kanban/tests/api/test_projects.py::test_skip_loaded_sequences_end_to_end_rest PASSED [ 92%]
+kanban/tests/api/test_issue_patch_etag_parity.py::test_chained_patch_get_patch_etag_parity PASSED [ 93%]
+kanban/tests/api/test_issue_patch_etag_parity.py::test_workflow_and_provenance_and_mcp_etag_parity PASSED [ 95%]
+kanban/tests/api/test_issue_archive.py::test_case_1_positive_archive_unarchive_and_list_filtering PASSED [ 96%]
+kanban/tests/api/test_issue_archive.py::test_case_2_rule_archive_in_progress_and_open_subissues PASSED [ 98%]
+kanban/tests/api/test_issue_archive.py::test_case_3_security_permissions_patch_guard_and_query_conflict PASSED [100%]
 
-============================== 5 passed in 0.72s ===============================
+============================= 65 passed in 49.69s ==============================
 
-=== test_p1_17_models.py, test_p1_14_rls_catalog.py ===
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/kanban
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 14 items
-
-database/tests/test_p1_17_models.py .............                        [ 92%]
-database/tests/test_p1_14_rls_catalog.py .                               [100%]
-
-============================== 14 passed in 1.48s ==============================
-
-=== test_agent_safe_sequences.py ===
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/kanban
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 5 items
-
-kanban/tests/services/test_agent_safe_sequences.py::test_activity_event_type_registration PASSED [ 20%]
-kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_skips_loaded_and_records_activity PASSED [ 40%]
-kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_does_not_skip_when_disabled PASSED [ 60%]
-kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_tree_batch_sequence_and_skip_activity PASSED [ 80%]
-kanban/tests/services/test_agent_safe_sequences.py::test_copy_issue_batch_sequence_and_skip_activity PASSED [100%]
-
-============================== 5 passed in 0.88s ===============================
-
-=== test_issue_trees.py, test_issue_copy.py, test_issues.py, test_activity.py ===
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/kanban
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 42 items
-
-kanban/tests/services/test_issues.py .................                   [ 40%]
-kanban/tests/services/test_issue_trees.py .......                        [ 57%]
-kanban/tests/services/test_issue_copy.py ..........                      [ 80%]
-kanban/tests/services/test_activity.py ........                          [100%]
-
-============================== 42 passed in 18.12s =============================
-
-=== BACKEND COVERAGE REPORT (>=95% ON MODIFIED MODULES) ===
+=== COVERAGE REPORT ===
 Name                                    Stmts   Miss Branch BrPart  Cover   Missing
 -----------------------------------------------------------------------------------
-database/models/projects.py               108      1      0      0    99%   226
+database/models/projects.py               108      1      0      0    99%   75
 database/models/workspace_settings.py      22      0      0      0   100%
-kanban/issues/tree_service.py             347     14    152      5    95%   83-84, 150->152, 192->194, 219-220, 227->233, 230-231, 319-320, 362, 381, 401-402, 409
-kanban/services/activity.py               214      1      8      1    99%   451
+kanban/api/v1/issue_copy.py                18      0      0      0   100%
+kanban/api/v1/issue_trees.py               20      0      0      0   100%
+kanban/api/v1/issues.py                    58      0      8      0   100%
+kanban/issues/tree_service.py             344     13    152     11    95%   163->exit, 355, 378, 430, 492, 529, 606->612, 648-652, 700, 732, 948-950, 953
+kanban/services/activity.py               214      0      8      1    99%   446->457
 kanban/services/issue_copy.py             126      0     40      0   100%
-kanban/services/issues.py                 456     19    184      6    95%   138-140, 149-152, 161, 233, 246, 252, 281-282, 375, 412, 414, 461, 529-530, 680, 725
+kanban/services/issues.py                 461     10    186      7    97%   320-324, 427, 649->652, 839, 891, 992, 1039->1042, 1132, 1176->1178
+kanban/services/projects.py               194      1     56      1    99%   262
 -----------------------------------------------------------------------------------
-TOTAL                                    1273     35    384     12    96%
+TOTAL                                    1565     25    450     20    98%

@@ -18,18 +18,29 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import select, text
+from starlette.requests import Request
 from starlette.responses import Response
 
 from database.models.auth import UserSession
 from database.session import RLSContext, RLSSessionFactory
+from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException, problem_exception_handler
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
+from kanban.api.v1.workspaces import (
+    UpdateWorkspaceRequest,
+    WorkspaceRoleBindingRequest,
+    bind_workspace_role_endpoint,
+    switch_workspace_endpoint,
+    unbind_workspace_role_endpoint,
+    update_workspace_endpoint,
+)
 from kanban.auth.sessions.cookies import (
     FALLBACK_SESSION_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -45,6 +56,7 @@ from kanban.auth.sessions.resolver import SessionCookieResolver
 from kanban.auth.sessions.service import SessionService
 from kanban.security.envelope import StaticKekProvider
 from kanban.security.keys import KeyMaterial
+from kanban.security.mcp_keys import mint_mcp_api_key
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -326,17 +338,28 @@ async def test_workspace_switch_preserves_absolute_expiry_and_stale_aal2(
         assert age >= 1000, "Stale AAL2 verification must stay stale"
 
     # 4. Non-cookie caller rejection:
-    # A caller lacking a valid browser cookie session (caller.session_id is None)
-    # must be rejected with 401
+    # A caller authenticating with a REAL valid non-cookie token (caller.session_id is None)
+    # must reach workspaces.py:287 and be rejected with 401 SESSION_REQUIRED
+    async with factory.session(ctx_admin) as sess:
+        _key_rec, valid_token = await mint_mcp_api_key(
+            sess,
+            workspace_id=ws1_id,
+            principal_id=admin_id,
+            surface="agent",
+            scopes=["agent:read", "agent:write"],
+            created_by_id=admin_id,
+        )
+
     async with httpx.AsyncClient(
         transport=transport, base_url="https://kanban.local"
     ) as client_no_cookie:
         resp_no_cookie = await client_no_cookie.post(
             f"/api/v1/workspaces/{ws2_id}/switch",
-            headers={"X-KB-Subject-Token": "kb_ephem_dummy_token_without_session"},
+            headers={"X-KB-Subject-Token": valid_token},
         )
-        # 401 Unauthorized or 403 Forbidden without session cookie
-        assert resp_no_cookie.status_code in (401, 403)
+        assert resp_no_cookie.status_code == 401
+        data_no_cookie = resp_no_cookie.json()
+        assert data_no_cookie.get("code") == "SESSION_REQUIRED"
         assert "set-cookie" not in resp_no_cookie.headers
 
 
@@ -445,3 +468,149 @@ async def test_direct_session_service_rotate_for_workspace_switch_unit(
 
         revoked_count = await session_service.revoke_all_for_principal(session, admin_id)
         assert revoked_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_workspace_switch_error_branches(
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """Test error handling branches in switch_workspace_endpoint.
+
+    - line 296: session_factory is None -> 500 INTERNAL_ERROR
+    - lines 325-326: rotate_for_workspace_switch raises ValueError -> 401 SESSION_EXPIRED
+    """
+    factory = RLSSessionFactory(pg_worker_db)
+    session_service = SessionService(key_material.session_hmac_key)
+    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
+    ws2_id = uuid.uuid4()
+
+    ctx_admin = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=1)
+    async with factory.session(ctx_admin) as sess:
+        await sess.execute(
+            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'WS 2')"),
+            {"id": ws2_id, "slug": f"ws-{ws2_id.hex[:10]}"},
+        )
+        issued = await session_service.create_after_login(
+            sess,
+            principal_id=admin_id,
+            workspace_id=ws1_id,
+            remember_me=False,
+            aal_level=1,
+        )
+
+        app = _create_app(factory, key_material, session_service)
+        req = Request({"type": "http", "app": app, "headers": []})
+        caller = PrincipalContext(
+            principal_id=admin_id,
+            workspace_id=ws1_id,
+            session_id=issued.session_id,
+        )
+
+        # 1. session_factory is None -> 500 INTERNAL_ERROR (workspaces.py:296)
+        req.app.state.session_factory = None
+        with pytest.raises(ProblemException) as exc_info:
+            await switch_workspace_endpoint(ws2_id, caller, sess, req)
+        assert exc_info.value.code == "INTERNAL_ERROR"
+        assert exc_info.value.status == 500
+
+        # Restore session_factory
+        req.app.state.session_factory = factory
+
+        # 2. rotate_for_workspace_switch raises ValueError ->
+        # 401 SESSION_EXPIRED (workspaces.py:325-326)
+        with patch.object(
+            session_service,
+            "rotate_for_workspace_switch",
+            side_effect=ValueError("Session revoked or expired"),
+        ):
+            with pytest.raises(ProblemException) as exc_info:
+                await switch_workspace_endpoint(ws2_id, caller, sess, req)
+            assert exc_info.value.code == "SESSION_EXPIRED"
+            assert exc_info.value.status == 401
+
+
+@pytest.mark.asyncio
+async def test_workspace_endpoint_admin_checks_and_conflicts(
+    pg_worker_db: AsyncEngine,
+) -> None:
+    """Test update_workspace_endpoint and role binding error branches.
+
+    - line 403: non-admin update -> 403 INSUFFICIENT_CAPABILITY
+    - line 416: non-existent workspace -> 404 NOT_FOUND
+    - line 448: conflicting slug -> 409 WORKSPACE_SLUG_CONFLICT
+    - lines 512, 544: non-admin role bindings -> 403 INSUFFICIENT_CAPABILITY
+    """
+    factory = RLSSessionFactory(pg_worker_db)
+    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
+    member_id = uuid.uuid4()
+
+    # Member session without admin roles
+    ctx_member = RLSContext(principal_id=member_id, workspace_id=ws1_id, aal_level=1)
+    async with factory.session(ctx_member) as sess_member:
+        caller_member = PrincipalContext(principal_id=member_id, workspace_id=ws1_id)
+
+        # 1. Non-admin update -> 403 (workspaces.py:403)
+        with pytest.raises(ProblemException) as exc_info:
+            await update_workspace_endpoint(
+                ws1_id, UpdateWorkspaceRequest(name="Hacked"), caller_member, sess_member
+            )
+        assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
+        assert exc_info.value.status == 403
+
+        # 2. Non-admin bind role -> 403 (workspaces.py:512)
+        binding_req = WorkspaceRoleBindingRequest(principal_id=member_id, role="MEMBER")
+        with pytest.raises(ProblemException) as exc_info:
+            await bind_workspace_role_endpoint(ws1_id, binding_req, caller_member, sess_member)
+        assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
+        assert exc_info.value.status == 403
+
+        # 3. Non-admin unbind role -> 403 (workspaces.py:544)
+        with pytest.raises(ProblemException) as exc_info:
+            await unbind_workspace_role_endpoint(ws1_id, binding_req, caller_member, sess_member)
+        assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
+        assert exc_info.value.status == 403
+
+    # Admin session
+    ctx_admin = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=1)
+    async with factory.session(ctx_admin) as sess_admin:
+        caller_admin = PrincipalContext(principal_id=admin_id, workspace_id=ws1_id)
+
+        # 4. Non-existent workspace -> 404 (workspaces.py:416)
+        fake_ws = uuid.uuid4()
+        with pytest.raises(ProblemException) as exc_info:
+            await update_workspace_endpoint(
+                fake_ws, UpdateWorkspaceRequest(name="New"), caller_admin, sess_admin
+            )
+        assert exc_info.value.code == "NOT_FOUND"
+        assert exc_info.value.status == 404
+
+        # 5. Conflicting slug -> 409 (workspaces.py:448)
+        other_ws = uuid.uuid4()
+        await sess_admin.execute(
+            text(
+                "INSERT INTO workspaces (id, slug, name) "
+                "VALUES (:id, 'slug-conflict-x', 'WS Other')"
+            ),
+            {"id": other_ws},
+        )
+        with pytest.raises(ProblemException) as exc_info:
+            await update_workspace_endpoint(
+                ws1_id, UpdateWorkspaceRequest(slug="slug-conflict-x"), caller_admin, sess_admin
+            )
+        assert exc_info.value.code == "WORKSPACE_SLUG_CONFLICT"
+        assert exc_info.value.status == 409
+
+        # 6. Name update when WorkspaceSettings row exists (covers lines 428-430)
+        resp_name = await update_workspace_endpoint(
+            ws1_id, UpdateWorkspaceRequest(name="Updated Name WS"), caller_admin, sess_admin
+        )
+        assert resp_name.name == "Updated Name WS"
+
+    # 7. Slug update with same slug in fresh session (post-commit) (covers line 440->456 no-op path)
+    async with factory.session(ctx_admin) as sess_admin2:
+        caller_admin2 = PrincipalContext(principal_id=admin_id, workspace_id=ws1_id)
+        resp_same_slug = await update_workspace_endpoint(
+            ws1_id, UpdateWorkspaceRequest(slug=resp_name.slug), caller_admin2, sess_admin2
+        )
+        assert resp_same_slug.slug == resp_name.slug

@@ -1,78 +1,40 @@
-=== 1. RUFF CHECK ===
-$ uv run ruff check kanban database mcp agent scripts
-All checks passed!
-
-=== 2. RUFF FORMAT CHECK ===
-$ uv run ruff format --check kanban database mcp agent scripts
-1004 files already formatted
-
-=== 3. MYPY TYPECHECK ===
-$ uv run mypy kanban database mcp agent scripts
-Success: no issues found in 996 source files
-
-=== 4. CHECK MIGRATIONS ===
+=== STATIC GATES & BUILD VERIFICATION (HEAD 7913c2c81b47de7e551fc5f76f5f180073d38b2a) ===
 $ uv run kanban-ctl db check-migrations
-OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk
+OK: all 63 migrations are valid (single head: p4_24_agent_safe_sequences).
+Exit code: 0
 
-=== 5. LINT-IMPORTS ===
+$ uv run ruff check .
+All checks passed!
+Exit code: 0
+
+$ uv run ruff format --check .
+2018 files already formatted
+Exit code: 0
+
+$ uv run mypy database kanban mcp agent
+Success: no issues found in 995 source files
+Exit code: 0
+
 $ uv run lint-imports
-
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 983 files, 3499 dependencies.
---------------------------------------
-
-Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-mcp forbidden from importing database KEPT (48 ignored imports)
-
 Contracts: 2 kept, 0 broken.
+Exit code: 0
 
-=== 6. FRONTEND TYPECHECK (tsc -b --noEmit) ===
-$ cd kanban/web && npm run typecheck
-
-> @kanban/web@0.1.0 typecheck
+$ pnpm --dir kanban/web run typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
 > tsc -b --noEmit
+Exit code: 0
 
-Clean: 0 errors.
-
-=== 7. ESLINT (eslint . --max-warnings 0) ===
-$ cd kanban/web && npm run lint
-
-> @kanban/web@0.1.0 lint
+$ pnpm --dir kanban/web run lint
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
 > eslint . --max-warnings 0
+Exit code: 0
 
-Clean: 0 warnings.
-
-=== 8. FRONTEND PRODUCTION BUILD (tsc -b && vite build) ===
-$ cd kanban/web && npm run build
-
-> @kanban/web@0.1.0 build
+$ pnpm --dir kanban/web run build
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
 > tsc -b && vite build
+built in 1.22s
+Exit code: 0
 
-vite v8.3.8 building client environment for production...
-✓ 720 modules transformed.
-dist/index.html                             0.51 kB │ gzip:   0.32 kB
-dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-BJiKR0z9.css            461.23 kB │ gzip:  64.86 kB
-dist/assets/index-C9tuxmQ2.js           2,380.91 kB │ gzip: 660.77 kB
-✓ built in 2.27s
-
-=== 9. CHECK NO DASHES (0 EM/EN-DASHES) ===
 $ python3 -m scripts.check_no_dashes --all
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 0 forbidden unicode dashes found across repository.
-
-$ python3 -m scripts.check_no_dashes /home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md
-0 forbidden unicode dashes found across wiki.
+Exit code: 0

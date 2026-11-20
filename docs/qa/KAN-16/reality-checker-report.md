@@ -1,126 +1,124 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive Clean-Room R1 audit only (0 shell commands executed, 0 URLs visited, 0 files modified; inspected exclusively via `read_file` per passive forensic rules).
+**Commands Executed**: Passive forensic audit only (`read_file` across `docs/qa/KAN-16/*`, 16 PNGs in `docs/qa/KAN-16/screenshots/`, and on-disk sources under `kanban/web/src/components/help/` and `kanban/web/src/features/docs-center/`; zero shell commands, zero URLs visited, zero files modified). Note: the prompt paths `kanban/web/src/features/docs/DocsCenterPage.tsx`, `DocsCenterPage.css`, and `kanban/web/src/components/help/HelpDrawer.tsx` do not exist on disk; the actual on-disk files are in `kanban/web/src/features/docs-center/`.
 **Evidence Captured**:
-- QA Packet in `docs/qa/KAN-16/`: `message-to-reality-checker.md`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `ui-specialist-review.md`
-- 11 live Playwright PNG screenshots in `docs/qa/KAN-16/screenshots/`
-- Direct source verification across `scripts/sync_wiki_bundle.py`, `kanban/web/src/features/docs-center/*`, `kanban/web/src/components/help/*`, `kanban/web/src/app/{routes.tsx,AppShell.tsx,shellPanels.tsx,Sidebar.tsx,Topbar.tsx}`, `kanban/web/src/features/auth/useSessionGuard.ts` (note: located under `features/auth/`, not `src/auth/`), and studio pages (`ProjectSettingsPage.tsx`, `WorkspaceSettingsPage.tsx`, `WorkflowStudioPage.tsx`, `AuthStudioPage.tsx`, `McpAccessStudio.tsx`, `AiStudioPage.tsx`, `StandaloneStatusPanel.tsx`)
+- `docs/qa/KAN-16/message-to-reality-checker.md` (RC1 builder packet referencing `fix/KAN-16-rc1`, 27 chapters, 11 screenshots)
+- `docs/qa/KAN-16/changed-files-manifest.txt` (25 SHA-256 entries, including 16 PNGs)
+- `docs/qa/KAN-16/git-diff.patch` (128 lines covering only `FieldHelpHint.tsx` and `FieldHelpHint.test.tsx`)
+- `docs/qa/KAN-16/unit-test-results.txt` (run in `swarm-b-kan16-rc1-07a90f50` worktree: 14 files / 350 tests passed, coverage run for `DocsCenter.test.tsx` only)
+- `docs/qa/KAN-16/build-or-typecheck.txt` (verified at HEAD `7913c2c81b47de7e551fc5f76f5f180073d38b2a`: 9 static/build commands exited 0)
+- `docs/qa/KAN-16/live-fullstack-proof.txt` (unmocked `kanban-liveqa-1` at `http://127.0.0.1:18961`, commit `7913c2c8`, 12 screenshots listed)
+- `docs/qa/KAN-16/api-specialist-review.md` and `docs/qa/KAN-16/ui-specialist-review.md`
+- All 16 PNG screenshots in `docs/qa/KAN-16/screenshots/` inspected via `read_file`.
 
-**QA Cross-Validation**:
-- **Confirmed**:
-  - Offline `/docs` and `/help/:slug` routes are publicly accessible pre-bootstrap (`PUBLIC_PATH_PREFIXES` includes `'/docs'` and `'/help'` in `useSessionGuard.ts`, and top-level routes in `routes.tsx` lines 1994-2008 bypass `AppShell`).
-  - `scripts/sync_wiki_bundle.py` compiles cleanly (`ruff` and `mypy` 0 issues) and bundles 27 chapters into `wikiManifest.ts`.
-  - `DocsCenter.test.tsx` passes 29/29 tests with 99.39% statements, 97.59% branches, 100% functions, 100% lines coverage; `tsc -b --noEmit` and `eslint . --max-warnings 0` exit 0; `check_no_dashes.py` exits 0; `cssTokensAudit.test.ts` passes 4/4.
-  - Live Playwright unmocked container (`kanban-liveqa-3`) verified 0 external egress, 0 console errors, 0 page errors, 0 HTTP 5xx responses, live Mermaid SVG rendering, and `HelpDrawer` preserving `"UNSAVED-DRAFT-42"` on `/projects/KAN/settings`.
-- **Challenged / Discrepancies Found**:
-  1. `ui-specialist-review.md` (line 84) claims `DocsCenter.test.tsx` passed `29/29 tests in 1.23s`, whereas verbatim `unit-test-results.txt` (line 15) shows `Duration  3.23s`.
-  2. `ui-specialist-review.md` (line 91) claims `344/344 tests passed across all 11 touched studios`, whereas `unit-test-results.txt` shows 29 tests in `DocsCenter.test.tsx` plus 315 tests across 13 files (which include `cssTokensAudit.test.ts` [4] and `FieldHelpHint.test.tsx` [23]), meaning 288 tests across the 11 studio test files (344 total across all 14 test files).
-  3. `message-to-reality-checker.md` (line 76) claims `Stderr act(...) warnings: 0`, which holds for `DocsCenter.test.tsx` and `RunnerStudioPage.test.tsx`, but `unit-test-results.txt` (lines 43-209) contains multiple `act(...)` and controlled-input warnings from `StandaloneStatusPanel.test.tsx`.
-  4. `message-to-reality-checker.md` (line 96) reports Vite build time as `1.48s`, whereas `build-or-typecheck.txt` (line 33) shows `built in 1.62s` alongside chunk-size warnings (`mermaid.worker` 1,530.54 kB and `index` 2,369.70 kB > 500 kB).
-  5. `ui-specialist-review.md` claims clean responsive adaptation across Tablet and Mobile, which is contradicted by visual inspection of `live-docs-tablet-light.png` and `live-docs-mobile-light.png` (no mobile/tablet chapter navigation UI exists when `.kb-docs-sidebar` is hidden).
+**QA Cross-Validation**: **CHALLENGED**. Both `api-specialist-review.md` and `ui-specialist-review.md` issued `APPROVED` while overlooking concrete defects directly visible in the screenshots, code, and test packet:
+1. `api-specialist-review.md` (lines 59-81) quotes a `resolveSafeDocImageUrl` implementation with `encodeURIComponent(clean)` and `..` / `/` / `\` path-traversal rejection. Actual on-disk `kanban/web/src/features/docs-center/DocMarkdownViewer.tsx` (lines 29-55) does NOT contain `encodeURIComponent` or any `..` / `\` checks; `resolveSafeDocImageUrl('/docs-images/../secret')` returns `'/docs-images/../secret'` untouched.
+2. `api-specialist-review.md` (line 135) cites `1.28s, 720 modules transformed`, whereas `build-or-typecheck.txt` (line 35) reports `built in 1.22s` with no module count.
+3. `ui-specialist-review.md` did not flag 4 visual defects plainly visible in the Round 2 screenshots (clipped `"Architectural"` filter tab, literal `<a id="system-topology"></a>` HTML text rendered in body, duplicated `[Guide]`/`[Informational]`/`[Architectural]` prefixes + badges in sidebar, and a `404 - Page Not Found` inside the bundled `14-custom-fields-studio.png` screenshot).
+4. Both specialist reviews ignored 4 stale 27-chapter screenshots still present in `docs/qa/KAN-16/screenshots/` and the fact that `unit-test-results.txt` was executed in an earlier worktree (`swarm-b-kan16-rc1-07a90f50`) with zero coverage metrics collected for `FieldHelpHint.tsx`.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots inspected (all 11 PNGs):
-  - `docs/qa/KAN-16/screenshots/live-docs-desktop-light.png` (1440x900 Light)
-  - `docs/qa/KAN-16/screenshots/live-docs-desktop-dark.png` (1440x900 Dark)
-  - `docs/qa/KAN-16/screenshots/live-docs-tablet-light.png` (768x1024 Light)
-  - `docs/qa/KAN-16/screenshots/live-docs-mobile-light.png` (390x844 Light)
-  - `docs/qa/KAN-16/screenshots/live-help-guide-custom-fields-light.png` (1440x900 Light, `/help/Guide-Custom-Fields`)
-  - `docs/qa/KAN-16/screenshots/live-docs-search-listbox-light.png` (1440x900 Light, search `"Mermaid"`)
-  - `docs/qa/KAN-16/screenshots/live-project-settings-field-help-popover-light.png` (1440x900 Light, `(?)` popover + `"UNSAVED-DRAFT-42"`)
-  - `docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-light.png` (1440x900 Light, `HelpDrawer` open over blurred form)
-  - `docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-dark.png` (1440x900 Dark, `HelpDrawer` open)
-  - `docs/qa/KAN-16/screenshots/live-help-drawer-mobile-light.png` (390x844 Light, `HelpDrawer` 100vw)
-  - `docs/qa/KAN-16/screenshots/live-admin-ai-help-drawer-light.png` (1440x900 Light, `/admin/ai` `StudioDocLink`)
-- User journey evidence:
-  - `/docs` landing -> `/help/Guide-Custom-Fields` deep link -> `"Mermaid"` instant search listbox -> `/projects/KAN/settings` `(?)` popover -> `More info ->` slide-over `HelpDrawer` preserving `"UNSAVED-DRAFT-42"` -> `/admin/ai` `StudioDocLink` -> `HelpDrawer`
-- Cross-browser comparison: Only Chromium Playwright screenshots provided; no Firefox/WebKit screenshots present.
+- Round 2 Live Full-Stack Screenshots (28 chapters, `7913c2c8`):
+  - `live-docs-desktop-light.png` (1440x900 Light `/docs`)
+  - `live-docs-desktop-dark.png` (1440x900 Dark `/docs`, scrolled sidebar)
+  - `live-docs-tablet-light.png` (768x1024 Light `/docs`)
+  - `live-docs-tablet-drawer-light.png` (768x1024 Light slide-over Chapters drawer)
+  - `live-docs-mobile-light.png` (390x844 Light `/docs`)
+  - `live-docs-mobile-drawer-light.png` (390x844 Light slide-over Chapters drawer)
+  - `live-docs-embedded-images-light.png` (`/docs/admin-custom-scripted-fields-and-sandbox` with `/docs-images/14-custom-fields-studio.png`)
+  - `live-project-settings-field-help-popover-light.png` (`(?)` popover on Project Modules)
+  - `live-project-settings-help-drawer-light.png` (`HelpDrawer` Light in Project Settings, Chapter 24 of 28)
+  - `live-project-settings-help-drawer-dark.png` (`HelpDrawer` Dark in Project Settings, Chapter 24 of 28)
+  - `live-project-settings-escape-focus-restored.png` (after `Escape` on `/projects/KAN/settings`)
+  - `live-custom-fields-escape-focus-restored.png` (after `Escape` on `/projects/SEC2/settings/custom-fields`)
+- Stale Round 1 Screenshots still in `docs/qa/KAN-16/screenshots/` (27 chapters, no filter tabs/badges):
+  - `live-docs-search-listbox-light.png`
+  - `live-admin-ai-help-drawer-light.png` (shows `Chapter 15 of 27`)
+  - `live-help-drawer-mobile-light.png` (shows `Chapter 23 of 27`)
+  - `live-help-guide-custom-fields-light.png` (shows `Chapter 10 of 27`)
 
 **What System Actually Delivers**:
-- **Desktop Light (`live-docs-desktop-light.png`, `live-help-guide-custom-fields-light.png`, `live-docs-search-listbox-light.png`)**: Clean 3-column layout (categories rail, prose content, right `ON THIS PAGE` TOC rail), `Chapter 11 of 27` (`Home` / `Overview`), rendered Mermaid diagram (`Alt: Mermaid diagram` tooltip visible), and responsive instant search listbox showing 8 matching results with category and snippet. However, `System Architecture` appears first in the left rail and `Home` is `Chapter 11 of 27` due to alphabetical `.md` sorting in `sync_wiki_bundle.py`.
-- **Desktop Dark (`live-docs-desktop-dark.png`, `live-project-settings-help-drawer-dark.png`)**: Dark tokens render cleanly in the main pane and `HelpDrawer`, but `live-docs-desktop-dark.png` is captured mid-scroll where the sticky `.kb-docs-sidebar` (`height: calc(100vh - var(--topbar-h))`) slices `"Three-Surface Model Context..."` horizontally at the bottom edge of the rail and leaves a dark void underneath it.
-- **Tablet & Mobile (`live-docs-tablet-light.png`, `live-docs-mobile-light.png`)**: Both the right TOC rail (`<= 1024px`) and left chapters sidebar (`<= 768px`) are set to `display: none` in `DocsCenterPage.css`, leaving zero chapter-switcher or drawer menu on 768px tablet or 390px mobile. On 390px mobile, `"Kanban Docs"` and `"Offline Center"` wrap onto 2 lines each and the search input placeholder clips to `"Search offline "`.
-- **Contextual `(?)` Popover & `HelpDrawer` (`live-project-settings-field-help-popover-light.png`, `live-project-settings-help-drawer-light.png`, `live-help-drawer-mobile-light.png`, `live-admin-ai-help-drawer-light.png`)**: `FieldHelpHint` opens cleanly over `/projects/KAN/settings`, and clicking `More info ->` opens the 480px `HelpDrawer` (390px / 100vw on mobile) while keeping `/projects/KAN/settings` mounted and `"UNSAVED-DRAFT-42"` intact. Drawer header titles truncate (`"Ticket Screen, Peek Drawer, a..."`) and `SECTIONS` TOC links show raw markdown backticks (e.g., `` (`C`) ``, `` (`/admin/ai`) ``).
+- Pre-bootstrap `/docs` loads unauthenticated in 1420 ms with `Home` ordered as `Chapter 1 of 28`, 28 sidebar links, and clean sticky sidebar/TOC scrolling (`live-docs-desktop-light.png`, `live-docs-desktop-dark.png`).
+- Tablet (768x1024) and Mobile (390x844) render a `44px` `Chapters` button, unclipped `"Search offline docs..."` input on row 2, zero horizontal page overflow, and a functioning left slide-over Chapters drawer (`live-docs-tablet-light.png`, `live-docs-tablet-drawer-light.png`, `live-docs-mobile-light.png`, `live-docs-mobile-drawer-light.png`).
+- On `Escape` from `HelpDrawer`, `document.activeElement` visibly returns to the `(?)` `<button>` (`live-project-settings-escape-focus-restored.png`, `live-custom-fields-escape-focus-restored.png`) and preserves unsaved draft `"UNSAVED-DRAFT-42"`; however, returning focus to `(?)` immediately triggers `FieldHelpHint`'s `handleFocus` (`ctrl.focus(popupId)`) and re-opens the popover over underlying form controls.
+- Visual defects remain in `/docs`: the 4th sidebar filter tab `"Architectural"` is clipped to `"A"` (`live-docs-desktop-light.png`), literal HTML `<a id="system-topology"></a>` renders as visible text (`live-docs-desktop-light.png`, `live-docs-desktop-dark.png`, `live-docs-tablet-light.png`), sidebar items repeat category labels (`[Guide] ... [Guide]`), and the bundled `/docs-images/14-custom-fields-studio.png` asset depicts a `404 - Page Not Found` page (`live-docs-embedded-images-light.png`).
 
 ## 🧪 Integration Testing Results
-- **End-to-End User Journeys**: **PARTIAL PASS**
-  - Desktop `/docs` landing, `/help/:slug` alias, instant search, Mermaid rendering, and `/projects/KAN/settings` + `/admin/ai` `FieldHelpHint`/`StudioDocLink` -> `HelpDrawer` preserving `"UNSAVED-DRAFT-42"` PASS based on screenshots and `live-fullstack-proof.txt`.
-  - Mobile and 768px Tablet chapter-browsing journey FAILS (`live-docs-tablet-light.png` and `live-docs-mobile-light.png` show no sidebar, no TOC, and no mobile chapter menu trigger).
-  - Markdown chapters containing embedded `![alt](images/...)` screenshots FAIL image rendering in `DocMarkdownViewer.tsx` (verified by code inspection against `wikiManifest.ts` line 87).
-- **Cross-Device Consistency**: **FAIL (Mobile/Tablet navigation & header wrapping)**
-  - `horizontal overflow = false` holds across Desktop (1440x900), Tablet (768x1024), and Mobile (390x844), and Mobile `HelpDrawer` fits 390px (`live-help-drawer-mobile-light.png`). However, hiding `.kb-docs-sidebar` at `<= 768px` without a mobile/tablet navigation toggle breaks chapter discovery, and the 390px header wraps/clips (`live-docs-mobile-light.png`).
-- **Performance Validation**: **PASS**
-  - `/docs`: 1023 ms; `/help/Guide-Custom-Fields`: 605 ms; `/projects/KAN/settings`: 1111 ms (all under 3s threshold, 0 external requests, 0 console/page errors, 0 HTTP 5xx).
-- **Specification Compliance**: **PARTIAL PASS**
-  - Offline wiki bundling (27 chapters), pre-bootstrap public `/docs` & `/help` access, `Sidebar.tsx` + `Topbar.tsx` entry points, form-preserving `HelpDrawer`, `(?)` popovers, `StudioDocLink` across 11 studios, and zero inline JSX `style={...}` props are implemented.
-  - Gaps: no mobile/tablet chapter navigation fallback, no markdown image (`![alt](src)`) support in `DocMarkdownViewer.tsx`, and missing `Tab` focus-trap/restoration in `HelpDrawer.tsx`.
+- **End-to-End User Journeys**: **PARTIAL PASS / NEEDS WORK**
+  - `/docs` pre-bootstrap landing, Chapter 1 ordering, and mobile/tablet Chapters drawer: PASS (`live-docs-desktop-light.png`, `live-docs-mobile-drawer-light.png`), except mobile drawer lacks focus move/trap/restore (`DocsCenterPage.tsx` lines 310-366).
+  - Embedded `/docs-images/*.png` loading: PASS for local serving (`naturalWidth=1440`, 0 external egress), FAIL on bundled image content (`14-custom-fields-studio.png` shows a 404 screen in `live-docs-embedded-images-light.png`).
+  - `FieldHelpHint` `(?)` -> `More info ->` -> `HelpDrawer` -> `Escape` focus restoration: PASS for focus ring on `(?)` button and draft retention (`live-project-settings-escape-focus-restored.png`, `live-custom-fields-escape-focus-restored.png`), with popover re-opening side effect on `Escape`.
+  - Docs search dropdown: Only evidenced by stale 27-chapter screenshot `live-docs-search-listbox-light.png` (which also shows raw ```` ```mermaid ```` fences in snippets).
+- **Cross-Device Consistency**: **PARTIAL PASS** - Desktop (1440x900), Tablet (768x1024), and Mobile (390x844) avoid page horizontal overflow, but Desktop sidebar filter tabs clip `"Architectural"` to `"A"`, and Mobile drawer `[Informational]` pills crowd the drawer edge (`live-docs-mobile-drawer-light.png`).
+- **Performance Validation**: **PASS** - `GET http://127.0.0.1:18961/docs` loaded in `1420 ms` (< 3000 ms budget) with 0 console errors, 0 page errors, 0 HTTP 5xx, and 0 external egress requests (`live-fullstack-proof.txt`).
+- **Specification Compliance**: **FAIL**
+  - Required: `>=95%` unit test coverage on touched modules verified on the final commit, plus path-traversal rejection claimed in `api-specialist-review.md` (`..`, `/`, `\`).
+  - Reality: `unit-test-results.txt` was run on worktree `swarm-b-kan16-rc1-07a90f50` (not `7913c2c8`), excludes `FieldHelpHint.tsx` from `test:coverage`, and `DocMarkdownViewer.tsx` (`resolveSafeDocImageUrl`) does not reject `..` or `\`.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- `StandaloneStatusPanel.test.tsx` in `unit-test-results.txt` (lines 43-209) still emits `act(...)` and controlled/uncontrolled input warnings (masked by `message-to-reality-checker.md` claiming `Stderr act(...) warnings: 0`).
-- Vite production build (`build-or-typecheck.txt` lines 28-32) still emits >500 kB chunk warnings (`mermaid.worker` 1,530.54 kB, `index` 2,369.70 kB).
+1. Stale 27-chapter RC1 documentation/artifacts (`message-to-reality-checker.md` and 4 PNGs in `docs/qa/KAN-16/screenshots/`) remain mixed into the Round 2 verification packet.
 
 **New Issues Discovered**:
-1. **No Mobile/Tablet Chapter Navigation (`DocsCenterPage.tsx`, `DocsCenterPage.css`, `live-docs-tablet-light.png`, `live-docs-mobile-light.png`)**: At `<= 768px` (which includes 768px tablet and 390px mobile), `.kb-docs-sidebar { display: none; }` removes the 27-chapter navigation rail with no hamburger drawer or chapter `<select>` fallback.
-2. **Markdown Image Syntax Broken (`DocMarkdownViewer.tsx` vs `wikiManifest.ts`)**: `renderInlineMarkdown` (`DocMarkdownViewer.tsx` lines 35-36) lacks `![alt](src)` matching, and `isSafeUrl` rejects relative `images/...` paths. Embedded images in bundled wiki chapters (e.g., `admin-custom-scripted-fields-and-sandbox`) degrade to literal `!Alt Text` strings, and no wiki `images/*.png` assets are bundled in `changed-files-manifest.txt`.
-3. **Mobile Header Wrapping & Placeholder Truncation (`live-docs-mobile-light.png`, `DocsCenterPage.css` lines 318-331)**: At 390px, `"Kanban Docs"` and `"Offline Center"` wrap onto 2 lines and the search placeholder clips to `"Search offline "`.
-4. **`HelpDrawer` Modal Focus & Prop Sync Gaps (`HelpDrawer.tsx`)**: Despite `role="dialog"` and `aria-modal="true"`, `HelpDrawer.tsx` neither moves initial focus into the dialog, traps `Tab` focus inside the drawer, nor restores focus to the invoking `(?)` / `StudioDocLink` trigger on close. Also `activeAnchor` `useState(initialAnchor)` (line 49) would not resync if `arg` changes while already mounted.
-5. **Unverified 9 of 11 Studios in Live Stack (`live-fullstack-proof.txt`)**: Only `/projects/KAN/settings` and `/admin/ai` have live Playwright proof; the other 9 studios rely on Vitest unit tests only.
-6. **Minor Polish / Organization Issues**:
-   - `sync_wiki_bundle.py` (line 256) sorts files alphabetically, placing `System Architecture` first and `Home` (`Overview`) at `Chapter 11 of 27`.
-   - `HelpDrawer.tsx` and `DocsCenterPage.tsx` TOC rails render raw markdown backticks inside section titles (visible in `live-project-settings-help-drawer-light.png` and `live-admin-ai-help-drawer-light.png`).
-   - `routes.tsx` duplicates `/docs`, `/docs/:slug`, `/help`, `/help/:slug` at lines 1994-2008 and lines 2037-2051 (inner routes are shadowed/dead).
-   - `live-docs-desktop-dark.png` shows the sticky sidebar clipping `"Three-Surface Model Context..."` mid-line when scrolled.
+1. **Path Traversal Guard Missing vs. API Review Claim (`DocMarkdownViewer.tsx` lines 29-55 vs `api-specialist-review.md` lines 59-81)**: `resolveSafeDocImageUrl` accepts `images/../...` and `/docs-images/../...` without rejecting `..`, `\`, or URL-encoding filenames.
+2. **Clipped `"Architectural"` Filter Tab (`DocsCenterPage.css` lines 214-237, `live-docs-desktop-light.png`)**: In the 260px desktop sidebar, `.kb-docs-filter-tabs` overflows and clips `"Architectural"` to `"A"`.
+3. **Raw HTML Tag Rendered as Text (`DocMarkdownViewer.tsx`, `live-docs-desktop-light.png`)**: `<a id="system-topology"></a>` displays verbatim as text above `Core System Architecture #`.
+4. **Duplicated Category Labels in Sidebar (`live-docs-desktop-light.png`, `live-docs-desktop-dark.png`, `live-docs-tablet-drawer-light.png`, `live-docs-mobile-drawer-light.png`)**: Titles like `[Guide] ...` and `[Architectural] ...` render alongside identical `[Guide]`/`[Architectural]` pills.
+5. **Broken 404 Content in Bundled Screenshot (`live-docs-embedded-images-light.png`)**: `/docs-images/14-custom-fields-studio.png` displays a `404 - Page Not Found` UI screen.
+6. **Missing Focus Management on Mobile Chapters Drawer (`DocsCenterPage.tsx` lines 310-366)**: `role="dialog"` / `aria-modal="true"` drawer lacks initial focus move, `Tab` trap, and focus restoration to `docs-mobile-chapters-btn` on close.
+7. **Unintended Popover Re-open on `HelpDrawer` `Escape` (`FieldHelpHint.tsx` lines 166-170 & `HelpDrawer.tsx` lines 65-75)**: Restoring focus to `(?)` fires `onFocus` -> `ctrl.focus(popupId)` and immediately opens the popover over form fields (`live-custom-fields-escape-focus-restored.png`).
+8. **Missing Coverage & Commit Parity in `unit-test-results.txt`**: `test:coverage` omits `FieldHelpHint.tsx`, and test logs were generated in `swarm-b-kan16-rc1-07a90f50` rather than `7913c2c8`.
 
 **Critical Issues**:
-1. Mobile (`390x844`) and Tablet (`768x1024`) users have no chapter navigation menu when `.kb-docs-sidebar` is hidden (`live-docs-tablet-light.png`, `live-docs-mobile-light.png`).
-2. `DocMarkdownViewer.tsx` fails to render `![alt](src)` markdown images present in `wikiManifest.ts` (`admin-custom-scripted-fields-and-sandbox`), outputting stray `!Alt Text` prose instead.
+1. `resolveSafeDocImageUrl` in `DocMarkdownViewer.tsx` lacks the `..` and `\` path-traversal guard claimed by `api-specialist-review.md` (and lacks unit tests for `..` / `\` traversal).
+2. QA evidence packet discrepancy: `unit-test-results.txt` omits coverage for `FieldHelpHint.tsx` and predates `7913c2c8`, while 4 stale 27-chapter screenshots and a stale `message-to-reality-checker.md` remain in `docs/qa/KAN-16/`.
 
 **Medium Issues**:
-1. Mobile header wrapping and truncated search placeholder at 390px (`live-docs-mobile-light.png`).
-2. `HelpDrawer.tsx` lacks modal `Tab` focus trapping, initial focus placement, and focus restoration on close.
-3. QA report inaccuracies in `ui-specialist-review.md` (`1.23s` vs `3.23s`, `344` studio tests vs `344` total across 14 files) and `message-to-reality-checker.md` (`0` stderr warnings vs `StandaloneStatusPanel.test.tsx` warnings; `1.48s` vs `1.62s`), plus live Playwright coverage missing for 9 of 11 wired studios.
-4. Sticky sidebar mid-line text clipping in scrolled `live-docs-desktop-dark.png`, alphabetical chapter ordering putting `Home` at `Chapter 11 of 27`, raw backticks in TOC headings, and shadowed duplicate `/docs` routes in `routes.tsx`.
+1. `"Architectural"` filter tab clipped to `"A"` in desktop sidebar (`live-docs-desktop-light.png`).
+2. Literal `<a id="system-topology"></a>` rendered as visible text (`live-docs-desktop-light.png`).
+3. Duplicate category prefixes in sidebar links (`[Guide]` text + `[Guide]` pill) and edge-crowding `[Informational]` pill in mobile drawer.
+4. Bundled `/docs-images/14-custom-fields-studio.png` shows a 404 page (`live-docs-embedded-images-light.png`).
+5. Mobile chapters `aria-modal="true"` drawer lacks focus trap and focus restoration (`DocsCenterPage.tsx`).
+6. `FieldHelpHint` popover automatically pops back open upon `Escape` dismissal of `HelpDrawer` (`live-project-settings-escape-focus-restored.png`, `live-custom-fields-escape-focus-restored.png`).
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: **B-**
-**Design Implementation Level**: **Good**
-**System Completeness**: **82%**
-**Production Readiness**: **NEEDS WORK**
+**Overall Quality Rating**: B-
+**Design Implementation Level**: Good
+**System Completeness**: 82%
+**Production Readiness**: NEEDS WORK
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: **NEEDS WORK**
+**Status**: NEEDS WORK
 
 **Required Fixes Before Production**:
-1. Add a responsive chapter navigation drawer or selector button in `DocsCenterPage.tsx` / `DocsCenterPage.css` when `.kb-docs-sidebar` collapses at `<= 768px`, and fix the 390px header layout so `"Kanban Docs"`, `"Offline Center"`, and the search input do not wrap/clip (`live-docs-tablet-light.png`, `live-docs-mobile-light.png`).
-2. Implement safe markdown image rendering (`![alt](src)`) in `DocMarkdownViewer.tsx` and bundle or resolve relative `images/*.png` wiki assets (or strip/map them cleanly with tests) so chapters like `admin-custom-scripted-fields-and-sandbox` do not emit raw `!Alt Text` strings.
-3. Add accessible `Tab` focus trapping, initial focus placement, and trigger focus restoration to `HelpDrawer.tsx` (`role="dialog"`, `aria-modal="true"`), and strip inline backticks from TOC link labels.
-4. Correct the inaccurate timing/count/warning claims in `ui-specialist-review.md` and `message-to-reality-checker.md`, and remove the dead duplicate `/docs` and `/help` child routes in `routes.tsx` (lines 2037-2051).
+1. Harden `resolveSafeDocImageUrl` in `kanban/web/src/features/docs-center/DocMarkdownViewer.tsx` (reject `..`, `\`, control chars, and unexpected path segments) and add unit tests so implementation matches `api-specialist-review.md`.
+2. Fix `"Architectural"` tab clipping in `kanban/web/src/features/docs-center/DocsCenterPage.css` (wrap tabs, use compact/2x2 layout, or shorten label cleanly without clipping `"A"` as shown in `live-docs-desktop-light.png`).
+3. Strip or convert standalone `<a id="..."></a>` anchor tags in `DocMarkdownViewer.tsx` so raw HTML is not printed in `live-docs-desktop-light.png` / `live-docs-desktop-dark.png`.
+4. Deduplicate `[Guide]` / `[Informational]` / `[Architectural]` title prefixes when category pill badges are rendered, and replace the broken 404 image in `kanban/web/public/docs-images/14-custom-fields-studio.png` (visible in `live-docs-embedded-images-light.png`).
+5. Add focus move, `Tab` trap, and trigger focus restoration to `DocsCenterPage.tsx`'s `kb-docs-mobile-drawer`, and suppress unintended popover auto-reopen when `HelpDrawer` restores focus to `(?)` on `Escape` (or confirm desired behavior explicitly).
+6. Refresh `docs/qa/KAN-16/` at final commit HEAD: remove the 4 stale 27-chapter PNGs, update `message-to-reality-checker.md` and `live-docs-search-listbox-light.png`, and re-run `unit-test-results.txt` including `FieldHelpHint.tsx` in `COVERAGE_INCLUDE`.
 
-**Timeline for Production Readiness**: 1 revision cycle (estimated 0.5-1 day of focused frontend + QA evidence cleanup).
-**Revision Cycle Required**: **YES**
+**Timeline for Production Readiness**: 1 short remediation cycle (approx. 0.5-1 day)
+**Revision Cycle Required**: YES
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Full mobile/tablet chapter navigation parity without hiding all 27 chapters at `<= 768px`.
-- Complete markdown image rendering or bundled wiki asset handling in `DocMarkdownViewer.tsx`.
-- Full WAI-ARIA modal dialog focus management in `HelpDrawer.tsx`.
-- Exact 1:1 accuracy between QA summary markdowns and raw tool logs.
+- Strict alignment between on-disk code (`DocMarkdownViewer.tsx`), specialist review quotes, and automated screenshot/test artifacts at the same commit SHA.
+- Elimination of visible raw HTML tags, clipped sidebar filter tabs, duplicate category prefixes, and broken 404 screenshot media inside `/docs`.
+- Complete `aria-modal="true"` focus lifecycle in `DocsCenterPage.tsx` mobile drawer and clean `Escape` UX on `FieldHelpHint`.
 
 **Quality Targets**:
-- `>= 95%` Vitest coverage maintained on `docs-center` and `components/help` with 0 `act(...)` warnings.
-- 0 broken/unparsed markdown image syntax across all 27 bundled `WIKI_CHAPTERS`.
-- Clean 390px mobile and 768px tablet header + chapter-drawer screenshots with 0 text clipping or 2-line badge wrapping.
+- `>=95%` statement, branch, function, and line coverage across ALL touched files including `FieldHelpHint.tsx` on final commit SHA.
+- 0 visual clipping, 0 raw HTML tags, 0 404 doc images, and 0 stale screenshots in `docs/qa/KAN-16/screenshots/`.
 
 **Evidence Requirements**:
-- Updated Playwright screenshots showing mobile (`390x844`) and tablet (`768x1024`) chapter menu open/usable and crisp single-row header layout.
-- Live Playwright screenshot of a chapter containing an embedded image (e.g., `admin-custom-scripted-fields-and-sandbox`) verifying rendered media instead of `!Alt Text`.
-- Updated `docs/qa/KAN-16/` logs with accurate durations/counts and verified keyboard focus-trap tests for `HelpDrawer`.
+- Re-captured Playwright screenshots on `kanban-liveqa-1` showing unclipped `"Architectural"` filter tab, clean rendering without `<a id="system-topology"></a>`, updated `live-docs-search-listbox-light.png` (28 chapters), non-404 `14-custom-fields-studio.png`, and mobile drawer focus behavior.
+- Fresh `unit-test-results.txt` and `build-or-typecheck.txt` tied to the same commit SHA, with `FieldHelpHint.tsx` coverage >=95%.
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
-**Evidence Location**: docs/qa/KAN-16/ and docs/qa/KAN-16/screenshots/
+**Evidence Location**: docs/qa/KAN-16/
 **Re-assessment Required**: After fixes implemented

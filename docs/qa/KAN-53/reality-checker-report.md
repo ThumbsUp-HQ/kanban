@@ -1,108 +1,93 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands executed, zero URLs visited, zero files modified per protocol). Inspected all Round 1 verification packet artifacts in `/home/adamoutler/kanban/docs/qa/KAN-53/`, all 7 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-53/screenshots/`, `/home/adamoutler/kanban/kanban/web/src/app/Sidebar.tsx`, and `/home/adamoutler/kanban/kanban/web/src/app/Sidebar.test.tsx` (also verified `/home/adamoutler/kanban/kanban/web/src/app/__tests__/Sidebar.test.tsx` does not exist on disk).
+**Commands Executed**: Passive forensic audit via `read_file` only (zero shell commands executed, zero URLs visited, zero files modified, per clean-room `reality-checker` protocol). Inspected `.agents/agents/reality-checker.md`, all 7 text/manifest artifacts in `/home/adamoutler/kanban/docs/qa/KAN-53/`, all 7 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-53/screenshots/`, and on-disk `kanban/web/src/app/Sidebar.tsx` (1112 lines) and `kanban/web/src/app/Sidebar.test.tsx` (1455 lines).
 **Evidence Captured**:
-- `docs/qa/KAN-53/message-to-reality-checker.md` (96 lines)
-- `docs/qa/KAN-53/changed-files-manifest.txt` (14 entries with SHA-256 hashes)
-- `docs/qa/KAN-53/git-diff.patch` (619 lines)
-- `docs/qa/KAN-53/unit-test-results.txt` (23 lines)
-- `docs/qa/KAN-53/build-or-typecheck.txt` (16 lines)
-- `docs/qa/KAN-53/live-fullstack-proof.txt` (48 lines)
-- `docs/qa/KAN-53/ui-specialist-review.md` (151 lines)
-- 7 live container PNG screenshots (`live-sidebar-kan-focused-desktop-light.png`, `live-sidebar-kan-focused-desktop-dark.png`, `live-sidebar-sec-focused-desktop-light.png`, `live-sidebar-both-expanded-desktop-light.png`, `live-sidebar-home-preserved-desktop-light.png`, `live-sidebar-kan-focused-tablet.png`, `live-sidebar-kan-focused-mobile.png`)
-- Source files: `kanban/web/src/app/Sidebar.tsx` (1112 lines) and `kanban/web/src/app/Sidebar.test.tsx` (1368 lines)
-**QA Cross-Validation**: **Partially challenged.** The core implementation in `Sidebar.tsx` and the live full-stack container proof (`kanban-liveqa-2` at `http://127.0.0.1:18962`, commit `07d04cde`) genuinely demonstrate the project-focus auto-collapse and manual toggle behavior. However, `ui-specialist-review.md` (`APPROVED`) makes several unverified or inconsistent claims against the raw logs on disk:
-1. `ui-specialist-review.md` claims `tsc -b --noEmit: Exit code 0`, `eslint . --max-warnings 0: Exit code 0`, `vite build: Clean production build (1.11s)`, `Sidebar.test.tsx: 30/30 passed (3645ms)`, and `python3 -m scripts.check_no_dashes --all (Clean exit code 0)`. On disk, `build-or-typecheck.txt` contains ONLY `vite build` (`1.43s`, not `1.11s`) with zero raw output for `tsc`, `eslint`, or `check_no_dashes`, and `unit-test-results.txt` shows `3564ms` (not `3645ms`) from a swarm worktree path (`/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan53-b885c839/kanban/web`).
-2. `ui-specialist-review.md` claims touch targets on `.kb-project-expand-row` and subitem links meet `>44px` height without any CSS or DOM bounding-box evidence in the packet.
-3. `changed-files-manifest.txt` omits `kanban/web/src/app/Sidebar.test.tsx` even though `git-diff.patch` contains 390+ lines of changes to that file.
+- Packet manifests & logs: `docs/qa/KAN-53/changed-files-manifest.txt`, `docs/qa/KAN-53/git-diff.patch` (796 lines), `docs/qa/KAN-53/message-to-reality-checker.md`, `docs/qa/KAN-53/unit-test-results.txt`, `docs/qa/KAN-53/build-or-typecheck.txt`, `docs/qa/KAN-53/live-fullstack-proof.txt`, `docs/qa/KAN-53/ui-specialist-review.md`.
+- Live full-stack Playwright screenshots against `kanban-liveqa-2` (`http://127.0.0.1:18962`, commit `7913c2c8`):
+  - `live-sidebar-kan-focused-desktop-light.png` (1440x1050)
+  - `live-sidebar-kan-focused-desktop-dark.png` (1440x1050)
+  - `live-sidebar-sec-focused-desktop-light.png` (1440x1050)
+  - `live-sidebar-both-expanded-desktop-light.png` (1440x1050)
+  - `live-sidebar-home-preserved-desktop-light.png` (1440x1050)
+  - `live-sidebar-kan-focused-tablet.png` (768x1024)
+  - `live-sidebar-kan-focused-mobile.png` (390x844)
+**QA Cross-Validation**:
+- **Live Full-Stack Evidence Confirmed**: Direct visual inspection of all 7 PNG screenshots confirms the live Docker container (`kanban-liveqa-2`, PostgreSQL 16 + FORCE RLS) renders both "Kanban Core" and "Security Core" in the sidebar and accurately executes project-focus auto-collapse, manual multi-project expansion, and non-project route preservation with zero console/page/5xx/CSP errors reported in `live-fullstack-proof.txt`.
+- **Static & Build Gates Confirmed**: `build-or-typecheck.txt` was executed at `HEAD 7913c2c81b47de7e551fc5f76f5f180073d38b2a` in `/home/adamoutler/kanban/kanban/web` and repository root, with all 9 commands (`kanban-ctl db check-migrations`, `ruff check .`, `ruff format --check .`, `mypy`, `lint-imports`, `pnpm typecheck`, `pnpm lint --max-warnings 0`, `pnpm build`, `scripts.check_no_dashes --all`) exiting 0.
+- **Unit Test & Review Packet Discrepancy Flagged (Challenged)**:
+  - On-disk `kanban/web/src/app/Sidebar.test.tsx` contains **31** `it(...)` test cases (including `covers CreateProjectModal onCreated callback duplicate and modules_enabled branches` at lines 327-412, added in `git-diff.patch` lines 73-158).
+  - `docs/qa/KAN-53/unit-test-results.txt` was captured in an earlier worktree (`/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan53-b885c839/kanban/web`) and reports **30** tests for `Sidebar.test.tsx` (34 total with `cssTokensAudit.test.ts`) plus uncovered line `793` (which does not match current `Sidebar.tsx`, where line 793 is `const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;` and `CreateProjectModal.onCreated` is at lines 1085-1100).
+  - `docs/qa/KAN-53/ui-specialist-review.md` reports **28/28** passed in `Sidebar.test.tsx` and `99.24% stmts, 95.13% branch, 98.38% func, 99.59% lines` coverage, contradicting both `unit-test-results.txt` (30 tests, 99.61% stmts / 95.77% branch / 98.33% funcs / 100% lines) and on-disk `Sidebar.test.tsx` (31 tests).
+  - `docs/qa/KAN-53/message-to-reality-checker.md` is also stale relative to Round 2 (still references branch `feat/KAN-53` instead of `main` @ `7913c2c8` and omits `live-fullstack-proof.txt`, `ui-specialist-review.md`, and the 7 screenshots in section 3).
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
 - Full system screenshots:
-  - Desktop Light (1440x900): `live-sidebar-kan-focused-desktop-light.png`
-  - Desktop Dark (1440x900): `live-sidebar-kan-focused-desktop-dark.png`
-  - Tablet (768x1024): `live-sidebar-kan-focused-tablet.png`
-  - Mobile (390x844): `live-sidebar-kan-focused-mobile.png`
+  - `docs/qa/KAN-53/screenshots/live-sidebar-kan-focused-desktop-light.png`
+  - `docs/qa/KAN-53/screenshots/live-sidebar-kan-focused-desktop-dark.png`
+  - `docs/qa/KAN-53/screenshots/live-sidebar-kan-focused-tablet.png`
+  - `docs/qa/KAN-53/screenshots/live-sidebar-kan-focused-mobile.png`
 - User journey evidence:
-  - Step 1 (KAN focused): `live-sidebar-kan-focused-desktop-light.png`, `live-sidebar-kan-focused-desktop-dark.png`, `live-sidebar-kan-focused-tablet.png`, `live-sidebar-kan-focused-mobile.png`
-  - Step 2 (Click `Issues` under SEC -> auto-collapse KAN): `live-sidebar-sec-focused-desktop-light.png`
-  - Step 3 (Manual chevron click on KAN while SEC focused -> both expanded): `live-sidebar-both-expanded-desktop-light.png`
-  - Step 4 (Navigate to `/` -> manual expansion preserved): `live-sidebar-home-preserved-desktop-light.png`
-- Cross-browser comparison: Single browser engine (Chromium via Playwright); no multi-browser screenshots included.
+  - Step 1 (KAN focused): `live-sidebar-kan-focused-desktop-light.png` and `live-sidebar-kan-focused-desktop-dark.png`
+  - Step 2 (Click SEC sub-route -> KAN auto-collapses): `live-sidebar-sec-focused-desktop-light.png`
+  - Step 3 (Manually expand KAN while SEC focused -> both stay open): `live-sidebar-both-expanded-desktop-light.png`
+  - Step 4 (Navigate to Workspace Home `/` -> manual expansion preserved): `live-sidebar-home-preserved-desktop-light.png`
+- Cross-browser comparison: Single Chromium Playwright engine tested across Desktop (1440x1050 Light & Dark), Tablet (768x1024), and Mobile (390x844); no Firefox or WebKit screenshots provided.
 
 **What System Actually Delivers**:
-- Visual quality is clean across light and dark themes with crisp contrast, consistent spacing, and clear `▾` / `▸` expansion indicators.
-- In `live-sidebar-kan-focused-tablet.png` (768x1024), the taller 1024px viewport visually confirms BOTH `Kanban Core ▾` expanded and `Security Core ▸` collapsed at the bottom of the sidebar.
-- In `live-sidebar-kan-focused-desktop-light.png` (1440x900), `live-sidebar-kan-focused-desktop-dark.png` (1440x900), and `live-sidebar-kan-focused-mobile.png` (390x844), the expanded `Kanban Core` sub-navigation extends past the bottom edge of the viewport (ending at `Custom Fields` on desktop and `Workflows` on mobile), so `Security Core ▸` is below the scroll fold and not visually visible in those three PNGs (relies on DOM state `{"kanExpanded":"true","secExpanded":"false"}`).
-- In `live-sidebar-sec-focused-desktop-light.png`, clicking `Issues` under `Security Core` auto-collapsed `Kanban Core ▸` (clearly visible as a single collapsed row above `Security Core ▾`).
-- In `live-sidebar-both-expanded-desktop-light.png`, `Kanban Core ▾` is expanded above `Security Core ▾` (whose `Work Items` and `Issues` links are visible at the bottom edge of the 900px viewport).
-- In `live-sidebar-home-preserved-desktop-light.png`, the main pane displays `Workspace Home` with both `Kanban Core` and `Security Core` cards, while the sidebar shows `Kanban Core ▾` expanded; `Security Core` is scrolled below the 900px sidebar fold and not visually visible in the PNG (`secExpanded: "true"` is asserted only in `live-fullstack-proof.txt` text).
+- Visual quality is clean, high-contrast, and consistent across light and dark modes.
+- In `live-sidebar-kan-focused-desktop-light.png` and `live-sidebar-kan-focused-desktop-dark.png`, "Kanban Core" is expanded (`▾`) showing Work Items (`Issues`, `Board`, `Table`, `Calendar`, `Timeline`), `Cycles`, `Docs`, `Workflows`, `Custom Fields`, and `Project Settings`, while "Security Core" is collapsed (`▸`) below it.
+- In `live-sidebar-sec-focused-desktop-light.png`, after clicking `Issues` under `Security Core`, breadcrumb updates to `kanban / Security Core / Work Items`, "Kanban Core" auto-collapses (`▸`), and "Security Core" expands (`▾`).
+- In `live-sidebar-both-expanded-desktop-light.png`, manually clicking the "Kanban Core" row expands it (`▾`) without collapsing "Security Core" (`▾`).
+- In `live-sidebar-home-preserved-desktop-light.png`, navigating to `/` (`Workspace Home`) preserves both "Kanban Core" (`▾`) and "Security Core" (`▾`) in their manually expanded state.
+- In `live-sidebar-kan-focused-tablet.png` and `live-sidebar-kan-focused-mobile.png`, the flyout drawer opens cleanly over the backdrop scrim with "Kanban Core" (`▾`) expanded and "Security Core" (`▸`) collapsed. On mobile (`390x844`), the expanded project list exceeds viewport height so the sidebar scrolls slightly down (clipping the top `Drafts` edge while keeping `Your work`, `Stickies`, `Docs`, `Kanban Core`, `Security Core`, and footer `Docs` / `v2.0.0` visible).
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: **PARTIAL PASS** (all 4 journey steps passed DOM assertions in `live-fullstack-proof.txt` with 0 console JS errors, 0 page errors, 0 5xx responses, and 0 CSP violations; visually confirmed in `live-sidebar-kan-focused-tablet.png`, `live-sidebar-sec-focused-desktop-light.png`, and `live-sidebar-both-expanded-desktop-light.png`, while `live-sidebar-home-preserved-desktop-light.png` and desktop/mobile KAN-focused captures clip `Security Core` below the viewport fold).
-**Cross-Device Consistency**: **PASS** (1440x900 desktop light/dark, 768x1024 tablet overlay via hamburger menu, and 390x844 mobile slide-over drawer render cleanly with zero layout overflow or broken overlays).
-**Performance Validation**: **UNVERIFIED FOR PAGE LOAD** (`vite build` completed in `1.43s`, `Sidebar.test.tsx` + `cssTokensAudit.test.ts` completed in `4.73s`; `live-fullstack-proof.txt` contains no per-route page load timing or `test-results.json` metrics).
-**Specification Compliance**: **PARTIAL PASS** (implementation in `Sidebar.tsx` satisfies route extraction via `extractProjectKeyFromPath`, `focusProject` auto-collapse on route navigation and `.kb-project-subitems` click, manual chevron preservation, and non-project route preservation; however, complete static gate logs and full-suite regression results on the current tree are missing from the packet).
+**End-to-End User Journeys**: PASS (visually proven on live container `kanban-liveqa-2` at commit `7913c2c8` across all 4 journey steps and 3 viewport sizes).
+**Cross-Device Consistency**: PASS on Desktop (1440x1050 Light/Dark), Tablet (768x1024), and Mobile (390x844) in Chromium Playwright.
+**Performance Validation**: PASS (all recorded timings in `live-fullstack-proof.txt` are under the 3000ms threshold: Desktop `/projects/KAN/issues?layout=list` 857ms, SEC Issues navigation 279ms, Home `/` navigation 285ms, Tablet 837ms, Mobile 877ms; 0 console JS errors, 0 page errors, 0 5xx responses, 0 CSP violations).
+**Specification Compliance**: PASS for implemented `Sidebar.tsx` behavior (`extractProjectKeyFromPath`, `focusProject`, `useEffect` route sync, manual `.kb-project-expand-row` toggle independence, `.kb-project-subitems` click focus, non-project route preservation); FAIL on Verification Packet currency because `unit-test-results.txt` was not re-captured on `main` @ `7913c2c8` after the 31st test was added to `Sidebar.test.tsx`.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- `docs/qa/KAN-53/ui-specialist-review.md` cites metrics (`vite build` 1.11s, `Sidebar.test.tsx` 3645ms) that do not match the captured raw files (`1.43s` and `3564ms`) and asserts `tsc`, `eslint`, and `check_no_dashes` results without supporting raw logs in `docs/qa/KAN-53/`.
-
+- `Sidebar.tsx` retains two pre-existing `/* v8 ignore start */` / `/* v8 ignore stop */` pragmas (lines 191-195 around `URLSearchParams` catch, lines 321-325 around `window.location.assign` fallback outside Router), though the KAN-53 `/* v8 ignore next */` pragma around `CreateProjectModal` `onCreated` (line 1088) was removed and replaced with a unit test.
 **New Issues Discovered**:
-1. **Missing Raw Static Gate & Full-Suite Test Logs**: `docs/qa/KAN-53/build-or-typecheck.txt` contains ONLY `vite build` output. Raw outputs for `tsc -b --noEmit`, `eslint --max-warnings 0`, `python3 -m scripts.check_no_dashes`, and a full `kanban/web` Vitest run (rather than a 2-file run inside a swarm worktree) are absent from `docs/qa/KAN-53/`.
-2. **Incomplete Manifest**: `docs/qa/KAN-53/changed-files-manifest.txt` omits `kanban/web/src/app/Sidebar.test.tsx` despite `git-diff.patch` modifying it (+386/-6 lines), and the handoff prompt referenced non-existent `kanban/web/src/app/__tests__/Sidebar.test.tsx` instead of `kanban/web/src/app/Sidebar.test.tsx`.
-3. **Coverage Exclusion Expansion (`Sidebar.tsx` lines 1086-1099)**: `git-diff.patch` replaces a single-line `/* v8 ignore next */` with a full `/* v8 ignore start */ ... /* v8 ignore stop */` block around `CreateProjectModal`'s `onCreated` callback instead of testing that callback.
-4. **Below-the-Fold Clipping on `live-sidebar-home-preserved-desktop-light.png`**: Because `Kanban Core` is expanded at 1440x900, `Security Core`'s preserved expanded state on `/` is not visually visible in the screenshot without scrolling the sidebar container.
-5. **Non-Interactive Element Click Handler (`Sidebar.tsx` lines 819-823)**: `<ul className="kb-project-subitems" onClick={() => { focusProject(proj.key); }}>` attaches `onClick` directly to a `<ul>` element; without raw `eslint` output, `jsx-a11y` compliance cannot be verified passively.
-
+- **Critical (Evidence Integrity)**: `docs/qa/KAN-53/unit-test-results.txt` is stale relative to `HEAD 7913c2c8` and on-disk `Sidebar.test.tsx`. It ran in the prior worktree `swarm-b-kan53-b885c839` with **30** tests in `Sidebar.test.tsx` instead of the **31** `it(...)` tests present in on-disk `kanban/web/src/app/Sidebar.test.tsx`. Under passive forensic QA rules, unverified post-final-edit test output cannot certify ticket closure.
+- **Medium (Documentation Drift)**: `docs/qa/KAN-53/ui-specialist-review.md` cites **28/28** tests in `Sidebar.test.tsx` (and `99.24% / 95.13% / 98.38% / 99.59%` coverage), while `docs/qa/KAN-53/message-to-reality-checker.md` still references `feat/KAN-53` and omits `live-fullstack-proof.txt`, `ui-specialist-review.md`, and the 7 screenshots from section 3.
+- **Low (Code Observation / Scope)**: `git-diff.patch` bundles sidebar `Docs` links (lines 749-761, 1054-1064) and `List` -> `Issues` label updates (lines 852, 857) alongside KAN-53 auto-collapse. Additionally, in `Sidebar.tsx` line 469, `focusProject` depends on `projectList`, causing `useEffect` (lines 475-480) to re-evaluate when `fetchedProjects` resolves; this is currently safe only because `prevFocusedKeyRef.current === focusedProjectKey` guards re-invocation.
 **Critical Issues**:
-- None in the core sidebar auto-collapse runtime logic observed in `Sidebar.tsx` or live screenshots.
-
+1. Re-run Vitest + v8 coverage in `/home/adamoutler/kanban/kanban/web` at `HEAD 7913c2c8` (confirming all 31 tests in `Sidebar.test.tsx` pass and `>=95%` coverage on `Sidebar.tsx` without worktree drift) and update `docs/qa/KAN-53/unit-test-results.txt` and `changed-files-manifest.txt`.
 **Medium Issues**:
-- Missing raw logs for `tsc -b --noEmit`, `eslint --max-warnings 0`, `check_no_dashes`, and full-suite Vitest execution on the integrated workspace.
-- Mismatched timings/counts between `ui-specialist-review.md` and raw packet files (`build-or-typecheck.txt`, `unit-test-results.txt`).
-- `changed-files-manifest.txt` missing `kanban/web/src/app/Sidebar.test.tsx`.
-- `/* v8 ignore start */ ... /* v8 ignore stop */` expanded around `CreateProjectModal` `onCreated` in `Sidebar.tsx`.
+1. Align test counts and coverage figures in `docs/qa/KAN-53/ui-specialist-review.md` and `docs/qa/KAN-53/message-to-reality-checker.md` with `HEAD 7913c2c8` (31 tests in `Sidebar.test.tsx`, 35 total with `cssTokensAudit.test.ts`, and include all 15 manifest artifacts).
 
 ## 🎯 Realistic Quality Certification
 **Overall Quality Rating**: B+
 **Design Implementation Level**: Good
-**System Completeness**: 90%
+**System Completeness**: 95% (implementation and live full-stack visual proof are complete; unit test & packet documentation parity at `7913c2c8` is incomplete)
 **Production Readiness**: NEEDS WORK
 
 ## 🔄 Deployment Readiness Assessment
 **Status**: NEEDS WORK
 
 **Required Fixes Before Production**:
-1. **Capture Complete Raw Verification Logs on Current Workspace**: Populate `docs/qa/KAN-53/build-or-typecheck.txt` with raw stdout/exit codes for `tsc -b --noEmit`, `eslint --max-warnings 0`, `vite build`, and `python3 -m scripts.check_no_dashes`, and re-run the full `kanban/web` Vitest suite (plus `Sidebar.tsx` coverage) from the current integrated workspace into `docs/qa/KAN-53/unit-test-results.txt` (fixing the stale swarm worktree path and timing mismatch in `ui-specialist-review.md`).
-2. **Fix Manifest & File Reference Integrity**: Update `docs/qa/KAN-53/changed-files-manifest.txt` to include `kanban/web/src/app/Sidebar.test.tsx` (with SHA-256 hash) and ensure all references point to `kanban/web/src/app/Sidebar.test.tsx` rather than `kanban/web/src/app/__tests__/Sidebar.test.tsx`.
-3. **Remove Unnecessary `v8 ignore` Expansion**: Replace the newly added `/* v8 ignore start */ ... /* v8 ignore stop */` block around `CreateProjectModal`'s `onCreated` handler (`Sidebar.tsx` lines 1086-1099) with a unit test in `Sidebar.test.tsx` (or document why it is unreachable if truly dead code).
-4. **Provide Visible Screenshot Proof for `Security Core` in Home-Preserved & Desktop KAN-Focused States**: Scroll the sidebar or capture a taller viewport on `/` (`live-sidebar-home-preserved-desktop-light.png`) and on `/projects/KAN/issues` so both `Kanban Core` and `Security Core` states are visually verifiable in the PNGs, not solely via DOM telemetry.
+1. Run `pnpm --dir kanban/web exec vitest run src/app/Sidebar.test.tsx src/styles/__tests__/cssTokensAudit.test.ts --coverage --coverage.include="src/app/Sidebar.tsx"` directly against `/home/adamoutler/kanban/kanban/web` at `HEAD 7913c2c8` and overwrite `docs/qa/KAN-53/unit-test-results.txt` so it proves all **31** tests in `Sidebar.test.tsx` pass with `>=95%` coverage and 0 `act(...)` warnings (currently `unit-test-results.txt` shows 30 tests from worktree `swarm-b-kan53-b885c839`).
+2. Update `docs/qa/KAN-53/ui-specialist-review.md` (currently claiming 28/28 tests) and `docs/qa/KAN-53/message-to-reality-checker.md` (currently claiming `feat/KAN-53` and omitting the Round 2 live proof + screenshots in section 3) and regenerate `docs/qa/KAN-53/changed-files-manifest.txt` hashes.
 
-**Timeline for Production Readiness**: 1 focused revision cycle (less than 1 hour) to regenerate raw logs, fix the manifest, test `onCreated`, and capture scrolled sidebar proof.
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Under 15 minutes (evidence/packet synchronization only; no UI code defects observed in live screenshots).
+**Revision Cycle Required**: YES (evidence refresh cycle required so test log matches on-disk `Sidebar.test.tsx` at `7913c2c8`).
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Exact parity between claims in `ui-specialist-review.md` / `message-to-reality-checker.md` and raw command outputs stored in `docs/qa/KAN-53/`.
-- Visual screenshot framing that keeps both projects (`Kanban Core` and `Security Core`) visible when asserting multi-project state preservation.
-- Avoiding `v8 ignore` block expansion to satisfy >=95% coverage thresholds.
-
+- Capture all unit test and coverage logs from the exact integrated commit (`7913c2c8`) in the main workspace path after the final edit to `Sidebar.test.tsx`.
+- Ensure specialist review docs and `message-to-reality-checker.md` cite the exact final test count and artifact list.
 **Quality Targets**:
-- 100% raw log traceability for `tsc`, `eslint --max-warnings 0`, `check_no_dashes`, `vite build`, and full `vitest` suite on the integrated branch.
-- `>=95%` statements/branches/functions/lines coverage on `Sidebar.tsx` without new `/* v8 ignore start */` exclusions.
-- Visual confirmation of both projects in every multi-project state screenshot.
-
+- 31/31 tests passing in `Sidebar.test.tsx` (35/35 with `cssTokensAudit.test.ts`), `>=95%` Stmts/Branch/Funcs/Lines coverage on `Sidebar.tsx`, 0 `act(...)` warnings, and exact SHA-256 parity in `changed-files-manifest.txt`.
 **Evidence Requirements**:
-- Updated `docs/qa/KAN-53/build-or-typecheck.txt` containing verbatim `tsc`, `eslint`, `vite build`, and `check_no_dashes` outputs.
-- Updated `docs/qa/KAN-53/unit-test-results.txt` executed from the integrated workspace.
-- Updated `docs/qa/KAN-53/changed-files-manifest.txt` including `kanban/web/src/app/Sidebar.test.tsx`.
-- Updated `docs/qa/KAN-53/ui-specialist-review.md` reconciled with the regenerated log metrics.
-- Updated screenshot(s) visually showing both `Kanban Core` and `Security Core` in the `/` preserved state.
+- Updated `docs/qa/KAN-53/unit-test-results.txt`, `docs/qa/KAN-53/ui-specialist-review.md`, `docs/qa/KAN-53/message-to-reality-checker.md`, and `docs/qa/KAN-53/changed-files-manifest.txt` matching `HEAD 7913c2c8` (no re-run of live Playwright screenshots required unless code changes).
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
-**Evidence Location**: docs/qa/KAN-53/
-**Re-assessment Required**: After fixes implemented
+**Evidence Location**: docs/qa/KAN-53/screenshots/
+**Re-assessment Required**: After unit-test-results.txt and packet metadata are refreshed at HEAD 7913c2c8

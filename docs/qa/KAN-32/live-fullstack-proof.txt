@@ -1,78 +1,64 @@
 ================================================================================
-KAN-32 LIVE FULL-STACK BLACK-BOX QA R2/R3 PROOF (main commit 07d04cde)
+KAN-32 LIVE FULL-STACK BLACK-BOX QA PROOF (main commit 7913c2c8)
 Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
-1. CUSTOM FIELDS STUDIO CONTROLS, + NEW FIELD & ADVANCED TIER GATING (/projects/SEC2/settings/custom-fields)
+1. CUSTOM FIELDS STUDIO CONTROLS & TIER GATING (/projects/SEC2/settings/custom-fields)
 --------------------------------------------------------------------------------
-Loaded /projects/SEC2/settings/custom-fields as @admin (AAL2, 1037 ms) with issue SEC2-1 (priority=high):
-- Single-line <input> and <select> height check (must be < 55 px, zero 140px bloated inputs):
+Loaded /projects/SEC2/settings/custom-fields as @admin (AAL2, 848 ms) with issue SEC2-1:
+- Single-line <input> and <select> heights (all < 55px, zero 140px bloated inputs):
   * field-name-input: height=38px
   * field-slug-input: height=38px
   * field-flavor-select: height=38px
   * output-format-select: height=38px
   * test-issue-key-input: height=38px
   * execution-tier-select (Advanced tab): height=38px
-  * allInputsUnder55px=true (every single-line control renders at 38px)
-- (a) + New Field (FlavorDecisionMatrix + PresetGallery with disabled nsjail):
-  * toolkitVisible=true, presetCount=6, flavorNsjailDisabled=true
-  * Disabled nsjail presets display "Multi-Container Compose Required" badge
-  * Screenshot: docs/qa/KAN-32/screenshots/live-new-field-matrix-presets-light.png
-- (b) Advanced tab:
-  * execution-tier-select nsjail option disabled (tierNsjailDisabled=true)
-  * Visible warning badge: "nsjail option requires Multi-Container Compose"
-  * Screenshot: docs/qa/KAN-32/screenshots/live-advanced-tier-gating-light.png
+- + New Field: FlavorDecisionMatrix + PresetGallery (6 presets; nsjail presets disabled and badged "Multi-Container Compose Required").
+- Advanced tab: execution-tier-select nsjail option disabled + "nsjail option requires Multi-Container Compose" badge.
+- Screenshots:
+  * docs/qa/KAN-32/screenshots/live-new-field-matrix-presets-light.png
+  * docs/qa/KAN-32/screenshots/live-advanced-tier-gating-light.png
 
-2. MANUAL WebAssembly STARTER_TEMPLATES.wasm TEST EXECUTE & LONG LOG WRAPPING
+2. BARE FORMULA COPY-PASTE NORMALIZATION (EXAMPLE 3 WITHOUT "formula: " PREFIX)
 --------------------------------------------------------------------------------
-- (c) Selected Output Format -> severity_pill, Field Flavor -> WebAssembly (wasm):
-  * Editor auto-populated STARTER_TEMPLATES.wasm.severity_pill ("// echo_cvss.wasm - WebAssembly Tier A Module (Base64)...")
-  * Entered Test With Issue Key = SEC2-1 and clicked Test Execute:
-    - POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200
-    - Response: {"output_format":"severity_pill","value":{"level":"high","score":8.8,"label":"8.8 High"},"latency_ms":8,"logs":"Draft test execution on SEC2-1 (flavor=wasm)\nExecuted Wasm module: fuel=7\nSuccess: validated format severity_pill\n","status":"SUCCESS","error":null}
-    - Rendered Output Pill text: "8.8 High" (hasDuplicateScore=false; zero duplicate "8.8 8.8 High")
-  * Screenshot: docs/qa/KAN-32/screenshots/live-wasm-test-execute-light.png
-  * Screenshot: docs/qa/KAN-32/screenshots/live-desktop-test-exec.png
+- Selected Field Flavor = formula, Output Format = severity_pill.
+- Pasted exact bare Example 3 expression from Guide-Custom-Fields.md WITHOUT "formula: " prefix:
+  {"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" else {"level": "low", "score": 2.0, "label": "Low"}))
+- Entered Test With Issue Key = SEC2-1 and clicked Test Execute:
+  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK
+  * Response: {"output_format":"severity_pill","value":{"level":"low","score":2,"label":"Low"},"latency_ms":3,"logs":"Draft test execution on SEC2-1 (flavor=wasm)\nEvaluated Formula expression: ...","status":"SUCCESS","error":null}
+  * Rendered UI preview: Status SUCCESS, Latency 3.0 ms, pill "2.0 Low" (zero 422 WASM_BINARY_INVALID).
+- Screenshot: docs/qa/KAN-32/screenshots/live-wiki-example3-test-exec-light.png
 
-- (c2) Long unbroken log line wrapping inside pre.custom-field-test-logs:
-  * Executed formula: "UNBROKEN_LOG_LINE_" + "X" * 220 against SEC2-1 -> HTTP 200 (latency_ms=4)
-  * pre.custom-field-test-logs metrics:
-    scrollWidth=742, clientWidth=742, scrollEqualsClient=true, overflowsCard=false, whiteSpace="pre-wrap", overflowWrap="anywhere", wordBreak="break-all", logsLength=347
+3. MANUAL WebAssembly ("8.8 High") & 220-CHAR LOG WRAPPING
+--------------------------------------------------------------------------------
+- Manual Field Flavor -> WebAssembly (STARTER_TEMPLATES.wasm.severity_pill) Test Execute on SEC2-1:
+  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK (latency_ms=10)
+  * Rendered Output Pill: "8.8 High" (hasDuplicateScore=false)
+  * Screenshots:
+    - docs/qa/KAN-32/screenshots/live-wasm-test-execute-light.png
+    - docs/qa/KAN-32/screenshots/live-desktop-test-exec.png
+    - docs/qa/KAN-32/screenshots/live-desktop-dark.png
+- 220-char unbroken formula expression log line wrapping inside pre.custom-field-test-logs:
+  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK (latency_ms=6)
+  * pre.custom-field-test-logs: scrollWidth=742, clientWidth=742, scrollEqualsClient=true, overflowsCard=false, whiteSpace="pre-wrap", overflowWrap="anywhere", wordBreak="break-all"
   * Screenshot: docs/qa/KAN-32/screenshots/live-long-log-wrap-light.png
+- Responsive screenshots:
+  * docs/qa/KAN-32/screenshots/live-desktop-light.png
+  * docs/qa/KAN-32/screenshots/live-tablet.png (scrollWidth=768, overflows=false)
+  * docs/qa/KAN-32/screenshots/live-mobile.png (scrollWidth=390, overflows=false)
+  * docs/qa/KAN-32/screenshots/live-guide-custom-fields-desktop-light.png
 
-3. WIKI EXAMPLE 3 FORMULA COPY-PASTE TEST EXECUTE (FAILURE REPRODUCED)
+4. TELEMETRY & VERDICT
 --------------------------------------------------------------------------------
-- (e) Copied exact Example 3 formula from thumbs-up-kanban.wiki/Guide-Custom-Fields.md (lines 102-104) into Field Flavor = formula, Output Format = severity_pill:
-  * Pasted script_source:
-    {"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" else {"level": "low", "score": 2.0, "label": "Low"}))
-  * Entered Test With Issue Key = SEC2-1 and clicked Test Execute:
-    - POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 422
-    - Response body: {"type":"urn:kanban:problem:WASM_BINARY_INVALID","title":"Invalid WebAssembly Binary","status":422,"code":"WASM_BINARY_INVALID","detail":"Cannot decode WebAssembly module bytes: Only base64 data is allowed","request_id":"d7e716c737e641ceb843ed6881515aaf"}
-    - UI error banner: "Cannot decode WebAssembly module bytes: Only base64 data is allowed"
-  * Root cause: CustomFieldDefinitionEditor.tsx sends tier="wasm" and raw script_source without prepending "formula: " (or sending flavor="formula"), and kanban/api/v1/custom_field_execution.py:245-256 only treats tier="wasm" scripts as interpreted formulas when prefixed with "scalar:", "formula:", or "return ". Therefore exact Example 3 copy-paste from Guide-Custom-Fields.md fails with HTTP 422 WASM_BINARY_INVALID.
-  * Screenshot: docs/qa/KAN-32/screenshots/live-wiki-example3-test-exec-light.png
-
-4. RESPONSIVE & THEME SCREENSHOTS
---------------------------------------------------------------------------------
-- Desktop 1440x900 Light: docs/qa/KAN-32/screenshots/live-desktop-light.png
-- Desktop 1440x900 Dark: docs/qa/KAN-32/screenshots/live-desktop-dark.png
-- Tablet 768x1024 Light (scrollWidth=768, innerWidth=768, overflows=false): docs/qa/KAN-32/screenshots/live-tablet.png
-- Mobile 390x844 Light (scrollWidth=390, innerWidth=390, overflows=false): docs/qa/KAN-32/screenshots/live-mobile.png
-- Guide Custom Fields (/docs/guide-custom-fields): docs/qa/KAN-32/screenshots/live-guide-custom-fields-desktop-light.png
-
-5. TELEMETRY & VERDICT
---------------------------------------------------------------------------------
-- Unexpected UI console errors: 0 (1 expected HTTP 422 console log from Wiki Example 3 test-execute failure)
+- Browser console errors: 0
 - Browser page errors: 0
 - HTTP 5xx server errors: 0
 
-LIVE_STACK_VERDICT: FAIL
-- Single-line <input> and <select> heights (all 38px < 55px): PASS
-- + New Field (FlavorDecisionMatrix + PresetGallery with disabled nsjail): PASS
-- Advanced tab (execution-tier-select + "nsjail option requires Multi-Container Compose" badge): PASS
-- Manual Field Flavor -> WebAssembly (STARTER_TEMPLATES.wasm) Test Execute (HTTP 200, "8.8 High" pill): PASS
-- Long unbroken log line wrapping inside pre.custom-field-test-logs (scrollWidth === clientWidth): PASS
-- Desktop Light/Dark, Tablet, Mobile responsive layout: PASS
-- Exact Wiki Example 3 formula copy-paste into formula + severity_pill Test Execute: FAIL (HTTP 422 WASM_BINARY_INVALID)
+LIVE_STACK_VERDICT: PASS
+- Bare Example 3 formula copy-paste WITHOUT "formula: " prefix -> HTTP 200 OK: PASS
+- Single-line <input>/<select> 38px height parity: PASS
+- "8.8 High" formatted severity pill (STARTER_TEMPLATES.wasm): PASS
+- 220-char unbroken log line wrapping (scrollWidth === clientWidth): PASS

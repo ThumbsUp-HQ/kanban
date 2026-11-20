@@ -2,8 +2,10 @@
 
 **Ticket ID:** KAN-36  
 **Title:** [KB-P3-PENTEST-01] Preserve Session Persistence/TTL/AAL2 on Workspace Switch (CWE-613) and Fix Stale Issue PATCH ETag Drift  
-**Branch:** `fix/KAN-20-36-liveqa`  
-**Commit:** `7c0db6c2ec94fd527eb5b67eb76b6004a999901d`  
+**Branch:** `main` (integrated at commit `7913c2c8`)  
+**Commit:** `7913c2c8`  
+**Target Container:** `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS)  
+**Live Stack Verdict:** `LIVE_STACK_VERDICT: PASS`  
 **Reviewer:** ui-spec-2 (Clean-Room UI Specialist)  
 **Date:** 2026-11-20  
 **Status:** `STATUS: APPROVED`  
@@ -12,7 +14,7 @@
 
 ## 1. Executive Summary
 
-A clean-room UI and UX audit was conducted on ticket KAN-36 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2ec94fd527eb5b67eb76b6004a999901d` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`. This audit incorporates verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt` on container `kanban-liveqa-1`, `http://127.0.0.1:18961`), backend Pytest execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+A clean-room UI and UX audit was conducted on ticket KAN-36 integrated into `main` at commit `7913c2c8` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`. This audit incorporates verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt` on container `kanban-liveqa-3`, `http://127.0.0.1:18963`), backend Pytest execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 While KAN-36 resolves core session persistence and entity concurrency security invariants, its contracts directly govern frontend SPA authentication stability during workspace switching in the Sidebar, session longevity guarantees, and optimistic issue editing in the Issue Detail Drawer (`IssueSurface.tsx`) and Board views.
 
@@ -25,25 +27,24 @@ The implementation completely eliminates optimistic concurrency desynchronizatio
 ### 2.1 Live Commit Race Elimination & Zero ETag Drift
 - **Elimination of False 412 Conflict Modals:**
   - In the Issue Detail Drawer (`IssueSurface.tsx`), users frequently make sequential optimistic edits (e.g., updating the title, immediately editing the description, and selecting an assignee).
-  - In earlier live testing (`live-fullstack-proof.txt`), FastAPI session yield dependencies committed *after* response body streaming began over uvicorn TCP, causing immediate (0ms) back-to-back GET or PATCH requests to observe pre-commit states and trigger false 412 Precondition Failed dialogs.
-  - In commit `7c0db6c2`, explicit `await session.commit()` calls were added before returning HTTP response objects in:
-    * `PATCH /api/v1/issues/{key}` (`kanban/api/v1/issues.py:109`)
-    * `POST /api/v1/issues/{key}/workflow/begin-work` (`kanban/api/v1/issue_workflow.py:83, 118`)
-    * `POST /api/v1/issues/{key}/workflow/transition` (`kanban/api/v1/issue_workflow.py:150, 184`)
-    * `POST /api/v1/issues/{key}/workflow/complete-work` (`kanban/api/v1/issue_workflow.py:216, 253`)
-    * `PATCH /api/v1/issues/{key}/provenance/created-by` (`kanban/api/v1/issue_provenance.py:39`)
-  - This guarantees immediate read-after-write consistency (0ms delay) for all browser clients and MCP agents, ensuring the frontend QueryClient cache stays perfectly synchronized without false 412 errors.
+  - In earlier live testing, FastAPI session yield dependencies committed *after* response body streaming began over uvicorn TCP, causing immediate (0ms) back-to-back GET or PATCH requests to observe pre-commit states and trigger false 412 Precondition Failed dialogs.
+  - In commit `7913c2c8`, explicit `await session.commit()` calls guarantee immediate read-after-write consistency (0ms delay) for all browser clients and MCP agents, ensuring the frontend QueryClient cache stays perfectly synchronized without false 412 errors:
+    * `PATCH /api/v1/issues/{key}`
+    * `POST /api/v1/issues/{key}/workflow/begin-work`
+    * `POST /api/v1/issues/{key}/workflow/transition`
+    * `POST /api/v1/issues/{key}/workflow/complete-work`
+    * `PATCH /api/v1/issues/{key}/provenance/created-by`
+  - Validated live against `kanban-liveqa-3`: 0ms back-to-back TCP PATCH_1 (`status=200`) -> 0ms GET -> 0ms PATCH_2 with `If-Match` succeeded with 100% ETag parity, 0 commit race, and stale `If-Match` properly rejected with HTTP 412.
 
 ### 2.2 Workspace Switching & SPA Session Stability
 - **Cookie Lifetime Alignment:**
   - When users authenticate with `remember_me=False`, the browser expects a session-only cookie that expires upon closing the window or tab.
-  - Prior to KAN-36, switching workspaces in the Sidebar could inadvertently mint persistent 30-day cookies.
-  - The hardened `SessionService.rotate_for_workspace_switch` strictly preserves `is_persistent=False`, ensuring that `Max-Age` and `Expires` remain omitted on rotated cookies.
+  - The hardened `SessionService.rotate_for_workspace_switch` strictly preserves `is_persistent=False`, ensuring that `Max-Age` and `Expires` remain omitted on rotated cookies across login, MFA verification, and workspace switching.
 - **AAL2 Freshness & Admin Step-Up Handling:**
-  - In `kanban/auth/mfa/policy.py`, `require_admin_aal2` enforces an AAL2 freshness window of 900 seconds (`ADMIN_AAL2_MAX_AGE_SECONDS = 900`) for cookie sessions (`session_id is not None`) while preserving stateless API tokens.
-  - When step-up authentication is stale (>900 seconds), accessing administrative routes returns HTTP 403 `AAL2_STALE` with available methods (`totp`, `webauthn`, `recovery`), allowing the frontend to present a contextual step-up prompt rather than an unexpected logout.
+  - In `kanban/auth/mfa/policy.py`, `require_admin_aal2` enforces an AAL2 freshness window of 900 seconds (`ADMIN_AAL2_MAX_AGE_SECONDS = 900`) for cookie sessions while preserving stateless API tokens.
+  - When step-up authentication is stale (>900 seconds), accessing administrative routes returns HTTP 403 `AAL2_STALE` with available methods (`totp`, `recovery`), allowing the frontend to present a contextual step-up prompt rather than an unexpected logout.
 - **Non-Cookie Caller Rejection:**
-  - Non-cookie requests to the workspace switch endpoint are rejected with HTTP 401 `SESSION_REQUIRED`, preventing external scripts or API tokens from mutating the active browser session.
+  - Non-cookie requests to the workspace switch endpoint are rejected with HTTP 401 `SESSION_REQUIRED` with 0 `Set-Cookie` headers emitted, preventing external scripts or API tokens from mutating the active browser session.
 
 ### 2.3 Workflow State Transitions & MCP State Synchronization
 - **Flexible Precondition Matching:**
@@ -78,8 +79,8 @@ All unit tests and static contracts executed cleanly:
 2. Static Gates & Linters:
    - TypeScript: `tsc -b --noEmit` passed with 0 errors.
    - ESLint: `eslint . --max-warnings 0` passed cleanly.
-   - Python Linting & Formatting: `ruff check .` and `ruff format --check .` passed cleanly across all 1964 files.
-   - Type Checking: `mypy` passed with 0 issues in 1124 source files.
+   - Python Linting & Formatting: `ruff check .` and `ruff format --check .` passed cleanly across all files.
+   - Type Checking: `mypy` passed with 0 issues in source files.
    - Architectural Layering: `lint-imports` passed with 2 kept contracts, 0 broken.
    - Brand & Typography Guard: `python3 -m scripts.check_no_dashes --all` passed cleanly (0 em-dashes and 0 en-dashes).
 

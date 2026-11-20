@@ -46,7 +46,9 @@ async def archive_issue(
 ) -> IssueResponse:
     """Archive an issue enforcing completed/cancelled state and no open sub-issues."""
     async with timing_floor(floor_ms=25.0):
-        return await svc.archive_issue(session, caller, issue_ref)
+        res = await svc.archive_issue(session, caller, issue_ref)
+        await session.commit()
+        return res
 
 
 @router.post(
@@ -64,10 +66,12 @@ async def unarchive_issue(
     async with timing_floor(floor_ms=25.0):
         reason = body.reason if body else None
         admin_override = body.admin_override if body else False
-        return await svc.unarchive_issue(
+        res = await svc.unarchive_issue(
             session,
             caller,
             issue_ref,
             reason=reason,
             admin_override=admin_override,
         )
+        await session.commit()
+        return res

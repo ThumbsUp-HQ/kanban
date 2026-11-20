@@ -4,16 +4,17 @@
 - Title: [KB-P3-PENTEST-01] Preserve Session Persistence/TTL/AAL2 on Workspace Switch (CWE-613) and Fix Stale Issue PATCH ETag Drift (4 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Directory: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/docs/qa/KAN-36`
-- Branch: `fix/KAN-20-36-liveqa`
-- Commit: `7c0db6c2ec94fd527eb5b67eb76b6004a999901d`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-36`
+- Branch: `main` (commit `7913c2c8`)
+- Container Environment: `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
+- Live Stack Status: `LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-36 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2`. This audit incorporates verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt`), unit test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-36 on branch `main` at commit `7913c2c8`. This audit incorporates verified evidence from the zero-mock live container execution against `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-36/live-fullstack-proof.txt`, unit test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 The ticket resolves four critical security, session management, and HTTP caching problems:
 1. Session Persistence, TTL, and AAL2 Preservation on Workspace Switch (CWE-613):
@@ -165,4 +166,4 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-36/live-fullstack-pr
 
 STATUS: APPROVED
 
-All session rotation procedures, security invariants, cookie hygiene routines, explicit response transaction commits, and unit test suites for KAN-36 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2` have been thoroughly audited, verified against all architectural and security invariants, and certified. Ready for Clean-Room Reality-Checker QA.
+All session rotation procedures, security invariants, cookie hygiene routines, explicit response transaction commits, and unit test suites for KAN-36 on branch `main` at commit `7913c2c8` have been thoroughly audited, verified against all architectural and security invariants, and certified. Verified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Ready for Clean-Room Reality-Checker QA.

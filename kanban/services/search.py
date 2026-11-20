@@ -1071,6 +1071,26 @@ async def search_issues(  # noqa: C901, PLR0912, PLR0915
                     )
                 )
             ]
+            if extra_predicates and filtered_cands:
+                cand_ids = [c.id for c in filtered_cands]
+                filter_stmt = (
+                    select(Issue.id)
+                    .join(Project, Issue.project_id == Project.id)
+                    .join(ObjectRecord, Issue.id == ObjectRecord.id)
+                    .outerjoin(WorkflowState, Issue.state_id == WorkflowState.id)
+                    .outerjoin(ProjectPriority, Issue.priority_id == ProjectPriority.id)
+                    .outerjoin(Workspace, Project.workspace_id == Workspace.id)
+                    .where(
+                        ObjectRecord.deleted_at.is_(None),
+                        ObjectRecord.archived_at.is_(None),
+                        Issue.id.in_(cand_ids),
+                        *extra_predicates,
+                    )
+                )
+                if project_id is not None:
+                    filter_stmt = filter_stmt.where(Issue.project_id == project_id)
+                allowed_ids = set((await session.execute(filter_stmt)).scalars().all())
+                filtered_cands = [c for c in filtered_cands if c.id in allowed_ids]
             if cursor_score is not None and cursor_id is not None:
                 filtered_cands = [
                     c

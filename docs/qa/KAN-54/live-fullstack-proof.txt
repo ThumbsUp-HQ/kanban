@@ -1,27 +1,15 @@
-=== KAN-54 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 07d04cde) ===
-Timestamp: 2026-11-20T20:44:07.843Z
-GET /api/v1/setup/status -> HTTP 200 (8ms) body={"initialized":true}
-POST /api/v1/auth/local/login -> HTTP 200 (98ms)
-POST /api/v1/auth/mfa/verify -> HTTP 200 (25ms)
-POST /api/v1/workspaces/default/agent-definitions (codex-forensic-auditor) -> HTTP 409 (11ms)
-POST /api/v1/workspaces/default/agent-definitions (gemini-qa-reviewer) -> HTTP 409 (11ms)
-GET /api/v1/projects/KAN/approved-wasm-modules -> HTTP 200 (30ms)
-POST /api/v1/projects/KAN/workflow-hooks (require-qa-proof-link) -> SKIPPED (already exists)
-POST /api/v1/projects/KAN/workflow-hooks (auto-label-verified) -> SKIPPED (already exists)
-POST /api/v1/projects/KAN/workflow-hooks (codex-forensic-qa-gate) -> SKIPPED (already exists)
-POST /api/v1/projects/KAN/workflow-hooks (security-invariant-check) -> SKIPPED (already exists)
-GET /api/v1/projects/KAN/workflow-hooks -> HTTP 200 (32ms) ruleGroups=2
-WorkflowStudioPage Desktop Light (1440x900) loaded in 857ms: {"heading":"⚙️ ProjectKAN> Scripted Workflows & Transition Helpers","scriptRunnerCount":0,"interceptorCount":0,"scrollWidth":1440,"innerWidth":1440,"overflow":false}
-Copied Desktop Light screenshot to /home/adamoutler/kanban/thumbs-up-kanban.wiki/images/15-workflow-transition-studio.png and /home/adamoutler/kanban/kanban/web/public/docs-images/15-workflow-transition-studio.png
-AttachHookDialog check (with Agent Transition Helper selected): {"dialogTitle":"Attach Workflow Helper Hook","hasAgentOption":true,"scriptRunnerCount":0,"interceptorCount":0}
-WorkflowStudioPage Tablet (768x1024) geometry: {"scrollWidth":768,"innerWidth":768}
-WorkflowStudioPage Mobile (390x844) geometry: {"scrollWidth":390,"innerWidth":390}
+=== KAN-54 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 7913c2c8) ===
+Timestamp: 2026-11-20T22:12:49.166Z
+GET /api/v1/setup/status -> HTTP 200 (6ms) body={"initialized":true}
+Desktop Light (/w/kanban/p/KAN/settings/workflows) loaded in 897ms: {"prefix":"⚙️ ProjectKAN","suffix":"> Scripted Workflows & Transition Helpers","scriptRunnerCount":0,"interceptorCount":0,"scrollWidth":1440,"innerWidth":1440}
+Tablet (768x1024) geometry: {"scrollWidth":768,"innerWidth":768}
+Mobile (390x844) layout & breadcrumb audit: {"scrollWidth":390,"innerWidth":390,"prefixTop":80,"prefixBottom":113,"prefixHeight":33,"prefixChildrenOnSameLine":true,"suffixTop":121,"suffixWrapsBelowPrefix":true,"breadcrumbRight":129,"searchLeft":137,"breadcrumbClearsSearchBtn":true,"breadcrumbOverflow":"hidden","breadcrumbTextOverflow":"clip"}
+AttachHookDialog FieldHelpHint popover z-index check: {"popoverZ":"1220","backdropZ":"1000"}
 
 --- Runtime Error Telemetry ---
 Console errors: 0
 Page errors: 0
 5xx responses: 0
-LIVE_STACK_VERDICT [P1_WORKFLOW_STUDIO_LABELS]: PASS
-LIVE_STACK_VERDICT [P2_ATTACH_HOOK_DIALOG_LABELS]: PASS
-LIVE_STACK_VERDICT [P3_WIKI_IMAGE_15_UPDATED]: PASS
+LIVE_STACK_VERDICT [P1_STUDIO_LABELS_AND_WIKI_IMAGE]: PASS
+LIVE_STACK_VERDICT [P2_MOBILE_BREADCRUMB_ELLIPSIS_AND_TITLE_GROUPING]: PASS
 OVERALL LIVE_STACK_VERDICT (KAN-54): PASS

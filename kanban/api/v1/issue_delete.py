@@ -75,7 +75,9 @@ async def delete_issue(
 ) -> IssueDeleteResponse:
     """Soft-delete an issue into trash guarded by blast-radius hash concurrency check."""
     async with timing_floor(floor_ms=25.0):
-        return await svc.trash_issue(session, caller, issue_ref, kb_blast_hash)
+        res = await svc.trash_issue(session, caller, issue_ref, kb_blast_hash)
+        await session.commit()
+        return res
 
 
 @router.get(
@@ -126,4 +128,6 @@ async def restore_issue(
 ) -> IssueResponse:
     """Restore a soft-deleted issue from trash back into active state."""
     async with timing_floor(floor_ms=25.0):
-        return await svc.restore_issue(session, caller, issue_ref)
+        res = await svc.restore_issue(session, caller, issue_ref)
+        await session.commit()
+        return res

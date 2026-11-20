@@ -1,509 +1,409 @@
-diff --git a/kanban/api/v1/issue_workflow.py b/kanban/api/v1/issue_workflow.py
-index 49e43f36..43f53bb1 100644
---- a/kanban/api/v1/issue_workflow.py
-+++ b/kanban/api/v1/issue_workflow.py
-@@ -6,11 +6,12 @@ from __future__ import annotations
+diff --git a/kanban/api/deps.py b/kanban/api/deps.py
+index 69a69e3e..acaa23af 100644
+--- a/kanban/api/deps.py
++++ b/kanban/api/deps.py
+@@ -42,6 +42,8 @@ class PrincipalContext:
+     scoped_project_id: uuid.UUID | None = None
+     user_access_hash: bytes | None = None
+     is_server_admin: bool = False
++    principal_type: str | None = None
++    is_mcp_credential: bool = False
  
- from typing import Annotated, Any
+     def __post_init__(self) -> None:
+         """Enforce AAL level bounds."""
+@@ -57,6 +59,17 @@ class PrincipalContext:
+             converted: tuple[object, ...] = tuple(raw_scopes)
+             object.__setattr__(self, "token_scopes", converted)
  
--from fastapi import APIRouter, Depends, Header, Response, status
-+from fastapi import APIRouter, Depends, Header, status
- from pydantic import BaseModel, ConfigDict, Field
- from sqlalchemy.ext.asyncio import AsyncSession
- from starlette.responses import JSONResponse
- 
-+from database.models.spine import ObjectRecord
- from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
- from kanban.api.timing import timing_floor
- from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
-@@ -60,7 +61,6 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
-     body: BeginWorkRequest,
-     caller: Caller,
-     session: Session,
--    response: Response,
-     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
-     if_match: Annotated[str | None, Header()] = None,
- ) -> JSONResponse:
-@@ -91,6 +91,12 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
-                 },
-             )
- 
-+        await session.flush()
-+        await session.refresh(issue)
-+        obj_rec = await session.get(ObjectRecord, issue.id, populate_existing=True)
-+        if obj_rec is not None:
-+            await session.refresh(obj_rec)
++    @property
++    def is_agent_or_mcp_caller(self) -> bool:
++        """Return True if caller is an AI agent, MCP client, or service principal."""
++        if self.principal_type in ("AGENT", "SERVICE_PRINCIPAL", "agent", "service_principal"):
++            return True
++        if self.agent_principal_id is not None:
++            return True
++        if self.is_mcp_credential:
++            return True
++        return any(scope.startswith(("agent:", "docs:", "admin:")) for scope in self.token_scopes)
 +
-         serialized = await svc.serialize_issue(session, caller, issue)
-         issue_dict = serialized.model_dump(mode="json")
-         issue_dict["status"] = "started"
-@@ -108,11 +114,8 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
-         issue_dict["comment_ref"] = comment_ref
-         issue_dict["comment_id"] = comment_ref
  
--        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
--        if sha256_hex:
--            response.headers["ETag"] = f'"{sha256_hex}"'
--
--        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
-+        headers = {"ETag": serialized.etag} if serialized.etag else {}
-+        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
+ class PrincipalResolver(Protocol):
+     """Protocol for resolving PrincipalContext from an inbound HTTP request."""
+diff --git a/kanban/api/v1/admin/workspace_settings.py b/kanban/api/v1/admin/workspace_settings.py
+index fad7f34d..f42621ba 100644
+--- a/kanban/api/v1/admin/workspace_settings.py
++++ b/kanban/api/v1/admin/workspace_settings.py
+@@ -43,6 +43,7 @@ class WorkspaceSettingsResponse(BaseModel):
+     trash_retention_days: int
+     mcp_key_max_ttl_days: int
+     air_gap_mode: bool
++    default_skip_loaded_sequence_numbers: bool = False
+     updated_at: datetime
  
  
- @router.post(
-@@ -124,7 +127,6 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
-     body: TransitionTicketRequest,
-     caller: Caller,
-     session: Session,
--    response: Response,
-     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
-     if_match: Annotated[str | None, Header()] = None,
- ) -> JSONResponse:
-@@ -154,6 +156,12 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
-                 },
+@@ -60,6 +61,7 @@ class WorkspaceSettingsUpdate(BaseModel):
+     trash_retention_days: int | None = Field(default=None, ge=7, le=365)
+     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
+     air_gap_mode: bool | None = None
++    default_skip_loaded_sequence_numbers: bool | None = None
+ 
+ 
+ async def require_workspace_or_server_admin(
+@@ -119,6 +121,7 @@ async def _get_or_create_settings(
+         trash_retention_days=trash_days,
+         mcp_key_max_ttl_days=90,
+         air_gap_mode=False,
++        default_skip_loaded_sequence_numbers=False,
+     )
+     session.add(settings)
+     await session.flush()
+@@ -150,6 +153,7 @@ async def get_workspace_settings(
+         trash_retention_days=settings.trash_retention_days,
+         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+         air_gap_mode=settings.air_gap_mode,
++        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+         updated_at=settings.updated_at,
+     )
+ 
+@@ -211,29 +215,30 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+                 title="AAL2 Required",
+                 detail="Updating trash_retention_days requires AAL2 authentication.",
              )
+-        verified_at = caller.aal2_verified_at
+-        if verified_at is None:
+-            raise ProblemException(
+-                code="AAL2_STALE",
+-                status=403,
+-                title="AAL2 Session Stale",
+-                detail="AAL2 verification timestamp is missing or stale.",
+-            )
+-        now_utc = datetime.now(UTC)
+-        if verified_at.tzinfo is None:
+-            verified_at = verified_at.replace(tzinfo=UTC)
+-        age_sec = (now_utc - verified_at).total_seconds()
+-        if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
+-            stale_msg = (
+-                f"AAL2 verification is stale ({int(age_sec)}s > "
+-                f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
+-            )
+-            raise ProblemException(
+-                code="AAL2_STALE",
+-                status=403,
+-                title="AAL2 Session Stale",
+-                detail=stale_msg,
+-            )
++        if "session" in caller.token_scopes:
++            verified_at = caller.aal2_verified_at
++            if verified_at is None:
++                raise ProblemException(
++                    code="AAL2_STALE",
++                    status=403,
++                    title="AAL2 Session Stale",
++                    detail="AAL2 verification timestamp is missing or stale.",
++                )
++            now_utc = datetime.now(UTC)
++            if verified_at.tzinfo is None:
++                verified_at = verified_at.replace(tzinfo=UTC)
++            age_sec = (now_utc - verified_at).total_seconds()
++            if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
++                stale_msg = (
++                    f"AAL2 verification is stale ({int(age_sec)}s > "
++                    f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
++                )
++                raise ProblemException(
++                    code="AAL2_STALE",
++                    status=403,
++                    title="AAL2 Session Stale",
++                    detail=stale_msg,
++                )
  
-+        await session.flush()
-+        await session.refresh(issue)
-+        obj_rec = await session.get(ObjectRecord, issue.id, populate_existing=True)
-+        if obj_rec is not None:
-+            await session.refresh(obj_rec)
+     before: dict[str, Any] = {
+         "name": ws.name if ws else settings.display_name,
+@@ -245,6 +250,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+         "trash_retention_days": settings.trash_retention_days,
+         "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
+         "air_gap_mode": settings.air_gap_mode,
++        "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+     }
+ 
+     diff: dict[str, Any] = {}
+@@ -331,6 +337,11 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+         diff["air_gap_mode"] = body.air_gap_mode
+         settings.air_gap_mode = bool(body.air_gap_mode)
+ 
++    skip_seq = body.default_skip_loaded_sequence_numbers
++    if skip_seq is not None and skip_seq != settings.default_skip_loaded_sequence_numbers:
++        diff["default_skip_loaded_sequence_numbers"] = skip_seq
++        settings.default_skip_loaded_sequence_numbers = skip_seq
 +
-         serialized = await svc.serialize_issue(session, caller, issue)
-         issue_dict = serialized.model_dump(mode="json")
-         issue_dict["status"] = "transitioned"
-@@ -170,11 +178,8 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
-             "group": target_state.state_group,
+     if diff:
+         await session.flush()
+         await session.refresh(settings)
+@@ -345,6 +356,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+             "trash_retention_days": settings.trash_retention_days,
+             "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
+             "air_gap_mode": settings.air_gap_mode,
++            "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
          }
  
--        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
--        if sha256_hex:
--            response.headers["ETag"] = f'"{sha256_hex}"'
--
--        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
-+        headers = {"ETag": serialized.etag} if serialized.etag else {}
-+        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
- 
- 
- @router.post(
-@@ -186,7 +191,6 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
-     body: CompleteWorkRequest,
-     caller: Caller,
-     session: Session,
--    response: Response,
-     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
-     if_match: Annotated[str | None, Header()] = None,
- ) -> JSONResponse:
-@@ -216,6 +220,12 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
+         await record_activity(
+@@ -389,6 +401,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
                  },
              )
  
-+        await session.flush()
-+        await session.refresh(issue)
-+        obj_rec = await session.get(ObjectRecord, issue.id, populate_existing=True)
-+        if obj_rec is not None:
-+            await session.refresh(obj_rec)
++    await session.commit()
 +
-         serialized = await svc.serialize_issue(session, caller, issue)
-         issue_dict = serialized.model_dump(mode="json")
-         issue_dict["status"] = "completed"
-@@ -235,8 +245,5 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
-         issue_dict["comment_id"] = comment_ref
-         issue_dict["proof"] = proof
- 
--        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
--        if sha256_hex:
--            response.headers["ETag"] = f'"{sha256_hex}"'
--
--        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
-+        headers = {"ETag": serialized.etag} if serialized.etag else {}
-+        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
-diff --git a/kanban/api/v1/workspaces.py b/kanban/api/v1/workspaces.py
-index b3ca35b4..0a635364 100644
---- a/kanban/api/v1/workspaces.py
-+++ b/kanban/api/v1/workspaces.py
-@@ -21,8 +21,10 @@ from kanban.admin import principal_service
- from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
- from kanban.api.problems import FieldError, ProblemException
- from kanban.auth.sessions.cookies import (
-+    FALLBACK_SESSION_COOKIE_NAME,
-     SESSION_COOKIE_NAME,
-     attach_session_and_csrf_cookies,
-+    build_clear_fallback_cookie_header,
-     extract_session_cookie,
-     is_plain_http,
- )
-@@ -223,33 +225,19 @@ async def create_workspace_endpoint(
+     return WorkspaceSettingsResponse(
+         workspace_id=settings.workspace_id,
+         name=ws.name if ws else settings.display_name,
+@@ -400,5 +414,6 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
+         trash_retention_days=settings.trash_retention_days,
+         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+         air_gap_mode=settings.air_gap_mode,
++        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+         updated_at=settings.updated_at,
      )
+diff --git a/kanban/api/v1/issue_copy.py b/kanban/api/v1/issue_copy.py
+index 1cdda12e..b721dc8e 100644
+--- a/kanban/api/v1/issue_copy.py
++++ b/kanban/api/v1/issue_copy.py
+@@ -35,4 +35,5 @@ async def copy_issue_endpoint(
+     async with timing_floor(floor_ms=25.0):
+         result, canonical_key = await copy_issue(session, caller, issue_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{canonical_key}"
++        await session.commit()
+         return result
+diff --git a/kanban/api/v1/issue_trees.py b/kanban/api/v1/issue_trees.py
+index 4bc8ccea..5f925433 100644
+--- a/kanban/api/v1/issue_trees.py
++++ b/kanban/api/v1/issue_trees.py
+@@ -40,4 +40,5 @@ async def create_issue_tree(  # noqa: PLR0913, PLR0917
+         await taint_guard.check_write(project_ref, tool_name="create_ticket")
+         result = await svc.create_issue_tree(session, caller, project_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{result.root.key}"
++        await session.commit()
+         return result
+diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
+index 3e82fe20..406d4e43 100644
+--- a/kanban/api/v1/issues.py
++++ b/kanban/api/v1/issues.py
+@@ -46,6 +46,7 @@ async def create_issue(
+         result, etag = await svc.create_issue(session, caller, project_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{result.key}"
+         response.headers["ETag"] = etag
++        await session.commit()
+         return result
  
  
--@router.post(
--    "/{workspace_id}/switch",
--    response_model=SwitchWorkspaceResponse,
--    summary="Switch active workspace session",
--)
--async def switch_workspace_endpoint(
-+async def _execute_workspace_switch_proc(
-+    session: AsyncSession,
-     workspace_id: uuid.UUID,
--    caller: Annotated[PrincipalContext, Depends(get_principal)],
--    session: Annotated[AsyncSession, Depends(get_rls_session)],
--    request: Request,
--) -> Response:
--    """Switch caller's active session to the target workspace."""
--    session_factory = getattr(request.app.state, "session_factory", None)
--    if session_factory is None:
--        raise ProblemException(
--            code="INTERNAL_ERROR",
--            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
--            title="Internal Server Error",
--            detail="Session factory is not available.",
--        )
-+    principal_id: uuid.UUID,
-+) -> uuid.UUID:
-+    """Execute kb_auth_switch_workspace procedure and handle error codes."""
-     try:
-         res = (
-             await session.execute(
-                 text(
-                     "SELECT workspace_id, principal_id FROM kb_auth_switch_workspace(:ws_id, :p_id)"
-                 ),
--                {"ws_id": workspace_id, "p_id": caller.principal_id},
-+                {"ws_id": workspace_id, "p_id": principal_id},
-             )
-         ).first()
-     except Exception as exc:
-@@ -277,22 +265,71 @@ async def switch_workspace_endpoint(
-             title="Workspace Not Found",
-             detail=f"Target workspace {workspace_id} does not exist.",
-         )
-+    val = res.principal_id
-+    if isinstance(val, uuid.UUID):
-+        return val
-+    return uuid.UUID(str(val))
-+
-+
-+@router.post(
-+    "/{workspace_id}/switch",
-+    response_model=SwitchWorkspaceResponse,
-+    summary="Switch active workspace session",
-+)
-+async def switch_workspace_endpoint(
-+    workspace_id: uuid.UUID,
-+    caller: Annotated[PrincipalContext, Depends(get_principal)],
-+    session: Annotated[AsyncSession, Depends(get_rls_session)],
-+    request: Request,
-+) -> Response:
-+    """Switch caller's active session to the target workspace."""
-+    if caller.session_id is None:
-+        raise ProblemException(
-+            code="SESSION_REQUIRED",
-+            status=status.HTTP_401_UNAUTHORIZED,
-+            title="Session Required",
-+            detail="Workspace switching requires an active browser session.",
-+        )
+@@ -106,6 +107,7 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
+         issue = await svc.get_issue_or_404(session, caller, issue_key)
+         await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
+         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
++        await session.commit()
+         response.headers["ETag"] = new_etag
+         return result
  
--    target_principal_id = res.principal_id
-+    session_factory = getattr(request.app.state, "session_factory", None)
-+    if session_factory is None:
-+        raise ProblemException(
-+            code="INTERNAL_ERROR",
-+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-+            title="Internal Server Error",
-+            detail="Session factory is not available.",
-+        )
+diff --git a/kanban/api/v1/transitions.py b/kanban/api/v1/transitions.py
+index 98ede3e5..28cd52ff 100644
+--- a/kanban/api/v1/transitions.py
++++ b/kanban/api/v1/transitions.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import logging
+ import uuid  # noqa: TC003
+ from typing import Annotated, Any
+ 
+@@ -17,6 +18,8 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException
+ from kanban.workflows.engine import TransitionEngine
+ 
++logger = logging.getLogger(__name__)
 +
-+    target_principal_id = await _execute_workspace_switch_proc(
-+        session, workspace_id, caller.principal_id
+ router = APIRouter(tags=["transitions"])
+ 
+ Caller = Annotated[PrincipalContext, Depends(get_principal)]
+@@ -69,6 +72,21 @@ class CancelTransitionResponse(BaseModel):
+     execution_id: uuid.UUID
+ 
+ 
++async def _attach_issue_etag(
++    session: AsyncSession, caller: PrincipalContext, issue_key: str, headers: dict[str, str]
++) -> None:
++    """Attempt to resolve and attach fresh ETag header for issue."""
++    try:
++        from kanban.services.issues import get_issue_or_404, serialize_issue  # noqa: PLC0415
++
++        issue_row = await get_issue_or_404(session, caller, issue_key)
++        serialized = await serialize_issue(session, caller, issue_row)
++        if serialized.etag:
++            headers["ETag"] = serialized.etag
++    except Exception:  # noqa: BLE001
++        logger.debug("Could not attach fresh ETag for %s", issue_key)
++
++
+ @router.post(
+     "/issues/{issue_key}/transitions",
+     response_model=TransitionResponse,
+@@ -111,6 +129,8 @@ async def post_issue_transition(
+         raise RuntimeError(msg)
+ 
+     if outcome.status_code == status.HTTP_202_ACCEPTED or outcome.status == "pending_agent_gate":
++        if session.is_active:
++            await session.commit()
+         content: dict[str, Any] = {
+             "status": "pending_agent_gate",
+             "execution_id": str(outcome.execution_id),
+@@ -121,13 +141,23 @@ async def post_issue_transition(
+         }
+         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=content)
+ 
++    headers: dict[str, str] = {}
++    await _attach_issue_etag(session, caller, issue_key, headers)
++
++    if session.is_active:
++        await session.commit()
++
+     resp_data = TransitionResponse(
+         execution_id=outcome.execution_id,
+         status=outcome.status,
+         state=outcome.state,
+         sync_duration_ms=outcome.sync_duration_ms,
+     )
+-    return JSONResponse(status_code=200, content=resp_data.model_dump(mode="json"))
++    return JSONResponse(
++        status_code=200,
++        content=resp_data.model_dump(mode="json"),
++        headers=headers or None,
 +    )
  
-     session_service: SessionService | None = getattr(request.app.state, "session_service", None)
-     if session_service is not None:
-         cookie_hdr = request.headers.get("cookie")
--        existing_sess = extract_session_cookie(cookie_hdr) or request.cookies.get(
--            SESSION_COOKIE_NAME
--        )
--        issued = await session_service.create_after_login(
--            session,
--            principal_id=target_principal_id,
--            workspace_id=workspace_id,
--            aal_level=caller.aal_level,
--            existing_cookie=existing_sess,
-+        existing_sess = (
-+            extract_session_cookie(cookie_hdr)
-+            or request.cookies.get(SESSION_COOKIE_NAME)
-+            or request.cookies.get(FALLBACK_SESSION_COOKIE_NAME)
+ 
+ @router.delete(
+diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
+index 9b5c6f21..66068ea6 100644
+--- a/kanban/auth/sessions/resolver.py
++++ b/kanban/auth/sessions/resolver.py
+@@ -82,6 +82,8 @@ class SessionCookieResolver:
+             session_id=user_session.id,
+             mfa_pending=user_session.mfa_pending,
+             aal2_verified_at=user_session.aal2_verified_at,
++            principal_type="USER",
++            is_mcp_credential=False,
          )
-+        orig_session = getattr(request.state, "user_session", None)
-+        try:
-+            issued = await session_service.rotate_for_workspace_switch(
-+                session,
-+                target_principal_id=target_principal_id,
-+                target_workspace_id=workspace_id,
-+                old_session_id=caller.session_id,
-+                existing_cookie=existing_sess,
-+                originating_session=orig_session,
-+            )
-+        except ValueError as exc:
-+            raise ProblemException(
-+                code="SESSION_EXPIRED",
-+                status=status.HTTP_401_UNAUTHORIZED,
-+                title="Session Expired",
-+                detail=str(exc),
-+            ) from exc
-+
-         await session.commit()
+         request.state.principal = ctx
+         bind_request_log_user(
+@@ -144,6 +146,10 @@ class SessionCookieResolver:
+                 ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
  
-         response = JSONResponse(
-@@ -309,10 +346,15 @@ async def switch_workspace_endpoint(
-             issued.csrf_token,
-             persistent=issued.is_persistent,
+         is_ephemeral = intro.token_kind == "ephemeral" or raw_token.startswith("kb_agt_eph_")  # noqa: S105
++        owner_kind = intro.owner_kind or (
++            "agent" if intro.agent_principal_id or is_ephemeral else "user"
++        )
++        principal_type = owner_kind.upper()
+         ctx = PrincipalContext(
+             principal_id=intro.principal_id,
+             workspace_id=ws_id,
+@@ -154,6 +160,8 @@ class SessionCookieResolver:
+             read_only=is_ephemeral,
+             scope_tier=intro.scope_tier,
+             scoped_project_id=intro.project_id,
++            principal_type=principal_type,
++            is_mcp_credential=True,
          )
--        if not is_plain_http(request) and FALLBACK_CSRF_COOKIE_NAME in request.cookies:
--            response.raw_headers.append(
--                (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
--            )
-+        if not is_plain_http(request):
-+            if FALLBACK_SESSION_COOKIE_NAME in request.cookies:
-+                response.raw_headers.append(
-+                    (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
-+                )
-+            if FALLBACK_CSRF_COOKIE_NAME in request.cookies:
-+                response.raw_headers.append(
-+                    (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
-+                )
-         return response
- 
-     return JSONResponse(
-@@ -391,7 +433,7 @@ async def update_workspace_endpoint(
-         if not SLUG_REGEX.match(cleaned_slug):
-             raise ProblemException(
-                 code="VALIDATION_FAILED",
--                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-+                status=422,
-                 title="Validation Failed",
-                 detail="slug must match ^[a-z0-9][a-z0-9-]{1,62}$",
-             )
-diff --git a/kanban/auth/sessions/service.py b/kanban/auth/sessions/service.py
-index f12168d8..1972e859 100644
---- a/kanban/auth/sessions/service.py
-+++ b/kanban/auth/sessions/service.py
-@@ -10,7 +10,7 @@ from dataclasses import dataclass
- from datetime import UTC, datetime, timedelta
- from typing import TYPE_CHECKING, Final
- 
--from sqlalchemy import text
-+from sqlalchemy import select, text
- 
- from database.models.auth import UserSession
- from kanban.auth.sessions.cookies import (
-@@ -268,6 +268,115 @@ class SessionService:
-         res = await session.execute(stmt, {"p_id": session_id})
-         return bool(res.scalar_one())
- 
-+    async def rotate_for_workspace_switch(  # noqa: PLR0913
-+        self,
-+        session: AsyncSession,
-+        *,
-+        target_principal_id: uuid.UUID,
-+        target_workspace_id: uuid.UUID,
-+        old_session_id: uuid.UUID | None = None,
-+        existing_cookie: str | None = None,
-+        originating_session: UserSession | None = None,
-+    ) -> IssuedSession:
-+        """Rotate session during workspace switch preserving TTL, persistence, and AAL2.
-+
-+        Adheres to CWE-613 session expiration and privilege retention standards.
-+        """
-+        orig: UserSession | None = originating_session
-+        if orig is None and existing_cookie:
-+            old_token = parse_session_cookie(existing_cookie, self._session_hmac_key)
-+            if old_token:
-+                old_sha = hash_session_token(old_token)
-+                orig = await self.resolve_session(session, old_sha)
-+
-+        if orig is None and old_session_id is not None:
-+            res = await session.execute(
-+                select(UserSession).where(
-+                    UserSession.id == old_session_id,
-+                    UserSession.revoked_at.is_(None),
-+                )
-+            )
-+            orig = res.scalar_one_or_none()
-+
-+        if orig is None:
-+            msg = "Originating session could not be resolved or does not exist"
-+            raise ValueError(msg)
-+
-+        now = datetime.now(UTC)
-+        if orig.revoked_at is not None:
-+            msg = "Originating session has already been revoked"
-+            raise ValueError(msg)
-+
-+        idle_at = (
-+            orig.idle_expires_at
-+            if orig.idle_expires_at.tzinfo
-+            else orig.idle_expires_at.replace(tzinfo=UTC)
-+        )
-+        abs_at = (
-+            orig.absolute_expires_at
-+            if orig.absolute_expires_at.tzinfo
-+            else orig.absolute_expires_at.replace(tzinfo=UTC)
-+        )
-+
-+        if now >= idle_at or now >= abs_at:
-+            msg = "Originating session is expired"
-+            raise ValueError(msg)
-+
-+        # Revoke the originating session prior to issuing the rotated session
-+        await self.logout(session, orig.id)
-+
-+        is_persistent = bool(orig.is_persistent)
-+        absolute_expires_at = orig.absolute_expires_at
-+        idle_seconds = (
-+            self._policy.remember_idle_seconds if is_persistent else self._policy.idle_seconds
-+        )
-+        idle_expires_at = min(now + timedelta(seconds=idle_seconds), absolute_expires_at)
-+
-+        new_session_id = uuid.uuid4()
-+        token = generate_session_token()
-+        token_sha256 = hash_session_token(token)
-+
-+        stmt = text(
-+            "SELECT kb_auth.session_create("
-+            "  :p_id, :p_token_sha256, :p_principal_id, :p_workspace_id, "
-+            "  :p_auth_card_id, :p_aal_level, :p_aal2_verified_at, :p_mfa_pending, "
-+            "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id, "
-+            "  :p_is_persistent"
-+            ")"
-+        )
-+        await session.execute(
-+            stmt,
-+            {
-+                "p_id": new_session_id,
-+                "p_token_sha256": token_sha256,
-+                "p_principal_id": target_principal_id,
-+                "p_workspace_id": target_workspace_id,
-+                "p_auth_card_id": orig.auth_card_id,
-+                "p_aal_level": orig.aal_level,
-+                "p_aal2_verified_at": orig.aal2_verified_at,
-+                "p_mfa_pending": orig.mfa_pending,
-+                "p_idle_expires_at": idle_expires_at,
-+                "p_absolute_expires_at": absolute_expires_at,
-+                "p_rotated_from_id": orig.id,
-+                "p_is_persistent": is_persistent,
-+            },
-+        )
-+
-+        cookie_val = encode_session_cookie(token, self._session_hmac_key)
-+        csrf_token = generate_csrf_token(new_session_id, self._session_hmac_key)
-+
-+        return IssuedSession(
-+            session_id=new_session_id,
-+            token=token,
-+            cookie_val=cookie_val,
-+            csrf_token=csrf_token,
-+            aal_level=orig.aal_level,
-+            mfa_pending=orig.mfa_pending,
-+            idle_expires_at=idle_expires_at,
-+            absolute_expires_at=absolute_expires_at,
-+            is_persistent=is_persistent,
-+        )
-+
-     async def resolve_session(
-         self, session: AsyncSession, token_sha256: bytes
-     ) -> UserSession | None:
-diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
-index 2b80b15a..d7056980 100644
---- a/kanban/issues/workflow_service.py
-+++ b/kanban/issues/workflow_service.py
-@@ -123,13 +123,30 @@ def render_proof_table(summary_markdown: str, proof: dict[str, Any]) -> str:
-     )
- 
- 
--async def _check_if_match_etag(issue: Issue, if_match: str | None) -> None:
--    """Validate optional If-Match ETag against issue description SHA-256."""
-+async def _check_if_match_etag(
-+    issue: Issue,
-+    if_match: str | None,
-+    session: AsyncSession | None = None,
-+    caller: PrincipalContext | None = None,
-+) -> None:
-+    """Validate optional If-Match ETag against composite issue ETag or description SHA-256."""
-     if not if_match:
-         return
--    current_etag = issue.description_sha256.hex() if issue.description_sha256 else ""
--    clean_match = if_match.strip().strip('"')
--    if clean_match != current_etag:
-+    raw_etag = if_match.strip()
-+    if raw_etag.startswith("W/"):
-+        raw_etag = raw_etag[2:].strip()
-+    clean_match = raw_etag.strip('"')
-+    current_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
-+    valid_etags = [current_sha.lower()]
-+
-+    if session is not None and caller is not None:
-+        from kanban.services.issues import serialize_issue  # noqa: PLC0415
-+
-+        serialized = await serialize_issue(session, caller, issue)
-+        if serialized.etag:
-+            valid_etags.append(serialized.etag.strip('"').lower())
-+
-+    if clean_match.lower() not in valid_etags:
-         raise ProblemException(
-             code="CONFLICT_ETAG",
-             status=412,
-@@ -205,7 +222,7 @@ async def begin_work(
-         Capability.EDIT | Capability.TRANSITION,
-     )
- 
--    await _check_if_match_etag(issue, if_match)
-+    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
- 
-     if issue.pending_transition_exec_id is not None:
-         raise ProblemException(
-@@ -376,7 +393,7 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
-     issue = await resolve_issue_ref(session, caller, issue_ref)
-     await require_capability(session, caller, issue.id, Capability.TRANSITION)
- 
--    await _check_if_match_etag(issue, if_match)
-+    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
- 
-     if issue.pending_transition_exec_id is not None:
-         raise ProblemException(
-@@ -564,7 +581,7 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
-     issue = await resolve_issue_ref(session, caller, issue_ref)
-     await require_capability(session, caller, issue.id, Capability.TRANSITION)
- 
--    await _check_if_match_etag(issue, if_match)
-+    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
- 
-     if issue.pending_transition_exec_id is not None:
-         raise ProblemException(
-diff --git a/kanban/services/issue_provenance.py b/kanban/services/issue_provenance.py
-index 6210fb87..56773fb2 100644
---- a/kanban/services/issue_provenance.py
-+++ b/kanban/services/issue_provenance.py
-@@ -311,4 +311,4 @@ async def override_issue_created_by(
- 
-     resp = await serialize_issue(session, caller, issue)
-     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
--    return resp, f'"{sha256_hex}"'
-+    return resp, resp.etag or (f'"{sha256_hex}"' if sha256_hex else '""')
+         request.state.principal = ctx
+         bind_request_log_user(
 diff --git a/kanban/services/issues.py b/kanban/services/issues.py
-index c0737b0d..5509d18a 100644
+index a7d07a00..13140f56 100644
 --- a/kanban/services/issues.py
 +++ b/kanban/services/issues.py
-@@ -656,7 +656,7 @@ async def serialize_issue(
+@@ -27,7 +27,7 @@ import base64
+ import binascii
+ import hashlib
+ import uuid
+-from datetime import date, datetime
++from datetime import UTC, date, datetime
+ from typing import TYPE_CHECKING, Any, Final
+ 
+ from sqlalchemy import delete, select, text, update
+@@ -656,8 +656,11 @@ async def serialize_issue(
  
      sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
  
 -    obj = await session.get(ObjectRecord, issue.id)
 +    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
      archived_at = obj.archived_at if obj is not None else None
++    now_utc = datetime.now(UTC)
++    issue_created_at = obj.created_at if obj is not None else now_utc
++    issue_updated_at = obj.updated_at if obj is not None else now_utc
      archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
  
-@@ -851,7 +851,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+     pending_gate = await resolve_pending_gate(session, issue)
+@@ -674,7 +677,12 @@ async def serialize_issue(
+             else issue.description_markdown
+         ),
+         description_sha256=sha256_hex,
+-        state=StateSummary(id=state.id, name=state.name, group=state.state_group),
++        state=StateSummary(
++            id=state.id,
++            name=state.name,
++            group=state.state_group,
++            color_hex=state.color_hex,
++        ),
+         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
+         start_date=issue.start_date,
+         due_date=issue.due_date,
+@@ -692,6 +700,8 @@ async def serialize_issue(
+         provenance=provenance,
+         access_manifest=manifest,
+         capabilities=capabilities_to_names(caps),
++        created_at=issue_created_at,
++        updated_at=issue_updated_at,
+         archived_at=archived_at,
+         archive_eligibility=archive_eligibility,
+         pending_gate=pending_gate,
+@@ -740,15 +750,37 @@ async def create_issue(
+ 
+     try:
+         async with session.begin_nested():
+-            seq_id = (
++            seq_row = (
+                 await session.execute(
+-                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
++                    text(
++                        "SELECT allocated_sequences, skipped_sequences "
++                        "FROM allocate_issue_sequences(:proj, 1, false)"
++                    ),
++                    {"proj": project.id},
+                 )
+-            ).scalar_one()
++            ).one()
++            allocated_seqs: list[int] = list(seq_row[0])
++            skipped_seqs: list[int] = list(seq_row[1])
++            seq_id = allocated_seqs[0]
+ 
+             canonical_key = f"{project.identifier}-{seq_id}"
+             rank = initial_board_rank(seq_id)
+ 
++            if skipped_seqs:
++                await record_activity(
++                    session,
++                    workspace_id=caller.workspace_id,
++                    object_id=project.id,
++                    actor_principal_id=caller.principal_id,
++                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
++                    payload={
++                        "project_key": project.identifier,
++                        "skipped_sequences": skipped_seqs,
++                        "allocated_sequence": seq_id,
++                        "reason": "agent_safe_sequence_numbering",
++                    },
++                )
++
+             issue_id = (
+                 await session.execute(
+                     text(
+@@ -846,7 +878,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
  ) -> tuple[IssueResponse, str]:
      """Patch issue fields under description ETag concurrency check and emit activity."""
      issue = await resolve_issue_ref(session, caller, issue_ref)
@@ -512,7 +412,22 @@ index c0737b0d..5509d18a 100644
      if obj is not None and obj.archived_at is not None:
          raise _problem(
              code="ISSUE_ARCHIVED",
-@@ -1135,11 +1135,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+@@ -855,6 +887,14 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             detail="Archived issues are read-only and cannot be modified",
+         )
+ 
++    if issue.pending_transition_exec_id is not None:
++        raise _problem(
++            code="TRANSITION_HELD",
++            status=409,
++            title="Transition Held",
++            detail="Issue modification is blocked while an asynchronous transition gate is pending",
++        )
++
+     project = await session.get(Project, issue.project_id)
+     if project is None:  # pragma: no cover
+         not_found()
+@@ -1130,11 +1170,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
              },
          )
  
@@ -532,10 +447,10 @@ index c0737b0d..5509d18a 100644
      new_etag = serialized.etag or (
 diff --git a/kanban/tests/api/test_issue_patch_etag_parity.py b/kanban/tests/api/test_issue_patch_etag_parity.py
 new file mode 100644
-index 00000000..dc710c06
+index 00000000..f01e577c
 --- /dev/null
 +++ b/kanban/tests/api/test_issue_patch_etag_parity.py
-@@ -0,0 +1,260 @@
+@@ -0,0 +1,289 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Integration tests for issue PATCH ETag parity and drift prevention.
@@ -586,6 +501,35 @@ index 00000000..dc710c06
 +            f"docs/qa/{key}/unit-test-results.txt",
 +        ],
 +    }
++
++
++def _make_valid_report(verdict: str = "READY", grade: str = "A") -> str:
++    return f"""# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++- Verified all deliverables against acceptance criteria.
++- Complete audit of all source files and assets.
++
++## Complete System Evidence
++- System running smoothly with zero errors.
++- Verification artifacts collected in docs/qa.
++
++## Integration Testing Results
++- All unit and integration test suites executed cleanly.
++- Full regression suite passing.
++
++## Comprehensive Issue Assessment
++- Root cause identified and systematically resolved.
++- Security and performance invariants verified.
++
++## Realistic Quality Certification
++- Verdict: {verdict}
++- Grade: {grade}
++
++## Deployment Readiness Assessment
++- Ready for immediate production deployment.
++- No rollback concerns or migration locks.
++"""
 +
 +
 +async def test_chained_patch_get_patch_etag_parity(
@@ -763,7 +707,7 @@ index 00000000..dc710c06
 +    cw_resp = await client.post(
 +        f"/api/v1/issues/{issue_key}/complete-work",
 +        json={
-+            "summary_markdown": "Completed all implementation and tests.",
++            "summary_markdown": _make_valid_report(),
 +            "verification_proof": proof,
 +        },
 +        headers={"If-Match": trans_etag},
@@ -796,666 +740,3 @@ index 00000000..dc710c06
 +    # Immediate GET matches provenance override ETag
 +    get_prov = await client.get(f"/api/v1/issues/{issue_key}")
 +    assert get_prov.headers["ETag"] == prov_etag
-diff --git a/kanban/tests/api/test_workspaces_api.py b/kanban/tests/api/test_workspaces_api.py
-index 53f0dcab..4be25424 100644
---- a/kanban/tests/api/test_workspaces_api.py
-+++ b/kanban/tests/api/test_workspaces_api.py
-@@ -672,16 +672,33 @@ async def test_case_8_workspaces_under_kanban_app_force_rls(
-     session_service = SessionService(key_material.session_hmac_key)
-     app = _create_test_app(factory, key_material, session_service)
- 
-+    issued_session = await session_service.create_after_login(
-+        db_session,
-+        principal_id=admin_id,
-+        workspace_id=ws_id,
-+        aal_level=2,
-+    )
-+
-     caller = PrincipalContext(
-         principal_id=admin_id,
-         workspace_id=ws_id,
-         aal_level=2,
-+        session_id=issued_session.session_id,
-     )
- 
-     # Drop privileges to kanban_app
-     await db_session.execute(text("SET LOCAL ROLE kanban_app"))
- 
--    req = Request(scope={"type": "http", "app": app, "path": "/api/v1/workspaces", "headers": []})
-+    cookie_hdr = f"{SESSION_COOKIE_NAME}={issued_session.cookie_val}".encode("latin-1")
-+    req = Request(
-+        scope={
-+            "type": "http",
-+            "app": app,
-+            "path": "/api/v1/workspaces",
-+            "headers": [(b"cookie", cookie_hdr)],
-+        }
-+    )
-+    req.state.session_id = issued_session.session_id
- 
-     # 1. List workspaces under kanban_app
-     ws_list = await list_workspaces_endpoint(caller=caller, session=db_session, request=req)
-@@ -708,6 +725,65 @@ async def test_case_8_workspaces_under_kanban_app_force_rls(
-     )
-     assert switched_resp.status_code == 200
- 
-+    # 4. Direct update_workspace_endpoint coverage
-+    from kanban.api.v1.workspaces import (  # noqa: PLC0415
-+        UpdateWorkspaceRequest,
-+        WorkspaceRoleBindingRequest,
-+        bind_workspace_role_endpoint,
-+        unbind_workspace_role_endpoint,
-+        update_workspace_endpoint,
-+    )
-+
-+    valid_new_slug = f"ws-rls-{uuid.uuid4().hex[:8]}"
-+    patched = await update_workspace_endpoint(
-+        workspace_id=ws_id,
-+        body=UpdateWorkspaceRequest(name="Updated RLS Name", slug=valid_new_slug),
-+        caller=caller,
-+        session=db_session,
-+    )
-+    assert patched.name == "Updated RLS Name"
-+    assert patched.slug == valid_new_slug
-+
-+    # Validation errors on update_workspace_endpoint
-+    with pytest.raises(ProblemException) as exc_slug:
-+        await update_workspace_endpoint(
-+            workspace_id=ws_id,
-+            body=UpdateWorkspaceRequest(slug="Invalid Slug!"),
-+            caller=caller,
-+            session=db_session,
-+        )
-+    assert exc_slug.value.code == "VALIDATION_FAILED"
-+
-+    # 5. Direct bind and unbind role endpoints
-+    rb_req = WorkspaceRoleBindingRequest(principal_id=caller.principal_id, role="WORKSPACE_ADMIN")
-+    bound = await bind_workspace_role_endpoint(
-+        workspace_id=ws_id,
-+        body=rb_req,
-+        caller=caller,
-+        session=db_session,
-+    )
-+    assert bound is not None
-+
-+    unbound = await unbind_workspace_role_endpoint(
-+        workspace_id=ws_id,
-+        body=rb_req,
-+        caller=caller,
-+        session=db_session,
-+    )
-+    assert unbound is not None
-+
-+    # WorkspaceRoleBindingRequest validation (empty role -> 422)
-+    with pytest.raises(ProblemException) as exc_rb:
-+        WorkspaceRoleBindingRequest(principal_id=caller.principal_id)
-+    assert exc_rb.value.code == "VALIDATION_FAILED"
-+
-+    # WorkspaceRoleBindingRequest validation (empty role -> 422)
-+    with pytest.raises(ProblemException) as exc_rb:
-+        WorkspaceRoleBindingRequest(principal_id=caller.principal_id)
-+    assert exc_rb.value.code == "VALIDATION_FAILED"
-+
-+    await db_session.execute(text("RESET ROLE"))
-+
- 
- @pytest.mark.asyncio
- async def test_case_9_multi_workspace_switch_roundtrip_project_creation(  # noqa: PLR0915
-diff --git a/kanban/tests/auth/test_session_persistence.py b/kanban/tests/auth/test_session_persistence.py
-index d52ed98c..755f6c23 100644
---- a/kanban/tests/auth/test_session_persistence.py
-+++ b/kanban/tests/auth/test_session_persistence.py
-@@ -277,10 +277,8 @@ async def test_csrf_stability_and_session_status(
- 
-         # Second request with existing CSRF cookie:
-         # must reuse same CSRF token and emit NO Set-Cookie
--        r2 = await client.get(
--            "/api/v1/auth/session",
--            cookies={CSRF_COOKIE_NAME: csrf1},
--        )
-+        client.cookies.set(CSRF_COOKIE_NAME, csrf1)
-+        r2 = await client.get("/api/v1/auth/session")
-         assert r2.status_code == 200
-         d2 = r2.json()
-         assert d2["csrf_token"] == csrf1
-@@ -289,13 +287,9 @@ async def test_csrf_stability_and_session_status(
- 
-         # Third request with valid authenticated session cookie & valid CSRF
-         valid_csrf_for_sess = issued.csrf_token
--        r3 = await client.get(
--            "/api/v1/auth/session",
--            cookies={
--                SESSION_COOKIE_NAME: issued.cookie_val,
--                CSRF_COOKIE_NAME: valid_csrf_for_sess,
--            },
--        )
-+        client.cookies.set(SESSION_COOKIE_NAME, issued.cookie_val)
-+        client.cookies.set(CSRF_COOKIE_NAME, valid_csrf_for_sess)
-+        r3 = await client.get("/api/v1/auth/session")
-         assert r3.status_code == 200
-         d3 = r3.json()
-         assert d3["authenticated"] is True
-diff --git a/kanban/tests/auth/test_workspace_switch_session_persistence.py b/kanban/tests/auth/test_workspace_switch_session_persistence.py
-new file mode 100644
-index 00000000..a3ffba4e
---- /dev/null
-+++ b/kanban/tests/auth/test_workspace_switch_session_persistence.py
-@@ -0,0 +1,447 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Tests for workspace switch session persistence, TTL, AAL2, and cookie safety.
-+
-+Validates KB-P3-PENTEST-01 / KAN-36 / CWE-613.
-+
-+Verifies that switching active workspaces:
-+1. Preserves is_persistent=False (never escalating remember_me=False to True).
-+2. Omits Max-Age and Expires on session cookies when is_persistent=False.
-+3. Clears fallback cookies over HTTPS.
-+4. Preserves absolute_expires_at verbatim (never extending session lifespan).
-+5. Preserves stale aal2_verified_at (>900s remains stale).
-+6. Rejects callers lacking a valid browser cookie session (caller.session_id is None) with 401.
-+"""
-+
-+from __future__ import annotations
-+
-+import uuid
-+from datetime import UTC, datetime, timedelta
-+from typing import TYPE_CHECKING
-+
-+import httpx
-+import pytest
-+from fastapi import FastAPI
-+from sqlalchemy import select, text
-+from starlette.responses import Response
-+
-+from database.models.auth import UserSession
-+from database.session import RLSContext, RLSSessionFactory
-+from kanban.api.problems import ProblemException, problem_exception_handler
-+from kanban.api.request_id import RequestIdMiddleware
-+from kanban.api.v1 import build_v1_router
-+from kanban.auth.sessions.cookies import (
-+    FALLBACK_SESSION_COOKIE_NAME,
-+    SESSION_COOKIE_NAME,
-+    attach_session_and_csrf_cookies,
-+)
-+from kanban.auth.sessions.csrf import (
-+    CSRF_COOKIE_NAME,
-+    CSRF_HEADER_NAME,
-+    FALLBACK_CSRF_COOKIE_NAME,
-+    CsrfMiddleware,
-+)
-+from kanban.auth.sessions.resolver import SessionCookieResolver
-+from kanban.auth.sessions.service import SessionService
-+from kanban.security.envelope import StaticKekProvider
-+from kanban.security.keys import KeyMaterial
-+
-+if TYPE_CHECKING:
-+    from sqlalchemy.ext.asyncio import AsyncEngine
-+
-+
-+@pytest.fixture
-+def key_material() -> KeyMaterial:
-+    """Provide static test key material."""
-+    return KeyMaterial(
-+        master_kek=b"m" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+        master_kek_kid="kek-v1",
-+    )
-+
-+
-+@pytest.fixture
-+def kek_provider(key_material: KeyMaterial) -> StaticKekProvider:
-+    """Provide static KEK provider."""
-+    return StaticKekProvider.from_key_material(key_material)
-+
-+
-+async def _setup_workspace_and_admin(
-+    factory: RLSSessionFactory,
-+) -> tuple[uuid.UUID, uuid.UUID]:
-+    """Provision primary workspace, user, and server admin principal."""
-+    ws_id = uuid.uuid4()
-+    u_id = uuid.uuid4()
-+    ctx = RLSContext(principal_id=u_id, workspace_id=ws_id, aal_level=1)
-+    async with factory.session(ctx) as session:
-+        await session.execute(
-+            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
-+            {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "Primary WS"},
-+        )
-+        await session.execute(
-+            text(
-+                "SELECT register_object("
-+                "'user'::object_kind, :ws_id, NULL, :ckey, :title, :u_id, :u_id)"
-+            ),
-+            {
-+                "ws_id": ws_id,
-+                "ckey": f"usr-{u_id.hex}",
-+                "title": "Admin User",
-+                "u_id": u_id,
-+            },
-+        )
-+        await session.execute(
-+            text(
-+                "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
-+                "VALUES (:id, 'USER', :ws_id, 'Admin User', 'ACTIVE')"
-+            ),
-+            {"id": u_id, "ws_id": ws_id},
-+        )
-+        await session.execute(
-+            text(
-+                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
-+                "VALUES (:id, 'user', 'USER', :ws_id, 'admin@example.com')"
-+            ),
-+            {"id": u_id, "ws_id": ws_id},
-+        )
-+        await session.execute(
-+            text(
-+                "INSERT INTO role_bindings "
-+                "(id, workspace_id, principal_id, role, scope_type, project_id) "
-+                "VALUES (:id, :ws_id, :p_id, 'SERVER_ADMIN', 'server', NULL)"
-+            ),
-+            {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": u_id},
-+        )
-+    return ws_id, u_id
-+
-+
-+def _create_app(
-+    factory: RLSSessionFactory,
-+    key_material: KeyMaterial,
-+    session_service: SessionService,
-+) -> FastAPI:
-+    """Build FastAPI test instance wired with full v1 router and session middleware."""
-+    app = FastAPI(title="Workspace Switch Test App")
-+    app.state.session_factory = factory
-+    app.state.session_service = session_service
-+    app.state.key_material = key_material
-+
-+    resolver = SessionCookieResolver(session_service, factory)
-+    app.state.principal_resolver = resolver
-+
-+    app.add_middleware(RequestIdMiddleware)
-+    app.add_middleware(CsrfMiddleware, session_hmac_key=key_material.session_hmac_key)
-+    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
-+
-+    v1_router = build_v1_router()
-+    app.include_router(v1_router, prefix="/api/v1")
-+    return app
-+
-+
-+@pytest.mark.asyncio
-+async def test_remember_me_false_workspace_switch_preserves_persistence_and_omits_expires(
-+    pg_worker_db: AsyncEngine,
-+    key_material: KeyMaterial,
-+) -> None:
-+    """Scenario 1: remember_me=False session switched to secondary workspace.
-+
-+    Verifies:
-+    - Session cookie omits Max-Age and Expires before and after switch.
-+    - New session preserves is_persistent=False (never escalating to True).
-+    - Originating session is revoked with rotated_from_id tracked.
-+    - Clear fallback cookies emitted over HTTPS.
-+    """
-+    factory = RLSSessionFactory(pg_worker_db)
-+    session_service = SessionService(key_material.session_hmac_key)
-+    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
-+
-+    # Provision secondary workspace
-+    ws2_id = uuid.uuid4()
-+    ctx_admin = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=1)
-+    async with factory.session(ctx_admin) as sess:
-+        await sess.execute(
-+            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Secondary WS')"),
-+            {"id": ws2_id, "slug": f"ws-{ws2_id.hex[:10]}"},
-+        )
-+
-+        # 1. Login with remember_me=False (session-only)
-+        issued_orig = await session_service.create_after_login(
-+            sess,
-+            principal_id=admin_id,
-+            workspace_id=ws1_id,
-+            remember_me=False,
-+            aal_level=1,
-+        )
-+        assert issued_orig.is_persistent is False
-+
-+    # Check originating cookies omit Max-Age and Expires
-+    resp_init = Response()
-+    attach_session_and_csrf_cookies(
-+        resp_init, None, issued_orig, issued_orig.csrf_token, persistent=False
-+    )
-+    init_cookie_hdr = resp_init.headers.get("set-cookie") or ""
-+    assert "Max-Age=" not in init_cookie_hdr
-+    assert "Expires=" not in init_cookie_hdr
-+
-+    app = _create_app(factory, key_material, session_service)
-+
-+    # 2. Switch workspace via HTTPS client
-+    transport = httpx.ASGITransport(app=app)
-+    async with httpx.AsyncClient(transport=transport, base_url="https://kanban.local") as client:
-+        client.cookies.set(SESSION_COOKIE_NAME, issued_orig.cookie_val)
-+        client.cookies.set(CSRF_COOKIE_NAME, issued_orig.csrf_token)
-+        # Also simulate stale fallback cookies over HTTPS to test clearance
-+        client.cookies.set(FALLBACK_SESSION_COOKIE_NAME, "stale_fb_sess")
-+        client.cookies.set(FALLBACK_CSRF_COOKIE_NAME, "stale_fb_csrf")
-+
-+        resp_switch = await client.post(
-+            f"/api/v1/workspaces/{ws2_id}/switch",
-+            headers={CSRF_HEADER_NAME: issued_orig.csrf_token},
-+        )
-+        assert resp_switch.status_code == 200, resp_switch.text
-+        data = resp_switch.json()
-+        assert data["workspace_id"] == str(ws2_id)
-+        assert data["status"] == "switched"
-+        assert "csrf_token" in data
-+
-+        # Check returned Set-Cookie headers
-+        raw_set_cookies = resp_switch.headers.get_list("set-cookie")
-+        all_cookies_str = " ;; ".join(raw_set_cookies)
-+
-+        # Session cookie (__Host-kb_session) must NOT contain Max-Age or Expires
-+        for cookie_str in raw_set_cookies:
-+            if cookie_str.startswith(f"{SESSION_COOKIE_NAME}="):
-+                assert "Max-Age=" not in cookie_str
-+                assert "Expires=" not in cookie_str
-+
-+        # Fallback cookies must be cleared over HTTPS with Max-Age=0
-+        assert f"{FALLBACK_SESSION_COOKIE_NAME}=;" in all_cookies_str
-+        assert f"{FALLBACK_CSRF_COOKIE_NAME}=;" in all_cookies_str
-+        assert "Max-Age=0" in all_cookies_str
-+
-+    # 3. Verify in database: originating session is revoked, new session is persistent=False
-+    async with factory.session(ctx_admin) as sess:
-+        orig_row = (
-+            await sess.execute(select(UserSession).where(UserSession.id == issued_orig.session_id))
-+        ).scalar_one()
-+        assert orig_row.revoked_at is not None
-+
-+        new_row = (
-+            await sess.execute(
-+                select(UserSession).where(UserSession.rotated_from_id == issued_orig.session_id)
-+            )
-+        ).scalar_one()
-+        assert new_row.is_persistent is False
-+        assert new_row.workspace_id == ws2_id
-+        assert new_row.revoked_at is None
-+
-+
-+@pytest.mark.asyncio
-+async def test_workspace_switch_preserves_absolute_expiry_and_stale_aal2(
-+    pg_worker_db: AsyncEngine,
-+    key_material: KeyMaterial,
-+) -> None:
-+    """Scenario 2: Verify absolute_expires_at and stale aal2_verified_at are preserved verbatim.
-+
-+    Verifies:
-+    - Absolute expiry is NOT extended upon workspace switch.
-+    - Stale aal2_verified_at (>900s) remains stale.
-+    - Callers lacking caller.session_id (non-cookie / Bearer tokens) are rejected with 401.
-+    - Expired sessions are rejected with 401.
-+    """
-+    factory = RLSSessionFactory(pg_worker_db)
-+    session_service = SessionService(key_material.session_hmac_key)
-+    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
-+
-+    ws2_id = uuid.uuid4()
-+    ctx_admin = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=2)
-+    now = datetime.now(UTC)
-+
-+    # 1. Seed originating session with specific absolute_expires_at (2 days from now)
-+    # and stale aal2_verified_at (1000s in the past)
-+    fixed_absolute = now + timedelta(days=2)
-+    stale_aal2_at = now - timedelta(seconds=1000)
-+
-+    async with factory.session(ctx_admin) as sess:
-+        await sess.execute(
-+            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'WS2')"),
-+            {"id": ws2_id, "slug": f"ws-{ws2_id.hex[:10]}"},
-+        )
-+
-+        issued_orig = await session_service.create_after_login(
-+            sess,
-+            principal_id=admin_id,
-+            workspace_id=ws1_id,
-+            remember_me=True,
-+            aal_level=2,
-+        )
-+
-+        # Manually adjust timestamps to test preservation invariants
-+        await sess.execute(
-+            text(
-+                "UPDATE sessions SET absolute_expires_at = :abs_at, aal2_verified_at = :aal2_at "
-+                "WHERE id = :id"
-+            ),
-+            {
-+                "abs_at": fixed_absolute,
-+                "aal2_at": stale_aal2_at,
-+                "id": issued_orig.session_id,
-+            },
-+        )
-+
-+    app = _create_app(factory, key_material, session_service)
-+
-+    # 2. Switch workspace and inspect resulting session
-+    transport = httpx.ASGITransport(app=app)
-+    async with httpx.AsyncClient(transport=transport, base_url="https://kanban.local") as client:
-+        client.cookies.set(SESSION_COOKIE_NAME, issued_orig.cookie_val)
-+        client.cookies.set(CSRF_COOKIE_NAME, issued_orig.csrf_token)
-+
-+        resp_switch = await client.post(
-+            f"/api/v1/workspaces/{ws2_id}/switch",
-+            headers={CSRF_HEADER_NAME: issued_orig.csrf_token},
-+        )
-+        assert resp_switch.status_code == 200, resp_switch.text
-+
-+    # 3. Assert in database that absolute_expires_at and stale aal2_verified_at are preserved
-+    async with factory.session(ctx_admin) as sess:
-+        new_row = (
-+            await sess.execute(
-+                select(UserSession).where(UserSession.rotated_from_id == issued_orig.session_id)
-+            )
-+        ).scalar_one()
-+
-+        # absolute_expires_at must not be extended
-+        diff_abs = abs((new_row.absolute_expires_at - fixed_absolute).total_seconds())
-+        assert diff_abs < 1.0, (
-+            f"absolute_expires_at changed from {fixed_absolute} to {new_row.absolute_expires_at}"
-+        )
-+
-+        # stale aal2_verified_at must remain stale (>900s ago)
-+        assert new_row.aal2_verified_at is not None
-+        diff_aal2 = abs((new_row.aal2_verified_at - stale_aal2_at).total_seconds())
-+        assert diff_aal2 < 1.0, "aal2_verified_at was freshened instead of preserved verbatim"
-+        age = (datetime.now(UTC) - new_row.aal2_verified_at).total_seconds()
-+        assert age >= 1000, "Stale AAL2 verification must stay stale"
-+
-+    # 4. Non-cookie caller rejection:
-+    # A caller lacking a valid browser cookie session (caller.session_id is None)
-+    # must be rejected with 401
-+    async with httpx.AsyncClient(
-+        transport=transport, base_url="https://kanban.local"
-+    ) as client_no_cookie:
-+        resp_no_cookie = await client_no_cookie.post(
-+            f"/api/v1/workspaces/{ws2_id}/switch",
-+            headers={"X-KB-Subject-Token": "kb_ephem_dummy_token_without_session"},
-+        )
-+        # 401 Unauthorized or 403 Forbidden without session cookie
-+        assert resp_no_cookie.status_code in (401, 403)
-+        assert "set-cookie" not in resp_no_cookie.headers
-+
-+
-+@pytest.mark.asyncio
-+async def test_direct_session_service_rotate_for_workspace_switch_unit(
-+    pg_worker_db: AsyncEngine,
-+    key_material: KeyMaterial,
-+) -> None:
-+    """Direct unit tests for SessionService.rotate_for_workspace_switch edge cases."""
-+    factory = RLSSessionFactory(pg_worker_db)
-+    session_service = SessionService(key_material.session_hmac_key)
-+    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
-+    ws2_id = uuid.uuid4()
-+
-+    ctx = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=1)
-+    async with factory.session(ctx) as session:
-+        # 1. Non-existent session raises ValueError
-+        with pytest.raises(ValueError, match="Originating session could not be resolved"):
-+            await session_service.rotate_for_workspace_switch(
-+                session,
-+                target_principal_id=admin_id,
-+                target_workspace_id=ws2_id,
-+                old_session_id=uuid.uuid4(),
-+            )
-+
-+        # 2. Expired session raises ValueError
-+        issued = await session_service.create_after_login(
-+            session,
-+            principal_id=admin_id,
-+            workspace_id=ws1_id,
-+            remember_me=False,
-+        )
-+        await session.execute(
-+            text(
-+                "UPDATE sessions SET idle_expires_at = now() - interval '1 hour', "
-+                "absolute_expires_at = now() - interval '1 hour' WHERE id = :id"
-+            ),
-+            {"id": issued.session_id},
-+        )
-+        with pytest.raises(ValueError, match="expired"):
-+            await session_service.rotate_for_workspace_switch(
-+                session,
-+                target_principal_id=admin_id,
-+                target_workspace_id=ws2_id,
-+                old_session_id=issued.session_id,
-+                existing_cookie=issued.cookie_val,
-+            )
-+
-+        # 3. Already revoked session raises ValueError
-+        issued2 = await session_service.create_after_login(
-+            session,
-+            principal_id=admin_id,
-+            workspace_id=ws1_id,
-+            remember_me=True,
-+        )
-+        # Login with existing_cookie revokes previous session (session fixation defense)
-+        issued3 = await session_service.create_after_login(
-+            session,
-+            principal_id=admin_id,
-+            workspace_id=ws1_id,
-+            remember_me=False,
-+            existing_cookie=issued2.cookie_val,
-+        )
-+        assert issued3.session_id != issued2.session_id
-+
-+        # 4. Invalid cookie fallback to old_session_id
-+        with pytest.raises(ValueError, match="Originating session could not be resolved"):
-+            await session_service.rotate_for_workspace_switch(
-+                session,
-+                target_principal_id=admin_id,
-+                target_workspace_id=ws2_id,
-+                existing_cookie="invalid.malformed.cookie",
-+                old_session_id=uuid.uuid4(),
-+            )
-+
-+        # 5. Revoked originating session raises ValueError
-+        revoked_row = (
-+            await session.execute(select(UserSession).where(UserSession.id == issued2.session_id))
-+        ).scalar_one()
-+        assert revoked_row.revoked_at is not None
-+        with pytest.raises(ValueError, match="revoked"):
-+            await session_service.rotate_for_workspace_switch(
-+                session,
-+                target_principal_id=admin_id,
-+                target_workspace_id=ws2_id,
-+                originating_session=revoked_row,
-+            )
-+
-+        # 6. Policy property and revoke_all_for_principal coverage
-+        assert session_service.policy is not None
-+
-+        # 7. Rotate with old_session_id only (no existing_cookie) to cover direct DB query
-+        issued4 = await session_service.create_after_login(
-+            session,
-+            principal_id=admin_id,
-+            workspace_id=ws1_id,
-+            remember_me=False,
-+        )
-+        rotated_by_id = await session_service.rotate_for_workspace_switch(
-+            session,
-+            target_principal_id=admin_id,
-+            target_workspace_id=ws2_id,
-+            old_session_id=issued4.session_id,
-+        )
-+        assert rotated_by_id.session_id != issued4.session_id
-+
-+        revoked_count = await session_service.revoke_all_for_principal(session, admin_id)
-+        assert revoked_count >= 1
-diff --git a/kanban/workflows/engine.py b/kanban/workflows/engine.py
-index 3a35eae6..470582af 100644
---- a/kanban/workflows/engine.py
-+++ b/kanban/workflows/engine.py
-@@ -189,16 +189,21 @@ class TransitionEngine:
-             not_found()
-         issue = locked_issue
- 
--        # Description ETag check (If-Match)
-+        # Description ETag check (If-Match accepts composite compute_issue_etag
-+        # or backward-compatible description_sha256)
-         current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
--        current_etag = f'"{current_sha256_hex}"'
-+        from kanban.services.issues import serialize_issue  # noqa: PLC0415
-+
-+        current_serialized = await serialize_issue(session, actor, issue)
-+        current_etag = current_serialized.etag or f'"{current_sha256_hex}"'
-+        current_etag_hex = current_etag.strip('"')
- 
-         if if_match is not None:
-             raw_etag = if_match.strip()
-             if raw_etag.startswith("W/"):
-                 raw_etag = raw_etag[2:].strip()
-             client_hex = raw_etag.strip('"')
--            if client_hex.lower() != current_sha256_hex.lower():
-+            if client_hex.lower() not in (current_etag_hex.lower(), current_sha256_hex.lower()):
-                 raise ProblemException(
-                     code="PRECONDITION_FAILED",
-                     status=412,
-diff --git a/mcp/surfaces/agent/read_ticket.py b/mcp/surfaces/agent/read_ticket.py
-index 17c648bf..a1448fd6 100644
---- a/mcp/surfaces/agent/read_ticket.py
-+++ b/mcp/surfaces/agent/read_ticket.py
-@@ -426,7 +426,8 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
-         if lbl is not None
-     ]
- 
--    etag = issue_data.get("description_sha256") or issue_data.get("etag")
-+    etag_raw = issue_data.get("etag") or issue_data.get("description_sha256") or ""
-+    etag = str(etag_raw).strip('"')
- 
-     access_val = issue_data.get("access")
-     access_manifest_raw = issue_data.get("access_manifest")
-diff --git a/mcp/surfaces/agent/update_ticket.py b/mcp/surfaces/agent/update_ticket.py
-index 761f1662..7248f14e 100644
---- a/mcp/surfaces/agent/update_ticket.py
-+++ b/mcp/surfaces/agent/update_ticket.py
-@@ -401,8 +401,12 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
-                         subject_token=ctx.subject_token,
-                         mcp_session_id=ctx.session_id,
-                     )
--                    if isinstance(fresh_issue, dict) and "description_sha256" in fresh_issue:
--                        fresh_sha = str(fresh_issue["description_sha256"])
-+                    if isinstance(fresh_issue, dict):
-+                        fresh_sha = str(
-+                            fresh_issue.get("etag")
-+                            or fresh_issue.get("description_sha256")
-+                            or current_sha
-+                        )
-                 raise KbMcpError(
-                     McpErrorCode.CONFLICT_ETAG,
-                     "concurrency conflict: ticket description was modified concurrently",
-@@ -545,7 +549,7 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
-     )
-     pri_val = patched_issue.get("priority")
-     pri_str = str(pri_val.get("slug", "")) if isinstance(pri_val, dict) else str(pri_val or "")
--    etag_val = patched_issue.get("description_sha256") or patched_issue.get("etag") or ""
-+    etag_val = patched_issue.get("etag") or patched_issue.get("description_sha256") or ""
- 
-     return {
-         "key": issue_key,

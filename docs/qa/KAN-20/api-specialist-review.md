@@ -5,9 +5,7 @@
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
 - Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-20`
-- Branch: `fix/KAN-20-49-rc1`
-- Commit: `f4a54409`
-- Base Reference: `07d04cde` (on `main`)
+- Branch: `main` (commit `7913c2c8`)
 - Container Environment: `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
 - Live Stack Status: `LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
@@ -16,7 +14,7 @@
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-20 on branch `fix/KAN-20-49-rc1` at commit `f4a54409`, incorporating concrete verification evidence from live zero-mock full-stack testing against container `kanban-liveqa-3` (`http://127.0.0.1:18963`), all 4 live visual screenshots in `docs/qa/KAN-20/screenshots/`, unit test execution logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-20 on branch `main` at commit `7913c2c8`, incorporating concrete verification evidence from live zero-mock full-stack testing against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS), all 4 live visual screenshots in `docs/qa/KAN-20/screenshots/`, unit test execution logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
 The ticket resolves four primary problems across semantic embedding, hybrid candidate fusion, security-governed graph activation spreading, and explainable search discovery, and incorporates all reality-checker remediations:
 1. Zero-Egress Embedder, Matryoshka Head & Int8 Quantization:
@@ -217,4 +215,4 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-20/live-fullstack-pr
 
 STATUS: APPROVED
 
-All API endpoints, MCP tool surfaces, safe embedding quantizers, HNSW vector fusion query handlers, timeout resets, resilient synaptic spreading algorithms, and unit test suites for KAN-20 on branch `fix/KAN-20-49-rc1` at commit `f4a54409` have been thoroughly audited, verified against all architectural and security invariants, and certified. Verified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Ready for Reality-Checker QA.
+All API endpoints, MCP tool surfaces, safe embedding quantizers, HNSW vector fusion query handlers, timeout resets, resilient synaptic spreading algorithms, and unit test suites for KAN-20 on branch `main` at commit `7913c2c8` have been thoroughly audited, verified against all architectural and security invariants, and certified. Verified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Ready for Reality-Checker QA.

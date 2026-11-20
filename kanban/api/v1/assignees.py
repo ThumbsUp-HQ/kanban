@@ -39,7 +39,9 @@ async def add_assignee(
 ) -> AssigneeResponse:
     """Assign an eligible project viewer or free-text external label to an issue (EDIT required)."""
     async with timing_floor(floor_ms=25.0):
-        return await svc.add_assignee(session, caller, issue_ref, body)
+        res = await svc.add_assignee(session, caller, issue_ref, body)
+        await session.commit()
+        return res
 
 
 @router.delete(
@@ -56,6 +58,7 @@ async def remove_assignee(
     """Remove an assignee join from an issue (EDIT required)."""
     async with timing_floor(floor_ms=25.0):
         await svc.remove_assignee(session, caller, issue_ref, assignee_id)
+        await session.commit()
         return Response(status_code=204)
 
 

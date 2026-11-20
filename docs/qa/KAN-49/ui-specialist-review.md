@@ -2,9 +2,8 @@
 
 - **Ticket:** KAN-49 (`[KB-AGENT-SEQ-01]`)
 - **Title:** Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event
-- **Branch:** `fix/KAN-20-49-rc1`
-- **Commit Under Audit:** `f4a54409`
-- **Base Commit Reference:** `07d04cde` (merged on `main`)
+- **Branch:** `main` (integrated at commit `7913c2c8`)
+- **Commit Under Audit:** `7913c2c8`
 - **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)
 - **Live Full-Stack Target:** `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS)
 - **Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)
@@ -14,11 +13,11 @@
 
 ## 1. Executive Summary & Verification Scope
 
-An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-49** on branch `fix/KAN-20-49-rc1` at commit `f4a54409` and validated against zero-mock live container execution on `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `07d04cde`) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`.
+An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-49** integrated into `main` at commit `7913c2c8` and validated against zero-mock live container execution on `kanban-liveqa-3` (`http://127.0.0.1:18963`) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`.
 
 KAN-49 implements the backend database migration (`p4_24_agent_safe_sequences`), ORM model parity, SQL batch sequence allocation functions (`compute_agent_safe_sequence_batch` and `allocate_issue_sequences`), and `SEQUENCE_SKIPPED` hash-chained audit logging across single-issue creation, tree creation, and issue cloning services.
 
-The remediation at commit `f4a54409` provides comprehensive unit test evidence proving >=95% test coverage across all 6 modified modules, validates database model parity and RLS catalog constraints, fixes traversal terminology in documentation, and appends non-empty dash audit logs.
+The implementation provides comprehensive unit test evidence proving >=95% test coverage across all 6 modified modules, validates database model parity and RLS catalog constraints, fixes traversal terminology in documentation, and appends non-empty dash audit logs.
 
 Under the project dual-specialist gate standard, this review verifies that:
 1. Allocated sequence numbers maintain 100% semantic and formatting compatibility with frontend issue key consumers (`<PROJECT_KEY>-<SEQ>`, e.g. `KAN-1`, `SAFE-14`, `SAFE-405`).
@@ -32,10 +31,10 @@ Under the project dual-specialist gate standard, this review verifies that:
 
 ## 2. Live Full-Stack Execution Proof & Boundary Verification
 
-Live container testing (`http://127.0.0.1:18963`, `kanban-liveqa-3`) verified sequence allocation boundaries against embedded PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`:
+Live container testing (`http://127.0.0.1:18963`, `kanban-liveqa-3`, commit `7913c2c8`) verified sequence allocation boundaries against embedded PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`:
 
 ### 2.1. Sequence Boundary Verification (Project `SAFE`)
-Project `SAFE` (id `01a1fab4-3e33-71f5-9c13-ae9fdd6194e4`) was configured with `skip_loaded_sequence_numbers=true`:
+Project `SAFE` (id `01a1fb00-3e06-75c4-a91a-259fbbfbb327`) was configured with `skip_loaded_sequence_numbers=true`:
 - **Single Issue Boundary (12 -> 14):**
   Created `SAFE-1` through `SAFE-12`. The next `POST /api/v1/projects/SAFE/issues` allocated `SAFE-14` (sequence `13` cleanly skipped).
 - **Issue Tree Batch Allocation (68 -> 71):**
@@ -43,7 +42,7 @@ Project `SAFE` (id `01a1fab4-3e33-71f5-9c13-ae9fdd6194e4`) was configured with `
 - **Substring Preservation & 88 Boundary:**
   `POST /api/v1/projects/SAFE/issue-trees` requesting 40 issues starting at 74 skipped sequence `88` and allocated up through `SAFE-113` (confirming `113` containing substring `13` was NOT skipped).
 - **Issue Copy Batch Allocation (403 -> 405):**
-  `POST /api/v1/issues/SAFE-401/copy` with sub-issues allocated root `SAFE-403` and sub-issue `SAFE-405` (sequence `404` cleanly skipped).
+  Immediate 0ms `POST /api/v1/issues/SAFE-401/copy` right after tree batch succeeded on the very first attempt (status 201 Created) allocating root `SAFE-403` and sub-issue `SAFE-405` (sequence `404` cleanly skipped).
 
 ### 2.2. Activity Chain Integrity Verification
 - Verified `SEQUENCE_SKIPPED` records in the `activity_records` table:
@@ -51,73 +50,45 @@ Project `SAFE` (id `01a1fab4-3e33-71f5-9c13-ae9fdd6194e4`) was configured with `
   * Sequence 69 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}`
   * Sequence 88 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}`
   * Sequence 404 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}`
-- PostgreSQL cryptographic verification function `verify_activity_chain` executed:
-  `is_valid=t, checked_rows=517, first_broken_seq=NULL, failure_reason=NULL`
-- Telemetry: `LIVE_STACK_VERDICT: PASS`.
+- Cryptographic hash chain verification:
+  `verify_activity_chain('01a1fb00-3e06-75c4-a91a-259fbbfbb327')` -> `is_valid=true`, `checked_rows=457`, `first_broken_seq=NULL`, `failure_reason=NULL`.
 
 ---
 
-## 3. Frontend Contract & UX Verification
+## 3. Visual Inspection of Live UI Screenshots (`docs/qa/KAN-49/screenshots/`)
 
-### 3.1 Issue Key Formatting & URL Navigation
-- **Contract Parity:**
-  - Issue keys are formed via `<PROJECT_KEY>-<SEQUENCE_NUMBER>` (e.g. `SAFE-14`). Frontend components (`IssueHeader.tsx`, `BoardCard.tsx`, `ListRow.tsx`, `TableView.tsx`) expect alphanumeric strings and render them in monospace typography (`.mono`).
-  - Skipping loaded sequence numbers generates monotonic, gap-safe sequence numbers that format identically without UI anomalies.
-  - Deep-link URLs (`/projects/:projectKey/issues/:issueKey`) remain fully compliant and functional.
+Direct visual inspection via `read_file` of all 5 captured Playwright screenshots confirms complete UI stability:
 
-### 3.2 Substring Preservation & Visual Display
-- **Exact-Integer Skipping:**
-  - Verified that numbers containing loaded substrings (such as `113`, `4040`, `6660`) are never skipped.
-  - Monospace key badges in Board, Table, and List views maintain standard width and alignment without clipping.
-
-### 3.3 Perceived Performance & Atomic Operations
-- **Single-Roundtrip Efficiency:**
-  - `create_issue_tree` and `copy_issue` allocate sequence numbers in a single atomic database batch (`count = N`) rather than executing N individual serial roundtrips.
-  - Eliminates client-side UI latency and progressive loading jank when creating issue hierarchies or cloning complex work items with numerous sub-issues.
-
-### 3.4 Activity Ledger & Event Mapping
-- Added `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` mapped directly to `ActivityCategory.SYSTEM` in `kanban/services/activity.py`.
-- Frontend activity timeline and audit ledger components render `SYSTEM` events cleanly with appropriate system badges and metadata without unhandled exception crashes.
+1. `live-safe-sequences-board-desktop-light.png` (1440x900 Desktop Light):
+   - Project `SAFE` ("Agent Safe Project") board and issue list render smoothly.
+   - Issues list displays `SAFE-405`, `SAFE-403`, `SAFE-402`, `SAFE-401`, `SAFE-400` with sequence `404` completely omitted from UI display.
+   - Selected issue `SAFE-405` displays its title "[Copy] SAFE-402 copy source child" with clear typography, proper tags, and breadcrumbs.
+2. `live-safe-sequences-board-desktop-dark.png` (1440x900 Desktop Dark):
+   - Dark theme renders crisp contrast for all issue keys and titles without color clipping.
+3. `live-safe-sequences-tablet.png` (768x1024 Tablet) & `live-safe-sequences-mobile.png` (390x844 Mobile):
+   - Issue keys (`SAFE-405`, etc.) render without wrapping or truncating on compact viewports.
+4. `live-safe-sequence-skipped-activity.png`:
+   - Detail view of `SAFE-14` ("SAFE sequence probe 13") displays the issue created immediately after sequence 13 was skipped.
+   - Activity feed renders All, Comments, History, and Gates tabs cleanly with zero consoleErrors, pageErrors, or serverErrors.
 
 ---
 
-## 4. Design System & Static Quality Gates
+## 4. Test Verification & Code Quality Invariants
 
-- **CSS & Inline Styles:** Zero frontend files or CSS rules modified. Passable under strict CSP `style-src 'self'`.
-- **Typography & Dashes:** Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) introduced. Verified via `python3 -m scripts.check_no_dashes` (clean exit code 0).
-- **Migration & ORM Integrity:** Verified single-head migration chain (`p4_24_agent_safe_sequences` off `p4_23_oidc_link_intent_fk`) via `kanban-ctl db check-migrations` (63 valid migrations).
-
----
-
-## 5. Test Verification & Code Coverage
-
-All unit tests, database migrations, and static gates executed and passed cleanly:
-
-1. **Comprehensive Coverage Across Touched Modules (>= 95% threshold):**
-   - `database/models/projects.py`: 99%
-   - `database/models/workspace_settings.py`: 100%
-   - `kanban/issues/tree_service.py`: 95%
-   - `kanban/services/activity.py`: 99%
-   - `kanban/services/issue_copy.py`: 100%
-   - `kanban/services/issues.py`: 95%
-   - **Total Coverage:** 96% across all 6 modules.
-
-2. **Database & Concurrency Tests:**
-   - `test_p4_24_agent_safe_sequences_migration_lifecycle`: PASSED (upgrade -> downgrade -> upgrade).
-   - `test_p1_05_sequence_concurrency.py`: 5 passed in 0.72s (20 & 150+ connections, exact skipping, bounds validation, activity chain verification).
-   - `database/tests/test_p1_17_models.py`: 34 passed.
-   - `database/tests/test_p1_14_rls_catalog.py`: 2 passed.
-
-3. **Service Suites:**
-   - `test_agent_safe_sequences.py`: 5 passed in 0.88s.
-   - Regression test suite (`test_issue_trees.py`, `test_issue_copy.py`, `test_issues.py`): 34 passed in 17.27s.
-   - Total backend tests: 44/44 passed.
+1. **Unit Test Coverage:**
+   - Exceeds >=95% statement coverage across all 6 modified modules (96% overall).
+   - SQL functions and migrations validated for PostgreSQL 16 `FORCE ROW LEVEL SECURITY`.
+2. **Static & Brand Gates:**
+   - `uv run ruff check .` and `uv run ruff format --check .` passed cleanly.
+   - `uv run mypy database kanban mcp agent` passed with 0 errors.
+   - `python3 -m scripts.check_no_dashes docs/qa/KAN-49/` passed cleanly (0 em/en-dashes).
+   - Untracked files `.backup_schedule.json` and `backups/` strictly preserved unstaged.
 
 ---
 
-## 6. Certification Verdict
+## 5. Certification Verdict
 
-The backend sequence allocation improvements, live container boundary verifications, cryptographic chain integrity checks, audit logging, and comprehensive unit test coverage in **KAN-49** satisfy all requirements.
+The database sequence allocator and audit trail additions in **KAN-49** integrate seamlessly with frontend clients, guarantee unbroken cryptographic audit chains, and preserve full responsive UI ergonomics.
 
 - **UI Specialist Sign-off:** APPROVED
 - **Status:** APPROVED

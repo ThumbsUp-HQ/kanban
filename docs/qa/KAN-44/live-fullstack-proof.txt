@@ -1,49 +1,52 @@
-=== KAN-44 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 07d04cde) ===
-Timestamp: 2026-11-20T20:47:52.893Z - 2026-11-20T20:48:23.857Z
+=== KAN-44 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 7913c2c8) ===
+Timestamp: 2026-11-20T22:14:43.025Z - 2026-11-20T22:15:19.232Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite.mjs
+Test Runner Script: live_qa_suite_v2.mjs
 
---- Problem 1: Full-Page Issue View, Quick Properties Bar, Topbar Avatar z-index & VIEWER RBAC ---
-1. Desktop Light & Dark (/projects/KAN/issues/KAN-1):
-   - live-issue-desktop-light.png & live-issue-desktop-dark.png: header-state-select renders cleanly with crisp contrast.
-2. Topbar Avatar Menu Above .surface--full (live-topbar-menu-above-surface.png):
-   - Telemetry: {"topbarZ":"120","menuZ":"150","surfaceZ":"100","menuItemNotOccluded":true}
-   - Visual inspection confirms Topbar avatar dropdown renders cleanly above .surface--full with zero occlusion.
-3. Tablet (768x1024, live-issue-tablet.png) & Mobile (390x844, live-issue-mobile.png):
-   - Telemetry: {"hasQuickPropsBar":true,"headerSelectHeight":44,"scrollWidth":390,"innerWidth":390}
-4. VIEWER Read-Only RBAC Check (viewer2 provisioned with WORKSPACE_GUEST + project VIEWER role on KAN):
-   - Live screen: /projects/KAN/issues/KAN-1 on Mobile (390x844) - live-viewer-readonly-mobile.png
-   - Telemetry: {"hasHeaderStateBadge":true,"headerSelectCount":0,"quickPropsSelectCount":0,"scrollWidth":390,"innerWidth":390}
-   - Visual inspection confirms read-only StateBadge ("In Progress") with zero interactive state <select> controls.
-LIVE_STACK_VERDICT [P1_HEADER_QUICKPROPS_ZINDEX_VIEWER]: PASS
+--- Page Load & Transition Latency Metrics (< 3000ms threshold) ---
+- Board load: 941 ms | Board popover transition: 56 ms
+- Swimlane load: 933 ms
+- Table load: 848 ms | Table Desktop transition: 144 ms | Table Mobile transition: 128 ms
+- Mobile Board load: 848 ms | Mobile List load: 910 ms
+- Single Issue load: 741 ms
 
---- Problem 2: QuickFieldPopover Portal (createPortal(..., document.body)) on Board & Swimlane ---
-1. Desktop (1440x900) Board (/projects/KAN/issues?layout=board) - live-board-popover-desktop.png:
-   - Clicked [data-testid="board-card-state-btn-KAN-1"]:
-     {"isDirectBodyChild":true,"insideCardWrapper":false,"peekDrawers":0,"rect":{"left":1162,"right":1382,"top":276,"bottom":493,"width":220,"height":217},"withinViewport1440x900":true,"transitionStatus":200,"peekAfterTransition":0}
-   - Popover is portaled directly to document.body, completely unclipped inside 1440x900 viewport, transitions state via HTTP 200 without opening peek drawer.
-2. Desktop (1440x900) Swimlane (/projects/KAN/issues?layout=board&group_by=state&sub_group_by=priority) - live-swimlane-popover-desktop.png:
-   - Telemetry: {"isDirectBodyChild":true,"peekDrawers":0,"withinViewport":true}
-3. Mobile (390x844) Board Bottom Sheet - live-board-bottom-sheet-mobile.png:
-   - Button geometry: {"width":111,"height":44}
-   - Bottom sheet telemetry: {"isDirectBodyChild":true,"insideCardWrapper":false,"width":390,"bottom":844,"zIndex":"350","minOptionHeight":44,"optionCount":6,"transitionStatus":200}
-   - Escapes .board-card-wrapper transform cleanly, spans full 390px viewport width at bottom=844, z-index=350, and transitions state via HTTP 200.
-LIVE_STACK_VERDICT [P2_PORTAL_POPOVER_AND_MOBILE_BOTTOM_SHEET]: PASS
+--- Problem 1: Full-Page Issue View, Quick Properties Bar & Topbar z-index ---
+- Desktop Light & Dark (/projects/KAN/issues/KAN-1): live-issue-desktop-light.png, live-issue-desktop-dark.png
+- Tablet (768x1024) & Mobile (390x844): live-issue-tablet.png, live-issue-mobile.png
+- Topbar Avatar Menu Above .surface--full (live-topbar-menu-above-surface.png):
+  {"topbarZ":"120","menuZ":"150","surfaceZ":"100","menuItemNotOccluded":true}
+LIVE_STACK_VERDICT [P1_HEADER_QUICKPROPS_ZINDEX]: PASS
 
---- Problem 3 & 4: Mobile List Overlay Trap Prevention, Bottom Sheet & Single Split Surface Close ---
-1. Mobile (390x844) /projects/KAN/issues?layout=list initial load (no ?peek= trap) - live-list-mobile.png:
-   - Telemetry: {"url":"http://127.0.0.1:18962/projects/KAN/issues?layout=list","splitCloseCount":0,"drawerOverlayCount":0,"listCardVisible":true,"scrollWidth":390,"innerWidth":390}
-2. Tapping list-row-state-btn-KAN-1 (44x44px) - live-list-bottom-sheet-mobile.png:
-   - Button geometry: {"width":44,"height":44}
-   - Bottom sheet: {"width":390,"bottom":844,"zIndex":"350"}
-   - State transition response: HTTP 200
-3. Tapping issue-list-card-KAN-1 (?layout=list&peek=KAN-1) - live-list-split-mobile.png:
-   - Telemetry: {"url":"http://127.0.0.1:18962/projects/KAN/issues?layout=list&peek=KAN-1","splitSurfaceCount":1,"drawerInHostCount":0,"closeBtnWidth":44,"closeBtnHeight":44,"scrollWidth":390,"innerWidth":390}
-   - Confirmed ONLY mode="split" mounted (0 duplicate #kb-surface-host drawer overlay).
-4. Clicking split-surface-close-btn (44x44px):
-   - Telemetry after close: {"url":"http://127.0.0.1:18962/projects/KAN/issues?layout=list","hasPeek":false,"listCardVisible":true}
-   - Returned cleanly to the mobile issue cards list.
-LIVE_STACK_VERDICT [P3_P4_MOBILE_LIST_SHEET_AND_SPLIT_CLOSE]: PASS
+--- Problem 2: QuickFieldPopover Portal on Board & Swimlane + Table View Transitions ---
+- Desktop Board Popover (live-board-popover-desktop.png):
+  {"isDirectBodyChild":true,"insideCardWrapper":false,"peekDrawers":0,"withinViewport1440x900":true,"transitionStatus":200,"peekAfterTransition":0}
+- Desktop Swimlane Popover (live-swimlane-popover-desktop.png):
+  {"isDirectBodyChild":true,"peekDrawers":0,"withinViewport":true}
+- Mobile Board Bottom Sheet (live-board-bottom-sheet-mobile.png):
+  {"isDirectBodyChild":true,"insideCardWrapper":false,"width":390,"bottom":844,"zIndex":"350","minOptionHeight":44,"transitionStatus":200}
+- Table View (?layout=table) Transitions:
+  * Desktop (1440x900, live-table-desktop.png): .table-inline-select--state transition -> HTTP 200 (144 ms).
+  * Mobile (390x844, live-table-mobile.png): .table-inline-select height=44px (>=44px touch target), transition -> HTTP 200 (128 ms).
+LIVE_STACK_VERDICT [P2_PORTAL_POPOVER_AND_TABLE_TRANSITIONS]: PASS
+
+--- Problem 3 & 4: Mobile List Card Geometry, Bottom Sheet & Consolidated Mobile Split Detail ---
+- Mobile List Initial Load (?layout=list, live-list-mobile.png):
+  * .issue-list-card.list-row (height: auto; min-height: 68px; measured 85px) expands cleanly with zero summary overlap/bleeding across bottom card border:
+    {"allCardsNoBleed":true,"sampleCards":[{"key":"issue-list-card-KAN-6","cardHeight":85,"minHeight":"68px","summaryBottom":439,"cardBottom":448,"noBorderBleed":true},{"key":"issue-list-card-KAN-5","cardHeight":85,"minHeight":"68px","summaryBottom":528,"cardBottom":537,"noBorderBleed":true}]}
+- Mobile List Bottom Sheet (live-list-bottom-sheet-mobile.png):
+  {"listRowBtnBox":{"width":44,"height":44},"sheet":{"width":390,"bottom":844,"zIndex":"350"},"transitionStatus":200}
+- Mobile Split Detail (?layout=list&peek=KAN-1, live-list-split-mobile.png):
+  * {"splitSurfaceCount":1,"drawerInHostCount":0,"closeBtnRect":{"w":44,"h":44},"descOpen":true,"descBodyHeight":89,"descText":"Auth gateway with TOTP and AAL2.Edit description","peopleOpen":true,"peopleBodyHeight":79,"minToolbarControlHeight":44,"visibleStateSelectCountInMobileSplit":2,"visibleStateSelectTestIds":["split-state-select","quick-props-state-select"],"scrollWidth":390,"innerWidth":390}
+  * Confirmed DESCRIPTION and PEOPLE <details> bodies render full content, mobile split toolbar controls meet >=44px height, and duplicate header-state-select was consolidated out of mobile split header.
+LIVE_STACK_VERDICT [P3_P4_MOBILE_LIST_AND_SPLIT_DETAIL]: PASS
+
+--- Multi-View VIEWER RBAC Verification (viewer2: WORKSPACE_GUEST + project VIEWER on KAN) ---
+- Board: {"stateBtnCount":0,"readOnlyBadgeCount":0} (interactive board-card-state-btn-* omitted for VIEWER; column header retains static StateBadge)
+- Swimlane: {"stateBtnCount":0,"readOnlyBadgeCount":0} (interactive board-card-state-btn-* omitted for VIEWER)
+- List (?layout=list, live-viewer-list-mobile.png): {"interactiveStateBtnCount":0,"readOnlyStateBadgeCount":6} (list-row-state-readonly-* static StateBadge pills)
+- Table (?layout=table, live-viewer-table-mobile.png): {"interactiveStateSelectCount":0,"readOnlyStateBadgeCount":6} (static .table-state-cell .state-badge pills)
+- Single Issue (/projects/KAN/issues/KAN-1, live-viewer-readonly-mobile.png): {"hasHeaderStateBadge":true,"headerSelectCount":0,"quickPropsSelectCount":0}
+LIVE_STACK_VERDICT [MULTI_VIEW_VIEWER_RBAC]: PASS
 
 --- Runtime Error Telemetry (KAN-44 scope) ---
 Console JS errors: 0
@@ -54,6 +57,8 @@ CSP violations: 0
 Screenshots Verified (docs/qa/KAN-44/screenshots/):
 - live-board-popover-desktop.png
 - live-swimlane-popover-desktop.png
+- live-table-desktop.png
+- live-table-mobile.png
 - live-board-bottom-sheet-mobile.png
 - live-list-mobile.png
 - live-list-bottom-sheet-mobile.png
@@ -63,6 +68,8 @@ Screenshots Verified (docs/qa/KAN-44/screenshots/):
 - live-issue-tablet.png
 - live-issue-mobile.png
 - live-topbar-menu-above-surface.png
+- live-viewer-list-mobile.png
+- live-viewer-table-mobile.png
 - live-viewer-readonly-mobile.png
 
 OVERALL LIVE_STACK_VERDICT (KAN-44): PASS

@@ -1,66 +1,52 @@
-=== KAN-52 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 07d04cde) ===
-Timestamp: 2026-11-20T20:47:52.893Z - 2026-11-20T20:48:23.857Z
+=== KAN-52 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 7913c2c8) ===
+Timestamp: 2026-11-20T22:14:43.025Z - 2026-11-20T22:15:19.232Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite.mjs
+Test Runner Script: live_qa_suite_v2.mjs
 
---- Problem 1: Unified IssueNavigatorBar & View Labels ---
-- Sidebar label: "📋 Issues" (verified in live-navigator-desktop-light.png)
-  Note: LayoutSwitcher.tsx defines { id: 'list', label: 'Issues' }, while AppShell.tsx passes showLayoutSwitcher={false} in Topbar because view navigation lives in Sidebar.
-- Basic Mode (live-navigator-desktop-light.png, live-navigator-desktop-dark.png):
-  * Structured filter selects (All States, All Priorities, All Assignees, All Labels, All Cycles) present.
-  * Filtering State = "Purple Review" returned 3 issues (basicPurpleCount=3).
-  * Favorites toggle ("⭐ Favorites only") filtered down to 1 favorited issue (favFilteredCount=1).
-  * Saved views strip rendered 1 chip ("Active Review Queue").
-- Query Mode (live-navigator-query-desktop-light.png):
-  * Executed `project = "KAN" AND status = "Purple Review"` -> 3 matching issues rendered.
-  * Executed `priority:high` -> 2 matching issues rendered.
-LIVE_STACK_VERDICT [P1_NAVIGATOR_BAR_AND_QUERY]: PASS
+--- Page Load Timings (< 3000ms threshold) ---
+- Desktop Navigator (?layout=list&peek=KAN-1): 898 ms
+- Tablet Navigator (?layout=list&peek=KAN-1): 874 ms
+- Mobile List (?layout=list): 840 ms
 
---- Problem 2: 300px Left Master Rail (0 .list-section headers) ---
-- Telemetry: {"railWidth":300,"legacyListSectionHeaders":0,"sortOptions":["Updated","Created","Priority","State","Key","Due Date","Rank"],"hasSortDirBtn":true,"hasRefreshBtn":true,"issueCardCount":6}
-- Visual inspection of Desktop Light/Dark, Tablet (768x1024), and Mobile (390x844) confirms compact 2-line issue-list-card-* items, Order by dropdown, sort direction toggle, refresh button, and 0 legacy .list-section headers.
-- Minor mobile CSS polish note: in live-navigator-mobile-list.png, line 2 summary text inside .issue-list-card sits slightly tight against the bottom card border.
-LIVE_STACK_VERDICT [P2_LEFT_MASTER_RAIL]: PASS
+--- Problem 1 & 2: Unified IssueNavigatorBar + 300px Left Master Rail ---
+- Desktop Light & Dark (live-navigator-desktop-light.png, live-navigator-desktop-dark.png):
+  * Sidebar displays "📋 Issues" (LayoutSwitcher.tsx also defines "Issues").
+  * Unified issue-navigator-bar renders Basic filters (All States, All Priorities, All Assignees, All Labels, All Cycles, Favorites only), Saved Views strip ("Active Review Queue"), and Basic/Query mode toggle.
+  * Query mode JQL (live-navigator-query-jql-desktop.png): executed `project = "KAN" AND status = "Purple Review"` -> 3 matching issues rendered.
+  * 300px left master rail with 0 .list-section headers, Order by selector, sort direction toggle, refresh button, and compact 2-line issue-list-card-* items.
+- Collapsed Sidebar View (live-navigator-collapsed-rail-desktop.png):
+  * Collapsing left navigation sidebar provides full-width horizontal workspace for the 300px master rail + 2-column detail canvas.
+LIVE_STACK_VERDICT [P1_P2_NAVIGATOR_AND_MASTER_RAIL]: PASS
 
---- Problem 3 & 4: Right 2-Column Master-Detail Issue View, Navigation, Dates, People, Development ---
-- Sequential Pager & Keyboard Navigation:
-  * Initial position: "1 of 6"
-  * After clicking issue-next-btn: "2 of 6"
-  * After pressing 'j': "3 of 6"
-  * After pressing 'k': "2 of 6"
-  * After clicking issue-prev-btn: "1 of 6"
-- Action Toolbar & Collapsible Sections:
-  * Verified split-state-select, favorite-issue-toggle, split-add-comment-btn, split-edit-btn, split-assign-btn, split-share-btn.
-  * Collapsible sections rendered: Details, Description, Attachments, Sub-issues & Linked Issues, Activity / Comments, People, Dates, Development.
-- Dates (Problem 4 created_at / updated_at):
-  * split-date-created: "11/20/2026"
-  * split-date-updated: "11/20/2026"
-- FAIL 1 (People -> 1-click "Assign to me" HTTP 422):
-  * Clicking [data-testid="split-assign-to-me-btn"] triggered PATCH /api/v1/issues/KAN-6 with `{"assignees":[...]}`.
-  * Live backend returned HTTP 422:
-    {"type":"urn:kanban:problem:VALIDATION_FAILED","title":"Validation Failed","status":422,"code":"VALIDATION_FAILED","detail":"Request validation failed","request_id":"e8fe8c5a6149485dace987781e365152","errors":[{"path":"assignees","message":"Extra inputs are not permitted"}]}
-  * Root cause in IssueSurface.tsx (handleAssignToMe): sends `{ assignees: updatedAssignees }` to PATCH /api/v1/issues/{key} instead of POST /api/v1/issues/{issue_ref}/assignees, and silently swallows the 422 in catch{} so the UI shows an unpersisted optimistic assignee that vanishes on reload.
-- FAIL 2 (Development -> "Copy git branch" Unhandled Clipboard Rejection Crash):
-  * Clicking [data-testid="split-git-branch-copy"] invokes `void navigator.clipboard.writeText(branch)` directly in IssueSurface.tsx (line 1697; same pattern in handleShareExport line 1160) without try/catch or .catch(...) or using copyToClipboard().
-  * When clipboard-write permission is not granted in the browser context, it throws an unhandled promise rejection:
-    NotAllowedError: Failed to execute 'writeText' on 'Clipboard': Write permission denied.
-  * This crashes the entire React app into the global "Application Error Detected" overlay (live-navigator-git-branch-copy-crash.png).
-- Minor mobile visual polish note: in live-navigator-mobile-detail.png (390x844), the narrow right column cards clip the bottom of the Git Branch section inside the split detail pane.
-LIVE_STACK_VERDICT [P3_P4_DETAIL_PEOPLE_DATES_DEV]: FAIL
+--- Problem 3 & 4: Right 2-Column Detail View, Assign to Me (POST /assignees), Clipboard Copy, Responsive ---
+1. Assign to me ([data-testid="split-assign-to-me-btn"], live-navigator-assign-to-me-desktop.png):
+   - Network Request: POST http://127.0.0.1:18962/api/v1/issues/KAN-1/assignees
+   - HTTP Status: 201 (zero 422)
+   - Response Body: {"id":"01a1fb07-1eec-7d8e-ab4f-e895d36ad55d","kind":"principal","principal":{"id":"01a1fb02-b6e8-7687-9847-764ea6b823e3","handle":"admin","display_name":"Server Administrator","type":"USER"}}
+   - UI Update: Both DETAILS ("Assignee: Server Administrator") and PEOPLE ("ASSIGNEE: Server Administrator") updated immediately and persisted across Tablet and Mobile views (React Query ['issues', targetProject] cache updated; note 2-line master rail cards intentionally render priority, key, state, favorite, and summary without an avatar chip).
+2. Git Branch Copy & Share / Export:
+   - Clicked [data-testid="split-git-branch-copy"] -> text updated to "✓ Copied!" (0 NotAllowedError, 0 crash modals).
+   - Clicked [data-testid="split-share-btn"] -> text updated to "✓ Copied link!" (0 NotAllowedError, 0 crash modals).
+3. Responsive Views:
+   - Tablet (768x1024): live-navigator-tablet.png
+   - Mobile List (390x844): live-navigator-mobile-list.png
+   - Mobile Detail (390x844): live-navigator-mobile-detail.png
+LIVE_STACK_VERDICT [P3_P4_DETAIL_ASSIGN_CLIPBOARD_DATES]: PASS
 
 --- Runtime Error Telemetry (KAN-52 scope) ---
-Unplanned HTTP 422 error: 1 (PATCH /api/v1/issues/KAN-6 from Assign to me)
-Unhandled Page Error: 1 (NotAllowedError from split-git-branch-copy)
+Console JS errors: 0
+Page errors: 0
 5xx responses: 0
 CSP violations: 0
 
 Screenshots Verified (docs/qa/KAN-52/screenshots/):
 - live-navigator-desktop-light.png
 - live-navigator-desktop-dark.png
-- live-navigator-query-desktop-light.png
+- live-navigator-assign-to-me-desktop.png
+- live-navigator-query-jql-desktop.png
+- live-navigator-collapsed-rail-desktop.png
 - live-navigator-tablet.png
 - live-navigator-mobile-list.png
 - live-navigator-mobile-detail.png
-- live-navigator-git-branch-copy-crash.png
 
-OVERALL LIVE_STACK_VERDICT (KAN-52): FAIL
+OVERALL LIVE_STACK_VERDICT (KAN-52): PASS

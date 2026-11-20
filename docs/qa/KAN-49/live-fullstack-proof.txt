@@ -1,32 +1,49 @@
 ================================================================================
 KAN-49 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 7913c2c8, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
 1. SUMMARY OF LIVE VERIFICATION FINDINGS
 --------------------------------------------------------------------------------
-- Project SAFE (id=01a1fab4-3e33-71f5-9c13-ae9fdd6194e4) configured with skip_loaded_sequence_numbers=true.
-- Single issue sequence boundary 12 -> 14:
-  Created SAFE-1..SAFE-12, next POST /api/v1/projects/SAFE/issues allocated SAFE-14 (skipped 13).
-- Issue tree batch allocation across 68 -> 71:
-  POST /api/v1/projects/SAFE/issue-trees (5 issues starting at 68) allocated:
-  [SAFE-68, SAFE-70, SAFE-71, SAFE-72, SAFE-73] (skipped 69).
-- Substring preservation & 88 boundary:
-  POST /api/v1/projects/SAFE/issue-trees (40 issues starting at 74) skipped SAFE-88 and allocated SAFE-113 (113 NOT skipped!).
-- Issue copy batch allocation across 403 -> 405:
-  POST /api/v1/issues/SAFE-401/copy (include_sub_issues=true) allocated:
-  root=SAFE-403, copied_sub_issues=[{source_key: SAFE-402, copy_key: SAFE-405}] (skipped 404).
-- Note on POST /issue-trees commit timing: an immediate 0ms POST /issues/SAFE-401/copy right after POST /projects/SAFE/issue-trees returned 404 NOT_FOUND before get_rls_session committed; retrying copy after commit succeeded with 201 and allocated SAFE-403 & SAFE-405.
+- Project SAFE (skip_loaded_sequence_numbers=true) verified end-to-end against live PostgreSQL 16 + FORCE ROW LEVEL SECURITY:
+  * Single issue sequence boundary 12 -> 14:
+    Created SAFE-1..SAFE-12; next POST /api/v1/projects/SAFE/issues allocated SAFE-14 (skipped 13).
+  * Issue tree batch allocation across 68 -> 71:
+    POST /api/v1/projects/SAFE/issue-trees (5 issues starting at 68) allocated:
+    [SAFE-68, SAFE-70, SAFE-71, SAFE-72, SAFE-73] (skipped 69).
+  * Substring preservation & 88 boundary:
+    POST /api/v1/projects/SAFE/issue-trees (40 issues starting at 74) skipped SAFE-88 and allocated SAFE-113 (113 NOT skipped).
+  * Immediate 0ms POST /api/v1/issues/SAFE-401/copy right after POST /api/v1/projects/SAFE/issue-trees:
+    Succeeded on the VERY FIRST attempt with status=201 Created (zero 404 commit race!), allocating root=SAFE-403 and copied_sub_issues=[{source_key: SAFE-402, copy_key: SAFE-405}] (skipped 404).
+- PostgreSQL SEQUENCE_SKIPPED & Cryptographic Hash Chain:
+  * Verified SEQUENCE_SKIPPED activity_records rows for skipped sequences [13], [69], [88], [404] with reason="agent_safe_sequence_numbering".
+  * Verified verify_activity_chain('01a1fb00-3e06-75c4-a91a-259fbbfbb327') -> is_valid=t, checked_rows=457, first_broken_seq=NULL, failure_reason=NULL.
+- Playwright UI Visual Verification across Desktop Light/Dark, Tablet, Mobile + Issue Activity:
+  * Board/issues view on /w/kanban/p/SAFE/issues?view=board rendered SAFE-405, SAFE-403, SAFE-402, SAFE-401, SAFE-400 with zero SAFE-404 / SAFE-13 / SAFE-69 / SAFE-88.
+  * Issue detail & activity view /w/kanban/p/SAFE/issues/SAFE-14 rendered cleanly with zero consoleErrors, pageErrors, or serverErrors.
 
-2. VERBATIM POSTGRESQL SEQUENCE_SKIPPED & HASH-CHAIN OUTPUT
+2. VERBATIM API & POSTGRESQL LOG
 --------------------------------------------------------------------------------
-[PostgreSQL SEQUENCE_SKIPPED activity_records for SAFE]
-124|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
-179|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}
-185|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}
-514|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}
+Created 13 single issues: ['SAFE-1', 'SAFE-2', 'SAFE-3', 'SAFE-4', 'SAFE-5', 'SAFE-6', 'SAFE-7', 'SAFE-8', 'SAFE-9', 'SAFE-10', 'SAFE-11', 'SAFE-12', 'SAFE-14']
+Verified 12 -> 14 boundary: SAFE-13 skipped, SAFE-14 allocated.
+PostgreSQL SEQUENCE_SKIPPED row for 13:
+64|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
+Tree batch across 68 -> 71 allocated keys: ['SAFE-68', 'SAFE-70', 'SAFE-71', 'SAFE-72', 'SAFE-73']
+Verified SAFE-88 skipped and SAFE-113 NOT skipped: range=SAFE-74..SAFE-114
+Immediate 0ms POST /issues/SAFE-401/copy after POST /issue-trees -> status=201 root=SAFE-403, child=SAFE-405 (404 skipped!)
+All PostgreSQL SEQUENCE_SKIPPED rows for SAFE:
+64|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
+119|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}
+125|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}
+454|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}
+verify_activity_chain('01a1fb00-3e06-75c4-a91a-259fbbfbb327') -> t|457||
 
-[PostgreSQL verify_activity_chain(01a1faac-6c26-751e-ac04-ea2d2a34337e)]
-is_valid=t, checked_rows=517, first_broken_seq=NULL, failure_reason=NULL
+3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
+--------------------------------------------------------------------------------
+- docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-light.png
+- docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-dark.png
+- docs/qa/KAN-49/screenshots/live-safe-sequences-tablet.png
+- docs/qa/KAN-49/screenshots/live-safe-sequences-mobile.png
+- docs/qa/KAN-49/screenshots/live-safe-sequence-skipped-activity.png
 
 LIVE_STACK_VERDICT: PASS

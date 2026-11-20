@@ -5,9 +5,7 @@
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
 - Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-49`
-- Branch: `fix/KAN-20-49-rc1`
-- Commit: `f4a54409`
-- Base Reference: `07d04cde` (on `main`)
+- Branch: `main` (commit `7913c2c8`)
 - Container Environment: `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
 - Live Stack Status: `LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
@@ -16,7 +14,7 @@
 
 ## 1. Executive Summary & Audit Scope
 
-This clean-room API, Security, and Database Architecture audit inspects ticket KAN-49 on branch `fix/KAN-20-49-rc1` at commit `f4a54409`. KAN-49 establishes agent-safe sequence allocation across the universal object graph, preventing collision with culturally sensitive or agent-triggering loaded numbers while maintaining strict relational integrity, linear migration history, high-concurrency throughput, and cryptographic audit accountability. This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`), verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room API, Security, and Database Architecture audit inspects ticket KAN-49 on branch `main` at commit `7913c2c8`. KAN-49 establishes agent-safe sequence allocation across the universal object graph, preventing collision with culturally sensitive or agent-triggering loaded numbers while maintaining strict relational integrity, linear migration history, high-concurrency throughput, and cryptographic audit accountability. This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS), verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 The implementation addresses four architectural requirements and incorporates all reality-checker remediations:
 1. Linear Single-Head Database Migration (`p4_24_agent_safe_sequences`):
@@ -184,4 +182,4 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-49/live-fullstack-pr
 
 STATUS: APPROVED
 
-The database migration `p4_24_agent_safe_sequences`, ORM model parity, PL/pgSQL batch sequence allocation functions, service layer refactoring (`create_issue`, `create_issue_tree`, `copy_issue`), and `SEQUENCE_SKIPPED` cryptographic audit records for KAN-49 on branch `fix/KAN-20-49-rc1` at commit `f4a54409` have been thoroughly audited, verified against strict concurrency and migration fixtures, and certified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Clean-Room Reality-Checker QA.
+The database migration `p4_24_agent_safe_sequences`, ORM model parity, PL/pgSQL batch sequence allocation functions, service layer refactoring (`create_issue`, `create_issue_tree`, `copy_issue`), and `SEQUENCE_SKIPPED` cryptographic audit records for KAN-49 on branch `main` at commit `7913c2c8` have been thoroughly audited, verified against strict concurrency and migration fixtures, and certified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Clean-Room Reality-Checker QA.

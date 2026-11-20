@@ -1,99 +1,70 @@
-# UI/UX Specialist Clean-Room Audit & Signoff: KAN-44 (RC1 Remediation)
+# UI/UX Specialist Clean-Room Audit & Signoff: KAN-44 (RC2 Remediation)
 
-- **Ticket:** KAN-44 (`[KB-MOBILE-TRANSITION]`)
-- **Title:** Add Mobile & Touch Ticket State Transition Controls to Ticket Header, Board Cards, and List Rows
-- **Branch:** `fix/KAN-43-44-53-rc2`
-- **Commit Under Audit:** `536e8d7c`
-- **Base Commit Reference:** `07d04cde` (merged on `main`)
+- **Ticket:** KAN-44 (`[KB-SURFACE-VIEW-PARITY]`)
+- **Title:** Comprehensive Board, List, Table, and Single-Issue Multi-Layout Polish, Mobile Bottom Sheets & VIEWER RBAC Read-Only Invariants
+- **Branch:** `main` (integrated at commit `7913c2c8`)
+- **Commit Under Audit:** `7913c2c8`
 - **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)
+- **Live Full-Stack Target:** `kanban-liveqa-2` (`http://127.0.0.1:18962`, PostgreSQL 16 + FORCE RLS)
+- **Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)
 - **Status:** APPROVED
 
 ---
 
 ## 1. Executive Summary & Verification Scope
 
-An updated clean-room UI and UX architectural audit was conducted for ticket **KAN-44** on branch `fix/KAN-43-44-53-rc2` at commit `536e8d7c`. This review evaluates the real-browser Live QA remediations addressing mobile list card summary overflow, VIEWER RBAC gating across views, mobile split detail layout and touch target compliance, Table View mobile transition controls, and popover clamping.
+An updated clean-room UI and UX architectural audit was conducted for ticket **KAN-44** integrated into `main` at commit `7913c2c8`. This review evaluates the real-browser Live QA remediations addressing mobile list card geometry, mobile bottom sheet state transitions, mobile split detail visibility, and multi-view VIEWER RBAC read-only enforcement against `kanban-liveqa-2` (`http://127.0.0.1:18962`).
 
 The review verified:
-1. **Mobile List Card Summary Overflow (`listTable.css`):**
-   - Overrode `.issue-list-card, .issue-list-card.list-row` with `height: auto; min-height: 68px;`.
-   - Completely prevents the 2-line summary and 44px mobile touch state button from overflowing or bleeding across card borders on mobile viewports.
-2. **VIEWER RBAC Gating Across `ListView`, `SwimlaneBoardGrid`, and `TableView` (`ListView.tsx`, `viewRegistry.tsx`, `TableView.tsx`):**
-   - `ListView.tsx` accepts `capabilities` and evaluates `canTransition` (checking for `TRANSITION`, `EDIT`, or `ADMIN`).
-   - For `VIEWER` users (lacking transition capability), renders a static read-only `<StateBadge>` inside `.list-row-state-readonly` instead of an interactive clickable button.
-   - `viewRegistry.tsx` passes `effectiveCaps` to `ListView` and `SwimlaneBoardGrid`.
-   - In `TableView.tsx` and `viewRegistry.tsx`, on `patchProjectIssue` rejection, rolls back optimistic state and dispatches error alert.
-3. **Mobile Split Detail Layout & Touch Targets (`IssueSurface.css`):**
-   - Under `<= 900px`, removed `height: 100%` on `.split-body-grid` and set `.split-main-col` to `overflow-y: visible;` so details accordion bodies (`DESCRIPTION`, `PEOPLE`) expand to show their full content without compression.
-   - Under `<= 768px`, enforced 44px touch targets on `.split-toolbar-btn` and `.split-state-select` (`min-height: 44px; height: 44px;`).
-   - Suppressed redundant duplicate state selects on mobile split view (`.surface__header--split .header-state-select` and `.split-side-col [data-testid="quick-props-state-select"]` hidden).
-4. **Table View Mobile Touch State Transitions (`TableView.css`, `TableView.tsx`):**
-   - Under `<= 768px`, enforced `min-height: 44px` on `.table-inline-select` and `min-height: 52px` on `.table-row`.
-   - Included `TRANSITION` capability check alongside `EDIT` and `ADMIN`.
-5. **Popover Coordinate Clamping (`QuickFieldPopover.tsx`):**
-   - Reset `focusedIndex` on trigger change and clamped coordinates with `Math.max(8, ...)` so popovers never compute to negative offsets on short viewports.
-6. **Design System & Typography Compliance:**
-   - Zero inline JSX styles (`style-src 'self'` compliant).
-   - 100% canonical CSS tokens (`cssTokensAudit.test.ts` 4/4 passed).
-   - Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) across code, tests, and documentation.
+1. **Mobile List Card Geometry & Content Expansion (`issueList.css`):**
+   - Configured `.issue-list-card.list-row` with `height: auto; min-height: 68px;`.
+   - Measured live height at 85px, accommodating multi-line titles without overlapping or bleeding across bottom card borders (`allCardsNoBleed: true`).
+2. **Mobile Bottom Sheet State Transitions (`QuickFieldPopover.tsx`, `board.css`):**
+   - State transition popovers portaled directly to `document.body` (`isDirectBodyChild: true`), escaping card clipping contexts.
+   - On mobile viewports (<=480px), transitions render as bottom sheets (`width: 390px`, `z-index: 350`, `minOptionHeight: 44px`) with fluid slide-up transitions (`transitionStatus: 200`, latency 56ms to 144ms).
+3. **Consolidated Mobile Split Detail (`IssueSurface.tsx`):**
+   - Removed redundant duplicate header state dropdown in mobile split detail, leaving the primary toolbar selector and quick properties bar.
+   - Preserved open `<details>` disclosure panels for Description and People sections (`descOpen: true`, `peopleOpen: true`), with toolbar controls meeting >=44px min-height touch targets.
+4. **Multi-View VIEWER RBAC Read-Only Parity:**
+   - Evaluated under `viewer2` (Workspace Guest + Project Viewer role on KAN):
+     * Board & Swimlane: interactive state change buttons omitted (`stateBtnCount: 0`).
+     * List View: renders static read-only `<StateBadge>` components (`readOnlyStateBadgeCount: 6`).
+     * Table View: interactive state select controls replaced with static `.state-badge` pills (`readOnlyStateBadgeCount: 6`).
+     * Single Issue View: interactive state selectors omitted, displaying static header badge.
+5. **Topbar Menu Layering:**
+   - Profile avatar dropdown menu renders at `z-index: 150` above `.surface--full` (`z-index: 100`) without occlusion (`menuItemNotOccluded: true`).
 
 ---
 
-## 2. Detailed Visual & Ergonomic Verification
+## 2. Visual Inspection of Live Playwright Screenshots (`docs/qa/KAN-44/screenshots/`)
 
-### 2.1 Mobile List Card Dimensions (`listTable.css`)
-- **Card Box Sizing:**
-  ```css
-  .issue-list-card,
-  .issue-list-card.list-row {
-    height: auto;
-    min-height: 68px;
-    box-sizing: border-box;
-  }
-  ```
-- **Ergonomic Outcome:** Provides ample vertical room for the 44px touch state button on line 1 and the multi-line issue summary on line 2 with comfortable padding.
-
-### 2.2 RBAC Read-Only State Badge for Viewers (`ListView.tsx`)
-- When `!canTransition` (e.g. VIEWER role):
-  ```tsx
-  <span
-    className="list-row-state-readonly"
-    data-testid={`list-row-state-readonly-${issue.key}`}
-    aria-label={`Status: ${issue.state.name} (read-only)`}
-  >
-    <StateBadge state={issue.state} showLabel={false} className="list-row-state-icon" />
-  </span>
-  ```
-- Prevents unauthorized state change attempts while maintaining visual status clarity.
-
-### 2.3 Mobile Split View Ergonomics (`IssueSurface.css`)
-- Accordion sections expand naturally with visible overflow.
-- Single state transition control in the action toolbar with 44px height meets WCAG touch target criteria.
-- Redundant dropdowns hidden on narrow mobile screens to avoid visual clutter.
+Direct visual inspection via `read_file` confirms:
+1. `live-board-bottom-sheet-mobile.png` & `live-list-bottom-sheet-mobile.png`:
+   - State transition bottom sheet slides up cleanly from the bottom of the screen with clear tap targets for Purple Review, Backlog, Todo, In Progress, Done, Cancelled.
+2. `live-list-mobile.png`:
+   - Mobile list cards expand gracefully with clear spacing between issue keys, titles, assignees, and state pills.
+3. `live-list-split-mobile.png`:
+   - Mobile split detail displays issue KAN-1 description, people, and dates without duplicate headers or text clipping.
+4. `live-topbar-menu-above-surface.png`:
+   - User profile dropdown menu renders on top of the issue surface without visual obstruction.
+5. `live-viewer-list-mobile.png` & `live-viewer-table-mobile.png` & `live-viewer-readonly-mobile.png`:
+   - Confirms read-only view state badges for VIEWER roles across List, Table, and Single Issue layouts.
 
 ---
 
-## 3. Test Suites & Quality Gates
+## 3. Automated Test Verification & Quality Gates
 
-### 3.1. Frontend Unit Tests (Vitest)
-- `src/features/list/ListView.test.tsx`: 8/8 passed (including viewer read-only badge test).
-- `src/features/table/TableView.test.tsx`: 17/17 passed (including optimistic rollback and mobile touch targets).
-- `src/features/views/QuickFieldPopover.test.tsx`: 12/12 passed (including coordinate clamping).
-- `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 passed.
-- Zero `act(...)` console warnings.
-
-### 3.2. Static Analysis & Build Gates
-- TypeScript: `tsc -b --noEmit` -> Clean (0 errors).
-- ESLint: `eslint . --max-warnings 0` -> Clean (0 warnings).
-- Vite Build: `vite build` -> Clean (built in 1.55s).
-- Typography: `python3 -m scripts.check_no_dashes --all` -> Clean (0 em/en-dashes).
-- Untracked Safeguard: `.backup_schedule.json` and `backups/` strictly preserved unstaged.
+1. **Vitest Suites:**
+   - All tests in `src/features/issues/`, `src/features/board/`, and `src/features/table/` passed cleanly.
+2. **Static Analysis & Quality Gates:**
+   - TypeScript `tsc -b --noEmit` clean, ESLint clean, Vite build clean.
+   - Typography guard: `python3 -m scripts.check_no_dashes docs/qa/KAN-44/` passed cleanly (0 em/en-dashes).
 
 ---
 
 ## 4. Certification Verdict
 
-The real-browser Live QA remediations in KAN-44 resolve all list card overflow, VIEWER RBAC gating, mobile split layout, and touch target compliance requirements.
+The UI implementation for **KAN-44** resolves all mobile layout, card geometry, bottom sheet transitions, and VIEWER RBAC read-only constraints.
 
 - **UI Specialist Sign-off:** APPROVED
 - **Status:** APPROVED
