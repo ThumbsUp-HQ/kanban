@@ -286,7 +286,7 @@ export function WorkflowStudioPage({
         <div className="workflow-studio-actions">
           <StudioDocLink
             href="/docs/scripted-workflows-and-transition-helpers"
-            title="Scripted Workflows &amp; Transition Helpers Documentation"
+            title="Scripted Workflows & Transition Helpers Documentation"
             testId="workflow-studio-doc-link"
           />
           <button

@@ -979,7 +979,7 @@ class CustomFieldExecutor:
 
         output_bytes = b""
         tier_val: str = str(body.tier)
-        logs = f"Draft test execution on {body.issue_key} (flavor={tier_val})\n"
+        logs = f"Draft test execution on {body.issue_key} (tier={tier_val})\n"
         latency_ms = 0
         try:
             if tier_val == "wasm":
