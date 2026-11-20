@@ -1,83 +1,61 @@
-====================================================================
-LIVE FULL-STACK VERIFICATION PROOF: KAN-7 ([KB-P3-AUDIT-01])
+=== KAN-7 ZERO-MOCK LIVE FULL-STACK VERIFICATION ===
 Target: http://localhost:18951 (container: kanban-liveqa-1)
-Zero-Mock Mandate: 0 mockApi, 0 page.route, 0 context.route
-====================================================================
+Timestamp: 2026-11-20T04:10:57.861Z
 
---- 1. Container UID 65532 & Setup Token Permissions ---
-id kanban: uid=65532(kanban) gid=65532(kanban) groups=65532(kanban)
--rw------- 1 kanban kanban   52 Nov 20 02:41 /run/kanban/setup_token
+[CHECK 1] Container Setup Token & Pre-Claim Status
+stat /run/kanban/setup_token -> 65532:65532 600 /run/kanban/setup_token
+setup_token length -> 52 (prefix=kb_setup_...)
+GET /api/v1/setup/status -> HTTP 200 {"initialized":false}
 
-/run/kanban:
-total 20
-drwxr-xr-x 2 kanban kanban 4096 Nov 20 02:41 .
-drwxr-xr-x 1 root   root   4096 Nov 20 02:41 ..
--rw------- 1 kanban kanban   52 Nov 20 02:41 setup_token
--rw-r--r-- 1 root   root    273 Nov 20 02:41 standalone_status.json
-UID 65532 cat /run/kanban/setup_token: kb_setup_KkwicMo3klwI2Uy-lx2Ks2FZ4U_uuKFCN8WDPkLxEkU
-entrypoint.py KB_SETUP_TOKEN_FILE passthrough: 409:    "KB_SETUP_TOKEN_FILE",
+[PHASE A] Unauthenticated /setup?token=... Light/Dark Desktop/Mobile Screenshots
+  /setup (light-desktop 1440x900): url_search="" docScroll=1440/1440 consoleErrors=0 pageErrors=0 wsOrSse=0
+  /setup (dark-desktop 1440x900): url_search="" docScroll=1440/1440 consoleErrors=0 pageErrors=0 wsOrSse=0
+  /setup (light-mobile 390x844): url_search="" docScroll=390/390 consoleErrors=0 pageErrors=0 wsOrSse=0
+  /setup (dark-mobile 390x844): url_search="" docScroll=390/390 consoleErrors=0 pageErrors=0 wsOrSse=0
 
---- 2. Setup Claim + TOTP Enrollment (Captured in initial fresh boot run) ---
-GET /setup?token=kb_setup_... -> token stripped from URL bar (http://localhost:18951/setup)
-POST /api/v1/setup/claim (workspace=kanban, project=KAN) -> HTTP 200 | {"status":"enrollment_required","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","enrollment_id":"7bea1002-8b06-457a-b32d-82b5a06ab339"}
-POST /api/v1/auth/totp/enroll/verify -> HTTP 200 | {"confirmed":true,"status":"enrolled","verified":true,"aal_level":2,"recovery_codes":[10 codes]}
+[PHASE B] Claim /setup + Enroll TOTP + Enroll Virtual WebAuthn Passkey
+  POST /api/v1/setup/claim -> HTTP 200 {"status":"enrollment_required","principal_id":"01a1f726-95bc-7a5f-b304-c35e10f21a17","enrollment_id":"c81c6365-d022-4b69-b572-f441b58f578e","csrf_token":"-0AXZXOBYyfkMap2qwDRLQ.0E75S59lo7QkaKfQbrzhxkEsHk2MjR0jEIotC4VM6tw"}
+  POST /api/v1/auth/mfa/totp/enroll -> HTTP 200 (has_secret=true, has_uri=true)
+  POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 verified=true aal_level=2 recovery_count=10
+  Step 3 recovery codes rendered: count=10 first=Y44TK-SS3ZG
+  GET /api/v1/auth/session (after setup) -> HTTP 200 {"authenticated":true,"principal_id":"01a1f726-95bc-7a5f-b304-c35e10f21a17","workspace_id":"01a1f726-95bb-70ad-a382-a247af10e21c","session_id":"01a1f726-9685-7c87-a0d5-ba1f77e7db25","aal_level":2,"mfa_pending":false,"csrf_token":"3LxyeC94d2HxPVzOzpu3ng.K1gj9rTMAV9OBaXlTybqzQ38zJhmMiEvcfHGJq6FdUQ","idle_expires_at":"2026-11-27T04:11:03.684394+00:00","absolute_expires_at":"2026-12-20T04:11:03.504490+00:00","remember_me":true}
+  WebAuthn Virtual Passkey enrollment -> {"step":"done","optionsStatus":200,"verifyStatus":200,"verifyBody":{"verified":true,"credential_id":"01a1f726-9c90-790f-97ad-90a7d3b14ef9","nickname":"LiveQA Virtual Passkey"},"mfaStatusStatus":200,"mfaStatusBody":{"totp_enabled":true,"passkeys_count":1,"recovery_codes_remaining":10}}
 
---- 3. Fresh Context Login -> SecondFactorStep -> Recovery Code ---
-[2026-11-20T02:47:08.980Z] Assertion PASSED: [data-testid="second-factor-step"] is present
-[2026-11-20T02:47:09.027Z] Chromium new RegExp(pattern, 'v') check: {"ok":true,"pattern":"[A-Za-z0-9\\-]{8,32}","source":"[A-Za-z0-9\\-]{8,32}","flags":"v"}
-[2026-11-20T02:47:10.094Z] POST /api/v1/auth/recovery/verify -> HTTP 200
-[2026-11-20T02:47:10.752Z] Post-login GET /api/v1/auth/session -> HTTP 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6d9-c7e9-7b48-bce9-9b4d6e61be84","aal_level":2,"mfa_pending":false,"csrf_token":"dTOvp6DjxzrIwRNOtuZfVw.ML66u9bQAyjAYzzL2-gAJ6In3wsUGVlGic6FxiIbVnI","idle_expires_at":"2026-11-27T02:47:10.057314+00:00","absolute_expires_at":"2026-12-20T02:47:08.890698+00:00","remember_me":true}
-[2026-11-20T02:47:10.777Z] Console errors count: 4 (resolved in remediation below)
-[2026-11-20T02:47:10.779Z] Page errors count: 0
+[PHASE C] /login & SecondFactorStep (mfa_pending: true) + Mobile 390x844 Layout + Recovery Code Login
+  [light-desktop] /login initial: consoleErrors=0 pageErrors=0 wsRequests=0 websockets=0
+  [light-desktop] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required mfa_pending=true methods=["totp","webauthn","recovery"]
+  [light-desktop] SecondFactorStep (mfa_pending=true): consoleErrors=0 pageErrors=0 wsOrSse=0
+  [light-desktop] Rendered MFA tabs: ["Authenticator code","Passkey","Recovery code"]
+  [light-desktop] Layout & Regex-v check: {"docScrollWidth":1440,"docClientWidth":1440,"panelScrollWidth":478,"panelClientWidth":478,"tablistScrollWidth":430,"tablistClientWidth":430,"panelRect":{"left":480,"right":960,"width":480},"tablistRect":{"left":505,"right":935,"width":430},"tabRects":[{"text":"Authenticator code","left":505,"right":657,"top":390.359375,"bottom":424.359375,"width":152},{"text":"Passkey","left":665,"right":749,"top":390.359375,"bottom":424.359375,"width":84},{"text":"Recovery code","left":757,"right":887,"top":390.359375,"bottom":424.359375,"width":130}],"patternAttr":"[A-Za-z0-9\\-]{8,32}","regexVValid":true,"regexError":null}
+  [dark-desktop] /login initial: consoleErrors=0 pageErrors=0 wsRequests=0 websockets=0
+  [dark-desktop] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required mfa_pending=true methods=["totp","webauthn","recovery"]
+  [dark-desktop] SecondFactorStep (mfa_pending=true): consoleErrors=0 pageErrors=0 wsOrSse=0
+  [dark-desktop] Rendered MFA tabs: ["Authenticator code","Passkey","Recovery code"]
+  [dark-desktop] Layout & Regex-v check: {"docScrollWidth":1440,"docClientWidth":1440,"panelScrollWidth":478,"panelClientWidth":478,"tablistScrollWidth":430,"tablistClientWidth":430,"panelRect":{"left":480,"right":960,"width":480},"tablistRect":{"left":505,"right":935,"width":430},"tabRects":[{"text":"Authenticator code","left":505,"right":657,"top":390.359375,"bottom":424.359375,"width":152},{"text":"Passkey","left":665,"right":749,"top":390.359375,"bottom":424.359375,"width":84},{"text":"Recovery code","left":757,"right":887,"top":390.359375,"bottom":424.359375,"width":130}],"patternAttr":"[A-Za-z0-9\\-]{8,32}","regexVValid":true,"regexError":null}
+  [light-mobile] /login initial: consoleErrors=0 pageErrors=0 wsRequests=0 websockets=0
+  [light-mobile] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required mfa_pending=true methods=["totp","webauthn","recovery"]
+  [light-mobile] SecondFactorStep (mfa_pending=true): consoleErrors=0 pageErrors=0 wsOrSse=0
+  [light-mobile] Rendered MFA tabs: ["Authenticator code","Passkey","Recovery code"]
+  [light-mobile] Layout & Regex-v check: {"docScrollWidth":390,"docClientWidth":390,"panelScrollWidth":320,"panelClientWidth":320,"tablistScrollWidth":272,"tablistClientWidth":272,"panelRect":{"left":33.90625,"right":356.09375,"width":322.1875},"tablistRect":{"left":58.90625,"right":331.09375,"width":272.1875},"tabRects":[{"text":"Authenticator code","left":58.90625,"right":196.90625,"top":360.828125,"bottom":404.828125,"width":138},{"text":"Passkey","left":200.90625,"right":275.90625,"top":360.828125,"bottom":404.828125,"width":75},{"text":"Recovery code","left":58.90625,"right":174.90625,"top":408.828125,"bottom":452.828125,"width":116}],"patternAttr":"[A-Za-z0-9\\-]{8,32}","regexVValid":true,"regexError":null}
+  [dark-mobile] /login initial: consoleErrors=0 pageErrors=0 wsRequests=0 websockets=0
+  [dark-mobile] POST /api/v1/auth/local/login -> HTTP 200 status=mfa_required mfa_pending=true methods=["totp","webauthn","recovery"]
+  [dark-mobile] SecondFactorStep (mfa_pending=true): consoleErrors=0 pageErrors=0 wsOrSse=0
+  [dark-mobile] Rendered MFA tabs: ["Authenticator code","Passkey","Recovery code"]
+  [dark-mobile] Layout & Regex-v check: {"docScrollWidth":390,"docClientWidth":390,"panelScrollWidth":320,"panelClientWidth":320,"tablistScrollWidth":272,"tablistClientWidth":272,"panelRect":{"left":33.90625,"right":356.09375,"width":322.1875},"tablistRect":{"left":58.90625,"right":331.09375,"width":272.1875},"tabRects":[{"text":"Authenticator code","left":58.90625,"right":196.90625,"top":360.828125,"bottom":404.828125,"width":138},{"text":"Passkey","left":200.90625,"right":275.90625,"top":360.828125,"bottom":404.828125,"width":75},{"text":"Recovery code","left":58.90625,"right":174.90625,"top":408.828125,"bottom":452.828125,"width":116}],"patternAttr":"[A-Za-z0-9\\-]{8,32}","regexVValid":true,"regexError":null}
+  [dark-mobile] POST /api/v1/auth/recovery/verify -> HTTP 200
+  [dark-mobile] Post-recovery GET /api/v1/auth/session -> HTTP 200 {"authenticated":true,"principal_id":"01a1f726-95bc-7a5f-b304-c35e10f21a17","workspace_id":"01a1f726-95bb-70ad-a382-a247af10e21c","session_id":"01a1f726-c68e-7354-ad84-7d54a9e27911","aal_level":2,"mfa_pending":false,"csrf_token":"0enRKerYUvOHAeDVFcpz2A.15rwAOJVzEJ5tCQJ0x2Em7xYJPpF1NLakNUUrb0GEwg","idle_expires_at":"2026-11-27T04:11:15.982659+00:00","absolute_expires_at":"2026-12-20T04:11:14.625382+00:00","remember_me":true}
+  [dark-mobile] Post-recovery GET /api/v1/auth/mfa/status -> HTTP 200 {"totp_enabled":true,"passkeys_count":1,"recovery_codes_remaining":9}
 
---- 4. Live HTTP Transcript ---
-GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":false,"principal_id":null,"workspace_id":null,"session_id":null,"aal_level":0,"mfa_pending":false,"csrf_token":"qRnabQV8FW8vwlSK6XZTnw.zab0lsq4uOlUEbOQKR_YklFft0i4jmVsMsskGFboL7c","idle_expires_at":null,"absolute_expires_at":null,"remember_me":false}
-GET http://localhost:18951/api/v1/auth/cards -> 200 | {"cards":[{"id":"01a1f6d9-454f-7818-b5b7-6eea75a76f80","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","provider_kind":"LOCAL_ADMIN"}]}
-POST http://localhost:18951/api/v1/auth/local/login -> 200 | {"authenticated":true,"status":"mfa_required","challenge_id":"827fd421-9560-4257-b6f7-e7f44d52c488","methods":["totp","webauthn","recovery"],"session_id":"827fd421-9560-4257-b6f7-e7f44d52c488","aal_level":1,"mfa_pending":true,"csrf_token":"lIxfE1XmxUGRzp3pOSQupQ.auvOptMOIsnpenMN4kowxnq7vLtWUE4hCTkr91imfk0"}
-POST http://localhost:18951/api/v1/auth/recovery/verify -> 200 | (navigated away before body read)
-GET http://localhost:18951/api/v1/workspaces -> 200 | [{"id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","name":"Kanban","slug":"kanban","is_current":true,"role":"SERVER_ADMIN"}]
-GET http://localhost:18951/api/v1/setup/status -> 200 | {"initialized":true}
-GET http://localhost:18951/api/v1/system/status -> 200 | {"deployment_mode":"standalone_embedded_pg","persistent_volume":false,"data_mount_point":"/var/lib/kanban/data","data_mount_fstype":"ext4","tier_b_sandbox_available":false,"air_gap_mode":false,"local_llm_endpoint_host":null,"is_server_admin":true,"allow_unlimited_mcp_keys":true}
-GET http://localhost:18951/api/v1/notifications?limit=30 -> 200 | {"items":[],"next_cursor":null}
-GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6d9-c7e9-7b48-bce9-9b4d6e61be84","aal_level":2,"mfa_pending":false,"csrf_token":"dTOvp6DjxzrIwRNOtuZfVw.ML66u9bQAyjAYzzL2-gAJ6In3wsUGVlGic6FxiIbVnI","idle_expires_at":"2026-11-27T02:47:10.057314+00:00","absolute_expires_at":"2026-12-20T02:47:08.890698+00:00","remember_me":true}
-GET http://localhost:18951/api/v1/setup/status -> 200 | {"initialized":true}
-GET http://localhost:18951/api/v1/auth/me -> 200 | {"id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","handle":"admin","username":"admin","display_name":"Server Administrator","email":"admin@local.kanban","is_server_admin":true,"is_workspace_admin":true,"is_project_admin":true,"workspace_role":"SERVER_ADMIN","workspace_capabilities":["CREATE_PROJECT","MANAGE_WORKSPACE_SETTINGS","MANAGE_WORKSPACE_MCP_KEYS","MANAGE_SERVER_ADMIN","ADMIN_AUTH_STUDIO"]}
-GET http://localhost:18951/api/v1/auth/session -> 200 | {"authenticated":true,"principal_id":"01a1f6d9-4550-7899-8ce2-b3728b21291b","workspace_id":"01a1f6d9-454f-7a06-85ea-bbfb545b0c49","session_id":"01a1f6d9-c7e9-7b48-bce9-9b4d6e61be84","aal_level":2,"mfa_pending":false,"csrf_token":"dTOvp6DjxzrIwRNOtuZfVw.ML66u9bQAyjAYzzL2-gAJ6In3wsUGVlGic6FxiIbVnI","idle_expires_at":"2026-11-27T02:47:10.057314+00:00","absolute_expires_at":"2026-12-20T02:47:08.890698+00:00","remember_me":true}
-GET http://localhost:18951/api/v1/projects -> 200
-GET http://localhost:18951/api/v1/auth/session -> 200
-
---- 5. Scoped Problem Verdicts ---
-Problem 1 (POST /api/v1/setup/claim RLS Context Binding under FORCE RLS): PASS
-Problem 2 (UID 65532 /run/kanban/setup_token permissions + KB_SETUP_TOKEN_FILE passthrough): PASS
-Problem 3 (Recovery Code HTML5 pattern /v regex SyntaxError fix in real Chromium): PASS
-Problem 4 (SecondFactorStep data-testid="second-factor-step" attribute): PASS
-
---- 6. Live Stack Findings & Surgical Remediations ---
-Finding 1: Unauthenticated & mfa_pending WebSocket/SSE Console Errors (403 / 401)
-- Root Cause: RealtimeProvider / RealtimeClient initiated connection attempts regardless of session authentication state, attempting /ws (403) and /sse (401) on /login and during 2FA.
-- Remediation:
-  1. Gated RealtimeClient.connect() strictly behind isSessionAllowed() (session.authenticated === true && session.mfa_pending !== true).
-  2. In RealtimeProvider, added isPublicAuthRoute() detection (/login, /setup, /activate) and useQuery for session on protected routes.
-  3. Added session update observer in RealtimeClient (setSession) that immediately closes active connections if session becomes invalid.
-  4. Hardened WebSocket onclose to terminate cleanly without retry or SSE fallback on close code 4401 (WS_CLOSE_UNAUTHENTICATED) or 4403.
-  5. Added cleanup handlers for kb:auth-logout and storage logout events.
-- Verification: 0 WebSocket/SSE attempts made while unauthenticated or mfa_pending; connection established only upon successful session authentication; 0 console errors emitted.
-
-Finding 2: Mobile 390x844 Second-Factor Method Tabs Overflow
-- Root Cause: .auth-tablist in auth.css did not specify flex-wrap: wrap, causing the three MFA tabs (Authenticator code, Passkey, Recovery code) to exceed the width of .auth-panel at 390px.
-- Remediation:
-  1. Added flex-wrap: wrap, width: 100%, max-width: 100%, and box-sizing: border-box to .auth-tablist.
-  2. Under @media (max-width: 767px), added responsive compact layout: gap: var(--space-1, 4px), font-size: var(--text-xs, 0.75rem), padding: var(--space-2, 8px) var(--space-3, 12px), and min-height: var(--tap-min, 44px) meeting WCAG tap targets.
-  3. Verified zero inline style props (0 style={{...}}) and 100% canonical CSS tokens via cssTokensAudit.test.ts.
-- Verification: All three tabs wrap cleanly inside .auth-panel with scrollWidth <= clientWidth at 390px viewport width; zero horizontal overflow.
-
---- 7. Automated Test & Coverage Proof ---
-- Unit Tests: 86 passed across SecondFactorStep.test.tsx, realtime/index.test.tsx, api/realtime.test.ts, and cssTokensAudit.test.ts.
-- Coverage on Touched Files (v8):
-  * All files: 99.32% Statements, 95.77% Branches, 100% Functions, 99.54% Lines
-  * api/realtime.ts: 99.28% Statements, 95.48% Branches, 100% Functions, 99.28% Lines
-  * features/auth/SecondFactorStep.tsx: 98.97% Statements, 96.42% Branches, 100% Functions, 100% Lines
-  * realtime/context.tsx: 100% Statements, 95.74% Branches, 100% Functions, 100% Lines
-- Static Gates: tsc -b --noEmit (0 errors), eslint . --max-warnings 0 (0 errors), vite build (0 errors), check_no_dashes (0 em/en-dashes).
-
+=== SUMMARY ===
+Saved screenshots (10):
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-light-desktop.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-dark-desktop.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-light-mobile.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-01-setup-dark-mobile.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-03-workspace-light-desktop.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-light-desktop.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-dark-desktop.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-light-mobile.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-02-second-factor-recovery-dark-mobile.png
+  - /home/adamoutler/kanban/docs/qa/KAN-7/screenshots/live-03-workspace-dark-mobile.png
 LIVE_STACK_VERDICT: PASS

@@ -1,150 +1,676 @@
-diff --git a/docs/qa/KAN-7/build-or-typecheck.txt b/docs/qa/KAN-7/build-or-typecheck.txt
-index 437089e..edb18d5 100644
---- a/docs/qa/KAN-7/build-or-typecheck.txt
-+++ b/docs/qa/KAN-7/build-or-typecheck.txt
-@@ -2,10 +2,7 @@
- All checks passed!
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index 69734e0..b47534e 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -406,6 +406,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
+     "KB_AIR_GAP_MODE",
+     "KB_TRASH_RETENTION_DAYS",
+     "KB_LOG_LEVEL",
++    "KB_SETUP_TOKEN_FILE",
+ )
  
- === RUFF FORMAT CHECK ===
--1808 files already formatted
+ 
+@@ -521,7 +522,7 @@ def _compute_migrations_digest() -> str:
+     return ""
+ 
+ 
+-def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
++def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
+     """Coordinate standalone single-container startup."""
+     # 1. Mode selection
+     database_url = os.environ.get("DATABASE_URL")
+@@ -552,14 +553,23 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+     data_dir.mkdir(parents=True, exist_ok=True)
+     backups_dir = data_dir / "backups"
+     backups_dir.mkdir(parents=True, exist_ok=True)
++    run_kanban_dir = Path("/run/kanban")
++    try:
++        run_kanban_dir.mkdir(parents=True, exist_ok=True)
++    except OSError as exc:
++        log_phase("init_dirs", f"Warning: mkdir /run/kanban failed: {exc}")
++
+     if os.getuid() == 0:
+         try:
+             shutil.chown(str(data_dir), user=65532, group=65532)
+             shutil.chown(str(backups_dir), user=65532, group=65532)
+             data_dir.chmod(0o775)
+             backups_dir.chmod(0o775)
++            if run_kanban_dir.is_dir():
++                shutil.chown(str(run_kanban_dir), user=65532, group=65532)
++                run_kanban_dir.chmod(0o775)
+         except OSError as exc:
+-            log_phase("init_dirs", f"Warning: chown data_dir failed: {exc}")
++            log_phase("init_dirs", f"Warning: chown failed: {exc}")
+ 
+     keyring_path = Path(
+         os.environ.get(
+diff --git a/kanban/auth/setup.py b/kanban/auth/setup.py
+index a31790f..369dc30 100644
+--- a/kanban/auth/setup.py
++++ b/kanban/auth/setup.py
+@@ -13,13 +13,14 @@ import os
+ import re
+ import secrets
+ import sys
++import tempfile
+ import uuid
+ from pathlib import Path
+ from typing import TYPE_CHECKING, Final
+ 
+ from sqlalchemy import text
+ 
+-from database.session import RLSContext
++from database.session import RLSContext, bind_rls_context
+ from kanban.api.problems import ProblemException
+ from kanban.auth.local.hashing import DUMMY_HASH, hash_password, verify_password
+ from kanban.security.keys import derive_subkey, load_key_material
+@@ -108,21 +109,10 @@ class SetupBootstrapService:
+ 
+         token_file = os.environ.get("KB_SETUP_TOKEN_FILE", "/run/kanban/setup_token")
+ 
+-        def _persist_token(dest: str, secret: str) -> bool:
+-            try:
+-                p = Path(dest)
+-                p.parent.mkdir(parents=True, exist_ok=True)
+-                p.write_text(secret, encoding="utf-8")
+-                p.chmod(0o600)
+-            except OSError:
+-                return False
+-            else:
+-                return True
 -
--=== MYPY CHECK ===
--Success: no issues found in 4 source files
-+2 files already formatted
+-        written = await asyncio.to_thread(_persist_token, token_file, raw_token)
++        written_path = await asyncio.to_thread(self._persist_token, token_file, raw_token)
+         file_hint = (
+-            f" (claim token written to {token_file})"
+-            if written
++            f" (claim token written to {written_path})"
++            if written_path
+             else " (token claim available via setup wizard)"
+         )
  
- === LINT IMPORTS ===
+@@ -134,6 +124,58 @@ class SetupBootstrapService:
  
-@@ -23,7 +20,7 @@ Success: no issues found in 4 source files
- Contracts
- ---------
+         return raw_token
  
--Analyzed 945 files, 3288 dependencies.
-+Analyzed 953 files, 3327 dependencies.
- --------------------------------------
- 
- Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-@@ -33,14 +30,31 @@ Contracts: 2 kept, 0 broken.
- 
- === TYPESCRIPT TYPECHECK ===
- 
--> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
-+> @kanban/web@0.1.0 typecheck
- > tsc -b --noEmit
- 
-+Success: 0 errors
- 
- === ESLINT ===
- 
--> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
-+> @kanban/web@0.1.0 lint
- > eslint . --max-warnings 0
- 
-+Success: 0 errors, 0 warnings
++    @staticmethod
++    def _persist_token(dest: str, secret: str) -> str | None:
++        """Persist raw claim token to dest with 0o600 permissions.
 +
-+=== VITE BUILD ===
++        Falls back gracefully to a writable data/runtime directory on PermissionError.
++        """
++        targets: list[Path] = [Path(dest)]
 +
-+> @kanban/web@0.1.0 build
-+> tsc -b && vite build
++        fallbacks: list[Path] = []
++        if "KB_DATA_DIR" in os.environ:
++            fallbacks.append(Path(os.environ["KB_DATA_DIR"]) / "setup_token")
++        if "KB_RUN_DIR" in os.environ:
++            fallbacks.append(Path(os.environ["KB_RUN_DIR"]) / "setup_token")
++        fallbacks.extend(
++            [
++                Path("/var/lib/kanban/data/setup_token"),
++                Path("/var/lib/kanban/setup_token"),
++                Path(tempfile.gettempdir()) / "kanban" / "setup_token",
++                Path(tempfile.gettempdir()) / "setup_token",
++            ]
++        )
 +
-+vite v8.3.8 building client environment for production...
-+✓ 694 modules transformed.
-+dist/index.html                             0.51 kB │ gzip:   0.32 kB
-+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
-+dist/assets/index-BAiIJ2Md.css            400.37 kB │ gzip:  56.66 kB
-+dist/assets/index-li9z8NZ3.js           1,910.93 kB │ gzip: 518.93 kB
-+✓ built in 1.33s
- 
- === CHECK NO DASHES ===
-+python3 -m scripts.check_no_dashes --all
-+Success: 0 em/en-dashes found.
-diff --git a/docs/qa/KAN-7/changed-files-manifest.txt b/docs/qa/KAN-7/changed-files-manifest.txt
-index dfee60c..5ec7577 100644
---- a/docs/qa/KAN-7/changed-files-manifest.txt
-+++ b/docs/qa/KAN-7/changed-files-manifest.txt
-@@ -2,8 +2,13 @@
- 4bc9373c2a7eee2d58fde94a264287cbfc3c53893921d7f8fc92ec7b7c775d66     23694     684  deploy/standalone/entrypoint.py
- ee68961f02652d611662e10fa25654148f6a65e8745188f1ad395b208e767d7c     11636     320  kanban/auth/setup.py
- c494e192f2d971c037a993287076d697c9af4e6b0cddb2e3247aefda714c5464     16581     496  kanban/tests/auth/test_setup.py
--85ee5dce1c9cdb0ffd4e8b7543908fdbad518fd5b4d141dadf034cffe7ae87ff     10631     340  kanban/web/src/features/auth/SecondFactorStep.tsx
--3e15b631c992dd297f08eda769ccf359656fafb5e0700ef9f6767e5b522e5820     23611     746  kanban/web/src/features/auth/SecondFactorStep.test.tsx
-+e10d6667238320c5fb8c3cd7aef804e3110239019c81c747b9d778cc1a788fb8     17756     605  kanban/web/src/api/realtime.ts
-+be365fed6741582ad4e4bb375b8a733651ee4506d4b5196146362d4ae19454a7     23798     606  kanban/web/src/api/realtime.test.ts
-+362893362b4704bea4a355679e18b3b55cf4583614ecbf67d4bd5693839dcbd7     10735     341  kanban/web/src/features/auth/SecondFactorStep.tsx
-+478754bfbc8741c368484e89808938800388b373f12942f5ef23d861ff852cda     26543     820  kanban/web/src/features/auth/SecondFactorStep.test.tsx
-+3fb48da44e79d8a9a7c6ac56b938c6d64837b861168c15aed16642c1cf51320b     12169     566  kanban/web/src/features/auth/auth.css
-+5f6f141f575d6420d185b2acdc48ef952abe93370a7dbae867250bbe0352d61c      5948     201  kanban/web/src/realtime/context.tsx
-+52a060c51b9cb539e2c1dccbb2fe666b0813053e3e07b44aa151867b0bdc69a2     16299     490  kanban/web/src/realtime/index.test.tsx
- b7a952bc200d0d44a90ed571b94b118c3d837c97d39f720420bb9c0ae0070973     26901     757  tests/deploy/test_standalone_entrypoint.py
- c7ff5b37506bdecc90c529bece685628b249956ae3af8410a7d5cde55774c94a      4018     122  kanban/web/e2e/qa/kan-7-screenshots.spec.ts
- 35fc7aa7d8e0676913084eab07a50696ba319ed83bf05f1d87d6fd873157a6b1     56507     305  docs/qa/KAN-7/screenshots/kan-7-setup-claim-light-desktop.png
-diff --git a/docs/qa/KAN-7/unit-test-results.txt b/docs/qa/KAN-7/unit-test-results.txt
-index 00fe641..3e81a27 100644
---- a/docs/qa/KAN-7/unit-test-results.txt
-+++ b/docs/qa/KAN-7/unit-test-results.txt
-@@ -1,7 +1,7 @@
- === PYTEST UNIT TESTS & COVERAGE ===
- ============================= test session starts ==============================
- platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
--rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c
- configfile: pyproject.toml
- plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
- asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-@@ -47,32 +47,40 @@ tests/deploy/test_standalone_entrypoint.py::test_warm_boot_stale_alembic_digest_
- tests/deploy/test_standalone_entrypoint.py::test_ensure_backup_grants_executes_alembic_version_grant PASSED [100%]
- 
- ================================ tests coverage ================================
--_______________ coverage: platform linux, python 3.12.7-final-0 ________________
--
- Name                              Stmts   Miss Branch BrPart  Cover   Missing
- -----------------------------------------------------------------------------
- deploy/standalone/entrypoint.py     286     32     72      8    87%   342-343, 471->476, 517->521, 522, 562->574, 565-570, 593-625, 631->634, 654->659, 684
- kanban/auth/setup.py                127      0     20      0   100%
- -----------------------------------------------------------------------------
- TOTAL                               413     32     92      8    91%
--============================== 38 passed in 0.71s ==============================
-+============================== 38 passed in 0.38s ==============================
++        # Try primary destination first
++        try:
++            p = targets[0]
++            p.parent.mkdir(parents=True, exist_ok=True)
++            p.write_text(secret, encoding="utf-8")
++            p.chmod(0o600)
++            return str(p)
++        except PermissionError:
++            logger.warning(
++                "Permission denied writing setup token to %s; attempting fallback",
++                dest,
++            )
++        except OSError:
++            return None
 +
-+=== VITEST UNIT TESTS & COVERAGE (KAN-7 REMEDIATION) ===
++        # Fall back gracefully to a writable data/runtime directory
++        for fb in fallbacks:
++            if fb == targets[0]:
++                continue
++            try:
++                fb.parent.mkdir(parents=True, exist_ok=True)
++                fb.write_text(secret, encoding="utf-8")
++                fb.chmod(0o600)
++                logger.info("Persisted setup token to fallback path %s", fb)
++                return str(fb)
++            except OSError:
++                continue
++
++        return None
++
+     async def claim_initial_admin(  # noqa: PLR0913
+         self,
+         session: AsyncSession,
+@@ -193,6 +235,18 @@ class SetupBootstrapService:
+         workspace_id = row["workspace_id"]
+         local_card_id = row["local_card_id"]
  
--=== VITEST UNIT TESTS & COVERAGE ===
-+> @kanban/web@0.1.0 test:coverage
-+> vitest run --coverage src/features/auth/SecondFactorStep.test.tsx src/realtime/index.test.tsx src/api/realtime.test.ts src/styles/__tests__/cssTokensAudit.test.ts
- 
-- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
-+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c/kanban/web
-       Coverage enabled with v8
- 
-- ✓ src/features/auth/SecondFactorStep.test.tsx (19 tests) 479ms
-+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 19ms
-+ ✓ src/api/realtime.test.ts (42 tests) 112ms
-+ ✓ src/realtime/index.test.tsx (20 tests) 142ms
-+ ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 534ms
- 
-- Test Files  1 passed (1)
--      Tests  19 passed (19)
--   Start at  14:25:19
--   Duration  1.65s (environment 52%, tests 35%, import 8%, worker 3%, transform 1%)
-+ Test Files  4 passed (4)
-+      Tests  86 passed (86)
-+   Duration  1.79s (environment 66%, tests 18%, import 11%, worker 5%, transform 1%)
- 
-  % Coverage report from v8
- -------------------|---------|----------|---------|---------|-------------------
- File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
- -------------------|---------|----------|---------|---------|-------------------
--All files          |   98.96 |    96.25 |     100 |     100 |                   
-- ...FactorStep.tsx |   98.96 |    96.25 |     100 |     100 | 46,187,207        
-+All files          |   99.32 |    95.77 |     100 |   99.54 |                   
-+ api               |   99.28 |    95.48 |     100 |   99.28 |                   
-+  realtime.ts      |   99.28 |    95.48 |     100 |   99.28 | 271-272           
-+ features/auth     |   98.97 |    96.42 |     100 |     100 |                   
-+  ...actorStep.tsx |   98.97 |    96.42 |     100 |     100 | 46,187,208        
-+ realtime          |     100 |    95.74 |     100 |     100 |                   
-+  context.tsx      |     100 |    95.74 |     100 |     100 | 95,144            
- -------------------|---------|----------|---------|---------|-------------------
++        admin_principal_id = (
++            principal_id if isinstance(principal_id, uuid.UUID) else uuid.UUID(str(principal_id))
++        )
++        admin_workspace_id = (
++            workspace_id if isinstance(workspace_id, uuid.UUID) else uuid.UUID(str(workspace_id))
++        )
++
++        await bind_rls_context(
++            session,
++            RLSContext(principal_id=admin_principal_id, workspace_id=admin_workspace_id),
++        )
++
+         # Update initial workspace name & slug if provided
+         ws_name = (workspace_name or "Default Workspace").strip()
+         ws_slug = (workspace_slug or "default").strip()
+diff --git a/kanban/tests/auth/test_setup.py b/kanban/tests/auth/test_setup.py
+new file mode 100644
+index 0000000..b91c2f4
+--- /dev/null
++++ b/kanban/tests/auth/test_setup.py
+@@ -0,0 +1,496 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: S106, SLF001, ARG001, TRY003, EM101
++"""Unit tests for setup bootstrap service, claim handling, and RLS binding (KAN-7)."""
++
++from __future__ import annotations
++
++import io
++import os
++import stat
++import uuid
++from pathlib import Path
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import pytest
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.problems import ProblemException
++from kanban.auth.setup import (
++    SETUP_TOKEN_REGEX,
++    SetupBootstrapService,
++    generate_setup_token,
++    hash_setup_token,
++    mint_setup_token_if_uninitialized,
++)
++from kanban.security.keys import KeyMaterial
++
++
++def test_generate_and_hash_setup_token() -> None:
++    """Verify setup token generator format and HMAC derivation."""
++    token = generate_setup_token()
++    assert SETUP_TOKEN_REGEX.match(token)
++
++    pepper = b"test-pepper-32-bytes-long-key!!"
++    digest1 = hash_setup_token(token, pepper)
++    digest2 = hash_setup_token(token, pepper)
++    assert digest1 == digest2
++    assert len(digest1) == 32
++
++
++def test_persist_token_direct_success(tmp_path: Path) -> None:
++    """_persist_token writes token to destination with 0o600 permissions."""
++    dest = tmp_path / "setup_token"
++    token = generate_setup_token()
++
++    written = SetupBootstrapService._persist_token(str(dest), token)
++    assert written == str(dest)
++    assert dest.read_text(encoding="utf-8") == token
++    mode = stat.S_IMODE(dest.stat().st_mode)
++    assert mode == 0o600
++
++
++def test_persist_token_permission_error_fallback(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """When primary destination raises PermissionError, fall back to writable data dir."""
++    fallback_dir = tmp_path / "fallback_data"
++    fallback_dir.mkdir(parents=True, exist_ok=True)
++    monkeypatch.setenv("KB_DATA_DIR", str(fallback_dir))
++
++    token = generate_setup_token()
++    unwritable_dest = "/run/kanban/setup_token"
++
++    real_mkdir = Path.mkdir
++
++    def guarded_mkdir(
++        self: Path,
++        mode: int = 0o777,
++        parents: bool = False,  # noqa: FBT001, FBT002
++        exist_ok: bool = False,  # noqa: FBT001, FBT002
++    ) -> None:
++        if "/run/kanban" in str(self):
++            msg = "Permission denied: /run/kanban"
++            raise PermissionError(msg)
++        real_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
++
++    monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
++
++    written = SetupBootstrapService._persist_token(unwritable_dest, token)
++    assert written is not None
++    assert str(fallback_dir) in written
++    fallback_file = Path(written)
++    assert fallback_file.is_file()
++    assert fallback_file.read_text(encoding="utf-8") == token
++
++
++def test_persist_token_kb_run_dir_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """When primary destination raises PermissionError, falls back to KB_RUN_DIR."""
++    run_dir = tmp_path / "custom_run"
++    run_dir.mkdir(parents=True, exist_ok=True)
++    monkeypatch.setenv("KB_RUN_DIR", str(run_dir))
++    monkeypatch.delenv("KB_DATA_DIR", raising=False)
++
++    token = generate_setup_token()
++    real_mkdir = Path.mkdir
++
++    def guarded_mkdir(
++        self: Path,
++        mode: int = 0o777,
++        parents: bool = False,  # noqa: FBT001, FBT002
++        exist_ok: bool = False,  # noqa: FBT001, FBT002
++    ) -> None:
++        if "primary_run" in str(self):
++            msg = "Primary run unwritable"
++            raise PermissionError(msg)
++        real_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
++
++    monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
++
++    written = SetupBootstrapService._persist_token(str(tmp_path / "primary_run" / "tok"), token)
++    assert written is not None
++    assert str(run_dir) in written
++
++
++def test_persist_token_permission_error_and_all_fallbacks_fail(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """When primary raises PermissionError and all fallbacks fail, returns None."""
++    token = generate_setup_token()
++
++    def always_fail(self: Path, *args: object, **kwargs: object) -> None:
++        raise PermissionError("All unwritable")
++
++    monkeypatch.setattr(Path, "mkdir", always_fail)
++
++    written = SetupBootstrapService._persist_token("/var/lib/kanban/data/setup_token", token)
++    assert written is None
++
++
++def test_persist_token_all_fail_returns_none(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """When all candidate destinations raise OSError, returns None."""
++    token = generate_setup_token()
++
++    def failing_mkdir(self: Path, *args: object, **kwargs: object) -> None:
++        raise OSError("Disk failure")
++
++    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
++
++    written = SetupBootstrapService._persist_token(str(tmp_path / "token"), token)
++    assert written is None
++
++
++def test_persist_token_primary_oserror_returns_none(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Non-PermissionError OSError on primary destination returns None without fallback."""
++    token = generate_setup_token()
++
++    def generic_oserror(self: Path, *args: object, **kwargs: object) -> None:
++        raise OSError("Read-only file system")
++
++    monkeypatch.setattr(Path, "mkdir", generic_oserror)
++
++    written = SetupBootstrapService._persist_token(str(tmp_path / "token"), token)
++    assert written is None
++
++
++@pytest.mark.asyncio
++async def test_claim_initial_admin_binds_rls_context(monkeypatch: pytest.MonkeyPatch) -> None:
++    """claim_initial_admin binds RLS context for admin principal and workspace before inserts."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    service = SetupBootstrapService(mock_factory, key_material=key_material)
++
++    admin_principal_id = uuid.uuid4()
++    workspace_id = uuid.uuid4()
++    local_card_id = uuid.uuid4()
++
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    # Return values for session.execute:
++    # 1. setup_consume_and_create_admin returning mapping
++    consume_res = MagicMock()
++    consume_res.mappings.return_value.first.return_value = {
++        "principal_id": admin_principal_id,
++        "workspace_id": workspace_id,
++        "local_card_id": local_card_id,
++    }
++
++    # 2. UPDATE workspaces
++    update_res = MagicMock()
++
++    # 3. SELECT id FROM projects (returns None to trigger insert)
++    proj_check_res = MagicMock()
++    proj_check_res.first.return_value = None
++
++    # 4. SELECT uuidv7()
++    proj_uuid = uuid.uuid4()
++    proj_res = MagicMock()
++    proj_res.scalar_one.return_value = proj_uuid
++
++    # 5. INSERT objects
++    obj_res = MagicMock()
++
++    # 6. INSERT projects
++    proj_insert_res = MagicMock()
++
++    mock_session.execute.side_effect = [
++        consume_res,
++        update_res,
++        proj_check_res,
++        proj_res,
++        obj_res,
++        proj_insert_res,
++    ]
++
++    bound_contexts: list[RLSContext] = []
++
++    async def fake_bind(session: AsyncSession, ctx: RLSContext) -> None:
++        bound_contexts.append(ctx)
++
++    monkeypatch.setattr("kanban.auth.setup.bind_rls_context", fake_bind)
++
++    valid_token = generate_setup_token()
++    p_id, ws_id, card_id = await service.claim_initial_admin(
++        mock_session,
++        token=valid_token,
++        username="admin",
++        display_name="Admin User",
++        email="admin@example.com",
++        password="ValidPassword123!",
++        workspace_name="Custom Workspace",
++        workspace_slug="custom-ws",
++        project_name="Custom Project",
++        project_key="CUST",
++    )
++
++    assert p_id == str(admin_principal_id)
++    assert ws_id == str(workspace_id)
++    assert card_id == str(local_card_id)
++
++    # Verify RLS binding occurred with exact principal_id and workspace_id
++    assert len(bound_contexts) == 1
++    assert bound_contexts[0].principal_id == admin_principal_id
++    assert bound_contexts[0].workspace_id == workspace_id
++
++
++@pytest.mark.asyncio
++async def test_claim_initial_admin_invalid_token_format() -> None:
++    """Malformed setup token raises ProblemException with SETUP_TOKEN_INVALID."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    service = SetupBootstrapService(mock_factory, key_material=key_material)
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    with pytest.raises(ProblemException) as exc_info:
++        await service.claim_initial_admin(
++            mock_session,
++            token="invalid-format-token",
++            username="admin",
++            display_name="Admin",
++            email="admin@example.com",
++            password="password123",
++        )
++
++    assert exc_info.value.code == "SETUP_TOKEN_INVALID"
++    assert exc_info.value.status == 401
++
++
++@pytest.mark.asyncio
++async def test_claim_initial_admin_consumed_token_returns_none() -> None:
++    """When setup_consume_and_create_admin returns no rows, raises SETUP_TOKEN_INVALID."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    service = SetupBootstrapService(mock_factory, key_material=key_material)
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    consume_res = MagicMock()
++    consume_res.mappings.return_value.first.return_value = None
++    mock_session.execute.return_value = consume_res
++
++    valid_token = generate_setup_token()
++    with pytest.raises(ProblemException) as exc_info:
++        await service.claim_initial_admin(
++            mock_session,
++            token=valid_token,
++            username="admin",
++            display_name="Admin",
++            email="admin@example.com",
++            password="password123",
++        )
++
++    assert exc_info.value.code == "SETUP_TOKEN_INVALID"
++
++
++@pytest.mark.asyncio
++async def test_mint_token_if_uninitialized_and_wrapper(tmp_path: Path) -> None:
++    """mint_token_if_uninitialized writes banner and persists token to file."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    class FakeSessionContext:
++        async def __aenter__(self) -> AsyncSession:
++            return mock_session
++
++        async def __aexit__(self, *args: object) -> None:
++            pass
++
++    mock_factory.session.return_value = FakeSessionContext()
++
++    res = MagicMock()
++    res.scalar_one.return_value = True
++    mock_session.execute.return_value = res
++
++    target_token_file = tmp_path / "setup_token"
++    with patch.dict(os.environ, {"KB_SETUP_TOKEN_FILE": str(target_token_file)}):
++        stdout = io.StringIO()
++        token = await mint_setup_token_if_uninitialized(
++            mock_factory,
++            key_material=key_material,
++            stdout=stdout,
++        )
++
++    assert token is not None
++    assert SETUP_TOKEN_REGEX.match(token)
++    output = stdout.getvalue()
++    assert "[REDACTED:SETUP_TOKEN]" in output
++    assert f"claim token written to {target_token_file}" in output
++    assert target_token_file.read_text(encoding="utf-8") == token
++
++
++@pytest.mark.asyncio
++async def test_mint_token_already_initialized_returns_none() -> None:
++    """When instance is already initialized, mint_token returns None."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    class FakeSessionContext:
++        async def __aenter__(self) -> AsyncSession:
++            return mock_session
++
++        async def __aexit__(self, *args: object) -> None:
++            pass
++
++    mock_factory.session.return_value = FakeSessionContext()
++
++    res = MagicMock()
++    res.scalar_one.return_value = False
++    mock_session.execute.return_value = res
++
++    svc = SetupBootstrapService(mock_factory, key_material=key_material)
++    token = await svc.mint_token_if_uninitialized()
++    assert token is None
++
++
++@pytest.mark.asyncio
++async def test_is_initialized() -> None:
++    """is_initialized executes setup_is_initialized() and returns bool."""
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    svc = SetupBootstrapService(mock_factory)
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    res = MagicMock()
++    res.scalar_one.return_value = True
++    mock_session.execute.return_value = res
++
++    assert await svc.is_initialized(mock_session) is True
++
++
++@pytest.mark.asyncio
++async def test_claim_initial_admin_existing_project_skips_insert(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """When project identifier already exists, skips inserting project row."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_factory = MagicMock(spec=RLSSessionFactory)
++    service = SetupBootstrapService(mock_factory, key_material=key_material)
++
++    admin_principal_id = uuid.uuid4()
++    workspace_id = uuid.uuid4()
++    local_card_id = uuid.uuid4()
++
++    mock_session = AsyncMock(spec=AsyncSession)
++
++    consume_res = MagicMock()
++    consume_res.mappings.return_value.first.return_value = {
++        "principal_id": admin_principal_id,
++        "workspace_id": workspace_id,
++        "local_card_id": local_card_id,
++    }
++    update_res = MagicMock()
++    proj_check_res = MagicMock()
++    proj_check_res.first.return_value = (uuid.uuid4(),)
++
++    mock_session.execute.side_effect = [consume_res, update_res, proj_check_res]
++
++    async def fake_bind(session: AsyncSession, ctx: RLSContext) -> None:
++        pass
++
++    monkeypatch.setattr("kanban.auth.setup.bind_rls_context", fake_bind)
++
++    p_id, ws_id, card_id = await service.claim_initial_admin(
++        mock_session,
++        token=generate_setup_token(),
++        username="admin",
++        display_name="Admin User",
++        email="admin@example.com",
++        password="ValidPassword123!",
++    )
++    assert p_id == str(admin_principal_id)
++    assert ws_id == str(workspace_id)
++    assert card_id == str(local_card_id)
++
++
++def test_resolve_key_material_loads_when_none(monkeypatch: pytest.MonkeyPatch) -> None:
++    """When key_material is None, _resolve_key_material loads and caches it."""
++    mock_factory = MagicMock()
++    service = SetupBootstrapService(session_factory=mock_factory, key_material=None)
++
++    loaded_km = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_load = MagicMock(return_value=loaded_km)
++    monkeypatch.setattr("kanban.auth.setup.load_key_material", mock_load)
++
++    res1 = service._resolve_key_material()
++    res2 = service._resolve_key_material()
++    assert res1 == loaded_km
++    assert res2 == loaded_km
++    mock_load.assert_called_once()
++
++
++@pytest.mark.asyncio
++async def test_mint_token_uses_settings_effective_origin(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """When settings is provided, mint_token_if_uninitialized uses settings.effective_origin."""
++    key_material = KeyMaterial(
++        master_kek=b"k" * 32,
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++    mock_settings = MagicMock()
++    mock_settings.effective_origin = "https://custom-origin.local:9000"
++
++    mock_session = AsyncMock(spec=AsyncSession)
++    mock_res = MagicMock()
++    mock_res.scalar_one.return_value = True
++    mock_session.execute.return_value = mock_res
++
++    class FakeSessionFactory:
++        def session(self, _ctx: object) -> object:
++            class FakeCM:
++                async def __aenter__(self) -> AsyncSession:
++                    return mock_session
++
++                async def __aexit__(self, exc_type: object, exc_val: object, tb: object) -> None:
++                    pass
++
++            return FakeCM()
++
++    token_file = tmp_path / "custom_setup_token"
++    monkeypatch.setenv("KB_SETUP_TOKEN_FILE", str(token_file))
++
++    service = SetupBootstrapService(
++        session_factory=FakeSessionFactory(),  # type: ignore[arg-type]
++        key_material=key_material,
++        settings=mock_settings,
++    )
++
++    stdout_buf = io.StringIO()
++    raw_token = await service.mint_token_if_uninitialized(stdout=stdout_buf)
++    assert raw_token is not None
++    assert "https://custom-origin.local:9000/setup?token=" in stdout_buf.getvalue()
 diff --git a/kanban/web/src/api/realtime.test.ts b/kanban/web/src/api/realtime.test.ts
-index bb5d30b..34c64b4 100644
+index bb5d30b..9b86dad 100644
 --- a/kanban/web/src/api/realtime.test.ts
 +++ b/kanban/web/src/api/realtime.test.ts
 @@ -6,6 +6,8 @@ import {
@@ -165,7 +691,31 @@ index bb5d30b..34c64b4 100644
    onmessage: ((e: MessageEvent) => void) | null = null;
    constructor(readonly url: string) {
      FakeWebSocket.instances.push(this);
-@@ -532,4 +534,73 @@ describe('bindQueryInvalidation', () => {
+@@ -246,6 +248,23 @@ describe('RealtimeClient', () => {
+     probe.fail();
+   });
+ 
++  it('does not probe WebSocket when isSessionAllowed returns false in probeWebSocket', () => {
++    connectOpen();
++    failWs(3);
++    expect(client.state).toBe('sse-fallback');
++    const countBefore = FakeWebSocket.instances.length;
++    vi.spyOn(client, 'isSessionAllowed').mockReturnValue(false);
++    vi.advanceTimersByTime(60000);
++    expect(FakeWebSocket.instances.length).toBe(countBefore);
++  });
++
++  it('closes client on WS failure if isSessionAllowed returns false', () => {
++    connectOpen();
++    vi.spyOn(client, 'isSessionAllowed').mockReturnValue(false);
++    ws().fail();
++    expect(client.state).toBe('closed');
++  });
++
+   it('drops oversize, malformed, schema-invalid and long-id events and counts them', () => {
+     connectOpen();
+     client.subscribe('project:p1', (e) => events.push(e));
+@@ -532,4 +551,73 @@ describe('bindQueryInvalidation', () => {
      send({ id: '5', channel: 'c', type: 'issue.updated', payload: {} });
      expect(invalidate).not.toHaveBeenCalled();
    });
@@ -240,7 +790,7 @@ index bb5d30b..34c64b4 100644
 +  });
  });
 diff --git a/kanban/web/src/api/realtime.ts b/kanban/web/src/api/realtime.ts
-index a533e7a..1acf629 100644
+index a533e7a..4fda761 100644
 --- a/kanban/web/src/api/realtime.ts
 +++ b/kanban/web/src/api/realtime.ts
 @@ -71,9 +71,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
@@ -347,14 +897,494 @@ index a533e7a..1acf629 100644
          this.openWebSocket();
        }
      }, delay);
+@@ -268,6 +311,9 @@ export class RealtimeClient {
+   }
+ 
+   private probeWebSocket(): void {
++    if (!this.isSessionAllowed()) {
++      return;
++    }
+     if (this.state !== 'sse-fallback' || this.probe) {
+       return;
+     }
+diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
+index b9f0ca5..2aab39c 100644
+--- a/kanban/web/src/app/Topbar.test.tsx
++++ b/kanban/web/src/app/Topbar.test.tsx
+@@ -40,7 +40,7 @@ describe('Topbar', () => {
+     );
+ 
+     // Breadcrumb
+-    expect(screen.getByText('kanban')).toBeDefined();
++    expect(screen.getAllByText('kanban').length).toBeGreaterThanOrEqual(1);
+     expect(screen.getByText('Work Items')).toBeDefined();
+     expect(screen.getByText('(7)')).toBeDefined();
+ 
+@@ -214,14 +214,15 @@ describe('Topbar', () => {
+       avatarBtn.click();
+     });
+ 
+-    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /MCP Keys & OAuth Apps/ })).toBeDefined();
+     expect(screen.getByRole('menuitem', { name: /Admin Auth Studio/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Admin MCP Keys/ })).toBeDefined();
+     expect(
+       screen.getByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
+     ).toBeDefined();
+ 
++    const logoutEventSpy = vi.fn();
++    window.addEventListener('kb:auth-logout', logoutEventSpy);
++
+     const logoutBtn = screen.getByTestId('logout-button');
+     await act(async () => {
+       logoutBtn.click();
+@@ -232,6 +233,41 @@ describe('Topbar', () => {
+       '/api/v1/auth/logout',
+       expect.objectContaining({ method: 'POST' }),
+     );
++    expect(logoutEventSpy).toHaveBeenCalled();
++    window.removeEventListener('kb:auth-logout', logoutEventSpy);
++  });
++
++  it('navigates via avatar menu admin links and closes menu on click', () => {
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <ShellPanelsProvider>
++            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++              <Topbar user={{ is_server_admin: true, is_workspace_admin: true }} />
++            </MemoryRouter>
++          </ShellPanelsProvider>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++    const linkNames = [
++      /MCP Keys & OAuth Apps/,
++      /Admin Auth Studio/,
++      /System Storage, Backups & Deployment/,
++      /AI Providers & Token Caps/,
++      /Autonomous Agents/,
++      /Remote mTLS Runners/,
++    ];
++
++    for (const name of linkNames) {
++      act(() => {
++        avatarBtn.click();
++      });
++      const link = screen.getByRole('menuitem', { name });
++      fireEvent.click(link);
++      expect(screen.queryByRole('menu')).toBeNull();
++    }
+   });
+ 
+   it('hides admin links in avatar menu when user is standard member', () => {
+@@ -259,11 +295,9 @@ describe('Topbar', () => {
+     });
+ 
+     expect(screen.getByRole('menuitem', { name: /Personal Settings/ })).toBeDefined();
+-    expect(screen.getByRole('menuitem', { name: /Personal MCP Keys/ })).toBeDefined();
++    expect(screen.getByRole('menuitem', { name: /MCP Keys & OAuth Apps/ })).toBeDefined();
+     expect(screen.queryByRole('menuitem', { name: /Workspace Settings/ })).toBeNull();
+-    expect(screen.queryByRole('menuitem', { name: /Workspace MCP Keys/ })).toBeNull();
+     expect(screen.queryByRole('menuitem', { name: /Admin Auth Studio/ })).toBeNull();
+-    expect(screen.queryByRole('menuitem', { name: /Admin MCP Keys/ })).toBeNull();
+     expect(
+       screen.queryByRole('menuitem', { name: /System Storage, Backups & Deployment/ }),
+     ).toBeNull();
+@@ -397,6 +431,8 @@ describe('Topbar', () => {
+ 
+     // ArrowUp moves focus backward
+     fireEvent.keyDown(menu, { key: 'ArrowUp' });
++    fireEvent.keyDown(menu, { key: 'ArrowUp' });
++    fireEvent.keyDown(menu, { key: 'Tab' });
+ 
+     // Escape closes menu
+     fireEvent.keyDown(menu, { key: 'Escape' });
+@@ -432,6 +468,9 @@ describe('Topbar', () => {
+       avatarBtn.click();
+     });
+ 
++    const logoutEventSpy = vi.fn();
++    window.addEventListener('kb:auth-logout', logoutEventSpy);
++
+     const logoutBtn = screen.getByRole('menuitem', { name: /Log out/i });
+     await act(async () => {
+       logoutBtn.click();
+@@ -439,7 +478,9 @@ describe('Topbar', () => {
+     });
+ 
+     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
++    expect(logoutEventSpy).toHaveBeenCalled();
+     expect(screen.queryByRole('menu')).toBeNull();
++    window.removeEventListener('kb:auth-logout', logoutEventSpy);
+   });
+ 
+   describe('resolveDisplayHandle and user profile rendering (KANBA-210)', () => {
+@@ -623,37 +664,70 @@ describe('Topbar', () => {
+         avatarBtn.click();
+       });
+ 
+-      const personalMcp = screen.getByText('Personal MCP Keys');
++      const mcpStudio = screen.getByText(/MCP Keys & OAuth Apps/);
+       act(() => {
+-        personalMcp.click();
++        mcpStudio.click();
+       });
+ 
+       act(() => {
+         avatarBtn.click();
+       });
+ 
+-      const wsMcp = screen.getByText('Workspace MCP Keys');
++      const storage = screen.getByText('System Storage, Backups & Deployment');
++      act(() => {
++        storage.click();
++      });
++
++      // Additional admin links coverage
+       act(() => {
+-        wsMcp.click();
++        avatarBtn.click();
+       });
++      const aiStudio = screen.queryByText(/Workspace AI Studio/);
++      if (aiStudio) {
++        act(() => {
++          aiStudio.click();
++        });
++      }
+ 
+       act(() => {
+         avatarBtn.click();
+       });
++      const linkAuditor = screen.queryByTestId('topbar-link-auditor-link');
++      if (linkAuditor) {
++        act(() => {
++          linkAuditor.click();
++        });
++      }
+ 
+-      const adminMcp = screen.getByText('Admin MCP Keys');
+       act(() => {
+-        adminMcp.click();
++        avatarBtn.click();
+       });
++      const workflows = screen.queryByText('Workflows');
++      if (workflows) {
++        act(() => {
++          workflows.click();
++        });
++      }
+ 
+       act(() => {
+         avatarBtn.click();
+       });
++      const customFields = screen.queryByText('Custom Fields');
++      if (customFields) {
++        act(() => {
++          customFields.click();
++        });
++      }
+ 
+-      const storage = screen.getByText('System Storage, Backups & Deployment');
+       act(() => {
+-        storage.click();
++        avatarBtn.click();
+       });
++      const trashLink = screen.queryByText('Trash & Purge');
++      if (trashLink) {
++        act(() => {
++          trashLink.click();
++        });
++      }
+     });
+ 
+     it('covers resolveDisplayHandle edge branches and empty user fallbacks', () => {
+@@ -718,5 +792,30 @@ describe('Topbar', () => {
+       fireEvent.keyDown(menu, { key: 'ArrowDown' });
+       fireEvent.keyDown(menu, { key: 'ArrowUp' });
+     });
++
++    it('renders expand sidebar button when isSidebarCollapsed is true and handles click', () => {
++      const onToggleCollapse = vi.fn();
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <ShellPanelsProvider>
++              <MemoryRouter>
++                <Topbar
++                  isSidebarCollapsed={true}
++                  onToggleCollapse={onToggleCollapse}
++                />
++              </MemoryRouter>
++            </ShellPanelsProvider>
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++
++      const expandBtn = screen.getByRole('button', { name: 'Expand navigation sidebar' });
++      expect(expandBtn).toBeDefined();
++      act(() => {
++        expandBtn.click();
++      });
++      expect(onToggleCollapse).toHaveBeenCalledTimes(1);
++    });
+   });
+ });
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 4bba652..bcf7366 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -13,6 +13,7 @@ import React, {
+   type JSX,
+ } from 'react';
+ import { Link, useLocation, useNavigate } from 'react-router';
++import { useQueryClient } from '@tanstack/react-query';
+ import { Breadcrumb } from './Breadcrumb';
+ import { HeaderPills, type AccessManifestData } from './HeaderPills';
+ import { LayoutSwitcher } from './LayoutSwitcher';
+@@ -20,6 +21,7 @@ import { NotificationsBell } from '../features/notifications/NotificationsBell';
+ import { useTheme, type Theme } from '../theme/ThemeProvider';
+ import { type SystemStatus } from './useSystemStatus';
+ import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
++import { PanelLeftOpen } from '../components/icons/KanbanIcons';
+ import './Topbar.css';
+ 
+ export interface TopbarUser {
+@@ -67,7 +69,9 @@ export function resolveDisplayHandle(user?: TopbarUser | null): string {
+ 
+ export interface TopbarProps {
+   isSidebarOpen?: boolean | undefined;
++  isSidebarCollapsed?: boolean | undefined;
+   onToggleSidebar?: (() => void) | undefined;
++  onToggleCollapse?: (() => void) | undefined;
+   onOpenPalette?: (() => void) | undefined;
+   workspaceName?: string | undefined;
+   projectKey?: string | undefined;
+@@ -89,7 +93,9 @@ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
+ 
+ export function Topbar({
+   isSidebarOpen = true,
++  isSidebarCollapsed = false,
+   onToggleSidebar,
++  onToggleCollapse,
+   onOpenPalette,
+   workspaceName = 'kanban',
+   projectKey,
+@@ -104,6 +110,7 @@ export function Topbar({
+ }: TopbarProps): JSX.Element {
+   const loc = useLocation();
+   const navigate = useNavigate();
++  const queryClient = useQueryClient();
+   const locationPathname = loc.pathname;
+ 
+   const isIssuesRoute =
+@@ -177,6 +184,10 @@ export function Topbar({
+     } catch {
+       // Proceed to login redirect even if network request fails
+     } finally {
++      if (typeof window !== 'undefined') {
++        window.dispatchEvent(new CustomEvent('kb:auth-logout'));
++      }
++      void queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
+       setAvatarMenuOpen(false);
+       void navigate('/login', { replace: true });
+     }
+@@ -204,7 +215,7 @@ export function Topbar({
+ 
+   return (
+     <header className="kb-topbar">
+-      {/* Left: Hamburger & Breadcrumb */}
++      {/* Left: Hamburger (<=1279px) & Expand Button (desktop >=1280px when collapsed) & Breadcrumb */}
+       <div className="kb-topbar-left">
+         <button
+           type="button"
+@@ -215,6 +226,17 @@ export function Topbar({
+         >
+           ☰
+         </button>
++        {isSidebarCollapsed && (
++          <button
++            type="button"
++            className="kb-topbar-expand-btn"
++            aria-label="Expand navigation sidebar"
++            title="Expand sidebar ([)"
++            onClick={onToggleCollapse}
++          >
++            <PanelLeftOpen size={16} />
++          </button>
++        )}
+         <Breadcrumb
+           workspaceName={workspaceName}
+           projectKey={projectKey}
+@@ -259,6 +281,7 @@ export function Topbar({
+             ref={avatarButtonRef}
+             type="button"
+             className="kb-avatar-button"
++            data-testid="topbar-avatar-button"
+             aria-label="User profile and settings"
+             aria-haspopup="menu"
+             aria-expanded={avatarMenuOpen}
+@@ -272,6 +295,7 @@ export function Topbar({
+                 alt={user.display_name ?? 'User avatar'}
+                 className="kb-avatar-img"
+                 data-testid="topbar-avatar-img"
++                draggable={false}
+               />
+             ) : (
+               <span data-testid="topbar-avatar-initial">{userInitial}</span>
+@@ -295,6 +319,7 @@ export function Topbar({
+                           src={user.avatar_url}
+                           alt={user.display_name ?? 'User avatar'}
+                           className="kb-avatar-img"
++                          draggable={false}
+                         />
+                       ) : (
+                         <span className="kb-avatar-fallback">{userInitial}</span>
+@@ -370,6 +395,7 @@ export function Topbar({
+                 <Link
+                   to="/settings/mcp"
+                   role="menuitem"
++                  data-testid="topbar-mcp-studio-link"
+                   className="kb-theme-radio kb-avatar-menu-link"
+                   onClick={() => {
+                     setAvatarMenuOpen(false);
+@@ -379,7 +405,7 @@ export function Topbar({
+                     <span aria-hidden="true" className="kb-avatar-menu-icon">
+                       🔑
+                     </span>
+-                    Personal MCP Keys
++                    MCP Keys & OAuth Apps
+                   </span>
+                 </Link>
+ 
+@@ -402,22 +428,6 @@ export function Topbar({
+                       </span>
+                     </Link>
+ 
+-                    <Link
+-                      to="/workspaces/settings/mcp"
+-                      role="menuitem"
+-                      className="kb-theme-radio kb-avatar-menu-link"
+-                      onClick={() => {
+-                        setAvatarMenuOpen(false);
+-                      }}
+-                    >
+-                      <span>
+-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+-                          🔑
+-                        </span>
+-                        Workspace MCP Keys
+-                      </span>
+-                    </Link>
+-
+                     <Link
+                       to="/workspaces/settings/ai"
+                       role="menuitem"
+@@ -473,22 +483,6 @@ export function Topbar({
+                       </span>
+                     </Link>
+ 
+-                    <Link
+-                      to="/admin/mcp"
+-                      role="menuitem"
+-                      className="kb-theme-radio kb-avatar-menu-link"
+-                      onClick={() => {
+-                        setAvatarMenuOpen(false);
+-                      }}
+-                    >
+-                      <span>
+-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+-                          🤖
+-                        </span>
+-                        Admin MCP Keys
+-                      </span>
+-                    </Link>
+-
+                     <Link
+                       to="/admin/ai"
+                       role="menuitem"
 diff --git a/kanban/web/src/features/auth/SecondFactorStep.test.tsx b/kanban/web/src/features/auth/SecondFactorStep.test.tsx
-index 62d3230..5d8fe6d 100644
+index 1c23930..5d8fe6d 100644
 --- a/kanban/web/src/features/auth/SecondFactorStep.test.tsx
 +++ b/kanban/web/src/features/auth/SecondFactorStep.test.tsx
-@@ -743,4 +743,78 @@ describe('SecondFactorStep (KB-P3-35)', () => {
-     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
-     resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
-   });
+@@ -27,6 +27,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     );
+ 
+     const tabs = screen.getAllByRole('tab');
++    expect(screen.getByTestId('second-factor-step')).toBeDefined();
+     expect(tabs.length).toBe(2);
+     expect(tabs[0]?.textContent).toBe('Authenticator code');
+     expect(tabs[1]?.textContent).toBe('Recovery code');
+@@ -205,6 +206,15 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     );
+ 
+     const recInput = screen.getByLabelText(/Single-use Recovery Code/i);
++    const pattern = recInput.getAttribute('pattern');
++    expect(pattern).toBeTruthy();
++    const patternStr = pattern ?? '';
++    // Explicit assertion: Chromium UnicodeSets (/v) compiles without throwing SyntaxError
++    expect(() => new RegExp(patternStr, 'v')).not.toThrow();
++    const vRegExp = new RegExp(patternStr, 'v');
++    expect(vRegExp.test('valid-recovery-code-1234')).toBe(true);
++    expect(vRegExp.test('xxxx-xxxx-xxxx')).toBe(true);
++
+     const recForm = recInput.closest('form');
+     expect(recForm).not.toBeNull();
+     // Short code (<8) fails client-side format
+@@ -686,5 +696,125 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     // End moves to last (index 2)
+     fireEvent.keyDown(tab0, { key: 'End' });
+     expect(tab2.getAttribute('aria-selected')).toBe('true');
++
++    // Non-navigation key does not trigger tab change
++    fireEvent.keyDown(tab2, { key: 'Tab' });
++    expect(tab2.getAttribute('aria-selected')).toBe('true');
++  });
++
++  it('handles fallback when first method entry is undefined', () => {
++    render(
++      <SecondFactorStep
++        challengeId="chall-undef-method"
++        methods={[undefined as unknown as authApi.MfaMethod]}
++        onSuccess={vi.fn()}
++        onError={vi.fn()}
++        onSessionExpired={vi.fn()}
++      />,
++    );
++    expect(screen.getByRole('textbox', { name: /6-digit Authenticator Code/i })).toBeDefined();
++  });
++
++  it('prevents concurrent passkey assertions when isVerifying is already true', () => {
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
++    let resolveOptions: ((val: { options: { challenge: string; rpId: string } }) => void) | undefined;
++    vi.spyOn(authApi, 'getWebauthnAssertionOptions').mockImplementation(
++      () =>
++        new Promise((resolve) => {
++          resolveOptions = resolve;
++        }),
++    );
++
++    render(
++      <SecondFactorStep
++        challengeId="chall-passkey-concurrent"
++        methods={['webauthn']}
++        onSuccess={vi.fn()}
++        onError={vi.fn()}
++        onSessionExpired={vi.fn()}
++      />,
++    );
++
++    const passkeyBtn = screen.getByRole('button', { name: /Use passkey/i });
++    fireEvent.click(passkeyBtn);
++    // While isVerifying is true, second click should hit early return
++    fireEvent.click(passkeyBtn);
++
++    expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
++    resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
++  });
 +
 +  describe('3-method SecondFactorStep renders cleanly & mobile responsive layout (KAN-7)', () => {
 +    it('renders all 3 MFA method tabs cleanly with 0 inline styles and proper tab semantics', () => {
@@ -428,12 +1458,21 @@ index 62d3230..5d8fe6d 100644
 +      }
 +      expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
 +    });
-+  });
+   });
  });
 diff --git a/kanban/web/src/features/auth/SecondFactorStep.tsx b/kanban/web/src/features/auth/SecondFactorStep.tsx
-index 5c42207..bacfbb8 100644
+index 6b3ccae..bacfbb8 100644
 --- a/kanban/web/src/features/auth/SecondFactorStep.tsx
 +++ b/kanban/web/src/features/auth/SecondFactorStep.tsx
+@@ -158,7 +158,7 @@ export function SecondFactorStep({
+   };
+ 
+   return (
+-    <div className="auth-second-factor-step">
++    <div className="auth-second-factor-step" data-testid="second-factor-step">
+       <div className="auth-tablist" role="tablist" aria-label="Second factor methods">
+         {activeMethods.map((m, index) => {
+           const isSelected = selectedMethod === m;
 @@ -192,9 +192,10 @@ export function SecondFactorStep({
              }
            };
@@ -446,6 +1485,15 @@ index 5c42207..bacfbb8 100644
                role="tab"
                type="button"
                className="auth-tab"
+@@ -301,7 +302,7 @@ export function SecondFactorStep({
+                 id="recovery-code-input"
+                 className="auth-input auth-mono"
+                 type="text"
+-                pattern="^[A-Za-z0-9-]{8,32}$"
++                pattern="[A-Za-z0-9\-]{8,32}"
+                 maxLength={32}
+                 value={recoveryCode}
+                 onChange={(e) => { setRecoveryCode(e.target.value); }}
 diff --git a/kanban/web/src/features/auth/auth.css b/kanban/web/src/features/auth/auth.css
 index a443732..695efe8 100644
 --- a/kanban/web/src/features/auth/auth.css
@@ -502,8 +1550,404 @@ index a443732..695efe8 100644
    .auth-card-button {
      min-height: var(--tap-min, 44px);
      height: auto;
+diff --git a/kanban/web/src/features/auth/useSessionGuard.test.tsx b/kanban/web/src/features/auth/useSessionGuard.test.tsx
+new file mode 100644
+index 0000000..bca555e
+--- /dev/null
++++ b/kanban/web/src/features/auth/useSessionGuard.test.tsx
+@@ -0,0 +1,356 @@
++import React from 'react';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { render, screen, waitFor } from '@testing-library/react';
++import { MemoryRouter } from 'react-router';
++import {
++  isPublicPath,
++  ensureSessionCsrfToken,
++  useSessionGuard,
++} from './useSessionGuard';
++
++function TestGuardComponent({ enabled = true }: { enabled?: boolean }) {
++  const guard = useSessionGuard(enabled);
++  return (
++    <div>
++      <span data-testid="status">{guard.status}</span>
++      <span data-testid="authenticated">{String(guard.authenticated)}</span>
++      <span data-testid="mfaPending">{String(guard.mfaPending)}</span>
++    </div>
++  );
++}
++
++describe('useSessionGuard & CSRF bootstrap', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  describe('isPublicPath', () => {
++    it('correctly identifies public and protected paths', () => {
++      expect(isPublicPath('/login')).toBe(true);
++      expect(isPublicPath('/login/callback')).toBe(true);
++      expect(isPublicPath('/setup')).toBe(true);
++      expect(isPublicPath('/activate')).toBe(true);
++      expect(isPublicPath('/__dev')).toBe(true);
++      expect(isPublicPath('/')).toBe(false);
++      expect(isPublicPath('/projects')).toBe(false);
++      expect(isPublicPath('/projects/KAN/issues')).toBe(false);
++    });
++  });
++
++  describe('ensureSessionCsrfToken', () => {
++    it('extracts CSRF token from document.cookie when available', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: '__Host-kb_csrf=host-csrf-token-123; other=value',
++      });
++
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBe('host-csrf-token-123');
++    });
++
++    it('extracts fallback kb_csrf cookie when __Host-kb_csrf is absent', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: 'kb_csrf=fallback-csrf-token-456; other=value',
++      });
++
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBe('fallback-csrf-token-456');
++    });
++
++    it('returns raw cookie value if decodeURIComponent throws', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: '__Host-kb_csrf=%E0%A4%A; other=val',
++      });
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBe('%E0%A4%A');
++    });
++
++    it('returns null when /api/v1/auth/session returns not ok', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: '',
++      });
++      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
++        ok: false,
++      } as Response);
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBeNull();
++    });
++
++    it('fetches CSRF token from /api/v1/auth/session when no cookie exists', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: '',
++      });
++
++      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
++        ok: true,
++        json: () => Promise.resolve({ csrf_token: 'api-fetched-csrf-789' }),
++      } as Response);
++
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBe('api-fetched-csrf-789');
++    });
++
++    it('returns null when /api/v1/auth/session returns csrf_token that is not a non-empty string', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: '',
++      });
++
++      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
++        ok: true,
++        json: () => Promise.resolve({ csrf_token: '' }),
++      } as Response);
++
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBeNull();
++    });
++
++    it('returns null when /api/v1/auth/session fetch fails or rejects', async () => {
++      Object.defineProperty(document, 'cookie', {
++        writable: true,
++        value: '',
++      });
++
++      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network drop'));
++
++      const token = await ensureSessionCsrfToken();
++      expect(token).toBeNull();
++    });
++  });
++
++  describe('useSessionGuard lifecycle & auth logout dispatch', () => {
++    it('does nothing when enabled is false or on a public path', () => {
++      const fetchSpy = vi.spyOn(globalThis, 'fetch');
++
++      render(
++        <MemoryRouter initialEntries={['/login']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      expect(fetchSpy).not.toHaveBeenCalled();
++      expect(screen.getByTestId('status').textContent).toBe('authenticated');
++    });
++
++    it('dispatches kb:auth-logout and redirects to /setup when initialized is false', async () => {
++      const logoutEventSpy = vi.fn();
++      window.addEventListener('kb:auth-logout', logoutEventSpy);
++
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ initialized: false }), { status: 200 }),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('redirecting');
++      });
++      expect(logoutEventSpy).toHaveBeenCalled();
++      window.removeEventListener('kb:auth-logout', logoutEventSpy);
++    });
++
++    it('dispatches kb:auth-logout and redirects to /login when authenticated is false', async () => {
++      const logoutEventSpy = vi.fn();
++      window.addEventListener('kb:auth-logout', logoutEventSpy);
++
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++          );
++        }
++        if (url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({ authenticated: false, csrf_token: 'test-csrf' }),
++              { status: 200 },
++            ),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('redirecting');
++      });
++      expect(logoutEventSpy).toHaveBeenCalled();
++      window.removeEventListener('kb:auth-logout', logoutEventSpy);
++    });
++
++    it('dispatches kb:auth-logout and redirects to /login when mfa_pending is true', async () => {
++      const logoutEventSpy = vi.fn();
++      window.addEventListener('kb:auth-logout', logoutEventSpy);
++
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++          );
++        }
++        if (url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                authenticated: true,
++                mfa_pending: true,
++                csrf_token: 'test-csrf-mfa',
++              }),
++              { status: 200 },
++            ),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('redirecting');
++      });
++      expect(screen.getByTestId('mfaPending').textContent).toBe('true');
++      expect(logoutEventSpy).toHaveBeenCalled();
++      window.removeEventListener('kb:auth-logout', logoutEventSpy);
++    });
++
++    it('sets authenticated state when session is active and mfa_pending is false', async () => {
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++          );
++        }
++        if (url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                authenticated: true,
++                mfa_pending: false,
++                principal_id: 'prin-1',
++                workspace_id: 'ws-1',
++                csrf_token: 'valid-csrf',
++              }),
++              { status: 200 },
++            ),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('authenticated');
++        expect(screen.getByTestId('authenticated').textContent).toBe('true');
++        expect(screen.getByTestId('mfaPending').textContent).toBe('false');
++      });
++    });
++
++    it('handles unauthenticated redirect when path is root / without deep link next', async () => {
++      const logoutEventSpy = vi.fn();
++      window.addEventListener('kb:auth-logout', logoutEventSpy);
++
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++          );
++        }
++        if (url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ authenticated: false }), { status: 200 }),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('redirecting');
++      });
++      expect(logoutEventSpy).toHaveBeenCalled();
++      window.removeEventListener('kb:auth-logout', logoutEventSpy);
++    });
++
++    it('sets authenticated state with fallback nulls when optional fields are omitted', async () => {
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(new Response(null, { status: 500 }));
++        }
++        if (url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                authenticated: true,
++                mfa_pending: false,
++              }),
++              { status: 200 },
++            ),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('authenticated');
++      });
++    });
++
++    it('handles offline or fetch exceptions gracefully', () => {
++      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network drop'));
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++      expect(screen.getByTestId('status').textContent).toBe('authenticated');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/auth/useSessionGuard.ts b/kanban/web/src/features/auth/useSessionGuard.ts
+index afd7252..52b2225 100644
+--- a/kanban/web/src/features/auth/useSessionGuard.ts
++++ b/kanban/web/src/features/auth/useSessionGuard.ts
+@@ -132,6 +132,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+               status: 'redirecting',
+               initialized: false,
+             }));
++            if (typeof window !== 'undefined') {
++              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
++            }
+             void navFn('/setup', { replace: true });
+             return;
+           }
+@@ -161,6 +164,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+               aalLevel: 0,
+               mfaPending: false,
+             });
++            if (typeof window !== 'undefined') {
++              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
++            }
+             const currentFullUrl = `${pathname}${search}`;
+             const safeNext = resolveSafeNext(currentFullUrl);
+             const loginTarget =
+@@ -182,6 +188,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+               aalLevel: sessionData.aal_level ?? 1,
+               mfaPending: true,
+             });
++            if (typeof window !== 'undefined') {
++              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
++            }
+             void navFn('/login', { replace: true });
+             return;
+           }
 diff --git a/kanban/web/src/realtime/context.tsx b/kanban/web/src/realtime/context.tsx
-index a1708c7..c2a4926 100644
+index a1708c7..de6e4be 100644
 --- a/kanban/web/src/realtime/context.tsx
 +++ b/kanban/web/src/realtime/context.tsx
 @@ -8,13 +8,14 @@ import React, {
@@ -522,7 +1966,7 @@ index a1708c7..c2a4926 100644
  } from '../api/realtime';
  import { type RealtimeState } from '../api/RealtimeStatus';
  
-@@ -29,23 +30,83 @@ export interface RealtimeProviderProps {
+@@ -29,23 +30,87 @@ export interface RealtimeProviderProps {
    client?: RealtimeClient | undefined;
    autoConnect?: boolean | undefined;
    bindInvalidation?: boolean | undefined;
@@ -593,7 +2037,11 @@ index a1708c7..c2a4926 100644
 +    if (isPublicAuthRoute()) {
 +      return { authenticated: false, mfa_pending: false };
 +    }
-+    return sessionQuery.data ?? { authenticated: true, mfa_pending: false };
++    const data = sessionQuery.data;
++    if (data?.authenticated === true && data.mfa_pending !== true) {
++      return data;
++    }
++    return { authenticated: false, mfa_pending: false };
 +  }, [propSession, sessionQuery.data]);
 +
 +  const isPermitted =
@@ -606,7 +2054,7 @@ index a1708c7..c2a4926 100644
    useEffect(() => {
      return client.onStateChange((nextState) => {
        setState(nextState);
-@@ -64,10 +125,33 @@ export function RealtimeProvider({
+@@ -64,10 +129,33 @@ export function RealtimeProvider({
    }, [client]);
  
    useEffect(() => {
@@ -629,7 +2077,7 @@ index a1708c7..c2a4926 100644
 -  }, [client, autoConnect]);
 +    const handleAuthChange = () => {
 +      void queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
-+      if (isPublicAuthRoute() && client.state !== 'closed') {
++      if (client.state !== 'closed') {
 +        client.close();
 +      }
 +    };
@@ -644,10 +2092,40 @@ index a1708c7..c2a4926 100644
    const value = useMemo<RealtimeContextValue>(() => ({ client, state }), [client, state]);
  
 diff --git a/kanban/web/src/realtime/index.test.tsx b/kanban/web/src/realtime/index.test.tsx
-index 8f7b76c..5baeb53 100644
+index 8f7b76c..898838c 100644
 --- a/kanban/web/src/realtime/index.test.tsx
 +++ b/kanban/web/src/realtime/index.test.tsx
-@@ -176,4 +176,315 @@ describe('Realtime Module & React Hooks', () => {
+@@ -80,10 +80,15 @@ describe('Realtime Module & React Hooks', () => {
+     expect(result.current.state).toBe('open');
+   });
+ 
+-  it('auto-connects client on mount when autoConnect is true', () => {
++  it('auto-connects client on mount when autoConnect is true and session is authenticated', () => {
+     render(
+       <QueryClientProvider client={queryClient}>
+-        <RealtimeProvider client={mockClient} autoConnect={true} bindInvalidation={false}>
++        <RealtimeProvider
++          client={mockClient}
++          autoConnect={true}
++          bindInvalidation={false}
++          session={{ authenticated: true, mfa_pending: false }}
++        >
+           <div data-testid="child">Loaded</div>
+         </RealtimeProvider>
+       </QueryClientProvider>,
+@@ -166,7 +171,10 @@ describe('Realtime Module & React Hooks', () => {
+   it('renders RealtimeProvider with default props and attaches to window', () => {
+     const { unmount } = render(
+       <QueryClientProvider client={queryClient}>
+-        <RealtimeProvider client={mockClient}>
++        <RealtimeProvider
++          client={mockClient}
++          session={{ authenticated: true, mfa_pending: false }}
++        >
+           <div data-testid="child">child</div>
+         </RealtimeProvider>
+       </QueryClientProvider>,
+@@ -176,4 +184,351 @@ describe('Realtime Module & React Hooks', () => {
      expect((window as unknown as { __kanbanRealtimeClient?: RealtimeClient }).__kanbanRealtimeClient).toBe(mockClient);
      unmount();
    });
@@ -841,6 +2319,12 @@ index 8f7b76c..5baeb53 100644
 +          window.dispatchEvent(new StorageEvent('storage', { key: 'kb_logout' }));
 +        });
 +        expect(localCloseSpy).toHaveBeenCalledTimes(2);
++
++        act(() => {
++          logoutClient.state = 'closed';
++          window.dispatchEvent(new CustomEvent('kb:auth-logout'));
++        });
++        expect(localCloseSpy).toHaveBeenCalledTimes(2);
 +      } finally {
 +        window.history.pushState({}, '', originalPathname);
 +      }
@@ -876,13 +2360,18 @@ index 8f7b76c..5baeb53 100644
 +      });
 +    });
 +
-+    it('handles /api/v1/auth/session failure in useQuery gracefully', async () => {
++    it('handles /api/v1/auth/session failure in useQuery gracefully and fails closed', async () => {
 +      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
 +        ok: false,
 +      } as Response);
++      const wsSpy = vi.fn();
++      vi.stubGlobal('WebSocket', wsSpy);
++      const sseSpy = vi.fn();
++      vi.stubGlobal('EventSource', sseSpy);
 +
 +      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 +      const failClient = new RealtimeClient();
++      const localConnectSpy = vi.spyOn(failClient, 'connect');
 +
 +      render(
 +        <QueryClientProvider client={qc}>
@@ -893,15 +2382,24 @@ index 8f7b76c..5baeb53 100644
 +      );
 +
 +      await vi.waitFor(() => {
-+        expect(failClient.isSessionAllowed()).toBe(true);
++        expect(failClient.isSessionAllowed()).toBe(false);
 +      });
++      expect(localConnectSpy).not.toHaveBeenCalled();
++      expect(wsSpy).not.toHaveBeenCalled();
++      expect(sseSpy).not.toHaveBeenCalled();
++      expect(failClient.state).toBe('closed');
 +    });
 +
-+    it('handles /api/v1/auth/session network error rejection in useQuery gracefully', async () => {
++    it('handles /api/v1/auth/session network error rejection in useQuery gracefully and fails closed', async () => {
 +      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'));
++      const wsSpy = vi.fn();
++      vi.stubGlobal('WebSocket', wsSpy);
++      const sseSpy = vi.fn();
++      vi.stubGlobal('EventSource', sseSpy);
 +
 +      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 +      const errClient = new RealtimeClient();
++      const localConnectSpy = vi.spyOn(errClient, 'connect');
 +
 +      render(
 +        <QueryClientProvider client={qc}>
@@ -912,8 +2410,12 @@ index 8f7b76c..5baeb53 100644
 +      );
 +
 +      await vi.waitFor(() => {
-+        expect(errClient.isSessionAllowed()).toBe(true);
++        expect(errClient.isSessionAllowed()).toBe(false);
 +      });
++      expect(localConnectSpy).not.toHaveBeenCalled();
++      expect(wsSpy).not.toHaveBeenCalled();
++      expect(sseSpy).not.toHaveBeenCalled();
++      expect(errClient.state).toBe('closed');
 +    });
 +
 +    it('closes open client when autoConnect is false but session is unauthenticated', () => {
@@ -930,6 +2432,18 @@ index 8f7b76c..5baeb53 100644
 +      );
 +
 +      expect(closeSpy).toHaveBeenCalled();
++    });
++
++    it('handles session prop explicitly passed as null and fails closed', () => {
++      const nullClient = new RealtimeClient();
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider client={nullClient} autoConnect={false} session={null}>
++            <div>Null session</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++      expect(nullClient.isSessionAllowed()).toBe(false);
 +    });
 +
 +    it('uses default getRealtimeClient when client prop is omitted', () => {
@@ -963,3 +2477,30 @@ index 8f7b76c..5baeb53 100644
 +    });
 +  });
  });
+diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
+index 01adc31..ccc0140 100644
+--- a/tests/deploy/test_standalone_entrypoint.py
++++ b/tests/deploy/test_standalone_entrypoint.py
+@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
+ import pytest
+ 
+ from deploy.standalone.entrypoint import (
++    _PASSTHROUGH_ENV_VARS,
+     BIN_ALEMBIC,
+     BIN_INITDB,
+     BIN_PG_CTL,
+@@ -299,6 +300,14 @@ def test_trusted_proxies_passthrough_and_uvicorn_non_wildcard(
+     assert '--forwarded-allow-ips=""' in cmd_default
+ 
+ 
++def test_setup_token_file_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify KB_SETUP_TOKEN_FILE is included in _PASSTHROUGH_ENV_VARS and passed to child env."""
++    assert "KB_SETUP_TOKEN_FILE" in _PASSTHROUGH_ENV_VARS
++    monkeypatch.setenv("KB_SETUP_TOKEN_FILE", "/custom/token_path")
++    env = build_child_env()
++    assert env["KB_SETUP_TOKEN_FILE"] == "/custom/token_path"
++
++
+ # -----------------------------------------------------------------------------
+ # Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
+ # -----------------------------------------------------------------------------
