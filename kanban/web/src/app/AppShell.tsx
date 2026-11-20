@@ -50,6 +50,9 @@ export interface AppShellProps {
 }
 
 export function computeCurrentSection(pathname: string, fallback = 'Work Items'): string {
+  if (pathname === '/about' || pathname.startsWith('/about') || pathname.includes('/about')) {
+    return 'About';
+  }
   if (pathname.includes('/settings/workflows') || pathname.endsWith('/workflows')) {
     return 'Workflows';
   }

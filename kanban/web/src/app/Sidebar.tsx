@@ -14,7 +14,7 @@ import React, {
   type JSX,
   type KeyboardEvent,
 } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { CreateProjectModal } from '../features/projects/CreateProjectModal';
 import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
@@ -985,6 +985,20 @@ export function Sidebar({
             })
             )}
           </nav>
+
+          <div className="kb-sidebar-footer">
+            <Link
+              to="/about"
+              className="kb-sidebar-about-link"
+              data-testid="sidebar-about-link"
+              title="About 👍kanban"
+            >
+              <span className="kb-sidebar-icon" aria-hidden="true">
+                ℹ️
+              </span>
+              <span className="kb-sidebar-about-version">v2.0.0</span>
+            </Link>
+          </div>
         </div>
       </aside>
 

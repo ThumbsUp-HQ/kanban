@@ -360,6 +360,15 @@ export function CommandPalette({
           ]
         : []),
       {
+        id: 'nav-about',
+        title: 'About 👍kanban (License, API Docs & SBOM)',
+        icon: 'ℹ️',
+        category: 'navigation',
+        onSelect: () => {
+          void navigate('/about');
+        },
+      },
+      {
         id: 'act-toggle-sidebar',
         title: 'Toggle sidebar',
         icon: '📐',

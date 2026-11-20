@@ -45,6 +45,7 @@ COPY --chown=65532:65532 mcp/ /opt/kanban/mcp/
 COPY --chown=65532:65532 agent/ /opt/kanban/agent/
 COPY --chown=65532:65532 deploy/ /opt/kanban/deploy/
 COPY --chown=65532:65532 alembic.ini /opt/kanban/alembic.ini
+COPY --chown=65532:65532 LICENSE NOTICE license-allowlist.toml /opt/kanban/
 COPY --chown=65532:65532 --from=web-builder /app/kanban/web/dist /opt/kanban/web/dist
 RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m kanban.cli.ctl "$@"\n' > /usr/local/bin/kanban-ctl && \
     chmod 0755 /usr/local/bin/kanban-ctl && \
