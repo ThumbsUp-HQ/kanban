@@ -256,4 +256,177 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     fireEvent.click(screen.getByTestId('close-modal-bottom-btn'));
     expect(handleClose).toHaveBeenCalledTimes(3);
   });
+
+  it('renders workspace-scoped URL cleanly when scopeTier is not project or no project selected', () => {
+    // 1. scopeTier='workspace'
+    const { unmount: u1 } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="engineering"
+          scopeTier="workspace"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/engineering',
+    );
+    expect(screen.getByTestId('mcp-resource-url').textContent).not.toContain('/p/');
+    u1();
+
+    // 2. No projectKey and no scopeTier (defaults to workspace-scoped URL)
+    const { unmount: u2 } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="marketing"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/marketing',
+    );
+    expect(screen.getByTestId('mcp-resource-url').textContent).not.toContain('/p/');
+    expect(screen.getByTestId('mcp-resource-url').textContent).not.toContain('KANBA');
+    u2();
+  });
+
+  it('fetches first project from /api/v1/projects when project scope has empty projectKey', async () => {
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [{ identifier: 'LIVE' }, { identifier: 'OPS' }] }),
+        });
+      }
+      return Promise.reject(new Error('Unknown'));
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="production"
+          scopeTier="project"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/production/p/LIVE',
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to <PROJECT_KEY> placeholder when project scope has 0 projects', async () => {
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [] }),
+        });
+      }
+      return Promise.reject(new Error('Unknown'));
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="empty-ws"
+          scopeTier="project"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/empty-ws/p/<PROJECT_KEY>',
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('handles network error and non-ok status when fetching projects in project scope', async () => {
+    // 1. Network throw
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network down')));
+
+    const { unmount: u1 } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="offline-ws"
+          scopeTier="project"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/offline-ws/p/<PROJECT_KEY>',
+    );
+    u1();
+
+    // 2. HTTP 500 error
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    const { unmount: u2 } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="err-ws"
+          scopeTier="project"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/err-ws/p/<PROJECT_KEY>',
+    );
+    u2();
+
+    // 3. Raw array format with .key
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([{ key: 'ARRAY_PROJ' }]),
+      }),
+    );
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="arr-ws"
+          scopeTier="project"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/arr-ws/p/ARRAY_PROJ',
+    );
+
+    vi.unstubAllGlobals();
+  });
 });

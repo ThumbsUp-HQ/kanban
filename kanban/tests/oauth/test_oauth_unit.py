@@ -30,6 +30,7 @@ from kanban.oauth.server import (
     RegistrationRateLimiter,
     check_registration_rate_limit,
     generate_consent_csrf_token,
+    hash_token,
     parse_resource_target,
     parse_surface_from_resource,
     render_consent_screen,
@@ -498,10 +499,99 @@ def test_render_consent_screen_security_headers_and_admin_surface() -> None:
     csp = resp_admin.headers.get("content-security-policy", "")
     assert f"style-src 'self' 'sha256-{CONSENT_STYLE_SHA256}'" in csp
     assert "'unsafe-inline'" not in csp
+    assert "http://[::1]:*" not in csp
+    assert (
+        "form-action 'self' http://127.0.0.1:* http://localhost:* https: http://127.0.0.1:8080;"
+        in csp
+    )
+
+    resp_ipv6 = render_consent_screen(
+        client_name="IPv6 Client",
+        redirect_uri="http://[::1]:9090/cb",
+        surface="agent",
+        requested_scopes=["agent:read"],
+        state="st-ipv6",
+        code_challenge="chal",
+        code_challenge_method="S256",
+        resource="https://auth.kanban/mcp/agent",
+        client_id="cid-ipv6",
+        csrf_token="csrf-test",  # noqa: S106
+    )
+    csp_ipv6 = resp_ipv6.headers.get("content-security-policy", "")
+    assert "http://[::1]:*" not in csp_ipv6
+    assert "http://[::1]:9090" in csp_ipv6
 
     body = bytes(resp_admin.body).decode("utf-8")
     assert "admin@domain.local" in body
     assert "ADMIN" in body
+
+
+def test_oauth_server_helpers_coverage() -> None:
+    """Test hash_token, verify_pkce edge cases, and CSRF token format checks."""
+    # hash_token
+    h = hash_token("test-secret-token")
+    assert len(h) == 32
+
+    # verify_pkce_s256 length boundaries
+    assert verify_pkce_s256("short", "chal") is False
+    assert verify_pkce_s256("x" * 129, "chal") is False
+
+    # CSRF format edge cases
+    key = b"0" * 32
+    assert (
+        verify_consent_csrf_token(
+            "",
+            session_hmac_key=key,
+            session_id=None,
+            client_id="c",
+            redirect_uri="http://127.0.0.1/cb",
+            code_challenge="chal",
+            state="st",
+            surface="agent",
+        )
+        is False
+    )
+    assert (
+        verify_consent_csrf_token(
+            "no_dot_token",
+            session_hmac_key=key,
+            session_id=None,
+            client_id="c",
+            redirect_uri="http://127.0.0.1/cb",
+            code_challenge="chal",
+            state="st",
+            surface="agent",
+        )
+        is False
+    )
+    assert (
+        verify_consent_csrf_token(
+            "not_an_int.signature",
+            session_hmac_key=key,
+            session_id=None,
+            client_id="c",
+            redirect_uri="http://127.0.0.1/cb",
+            code_challenge="chal",
+            state="st",
+            surface="agent",
+        )
+        is False
+    )
+
+    # render_consent_screen without scheme/netloc in redirect_uri
+    resp_noscheme = render_consent_screen(
+        client_name="Client NoScheme",
+        redirect_uri="relative/path/callback",
+        surface="agent",
+        requested_scopes=["agent:read"],
+        state="st",
+        code_challenge="chal",
+        code_challenge_method="S256",
+        resource="https://auth.kanban/mcp/agent",
+        client_id="cid",
+        csrf_token="csrf-test",  # noqa: S106
+    )
+    assert resp_noscheme.status_code == 200
 
 
 def test_verify_same_origin_request_scenarios() -> None:

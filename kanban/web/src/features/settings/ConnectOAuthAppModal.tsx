@@ -15,6 +15,7 @@ export interface ConnectOAuthAppModalProps {
   } | null | undefined;
   workspaceSlug?: string | undefined;
   projectKey?: string | undefined;
+  scopeTier?: 'server' | 'workspace' | 'project' | undefined;
   onClose: () => void;
 }
 
@@ -30,7 +31,8 @@ const SCOPES_BY_SURFACE: Record<SurfaceType, readonly string[]> = {
 export function ConnectOAuthAppModal({
   user,
   workspaceSlug = 'kanban',
-  projectKey = 'KANBA',
+  projectKey,
+  scopeTier,
   onClose,
 }: ConnectOAuthAppModalProps): JSX.Element {
   const isAdmin =
@@ -42,6 +44,36 @@ export function ConnectOAuthAppModal({
   const [selectedScopes, setSelectedScopes] = useState<string[]>([...SCOPES_BY_SURFACE.agent]);
   const [activeTab, setActiveTab] = useState<ToolTab>('claude');
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [fetchedProjectKey, setFetchedProjectKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const isMounted = { current: true };
+    if (scopeTier === 'project' && !projectKey) {
+      void (async () => {
+        try {
+          const res = await fetch('/api/v1/projects', {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+          });
+          if (!res.ok || !isMounted.current) {
+            return;
+          }
+          const data = (await res.json()) as
+            | { items?: { key?: string; identifier?: string }[] }
+            | { key?: string; identifier?: string }[];
+          const items = Array.isArray(data) ? data : (data.items ?? []);
+          const firstKey = items[0]?.key ?? items[0]?.identifier;
+          setFetchedProjectKey(firstKey ?? '<PROJECT_KEY>');
+        } catch {
+          setFetchedProjectKey('<PROJECT_KEY>');
+        }
+      })();
+    }
+    return () => {
+      isMounted.current = false;
+    };
+  }, [scopeTier, projectKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -76,8 +108,17 @@ export function ConnectOAuthAppModal({
     }
   };
 
+  let resolvedProjectKey: string | null = null;
+  if (scopeTier === 'project') {
+    resolvedProjectKey = projectKey ?? fetchedProjectKey ?? '<PROJECT_KEY>';
+  } else if (!scopeTier && projectKey) {
+    resolvedProjectKey = projectKey;
+  }
+
   const origin = window.location.origin;
-  const resourceUrl = `${origin}/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`;
+  const resourceUrl = resolvedProjectKey
+    ? `${origin}/mcp/${surface}/w/${workspaceSlug}/p/${resolvedProjectKey}`
+    : `${origin}/mcp/${surface}/w/${workspaceSlug}`;
   const rfc8414Url = `${origin}/.well-known/oauth-authorization-server`;
 
   let snippet = '';

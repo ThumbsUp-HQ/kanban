@@ -1,43 +1,44 @@
 === RUFF CHECK ===
 All checks passed!
 
-=== RUFF FORMAT ===
-1807 files already formatted
 
 === MYPY ===
 Success: no issues found in 4 source files
 
-=== LINT IMPORTS ===
-
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 944 files, 3288 dependencies.
---------------------------------------
-
-Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-mcp forbidden from importing database KEPT (48 ignored imports)
-
-Contracts: 2 kept, 0 broken.
 
 === CHECK NO DASHES ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-fix-421a75a3/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 
-=== PNPM TYPECHECK ===
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9/kanban/web
+=== TYPESCRIPT TYPECHECK ===
+
+> @kanban/web@0.1.0 typecheck
 > tsc -b --noEmit
 
 
+
 === ESLINT ===
+All lint rules passed (0 errors, 0 warnings).
+
+
+=== VITE BUILD ===
+
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 694 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-krQeYhW2.css            400.19 kB │ gzip:  56.66 kB
+dist/assets/index-BLRv08-8.js           1,910.53 kB │ gzip: 518.85 kB
+
+✓ built in 1.46s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
