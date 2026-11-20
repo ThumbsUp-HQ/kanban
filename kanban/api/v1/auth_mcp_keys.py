@@ -39,7 +39,7 @@ class PersonalMcpKeyMintRequest(BaseModel):
     label: str | None = Field(default=None, max_length=120)
     expires_in_days: int | None = Field(default=30, ge=1, le=365)
     expires_at: datetime | None = None
-    scope_tier: Literal["global", "workspace", "project"] = "workspace"
+    scope_tier: Literal["global", "workspace", "project", "server"] = "workspace"
     workspace_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     allowed_workspace_ids: list[uuid.UUID] | None = None
@@ -126,7 +126,9 @@ async def mint_personal_key(
 ) -> PersonalMcpKeyMintResponse:
     """Mint a self-service personal MCP API key locked to the caller's principal."""
     target_workspace_id = (
-        None if body.scope_tier == "global" else (body.workspace_id or caller.workspace_id)
+        None
+        if body.scope_tier in ("global", "server")
+        else (body.workspace_id or caller.workspace_id)
     )
 
     allowed_project_ids = list(body.allowed_project_ids or [])
