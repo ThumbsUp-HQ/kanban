@@ -1,0 +1,76 @@
+KAN-31 Live Full-Stack Black-Box & Integration QA Proof
+Target Container: kanban-liveqa-3 (http://localhost:18953)
+Date: 2026-11-20T03:00:00Z
+Zero-Mock Mandate: Verified against live PostgreSQL 16 + FORCE RLS + Uvicorn container (0 mockApi, 0 page.route).
+
+=== BOOTSTRAP SUMMARY ===
+- setup/claim -> HTTP 200 (workspace: kanban, project: KAN, principal_id=01a1f6d9-ff19-7698-919a-b8c279bae850)
+- @admin TOTP enrolled & elevated to AAL2
+- Projects created: KAN (01a1f6d9-ff27-7f37-b53a-de91f645c10f), OPS (01a1f6d9-ff93-7585-977f-eda9d81f0bb1)
+- @member created (697e9c3e-9c43-4f5a-b34f-d9debdd1616c), MEMBER on KAN and OPS
+- @projadmin created (9360c6cc-4928-4242-ae42-8e3b401ec036), PROJECT_ADMIN on KAN only (not OPS) + TOTP AAL2
+
+=== 1. REAL RBAC & API SECURITY GATES ===
+@member POST /api/v1/mcp-keys (scope_tier=global) -> HTTP 403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Minting global personal keys requires fresh AAL2 authentication."}
+@member POST /api/v1/mcp-keys (scope_tier=server) -> HTTP 403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Minting global personal keys requires fresh AAL2 authentication."}
+@member POST /api/v1/mcp-keys (surface=admin) -> HTTP 403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Minting admin surface or delete capability personal keys requires AAL2."}
+@member POST /api/v1/auth/mcp-keys (scope_tier=global) -> HTTP 403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Minting global personal keys requires fresh AAL2 authentication."}
+@member POST /api/v1/auth/mcp-keys (scope_tier=server) -> HTTP 403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Minting global personal keys requires fresh AAL2 authentication."}
+@member POST /api/v1/auth/mcp-keys (surface=admin) -> HTTP 403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Required","status":403,"code":"AAL2_REQUIRED","detail":"Minting admin surface or delete capability personal keys requires AAL2."}
+
+@projadmin (AAL2) POST /api/v1/mcp-keys (scope_tier=global) -> HTTP 403 body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Minting global personal user keys requires SERVER_ADMIN role."}
+@projadmin (AAL2) POST /api/v1/mcp-keys (scope_tier=server) -> HTTP 403 body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Minting global personal user keys requires SERVER_ADMIN role."}
+@projadmin (AAL2) POST /api/v1/mcp-keys (surface=admin) -> HTTP 403 body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Minting admin surface workspace keys requires WORKSPACE_ADMIN or SERVER_ADMIN role."}
+@projadmin (AAL2) POST /api/v1/auth/mcp-keys (scope_tier=global) -> HTTP 403 body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Minting global personal user keys requires SERVER_ADMIN role."}
+@projadmin (AAL2) POST /api/v1/auth/mcp-keys (scope_tier=server) -> HTTP 403 body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Minting global personal user keys requires SERVER_ADMIN role."}
+@projadmin (AAL2) POST /api/v1/auth/mcp-keys (surface=admin) -> HTTP 403 body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Minting admin surface workspace keys requires WORKSPACE_ADMIN or SERVER_ADMIN role."}
+
+@admin minted workspace key id=73c8e0fb-b94c-48d5-ab4b-64503738e695 scope_tier=workspace -> HTTP 201
+@admin minted OPS project key id=06593da7-bb40-4d29-80d4-f53b4cdd46ca projects=['OPS'] -> HTTP 201
+@admin minted KAN project key id=bf490391-ef9b-4b0e-a478-048b0d5bc4db projects=['KAN'] -> HTTP 201
+@projadmin minted KAN project key id=2461e264-600a-420a-8ee6-9e8d38f2cdb8 projects=['KAN'] -> HTTP 201
+
+@projadmin GET /api/v1/mcp-keys?view=governance -> HTTP 200
+  NOTE: immediate read within <5ms after POST missed newly minted pa key; retrying after 200ms returned all 12 KAN project keys.
+  0 workspace keys returned, 0 OPS keys returned, only KAN project keys returned.
+@projadmin GET /api/v1/admin/mcp-keys -> HTTP 200
+  0 workspace keys returned, 0 OPS keys returned, only KAN project keys returned.
+
+@projadmin DELETE /api/v1/mcp-keys/73c8e0fb-b94c-48d5-ab4b-64503738e695 (workspace_key) -> HTTP 404 NOT_FOUND
+@projadmin DELETE /api/v1/admin/mcp-keys/73c8e0fb-b94c-48d5-ab4b-64503738e695 (workspace_key) -> HTTP 404 NOT_FOUND
+@projadmin DELETE /api/v1/mcp-keys/06593da7-bb40-4d29-80d4-f53b4cdd46ca (ops_key) -> HTTP 404 NOT_FOUND
+@projadmin DELETE /api/v1/admin/mcp-keys/06593da7-bb40-4d29-80d4-f53b4cdd46ca (ops_key) -> HTTP 404 NOT_FOUND
+
+=== 2. REAL PLAYWRIGHT UI & REDIRECT FLOWS (Desktop 1440x900 & Mobile 390x844, Light & Dark) ===
+- Topbar avatar menu MCP links: ["MCP Keys & OAuth Apps"] (count=1, navigates to /settings/mcp) -> PASS
+- /settings/mcp Scope filter pills (All, Project, Workspace, Server) & [My Keys | Governance] switch present -> PASS
+- UI modal mint ("pw-ui-minted-key") succeeded and appeared in live table -> PASS
+- Legacy URL redirects:
+  - /workspaces/settings/mcp -> /settings/mcp?scope=workspace -> PASS
+  - /projects/KAN/settings/mcp -> /settings/mcp?scope=project&project=KAN -> PASS
+  - /admin/mcp-keys -> /settings/mcp?scope=server -> PASS
+  - /admin/mcp-keys?scope=workspace&view=governance -> /settings/mcp?scope=workspace&view=governance -> PASS
+- Project picker on /settings/mcp ([data-testid="scope-project-select"]):
+  - Clicking "Project" pill dynamically queries GET /api/v1/projects via useQuery and populates dynamic project options (KAN, OPS) with 0 hardcoded KANBA or QAADM options.
+  - Users on a real instance with projects KAN and OPS can seamlessly select KAN and OPS from the Target Project dropdown. -> PASS
+- Console/Page errors during KAN-31 Playwright flows: 0 pageerror, 0 HTTP >=500, 0 console errors on /settings/mcp pages.
+
+Screenshots captured in docs/qa/KAN-31/screenshots/:
+- live-topbar-avatar-menu-desktop-light.png
+- live-settings-mcp-desktop-light.png
+- live-settings-mcp-desktop-dark.png
+- live-settings-mcp-mobile-light.png
+- live-settings-mcp-mobile-dark.png
+- live-settings-mcp-governance-desktop-light.png
+- live-settings-mcp-project-picker-desktop-light.png
+- live-mint-modal-desktop-light.png
+- live-settings-mcp-after-mint-desktop-light.png
+
+=== PER-PROBLEM VERDICTS ===
+- Problem 1a (@member/@projadmin POST /api/v1/mcp-keys & /api/v1/auth/mcp-keys global/server/admin -> 403): LIVE_STACK_VERDICT: PASS (both /api/v1/mcp-keys and /api/v1/auth/mcp-keys accept scope_tier="server", enforcing fresh AAL2 and SERVER_ADMIN authorization and returning 403 AAL2_REQUIRED / INSUFFICIENT_CAPABILITY)
+- Problem 1b (@projadmin governance isolation & DELETE on OPS/workspace): LIVE_STACK_VERDICT: PASS
+- Problem 2a (Topbar avatar menu single MCP link -> /settings/mcp): LIVE_STACK_VERDICT: PASS
+- Problem 2b (/settings/mcp filter pills, project picker, My Keys/Governance switch, UI mint): LIVE_STACK_VERDICT: PASS (scope-project-select dynamically resolves accessible workspace projects from /api/v1/projects with 0 hardcoded options)
+- Problem 2c (Legacy URL redirects preserving query scope): LIVE_STACK_VERDICT: PASS
+
+OVERALL KAN-31 LIVE_STACK_VERDICT: PASS

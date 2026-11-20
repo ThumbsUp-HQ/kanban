@@ -73,7 +73,27 @@ All changes have been verified against authoritative security specifications in 
 
 ---
 
+## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-25)
+
+- Target Branch: `fix/KAN-31-liveqa`
+- Remediation Head Commit: `50f0089`
+- Remediation Scope:
+  1. Dynamic Target Project Selection:
+     - In `kanban/web/src/features/settings/McpAccessStudio.tsx` and `McpConfigSnippetModal.tsx`: Replaced hardcoded project choices with dynamic project fetching via `GET /api/v1/projects`.
+     - Dynamic options populate `[data-testid="scope-project-select"]` and `<datalist id="mint-project-datalist">`, mapping directly to accessible workspace projects and propagating real project keys to snippet modals and OAuth connect flows.
+     - Added cache invalidation (`queryClient.invalidateQueries`) ensuring freshly minted keys display immediately without race conditions.
+  2. Parity for `scope_tier: "server"` on Personal Key Endpoint:
+     - In `kanban/api/v1/auth_mcp_keys.py`: Expanded `PersonalMcpKeyMintRequest.scope_tier` to accept `"server"` alongside `"global"`, `"workspace"`, and `"project"`.
+     - Properly evaluates `SERVER_ADMIN` role and fresh AAL2, returning RFC 7807 403 `AAL2_REQUIRED` or `INSUFFICIENT_CAPABILITY` on unauthorized requests instead of 422 `VALIDATION_FAILED`.
+  3. Test and Quality Verification:
+     - 39 Vitest tests passing with 99.18% statements and 97.32% branch coverage across `McpAccessStudio.tsx` and `McpConfigSnippetModal.tsx`.
+     - 13 backend Pytest tests passing, with explicit assertions for 403 response on unauthorized `scope_tier='server'` minting.
+     - Zero new external dependencies, zero em-dashes and en-dashes, clean `tsc`, `eslint`, `ruff`, `mypy`, and `cssTokensAudit`.
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-31/screenshots/`.
+

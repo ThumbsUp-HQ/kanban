@@ -97,6 +97,9 @@ describe('McpConfigSnippetModal direct unit tests', () => {
     fireEvent.click(screen.getByTestId('tab-codex'));
     expect(screen.getByTestId('snippet-code-box').textContent).toContain('codex mcp add');
 
+    fireEvent.click(screen.getByTestId('tab-oauth'));
+    expect(screen.getByTestId('snippet-code-box').textContent).toContain('OAuth 2.1');
+
     // Switch url scope
     const urlSelect = screen.getByTestId('url-scope-select');
     fireEvent.change(urlSelect, { target: { value: 'global' } });
@@ -124,5 +127,37 @@ describe('McpConfigSnippetModal direct unit tests', () => {
       },
     });
     fireEvent.click(screen.getByTestId('copy-key-button'));
+  });
+
+  it('renders dynamic projectKey in snippet URLs and omits hardcoded KANBA fallback', () => {
+    const handleClose = vi.fn();
+    const { unmount } = render(
+      <McpConfigSnippetModal
+        surface="agent"
+        workspaceSlug="engineering"
+        projectKey="OPS"
+        rawKey="kb_ops_key"
+        onClose={handleClose}
+      />,
+    );
+
+    const snippetBox = screen.getByTestId('snippet-code-box');
+    expect(snippetBox.textContent).toContain('/mcp/agent/w/engineering/p/OPS');
+    expect(snippetBox.textContent).not.toContain('KANBA');
+    unmount();
+
+    // When projectKey is omitted / empty
+    render(
+      <McpConfigSnippetModal
+        surface="agent"
+        workspaceSlug="engineering"
+        rawKey="kb_anon_key"
+        onClose={handleClose}
+      />,
+    );
+
+    const anonBox = screen.getByTestId('snippet-code-box');
+    expect(anonBox.textContent).not.toContain('KANBA');
+    expect(anonBox.textContent).toContain('/mcp/agent/w/engineering');
   });
 });

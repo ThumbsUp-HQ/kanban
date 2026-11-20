@@ -1,8 +1,10 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useCallback, type JSX } from 'react';
+import React, { useState, useEffect, useCallback, useContext, type JSX } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
+import { qk } from '../../api/queryKeys';
 import {
   fetchPersonalMcpKeys,
   mintPersonalMcpKey,
@@ -97,13 +99,26 @@ export interface McpAccessStudioProps {
   } | null | undefined;
 }
 
+interface ProjectOption {
+  id: string;
+  identifier: string;
+  name: string;
+}
+
+const fallbackQueryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+
 export function McpAccessStudio({
   tier,
   allowUnlimitedKeys,
   user: propUser,
 }: McpAccessStudioProps): JSX.Element {
+  const contextClient = useContext(QueryClientContext);
+  const queryClient = contextClient ?? fallbackQueryClient;
+
   const [searchParams, setSearchParams] = useSearchParams();
-  const routeParams = useParams<{ projectKey?: string }>();
+  const routeParams = useParams<{ projectKey?: string; workspaceSlug?: string }>();
 
   // Determine initial scope filter from props or query
   const queryScope = searchParams.get('scope');
@@ -121,12 +136,62 @@ export function McpAccessStudio({
   })();
 
   const [activeScope, setActiveScope] = useState<ActiveScopeFilter>(resolvedInitialScope);
-  const [selectedProject, setSelectedProject] = useState<string>(
-    queryProject ?? routeParams.projectKey ?? 'KANBA',
+  const [selectedProject, setSelectedProject] = useState<string | null>(
+    queryProject ?? routeParams.projectKey ?? null,
   );
   const [activeView, setActiveView] = useState<ActiveView>(
     queryView === 'governance' ? 'governance' : 'mine',
   );
+
+  const projectsQuery = useQuery<ProjectOption[]>(
+    {
+      queryKey: qk.projects(),
+      queryFn: async () => {
+        try {
+          const res = await apiFetch('GET', '/api/v1/projects');
+          const data = res as unknown as
+            | { items?: { id: string; identifier?: string; key?: string; name?: string }[] }
+            | { id: string; identifier?: string; key?: string; name?: string }[];
+          const rawList = Array.isArray(data) ? data : (data.items ?? []);
+          return rawList.map((p) => {
+            const ident = p.identifier ?? p.key ?? '';
+            return {
+              id: p.id,
+              identifier: ident,
+              name: p.name ?? ident,
+            };
+          });
+        } catch {
+          return [];
+        }
+      },
+      staleTime: 30000,
+    },
+    queryClient,
+  );
+
+  const workspacesQuery = useQuery<{ id: string; name: string; slug: string; is_current?: boolean }[]>(
+    {
+      queryKey: ['workspaces'],
+      queryFn: async () => {
+        try {
+          const res = await apiFetch('GET', '/api/v1/workspaces');
+          return Array.isArray(res) ? res : [];
+        } catch {
+          return [];
+        }
+      },
+      staleTime: 60000,
+    },
+    queryClient,
+  );
+
+  const currentWorkspaceSlug =
+    routeParams.workspaceSlug ??
+    (/^\/w\/([^/]+)/.exec(typeof window !== 'undefined' ? window.location.pathname : '')?.[1]) ??
+    workspacesQuery.data?.find((w) => w.is_current)?.slug ??
+    workspacesQuery.data?.[0]?.slug ??
+    'kanban';
 
   const [fetchedUser, setFetchedUser] = useState<{
     is_server_admin?: boolean;
@@ -168,9 +233,32 @@ export function McpAccessStudio({
   const allowUnlimited =
     allowUnlimitedKeys ?? systemStatusQuery.data?.allow_unlimited_mcp_keys ?? true;
 
-  const effectiveProjectKey = selectedProject;
-
   const [keys, setKeys] = useState<McpApiKeyItem[]>([]);
+
+  const projects = React.useMemo<ProjectOption[]>(() => {
+    if (projectsQuery.data && projectsQuery.data.length > 0) {
+      return projectsQuery.data;
+    }
+    const fromKeys = Array.from(
+      new Set(
+        keys
+          .flatMap((k) => k.allowed_projects ?? [])
+          .filter((p): p is string => Boolean(p.trim())),
+      ),
+    );
+    return fromKeys.map((p) => ({
+      id: p,
+      identifier: p,
+      name: p,
+    }));
+  }, [projectsQuery.data, keys]);
+
+  const effectiveProjectKey =
+    selectedProject ??
+    queryProject ??
+    routeParams.projectKey ??
+    projects[0]?.identifier ??
+    '';
   const [connectedApps, setConnectedApps] = useState<OAuthConnectedApp[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showConnectOAuthModal, setShowConnectOAuthModal] = useState<boolean>(false);
@@ -317,7 +405,7 @@ export function McpAccessStudio({
         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
         scope_tier: resolvedScopeTier,
         ...(resolvedScopeTier === 'project'
-          ? { allowed_projects: [newKeyProject.trim() ? newKeyProject.trim() : effectiveProjectKey] }
+          ? { allowed_projects: [newKeyProject.trim() || effectiveProjectKey] }
           : {}),
         ...(isUnlimited
           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
@@ -327,7 +415,10 @@ export function McpAccessStudio({
 
       const minted = await mintPersonalMcpKey(payload);
 
-      setKeys((prev) => [minted, ...prev]);
+      await queryClient.invalidateQueries({ queryKey: ['mcp-keys'] });
+      await queryClient.invalidateQueries({ queryKey: qk.projects() });
+
+      setKeys((prev) => [minted, ...prev.filter((k) => k.id !== minted.id)]);
       setActiveSnippetKey(minted.raw_key);
       setShowMintModal(false);
       setShowSnippetModal(true);
@@ -629,9 +720,12 @@ export function McpAccessStudio({
                 handleProjectSelectChange(e.target.value);
               }}
             >
-              <option value="KANBA">KANBA</option>
-              <option value="QAADM">QAADM</option>
-              {effectiveProjectKey !== 'KANBA' && effectiveProjectKey !== 'QAADM' && (
+              {projects.map((p) => (
+                <option key={p.id} value={p.identifier}>
+                  {p.name && p.name !== p.identifier ? `${p.identifier} - ${p.name}` : p.identifier}
+                </option>
+              ))}
+              {effectiveProjectKey && !projects.some((p) => p.identifier === effectiveProjectKey) && (
                 <option value={effectiveProjectKey}>{effectiveProjectKey}</option>
               )}
             </select>
@@ -681,7 +775,7 @@ export function McpAccessStudio({
                       </code>
                     </td>
                     <td className="kb-mcp-td">{getTierBadge(k.scope_tier, k.allowed_projects)}</td>
-                    <td className="kb-mcp-td">{((k.surface as string | undefined) ?? '').toUpperCase()}</td>
+                    <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
                     <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
                       {k.expires_at ? (
                         new Date(k.expires_at).toLocaleDateString()
@@ -827,7 +921,7 @@ export function McpAccessStudio({
                       <td className="kb-mcp-td">
                         <code>{app.client_id}</code>
                       </td>
-                      <td className="kb-mcp-td">{((app.surface as string | undefined) ?? '').toUpperCase()}</td>
+                      <td className="kb-mcp-td">{app.surface.toUpperCase()}</td>
                       <td className="kb-mcp-td">
                         {new Date(app.created_at).toLocaleDateString()}
                       </td>
@@ -970,12 +1064,22 @@ export function McpAccessStudio({
                     type="text"
                     className="kb-mcp-form-input"
                     data-testid="mint-project-input"
+                    list="mint-project-datalist"
                     value={newKeyProject}
                     onChange={(e) => {
                       setNewKeyProject(e.target.value);
                     }}
                     required
                   />
+                  {projects.length > 0 && (
+                    <datalist id="mint-project-datalist">
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.identifier}>
+                          {p.name && p.name !== p.identifier ? `${p.identifier} - ${p.name}` : p.identifier}
+                        </option>
+                      ))}
+                    </datalist>
+                  )}
                 </div>
               )}
 
@@ -1118,6 +1222,7 @@ export function McpAccessStudio({
         <McpConfigSnippetModal
           rawKey={activeSnippetKey}
           surface={newKeySurface}
+          workspaceSlug={currentWorkspaceSlug}
           projectKey={effectiveProjectKey}
           onClose={() => {
             setActiveSnippetKey(undefined);
@@ -1177,7 +1282,8 @@ export function McpAccessStudio({
       {showConnectOAuthModal && (
         <ConnectOAuthAppModal
           user={propUser ?? fetchedUser}
-          projectKey={selectedProject}
+          workspaceSlug={currentWorkspaceSlug}
+          projectKey={effectiveProjectKey}
           onClose={() => {
             setShowConnectOAuthModal(false);
           }}

@@ -20,7 +20,7 @@ export function McpConfigSnippetModal({
   rawKey,
   surface = 'agent',
   workspaceSlug = 'kanban',
-  projectKey = 'KANBA',
+  projectKey = '',
   onClose,
 }: McpConfigSnippetModalProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<ClientTab>('claude');
@@ -46,7 +46,9 @@ export function McpConfigSnippetModal({
   if (urlScope === 'workspace') {
     path = `/mcp/${surface}/w/${workspaceSlug}`;
   } else if (urlScope === 'project') {
-    path = `/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`;
+    path = projectKey
+      ? `/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`
+      : `/mcp/${surface}/w/${workspaceSlug}`;
   }
   const endpointUrl = `${origin}${path}`;
   const effectiveKey = rawKey ?? '<your-mcp-key>';
@@ -233,7 +235,9 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
               setUrlScope(e.target.value as UrlScope);
             }}
           >
-            <option value="project">Project ({`/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}`})</option>
+            <option value="project">
+              Project ({projectKey ? `/mcp/${surface}/w/${workspaceSlug}/p/${projectKey}` : `/mcp/${surface}/w/${workspaceSlug}`})
+            </option>
             <option value="workspace">Workspace ({`/mcp/${surface}/w/${workspaceSlug}`})</option>
             <option value="global">Global ({`/mcp/${surface}`})</option>
           </select>

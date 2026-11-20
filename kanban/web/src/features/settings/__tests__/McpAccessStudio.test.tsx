@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { McpAccessStudio } from '../McpAccessStudio';
 import * as settingsApi from '../settingsApi';
 import * as clientModule from '../../../api/client';
@@ -111,9 +112,19 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
-      is_server_admin: true,
-      is_workspace_admin: true,
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+      if (path === '/api/v1/projects') {
+        return Promise.resolve({
+          items: [
+            { id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' },
+            { id: 'proj-ops', identifier: 'OPS', name: 'Operations' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        is_server_admin: true,
+        is_workspace_admin: true,
+      });
     });
   });
 
@@ -870,12 +881,22 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     // Mock viewer role
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
-    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
-      id: 'u-viewer',
-      handle: 'viewer_user',
-      workspace_role: 'VIEWER',
-      is_workspace_admin: false,
-      is_server_admin: false,
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+      if (path === '/api/v1/projects') {
+        return Promise.resolve({
+          items: [
+            { id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' },
+            { id: 'proj-ops', identifier: 'OPS', name: 'Operations' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        id: 'u-viewer',
+        handle: 'viewer_user',
+        workspace_role: 'VIEWER',
+        is_workspace_admin: false,
+        is_server_admin: false,
+      });
     });
 
     render(
@@ -906,6 +927,158 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('mint-error-banner').textContent).toContain('Failed to mint MCP key.');
+    });
+  });
+
+  it('renders dynamic KAN and OPS project options in scope-project-select with 0 hardcoded KANBA or QAADM options', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+      if (path === '/api/v1/projects') {
+        return Promise.resolve({
+          items: [
+            { id: 'p-kan', identifier: 'KAN', name: 'Kanban Core' },
+            { id: 'p-ops', identifier: 'OPS', name: 'Operations' },
+          ],
+        });
+      }
+      return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/settings/mcp?scope=project']}>
+          <McpAccessStudio tier="personal" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scope-project-select')).toBeDefined();
+    });
+
+    const select = screen.getByTestId<HTMLSelectElement>('scope-project-select');
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(options).toEqual(['KAN', 'OPS']);
+    expect(options).not.toContain('KANBA');
+    expect(options).not.toContain('QAADM');
+  });
+
+  it('awaits queryClient.invalidateQueries and reloads data upon minting a key', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+      id: 'key-new',
+      label: 'Newly Minted Key',
+      display_hint: 'n3w1',
+      surface: 'agent',
+      scope_tier: 'personal_user',
+      scopes: ['agent:read'],
+      allowed_projects: null,
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'mpk_live_secret_123',
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="personal" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Newly Minted Key' },
+    });
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['mcp-keys'] });
+    });
+  });
+
+  it('opens and closes ConnectOAuthAppModal from header button and empty state', async () => {
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('connect-oauth-app-btn')).toBeDefined();
+    });
+
+    // 1. Open modal via header button
+    fireEvent.click(screen.getByTestId('connect-oauth-app-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
+    });
+
+    // Close modal via close button
+    fireEvent.click(screen.getByTestId('close-connect-oauth-modal-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('connect-oauth-app-modal')).toBeNull();
+    });
+  });
+
+  it('handles projects returned as array or with key field, and covers modal backdrop close', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+      if (path === '/api/v1/projects') {
+        return Promise.resolve([
+          { id: 'p-direct', key: 'DIR', name: 'Direct Project' },
+        ]);
+      }
+      if (path === '/api/v1/workspaces') {
+        return Promise.resolve([{ id: 'w1', name: 'W1', slug: 'w1-slug', is_current: true }]);
+      }
+      return Promise.resolve({ is_server_admin: true, is_workspace_admin: true });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/settings/mcp?scope=project']}>
+          <McpAccessStudio tier="personal" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scope-project-select')).toBeDefined();
+    });
+
+    const select = screen.getByTestId<HTMLSelectElement>('scope-project-select');
+    expect(select.value).toBe('DIR');
+
+    // Open connect modal and close via backdrop click
+    fireEvent.click(screen.getByTestId('empty-connect-oauth-app-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('connect-oauth-modal-backdrop'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('connect-oauth-app-modal')).toBeNull();
     });
   });
 });

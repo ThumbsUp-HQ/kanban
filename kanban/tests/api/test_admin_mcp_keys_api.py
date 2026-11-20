@@ -448,3 +448,57 @@ async def test_personal_mcp_keys_api_lifecycle(
     # 5. Revoking non-existent key returns 404
     resp_del_nf = await client.delete("/api/v1/auth/mcp-keys/00000000-0000-0000-0000-000000000000")
     assert resp_del_nf.status_code == 404
+
+    # 6. Verify scope_tier='server' on /api/v1/auth/mcp-keys returns 403 (not 422 VALIDATION_FAILED)
+    # AAL1 user attempting scope_tier='server' gets 403 AAL2_REQUIRED
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user_a.id,
+        workspace_id=user_a.workspace_id,
+        aal_level=1,
+    )
+    resp_server_aal1 = await client.post(
+        "/api/v1/auth/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "server",
+        },
+    )
+    assert resp_server_aal1.status_code == 403
+    assert resp_server_aal1.json()["code"] == "AAL2_REQUIRED"
+
+    # AAL2 non-server-admin user attempting scope_tier='server' gets 403 INSUFFICIENT_CAPABILITY
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=user_a.id,
+        workspace_id=user_a.workspace_id,
+        aal_level=2,
+    )
+    resp_server_aal2_non_admin = await client.post(
+        "/api/v1/auth/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "server",
+        },
+    )
+    assert resp_server_aal2_non_admin.status_code == 403
+    assert resp_server_aal2_non_admin.json()["code"] == "INSUFFICIENT_CAPABILITY"
+
+    # Server admin with AAL2 succeeds minting scope_tier='server'
+    server_admin = await make_user("srv_admin_personal", workspace_role="SERVER_ADMIN")
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=server_admin.id,
+        workspace_id=server_admin.workspace_id,
+        aal_level=2,
+    )
+    resp_server_admin_ok = await client.post(
+        "/api/v1/auth/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "server",
+            "label": "Personal Server Bot",
+        },
+    )
+    assert resp_server_admin_ok.status_code == 201
+    assert resp_server_admin_ok.json()["scope_tier"] == "global"
