@@ -4,21 +4,28 @@
 - Ticket ID: KAN-7 ([KB-P3-AUDIT-01])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
 - Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c`
-- Target Branch: fix/KAN-7-liveqa
-- Head Commit: 3637ca1
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rcfix-ca5cf51e`
+- Target Branch: fix/KAN-7-rc2
+- Base Commit: 036216b
+- Head Commit: 402a8b9
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review evaluates the UI layout, contrast, interaction ergonomics, mobile responsiveness, and frontend standards for ticket KAN-7, including the verified clean-room Reality-Checker remediation. The delivery resolves first-boot RLS insert failures in `/setup` claim, headless token persistence permissions, HTML5 recovery code regex pattern syntax errors under Chromium ES2024 unicodeSets (`/v` flag), adds missing testid attributes to `SecondFactorStep.tsx`, resolves mobile 390x844 second-factor method tab list overflow, and synchronously suppresses unauthenticated and `mfa_pending` WebSocket/SSE connections across public auth surfaces.
+This review evaluates the UI layout, contrast, interaction ergonomics, mobile responsiveness, and frontend standards for ticket KAN-7 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-01]).
 
-All 8 Playwright visual proof screenshots and live-stack screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis.
+The Round 2 remediation resolves:
+1. Fail-closed `RealtimeProvider` state initialization in `kanban/web/src/realtime/context.tsx`: `effectiveSession` defaults strictly to `{ authenticated: false, mfa_pending: false }` whenever `sessionQuery.data` is unresolved, pending, or rejected with a network error. Unauthenticated or `mfa_pending` visitors visiting `/` directly now cleanly open zero WebSocket or SSE connections, eliminating spurious 403 console errors.
+2. Synchronized client-side logout in `Topbar.tsx` (`handleLogout`) and `useSessionGuard.ts`: dispatching `kb:auth-logout` custom events and invalidating `['auth', 'session']` so `RealtimeProvider` disconnects synchronously upon user logout or session expiration.
+3. Guard in `api/realtime.ts` (`probeWebSocket()`): exits immediately if `!this.isSessionAllowed()`, preventing background upgrade attempts from unauthorized states.
+4. Second-factor recovery responsive tab wrapping (`flex-wrap: wrap`) on 390px mobile viewports with zero horizontal overflow.
+
+All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis.
 
 ---
 
-## Visual & Ergonomics Verification (8 Screenshots + Live Stack)
+## Visual & Ergonomics Verification (Screenshots & Live Stack)
 
 ### 1. Setup Wizard Claim Screen (kan-7-setup-claim-*.png, live-01-setup-*.png)
 - Views Inspected:
@@ -29,7 +36,7 @@ All 8 Playwright visual proof screenshots and live-stack screenshots across Desk
   - `live-01-setup-light-desktop.png`
   - `live-01-setup-dark-mobile.png`
 - Layout & Whitespace: Centered card container with generous vertical spacing and clean 4px/8px rhythm.
-- Input Design & Contrast: Form controls (Admin Username, Display Name, Administrator Email, Master Password, Workspace Name, Slug, Initial Project) feature accessible border tokens (`var(--border-strong)`) and clear active focus indicators.
+- Input Design & Contrast: Form controls feature accessible border tokens (`var(--border-strong)`) and clear active focus indicators.
 - Helper Text: Sub-labels and requirements maintain clear readability meeting WCAG AA contrast standards.
 - Action Button: "Claim Instance & Continue" renders full-width primary button with accessible blue token and distinct hover state.
 - Mobile Adaptation: On 390px mobile viewport, all inputs and buttons stack cleanly with touch targets >= 44px and zero horizontal overflow.
@@ -42,19 +49,19 @@ All 8 Playwright visual proof screenshots and live-stack screenshots across Desk
   - `kan-7-second-factor-recovery-dark-mobile.png` (Mobile 390x844 Dark)
   - `live-02-second-factor-recovery-light-desktop.png`
   - `live-02-second-factor-recovery-dark-mobile.png`
-- Responsive Tab Wrapping (Remediated in Commit 3637ca1):
-  - In `auth.css`, updated `.auth-tablist` with `flex-wrap: wrap; width: 100%; max-width: 100%; box-sizing: border-box;`.
-  - In `@media (max-width: 767px)`, added mobile-optimized styling (`gap: var(--space-1, 4px)`, `padding: var(--space-2, 8px) var(--space-3, 12px)`, `font-size: var(--text-xs, 0.75rem)`), maintaining `min-height: var(--tap-min, 44px)` for accessibility tap targets.
+- Responsive Tab Wrapping:
+  - In `auth.css`, `.auth-tablist` provides `flex-wrap: wrap; width: 100%; max-width: 100%; box-sizing: border-box;`.
+  - Under `@media (max-width: 767px)`, optimized token styling (`gap: var(--space-1, 4px)`, `padding: var(--space-2, 8px) var(--space-3, 12px)`, `font-size: var(--text-xs, 0.75rem)`), maintaining `min-height: var(--tap-min, 44px)` for accessibility tap targets.
   - All 3 tabs ("Authenticator code", "Passkey", "Recovery code") wrap gracefully on 390px viewports without horizontal clipping (`scrollWidth <= clientWidth`).
 - Clean React Keys: In `SecondFactorStep.tsx`, sanitized dynamic tab key mapping (`key={methodKey}`), preventing React duplicate key warnings.
 - HTML5 Pattern Validation: Escaped hyphen in regex pattern (`[A-Za-z0-9\-]{8,32}`) prevents browser `SyntaxError` when compiling under modern Chromium UnicodeSets (`/v` flag).
 - Component Identifiers: `data-testid="second-factor-step"` added to the root container.
 
 ### 3. Realtime Connection Lifecycle & Console Cleanliness
-- Unauthenticated Suppression (Remediated in Commit 3637ca1):
-  - `RealtimeClient` (`realtime.ts`) and `RealtimeProvider` (`context.tsx`) gate connection attempts strictly behind `isSessionAllowed()` (`session?.authenticated === true && session?.mfa_pending !== true`).
-  - Added `isPublicAuthRoute()` check suppressing connection attempts on `/login`, `/setup`, and `/activate`.
-  - Added clean disconnect listeners on logout events (`kb:auth-logout` and window `storage`).
+- Fail-Closed Initialization:
+  - `RealtimeProvider` initializes `effectiveSession` fail-closed to `{ authenticated: false, mfa_pending: false }` while `sessionQuery` is pending or failed.
+  - `probeWebSocket()` exits immediately when `!this.isSessionAllowed()`.
+  - Disconnect handlers in `Topbar.tsx` and `useSessionGuard.ts` dispatch `kb:auth-logout` and invalidate query state, ensuring clean client teardown.
   - Emits 0 WebSocket/SSE connection failures (`401`/`403`) in the browser console during authentication flows.
 
 ---
@@ -68,10 +75,23 @@ All 8 Playwright visual proof screenshots and live-stack screenshots across Desk
 
 ### 2. Type Safety & State Hygiene
 - Strict nullish coalescing (`??`) used throughout components and realtime client.
-- Clean cleanup in React effects.
+- Clean cleanup in React effects and event listeners.
 
 ### 3. Punctuation & Style Standard
 - Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) in code, CSS, tests, or documentation. All punctuation uses standard ASCII hyphens (-).
+
+---
+
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-01 Round 2)
+
+- Target Branch: `fix/KAN-7-rc2`
+- Remediation Head Commit: `402a8b9`
+- Remediations Verified:
+  1. `RealtimeProvider` fail-closed session defaults prevent 403 WebSocket console errors on unauthenticated visits.
+  2. `probeWebSocket()` session guard prevents background reconnects during unauthenticated states.
+  3. `Topbar.tsx` and `useSessionGuard.ts` synchronized logout dispatches clean disconnect events.
+  4. Unit test coverage across `context.tsx`, `realtime.ts`, `Topbar.tsx`, and `useSessionGuard.ts` with >= 95% statement and branch coverage.
+  5. 100% zero em-dashes and en-dashes.
 
 ---
 
@@ -87,11 +107,11 @@ All 8 Playwright visual proof screenshots and live-stack screenshots across Desk
 8. [x] Zero inline `style={...}` attributes (CSP compliant)
 9. [x] Canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
 10. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
-11. [x] Frontend test suite passes: 82 Vitest unit tests passing across touched files
+11. [x] Frontend test suite passes: 122 Vitest unit tests passing across touched files
 
 ---
 
 ## Verdict & Certification
 STATUS: APPROVED
 
-All visual, UX, ergonomics, accessibility, and frontend code quality criteria have been verified and certified. Ready for merge.
+All visual, UX, ergonomics, accessibility, and frontend code quality criteria have been verified and certified. Ready for dual specialist signoff and coordinator merge into `main`.

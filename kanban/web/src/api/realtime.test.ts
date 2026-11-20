@@ -248,6 +248,23 @@ describe('RealtimeClient', () => {
     probe.fail();
   });
 
+  it('does not probe WebSocket when isSessionAllowed returns false in probeWebSocket', () => {
+    connectOpen();
+    failWs(3);
+    expect(client.state).toBe('sse-fallback');
+    const countBefore = FakeWebSocket.instances.length;
+    vi.spyOn(client, 'isSessionAllowed').mockReturnValue(false);
+    vi.advanceTimersByTime(60000);
+    expect(FakeWebSocket.instances.length).toBe(countBefore);
+  });
+
+  it('closes client on WS failure if isSessionAllowed returns false', () => {
+    connectOpen();
+    vi.spyOn(client, 'isSessionAllowed').mockReturnValue(false);
+    ws().fail();
+    expect(client.state).toBe('closed');
+  });
+
   it('drops oversize, malformed, schema-invalid and long-id events and counts them', () => {
     connectOpen();
     client.subscribe('project:p1', (e) => events.push(e));

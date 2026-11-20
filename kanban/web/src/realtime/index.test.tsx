@@ -80,10 +80,15 @@ describe('Realtime Module & React Hooks', () => {
     expect(result.current.state).toBe('open');
   });
 
-  it('auto-connects client on mount when autoConnect is true', () => {
+  it('auto-connects client on mount when autoConnect is true and session is authenticated', () => {
     render(
       <QueryClientProvider client={queryClient}>
-        <RealtimeProvider client={mockClient} autoConnect={true} bindInvalidation={false}>
+        <RealtimeProvider
+          client={mockClient}
+          autoConnect={true}
+          bindInvalidation={false}
+          session={{ authenticated: true, mfa_pending: false }}
+        >
           <div data-testid="child">Loaded</div>
         </RealtimeProvider>
       </QueryClientProvider>,
@@ -166,7 +171,10 @@ describe('Realtime Module & React Hooks', () => {
   it('renders RealtimeProvider with default props and attaches to window', () => {
     const { unmount } = render(
       <QueryClientProvider client={queryClient}>
-        <RealtimeProvider client={mockClient}>
+        <RealtimeProvider
+          client={mockClient}
+          session={{ authenticated: true, mfa_pending: false }}
+        >
           <div data-testid="child">child</div>
         </RealtimeProvider>
       </QueryClientProvider>,
@@ -366,6 +374,12 @@ describe('Realtime Module & React Hooks', () => {
           window.dispatchEvent(new StorageEvent('storage', { key: 'kb_logout' }));
         });
         expect(localCloseSpy).toHaveBeenCalledTimes(2);
+
+        act(() => {
+          logoutClient.state = 'closed';
+          window.dispatchEvent(new CustomEvent('kb:auth-logout'));
+        });
+        expect(localCloseSpy).toHaveBeenCalledTimes(2);
       } finally {
         window.history.pushState({}, '', originalPathname);
       }
@@ -401,13 +415,18 @@ describe('Realtime Module & React Hooks', () => {
       });
     });
 
-    it('handles /api/v1/auth/session failure in useQuery gracefully', async () => {
+    it('handles /api/v1/auth/session failure in useQuery gracefully and fails closed', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
         ok: false,
       } as Response);
+      const wsSpy = vi.fn();
+      vi.stubGlobal('WebSocket', wsSpy);
+      const sseSpy = vi.fn();
+      vi.stubGlobal('EventSource', sseSpy);
 
       const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const failClient = new RealtimeClient();
+      const localConnectSpy = vi.spyOn(failClient, 'connect');
 
       render(
         <QueryClientProvider client={qc}>
@@ -418,15 +437,24 @@ describe('Realtime Module & React Hooks', () => {
       );
 
       await vi.waitFor(() => {
-        expect(failClient.isSessionAllowed()).toBe(true);
+        expect(failClient.isSessionAllowed()).toBe(false);
       });
+      expect(localConnectSpy).not.toHaveBeenCalled();
+      expect(wsSpy).not.toHaveBeenCalled();
+      expect(sseSpy).not.toHaveBeenCalled();
+      expect(failClient.state).toBe('closed');
     });
 
-    it('handles /api/v1/auth/session network error rejection in useQuery gracefully', async () => {
+    it('handles /api/v1/auth/session network error rejection in useQuery gracefully and fails closed', async () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'));
+      const wsSpy = vi.fn();
+      vi.stubGlobal('WebSocket', wsSpy);
+      const sseSpy = vi.fn();
+      vi.stubGlobal('EventSource', sseSpy);
 
       const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const errClient = new RealtimeClient();
+      const localConnectSpy = vi.spyOn(errClient, 'connect');
 
       render(
         <QueryClientProvider client={qc}>
@@ -437,8 +465,12 @@ describe('Realtime Module & React Hooks', () => {
       );
 
       await vi.waitFor(() => {
-        expect(errClient.isSessionAllowed()).toBe(true);
+        expect(errClient.isSessionAllowed()).toBe(false);
       });
+      expect(localConnectSpy).not.toHaveBeenCalled();
+      expect(wsSpy).not.toHaveBeenCalled();
+      expect(sseSpy).not.toHaveBeenCalled();
+      expect(errClient.state).toBe('closed');
     });
 
     it('closes open client when autoConnect is false but session is unauthenticated', () => {
@@ -455,6 +487,18 @@ describe('Realtime Module & React Hooks', () => {
       );
 
       expect(closeSpy).toHaveBeenCalled();
+    });
+
+    it('handles session prop explicitly passed as null and fails closed', () => {
+      const nullClient = new RealtimeClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RealtimeProvider client={nullClient} autoConnect={false} session={null}>
+            <div>Null session</div>
+          </RealtimeProvider>
+        </QueryClientProvider>,
+      );
+      expect(nullClient.isSessionAllowed()).toBe(false);
     });
 
     it('uses default getRealtimeClient when client prop is omitted', () => {

@@ -132,6 +132,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               status: 'redirecting',
               initialized: false,
             }));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
+            }
             void navFn('/setup', { replace: true });
             return;
           }
@@ -161,6 +164,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               aalLevel: 0,
               mfaPending: false,
             });
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
+            }
             const currentFullUrl = `${pathname}${search}`;
             const safeNext = resolveSafeNext(currentFullUrl);
             const loginTarget =
@@ -182,6 +188,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               aalLevel: sessionData.aal_level ?? 1,
               mfaPending: true,
             });
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
+            }
             void navFn('/login', { replace: true });
             return;
           }
