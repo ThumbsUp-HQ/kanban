@@ -1,102 +1,106 @@
 ================================================================================
 KAN-20 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (standalone_embedded_pg, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
 1. SUMMARY OF LIVE VERIFICATION FINDINGS
 --------------------------------------------------------------------------------
-- Seeded issues & docs in KAN linked via VERIFIED_BY_DOC and BLOCKS, plus secret issue & doc in PRIV with explicit @member ACL DENY on PRIV (and cross-project BLOCKS link from KAN to PRIV).
-- Fallback search (before object_embeddings population):
-  * GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid
-  * Latency: 43.83ms - 58.54ms (includes 25ms timing_floor), executed_mode="lexical", match_reason="Lexical match".
-- Hybrid search + Synaptic Activation (after EmbeddingIndexer with OnnxBgeSmallEmbedder(fallback_to_fixture=True)):
-  * GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @admin
-  * Latency: 48.66ms (warm) / 76.95ms - 82.52ms (with 25ms timing_floor)
-  * executed_mode="hybrid", total=21..31
-  * Returned provenance strings: "Semantic match", "Lexical match", "Linked via VERIFIED_BY_DOC to KAN-7", "Linked via BLOCKS to KAN-7".
-- CommandPalette (Ctrl+K) Playwright UI across Desktop (1440x900 Light & Dark), Tablet (768x1024), Mobile (390x844):
-  * Desktop Light load/search latency: 661ms
-  * Rendered 7 provenance pills (data-testid="match-reason-*") showing "Semantic match" and "Lexical match"
-  * docOverflow=false, dialogOverflow=false, clippedHorizontal=false, outsideDialog=false across all 4 viewports/themes
+- Seeded issues and docs in KAN linked via VERIFIED_BY_DOC and BLOCKS, plus secret issue and doc in PRIV with explicit @member ACL DENY on PRIV (and cross-project BLOCKS link from KAN-16 to PRIV-6).
+- Indexed embeddings using EmbeddingIndexer + OnnxBgeSmallEmbedder(fallback_to_fixture=True) under FORCE ROW LEVEL SECURITY.
+- COLD & WARM Hybrid Search + Synaptic Activation (0 HTTP 500s):
+  * COLD GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @member:
+    status=200 OK, latency=168.83ms, executed_mode="hybrid", total=24, 0 PRIV leaks.
+    Proves SET LOCAL statement_timeout = 0 reset in _query_vector_candidates and nested savepoint resilience in spread_synaptic_activation.
+  * WARM GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @member:
+    status=200 OK, latency=157.07ms, executed_mode="hybrid", total=24, 0 PRIV leaks.
+  * @member secret query probe (q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION):
+    hybrid_status=200 priv_leaks=0, lexical_total=0 (zero PRIV leakage!).
+  * COLD GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @admin:
+    status=200 OK, latency=74.26ms, executed_mode="hybrid", total=32.
+  * WARM GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @admin:
+    status=200 OK, latency=76.82ms, executed_mode="hybrid", total=32.
+  * Provenance match_reason strings verified: "Semantic match", "Lexical match", "Linked via VERIFIED_BY_DOC to KAN-*", "Linked via BLOCKS to KAN-*".
+- MCP JSON-RPC surfaces (BOTH emit executed_mode alongside mode and match_reason):
+  * POST /mcp/agent tools/call search_tickets (mode="hybrid") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
+  * POST /mcp/docs tools/call search -> mode: lexical, executed_mode: lexical, match_reason per item.
+- CommandPalette (Ctrl+K) Playwright UI on /w/kanban/p/KAN/issues across Desktop (1440x900 Light & Dark), Tablet (768x1024 Light), Mobile (390x844 Light):
+  * Desktop Light: searchMs=292ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Desktop Dark: searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Tablet Light: searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Mobile Light: searchMs=286ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
   * UI consoleErrors=0, pageErrors=0, serverErrors=0.
-- MCP JSON-RPC surfaces:
-  * POST /mcp/agent/ tools/call search_tickets (mode="hybrid") -> returned mode: hybrid and match_reason per item ("Semantic match", "Lexical match", "Linked via BLOCKS to KAN-7"). (Note: search_tickets uses YAML key "mode" rather than "executed_mode").
-  * POST /mcp/docs/ tools/call search -> returned mode: lexical and match_reason: Lexical match.
-- FORCE RLS Zero-Oracle Isolation & REAL 500 BUG DISCOVERED UNDER COLD HYBRID SPREADING:
-  * Warm @member search for "CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION" and "Synaptic Vector Kernel":
-    - HTTP 200 OK, secret_hits=0, synaptic_priv_hits=0, visible_kan_hits=20 (zero PRIV leakage!).
-  * REAL COLD-PATH 500 INTERNAL_ERROR BUG OBSERVED ON LIVE STACK:
-    - During the initial cold @member search for "Synaptic Vector Kernel" (mode="hybrid") immediately after indexing:
-      GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid -> HTTP 500 INTERNAL_ERROR
-      Response body: {"type":"urn:kanban:problem:INTERNAL_ERROR","title":"Internal Server Error","status":500,"code":"INTERNAL_ERROR","request_id":"a41c7843d33b4c2b875ec5644f237094"}
-    - Container traceback (docker logs kanban-liveqa-3):
-      File "/opt/kanban/kanban/services/synaptic_rescorer.py", line 400, in spread_synaptic_activation
-      sqlalchemy.exc.DBAPIError: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.QueryCanceledError'>: canceling statement due to statement timeout
-    - Root Cause: In kanban/services/search.py:526, _query_vector_candidates sets `SET LOCAL statement_timeout = '25ms'` inside `async with session.begin_nested():`. In PostgreSQL, SET LOCAL persists for the entire outer transaction after the savepoint ends, so spread_synaptic_activation (which has no try/except fallback and runs with app_effective_principal_set() under RLS) inherits the 25ms statement_timeout and crashes with HTTP 500 if the link graph + ERA query exceeds 25ms.
 
 2. VERBATIM API, INDEXER, RLS, AND MCP OUTPUT LOG
 --------------------------------------------------------------------------------
-[ACL] Granted explicit DENY for @member (367cbdd1-0cf2-4fb6-8278-ec68e023b5e1) on PRIV (01a1fa3f-226c-7f47-9872-ee35929baa13): 200
-[SEED] Created KAN-19, KAN-20, doc docs/verification-architecture-spec-6, PRIV PRIV-7, PRIV doc docs/classified-vault-runbook-6 + links VERIFIED_BY_DOC & BLOCKS
-[FALLBACK SEARCH (cold pre-index run)] latency=41.14ms executed_mode=lexical items=5
-[INDEXER]
-indexed issue 01a1fa5b-0eca-73bd-a87f-9a41585eb547 writes=1
-indexed issue 01a1fa5b-0ee9-7e37-8984-cff088b6a6da writes=1
-indexed doc 01a1fa5b-0f0b-75d7-a760-8c4212529194 writes=1
-indexed issue 01a1fa5b-0f22-73c1-8d2e-c4e8dcad9b1f writes=1
-indexed doc 01a1fa5b-0f42-7020-bf60-2a0978cf5e4e writes=1
-[HYBRID SEARCH AS ADMIN] latency=48.66ms (warm) / 76.95ms executed_mode=hybrid total=31
-  - kind=issue proj=KAN key=KAN-15 title=Synaptic Vector Kernel score=2.237325104239129 match_reason=Semantic match
-  - kind=issue proj=KAN key=KAN-17 title=Synaptic Vector Kernel score=2.236827254123193 match_reason=Semantic match
-  - kind=issue proj=KAN key=KAN-19 title=Synaptic Vector Kernel score=2.2363440563015597 match_reason=Semantic match
-  - kind=issue proj=KAN key=KAN-7 title=Synaptic Vector Kernel score=2.218032786885246 match_reason=Lexical match
-  - kind=doc proj=KAN key=docs/verification-architecture-spec title=Verification Architecture Spec score=0.8569278450012336 match_reason=Linked via VERIFIED_BY_DOC to KAN-7
-  - kind=issue proj=KAN key=KAN-8 title=Release Gate Readiness Checklist score=0.7561127898982655 match_reason=Linked via BLOCKS to KAN-7
+[SEED] Created KAN-16, KAN-17, KAN-18, doc docs/verification-architecture-spec-5 (01a1fab1-2dd6-718e-8616-b006599c922f), PRIV PRIV-6, PRIV doc docs/classified-vault-runbook-5 (01a1fab1-2e18-7609-bc21-c6346226f606)
+[LINKS] KAN-16 VERIFIED_BY_DOC->docs/verification-architecture-spec-5 (201), BLOCKS->KAN-17 (201), BLOCKS->PRIV-6 (201)
+[INDEXER] indexed issue 01a1fab1-2d59-7838-8ad7-689599c716d6 writes=1
+[INDEXER] indexed issue 01a1fab1-2d87-7bdd-913f-d883f87894ac writes=1
+[INDEXER] indexed issue 01a1fab1-2db3-7df0-b51f-305373c903db writes=1
+[INDEXER] indexed doc 01a1fab1-2dd6-718e-8616-b006599c922f writes=1
+[INDEXER] indexed issue 01a1fab1-2df4-7823-9304-121aaca9cd95 writes=1
+[INDEXER] indexed doc 01a1fab1-2e18-7609-bc21-c6346226f606 writes=1
+[COLD @member HYBRID SEARCH] status=200 latency=168.83ms executed_mode=hybrid total=24
+  - kind=issue proj=KAN key=KAN-16 title=Synaptic Vector Kernel match_reason=Semantic match
+  - kind=issue proj=KAN key=KAN-13 title=Synaptic Vector Kernel match_reason=Semantic match
+  - kind=issue proj=KAN key=KAN-6 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-12 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-3 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-9 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-10 title=Synaptic Vector Kernel match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-4 title=Synaptic Vector Kernel match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-7 title=Synaptic Vector Kernel match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-1 title=Synaptic Vector Kernel match_reason=Lexical match
+  - kind=issue proj=KAN key=KAN-15 title=Synaptic Vector Kernel Telemetry match_reason=Semantic match
+  - kind=issue proj=KAN key=KAN-18 title=Synaptic Vector Kernel Telemetry match_reason=Semantic match
+  - kind=doc proj=KAN key=docs/verification-architecture-spec-3 title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-10
+  - kind=doc proj=KAN key=docs/verification-architecture-spec-1 title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-4
+  - kind=doc proj=KAN key=docs/verification-architecture-spec-2 title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-7
+  - kind=doc proj=KAN key=docs/verification-architecture-spec title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-1
+  - kind=issue proj=KAN key=KAN-11 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-10
+  - kind=issue proj=KAN key=KAN-5 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-4
+  - kind=issue proj=KAN key=KAN-8 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-7
+  - kind=issue proj=KAN key=KAN-2 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-1
+[WARM @member HYBRID SEARCH] status=200 latency=157.07ms executed_mode=hybrid total=24
+[@member SECRET PROBE] hybrid_status=200 priv_leaks=0 lexical_total=0 executed_mode=hybrid (0 PRIV leaks)
+[COLD @admin HYBRID SEARCH] status=200 latency=74.26ms executed_mode=hybrid total=32
+[WARM @admin HYBRID SEARCH] status=200 latency=76.82ms executed_mode=hybrid total=32
 
-[FORCE RLS ZERO-ORACLE AS @member - COLD FAILURE]
-GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid -> HTTP 500 {"type":"urn:kanban:problem:INTERNAL_ERROR","title":"Internal Server Error","status":500,"code":"INTERNAL_ERROR","request_id":"a41c7843d33b4c2b875ec5644f237094"}
-
-[FORCE RLS ZERO-ORACLE AS @member - WARM RUN] status=200
-  secret_hits=0 synaptic_priv_hits=0 visible_kan_hits=20
-  - member visible: kind=issue proj=KAN key=KAN-15 title=Synaptic Vector Kernel match_reason=Semantic match
-  - member visible: kind=doc proj=KAN key=docs/verification-architecture-spec title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-7
-  - member visible: kind=issue proj=KAN key=KAN-8 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-7
-
-[MCP /mcp/agent search_tickets]
+[MCP /mcp/agent search_tickets YAML]
 mode: hybrid
-total: 21
+executed_mode: hybrid
+total: 24
 items:
-- key: KAN-15
+- key: KAN-16
+  issue_key: KAN-16
+  sequence_number: 16
   summary: Synaptic Vector Kernel
   state: Backlog
   priority: high
   workspace: kanban
   match_reason: Semantic match
-- key: KAN-7
-  summary: Synaptic Vector Kernel
-  state: Backlog
-  priority: high
-  workspace: kanban
-  match_reason: Lexical match
-- key: KAN-8
+- key: KAN-2
+  issue_key: KAN-2
+  sequence_number: 2
   summary: Release Gate Readiness Checklist
   state: Backlog
   priority: medium
   workspace: kanban
-  match_reason: Linked via BLOCKS to KAN-7
+  match_reason: Linked via BLOCKS to KAN-1
 
-[MCP /mcp/docs search]
+[MCP /mcp/docs search YAML]
 mode: lexical
-total: 7
+executed_mode: lexical
+total: 6
 items:
 - kind: doc
-  key: 01a1fa5b-0f0b-75d7-a760-8c4212529194
+  key: 01a1fab1-2dd6-718e-8616-b006599c922f
   title: Verification Architecture Spec
   anchor: '#verification-architecture'
   snippet: |-
     # Verification Architecture
 
-    Formal proof specification for release validation.
+    Formal proof specification for release validation and hybrid search.
   match_reason: Lexical match
 
 3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
@@ -106,5 +110,4 @@ items:
 - docs/qa/KAN-20/screenshots/live-command-palette-tablet-light.png
 - docs/qa/KAN-20/screenshots/live-command-palette-mobile-light.png
 
-LIVE_STACK_VERDICT: FAIL
-FAIL_REASON: Cold @member hybrid search crashed with HTTP 500 INTERNAL_ERROR (QueryCanceledError: canceling statement due to statement timeout in kanban/services/synaptic_rescorer.py:400) because SET LOCAL statement_timeout = '25ms' in _query_vector_candidates (kanban/services/search.py:526) leaks past the savepoint into spread_synaptic_activation without reset or exception handling. Additionally, /mcp/agent search_tickets and /mcp/docs search emit YAML key "mode:" rather than "executed_mode:".
+LIVE_STACK_VERDICT: PASS

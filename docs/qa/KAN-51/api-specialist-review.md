@@ -2,19 +2,20 @@
 
 - Ticket: KAN-51 (`[KB-AGENT-SEQ-03]`)
 - Title: MCP /mcp/agent Ticket Surface Parity for key, issue_key, sequence_number
-- Branch: `feat/KAN-51`
-- Base Commit: `837f657d079ebcb8ee88eec86ad2f6df41c1eb33`
-- Commit SHA: `cd1410ed2d2deab4910de36523e8d7f28873dfb0`
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Directory: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan51-a02519b7/docs/qa/KAN-51`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-51`
+- Branch: `main`
+- Commit: `07d04cde`
+- Container Environment: `http://127.0.0.1:18963/mcp/agent` (container: `kanban-liveqa-3`)
+- Live Stack Status: `LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary & Audit Scope
 
-This clean-room API, Security, and Architectural Audit inspects ticket KAN-51 on branch `feat/KAN-51` (commit `cd1410ed`). Ticket KAN-51 establishes typed field parity for `key: str`, `issue_key: str`, and `sequence_number: int` across the Model Context Protocol (MCP) agent tool surface (`/mcp/agent`) and the Level-of-Detail (LOD) projection engine (`mcp/lod.py`).
+This clean-room API, Security, and Architectural Audit inspects ticket KAN-51 on `main` at commit `07d04cde`. Ticket KAN-51 establishes typed field parity for `key: str`, `issue_key: str`, and `sequence_number: int` across the Model Context Protocol (MCP) agent tool surface (`/mcp/agent`) and the Level-of-Detail (LOD) projection engine (`mcp/lod.py`). This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963/mcp/agent`), verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 Under the project dual-specialist gate standard, this audit verifies that:
 1. Every `/mcp/agent` ticket tool (`read_ticket`, `search_tickets`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`) emits strongly typed `key: str`, `issue_key: str`, and integer `sequence_number: int` across all execution outcomes, including normal success and `202 Accepted` (`pending_agent_gate`) holds.
@@ -23,6 +24,7 @@ Under the project dual-specialist gate standard, this audit verifies that:
 4. Compact YAML serialization via `InlineSafeDumper` maintains strict token budgets without leaking YAML anchors or generating bloated payloads.
 5. High unit test coverage is maintained: all 8 touched backend modules achieve `>=96%` line and branch coverage (overall touched files coverage: `97%`).
 6. All 373 tests in the `mcp/tests` suite pass with 0 regressions, and all static analysis checks (`ruff`, `mypy`, `lint-imports`, `check_no_dashes`) pass with 0 errors and 0 em/en-dashes.
+7. Zero-mock live stack verification on `kanban-liveqa-3` proves typed field serialization (`key: str`, `issue_key: str`, `sequence_number: int`) across all 7 tools, all 3 LOD tiers, and nested children.
 
 ---
 
@@ -66,7 +68,33 @@ Under the project dual-specialist gate standard, this audit verifies that:
 
 ---
 
-## 3. Test Suite & Coverage Verification
+## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
+
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-51/live-fullstack-proof.txt` executed against target container `kanban-liveqa-3` (`http://127.0.0.1:18963/mcp/agent`, commit `07d04cde`):
+1. Key Minting & Authentication:
+   - Minted scoped `/mcp/agent` key with prefix `kb_agt_`.
+2. Hierarchical Ticket Creation (`create_ticket`):
+   - Created root ticket `KAN-33` with nested children `KAN-34` and `KAN-35`.
+   - Verified typed fields: root (`key: KAN-33`, `issue_key: KAN-33`, `sequence_number: 33`); child Alpha (`key: KAN-34`, `issue_key: KAN-34`, `sequence_number: 34`, `parent: KAN-33`); child Beta (`key: KAN-35`, `issue_key: KAN-35`, `sequence_number: 35`, `parent: KAN-33`).
+3. Level-of-Detail Tiers (`read_ticket`):
+   - `lod=summary`: `key: KAN-33`, `issue_key: KAN-33`, `sequence_number: 33`, `summary`, `state: Backlog`, `priority: high`.
+   - `lod=standard`: typed key and sequence fields, `description_markdown`, outbound `PARENT_OF` links to `KAN-34` and `KAN-35`, `etag`, `access: Project`.
+   - `lod=full`: typed key and sequence fields, `access_manifest` with user/agent capabilities, immutable `activity` log, `provenance`.
+4. Discovery & Search (`search_tickets`):
+   - `lod=summary`: `mode: lexical`, `executed_mode: lexical`, total: 5. All items (`KAN-33`, `KAN-30`, `KAN-27`, `KAN-24`, `KAN-21`) contain `key: str`, `issue_key: str`, `sequence_number: int`, and `match_reason`.
+   - `lod=standard`: All items include typed key and sequence fields, `description_markdown`, `workspace: kanban`, and `match_reason`.
+5. Lifecycle Transitions:
+   - `update_ticket`: `key: KAN-33`, `issue_key: KAN-33`, `sequence_number: 33`, `changed: [summary]`, `etag`.
+   - `begin_work`: `status: started`, `key: KAN-33`, `issue_key: KAN-33`, `sequence_number: 33`, `state: In Progress`, `assignees: ['@admin']`, `comment: KAN-33#c-01a1fab7`.
+   - `transition_ticket`: `status: transitioned`, `key: KAN-33`, `issue_key: KAN-33`, `sequence_number: 33`, `from_state: In Progress`, `to_state: Todo`.
+   - `complete_work`: `status: completed`, `key: KAN-33`, `issue_key: KAN-33`, `sequence_number: 33`, `state: Done`, `proof: {qa_dir: docs/qa/KAN-33/, artifacts: 1, verdict: READY}`, `comment: KAN-33#c-01a1fab7`.
+6. Live Stack Verdict:
+   - Verified `yaml.safe_load -> isinstance(key, str), isinstance(issue_key, str), isinstance(sequence_number, int)` across ALL 7 tools, all 3 LOD tiers, and nested children.
+   - `LIVE_STACK_VERDICT: PASS`
+
+---
+
+## 4. Test Suite & Coverage Verification
 
 - Full MCP Test Suite (`unit-test-results.txt`):
   - 373 passed in 58.96s with 0 regressions.
@@ -93,7 +121,7 @@ Under the project dual-specialist gate standard, this audit verifies that:
 
 ---
 
-## 4. Security & Isolation Matrix
+## 5. Security & Isolation Matrix
 
 | Capability / Concern | Specification Standard | Implementation | Verdict |
 | :--- | :--- | :--- | :--- |
@@ -109,8 +137,8 @@ Under the project dual-specialist gate standard, this audit verifies that:
 
 ---
 
-## 5. Verdict & Signoff
+## 6. Verdict & Signoff
 
 STATUS: APPROVED
 
-All `/mcp/agent` ticket tools and the LOD projection engine in `mcp/lod.py` for KAN-51 on branch `feat/KAN-51` (commit `cd1410ed`) have been thoroughly audited, verified against unit test coverage and static analysis gates, and certified. Both API Specialist and UI Specialist gates are complete. Ready for Clean-Room Reality-Checker QA.
+All `/mcp/agent` ticket tools and the LOD projection engine in `mcp/lod.py` for KAN-51 on `main` at commit `07d04cde` have been thoroughly audited, verified against unit test coverage and static analysis gates, and certified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Both API Specialist and UI Specialist gates are complete. Ready for Clean-Room Reality-Checker QA.

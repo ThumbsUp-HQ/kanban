@@ -1,132 +1,126 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive forensic read-only audit conducted strictly via `read_file` (zero shell commands executed, zero URLs visited, zero files modified), per Clean-Room R1 protocol. Inspected:
-- Verification packet & logs in `/home/adamoutler/kanban/docs/qa/KAN-30/`: `message-to-reality-checker.md`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `git-diff.patch`, `wiki-diff.patch`, `api-specialist-review.md`, and `ui-specialist-review.md`.
-- All 6 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-30/screenshots/`: `live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, `live-mobile.png`, `live-purge-modal.png`, and `live-role-matrix-desktop-light.png`.
-- On-disk implementation & test files: `kanban/web/src/features/settings/WorkspaceSettingsPage.tsx`, `kanban/web/src/features/settings/ProjectSettingsPage.css` (note: `WorkspaceSettingsPage.css` does not exist on disk), `kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`, `kanban/api/v1/admin/destructive.py` (note: `kanban/api/v1/admin/trash.py` does not exist on disk), `kanban/api/v1/admin/workspace_settings.py` (note: `kanban/api/v1/workspace_settings.py` does not exist on disk), `kanban/api/v1/schemas/issue_delete.py`, `kanban/jobs/trash_purge.py`, `kanban/services/destructive_lifecycle.py`, `kanban/services/issue_delete.py`, `kanban/tests/api/test_admin_trash_api.py`, and `thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md`.
+**Commands Executed**: Passive forensic read-only R2 Clean-Room audit conducted strictly via `read_file` (zero shell commands executed, zero URLs visited, zero files modified). Inspected:
+- All verification packet files in [`docs/qa/KAN-30/`](file:///home/adamoutler/kanban/docs/qa/KAN-30): [`message-to-reality-checker.md`](file:///home/adamoutler/kanban/docs/qa/KAN-30/message-to-reality-checker.md), [`changed-files-manifest.txt`](file:///home/adamoutler/kanban/docs/qa/KAN-30/changed-files-manifest.txt), [`unit-test-results.txt`](file:///home/adamoutler/kanban/docs/qa/KAN-30/unit-test-results.txt), [`build-or-typecheck.txt`](file:///home/adamoutler/kanban/docs/qa/KAN-30/build-or-typecheck.txt), [`live-fullstack-proof.txt`](file:///home/adamoutler/kanban/docs/qa/KAN-30/live-fullstack-proof.txt), [`api-specialist-review.md`](file:///home/adamoutler/kanban/docs/qa/KAN-30/api-specialist-review.md), [`ui-specialist-review.md`](file:///home/adamoutler/kanban/docs/qa/KAN-30/ui-specialist-review.md), and prior R1 [`reality-checker-report.md`](file:///home/adamoutler/kanban/docs/qa/KAN-30/reality-checker-report.md).
+- All 10 PNG screenshots in [`docs/qa/KAN-30/screenshots/`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots): [`live-desktop-light.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-desktop-light.png), [`live-desktop-dark.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-desktop-dark.png), [`live-tablet.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-tablet.png), [`live-mobile.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-mobile.png), [`live-purge-modal.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-purge-modal.png), [`live-projadmin-trash-desktop-light.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-projadmin-trash-desktop-light.png), [`live-role-matrix-desktop-light.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png), [`live-role-matrix-desktop-dark.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-desktop-dark.png), [`live-role-matrix-tablet.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-tablet.png), and [`live-role-matrix-mobile.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-mobile.png).
+- Actual on-disk implementation and documentation files: [`kanban/web/src/features/settings/WorkspaceSettingsPage.tsx`](file:///home/adamoutler/kanban/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx), [`kanban/web/src/features/settings/ProjectSettingsPage.css`](file:///home/adamoutler/kanban/kanban/web/src/features/settings/ProjectSettingsPage.css), [`kanban/api/v1/admin/destructive.py`](file:///home/adamoutler/kanban/kanban/api/v1/admin/destructive.py), [`kanban/api/v1/admin/workspace_settings.py`](file:///home/adamoutler/kanban/kanban/api/v1/admin/workspace_settings.py), and [`thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md`](file:///home/adamoutler/kanban/thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md).
 
 **Evidence Captured**:
-- `unit-test-results.txt`: 50/50 backend Pytest cases passed in 50.50s (95% overall coverage across 1,431 statements in 7 touched files), `test_assert_admin_routes_protected_compliance` passed (0.66s), 31/31 Vitest `WorkspaceSettingsPage.test.tsx` tests passed in 3.76s (99.77% Stmts, 95.68% Branch, 100% Funcs, 100% Lines), and 4/4 `cssTokensAudit.test.ts` tests passed in 1.04s.
-- `build-or-typecheck.txt`: `check-migrations` (62 migrations, single head `p4_23_oidc_link_intent_fk`), `ruff check`, `ruff format --check` (1,943 files), `mypy` (1,116 source files), `lint-imports` (2 contracts kept, 0 broken), `tsc -b --noEmit`, `eslint . --max-warnings 0`, `vite build` (1.52s), and `scripts.check_no_dashes` (codebase and wiki) all exited clean.
-- `live-fullstack-proof.txt`: Zero-mock live container (`kanban-liveqa-1` at `http://127.0.0.1:18961`, `main` commit `837f657d`) verification log covering soft-trash setup, retention PATCH (422 and 200), UI restore (200), 2-stage permanent purge (Stage 1 200, Stage 2 200), `@member_r4` and `@wsadmin` RBAC/ACL DENY isolation, and `/docs/role-and-permission-matrix` rendering.
-- 6 live PNG screenshots on disk.
+- `unit-test-results.txt`:
+  - Backend Pytest: 51 passed in 53.20s across 7 touched test files (`test_admin_trash_api.py` 6, `test_workspace_settings.py` 13, `test_trash_purge.py` 9, `test_aal2_policy.py` 3, `test_destructive_lifecycle.py` 6, `test_destructive_lifecycle_coverage.py` 6, `test_issue_delete.py` 8), overall 95% coverage (1,432 statements, 33 missed; `destructive.py` 95%, `workspace_settings.py` 94%, `issue_delete.py` schema 100%, `trash_purge.py` 95%, `activity.py` 96%, `destructive_lifecycle.py` 95%, `issue_delete.py` service 95%).
+  - Admin AAL2 compliance: `test_assert_admin_routes_protected_compliance` 1 passed in 0.64s.
+  - Frontend Vitest (`WorkspaceSettingsPage.test.tsx`): 34 passed in 2587ms (total run 4.08s), 99.78% Stmts, 95.11% Branch, 100% Funcs, 100% Lines.
+  - CSS Audit (`cssTokensAudit.test.ts`): 4 passed in 13ms.
+- `build-or-typecheck.txt`: `kanban-ctl db check-migrations` OK (62 migrations, single head `p4_23_oidc_link_intent_fk`), `ruff check .` clean, `ruff format --check .` (1,966 files) clean, `mypy` (1,125 source files) clean, `lint-imports` (2 kept, 0 broken), `tsc -b --noEmit` clean, `eslint . --max-warnings 0` clean, Vite build clean in 1.20s, and `python3 -m scripts.check_no_dashes` exit code 0.
+- `live-fullstack-proof.txt`: Zero-mock live container execution (`kanban-liveqa-1` at `http://127.0.0.1:18961`, `main` commit `07d04cde`, embedded PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`, 0 mocks/stubs), `LIVE_STACK_VERDICT: PASS` with 0 unexpected console errors, 0 page errors, and 0 HTTP 5xx responses.
+- `changed-files-manifest.txt`: 31 tracked artifacts with SHA-256 checksums and byte sizes, including all 10 PNGs and accurate canonical filenames.
 
 **QA Cross-Validation**:
-- Challenged and partially confirmed previous QA and specialist reviews (`api-specialist-review.md` and `ui-specialist-review.md` both issued premature `APPROVED` verdicts without flagging real code/doc/evidence discrepancies):
-  1. **UI Typo Missed by UI Specialist & QA:** `WorkspaceSettingsPage.tsx` (line 1405) renders the sticky filter pill as `Stickys` instead of `Stickies`, directly visible in `live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, and `live-purge-modal.png`.
-  2. **Incorrect `data-testid` and Stale Metrics in `ui-specialist-review.md`:** `ui-specialist-review.md` (line 55) cites `data-testid="purge-reason-input"`, whereas `WorkspaceSettingsPage.tsx` (line 1458) actually uses `data-testid="permanent-purge-reason-input"`. It also cites `99.76% stmts, 95.79% branch` vs. `unit-test-results.txt` `99.77% Stmts, 95.68% Branch`.
-  3. **Stale File Counts & Unverified Claim in `api-specialist-review.md` / `message-to-reality-checker.md`:** `api-specialist-review.md` cites `1942 files` / `1115 source files` vs. `build-or-typecheck.txt` `1943 files` / `1116 source files`. `message-to-reality-checker.md` (line 28) claims `GET /api/v1/admin/trash` accepts `limit` and `offset` parameters, whereas `kanban/api/v1/admin/destructive.py` (lines 230-239, 315) only accepts `kind`, `project_id`, and `q` and hardcodes `.limit(500)`.
-  4. **Project Admin Trash Studio Mismatch:** `destructive.py` (lines 263-276) and `Role-and-Permission-Matrix.md` (lines 44-45, Note 7) explicitly state `PROJECT_ADMIN` can inspect and restore items in the Trash Studio for their projects, yet `WorkspaceSettingsPage.tsx` (lines 237, 714) locks out any user without `is_server_admin` or `is_workspace_admin`.
-  5. **Manifest / Branch Drift:** `message-to-reality-checker.md` references branch `fix/KAN-30-rc1` (`b3b0f4ba`), while `live-fullstack-proof.txt` and specialist reviews reference `main` (`837f657d`). `changed-files-manifest.txt` omits `live-role-matrix-desktop-light.png` (and the diff/review files).
+- **Confirmed all 5 R1 blockers resolved**:
+  1. **`Stickys` typo fixed**: `WorkspaceSettingsPage.tsx` lines 90-100 (`TRASH_FILTER_LABELS`) map `sticky: 'Stickies'`, rendered at line 1468. Live proof confirms `stickysTypoCount=0` and all Trash Studio screenshots render `Stickies`.
+  2. **Stage 2 Permanent Purge explicit phrase input + un-prefilled reason**: `WorkspaceSettingsPage.tsx` lines 209-210 and 457-458 initialize `typedConfirmPhrase` and `purgeReason` to `''`. Lines 1515-1557 render `[data-testid="permanent-purge-confirm-phrase-input"]` and `[data-testid="permanent-purge-reason-input"]`, disabling `[data-testid="confirm-permanent-purge-btn"]` until `typedConfirmPhrase.trim()` matches `confirm_phrase` and `purgeReason.trim().length >= 8`. Enabled button uses `.kb-btn-purge` (`#991b1b` background, `#ffffff` text in `ProjectSettingsPage.css` lines 741-744). Verified visually in `live-purge-modal.png` and via Stage 2 HTTP 200 in `live-fullstack-proof.txt`.
+  3. **`PROJECT_ADMIN` Trash Studio contract aligned**: `WorkspaceSettingsPage.tsx` lines 122-130, 261-292, 771, 815-862, 1425-1454, and 1637 grant `PROJECT_ADMIN` scoped access to `#tab-trash` (including fallback probe on `GET /api/v1/admin/trash`), hide `General & Policy`, `Workspace Members`, and `Groups & Governance` tabs, hide retention edit inputs/save buttons (showing read-only policy text), and hide `Permanent Purge` buttons. Matches `destructive.py` lines 263-301 and `Role-and-Permission-Matrix.md` Note 7. Verified visually in `live-projadmin-trash-desktop-light.png` and via live `@projadmin` restore of `KAN-2` (HTTP 200).
+  4. **`limit` and `offset` pagination implemented on `GET /api/v1/admin/trash`**: `destructive.py` lines 239-246 define `limit` (`ge=1, le=500`, default `100`) and `offset` (`ge=0`, default `0`), applied at line 323 `.order_by(ObjectRecord.deleted_at.desc()).offset(offset).limit(limit)`. Verified by `test_admin_trash_pagination_limit_and_offset` and live container probes (`limit=2&offset=1` -> 200, `limit=0` -> 422, `limit=501` -> 422).
+  5. **QA evidence packet refreshed**: All 10 live PNGs and canonical file paths (`ProjectSettingsPage.css`, `destructive.py`, `workspace_settings.py`) match disk and manifest; `api-specialist-review.md` matches `unit-test-results.txt` and `build-or-typecheck.txt` metrics exactly.
+- **Challenged minor non-blocking inaccuracies in `ui-specialist-review.md`**:
+  - Line 33 describes `"The filter dropdown in the Trash toolbar renders '🟨 Stickies'"`, whereas the UI renders horizontal filter pill buttons (`Stickies` without emoji; the `🟨 Sticky` emoji is in the table `Type` badge).
+  - Line 42 cites placeholder `"Reason for permanent deletion (minimum 8 characters)..."`, whereas `WorkspaceSettingsPage.tsx` line 1537 uses `"Enter audit reason for permanent purge (min 8 chars)..."`.
+  - Line 45 cites `.kb-btn-purge:disabled` opacity `0.5`, whereas `ProjectSettingsPage.css` line 751 defines `opacity: 0.6`.
+  - Line 121 cites Vitest timing `2.08s`, whereas `unit-test-results.txt` line 56 reports `2587ms` (`2.59s`, total duration `4.08s`).
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
 - Full system / device screenshots:
-  - `docs/qa/KAN-30/screenshots/live-desktop-light.png` (1440x900 Light)
-  - `docs/qa/KAN-30/screenshots/live-desktop-dark.png` (1440x900 Dark)
-  - `docs/qa/KAN-30/screenshots/live-tablet.png` (768x1024 Light)
-  - `docs/qa/KAN-30/screenshots/live-mobile.png` (390x844 Light)
-  - `docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png` (Desktop full-page capture of `/docs/role-and-permission-matrix`)
-- User journey / modal evidence:
-  - `docs/qa/KAN-30/screenshots/live-purge-modal.png` (Desktop Light Stage 2 Permanent Cryptographic Purge panel + populated trashed-items table rows `KAN-9` and `KAN-8`)
-- Cross-browser comparison: None provided (Chromium/Playwright only; no Firefox/WebKit screenshots).
+  - [`live-desktop-light.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-desktop-light.png) (1440x900 Light - Trash Studio)
+  - [`live-desktop-dark.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-desktop-dark.png) (1440x900 Dark - Trash Studio)
+  - [`live-tablet.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-tablet.png) (768x1024 Light - Trash Studio)
+  - [`live-mobile.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-mobile.png) (390x844 Light - Trash Studio)
+  - [`live-role-matrix-desktop-light.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png) (1440x900 Light fullPage - Role & Permission Matrix)
+  - [`live-role-matrix-desktop-dark.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-desktop-dark.png) (1440x900 Dark fullPage - Role & Permission Matrix)
+  - [`live-role-matrix-tablet.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-tablet.png) (768x1024 Light fullPage - Role & Permission Matrix)
+  - [`live-role-matrix-mobile.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-role-matrix-mobile.png) (390x844 Light fullPage - Role & Permission Matrix)
+- User journey / role / modal evidence:
+  - [`live-purge-modal.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-purge-modal.png) (Desktop Light Stage 2 Permanent Cryptographic Purge panel for `KAN-3` with typed `PURGE ISSUE KAN-3`, typed reason, and enabled `#991b1b` `Confirm Permanent Purge` button)
+  - [`live-projadmin-trash-desktop-light.png`](file:///home/adamoutler/kanban/docs/qa/KAN-30/screenshots/live-projadmin-trash-desktop-light.png) (Desktop Light `@projadmin` view showing `#tab-trash` only, read-only retention policy, `KAN-2` row with `Restore` button only)
+- Cross-browser comparison: Chromium/Playwright only (no Firefox or WebKit captures).
 
 **What System Actually Delivers**:
-- **`live-desktop-light.png` & `live-desktop-dark.png`**: Render the Workspace Settings header, `Documentation ->` button, 4 tabs (`General & Policy`, `Workspace Members`, `Groups & Governance`, `Trash & Retention` active), `Workspace Trash & Retention Studio` header, `Retention Policy` card (value `14`, `Save Retention Policy` button), 9 kind filter pills (with visible typo `Stickys`), search bar + `Search` button, and the table header (`Type | Item | Deleted At | Days Remaining | Actions`). Both light and dark themes have clean contrast. However, because these are viewport-only captures, the trashed-items rows are clipped at the bottom edge of the frame.
-- **`live-tablet.png`**: Cleanly wraps the 4 tabs onto 2 lines and the 9 filter pills without horizontal overflow (`scrollWidth=768`). Only the top of row `KAN-9` is visible at the bottom edge.
-- **`live-mobile.png`**: Stacks the 4 tabs vertically and fits `Workspace Trash & Retention Studio` and the top of `Retention Policy` inside `390px` width without horizontal blowout. However, the `Save Retention Policy` button, filter pills (`Stickys`), search bar, and the entire trashed-items table are cut off below the `844px` fold, so mobile layout of the trash table and action buttons is not visually verified.
-- **`live-purge-modal.png`**: Provides the strongest visual proof for Problem 3. Shows retention updated to `21`, the `Permanent Cryptographic Purge (Stage 2)` inline alert box displaying `Confirm Phrase: PURGE ISSUE KAN-7`, `Blast Hash: 192640f97a9d700f5bce38727e5c86f3d4f9ca98da9287ce495df76e93a420f5`, and the `Reason for Purge` input populated with `"Live QA permanent purge verification for KAN-30"`, plus table rows for `KAN-9` and `KAN-8` showing `Issue` badges, timestamps, `20 days remaining` pills, `Restore` buttons, and `Permanent Purge` buttons. Notably: (a) there is no input field requiring the admin to type `PURGE ISSUE KAN-7` (the frontend auto-submits it in `handleExecutePurge`), and (b) the `Confirm Permanent Purge` button renders in a faded/muted red compared to the `#991b1b` `Permanent Purge` table buttons below it (consistent with `.kb-btn:disabled` `opacity: 0.6` styling state in the captured frame).
-- **`live-role-matrix-desktop-light.png`**: Renders Chapter 19 of 27 (`Role and Permission Matrix`) cleanly at `/docs/role-and-permission-matrix`, showing the `●`, `◐`, `○` Legend, all 7 Principal Tiers, the 20-row Master Capability Matrix with `(1)`-`(12)` footnotes, 12 Detailed Condition Notes, and 4 Architectural Security Invariants with zero horizontal clipping. Dark mode, tablet, and mobile captures of `/docs/role-and-permission-matrix` were not captured.
+- **`live-desktop-light.png` & `live-desktop-dark.png`**: Display the `Retention Policy` card (30 days + `Save Retention Policy`), all 9 filter pills (`All Items`, `Projects`, `Issues`, `Docs`, `Pages`, `Stickies`, `Cycles`, `Modules`, `Views`), search input + `Search` button, and all 3 trashed items (`KAN-3`, `KAN-2`, `KAN-1`) with `Issue` badges, timestamps, `29 days remaining` pills, `Restore`, and high-contrast `#991b1b` `Permanent Purge` buttons. Clean theme parity and contrast across Light and Dark modes.
+- **`live-tablet.png`**: Wraps the 9 filter pills cleanly onto 2 lines (`Views` on second line) and shows the complete retention card, search bar, and all 3 item rows (`KAN-3`, `KAN-2`, `KAN-1`) with `Restore` and `Permanent Purge` buttons inside 768px width (`scrollWidth=768`).
+- **`live-mobile.png`**: Renders all 9 filter pills (`Stickies` intact), search bar, and trashed item rows (`KAN-3`, `KAN-2`, and top of `KAN-1`) within 390px width (`scrollWidth=390`). As honestly noted in `live-fullstack-proof.txt` line 28, the `Search` button right edge meets the right viewport edge (`x=391px`) and the `Actions` column sits inside the `.kb-table-scroll-container` horizontal scroll wrapper.
+- **`live-purge-modal.png`**: Demonstrates the hardened Stage 2 Permanent Cryptographic Purge confirmation box for `KAN-3` (`01a1faaf-02d8-7e31-8649-d221e377be18`) with `Confirm Phrase: PURGE ISSUE KAN-3`, `Blast Hash: c8a468dddebcfd92cd0e3b7441637dc0639fdaec85a2e5e93c0c6083c7bec9c7`, typed confirmation phrase input (`PURGE ISSUE KAN-3`), typed reason (`Live QA R2 permanent purge check for KAN-30`), and an enabled `#991b1b` `Confirm Permanent Purge` button alongside `Cancel`.
+- **`live-projadmin-trash-desktop-light.png`**: Confirms `@projadmin` sees `Workspace Settings` with only the `Trash & Retention` tab visible, read-only text (`Soft-deleted items are retained for 30 days per workspace policy.`) with zero edit controls, `Stickies` pill, and `KAN-2` with `Restore` only (zero `Permanent Purge` buttons).
+- **`live-role-matrix-desktop-light.png`, `live-role-matrix-desktop-dark.png`, `live-role-matrix-tablet.png`, `live-role-matrix-mobile.png`**: All 4 captures render Chapter 19 of 27 (`Role and Permission Matrix`) at `/docs/role-and-permission-matrix` with `●`, `◐`, `○` glyphs, all 7 Principal Tiers, the 20-row Master Capability Matrix, 12 Detailed Condition Notes, and 4 Architectural Security Invariants. Desktop Light, Desktop Dark, and Tablet fit all 7 principal columns cleanly; Mobile (390px) constrains page `scrollWidth=390` via table horizontal scrolling (initially showing `Operational Capability`, `Guest`, `Viewer`, `Member` before horizontal scroll).
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PARTIAL PASS WITH GAPS
-- **Journey 1 - Retention Policy Config (`PATCH /api/v1/admin/workspace-settings`)**: PASS (`live-fullstack-proof.txt` shows 422 for `3` days, 200 in 55ms for `21` days; confirmed visually between `live-desktop-light.png` showing `14` and `live-purge-modal.png` showing `21`; backed by `test_workspace_settings.py` 13/13 and fresh AAL2 `<= 900s` + `TRASH_RETENTION_SHORTENED_WARN` audit emission).
-- **Journey 2 - Trash Listing, ACL DENY Isolation & Restore**: PASS AT API & WORKSPACE_ADMIN/SERVER_ADMIN UI; FAIL FOR PROJECT_ADMIN UI. `live-fullstack-proof.txt` proves `@member_r4` receives 403 and `[data-testid="access-denied-message"]`, `@wsadmin` excludes ACL-DENY `KAN-8` and sees 0 permanent purge buttons, and `KAN-9` restores in 89ms. However, `WorkspaceSettingsPage.tsx` (lines 237, 714) blocks `PROJECT_ADMIN` principals from opening `/workspaces/settings#tab-trash`, conflicting with `destructive.py` lines 263-276 and `Role-and-Permission-Matrix.md` Note 7.
-- **Journey 3 - 2-Stage Permanent Purge**: PASS WITH UX/SECURITY HARDENING GAP. `live-purge-modal.png` and `live-fullstack-proof.txt` confirm Stage 1 (`destructive:request`, 57ms, 200) and Stage 2 (`destructive:execute`, 65ms, 200) removed `KAN-7` from the DOM. However, `WorkspaceSettingsPage.tsx` (lines 428-443) auto-fills `confirm_phrase` without requiring user input and pre-populates a valid 27-character default `reason`, weakening Stage 2 human confirmation.
-- **Journey 4 - Role & Permission Matrix**: PASS ON DESKTOP LIGHT (`live-role-matrix-desktop-light.png`, 843ms load, `●`/`◐`/`○` verified).
-- **Journey 5 - Multi-Object Purge Daemon (`kanban/jobs/trash_purge.py`)**: Verified via Pytest (`test_trash_purge.py`, 9/9 passed), not exercised in `live-fullstack-proof.txt` on the live container.
+**End-to-End User Journeys**: PASS
+- **Journey 1 - Pagination & Filtering (`GET /api/v1/admin/trash`)**: PASS. Live PostgreSQL 16 + `FORCE ROW LEVEL SECURITY` verified `limit=100&offset=0` (HTTP 200, 4 items), `limit=2&offset=1` (HTTP 200, 2 sliced items), `limit=0` (HTTP 422 `VALIDATION_FAILED`), and `limit=501` (HTTP 422 `VALIDATION_FAILED`), backed by `test_admin_trash_pagination_limit_and_offset`.
+- **Journey 2 - Stage 2 Permanent Cryptographic Purge (`WorkspaceSettingsPage.tsx` + `destructive.py`)**: PASS. Live Stage 1 (`POST /api/v1/admin/destructive:request` -> HTTP 200, `PURGE ISSUE KAN-3`), default empty inputs + disabled confirm button, wrong-phrase/short-reason validation lock, valid phrase + reason enabling `#991b1b` (`rgb(153, 27, 27)`) button (`live-purge-modal.png`), and Stage 2 execution (`POST /api/v1/admin/destructive:execute` -> HTTP 200 with `blast_hash`, removing `KAN-3` from DOM).
+- **Journey 3 - `PROJECT_ADMIN` Scoped Trash Studio Access & Restore**: PASS. Non-AAL2 `@projadmin` rejected (`403 MFA_ENROLLMENT_REQUIRED`); post-AAL2 `@projadmin` loads `/workspaces/settings#tab-trash` with `visibleTabCount=1`, `saveRetentionBtnCount=0`, `permanentPurgeBtnCount=0` (`live-projadmin-trash-desktop-light.png`), and restores `KAN-2` via `POST /api/v1/admin/trash/{id}:restore` (HTTP 200, row removed).
+- **Journey 4 - Role & Permission Matrix (`/docs/role-and-permission-matrix`)**: PASS across Desktop Light, Desktop Dark, Tablet, and Mobile (`●`/`◐`/`○` glyphs verified, `stickysCount=0`).
 
-**Cross-Device Consistency**: PARTIAL / INCOMPLETE EVIDENCE
-- Desktop Light/Dark (1440x900) and Tablet (768x1024) layouts are consistent and overflow-free (`scrollWidth === innerWidth`) for the header, tabs, retention card, and filter toolbar.
-- `live-mobile.png` (390x844) does not show the retention submit button, filter pills, search bar, or trash table, leaving mobile usability of the studio table unproven visually.
-- `/docs/role-and-permission-matrix` was only captured on Desktop Light (`live-role-matrix-desktop-light.png`), with no dark mode, tablet, or mobile screenshot evidence.
+**Cross-Device Consistency**: PASS (with minor mobile horizontal table scroll)
+- Desktop Light/Dark (1440x900) and Tablet (768x1024) show complete layouts with zero horizontal overflow (`scrollWidth === innerWidth`).
+- Mobile (390x844) avoids page-level horizontal overflow (`scrollWidth=390`) on both Trash Studio and Role & Permission Matrix by using inner table scroll wrappers (`.kb-table-scroll-container`), though the `Search` button right edge touches `x=391px` on Trash Studio (`live-mobile.png`).
 
 **Performance Validation**: PASS
-- Measured live latencies in `live-fullstack-proof.txt` are well under the 3s threshold: `/workspaces/settings#tab-trash` load 795ms, retention PATCH 55ms, restore POST 89ms, Stage 1 `destructive:request` 57ms, Stage 2 `destructive:execute` 65ms, `/docs/role-and-permission-matrix` load 843ms, with 0 unexpected console errors, 0 page errors, and 0 HTTP 5xx responses.
+- Measured live latencies in `live-fullstack-proof.txt` are well below the 3s threshold: `/workspaces/settings#tab-trash` as `@admin` 667ms, as `@projadmin` 779ms, `/docs/role-and-permission-matrix` 605ms, with 0 unexpected console errors, 0 browser page errors, and 0 HTTP 5xx errors.
 
-**Specification Compliance**: PARTIAL FAIL (4 concrete gaps)
-- **Original Spec / Forensic Claims vs. Reality**:
-  1. **Pagination (`limit`, `offset`)**: `message-to-reality-checker.md` (line 28) states `GET /api/v1/admin/trash` accepts `limit, offset`, but `kanban/api/v1/admin/destructive.py` (lines 230-239, 315) does not implement `limit` or `offset` parameters and hardcodes `.limit(500)`.
-  2. **Project Admin Trash Studio Access**: `Role-and-Permission-Matrix.md` (lines 44-45, Note 7) specifies *"Project Admins in the Trash Studio can only view and restore items belonging to projects where they hold explicit `PROJECT_ADMIN` authority"*, and `destructive.py` implements `PROJECT_ADMIN` filtering, but `WorkspaceSettingsPage.tsx` (lines 237, 714) denies access to any user lacking `is_server_admin` or `is_workspace_admin`.
-  3. **Filter Pill Labeling**: `WorkspaceSettingsPage.tsx` (line 1405) outputs `"Stickys"` instead of `"Stickies"`.
-  4. **Stage 2 Confirmation Friction**: `WorkspaceSettingsPage.tsx` displays the Stage 2 `confirm_phrase` passively without requiring the user to type it to confirm permanent purge.
+**Specification Compliance**: PASS
+- **Original Spec vs. Implementation**:
+  - `Role-and-Permission-Matrix.md` Note 7 (`PROJECT_ADMIN` Trash Studio inspection and restore) matches `destructive.py` (lines 263-301) and `WorkspaceSettingsPage.tsx` (lines 122-130, 261-292, 815-862, 1425-1454, 1637).
+  - `TRASH_FILTER_LABELS` renders `Stickies` with 0 `Stickys` occurrences.
+  - Stage 2 permanent purge requires typing `confirm_phrase` and an un-prefilled reason.
+  - `GET /api/v1/admin/trash` implements bounded `limit` (1-500) and `offset` (>=0) query parameters.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- `Stickys` filter pill typo remains in `WorkspaceSettingsPage.tsx` (line 1405) and in all live Studio screenshots.
-- Viewport-cropped screenshots (`live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, `live-mobile.png`) still leave the mobile trash table/toolbar and desktop/tablet table rows uncaptured (except in `live-purge-modal.png`).
+- None of the 5 R1 blockers remain.
 
-**New Issues Discovered**:
-1. **`PROJECT_ADMIN` UI Lockout vs. API & Permission Matrix**: `WorkspaceSettingsPage.tsx` lines 237 and 714 reject `PROJECT_ADMIN` users even though `GET /api/v1/admin/trash` (`destructive.py` lines 263-276) and `Role-and-Permission-Matrix.md` Note 7 explicitly grant `PROJECT_ADMIN` Trash Studio inspection and restore access.
-2. **Missing `limit` / `offset` Pagination in `GET /api/v1/admin/trash`**: `destructive.py` line 315 hardcodes `.limit(500)` with no pagination parameters, contradicting `message-to-reality-checker.md` line 28.
-3. **Auto-Submitted `confirm_phrase` & Pre-Filled Default Reason in Stage 2 Purge Modal**: `WorkspaceSettingsPage.tsx` lines 428-443 and 1442-1461 auto-submit `confirm_phrase` and default `purgeReason` to `'Permanent cryptographic purge'`, allowing one-click irreversible purge without typing the confirmation phrase.
-4. **QA Artifact & Specialist Review Drift**:
-   - `ui-specialist-review.md` cites non-existent `data-testid="purge-reason-input"` (actual is `permanent-purge-reason-input`) and stale Vitest coverage (`99.76%` / `95.79%` vs. `99.77%` / `95.68%`).
-   - `api-specialist-review.md` cites stale Ruff/Mypy file counts (`1942` / `1115` vs. `1943` / `1116`).
-   - `changed-files-manifest.txt` omits `live-role-matrix-desktop-light.png`, `git-diff.patch`, `wiki-diff.patch`, `api-specialist-review.md`, and `ui-specialist-review.md`.
-   - `WorkspaceSettingsPage.css`, `kanban/api/v1/admin/trash.py`, and `kanban/api/v1/workspace_settings.py` do not exist on disk (functionality resides in `ProjectSettingsPage.css`, `kanban/api/v1/admin/destructive.py`, and `kanban/api/v1/admin/workspace_settings.py`).
-5. **No Live Screenshot Proof for Role Matrix on Mobile/Tablet/Dark or Mobile Trash Table**: `live-role-matrix-desktop-light.png` only covers desktop light; `live-mobile.png` stops above the filter pills and table.
+**New Issues Discovered** (Non-blocking minor polish / observations):
+1. **Frontend vs. Backend Minimum Purge Reason Length Mismatch (8 vs. 10 chars)**: `WorkspaceSettingsPage.tsx` lines 1537 and 1552 enable `Confirm Permanent Purge` when `purgeReason.trim().length >= 8` (`placeholder="Enter audit reason for permanent purge (min 8 chars)..."`), whereas `DestructiveExecuteIn.reason` in `destructive.py` line 91 (and `Role-and-Permission-Matrix.md` Note 10) enforces `min_length=10`. An 8- or 9-character reason will enable the UI button and then fail server-side with HTTP 422.
+2. **Post-Capability Pagination Count in `GET /api/v1/admin/trash`**: `destructive.py` lines 323-355 apply `.offset(offset).limit(limit)` in SQL before `evaluate_capabilities` filtering and return `total=len(items)` (the returned page size after ACL filtering rather than total workspace trashed items).
+3. **`handleExecutePurge` Payload Uses `expectedConfirmPhrase` Variable**: In `WorkspaceSettingsPage.tsx` lines 482-491, `handleExecutePurge` sends `expectedConfirmPhrase` in the JSON body; because the submit button is disabled unless `typedConfirmPhrase.trim() === expectedConfirmPhrase` (line 1551), the submitted value matches user input, though sending `typedConfirmPhrase.trim()` directly would be cleaner defense-in-depth.
+4. **Minor Mobile Search Edge & `ui-specialist-review.md` Wording Drift**: On 390px mobile (`live-mobile.png`), the Trash Studio `Search` button right edge touches `x=391px` (`live-fullstack-proof.txt` line 28); in `ui-specialist-review.md`, lines 33, 42, 45, and 121 contain minor phrasing/number inaccuracies (`filter dropdown`, placeholder text, `0.5` vs `0.6` disabled opacity, `2.08s` vs `2.59s` Vitest duration).
 
 **Critical Issues**:
-- **C1**: `PROJECT_ADMIN` UI access contradiction (`WorkspaceSettingsPage.tsx` lines 237, 714 block `PROJECT_ADMIN`, contradicting `destructive.py` lines 263-276 and `Role-and-Permission-Matrix.md` Note 7 - either enable scoped `PROJECT_ADMIN` access to the Trash Studio tab or clarify/align Project Settings Trash vs. Workspace Trash Studio in the matrix and API).
-- **C2**: Stage 2 Permanent Purge UX safeguard gap (`WorkspaceSettingsPage.tsx` lines 428-443, 1442-1461) auto-submits `confirm_phrase` and pre-fills a valid reason without requiring explicit confirmation phrase entry before irreversible cryptographic purge.
+- None.
 
 **Medium Issues**:
-- **M1**: `Stickys` spelling typo in `WorkspaceSettingsPage.tsx` line 1405 (visible in 4 screenshots).
-- **M2**: Missing `limit` and `offset` pagination on `GET /api/v1/admin/trash` (`destructive.py` line 315 hardcodes `.limit(500)`, contradicting `message-to-reality-checker.md`).
-- **M3**: Incomplete full-page screenshot coverage on mobile (`live-mobile.png` omits toolbar and table) and missing dark/tablet/mobile screenshots for `/docs/role-and-permission-matrix`.
-- **M4**: Stale QA review metadata (`ui-specialist-review.md` wrong `data-testid` and stale coverage percentages, `api-specialist-review.md` stale file counts, `changed-files-manifest.txt` missing `live-role-matrix-desktop-light.png`).
+- **M1 (Non-blocking)**: Align `WorkspaceSettingsPage.tsx` lines 1537/1552 minimum purge reason check from `8` to `10` characters to match `destructive.py` line 91 (`min_length=10`) and `Role-and-Permission-Matrix.md` Note 10.
+- **M2 (Non-blocking)**: Tighten mobile `.kb-trash-search-box` flex wrapping (`flex-wrap: wrap` or `min-width: 0`) so the `Search` button has right padding inside 390px viewports (`live-mobile.png`).
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B
-**Design Implementation Level**: Good
-**System Completeness**: 88%
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A
+**Design Implementation Level**: Excellent
+**System Completeness**: 98%
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. **Fix `Stickys` Pluralization Typo**: Update `WorkspaceSettingsPage.tsx` line 1405 (`sticky` -> `Stickies`, e.g., via an explicit label map) so filter pills no longer display `Stickys` as seen in `live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, and `live-purge-modal.png`.
-2. **Require Explicit `confirm_phrase` Input in Stage 2 Permanent Purge Modal**: Update `WorkspaceSettingsPage.tsx` (lines 416-459 and 1435-1484) to require the `SERVER_ADMIN` to type the returned `confirm_phrase` (and verify why `Confirm Permanent Purge` appeared faded in `live-purge-modal.png`), rather than auto-submitting `expectedConfirmPhrase` with a pre-filled reason.
-3. **Resolve `PROJECT_ADMIN` Trash Studio Contract Mismatch**: Align `WorkspaceSettingsPage.tsx` (lines 237, 714), `destructive.py`, and `Role-and-Permission-Matrix.md` Note 7 so `PROJECT_ADMIN` either has a working UI Trash Studio path (verified by live test/screenshot) or the Matrix accurately documents where `PROJECT_ADMIN` trash lives.
-4. **Implement or Reconcile `limit`/`offset` Pagination on `GET /api/v1/admin/trash`**: Either add `limit` and `offset` parameters to `api_admin_list_trash` in `kanban/api/v1/admin/destructive.py` (with tests) or remove the inaccurate claim from `message-to-reality-checker.md`.
-5. **Refresh QA Evidence Packet & Full-Page Screenshots**: Capture full-page screenshots for mobile (`live-mobile.png` showing filter pills, search, and trash table), desktop/tablet trash table rows, and `/docs/role-and-permission-matrix` across dark/tablet/mobile viewports; update `changed-files-manifest.txt`, `ui-specialist-review.md` (`permanent-purge-reason-input`, exact Vitest numbers), and `api-specialist-review.md` (exact Ruff/Mypy file counts).
+- None blocking production release. All R1 blockers (`Stickys` typo, Stage 2 typed confirmation phrase + empty reason default, `PROJECT_ADMIN` Trash Studio parity, `limit`/`offset` pagination, and complete 10-screenshot + QA evidence packet) are verified resolved in code, tests, static gates, and zero-mock live PostgreSQL 16 + RLS execution. Follow-up polish items M1 (align 8 vs. 10 min reason length) and M2 (390px mobile search button right margin) can be tracked as minor follow-up hygiene.
 
-**Timeline for Production Readiness**: 1 short remediation cycle (1-2 days for fixes, unit/live tests, full-page screenshots, and clean-room R2 re-audit).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready for ticket closure and merge now.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Exact parity between documented specifications (`Role-and-Permission-Matrix.md`, `message-to-reality-checker.md`), specialist audit logs (`ui-specialist-review.md`, `api-specialist-review.md`), and actual code (`WorkspaceSettingsPage.tsx`, `destructive.py`).
-- Human-in-the-loop safety on Stage 2 cryptographic permanent purge (requiring typed confirmation phrase).
-- Full-page Playwright screenshot coverage on mobile/tablet/desktop and dark mode for both `/workspaces/settings#tab-trash` and `/docs/role-and-permission-matrix`.
+- Align client-side purge reason validation (`>= 10` chars) with `DestructiveExecuteIn.reason` (`min_length=10`) and send `typedConfirmPhrase.trim()` directly in `handleExecutePurge`.
+- Add `min-width: 0` / wrapping on `.kb-trash-search-box` for sub-400px mobile viewports and refine `GET /api/v1/admin/trash` total count if server-side page-number controls are added to the UI.
+- Ensure specialist review logs quote exact CSS values, placeholders, and test durations verbatim from `unit-test-results.txt` and source files.
 
 **Quality Targets**:
-- 0 UI copy typos (`Stickies`).
-- 100% alignment between `Role-and-Permission-Matrix.md` and UI/API RBAC behavior for `PROJECT_ADMIN`.
-- >=95% backend and frontend unit test coverage maintained after remediation edits, with all CI/static checks clean.
-- Zero `test-id`, commit-hash, or metric mismatches across `docs/qa/KAN-30/*`.
+- Maintain `>= 95%` backend and frontend unit test coverage (`95%` and `99.78%/95.11%` achieved).
+- Maintain `0` console errors, `0` page errors, `0` HTTP 5xx errors, and `0` forbidden unicode dashes across all releases.
 
 **Evidence Requirements**:
-- Full-page Playwright PNGs for Desktop Light/Dark, Tablet, and Mobile showing the complete Trash & Retention table (`Stickies` pill fixed) and `/docs/role-and-permission-matrix`.
-- Updated `live-purge-modal.png` showing an explicit typed confirmation-phrase input and enabled `Confirm Permanent Purge` button state.
-- Live proof / Pytest + Vitest coverage for `PROJECT_ADMIN` Trash Studio scoping and `limit`/`offset` pagination (if added).
-- Updated `unit-test-results.txt`, `build-or-typecheck.txt`, `changed-files-manifest.txt`, `api-specialist-review.md`, and `ui-specialist-review.md` referencing the final commit SHA.
+- Already satisfied for `KAN-30` in `docs/qa/KAN-30/` (51/51 Pytest, 34/34 Vitest, 4/4 CSS token audit, clean static/migration checks, `LIVE_STACK_VERDICT: PASS`, and all 10 live Playwright screenshots).
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
 **Evidence Location**: docs/qa/KAN-30/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (R2 Grade-A READY)

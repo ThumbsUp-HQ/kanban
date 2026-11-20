@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KAN-45 Reality-Checker Proof & Gate Contracts",
+  "version": "1.0.0",
+  "verification_proof_sample": {
+    "reality_checker": {
+      "verdict": "READY",
+      "grade": "A",
+      "report_path": "docs/qa/KAN-45/reality-checker-report.md"
+    },
+    "artifacts": [
+      "docs/qa/KAN-45/git-diff.patch",
+      "docs/qa/KAN-45/changed-files-manifest.txt",
+      "docs/qa/KAN-45/unit-test-results.txt",
+      "docs/qa/KAN-45/build-or-typecheck.txt"
+    ],
+    "ci_run_url": "https://dash.hackedyour.info/repos/kanban/actions/runs/12345678"
+  },
+  "wasm_hook_contracts": {
+    "module_name": "qa-proof-validator",
+    "sha256": "fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972",
+    "fuel_limit": 2000000,
+    "input_schema_version": "kb-sync-hook-input/v1",
+    "sample_input": {
+      "version": "kb-sync-hook-input/v1",
+      "from_state": "In Progress",
+      "to_state": "Done",
+      "issue": {
+        "id": "01a1f000-0000-7000-8000-000000000045",
+        "key": "KAN-45",
+        "identifier": "KAN-45",
+        "title": "Enforce Canonical Reality-Checker Report on complete_work",
+        "description": "Implementation details.",
+        "comments": [
+          {
+            "id": "01a1f000-0000-7000-8000-000000000046",
+            "body": "Verification report at docs/qa/KAN-45/reality-checker-report.md with READY verdict",
+            "author_id": "01a1f000-0000-7000-8000-000000000001",
+            "created_at": "2026-11-20T21:00:00Z"
+          }
+        ]
+      },
+      "verification_proof": {
+        "reality_checker": {
+          "verdict": "READY",
+          "grade": "A",
+          "report_path": "docs/qa/KAN-45/reality-checker-report.md"
+        },
+        "artifacts": ["docs/qa/KAN-45/unit-test-results.txt"]
+      }
+    },
+    "sample_output_allow": {
+      "decision": "allow",
+      "allowed": true,
+      "reason": "QA proof and report verified"
+    },
+    "sample_output_reject": {
+      "decision": "reject",
+      "allowed": false,
+      "reason": "Missing canonical reality-checker report or READY verdict for completed state transition"
+    }
+  },
+  "agent_bypass_guard_problem_response": {
+    "type": "https://kanban.hackedyour.info/problems/invalid-transition",
+    "title": "Invalid Transition",
+    "status": 422,
+    "code": "USE_COMPLETE_WORK",
+    "detail": "Transition to completed state 'Done' requires complete_work with valid verification proof. Direct transition, patch, or move is reserved for human operators."
+  },
+  "async_gate_approval_comment_sample": {
+    "author_principal_id": "01a1f000-0000-7000-8000-000000000099",
+    "event_type": "COMMENT_CREATED",
+    "header": "### \u2705\ud83e\udd16 Integration Agent Verdict: READY (Grade: A)",
+    "body_markdown": "### \u2705\ud83e\udd16 Integration Agent Verdict: READY (Grade: A)\n**Hook:** `qa-gate-hook` | **Harness:** `kanban-agent` | **Transition:** `In Progress` -> `Done`\n\n---\n\n#### Forensic QA Summary\nAll verification artifacts and test logs verified."
+  }
+}

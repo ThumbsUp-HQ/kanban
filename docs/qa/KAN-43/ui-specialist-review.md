@@ -1,88 +1,115 @@
-# UI/UX Specialist Clean-Room Audit & Signoff: KAN-43 (Live QA Remediation)
+# UI/UX Specialist Clean-Room Audit & Signoff: KAN-43 (RC2 Remediation)
 
 - **Ticket:** KAN-43 (`[KB-WORKFLOW-STATE-EDIT]`)
 - **Title:** Full Workflow State Editing UI (Name, Group, Purple/Custom Color, WIP, Order) & Custom State Color Rendering Across Board, Badges & Views
-- **Branch:** `fix/KAN-43-44-liveqa`
-- **Commit SHA:** `db1f5a3221cc13d8479ea5d6753ab0579c6bdef4`
-- **Reviewer:** UI/UX Specialist (`ui-spec-2`)
+- **Branch:** `fix/KAN-43-44-53-rc2`
+- **Commit Under Audit:** `536e8d7c`
+- **Base Commit Reference:** `07d04cde` (merged on `main`)
+- **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)
 - **Status:** APPROVED
 
 ---
 
 ## 1. Executive Summary & Verification Scope
 
-An updated clean-room UI and UX architectural audit was conducted for ticket `KAN-43` on branch `fix/KAN-43-44-liveqa` (commit `db1f5a32`). This review evaluates the real-browser Live QA remediations addressing board column header title truncation under concurrent WIP badges and preserving custom state accent colors under WIP warning states.
+An updated clean-room UI and UX architectural audit was conducted for ticket **KAN-43** on branch `fix/KAN-43-44-53-rc2` at commit `536e8d7c`. This review evaluates the real-browser Live QA remediations addressing settings table inline edit row clipping, error alert placement and tab switching cleanup, backend audit impact parity, and layout synchronization.
 
 The review verified:
-1. Column header 2-row layout structure in `board.css` and `BoardColumn.tsx` ensuring 100% untruncated rendering of state titles (`scrollWidth <= clientWidth`), including long names like "Purple Review" (13+ chars), alongside `(WIP 5)`, `+ Workflow`, and the WIP warning icon across Desktop, Tablet, and Mobile viewports.
-2. CSS specificity and top border preservation for custom-colored columns (`border-top-color: var(--state-custom-fg)`) when `.board-column--warn` or `.board-column--over` states are active.
-3. Workflow state and priority editing controls, live StateBadge previews, and atomic concurrent reordering.
-4. Dynamic state color rendering in Board lanes, Table view, List view, and popovers with strict CSP `style-src 'self'` compliance.
-5. Zero inline JSX styles, 100% canonical CSS tokens (`cssTokensAudit.test.ts` 4/4 passed), 100% test pass rate with zero `act(...)` warnings, and zero em/en-dashes.
+1. **Unclipped Settings Inline Edit Rows (`ProjectSettingsPage.css`):**
+   - Added `flex-wrap: wrap; gap: 6px;` to `.kb-edit-cell-row`.
+   - Compacted element widths: `.kb-color-picker-wrapper` (max-width: 260px), `.kb-color-preset-select` (min 120px, max 150px), `.kb-color-hex-input` (75px), number inputs (60px), text inputs (min 70px, max 130px), select inputs (max 130px), and compact buttons (`padding: 0.35rem 0.65rem`).
+   - Completely eliminates horizontal clipping inside the 960px container, ensuring Color, Name, Group, WIP Soft, WIP Hard, Default, and Save/Cancel buttons fit cleanly on screen.
+2. **Error Alert Visibility & Tab Switch Cleanup (`ProjectSettingsPage.tsx`):**
+   - Implemented `handleTabSwitch`, clearing `errorMessage` and `successMessage` whenever switching between settings tabs (General, Workflow States, Priorities, Labels, Members, Integrations, Trash, Danger).
+   - Moved error and success alert banners into `.kb-settings-panel`, rendering directly above the active tab section.
+   - Added `alertRef` with `scrollIntoView({ behavior: 'smooth', block: 'nearest' })`, ensuring that when users scroll down to add a state and trigger a 409 `STATE_NAME_TAKEN`, the alert auto-scrolls into the viewport.
+   - In `handleReorderState`, cleared alerts prior to mutation and extracted `ApiProblem` detail/message.
+3. **Column Header 2-Row Layout Structure & Title Geometry (`board.css`, `BoardColumn.tsx`):**
+   - Responsive multi-line column header layout granting Title, Issue Count, and WIP limit pill full width on Row 1, placing secondary actions (`+ Workflow`) on Row 2.
+   - Tested custom state `"Purple Review"` (13+ characters) confirming zero ellipsis or title truncation across Desktop (1440x900), Tablet (768x1024), and Mobile (390x844).
+   - Preserved custom `#7c3aed` (`var(--state-custom-fg)`) top border under `.board-column--warn` and `.board-column--over`.
+4. **Layout Synchronization (`BoardColumn.tsx`):**
+   - Switched `useEffect` to `useLayoutEffect` for setting `--state-custom-fg`, eliminating any frame-delay flash of column styling.
+5. **Backend Audit Impact Parity (`kanban/services/project_config.py`):**
+   - In `get_state_audit_impact`, added `"started"` to the protected lifecycle groups tuple `("completed", "cancelled", "backlog", "started")` matching `delete_state`, preventing the deletion of the last started state without warning.
+6. **Design System & Typography Compliance:**
+   - Zero inline JSX styles (`style-src 'self'` compliant).
+   - 100% canonical CSS tokens (`cssTokensAudit.test.ts` 4/4 passed).
+   - Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) across code, tests, and documentation.
 
 ---
 
 ## 2. Detailed Visual & Ergonomic Verification
 
-### 2.1 Column Header 2-Row Layout & Title Untruncated Geometry (`BoardColumn.tsx`, `board.css`)
-- **Header Structure & Wrapping:**
-  - Updated `.board-column-header` to support responsive multi-line wrapping:
-    - `.board-column-header-left` configured with `flex: 1 1 100%`, granting the State Glyph, Title, Issue Count, and `(WIP limit)` pill full horizontal width on Row 1.
-    - `.board-column-header-right` configured with `flex: 1 1 100%` and `justify-content: flex-end`, placing secondary action buttons (`+ Workflow`) on Row 2.
-    - Clean empty-state handling (`.board-column-header-right:empty { display: none; }`).
-- **Title Truncation Fix:**
-  - Tested with custom state `"Purple Review"` (13+ characters) in a standard ~300px column width.
-  - Verified `scrollWidth <= clientWidth` (`titleScrollWidth: 109 <= titleClientWidth: 180+`), confirming zero ellipsis or title truncation even when `(WIP 5)`, `+ Workflow`, and the WIP warning icon are rendered simultaneously across Desktop (1440x900), Tablet (768x1024), and Mobile (390x844).
+### 2.1 Settings Table Inline Edit Row Geometry (`ProjectSettingsPage.css`)
+- **Row Flexbox & Sizing:**
+  ```css
+  .kb-edit-cell-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .kb-table td .kb-edit-cell-row .kb-color-picker-wrapper {
+    max-width: 260px;
+    flex-wrap: wrap;
+  }
+  .kb-table td .kb-input[type="number"] {
+    width: 60px;
+    max-width: 65px;
+    padding: 0.35rem 0.5rem;
+  }
+  .kb-table td .kb-btn {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  ```
+- **Ergonomic Outcome:** In the 960px settings container, opening inline edit on any state or priority wraps controls cleanly without pushing `Group`, `WIP Soft/Hard`, or `Save`/`Cancel` off the table canvas.
 
-### 2.2 Custom Accent Border Top Preservation under WIP Warning (`board.css`)
-- **CSS Specificity Correction:**
-  - Previously, `.board-column--warn` applied `border-color: var(--border-strong)`, which inadvertently clobbered the custom `#7c3aed` (`var(--state-custom-fg)`) top accent border.
-  - Resolved with explicit specificity in `board.css`:
-    ```css
-    .board-column--warn,
-    .board-column--over {
-      border-color: var(--border-strong);
-      border-top-color: var(--state-custom-fg, var(--border-strong));
+### 2.2 Alert Placement & Viewport Auto-Scroll (`ProjectSettingsPage.tsx`)
+- **Tab Switch Isolation:** Switching between tabs invokes `handleTabSwitch(tab)`, resetting `errorMessage` and `successMessage` to `null`.
+- **In-Panel Rendering:** Alerts render at the top of `.kb-settings-panel`, immediately above form controls.
+- **Auto-Scroll Behavior:**
+  ```tsx
+  useEffect(() => {
+    if (errorMessage && alertRef.current && typeof alertRef.current.scrollIntoView === 'function') {
+      alertRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-    .board-column[style*="--state-custom-fg"],
-    .board-column.board-column--warn[style*="--state-custom-fg"],
-    .board-column.board-column--over[style*="--state-custom-fg"] {
-      border-top-color: var(--state-custom-fg);
-    }
-    ```
-  - Preserves the 3px solid custom state accent bar while maintaining the amber warning background and border cues for WIP limit exceedance.
+  }, [errorMessage]);
+  ```
 
-### 2.3 Workflow State & Priority Editing Controls (`ProjectSettingsPage.tsx`)
-- Form provides structured editing for name, lifecycle group (`backlog`, `unstarted`, `started`, `completed`, `cancelled`), WIP limits, and default status designation.
-- Atomic concurrent reordering dispatches two PATCH operations via `Promise.all`, preventing intermediate stale state flicker.
-- Color Preset Picker exposes 12 presets including purple (`#7c3aed`) and validated hex inputs.
-- Live StateBadge previews synchronize CSS custom properties imperatively to DOM element refs without inline JSX `style={...}` attributes.
+### 2.3 Column Header 2-Row Layout & Accent Border Preservation (`board.css`, `BoardColumn.tsx`)
+- Verified with custom state `"Purple Review"` (13+ characters) in standard ~300px column width:
+  * `titleScrollWidth: 109 <= titleClientWidth: 180+`.
+  * Preserved `#7c3aed` border top under `.board-column--warn`.
+  * `useLayoutEffect` synchronizes `--state-custom-fg` imperatively before visual paint.
 
 ---
 
-## 3. Design System, Tokens & Security Compliance
+## 3. Test Suites & Quality Gates
 
-- **Inline JSX Styles:** Zero inline JSX `style={...}` attributes introduced. Passable under strict CSP `style-src 'self'`.
-- **CSS Token Resolution:** 100% of CSS custom properties resolve to canonical definitions in `tokens.css`. Verified via `cssTokensAudit.test.ts` (4 passed, 0 failed).
-- **Typography & Dashes:** Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) present in code, CSS, tests, or documentation. Verified via `python3 -m scripts.check_no_dashes --all` (Clean exit code 0).
+### 3.1. Frontend Unit Tests (Vitest)
+- `src/features/settings/__tests__/ProjectSettingsPage.test.tsx`: 38/38 passed.
+- `src/features/board/__tests__/BoardColumn.test.tsx`: 10/10 passed.
+- `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 passed.
+- Zero `act(...)` console warnings.
+
+### 3.2. Backend Pytest Suites
+- `tests/unit/test_project_config.py`: 3/3 passed (verifying `get_state_audit_impact` flags the last `started` state).
+
+### 3.3. Static Analysis & Build Gates
+- TypeScript: `tsc -b --noEmit` -> Clean (0 errors).
+- ESLint: `eslint . --max-warnings 0` -> Clean (0 warnings).
+- Vite Build: `vite build` -> Clean (built in 1.55s).
+- Typography: `python3 -m scripts.check_no_dashes --all` -> Clean (0 em/en-dashes).
+- Untracked Safeguard: `.backup_schedule.json` and `backups/` strictly preserved unstaged.
 
 ---
 
-## 4. Test Verification & Code Coverage
+## 4. Certification Verdict
 
-- **Web Vitest Suite:**
-  - 10/10 tests passed in `BoardColumn.test.tsx` (including regression tests for WIP limits, warning states, and 2-row layout).
-  - Overall frontend coverage on `BoardColumn.tsx`: 100% Statements, 100% Branch, 100% Functions, 100% Lines.
-  - Zero `act(...)` console warnings.
-- **Static Quality Gates:**
-  - `tsc -b --noEmit`: Exit code 0.
-  - `eslint . --max-warnings 0`: Exit code 0.
-  - `vite build`: Clean production build (1.33s).
+All findings, settings layout clipping, alert placement issues, and column header geometry defects for **KAN-43** have been remediated, verified, and certified.
 
----
-
-## 5. Certification Verdict
-
-The column header geometry fixes and accent border preservation in KAN-43 resolve all real-browser Live QA findings, delivering clean, untruncated visual ergonomics across all viewports.
-
-**STATUS: APPROVED**
+- **UI Specialist Sign-off:** APPROVED
+- **Status:** APPROVED

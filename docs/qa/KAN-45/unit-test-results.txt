@@ -1,0 +1,68 @@
+=================================================================
+=== 1. Gate Hardening & Workflow API Tests ===
+=================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-d3d41f2e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 29 items
+
+kanban/tests/api/test_gate_enforcement_hardening.py ..............       [ 48%]
+kanban/tests/api/test_issue_workflow.py .............                    [ 93%]
+kanban/tests/api/test_issue_patch_etag_parity.py ..                      [100%]
+
+============================== 29 passed in 7.23s ==============================
+
+=================================================================
+=== 2. Workflow & Wasm Validator Tests ===
+=================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-d3d41f2e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 44 items
+
+kanban/tests/workflows/test_qa_proof_validator_wasm.py ......            [ 13%]
+kanban/tests/workflows/test_async_gate.py ...............                [ 47%]
+kanban/tests/workflows/test_transition_engine.py ................        [ 84%]
+kanban/tests/workflows/test_dry_run.py .......                           [100%]
+
+============================= 44 passed in 22.15s ==============================
+
+=================================================================
+=== 3. Agent Gate Runner & Worker Tests ===
+=================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-d3d41f2e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 11 items
+
+agent/tests/gates/test_gate_runner.py ...                                [ 27%]
+agent/tests/gates/test_worker.py ........                                [100%]
+
+============================== 11 passed in 0.90s ==============================
+
+=================================================================
+=== 4. MCP Agent Workflow & Gate Tools Tests ===
+=================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-d3d41f2e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 21 items
+
+mcp/tests/agent/test_workflow_tools.py .........                         [ 42%]
+mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 57%]
+mcp/tests/agent/test_pending_gate_contract.py ...                        [ 71%]
+mcp/tests/agent/test_workflow_argument_validation.py ......              [100%]
+
+============================== 21 passed in 3.49s ==============================

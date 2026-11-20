@@ -1,0 +1,48 @@
+=== KAN-53 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 07d04cde) ===
+Timestamp: 2026-11-20T20:47:52.893Z - 2026-11-20T20:48:23.857Z
+Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
+Test Runner Script: live_qa_suite.mjs
+
+--- Setup ---
+Created second project SEC ("Security Core") via POST /api/v1/projects (HTTP 201) alongside KAN ("Kanban Core").
+
+--- Sidebar Project-Focus Auto-Collapse Verification ---
+1. Focusing KAN (/projects/KAN/issues?layout=list):
+   - Desktop Light (1440x900) - live-sidebar-kan-focused-desktop-light.png:
+     {"kanExpanded":"true","secExpanded":"false"}
+   - Desktop Dark (1440x900) - live-sidebar-kan-focused-desktop-dark.png:
+     {"kanExpanded":"true","secExpanded":"false"}
+   - Tablet (768x1024, sidebar opened via .kb-topbar-hamburger) - live-sidebar-kan-focused-tablet.png:
+     {"kanExpanded":"true","secExpanded":"false"}
+   - Mobile (390x844, sidebar opened via .kb-topbar-hamburger) - live-sidebar-kan-focused-mobile.png:
+     {"kanExpanded":"true","secExpanded":"false"}
+2. Clicking "📋 Issues" under SEC (/projects/SEC/issues?layout=list) - live-sidebar-sec-focused-desktop-light.png:
+   - KAN auto-collapsed and SEC expanded:
+     {"kanExpanded":"false","secExpanded":"true"}
+3. Clicking .kb-project-expand-row arrow on KAN manually while SEC is focused - live-sidebar-both-expanded-desktop-light.png:
+   - KAN manually expanded while keeping SEC expanded:
+     {"kanExpanded":"true","secExpanded":"true"}
+4. Navigating to "/" (Workspace Home) - live-sidebar-home-preserved-desktop-light.png:
+   - Manual expansion state preserved on non-project route:
+     {"kanExpanded":"true","secExpanded":"true"}
+
+Visual Inspection Confirmation:
+- All 7 Light/Dark/Tablet/Mobile screenshots confirm clean typography, crisp contrast, accurate aria-expanded triangles (▾ vs ▸), and zero layout regressions.
+LIVE_STACK_VERDICT [P1_SIDEBAR_AUTO_COLLAPSE]: PASS
+
+--- Runtime Error Telemetry (KAN-53 scope) ---
+Console JS errors: 0
+Page errors: 0
+5xx responses: 0
+CSP violations: 0
+
+Screenshots Verified (docs/qa/KAN-53/screenshots/):
+- live-sidebar-kan-focused-desktop-light.png
+- live-sidebar-kan-focused-desktop-dark.png
+- live-sidebar-sec-focused-desktop-light.png
+- live-sidebar-both-expanded-desktop-light.png
+- live-sidebar-home-preserved-desktop-light.png
+- live-sidebar-kan-focused-tablet.png
+- live-sidebar-kan-focused-mobile.png
+
+OVERALL LIVE_STACK_VERDICT (KAN-53): PASS

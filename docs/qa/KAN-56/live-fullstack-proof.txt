@@ -1,0 +1,19 @@
+=== KAN-56 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 07d04cde) ===
+Timestamp: 2026-11-20T20:44:07.844Z
+StudioDocLink -> HelpDrawer (440ms): {"title":"Scripted Workflows and Transition Helpers","hasHelperArch":true,"hasFailurePolicies":true,"mermaidSvgs":0}
+AttachHookDialog (?) Hook Kind More info -> (/docs/scripted-workflows-and-transition-helpers#helper-architecture) -> HelpDrawer: {"activeLink":"#helper-architecture","heading":"Helper Architecture#","drawerZ":"510","backdropZ":"1000","closeClickable":false,"interceptedBy":"workflow-modal-backdrop"}
+FAIL DETAIL (HelpDrawer z-index stacking trap behind AttachHookDialog): HelpDrawer z-index=510 < .workflow-modal-backdrop z-index=1000; close button intercepted by "workflow-modal-backdrop".
+AttachHookDialog (?) Failure Policy More info -> (/docs/scripted-workflows-and-transition-helpers#failure-policies) -> HelpDrawer: {"activeLink":"#failure-policies","heading":"Failure Policies#","drawerZ":"510","backdropZ":"1000","closeClickable":false,"interceptedBy":"workflow-modal-backdrop"}
+Full-page /docs/scripted-workflows-and-transition-helpers (837ms): {"sidebarCount":27,"retiredSidebarLinks":[],"hasNewSidebarLink":true,"mermaidPreviewCount":3,"allMermaidLoaded":true,"fallbackCount":0,"helperEngineIdx":0,"bannedInPage":0}
+Docs Tablet (768x1024) geometry: {"scrollWidth":768,"innerWidth":768}
+Docs Mobile (390x844) geometry: {"scrollWidth":390,"innerWidth":390}
+Retired URL /docs/scriptrunner-workflows-and-transition-interceptors -> HTTP 200 state={"pathname":"/docs/scriptrunner-workflows-and-transition-interceptors","firstHeading":"👍kanban: Executive Architecture and System Overview","sidebarHasScriptrunner":false}
+
+--- Runtime Error Telemetry ---
+Console errors: 0
+Page errors: 0
+5xx responses: 0
+LIVE_STACK_VERDICT [P1_STUDIO_DOC_LINK_HELP_DRAWER]: PASS
+LIVE_STACK_VERDICT [P2_DIALOG_FIELD_HELP_HINTS_ANCHORS]: FAIL (HelpDrawer z-index=510 renders behind AttachHookDialog .workflow-modal-backdrop z-index=1000, blocking pointer events and obscuring drawer)
+LIVE_STACK_VERDICT [P3_DOCS_PAGE_MERMAID_AND_RETIRED_SLUG]: PASS
+OVERALL LIVE_STACK_VERDICT (KAN-56): FAIL

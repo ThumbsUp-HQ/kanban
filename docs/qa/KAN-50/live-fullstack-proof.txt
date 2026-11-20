@@ -1,0 +1,65 @@
+================================================================================
+KAN-50 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
+Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
+================================================================================
+
+1. SUMMARY OF LIVE VERIFICATION FINDINGS
+--------------------------------------------------------------------------------
+- ProjectSettingsPage General tab (project-skip-loaded-seq-checkbox + EmojiHint):
+  * PASS across Desktop (1440x900 Light & Dark), Tablet (768x1024 Light), Mobile (390x844 Light).
+  * Checkbox hydrated as checked=true for project SAFE; clicking the EmojiHint button opened data-testid="emoji-hint-popup" visibly with full text "Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)", zero overflow, crisp contrast, consoleErrors=0, pageErrors=0, serverErrors=0.
+- PATCH /api/v1/projects/SAFE (toggle false <-> true):
+  * PASS - Recorded PROJECT_UPDATED activity diff in PostgreSQL activity_records.
+- TWO LIVE-STACK BUGS DISCOVERED:
+  1) BUG-1 (UI Z-Index Occlusion in CreateProjectModal):
+     - In CreateProjectModal (kanban/web/src/features/projects/CreateProjectModal.tsx:232), the backdrop uses class "kb-palette-scrim kb-create-project-scrim" with z-index: 9999 (CommandPalette.css:6) / 1200 (CreateProjectModal.css:8).
+     - EmojiHint (kanban/web/src/components/emoji/EmojiHint.css:79) renders .emoji-hint-popup via HintPortal in document.body with z-index: 1000.
+     - Consequently, clicking the EmojiHint button inside CreateProjectModal mounts [data-testid="emoji-hint-popup"] in the DOM, but it is COMPLETELY OCCLUDED BEHIND the modal (popupZIndex="1000" < scrimZIndex="9999", occludedByModal=true across all 4 viewports). Visual inspection via read_file confirmed the popover is invisible in all 4 CreateProjectModal screenshots.
+  2) BUG-2 (0ms Commit Race on PATCH /api/v1/admin/workspace-settings -> POST /api/v1/projects):
+     - PATCH /api/v1/admin/workspace-settings (kanban/api/v1/admin/workspace_settings.py) returns HTTP 200 with default_skip_loaded_sequence_numbers=true WITHOUT calling `await session.commit()` before sending the response (relying on get_rls_session teardown after TCP response).
+     - An immediate 0ms POST /api/v1/projects (SAFE, omitting skip_loaded_sequence_numbers) read pre-commit default_skip_loaded_sequence_numbers=false and returned skip_loaded_sequence_numbers=false!
+     - Subsequent projects created after commit settled (SAFE2, SAFE3) inherited skip_loaded_sequence_numbers=true.
+
+2. VERBATIM REST, POSTGRESQL, AND PLAYWRIGHT OUTPUT LOG
+--------------------------------------------------------------------------------
+[REST - 0ms Workspace Settings Inheritance Race]
+Initial GET /api/v1/admin/workspace-settings: status=200 default_skip_loaded_sequence_numbers=False
+PATCH /api/v1/admin/workspace-settings (true): status=200 body={"workspace_id":"01a1faac-6c26-751e-ac04-ea2d2a34337e","name":"Kanban Primary","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"default_skip_loaded_sequence_numbers":true,"updated_at":"2026-11-20T20:44:38.826055Z"}
+Immediate 0ms POST /api/v1/projects (SAFE, omitted skip_loaded_sequence_numbers): status=201 skip_loaded_sequence_numbers=False (PRE-COMMIT RACE!)
+Settled POST /api/v1/projects (SAFE2, omitted skip_loaded_sequence_numbers): status=201 skip_loaded_sequence_numbers=True
+Settled POST /api/v1/projects (SAFE3, omitted skip_loaded_sequence_numbers): status=201 skip_loaded_sequence_numbers=True
+
+[REST - PATCH /api/v1/projects/SAFE & PostgreSQL PROJECT_UPDATED Diff]
+PATCH /api/v1/projects/SAFE (true): status=200 skip_loaded_sequence_numbers=True
+PATCH /api/v1/projects/SAFE (false): status=200 skip_loaded_sequence_numbers=False
+PATCH /api/v1/projects/SAFE (true): status=200 skip_loaded_sequence_numbers=True
+PostgreSQL PROJECT_UPDATED activity rows for SAFE:
+107|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": true, "old": false}}}
+108|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": false, "old": true}}}
+109|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": true, "old": false}}}
+
+[Playwright UI - CreateProjectModal EmojiHint Occlusion Measurements]
+- desktop-light: popupZIndex="1000", scrimZIndex="9999", occludedByModal=true, topElementTag="DIV.kb-create-project-actions", docOverflow=false, dialogOverflow=false, outsideDialog=false
+- desktop-dark:  popupZIndex="1000", scrimZIndex="9999", occludedByModal=true, topElementTag="DIV.kb-create-project-actions", docOverflow=false, dialogOverflow=false, outsideDialog=false
+- tablet-light:  popupZIndex="1000", scrimZIndex="9999", occludedByModal=true, topElementTag="DIV.kb-create-project-actions", docOverflow=false, dialogOverflow=false, outsideDialog=false
+- mobile-light:  popupZIndex="1000", scrimZIndex="9999", occludedByModal=true, topElementTag="BUTTON.kb-create-project-cancel-btn", docOverflow=false, dialogOverflow=false, outsideDialog=false
+
+[Playwright UI - ProjectSettingsPage General Tab]
+- desktop-light: isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
+- desktop-dark:  isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
+- tablet-light:  isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
+- mobile-light:  isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
+
+3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
+--------------------------------------------------------------------------------
+- docs/qa/KAN-50/screenshots/live-create-project-desktop-light.png (EmojiHint popover occluded behind modal!)
+- docs/qa/KAN-50/screenshots/live-create-project-desktop-dark.png (EmojiHint popover occluded behind modal!)
+- docs/qa/KAN-50/screenshots/live-create-project-tablet-light.png (EmojiHint popover occluded behind modal!)
+- docs/qa/KAN-50/screenshots/live-create-project-mobile-light.png (EmojiHint popover occluded behind modal!)
+- docs/qa/KAN-50/screenshots/live-project-settings-desktop-light.png
+- docs/qa/KAN-50/screenshots/live-project-settings-desktop-dark.png
+- docs/qa/KAN-50/screenshots/live-project-settings-tablet-light.png
+- docs/qa/KAN-50/screenshots/live-project-settings-mobile-light.png
+
+LIVE_STACK_VERDICT: FAIL
+FAIL_REASON: (1) EmojiHint popover (.emoji-hint-popup z-index: 1000) is completely occluded behind CreateProjectModal (.kb-palette-scrim z-index: 9999 / .kb-create-project-scrim z-index: 1200) across all 4 viewports/themes. (2) PATCH /api/v1/admin/workspace-settings omits `await session.commit()` before returning 200, causing a 0ms POST /api/v1/projects to miss inherited default_skip_loaded_sequence_numbers=true.

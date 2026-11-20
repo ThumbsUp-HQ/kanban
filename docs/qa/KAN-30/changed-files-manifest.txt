@@ -1,21 +1,31 @@
-kanban/api/v1/admin/destructive.py
-kanban/api/v1/admin/workspace_settings.py
-kanban/api/v1/schemas/issue_delete.py
-kanban/jobs/trash_purge.py
-kanban/services/activity.py
-kanban/services/destructive_lifecycle.py
-kanban/services/issue_delete.py
-kanban/tests/api/test_admin_trash_api.py
-kanban/tests/api/test_issue_delete.py
-kanban/tests/api/test_workspace_settings.py
-kanban/tests/jobs/test_trash_purge.py
-kanban/web/src/features/settings/ProjectSettingsPage.css
-kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
-kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
-docs/qa/KAN-30/live-fullstack-proof.txt
-docs/qa/KAN-30/screenshots/live-desktop-dark.png
-docs/qa/KAN-30/screenshots/live-desktop-light.png
-docs/qa/KAN-30/screenshots/live-mobile.png
-docs/qa/KAN-30/screenshots/live-purge-modal.png
-docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png
-docs/qa/KAN-30/screenshots/live-tablet.png
+88e70d01abd0740a86a604dd1dbd6cf07eb199e4431787340fb0a5a293e4d62c     12565  kanban/api/v1/admin/destructive.py
+d4cba20477eea43fb14b712a84c19f1555083e32b671d61a46d19cc4b5a6ec80     17020  kanban/api/v1/admin/workspace_settings.py
+2a07dba5e0d5ebe479e9a624e6deb229c8236df4a8df2c736764f90c88a42990      2519  kanban/api/v1/schemas/issue_delete.py
+9f8d695afd7f344ab28e14f9196456bbbcbe0286acf0efdeacde4b7f8da6bac6     24890  kanban/jobs/trash_purge.py
+1f65aa6dee11370a0afa23351e649b010a4985394d6d0c02be0af418457f5e5a     47346  kanban/services/destructive_lifecycle.py
+37f0777c9b1db1a5515b232048c29fa928b29f45ad878cd2c1edf44857d6287a     16556  kanban/services/issue_delete.py
+7bd76af9bb6f5101a4bae024566e37eb189ee68485bde5eb90334c734defdde9     15678  kanban/tests/api/test_admin_trash_api.py
+e70850f9f1680ec5a548ce5fc2f6e44a0cd1c5db2fb842529d452a760ebd72b3     21297  kanban/tests/api/test_workspace_settings.py
+7306e214454cd9373a6fd640d42a65133d79b3118254686ac3a760ca0d6ecbb2     24015  kanban/tests/jobs/test_trash_purge.py
+7dacc1a57b1c2b75170a165ddb35ddd2ea45e04c1173eb4f7a8a5859b472b583     68522  kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+7264faa507cc222d6b8f4b4393488faaf7aa2d3c62d676afcfa1d343b75299d9     17621  kanban/web/src/features/settings/ProjectSettingsPage.css
+f4599141d6573a574bc74c9b6f650bc51e803b2a4f3a1c20010681ea59a07382    100064  kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+163388bb369eda78d557044051304f8baaa4e7540c08267dcfa2e2325f5005a0     10894  docs/qa/KAN-30/api-specialist-review.md
+6d4371aa86f3fbcfef7a1b0cf819aa16f12243eecc96b88734d0a49dd88bed9c      2610  docs/qa/KAN-30/build-or-typecheck.txt
+2d487752493eb09072566463991c5218aa216424676b9e6515f276e797b4e75f    255871  docs/qa/KAN-30/git-diff.patch
+e1ab3d9aef271d4a6413bc5854557895730e215fcab2183edc9a3ab7078bf021      6502  docs/qa/KAN-30/live-fullstack-proof.txt
+c3b9a6b1ec9d0a6ea46164fc70239c0ce7cb3b5211f909fd3198719c88d2c6ad      7570  docs/qa/KAN-30/message-to-reality-checker.md
+dea4533bccf3bb8c4abe62543320dda4c83020d2ad388924b8c27527d76b1d9a     20056  docs/qa/KAN-30/reality-checker-report.md
+31e3e2b6bb6da80f00ce10cf618ef293298b7d8ec26797d6284980f6bc3ea713     10811  docs/qa/KAN-30/ui-specialist-review.md
+87fab7ca89ca179600d1afdfa9f16519d0ad505eb1c05e1798a363b24873701f      8915  docs/qa/KAN-30/unit-test-results.txt
+b4314acdaad627cbb1b2c9d6f1757bfd79aa8fbc225390e64f1cb434ae3094bf      8699  docs/qa/KAN-30/wiki-diff.patch
+554797c13d3cd7988c5be2425fe5327c10f28971a19610b48ea76002fab2b902    123077  docs/qa/KAN-30/screenshots/live-desktop-dark.png
+069763d6bbf75e0677498081690f8a8d39a87afa0e9d7b430c3c273f7c120311    122688  docs/qa/KAN-30/screenshots/live-desktop-light.png
+eb98c2ae9d23f71d7cb4f878a202bc505af21e57b2f1543ec42e55675b466194     43737  docs/qa/KAN-30/screenshots/live-mobile.png
+05de6d64387d2cfc7ebe99672264bb7d5f97f0c3f6157a2e0240980dde2ca41a    106357  docs/qa/KAN-30/screenshots/live-projadmin-trash-desktop-light.png
+7bc8c1b12dcf507c13f7c2b7eea4ec3f5c4405756f356e2874652c400289d3da    120407  docs/qa/KAN-30/screenshots/live-purge-modal.png
+33e147ab3b9172890a992de519285bd285bb67287f25203c065fb809e45c1de8    607026  docs/qa/KAN-30/screenshots/live-role-matrix-desktop-dark.png
+9be22be1c54d610bcfdfe54a914ec8c0a1ebf45010d9b7aeef5ae985fc940919    597442  docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png
+ed8035c749fc34e937084eff8829d153a49eb32b252b58d44f617afd74035876    470482  docs/qa/KAN-30/screenshots/live-role-matrix-mobile.png
+c3f957cad40d131055669b15538fa71da051ceec9461748ad7ebac90c3acff33    517166  docs/qa/KAN-30/screenshots/live-role-matrix-tablet.png
+4a4ad5b94ab102db3cb8237d8aa5fb6b8103aae14b5f413d8c924f3b316ba4e5     83827  docs/qa/KAN-30/screenshots/live-tablet.png

@@ -3303,3 +3303,35 @@ index f8d6179d..7d862460 100644
 +  --popover-top: 0px;
 +  --popover-left: 0px;
  }
+
+
+commit db1f5a3221cc13d8479ea5d6753ab0579c6bdef4
+Author: Kanban Agent <agent@kanban.local>
+Date:   Fri Nov 20 14:23:23 2026 -0500
+
+    fix(liveqa): resolve real-browser layout, portal clipping, and dual-drawer defects for KAN-43 and KAN-44
+
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 0b8bc7d1..62b8bebd 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -124,6 +124,10 @@ export function AppShell({
+       ? currentSection
+       : computeCurrentSection(location.pathname, currentSection);
+ 
++  const isProjectIssuesRoute = /^(?:\/projects|\/w\/[^/]+\/p)\/[^/]+\/issues(?:\/)?$/.test(location.pathname);
++  const searchParams = new URLSearchParams(location.search);
++  const isListSplitHandled = isProjectIssuesRoute && searchParams.get('layout') === 'list';
++
+   const isPublicRoute =
+     location.pathname.startsWith('/login') ||
+     location.pathname.startsWith('/setup') ||
+@@ -327,7 +331,7 @@ export function AppShell({
+         <div id="kb-surface-host">
+           <div id="kb-issue-surface-host">
+             <IssueSurfaceSlotsContext.Provider value={issueSurfaceSlots}>
+-              <IssueSurface />
++              {!isListSplitHandled && <IssueSurface />}
+             </IssueSurfaceSlotsContext.Provider>
+           </div>
+         </div>

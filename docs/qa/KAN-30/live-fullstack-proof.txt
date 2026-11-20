@@ -1,81 +1,81 @@
 ================================================================================
-KAN-30 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (main commit 837f657d)
+KAN-30 LIVE FULL-STACK BLACK-BOX QA R2/R3 PROOF (main commit 07d04cde)
 Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
-1. TEST DATA PROVISIONING & SOFT-TRASH SETUP
+1. TEST DATA PROVISIONING & TRASH PAGINATION API CHECKS
 --------------------------------------------------------------------------------
-Created disposable issues as @admin (SERVER_ADMIN, AAL2):
-- pubIssue: KAN-7 (01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777) -> HTTP 201
-- secIssue: KAN-8 (01a1fa5c-8c7f-76ac-9da4-c22524fe2692) -> HTTP 201
-- restoreIssue: KAN-9 (01a1fa5c-8cba-7acc-9c3a-b2aadd625ae4) -> HTTP 201
-Granted explicit ACL DENY for @wsadmin (WORKSPACE_ADMIN) on KAN-8 via POST /api/v1/admin/acl-entries -> HTTP 200
-Soft-trashed KAN-7, KAN-8, KAN-9 (GET /delete-preview + DELETE /api/v1/issues/{key} with Kb-Blast-Hash) -> HTTP 200 each
+Provisioned as @admin (SERVER_ADMIN, AAL2):
+- Created KAN-1, KAN-2, KAN-3, KAN-4 in KAN and soft-trashed all 4 (GET /delete-preview + DELETE /api/v1/issues/{key} with Kb-Blast-Hash -> HTTP 200 each).
+- Provisioned @projadmin (role=WORKSPACE_MEMBER) and bound PROJECT_ADMIN on KAN only via POST /api/v1/admin/role-bindings -> HTTP 200.
 
-2. WORKSPACE ADMIN TRASH & RETENTION STUDIO (/workspaces/settings#tab-trash)
+Pagination API checks (against live PostgreSQL 16 + FORCE RLS):
+- GET /api/v1/admin/trash?limit=100&offset=0 -> HTTP 200 (items=4, total=4)
+- GET /api/v1/admin/trash?limit=2&offset=1 -> HTTP 200 (sliced items=2: ["KAN-2", "KAN-1"] after KAN-4 purge, or ["KAN-3", "KAN-2"] pre-purge)
+- GET /api/v1/admin/trash?limit=0 -> HTTP 422 VALIDATION_FAILED (Input should be greater than or equal to 1)
+- GET /api/v1/admin/trash?limit=501 -> HTTP 422 VALIDATION_FAILED (Input should be less than or equal to 500)
+
+2. WORKSPACE TRASH STUDIO UI (/workspaces/settings#tab-trash) & STAGE 2 PURGE
 --------------------------------------------------------------------------------
-Loaded /workspaces/settings#tab-trash as @admin (795ms):
-- Desktop 1440x900 Light: docs/qa/KAN-30/screenshots/live-desktop-light.png
-- Desktop 1440x900 Dark: docs/qa/KAN-30/screenshots/live-desktop-dark.png
-- Tablet 768x1024 Light (scrollWidth=768, innerWidth=768, overflows=false): docs/qa/KAN-30/screenshots/live-tablet.png
-- Mobile 390x844 Light (scrollWidth=390, innerWidth=390, overflows=false): docs/qa/KAN-30/screenshots/live-mobile.png
+Loaded /workspaces/settings#tab-trash as @admin (667 ms):
+- Filter pill label check: stickiesPills=["Stickies"], hasStickiesPill=true, stickysTypoCount=0 (zero "Stickys" anywhere in DOM).
+- Screenshots (fullPage: true, scrolled to show complete filter toolbar + table rows):
+  * Desktop 1440x900 Light (scrollWidth=1440, innerWidth=1440, overflows=false): docs/qa/KAN-30/screenshots/live-desktop-light.png
+  * Desktop 1440x900 Dark: docs/qa/KAN-30/screenshots/live-desktop-dark.png
+  * Tablet 768x1024 Light (scrollWidth=768, innerWidth=768, overflows=false): docs/qa/KAN-30/screenshots/live-tablet.png
+  * Mobile 390x844 Light (scrollWidth=390, innerWidth=390, overflows=false; note Search button right edge at x=391px touches right viewport edge and Actions column is inside inner table scroll wrapper): docs/qa/KAN-30/screenshots/live-mobile.png
 
-Per-workspace retention settings update:
-- Invalid retention (<7 days): PATCH /api/v1/admin/workspace-settings {trash_retention_days: 3} -> HTTP 422
-- Valid retention via UI Save Retention Policy (21 days): PATCH /api/v1/admin/workspace-settings -> HTTP 200 (55ms)
+Full Stage 2 Permanent Cryptographic Purge modal on KAN-3:
+- Clicked [data-testid="permanent-purge-btn-01a1faaf-02d8-7e31-8649-d221e377be18"]:
+  * Stage 1 POST /api/v1/admin/destructive:request -> HTTP 200, confirm_phrase="PURGE ISSUE KAN-3"
+- Verified default modal state:
+  * [data-testid="permanent-purge-confirm-phrase-input"] value=""
+  * [data-testid="permanent-purge-reason-input"] value=""
+  * [data-testid="confirm-permanent-purge-btn"] disabled=true
+- Verified validation gate: wrong phrase + <8-char reason ("short") -> confirm button remains disabled=true.
+- Typed exact phrase "PURGE ISSUE KAN-3" + reason "Live QA R2 permanent purge check for KAN-30":
+  * confirm button enabled (disabled=false)
+  * Computed button styles: backgroundColor="rgb(153, 27, 27)" (#991b1b), color="rgb(255, 255, 255)", opacity="0.998442"
+  * Screenshot: docs/qa/KAN-30/screenshots/live-purge-modal.png
+- Clicked [data-testid="confirm-permanent-purge-btn"]:
+  * Stage 2 POST /api/v1/admin/destructive:execute -> HTTP 200
+    {"status":"executed","target":"KAN-3","target_kind":"issue","target_id":"01a1faaf-02d8-7e31-8649-d221e377be18","mode":"permanent_purge","reason":"Live QA R2 permanent purge check for KAN-30","blast_hash":"c8a468dddebcfd92cd0e3b7441637dc0639fdaec85a2e5e93c0c6083c7bec9c7"}
+  * KAN-3 row removed from table (purgedRowCountAfter=0).
 
-UI Restore item:
-- Clicked [Restore] on KAN-9 -> POST /api/v1/admin/trash/01a1fa5c-8cba-7acc-9c3a-b2aadd625ae4:restore -> HTTP 200 (89ms)
-
-3. FULL LIVE 2-STAGE [PERMANENT PURGE] UI MODAL END-TO-END
+3. PROJECT_ADMIN (@projadmin on KAN only, WORKSPACE_MEMBER, AAL2)
 --------------------------------------------------------------------------------
-- Clicked [data-testid="permanent-purge-btn-01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777"] on KAN-7:
-  * Stage 1: POST /api/v1/admin/destructive:request (DestructiveRequestIn {target_kind:"issue", target:"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777", mode:"permanent_purge"})
-    -> HTTP 200 (57ms), confirm_phrase="PURGE ISSUE KAN-7"
-  * UI modal [data-testid="permanent-purge-confirmation-dialog"] opened and rendered:
-    [data-testid="permanent-purge-confirm-phrase"] = "Confirm Phrase: PURGE ISSUE KAN-7"
-    Screenshot: docs/qa/KAN-30/screenshots/live-purge-modal.png
-- Entered reason ("Live QA permanent purge verification for KAN-30") and clicked [data-testid="confirm-permanent-purge-btn"]:
-  * Stage 2: POST /api/v1/admin/destructive:execute (DestructiveExecuteIn {target_kind:"issue", target:"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777", mode:"permanent_purge", confirmation_token:"...", confirm_phrase:"PURGE ISSUE KAN-7", reason:"Live QA permanent purge verification for KAN-30"})
-    -> HTTP 200 (65ms) {"status":"executed","target":"KAN-7","target_kind":"issue","target_id":"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777","mode":"permanent_purge","reason":"Live QA permanent purge verification for KAN-30","blast_hash":"192640f97a9d700f5bce38727e5c86f3d4f9ca98da9287ce495df76e93a420f5"}
-  * Verified [data-testid="trash-row-01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777"] (KAN-7) disappeared from trash-items-table.
+- Note: Non-AAL2 @projadmin hitting /api/v1/admin/trash correctly receives HTTP 403 MFA_ENROLLMENT_REQUIRED. After enrolling TOTP and verifying AAL2:
+- Loaded /workspaces/settings#tab-trash as @projadmin (779 ms):
+  * visibleTabCount=1, onlyTrashTabVisible=true (only #tab-trash shown; General & Policy, Workspace Members, Groups & Governance tabs hidden)
+  * Retention Policy input and Save Retention Policy button hidden (saveRetentionBtnCount=0; zero number inputs in DOM; read-only policy text shown)
+  * Permanent Purge buttons hidden (permanentPurgeBtnCount=0)
+  * Screenshot: docs/qa/KAN-30/screenshots/live-projadmin-trash-desktop-light.png
+- Clicked Restore on KAN-2 as @projadmin:
+  * POST /api/v1/admin/trash/01a1faaf-02a4-7605-b90d-11e8455fe82f:restore -> HTTP 200
+    {"status":"restored","target":"KAN-2","target_kind":"issue","target_id":"01a1faaf-02a4-7605-b90d-11e8455fe82f","reason":"Restored from workspace trash studio"}
+  * KAN-2 removed from trash table (restoredRowCountAfter=0).
 
-4. RLS & ROLE ISOLATION (@member AND @wsadmin)
+4. ROLE & PERMISSION MATRIX (/docs/role-and-permission-matrix)
 --------------------------------------------------------------------------------
-- @member_r4 (WORKSPACE_MEMBER, non-admin):
-  * GET /api/v1/admin/trash -> HTTP 403
-  * POST /api/v1/admin/destructive:request (permanent_purge) -> HTTP 403
-  * UI /workspaces/settings#tab-trash -> renders [data-testid="access-denied-message"] (visible=true)
-- @wsadmin (WORKSPACE_ADMIN, AAL2):
-  * GET /api/v1/admin/trash -> HTTP 200, secret ACL-DENY issue KAN-8 excluded (secretHidden=true)
-  * POST /api/v1/admin/destructive:request (permanent_purge) -> HTTP 403 SERVER_ADMIN_REQUIRED
-  * UI /workspaces/settings#tab-trash -> [data-testid^="permanent-purge-btn-"] count = 0
+- Loaded /docs/role-and-permission-matrix (605 ms):
+  * Glyphs verified: filled circle (●)=true, half circle (◐)=true, empty circle (○)=true, stickysCount=0
+- fullPage: true screenshots across all viewports (zero horizontal overflow):
+  * Desktop 1440x900 Light (scrollWidth=1440, overflows=false): docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png
+  * Desktop 1440x900 Dark: docs/qa/KAN-30/screenshots/live-role-matrix-desktop-dark.png
+  * Tablet 768x1024 Light (scrollWidth=768, overflows=false): docs/qa/KAN-30/screenshots/live-role-matrix-tablet.png
+  * Mobile 390x844 Light (scrollWidth=390, overflows=false): docs/qa/KAN-30/screenshots/live-role-matrix-mobile.png
 
-5. VISUAL ROLE & PERMISSION MATRIX (/docs/role-and-permission-matrix)
+5. TELEMETRY & VERDICT
 --------------------------------------------------------------------------------
-- Loaded /docs/role-and-permission-matrix (843ms):
-  * Glyphs verified in DOM: filled circle (●)=true, half circle (◐)=true, empty circle (○)=true
-  * Desktop 1440x900 Light: scrollWidth=1440, innerWidth=1440 (zero horizontal overflow)
-  * Screenshot: docs/qa/KAN-30/screenshots/live-role-matrix-desktop-light.png
-
-6. LATENCIES & ERROR COUNTS
---------------------------------------------------------------------------------
-Latencies:
-- /workspaces/settings#tab-trash load: 795ms
-- Retention policy PATCH 200: 55ms
-- UI Restore POST 200: 89ms
-- Stage 1 destructive:request POST 200: 57ms
-- Stage 2 destructive:execute POST 200: 65ms
-- /docs/role-and-permission-matrix load: 843ms
-
-Unexpected Console Errors: 0 (Note: 1 expected resource log during @member negative RBAC visit to /workspaces/settings#tab-trash)
-Browser Page Errors: 0
-HTTP 5xx Server Errors: 0
+- Unexpected UI console errors: 0 (2 expected HTTP 422 console logs from direct fetch negative limit=0/501 probes)
+- Browser page errors: 0
+- HTTP 5xx server errors: 0
 
 LIVE_STACK_VERDICT: PASS
-- Problem 1 (Per-workspace retention config & validation): PASS
-- Problem 2 (RLS + ACL DENY trash isolation & SERVER_ADMIN-only permanent purge): PASS
-- Problem 3 (Workspace Trash Studio UI & FULL 2-stage Permanent Purge UI modal): PASS
-- Problem 4 (Visual ●/◐/○ Role & Permission Matrix): PASS
+- Stickies pill spelling ("0" occurrences of "Stickys"): PASS
+- GET /api/v1/admin/trash pagination (limit=2&offset=1 -> 200 OK; limit=0 / 501 -> 422): PASS
+- Stage 2 Permanent Cryptographic Purge modal (exact phrase + >=8-char empty-default reason + #991b1b button -> 200 OK): PASS
+- PROJECT_ADMIN (@projadmin) trash-only tab isolation & KAN issue restore (200 OK): PASS
+- Trash Studio & Role Matrix fullPage screenshots across Desktop Light/Dark, Tablet, Mobile: PASS

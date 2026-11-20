@@ -1,0 +1,230 @@
+================================================================================
+KAN-51 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963/mcp/agent)
+Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
+================================================================================
+
+Minted scoped /mcp/agent key prefix=kb_agt_
+Created ticket tree root=KAN-33 via JSON-RPC tools/call create_ticket
+Verified yaml.safe_load -> isinstance(key, str), isinstance(issue_key, str), isinstance(sequence_number, int) across ALL 7 tools, all 3 LOD tiers (summary/standard/full), and nested child items.
+
+--- 1. create_ticket (with children) ---
+created: 3
+root:
+  key: KAN-33
+  issue_key: KAN-33
+  sequence_number: 33
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+children:
+- key: KAN-34
+  issue_key: KAN-34
+  sequence_number: 34
+  summary: KAN-51 Child Alpha
+  parent: KAN-33
+- key: KAN-35
+  issue_key: KAN-35
+  sequence_number: 35
+  summary: KAN-51 Child Beta
+  parent: KAN-33
+
+--- 2.1. read_ticket (lod=summary) ---
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+summary: KAN-51 Live MCP Framing Root
+state: Backlog
+priority: high
+
+--- 2.2. read_ticket (lod=standard) ---
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+summary: KAN-51 Live MCP Framing Root
+state: Backlog
+priority: high
+description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+links:
+  outbound:
+  - link_type: PARENT_OF
+    target: {key: KAN-34}
+  - link_type: PARENT_OF
+    target: {key: KAN-35}
+etag: bf860594062465091d7a5dd2a18aa95bf9075e9b34be173878d7ed88191c0d4a
+access: Project
+
+--- 2.3. read_ticket (lod=full) ---
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+summary: KAN-51 Live MCP Framing Root
+state: Backlog
+priority: high
+description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+links:
+  outbound:
+  - link_type: PARENT_OF
+    target: {key: KAN-34}
+  - link_type: PARENT_OF
+    target: {key: KAN-35}
+etag: bf860594062465091d7a5dd2a18aa95bf9075e9b34be173878d7ed88191c0d4a
+access: Project
+access_manifest:
+  pill_label: Project
+  inherited_scope: {kind: project, scope_label: 'Project: KAN', project_key: KAN}
+  users:
+  - handle: '@admin'
+    grant_source: project_owner
+    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]
+  - handle: '@member'
+    grant_source: workspace_role
+    capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK]
+  agents:
+  - capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK, SHARE, ADMIN, DELETE]
+  caller_capabilities: [VIEW, COMMENT, EDIT, TRANSITION, LINK]
+activity:
+- event_type: ISSUE_CREATED
+  actor: '@admin'
+  created_at: '2026-11-20T20:48:08.018839Z'
+  payload: {key: KAN-33}
+provenance: {created_by: '@admin'}
+
+--- 3.1. search_tickets (lod=summary) ---
+mode: lexical
+executed_mode: lexical
+total: 5
+items:
+- key: KAN-33
+  issue_key: KAN-33
+  sequence_number: 33
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-30
+  issue_key: KAN-30
+  sequence_number: 30
+  summary: KAN-51 Live MCP Framing Root (Updated)
+  state: Todo
+  priority: high
+  assignees: ['@liveqaadmin']
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-27
+  issue_key: KAN-27
+  sequence_number: 27
+  summary: KAN-51 Live MCP Framing Root (Updated)
+  state: Todo
+  priority: high
+  assignees: ['@liveqaadmin']
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-24
+  issue_key: KAN-24
+  sequence_number: 24
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-21
+  issue_key: KAN-21
+  sequence_number: 21
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+  workspace: kanban
+  match_reason: Lexical match
+
+--- 3.2. search_tickets (lod=standard) ---
+mode: lexical
+executed_mode: lexical
+total: 5
+items:
+- key: KAN-33
+  issue_key: KAN-33
+  sequence_number: 33
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+  description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-30
+  issue_key: KAN-30
+  sequence_number: 30
+  summary: KAN-51 Live MCP Framing Root (Updated)
+  state: Todo
+  priority: high
+  assignees: ['@liveqaadmin']
+  description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-27
+  issue_key: KAN-27
+  sequence_number: 27
+  summary: KAN-51 Live MCP Framing Root (Updated)
+  state: Todo
+  priority: high
+  assignees: ['@liveqaadmin']
+  description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-24
+  issue_key: KAN-24
+  sequence_number: 24
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+  description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+  workspace: kanban
+  match_reason: Lexical match
+- key: KAN-21
+  issue_key: KAN-21
+  sequence_number: 21
+  summary: KAN-51 Live MCP Framing Root
+  state: Backlog
+  priority: high
+  description_markdown: Root ticket created via /mcp/agent create_ticket with nested children.
+  workspace: kanban
+  match_reason: Lexical match
+
+--- 4. update_ticket ---
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+summary: KAN-51 Live MCP Framing Root (Updated)
+state: Backlog
+priority: high
+etag: caf33154ee47f6e5e887dabddb8cd46fdef1215abcecc36ad52b574a6ccebcfa
+changed: [summary]
+
+--- 5. begin_work ---
+status: started
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+state: In Progress
+assignees: ['@admin']
+comment: KAN-33#c-01a1fab7
+
+--- 6. transition_ticket ---
+status: transitioned
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+from_state: In Progress
+to_state: Todo
+
+--- 7. complete_work ---
+status: completed
+key: KAN-33
+issue_key: KAN-33
+sequence_number: 33
+state: Done
+proof: {qa_dir: docs/qa/KAN-33/, artifacts: 1, verdict: READY}
+comment: KAN-33#c-01a1fab7
+
+--------------------------------------------------------------------------------
+LIVE_STACK_VERDICT: PASS

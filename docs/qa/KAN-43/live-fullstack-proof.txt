@@ -1,32 +1,70 @@
-=== KAN-43 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, commit 837f657d) ===
-Timestamp: 2026-11-20T18:39:33.441Z
+=== KAN-43 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 07d04cde) ===
+Timestamp: 2026-11-20T20:47:52.893Z - 2026-11-20T20:48:23.857Z
+Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
+Test Runner Script: live_qa_suite.mjs
 
---- Problem 1 & 4: /projects/KAN/settings States & Priorities Editor ---
-Loaded /projects/KAN/settings States tab in 1063ms
-Found/Created "Purple Review" id=01a1fa3f-dc79-741d-954d-e5d8078b0b59 color=#7c3aed group=started wip_soft_limit=2 wip_hard_limit=5
-Assigned 3 issues to Purple Review via PATCH /api/v1/issues/{key}: KAN-5->HTTP 200, KAN-4->HTTP 200, KAN-3->HTTP 200
-Active inline state edit row OPEN check: {"hasPreview":true,"previewCustomFg":"#7c3aed","hasColorPicker":true,"hasOrderInput":true,"orderValue":"0"}
-Triggered real 409 UI conflict -> HTTP 409 body={"type":"urn:kanban:problem:STATE_NAME_TAKEN","title":"State Name Taken","status":409,"code":"STATE_NAME_TAKEN","request_id":"ea527963082a4817b387a3d974db934d"}
-  Rendered UI 409 alert banner: "A workflow state with this name already exists in this project."
-Opened active inline priority edit row (order, emoji, label, slug, ColorPresetPicker, default checkbox)
-LIVE_STACK_VERDICT [P1_SETTINGS_EDITOR_AND_409_CONFLICT]: PASS (minor UX note: stale red alert banner remained visible after switching to Priorities tab)
+--- Problem 1 & 4: /projects/KAN/settings States & Priorities Editor + 409 Conflict ---
+1. Created custom workflow state via UI:
+   - Name: "Purple Review"
+   - Color: #7c3aed
+   - Group: started
+   - Order: 2
+   - WIP Soft Limit: 2
+   - WIP Hard Limit: 5
+   - Real API Response: id=01a1fab0-3f98-7b75-b660-95d7fe0f4003, color_hex=#7c3aed, group=started, sort_order=2, wip_soft_limit=2, wip_hard_limit=5, issue_count=3
+2. Inline State Edit Open (live-editor-state-open-light.png):
+   - Telemetry: {"hasPreview":true,"previewCustomFg":"#7c3aed","hasOrderInput":true,"orderValue":"2","hasColorPicker":true}
+3. Duplicate State 409 Conflict (live-editor-409-conflict.png):
+   - HTTP Status: 409
+   - Response Body: {"type":"urn:kanban:problem:STATE_NAME_TAKEN","title":"State Name Taken","status":409,"code":"STATE_NAME_TAKEN","request_id":"14fb0daaa36d4f32a93eb09d3606aba5"}
+   - Rendered UI Alert Banner: "A workflow state with this name already exists in this project."
+   - Dark Mode Editor Verified: live-editor-desktop-dark.png
+4. Inline Priority Edit Open (live-editor-priority-open-light.png):
+   - Rendered priority-edit-sort-*, priority-edit-emoji-*, priority-edit-label-*, priority-edit-slug-* inline inputs cleanly.
+   - Minor UX note: Stale 409 red alert banner from States tab remained visible after switching to Priorities tab.
+LIVE_STACK_VERDICT [P1_P4_SETTINGS_EDITOR_AND_409]: PASS
 
---- Problem 2 & 3: Board, Table, List, QuickCreateIssueModal ---
-Board View Desktop Light (824ms):
-  {"colCount":6,"colTitleText":"Purple Review","titleScrollWidth":109,"titleClientWidth":57,"titleTruncated":true,"wipText":"(WIP 5)","wipWhiteSpace":"nowrap","wipHeight":21,"wipLineHeight":"20.76px","customFg":"#7c3aed","borderTopColor":"rgb(209, 213, 219)","badgeCount":1,"badgeCustomFg":"#7c3aed","titleHeight":26}
-  FAIL DETAIL 1 (Board Column Title Truncation): Visual inspection of live-board-desktop-light.png, live-board-desktop-dark.png, live-board-tablet.png, and live-board-mobile.png confirms "Purple Review" is visually truncated to "Purpl..." (with 3 issues & soft WIP warning icon) and "Purple R..." (even with 0 issues, titleClientWidth=85 vs titleScrollWidth=109). The .board-column-header places the icon StateBadge, .board-column-title, count, (WIP 5), + Workflow button, and warning icon inside a single non-wrapping flex row in a 324px lane, squeezing .board-column-title down to 57px.
-  FAIL DETAIL 2 (Board Column Warn Border Override): When 3 issues exceed wip_soft_limit=2, .board-column--warn sets border-color: var(--border-strong), overriding the custom #7c3aed border-top accent (borderTopColor=rgb(209, 213, 219) in light mode).
-  PASS DETAIL: "(WIP 5)" renders on a single line (white-space: nowrap, height=21px), and card StateBadge pills render with custom --state-custom-fg: #7c3aed.
-Table View (1048ms): {"hasPurpleReview":true,"matchingElements":5} (State select shows "Purple Review" across assigned issues)
-List View (1077ms): {"hasPurpleReviewSection":true} (Visual inspection of live-list-desktop-light.png confirms purple #7c3aed section border and purple StateBadge pills on KAN-5, KAN-4, KAN-3)
-QuickCreateIssueModal state selector: {"selectedText":"Purple Review","hasPurpleReviewOption":true,"options":["Backlog","Purple Review","Todo","In Progress","Done","Cancelled"]}
-LIVE_STACK_VERDICT [P2_P3_BOARD_AND_VIEWS]: FAIL - Board column header truncates "Purple Review" to "Purpl..." across all viewports (titleScrollWidth=109 > titleClientWidth=57) and .board-column--warn overrides the custom #7c3aed top accent border.
+--- Problem 2 & 3: Board Column Header (2-Row Layout, Untruncated, #7c3aed Border with Warn), Table, List, QuickCreate ---
+Assigned 3 issues to "Purple Review" via PATCH /api/v1/issues/{key}:
+  KAN-3 -> HTTP 200
+  KAN-4 -> HTTP 200
+  KAN-5 -> HTTP 200
 
---- Runtime Error Telemetry ---
-Console JS errors: 0
-Intentional 409 console resource logs during conflict test: 1
+Board Column "Purple Review" Telemetry Across All 4 Viewports (.board-column--warn active):
+1. Desktop Light (1440x900) - live-board-desktop-light.png:
+   {"hasWarnClass":true,"borderTopWidth":"3px","borderTopStyle":"solid","borderTopColor":"rgb(124, 58, 237)","customFgVar":"#7c3aed","titleText":"Purple Review","titleScrollWidth":109,"titleClientWidth":109,"titleTruncated":false,"countText":"3","wipText":"(WIP 5)","wipWhiteSpace":"nowrap","wipHeight":21,"hasAddWorkflowBtn":true,"hasWarnIcon":true,"headerHeight":54,"badgeCount":1,"badgeCustomFg":"#7c3aed","scrollWidth":1440,"innerWidth":1440}
+2. Desktop Dark (1440x900) - live-board-desktop-dark.png:
+   {"hasWarnClass":true,"borderTopWidth":"3px","borderTopStyle":"solid","borderTopColor":"rgb(124, 58, 237)","customFgVar":"#7c3aed","titleText":"Purple Review","titleScrollWidth":109,"titleClientWidth":109,"titleTruncated":false,"countText":"3","wipText":"(WIP 5)","wipWhiteSpace":"nowrap","wipHeight":21,"hasAddWorkflowBtn":true,"hasWarnIcon":true,"headerHeight":54,"badgeCount":1,"badgeCustomFg":"#7c3aed","scrollWidth":1440,"innerWidth":1440}
+3. Tablet (768x1024) - live-board-tablet.png:
+   {"hasWarnClass":true,"borderTopWidth":"3px","borderTopStyle":"solid","borderTopColor":"rgb(124, 58, 237)","customFgVar":"#7c3aed","titleText":"Purple Review","titleScrollWidth":109,"titleClientWidth":109,"titleTruncated":false,"countText":"3","wipText":"(WIP 5)","wipWhiteSpace":"nowrap","wipHeight":21,"hasAddWorkflowBtn":true,"hasWarnIcon":true,"headerHeight":54,"badgeCount":1,"badgeCustomFg":"#7c3aed","scrollWidth":768,"innerWidth":768}
+4. Mobile (390x844) - live-board-mobile.png:
+   {"hasWarnClass":true,"borderTopWidth":"3px","borderTopStyle":"solid","borderTopColor":"rgb(124, 58, 237)","customFgVar":"#7c3aed","titleText":"Purple Review","titleScrollWidth":109,"titleClientWidth":109,"titleTruncated":false,"countText":"3","wipText":"(WIP 5)","wipWhiteSpace":"nowrap","wipHeight":21,"hasAddWorkflowBtn":true,"hasWarnIcon":true,"headerHeight":54,"badgeCount":1,"badgeCustomFg":"#7c3aed","scrollWidth":390,"innerWidth":390}
+
+Visual Inspection Confirmation:
+- 2-row .board-column-header renders "Purple Review" 100% untruncated (titleScrollWidth=109 <= titleClientWidth=109) alongside count "3", "(WIP 5)" single-line (white-space: nowrap, height=21px), "+ Workflow", and WIP warning icon across Desktop Light/Dark, Tablet, and Mobile.
+- Custom #7c3aed 3px solid border-top-color (rgb(124, 58, 237)) remains intact even with .board-column--warn active.
+- TableView (live-table-desktop-light.png): {"matchingElements":20,"hasPurpleReview":true} - shows "Purple Review" across KAN-3, KAN-4, KAN-5.
+- IssueNavigator ?layout=list (live-list-desktop-light.png): visual inspection confirms purple #7c3aed state pills on KAN-5, KAN-4, and KAN-3.
+- QuickCreateIssueModal (live-quick-create-modal.png): {"options":["Backlog","Todo","In Progress","Purple Review","Done","Cancelled"]} - "Purple Review" selectable.
+LIVE_STACK_VERDICT [P2_P3_BOARD_AND_VIEWS]: PASS
+
+--- Runtime Error Telemetry (KAN-43 scope) ---
+Console JS errors: 0 (1 intentional HTTP 409 resource log during duplicate state conflict test)
 Page errors: 0
 5xx responses: 0
 CSP violations: 0
 
-OVERALL LIVE_STACK_VERDICT (KAN-43): FAIL
+Screenshots Verified (docs/qa/KAN-43/screenshots/):
+- live-board-desktop-light.png
+- live-board-desktop-dark.png
+- live-board-tablet.png
+- live-board-mobile.png
+- live-editor-state-open-light.png
+- live-editor-409-conflict.png
+- live-editor-desktop-dark.png
+- live-editor-priority-open-light.png
+- live-table-desktop-light.png
+- live-list-desktop-light.png
+- live-quick-create-modal.png
+
+OVERALL LIVE_STACK_VERDICT (KAN-43): PASS
