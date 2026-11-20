@@ -443,4 +443,20 @@ describe('AppShell', () => {
 
     spy.mockRestore();
   });
+
+  it('does not mount duplicate global IssueSurface drawer when layout is list on project issues route', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list&peek=KAN-1']}>
+            <AppShell projectKey="KAN" projectName="kanban" />
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const surfaceHost = document.getElementById('kb-surface-host');
+    expect(surfaceHost).toBeDefined();
+    expect(surfaceHost?.querySelector('.surface--drawer')).toBeNull();
+  });
 });

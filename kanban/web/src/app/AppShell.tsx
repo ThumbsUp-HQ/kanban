@@ -124,6 +124,10 @@ export function AppShell({
       ? currentSection
       : computeCurrentSection(location.pathname, currentSection);
 
+  const isProjectIssuesRoute = /^(?:\/projects|\/w\/[^/]+\/p)\/[^/]+\/issues(?:\/)?$/.test(location.pathname);
+  const searchParams = new URLSearchParams(location.search);
+  const isListSplitHandled = isProjectIssuesRoute && searchParams.get('layout') === 'list';
+
   const isPublicRoute =
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/setup') ||
@@ -327,7 +331,7 @@ export function AppShell({
         <div id="kb-surface-host">
           <div id="kb-issue-surface-host">
             <IssueSurfaceSlotsContext.Provider value={issueSurfaceSlots}>
-              <IssueSurface />
+              {!isListSplitHandled && <IssueSurface />}
             </IssueSurfaceSlotsContext.Provider>
           </div>
         </div>

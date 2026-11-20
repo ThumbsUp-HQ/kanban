@@ -1,4 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, useMemo, type JSX } from 'react';
+import { createPortal } from 'react-dom';
 import type { IssueItem } from './viewsApi';
 import './filterBulk.css';
 
@@ -165,7 +166,7 @@ export function QuickFieldPopover({
     return null;
   }
 
-  return (
+  const content = (
     <>
       <div
         className="quick-field-backdrop"
@@ -202,4 +203,11 @@ export function QuickFieldPopover({
       </div>
     </>
   );
+
+  /* v8 ignore next 3 */
+  if (typeof document === 'undefined') {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 }

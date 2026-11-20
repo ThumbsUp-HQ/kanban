@@ -242,4 +242,40 @@ describe('BoardColumn Component', () => {
     expect(screen.getByText('KAN-1')).toBeDefined();
     unmount();
   });
+
+  it('renders untruncated Purple Review header with WIP label, + Workflow button, and WIP warn simultaneously', () => {
+    const purpleReviewState: BoardWorkflowState = {
+      ...baseState,
+      id: 'state-purple-review',
+      name: 'Purple Review',
+      group: 'started',
+      color_hex: '#7c3aed',
+      wip_soft_limit: 2,
+      wip_hard_limit: 5,
+    };
+    const issues = generateIssues(3);
+
+    const { container } = render(
+      <BoardColumn
+        state={purpleReviewState}
+        issues={issues}
+        canManageWorkflows={true}
+      />,
+    );
+
+    const colSection = screen.getByTestId(`board-column-${purpleReviewState.id}`);
+    expect(colSection.classList.contains('board-column--warn')).toBe(true);
+    expect(colSection.style.getPropertyValue('--state-custom-fg')).toBe('#7c3aed');
+
+    const titleEl = container.querySelector('.board-column-title');
+    expect(titleEl?.textContent).toBe('Purple Review');
+
+    expect(screen.getByText('(WIP 5)')).toBeDefined();
+    expect(screen.getByTestId('section-add-workflow-btn-Purple Review')).toBeDefined();
+    expect(screen.getByTestId('wip-warning-state-purple-review')).toBeDefined();
+
+    // Verify 2-row layout classes
+    expect(container.querySelector('.board-column-header-left')).toBeDefined();
+    expect(container.querySelector('.board-column-header-right')).toBeDefined();
+  });
 });
