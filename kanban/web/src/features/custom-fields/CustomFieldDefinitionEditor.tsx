@@ -2,9 +2,13 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import type { JSX } from 'react';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NotFoundView } from '../../app/routes';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { FlavorDecisionMatrix } from './FlavorDecisionMatrix';
+import { PresetGallery } from './PresetGallery';
+import type { CustomFieldPreset } from './presets';
 import {
   createCustomField,
   deleteCustomField,
@@ -232,6 +236,20 @@ export function CustomFieldDefinitionEditor({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isTamperConfirmOpen, setIsTamperConfirmOpen] = useState(false);
+  const [appliedPresetName, setAppliedPresetName] = useState<string | null>(null);
+
+  const snapshotRef = useRef<{
+    name: string;
+    slug: string;
+    flavor: FieldFlavor;
+    tier: CustomFieldTier;
+    outputFormat: OutputFormatType;
+    metadataText: string;
+    scriptSource: string;
+    targetScope: CustomFieldTargetScope;
+    credentialMode: CustomFieldCredentialMode;
+    egressText: string;
+  } | null>(null);
 
   // Test execute states
   const [testIssueKey, setTestIssueKey] = useState('');
@@ -252,6 +270,95 @@ export function CustomFieldDefinitionEditor({
 
   const manifestSha = selectedField?.manifest_sha256;
 
+  const isDirty = useMemo(() => {
+    if (selectedField) {
+      const origMeta = JSON.stringify(selectedField.output_format_metadata, null, 2);
+      const origEgress = selectedField.egress_allowlist.join('\n');
+      return (
+        name !== selectedField.name ||
+        tier !== selectedField.tier ||
+        outputFormat !== selectedField.output_format ||
+        metadataText !== origMeta ||
+        scriptSource !== (selectedField.script_source ?? '') ||
+        targetScope !== selectedField.target_scope ||
+        credentialMode !== selectedField.credential_mode ||
+        egressText !== origEgress ||
+        isEnabled !== selectedField.is_enabled
+      );
+    }
+    const defaultMeta = JSON.stringify(DEFAULT_METADATA_BY_FORMAT.text, null, 2);
+    return (
+      name !== '' ||
+      slug !== '' ||
+      scriptSource !== STARTER_TEMPLATES.scalar.text ||
+      egressText !== '' ||
+      metadataText !== defaultMeta ||
+      targetScope !== 'PROJECT' ||
+      credentialMode !== 'INVOKING_USER'
+    );
+  }, [
+    selectedField,
+    name,
+    slug,
+    tier,
+    outputFormat,
+    metadataText,
+    scriptSource,
+    targetScope,
+    credentialMode,
+    egressText,
+    isEnabled,
+  ]);
+
+  const handleApplyPreset = (preset: CustomFieldPreset) => {
+    snapshotRef.current = {
+      name,
+      slug,
+      flavor,
+      tier,
+      outputFormat,
+      metadataText,
+      scriptSource,
+      targetScope,
+      credentialMode,
+      egressText,
+    };
+    setAppliedPresetName(preset.name);
+    setName(preset.name);
+    if (!selectedField) {
+      setSlug(preset.slug);
+    }
+    setFlavor(preset.flavor);
+    setTier(preset.tier);
+    setOutputFormat(preset.outputFormat);
+    setMetadataText(preset.metadataText);
+    setScriptSource(preset.scriptSource);
+    setTargetScope(preset.targetScope);
+    setCredentialMode(preset.credentialMode);
+    setEgressText(preset.egressAllowlist.join('\n'));
+    setJsonError(null);
+  };
+
+  const handleUndoPreset = () => {
+    if (snapshotRef.current) {
+      const snap = snapshotRef.current;
+      setName(snap.name);
+      if (!selectedField) {
+        setSlug(snap.slug);
+      }
+      setFlavor(snap.flavor);
+      setTier(snap.tier);
+      setOutputFormat(snap.outputFormat);
+      setMetadataText(snap.metadataText);
+      setScriptSource(snap.scriptSource);
+      setTargetScope(snap.targetScope);
+      setCredentialMode(snap.credentialMode);
+      setEgressText(snap.egressText);
+      snapshotRef.current = null;
+    }
+    setAppliedPresetName(null);
+  };
+
   // Load field into editor form
   const handleSelectField = (field: CustomFieldDefinition) => {
     setSelectedFieldId(field.id);
@@ -270,6 +377,8 @@ export function CustomFieldDefinitionEditor({
     setSubmitError(null);
     setTestResult(null);
     setTestError(null);
+    setAppliedPresetName(null);
+    snapshotRef.current = null;
   };
 
   const handleResetNew = () => {
@@ -289,6 +398,8 @@ export function CustomFieldDefinitionEditor({
     setSubmitError(null);
     setTestResult(null);
     setTestError(null);
+    setAppliedPresetName(null);
+    snapshotRef.current = null;
   };
 
   // Format change helper
@@ -559,6 +670,34 @@ export function CustomFieldDefinitionEditor({
           </div>
         )}
 
+        {/* Starter Presets & 4-Flavor Decision Matrix (when creating new definition) */}
+        {!selectedField && (
+          <div className="custom-fields-starter-toolkit" data-testid="custom-fields-starter-toolkit">
+            <FlavorDecisionMatrix
+              selectedFlavor={flavor}
+              onSelectFlavor={(f) => {
+                setFlavor(f);
+                if (f === 'nsjail') {
+                  setTier('nsjail');
+                } else {
+                  setTier('wasm');
+                }
+                setScriptSource(STARTER_TEMPLATES[f][outputFormat]);
+              }}
+            />
+
+            <PresetGallery
+              onApplyPreset={handleApplyPreset}
+              isDirty={isDirty}
+              onUndo={handleUndoPreset}
+              appliedPresetName={appliedPresetName}
+              onDismissUndo={() => {
+                setAppliedPresetName(null);
+              }}
+            />
+          </div>
+        )}
+
         {/* Tab switcher: Basic vs Advanced */}
         <div className="custom-fields-tabs-bar" role="tablist">
           <button
@@ -604,6 +743,13 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="field-name" className="custom-field-form-label">
                   Field Name
+                  <FieldHelpHint
+                    title="Display Name"
+                    summary="The human-readable label displayed on issue detail rails, tables, and boards."
+                    example="CVSS 3.1 Score"
+                    docHref="/docs/custom-fields#display-name"
+                    testId="hint-field-name"
+                  />
                 </label>
                 <input
                   id="field-name"
@@ -624,6 +770,18 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="field-slug" className="custom-field-form-label">
                   Identifier Slug (a-z0-9-)
+                  <FieldHelpHint
+                    title="Identifier Slug"
+                    summary="Unique lowercase alphanumeric identifier used in API requests, formulas, and queries."
+                    validValues={{
+                      pattern: 'Lowercase letters, digits, and hyphens (a-z0-9-)',
+                      length: '2 to 63 characters',
+                      immutability: 'Immutable once created to protect API and script bindings',
+                    }}
+                    caution="Cannot be modified after creation."
+                    docHref="/docs/custom-fields#slug"
+                    testId="hint-field-slug"
+                  />
                 </label>
                 <input
                   id="field-slug"
@@ -646,6 +804,18 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="field-flavor" className="custom-field-form-label">
                   Field Flavor
+                  <FieldHelpHint
+                    title="Field Flavor"
+                    summary="The execution paradigm determining compute speed, sandbox isolation, and capabilities."
+                    validValues={[
+                      { label: 'Scalar', description: 'Static literal or JSON constant (<1ms)' },
+                      { label: 'Formula', description: 'Single-issue AST math on issue.* (<5ms)' },
+                      { label: 'WebAssembly', description: 'Compiled bytecode module in Tier A sandbox (<25ms)' },
+                      { label: 'nsjail Script', description: 'Isolated Linux namespace script with optional egress (<=3,000ms)' },
+                    ]}
+                    docHref="/docs/custom-fields#flavors"
+                    testId="hint-field-flavor"
+                  />
                 </label>
                 <select
                   id="field-flavor"
@@ -674,6 +844,21 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="output-format" className="custom-field-form-label">
                   Output Format
+                  <FieldHelpHint
+                    title="Output Format"
+                    summary="Specifies how evaluated output values are sanitized, validated, and rendered in the UI."
+                    validValues={[
+                      { label: 'text', description: 'Plain text string (max 280 characters)' },
+                      { label: 'number', description: 'Formatted numeric value with fraction digits and unit suffix' },
+                      { label: 'badge', description: 'Design token status badge (info, success, warning, danger)' },
+                      { label: 'markdown_snippet', description: 'Sanitized markdown markup (max 2000 characters)' },
+                      { label: 'url', description: 'Validated HTTPS hyperlink anchor' },
+                      { label: 'json_table', description: 'Structured tabular data grid (max 50 rows)' },
+                      { label: 'severity_pill', description: 'Security threat level pill (low, medium, high, critical)' },
+                    ]}
+                    docHref="/docs/custom-fields#output-formats"
+                    testId="hint-output-format"
+                  />
                 </label>
                 <select
                   id="output-format"
@@ -699,6 +884,22 @@ export function CustomFieldDefinitionEditor({
             <div className="custom-field-form-group">
               <label htmlFor="format-metadata" className="custom-field-form-label">
                 Format Configuration Metadata (JSON)
+                <FieldHelpHint
+                  title="Format Metadata JSON"
+                  summary="JSON configuration dictionary tailoring display options for the selected output format."
+                  validValues={[
+                    { label: 'text', description: 'max_length, prefix, monospace' },
+                    { label: 'number', description: 'maximum_fraction_digits, unit_suffix' },
+                    { label: 'badge', description: 'color_token, allowed_labels' },
+                    { label: 'markdown_snippet', description: 'max_chars' },
+                    { label: 'url', description: 'allowed_schemes (e.g. ["https"])' },
+                    { label: 'json_table', description: 'columns ([{key, label}]), max_rows' },
+                    { label: 'severity_pill', description: 'Optional severity score thresholds' },
+                  ]}
+                  example={JSON.stringify({ maximum_fraction_digits: 2, unit_suffix: ' pts' })}
+                  docHref="/docs/custom-fields#format-metadata"
+                  testId="hint-format-metadata"
+                />
               </label>
               <textarea
                 id="format-metadata"
@@ -717,6 +918,14 @@ export function CustomFieldDefinitionEditor({
             <div className="custom-field-form-group">
               <label htmlFor="script-source" className="custom-field-form-label">
                 Script Source Code (Sandboxed, never executed client-side)
+                <FieldHelpHint
+                  title="Script / Formula Source"
+                  summary="Source code or AST formula evaluated in the server sandbox to compute the field value."
+                  example='formula: issue.state === "DONE" ? "Completed" : "In Progress"'
+                  caution="Scripts run inside hardened server sandboxes and are never executed inside the browser client."
+                  docHref="/docs/custom-fields#script-source"
+                  testId="hint-script-source"
+                />
               </label>
               <textarea
                 id="script-source"
@@ -737,7 +946,7 @@ export function CustomFieldDefinitionEditor({
                 <label htmlFor="test-issue-key" className="custom-field-form-label">
                   Test With Issue Key
                 </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div className="custom-field-test-input-row">
                   <input
                     id="test-issue-key"
                     type="text"
@@ -765,9 +974,8 @@ export function CustomFieldDefinitionEditor({
 
               {testError && (
                 <div
-                  className="custom-field-input-error"
+                  className="custom-field-input-error custom-field-test-error-mt"
                   data-testid="test-execute-error"
-                  style={{ marginTop: '8px' }}
                 >
                   {testError}
                 </div>
@@ -775,10 +983,7 @@ export function CustomFieldDefinitionEditor({
 
               {testResult && (
                 <div className="custom-field-test-result" data-testid="test-execute-result-panel">
-                  <div
-                    className="custom-field-test-meta"
-                    style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}
-                  >
+                  <div className="custom-field-test-meta custom-field-test-meta-row">
                     <span>
                       <strong>Status:</strong>{' '}
                       <span
@@ -792,12 +997,11 @@ export function CustomFieldDefinitionEditor({
                     </span>
                   </div>
 
-                  <div style={{ marginBottom: '8px' }}>
+                  <div className="custom-field-test-preview-wrap">
                     <strong>Rendered Output Pill:</strong>
                     <div
-                      className="custom-field-pill-preview"
+                      className="custom-field-pill-preview custom-field-pill-preview-mt"
                       data-testid="test-output-pill"
-                      style={{ marginTop: '4px' }}
                     >
                       <CustomFieldValue
                         format={outputFormat}
@@ -855,6 +1059,24 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="execution-tier" className="custom-field-form-label">
                   Execution Sandbox (S13.3)
+                  <FieldHelpHint
+                    title="Sandbox Tier"
+                    summary="The isolation boundary executing custom field code."
+                    validValues={[
+                      {
+                        label: 'wasm',
+                        description:
+                          'In-memory WebAssembly sandbox with CPU/memory limits and zero network',
+                      },
+                      {
+                        label: 'nsjail',
+                        description:
+                          'Isolated Linux namespace container with optional allowlisted HTTP egress',
+                      },
+                    ]}
+                    docHref="/docs/custom-fields#sandbox-tier"
+                    testId="hint-execution-tier"
+                  />
                 </label>
                 <select
                   id="execution-tier"
@@ -879,6 +1101,29 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="target-scope" className="custom-field-form-label">
                   Token Scope (S13.2)
+                  <FieldHelpHint
+                    title="Target Scope"
+                    summary="The permission boundary for API tokens granted to script executions."
+                    validValues={[
+                      {
+                        label: 'PROJECT',
+                        description: 'Scoped strictly to current project issues (Default)',
+                      },
+                      {
+                        label: 'WORKSPACE',
+                        description:
+                          'Scoped across all projects in the workspace (Requires Workspace Admin approval)',
+                      },
+                      {
+                        label: 'SERVER',
+                        description:
+                          'Scoped server-wide (Requires Server Admin dual-control approval)',
+                      },
+                    ]}
+                    caution="Elevating scope beyond PROJECT requires formal administrative approval."
+                    docHref="/docs/custom-fields#target-scope"
+                    testId="hint-target-scope"
+                  />
                 </label>
                 <select
                   id="target-scope"
@@ -917,6 +1162,30 @@ export function CustomFieldDefinitionEditor({
               <div className="custom-field-form-group">
                 <label htmlFor="credential-mode" className="custom-field-form-label">
                   Credential Mode (S13.2)
+                  <FieldHelpHint
+                    title="Credential Mode"
+                    summary="The identity and authority assumed by custom field executions."
+                    validValues={[
+                      {
+                        label: 'INVOKING_USER',
+                        description:
+                          'Executes under the viewing user credentials and permissions (Default)',
+                      },
+                      {
+                        label: 'PROJECT_ADMIN_SP',
+                        description:
+                          'Runs with Project Admin Service Principal credentials for all viewers',
+                      },
+                      {
+                        label: 'SERVER_ADMIN_SP',
+                        description:
+                          'Runs with Server Admin Service Principal credentials (Dual-control required)',
+                      },
+                    ]}
+                    caution="Service Principal execution grants elevated privileges regardless of who is viewing the issue."
+                    docHref="/docs/custom-fields#credential-mode"
+                    testId="hint-credential-mode"
+                  />
                 </label>
                 <select
                   id="credential-mode"
@@ -931,6 +1200,36 @@ export function CustomFieldDefinitionEditor({
                   <option value="PROJECT_ADMIN_SP">Project Admin Service Principal (SP)</option>
                   <option value="SERVER_ADMIN_SP">Server Admin Service Principal (SP)</option>
                 </select>
+              </div>
+
+              {/* Egress Allowlist */}
+              <div className="custom-field-form-group">
+                <label htmlFor="egress-allowlist" className="custom-field-form-label">
+                  Egress Allowlist
+                  <FieldHelpHint
+                    title="Egress Allowlist"
+                    summary="Line-delimited list of approved hostnames or IP addresses for nsjail scripts."
+                    validValues={{
+                      format: 'Line-delimited FQDNs or IPs (e.g. api.github.com, 127.0.0.1)',
+                      scope: 'Applied strictly to nsjail isolated process network namespace',
+                    }}
+                    example={'api.github.com\n127.0.0.1'}
+                    caution="Only active in nsjail sandbox; WebAssembly formulas have zero network egress."
+                    docHref="/docs/custom-fields#egress-allowlist"
+                    testId="hint-egress-allowlist"
+                  />
+                </label>
+                <textarea
+                  id="egress-allowlist"
+                  className="custom-field-textarea mono"
+                  rows={4}
+                  value={egressText}
+                  onChange={(e) => {
+                    setEgressText(e.target.value);
+                  }}
+                  data-testid="egress-allowlist-textarea"
+                  placeholder="e.g. api.github.com&#10;127.0.0.1"
+                />
               </div>
             </div>
           </div>
