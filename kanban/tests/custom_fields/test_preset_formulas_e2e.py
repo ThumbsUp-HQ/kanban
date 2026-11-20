@@ -238,9 +238,7 @@ def test_preset_formulas_across_all_issue_states() -> None:  # noqa: C901, PLR09
 
         for sname, ctx in issue_states.items():
             raw_val = _eval_safe_formula(p["script_source"], ctx)
-            assert raw_val is not None, (
-                f"Formula '{pid}' returned None on issue state '{sname}'"
-            )
+            assert raw_val is not None, f"Formula '{pid}' returned None on issue state '{sname}'"
 
             # Validate against schema
             validated = validate_field_output_value(fmt, parsed_meta, raw_val)
@@ -385,9 +383,7 @@ async def test_preset_formulas_end_to_end_in_executor(
 
     await db_session.commit()
 
-    proj = (
-        await db_session.execute(select(Project).where(Project.id == proj_id))
-    ).scalar_one()
+    proj = (await db_session.execute(select(Project).where(Project.id == proj_id))).scalar_one()
 
     caller = PrincipalContext(
         principal_id=admin_id,
@@ -430,9 +426,7 @@ async def test_preset_formulas_end_to_end_in_executor(
         await db_session.commit()
 
         # Execute for issue
-        res = await executor.execute_for_issue(
-            db_session, caller, "TFP-1", fid, force_refresh=True
-        )
+        res = await executor.execute_for_issue(db_session, caller, "TFP-1", fid, force_refresh=True)
         assert res["status"] == "computed"
         assert res["value"] is not None
 
@@ -478,14 +472,8 @@ def test_formula_evaluator_ast_operators_and_edge_cases() -> None:
         == "({'level': 'crit'}) if (a) else ({'level': 'low'})"
     )
     assert _convert_js_ternary("a ? [1, 2] : [3, 4]") == "([1, 2]) if (a) else ([3, 4])"
-    assert (
-        _convert_js_ternary("a ? 'foo:bar' : 'baz:qux'")
-        == "('foo:bar') if (a) else ('baz:qux')"
-    )
-    assert (
-        _convert_js_ternary("a ? (b ? 1 : 2) : 3")
-        == "((1) if (b) else (2)) if (a) else (3)"
-    )
+    assert _convert_js_ternary("a ? 'foo:bar' : 'baz:qux'") == "('foo:bar') if (a) else ('baz:qux')"
+    assert _convert_js_ternary("a ? (b ? 1 : 2) : 3") == "((1) if (b) else (2)) if (a) else (3)"
     assert (
         _convert_js_ternary('a ? "quote\\"esc" : "plain"')
         == '("quote\\"esc") if (a) else ("plain")'

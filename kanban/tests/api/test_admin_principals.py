@@ -1498,9 +1498,7 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
         name=str(uuid.uuid4()),
         display_name="Cloud Security",
     )
-    detail_uuid_name = await get_principal_detail(
-        session, admin.workspace_id, grp_uuid_name["id"]
-    )
+    detail_uuid_name = await get_principal_detail(session, admin.workspace_id, grp_uuid_name["id"])
     assert detail_uuid_name["handle"] == "@cloud-security"
 
     p_group_row = (
@@ -1508,9 +1506,7 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
             select(DBPrincipal).where(DBPrincipal.id == uuid.UUID(grp_uuid_name["id"]))
         )
     ).scalar_one()
-    formatted_uuid_name = await _format_principal_entry(
-        session, admin.workspace_id, p_group_row
-    )
+    formatted_uuid_name = await _format_principal_entry(session, admin.workspace_id, p_group_row)
     assert formatted_uuid_name["handle"] == "@cloud-security"
 
     p_eph = DBPrincipal(

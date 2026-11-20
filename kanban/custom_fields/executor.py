@@ -419,9 +419,9 @@ async def build_issue_context(  # noqa: C901, PLR0912, PLR0915
     completed_sub_issue_count: int = comp_val if isinstance(comp_val, int) else 0
 
     # Resolve from DB if session is active and not a test mock
-    is_mock = (
-        type(session).__name__ != "AsyncSession"
-        or type(issue).__name__ not in ("Issue", "DbIssue")
+    is_mock = type(session).__name__ != "AsyncSession" or type(issue).__name__ not in (
+        "Issue",
+        "DbIssue",
     )
     if session is not None and not is_mock:
         try:

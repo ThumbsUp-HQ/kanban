@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, type ComponentType, t
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
-import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
+import type { BoardIssue, BoardWorkflowState, StateGroup } from '../board/boardApi.ts';
 import { ListView } from './ListView';
 import { TableView } from '../table/TableView';
 import { CalendarView } from '../calendar/CalendarView';
@@ -750,13 +750,13 @@ export function IssuesWorkspaceRoute({
 
       const stateId = resolvedState?.id ?? explicitStateId;
       const stateName = resolvedState?.name ?? '';
-      const stateGroup = resolvedState?.group ?? 'unstarted';
+      const stateGroup = resolvedState?.group;
 
       const exactMatch = boardStates.find((s) => s.id === stateId);
       const nameMatch = stateName
         ? boardStates.find((s) => normalizeStateKey(s.name) === normalizeStateKey(stateName))
         : undefined;
-      const groupMatch = boardStates.find((s) => s.group === stateGroup);
+      const groupMatch = stateGroup ? boardStates.find((s) => s.group === stateGroup) : undefined;
       const resolvedStateId =
         exactMatch?.id ?? nameMatch?.id ?? groupMatch?.id ?? fallbackStateId;
 
@@ -794,7 +794,7 @@ export function IssuesWorkspaceRoute({
           ? {
               id: resolvedState.id ?? resolvedStateId,
               name: resolvedState.name ?? stateName,
-              group: resolvedState.group ?? 'unstarted',
+              group: (resolvedState.group ?? 'unstarted') as StateGroup,
               color_hex: (resolvedState as { color_hex?: string | null | undefined }).color_hex ?? null,
             }
           : undefined,

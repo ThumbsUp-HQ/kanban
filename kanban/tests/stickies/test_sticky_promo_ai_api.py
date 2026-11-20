@@ -543,6 +543,7 @@ async def test_case_7_air_gapped_provider_unavailable_and_preview_promotion_alia
 
 def test_is_provider_unavailable_error_branches() -> None:
     """Verify _is_provider_unavailable_error correctly classifies error types and codes."""
+
     class CustomCodeError(Exception):
         def __init__(self, code: str) -> None:
             super().__init__(f"Error code: {code}")
@@ -582,4 +583,3 @@ def test_deterministic_fallback_structurer_unit() -> None:
     # 2. Oversized sticky error
     with pytest.raises(too_large_err):
         fallback_fn("A" * 150_000)
-

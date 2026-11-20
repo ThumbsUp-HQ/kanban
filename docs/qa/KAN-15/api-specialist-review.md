@@ -65,7 +65,13 @@ All API contracts, security invariants, AST parser boundaries, database context 
 ### 2.3 Formula Presets Verification (`presets.ts`)
 - Days Until Due SLA:
   ```python
-  {"level": "critical", "score": 9.5, "label": "SLA Breached"} if (issue.days_until_due < 0 or issue.priority == "URGENT") else ({"level": "high", "score": 7.0, "label": "Due Soon"} if (issue.days_until_due <= 2 or issue.priority == "HIGH") else {"level": "low", "score": 2.0, "label": "Within SLA"})
+  {"level": "critical", "score": 9.5, "label": "SLA Breached"} if (
+      issue.days_until_due < 0 or issue.priority == "URGENT"
+  ) else (
+      {"level": "high", "score": 7.0, "label": "Due Soon"}
+      if (issue.days_until_due <= 2 or issue.priority == "HIGH")
+      else {"level": "low", "score": 2.0, "label": "Within SLA"}
+  )
   ```
 - Blocker Count Badge:
   ```python
@@ -73,7 +79,9 @@ All API contracts, security invariants, AST parser boundaries, database context 
   ```
 - Sub-Issue Completion %:
   ```python
-  ((issue.completed_sub_issue_count * 100.0) / issue.sub_issue_count) if (issue.sub_issue_count > 0) else (100.0 if issue.state in ("DONE", "Done") else 0.0)
+  ((issue.completed_sub_issue_count * 100.0) / issue.sub_issue_count) if (
+      issue.sub_issue_count > 0
+  ) else (100.0 if issue.state in ("DONE", "Done") else 0.0)
   ```
 
 ### 2.4 Test Suite & Coverage Verification

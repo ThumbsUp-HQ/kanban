@@ -184,9 +184,7 @@ async def get_principal_detail(
         elif principal.display_name and not _RFC4122_UUID_REGEX.match(
             principal.display_name.strip().lstrip("@")
         ):
-            slug = re.sub(
-                r"[^a-z0-9._-]+", "-", principal.display_name.strip().lower()
-            ).strip("-")
+            slug = re.sub(r"[^a-z0-9._-]+", "-", principal.display_name.strip().lower()).strip("-")
             handle = f"@{slug or 'group'}"
         else:
             handle = "@group"

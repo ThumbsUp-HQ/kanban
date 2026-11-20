@@ -649,10 +649,12 @@ async def test_create_ticket_utf16_lone_surrogates() -> None:
 
     # 2. Lone surrogate in description
     with pytest.raises(KbMcpError) as exc_desc:
-        _validate_node_scalars({
-            "summary": "Valid summary",
-            "description_markdown": "Invalid \udfff description",
-        })
+        _validate_node_scalars(
+            {
+                "summary": "Valid summary",
+                "description_markdown": "Invalid \udfff description",
+            }
+        )
     assert exc_desc.value.code == McpErrorCode.VALIDATION_FAILED
     assert exc_desc.value.message == "INVALID_UTF8_SURROGATE"
 

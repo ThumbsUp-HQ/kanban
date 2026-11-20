@@ -1,7 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 """Tests for MCP Streamable HTTP JSON-RPC 2.0 protocol and session management."""
 
-# ruff: noqa: SLF001, PLR0915, PLC0415, E501, S106, FBT003
+# ruff: noqa: SLF001, PLR0915, PLC0415, S106, FBT003
 from __future__ import annotations
 
 import json
@@ -690,9 +690,7 @@ async def test_protocol_advanced_dispatch_branches(mcp_client: httpx.AsyncClient
 async def test_protocol_schema_validation_special_branches() -> None:
     """Verify state and custom_fields hints, nullable types, and pattern checks."""
     registry = ToolRegistry(Surface.AGENT)
-    handler = McpProtocolHandler(
-        Surface.AGENT, registry, InMemorySessionStore(), McpSettings()
-    )
+    handler = McpProtocolHandler(Surface.AGENT, registry, InMemorySessionStore(), McpSettings())
 
     spec_update = ToolSpec(
         name="update_ticket",
@@ -755,9 +753,7 @@ async def test_protocol_initialize_and_admin_scope_branches() -> None:
         handler=lambda _args: "done",
     )
     registry.register(admin_tool)
-    handler = McpProtocolHandler(
-        Surface.ADMIN, registry, InMemorySessionStore(), McpSettings()
-    )
+    handler = McpProtocolHandler(Surface.ADMIN, registry, InMemorySessionStore(), McpSettings())
 
     # 1. _handle_initialize with request=None
     res_none = await handler._handle_initialize(1, request=None)
@@ -823,6 +819,7 @@ async def test_protocol_initialize_and_admin_scope_branches() -> None:
     from dataclasses import replace
 
     from mcp.auth import McpAuthContext
+
     scope_auth = {
         "type": "http",
         "method": "POST",
@@ -845,15 +842,11 @@ async def test_protocol_initialize_and_admin_scope_branches() -> None:
         (b"x-kb-aal-level", b"1"),
         (b"mcp-session-id", session.session_id.encode()),
     ]
-    await handler._process_valid_payload(
-        {"jsonrpc": "2.0", "id": 7, "method": "ping"}, req_auth
-    )
+    await handler._process_valid_payload({"jsonrpc": "2.0", "id": 7, "method": "ping"}, req_auth)
 
     # 9. Ephemeral introspect branches
     docs_registry = ToolRegistry(Surface.DOCS)
-    docs_registry.register(
-        ToolSpec("search", "Search tool", {}, Surface.DOCS, lambda _args: {})
-    )
+    docs_registry.register(ToolSpec("search", "Search tool", {}, Surface.DOCS, lambda _args: {}))
     mock_client = MagicMock()
     mock_client.request = AsyncMock(side_effect=RuntimeError("internal err"))
     handler_eph = McpProtocolHandler(
@@ -924,7 +917,7 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     assert _format_flag_val(42) == "42"
     assert _format_flag_val(3.14) == "3.14"
     assert _format_flag_val([1, "x"]) == "'[1, \"x\"]'"
-    assert _format_flag_val({"key": "val"}) == "'{\"key\": \"val\"}'"
+    assert _format_flag_val({"key": "val"}) == '\'{"key": "val"}\''
     dummy_obj = object()
     assert _format_flag_val(dummy_obj) == f'"{dummy_obj}"'
 
@@ -939,10 +932,18 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     # 2. Session token & scope fingerprint mismatch
     registry = ToolRegistry(Surface.AGENT)
     registry.register(
-        ToolSpec("ping", "Ping tool", {"type": "object"}, Surface.AGENT, lambda _args: {"pong": True})
+        ToolSpec(
+            "ping", "Ping tool", {"type": "object"}, Surface.AGENT, lambda _args: {"pong": True}
+        )
     )
     registry.register(
-        ToolSpec("read_ticket", "Read ticket", {"type": "object"}, Surface.AGENT, lambda _args: {"ticket": "1"})
+        ToolSpec(
+            "read_ticket",
+            "Read ticket",
+            {"type": "object"},
+            Surface.AGENT,
+            lambda _args: {"ticket": "1"},
+        )
     )
     store = InMemorySessionStore()
     handler = McpProtocolHandler(Surface.AGENT, registry, store, McpSettings())
@@ -965,7 +966,9 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     }
     req_token_mismatch = Request(req_scope)
     req_token_mismatch.state.mcp_token_sha256 = b"token_b"
-    req_token_mismatch.state.connection_scope = ConnectionScope(mode=ScopeMode.WORKSPACE, workspace_slug="ws")
+    req_token_mismatch.state.connection_scope = ConnectionScope(
+        mode=ScopeMode.WORKSPACE, workspace_slug="ws"
+    )
     res_mismatch = await handler._process_valid_payload(
         {"jsonrpc": "2.0", "id": 1, "method": "ping"}, req_token_mismatch
     )
@@ -975,7 +978,9 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     # Request with matching token but mismatched scope fingerprint
     req_scope_mismatch = Request(req_scope)
     req_scope_mismatch.state.mcp_token_sha256 = b"token_a"
-    req_scope_mismatch.state.connection_scope = ConnectionScope(mode=ScopeMode.WORKSPACE, workspace_slug="other_ws")
+    req_scope_mismatch.state.connection_scope = ConnectionScope(
+        mode=ScopeMode.WORKSPACE, workspace_slug="other_ws"
+    )
     res_scope_mismatch = await handler._process_valid_payload(
         {"jsonrpc": "2.0", "id": 2, "method": "ping"}, req_scope_mismatch
     )
@@ -1056,7 +1061,9 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     # 6. Caller lacks required scopes branch
     reg_scoped = ToolRegistry(Surface.AGENT)
     reg_scoped.register(
-        ToolSpec("create_ticket", "Create ticket", {"type": "object"}, Surface.AGENT, lambda _args: {})
+        ToolSpec(
+            "create_ticket", "Create ticket", {"type": "object"}, Surface.AGENT, lambda _args: {}
+        )
     )
     handler_scoped = McpProtocolHandler(Surface.AGENT, reg_scoped, store, McpSettings())
     res_no_scope = await handler_scoped._dispatch_method(
@@ -1107,7 +1114,9 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     )
     # Unknown parameter without close match
     with pytest.raises(KbMcpError) as exc_unknown:
-        handler._validate_tool_arguments_schema(spec_schema, {"completely_unknown_xyz": 1, "mandatory": "ok"})
+        handler._validate_tool_arguments_schema(
+            spec_schema, {"completely_unknown_xyz": 1, "mandatory": "ok"}
+        )
     assert exc_unknown.value.code == McpErrorCode.VALIDATION_FAILED
     assert "Unknown parameter 'completely_unknown_xyz'" in exc_unknown.value.message
 
@@ -1126,27 +1135,39 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
 
     # Type mismatch branches (integer, boolean, array, object)
     with pytest.raises(KbMcpError) as exc_type_int:
-        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "int_val": "not_int"})
+        handler._validate_tool_arguments_schema(
+            spec_schema, {"mandatory": "ok", "int_val": "not_int"}
+        )
     assert exc_type_int.value.code == McpErrorCode.VALIDATION_FAILED
 
     with pytest.raises(KbMcpError) as exc_type_bool:
-        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "bool_val": "not_bool"})
+        handler._validate_tool_arguments_schema(
+            spec_schema, {"mandatory": "ok", "bool_val": "not_bool"}
+        )
     assert exc_type_bool.value.code == McpErrorCode.VALIDATION_FAILED
 
     with pytest.raises(KbMcpError) as exc_type_arr:
-        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "arr_val": "not_arr"})
+        handler._validate_tool_arguments_schema(
+            spec_schema, {"mandatory": "ok", "arr_val": "not_arr"}
+        )
     assert exc_type_arr.value.code == McpErrorCode.VALIDATION_FAILED
 
     with pytest.raises(KbMcpError) as exc_type_obj:
-        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "obj_val": "not_obj"})
+        handler._validate_tool_arguments_schema(
+            spec_schema, {"mandatory": "ok", "obj_val": "not_obj"}
+        )
     assert exc_type_obj.value.code == McpErrorCode.VALIDATION_FAILED
 
     # Pattern mismatch branch
     with pytest.raises(KbMcpError) as exc_pat:
-        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "etag": "short_not_64"})
+        handler._validate_tool_arguments_schema(
+            spec_schema, {"mandatory": "ok", "etag": "short_not_64"}
+        )
     assert exc_pat.value.code == McpErrorCode.VALIDATION_FAILED
     assert exc_pat.value.fix_hint is not None
     assert "64-character SHA-256 hex ETag" in exc_pat.value.fix_hint
 
     # Nullable property with None and bad_prop non-dict
-    handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "nullable_str": None, "bad_prop": 123})
+    handler._validate_tool_arguments_schema(
+        spec_schema, {"mandatory": "ok", "nullable_str": None, "bad_prop": 123}
+    )
