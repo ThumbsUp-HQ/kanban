@@ -68,6 +68,7 @@ All API contracts, security invariants, database transaction boundaries, import 
   headers: dict[str, str] = {}
   try:
       from kanban.services.issues import get_issue_or_404
+
       fresh_issue = await get_issue_or_404(session, caller, issue_key)
       if fresh_issue.etag:
           headers["ETag"] = fresh_issue.etag

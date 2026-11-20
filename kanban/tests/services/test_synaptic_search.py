@@ -428,7 +428,6 @@ async def test_2hop_synaptic_activation_spreading(
         assert unified_res.total >= 1
 
 
-
 async def test_synaptic_zero_oracle_leakage(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
@@ -900,10 +899,6 @@ async def test_empty_query_embedding() -> None:
     assert await _get_query_embedding("   ") is None
 
 
-
-
-
-
 async def test_hybrid_search_vector_only_hydration_and_pagination(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
@@ -1072,4 +1067,3 @@ async def test_hybrid_search_vector_only_hydration_and_pagination(
         assert res_k.executed_mode == "hybrid"
         assert res_k.total >= 1
         assert res_k.items[0].title == "Completely Unrelated Pears"
-

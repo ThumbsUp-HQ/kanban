@@ -116,7 +116,11 @@ The audit inspects and certifies all four problems:
 - Completed State Bypass Guard:
   - In `TransitionEngine.execute_transition`:
     ```python
-    if not is_complete_work and target_state.state_group == "completed" and actor.is_agent_or_mcp_caller:
+    if (
+        not is_complete_work
+        and target_state.state_group == "completed"
+        and actor.is_agent_or_mcp_caller
+    ):
         raise ProblemException(
             code="USE_COMPLETE_WORK",
             status=422,

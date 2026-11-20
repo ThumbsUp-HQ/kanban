@@ -1278,6 +1278,7 @@ async def test_search_v2_unit_coverage() -> None:
 
     def search_h(req: httpx.Request) -> httpx.Response:
         import json
+
         captured_payloads.append(json.loads(req.content.decode()))
         return httpx.Response(
             200,
@@ -1309,9 +1310,7 @@ async def test_search_v2_unit_coverage() -> None:
     assert captured_payloads[-1]["mode"] == "hybrid"
 
     # Explicit mode="lexical"
-    await search_v2_handler(
-        {"query": "q", "mode": "lexical"}, client=c_srch
-    )
+    await search_v2_handler({"query": "q", "mode": "lexical"}, client=c_srch)
     assert captured_payloads[-1]["mode"] == "lexical"
 
     # Invalid mode validation error
@@ -1961,7 +1960,9 @@ async def test_update_v2_unit_coverage() -> None:
         if "/stickies" in p:
             return httpx.Response(
                 200,
-                json=[{"id": str(uuid.uuid4()), "color_token": "blue", "body_markdown": "Note body"}],
+                json=[
+                    {"id": str(uuid.uuid4()), "color_token": "blue", "body_markdown": "Note body"}
+                ],
             )
         if "/projects/" in p:
             return httpx.Response(404, json={})
@@ -1999,5 +2000,3 @@ async def test_update_v2_unit_coverage() -> None:
             {"project": "noid-proj", "target_type": "DOC", "include_tree": False}, client=c_noid
         )
     assert exc_noid.value.code == McpErrorCode.NOT_FOUND
-
-

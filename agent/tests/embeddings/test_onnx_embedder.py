@@ -353,4 +353,3 @@ async def test_embed_batch_rich_on_direct_embedder() -> None:
     assert len(chunk.full_q8) == EMBED_DIMENSION
     assert len(chunk.heading_anchors) == 1
     assert chunk.heading_anchors[0]["title"] == "Security Heading"
-

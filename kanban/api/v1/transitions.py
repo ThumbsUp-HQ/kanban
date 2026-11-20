@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid  # noqa: TC003
 from typing import Annotated, Any
 
@@ -16,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.workflows.engine import TransitionEngine
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["transitions"])
 
@@ -67,6 +70,20 @@ class CancelTransitionResponse(BaseModel):
 
     status: str = "cancelled"
     execution_id: uuid.UUID
+
+
+async def _attach_issue_etag(
+    session: AsyncSession, caller: PrincipalContext, issue_key: str, headers: dict[str, str]
+) -> None:
+    """Attempt to resolve and attach fresh ETag header for issue."""
+    try:
+        from kanban.services.issues import get_issue_or_404  # noqa: PLC0415
+
+        fresh_issue = await get_issue_or_404(session, caller, issue_key)
+        if fresh_issue.etag:
+            headers["ETag"] = fresh_issue.etag
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not attach fresh ETag for %s", issue_key)
 
 
 @router.post(
@@ -124,14 +141,7 @@ async def post_issue_transition(
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=content)
 
     headers: dict[str, str] = {}
-    try:
-        from kanban.services.issues import get_issue_or_404  # noqa: PLC0415
-
-        fresh_issue = await get_issue_or_404(session, caller, issue_key)
-        if fresh_issue.etag:
-            headers["ETag"] = fresh_issue.etag
-    except Exception:  # noqa: BLE001
-        pass
+    await _attach_issue_etag(session, caller, issue_key, headers)
 
     if session.is_active:
         await session.commit()

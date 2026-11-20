@@ -140,9 +140,7 @@ All API contracts, security invariants, database constraints, CSP compliance rul
           )
       )
       if grp_cnt_res.scalar_one() <= 1:
-          blocking_reasons.append(
-              "Last State in Group: Cannot delete the last state in group."
-          )
+          blocking_reasons.append("Last State in Group: Cannot delete the last state in group.")
   ```
   Adding `'started'` aligns `get_state_audit_impact` with `delete_state:696`, verified by unit tests in `tests/unit/test_project_config.py`.
 
