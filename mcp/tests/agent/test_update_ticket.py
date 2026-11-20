@@ -838,7 +838,8 @@ async def test_update_ticket_comprehensive_branch_coverage() -> None:  # noqa: C
                 }
             )
         assert exc_conflict.value.code == McpErrorCode.CONFLICT_ETAG
-        assert exc_conflict.value.hint is not None and "c" * 64 in exc_conflict.value.hint
+        assert exc_conflict.value.hint is not None
+        assert "c" * 64 in exc_conflict.value.hint
 
         # 6. Assignees add & remove complex paths (lines 388-489)
         mock_client.request = AsyncMock(side_effect=_mock_req)
