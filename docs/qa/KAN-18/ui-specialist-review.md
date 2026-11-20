@@ -3,24 +3,26 @@
 ## Audit Metadata
 - Ticket ID: KAN-18 ([KB-P3-AUDIT-12])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-fix-5f154820`
-- Target Branch: fix/KAN-18-liveqa
-- Base Commit: 6eab593
-- Head Commit: af7b91d
+- Date: 2026-11-20
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-rcfix-4876d148`
+- Target Branch: fix/KAN-18-rc2
+- Base Commit: 036216b
+- Head Commit: 40cd7e0
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review evaluates ticket KAN-18 and its clean-room live stack remediation ([KB-P3-AUDIT-12]) under the Dual Specialist Gate policy. KAN-18 consolidates the `/mcp/docs` Model Context Protocol surface from 6 redundant CRUD tools into 3 CLI-modeled tools (`search`, `create`, `update`).
+This review evaluates ticket KAN-18 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-12]) under the Dual Specialist Gate policy. KAN-18 consolidates the `/mcp/docs` Model Context Protocol surface from 6 redundant CRUD tools into 3 CLI-modeled tools (`search`, `create`, `update`).
 
-The clean-room live remediation ([KB-P3-AUDIT-12]) specifically resolves:
-1. Normalization of unquoted vs quoted `if_match` / `etag` across sticky and doc tools, ensuring optimistic concurrency and seamless direct chaining (`update(if_match=res["etag"])`).
-2. Correct Doc vs Page resolution precedence on `docs/<slug>` single-slug paths.
-3. Preservation of `project` filter on `search(project="...", type="DOC")` when `include_tree=False`.
-4. Ephemeral token allowlist updates and rejection of partial diff-patch replacements.
-5. Programmatic regeneration of `docs/qa/KAN-18/contract-sample.yaml` from verbatim tool executions.
+The Round 2 remediation specifically resolves:
+1. Connection scoping enforcement unit tests for `/mcp/docs` mutating tools (`create` and `update`) in `mcp/tests/test_connection_scoping.py`.
+2. Edge-case test coverage in `mcp/tests/test_docs_kan18_coverage.py`, ensuring all 9 touched modules exceed >= 95% unit test line and branch coverage (overall 96% across touched modules, 344 unit tests passing).
+3. ETag normalization across sticky and doc tools, ensuring optimistic concurrency and direct chaining (`update(if_match=res["etag"])`).
+4. Correct Doc vs Page resolution precedence on `docs/<slug>` single-slug paths.
+5. Preservation of `project` filter on `search(project="...", type="DOC")` when `include_tree=False`.
+6. Ephemeral token allowlist updates and rejection of partial diff-patch replacements.
+7. Programmatic regeneration of `docs/qa/KAN-18/contract-sample.yaml` from verbatim tool executions.
 
 While KAN-18 is a non-UI backend MCP surface ticket (with zero frontend web components modified), the Dual Gate requires UI/UX specialist verification to certify:
 1. Non-UI ticket classification and absence of inadvertent frontend regressions.
@@ -68,18 +70,20 @@ While KAN-18 is a non-UI backend MCP surface ticket (with zero frontend web comp
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-12)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-12 Round 2)
 
-- Target Branch: `fix/KAN-18-liveqa`
-- Remediation Head Commit: `af7b91d`
+- Target Branch: `fix/KAN-18-rc2`
+- Remediation Head Commit: `40cd7e0`
 - Remediations Verified:
-  1. Normalized unquoted vs quoted `etag` and `if_match` strings across `create.py`, `search.py`, and `update.py`. Passing `res["etag"]` directly to `update(if_match=...)` succeeds seamlessly.
-  2. Single-slug doc paths (`id="docs/<doc-slug>"`) resolve `GET /api/v1/docs/{slug}` before falling back to pages.
-  3. Non-tree project searches (`search(project="...", type="DOC")`) query `/api/v1/projects/{key}` and correctly filter docs by project.
-  4. Ephemeral token authorization on `/mcp/docs` maps `search` tool cleanly and blocks mutation tools (`create`, `update`).
-  5. Programmatic regeneration of `docs/qa/KAN-18/contract-sample.yaml` via test suite execution.
-  6. Quality gates: 46 unit and integration tests passing in 16.89s, >= 95% line and branch coverage across all touched modules.
-  7. 100% zero em-dashes and en-dashes.
+  1. Connection scoping unit tests verify `/mcp/docs` `create` and `update` mutating tool enforcement and auto-filling target project keys.
+  2. Edge cases in `McpAuthMiddleware` and `McpProtocolHandler` covered in `test_docs_kan18_coverage.py`.
+  3. All 9 touched modules exceed >= 95% unit test line and branch coverage (96% overall across 9 modules, 344 passed).
+  4. Normalized unquoted vs quoted `etag` and `if_match` strings across `create.py`, `search.py`, and `update.py`. Passing `res["etag"]` directly to `update(if_match=...)` succeeds seamlessly.
+  5. Single-slug doc paths (`id="docs/<doc-slug>"`) resolve `GET /api/v1/docs/{slug}` before falling back to pages.
+  6. Non-tree project searches (`search(project="...", type="DOC")`) query `/api/v1/projects/{key}` and correctly filter docs by project.
+  7. Ephemeral token authorization on `/mcp/docs` maps `search` tool cleanly and blocks mutation tools (`create`, `update`).
+  8. Programmatic regeneration of `docs/qa/KAN-18/contract-sample.yaml` via test suite execution.
+  9. 100% zero em-dashes and en-dashes.
 
 ---
 
@@ -88,7 +92,7 @@ While KAN-18 is a non-UI backend MCP surface ticket (with zero frontend web comp
 1. Zero Em-Dashes or En-Dashes: Verified zero instances of `\u2014` or `\u2013` across all modified files and commit messages. Plain ASCII hyphens (-) used exclusively.
 2. Architecture & Layering: Verified `uv run lint-imports` maintains strict separation (`mcp` does not import `database`).
 3. Contract Samples: Verified `docs/qa/KAN-18/contract-sample.yaml` contains comprehensive YAML transcripts demonstrating `search(id="help")`, `search(id="...")`, `create(type="DOC")`, `update(original_text, replacement_text)`, and sticky auto-promotion.
-4. Test Coverage: All touched modules (`create.py`, `search.py`, `update.py`, `ephemeral_mcp_tokens.py`, `scoping.py`) exceed 95.10% unit test line and branch coverage.
+4. Test Coverage: All touched modules (`create.py`, `search.py`, `update.py`, `ephemeral_mcp_tokens.py`, `scoping.py`, `protocol.py`, `auth.py`, `errors.py`) exceed 95% unit test line and branch coverage.
 
 ---
 
@@ -103,8 +107,9 @@ While KAN-18 is a non-UI backend MCP surface ticket (with zero frontend web comp
 7. [x] Surgical diff-patching with similarity diagnostics verified
 8. [x] Sticky-to-Doc auto-promotion workflow verified
 9. [x] ETag normalization and direct concurrency chaining verified
-10. [x] Strict ASCII hyphenation verified (0 em-dashes and 0 en-dashes)
-11. [x] All 46 Pytest unit and integration tests passing with >= 95.10% coverage
+10. [x] Connection scoping mutating tools enforcement verified
+11. [x] Strict ASCII hyphenation verified (0 em-dashes and 0 en-dashes)
+12. [x] All 344 Pytest unit and integration tests passing with >= 95% coverage across all 9 touched modules
 
 ---
 
