@@ -60,6 +60,9 @@ class Project(Base):
     issue_seq_counter: Mapped[int] = mapped_column(
         BigInteger, nullable=False, server_default=text("0")
     )
+    skip_loaded_sequence_numbers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     auto_archive_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     @property

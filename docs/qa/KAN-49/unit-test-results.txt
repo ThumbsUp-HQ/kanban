@@ -1,0 +1,60 @@
+=== test_p4_24_agent_safe_sequences_migration.py ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan49-43e0a58b/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan49-43e0a58b
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 1 item
+
+database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py::test_p4_24_agent_safe_sequences_migration_lifecycle PASSED [100%]
+
+============================== 1 passed in 0.63s ===============================
+
+=== test_p1_05_sequence_concurrency.py ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan49-43e0a58b/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan49-43e0a58b
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 5 items
+
+database/tests/test_p1_05_sequence_concurrency.py::test_06_sequence_concurrency_20_connections PASSED [ 20%]
+database/tests/test_p1_05_sequence_concurrency.py::test_07_sequence_concurrency_150_connections_batches PASSED [ 40%]
+database/tests/test_p1_05_sequence_concurrency.py::test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500 PASSED [ 60%]
+database/tests/test_p1_05_sequence_concurrency.py::test_09_invalid_sequence_count_bounds PASSED [ 80%]
+database/tests/test_p1_05_sequence_concurrency.py::test_10_allocate_issue_sequences_and_verify_activity_chain PASSED [100%]
+
+============================== 5 passed in 0.72s ===============================
+
+=== test_agent_safe_sequences.py ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan49-43e0a58b/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan49-43e0a58b
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 5 items
+
+kanban/tests/services/test_agent_safe_sequences.py::test_activity_event_type_registration PASSED [ 20%]
+kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_skips_loaded_and_records_activity PASSED [ 40%]
+kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_does_not_skip_when_disabled PASSED [ 60%]
+kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_tree_batch_sequence_and_skip_activity PASSED [ 80%]
+kanban/tests/services/test_agent_safe_sequences.py::test_copy_issue_batch_sequence_and_skip_activity PASSED [100%]
+
+============================== 5 passed in 0.88s ===============================
+
+=== test_issue_trees.py, test_issue_copy.py, test_issues.py ===
+..................................                                       [100%]
+34 passed in 17.27s
+Name                                    Stmts   Miss Branch BrPart  Cover
+-------------------------------------------------------------------------
+database/models/projects.py               108      2      0      0    98%
+database/models/workspace_settings.py      22      0      0      0   100%
+kanban/issues/tree_service.py             344    180    152     25    41%
+kanban/services/activity.py               214      7      8      4    95%
+kanban/services/issue_copy.py             126     33     40     14    66%
+kanban/services/issues.py                 456    292    184     21    30%
+-------------------------------------------------------------------------
+TOTAL                                    1270    514    384     64    51%

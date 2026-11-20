@@ -209,6 +209,7 @@ class ActivityEventType(StrEnum):
     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
     DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
     MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
+    SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -364,6 +365,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ACL_ENTRY_GRANTED: ActivityCategory.SYSTEM,
         ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_TAINT_BLOCKED: ActivityCategory.SYSTEM,
+        ActivityEventType.SEQUENCE_SKIPPED: ActivityCategory.SYSTEM,
     }
 )
 
