@@ -3169,7 +3169,7 @@ index 88e56b93..66bd3d95 100644
 +        # 3. Caller session is preserved: create_after_login was NEVER called
 +        assert mock_session_service.create_after_login.call_count == 0
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
-index 6cd483e0..dd5aab26 100644
+index 6cd483e0..ce7f623e 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.css
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
 @@ -332,6 +332,30 @@
@@ -3229,20 +3229,60 @@ index 6cd483e0..dd5aab26 100644
  @media (max-width: 640px) {
    .kb-personal-settings-table,
    .kb-personal-settings-table tbody,
+@@ -835,7 +878,11 @@
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+-    gap: var(--space-2);
++    flex-wrap: wrap;
++    gap: var(--space-1, 4px) var(--space-2, 8px);
++    min-width: 0;
++    overflow-wrap: anywhere;
++    word-break: break-word;
+     font-size: var(--text-sm);
+   }
+ 
+@@ -889,3 +936,25 @@
+     margin-right: 0;
+   }
+ }
++
++.kb-personal-settings-footer {
++  margin-top: var(--space-8);
++  padding-top: var(--space-4);
++  border-top: 1px solid var(--border-subtle);
++  display: flex;
++  justify-content: center;
++}
++
++.kb-personal-settings-about-link {
++  color: var(--fg-muted);
++  text-decoration: none;
++  font-size: var(--text-sm);
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2);
++  transition: color 0.15s ease;
++}
++
++.kb-personal-settings-about-link:hover {
++  color: var(--fg-primary);
++}
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
-index f7380611..fca96fea 100644
+index f7380611..2ee11e19 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
-@@ -1,7 +1,7 @@
+@@ -1,7 +1,8 @@
  // Copyright 2026 Kanban Platform Contributors
  // Apache-2.0 License. See LICENSE for details.
  
 -import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
 +import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
++import { Link } from 'react-router';
  import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
  import {
    fetchMyProfile,
-@@ -21,11 +21,14 @@ import {
+@@ -21,11 +22,14 @@ import {
    regenerateRecoveryCodes,
    fetchExternalIdentities,
    unlinkIdentity,
@@ -3257,7 +3297,7 @@ index f7380611..fca96fea 100644
  import { SecondFactorStep } from '../auth/SecondFactorStep';
  import {
    isWebAuthnSupported,
-@@ -64,8 +67,27 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -64,8 +68,27 @@ export function PersonalSettingsPage(): JSX.Element {
    const queryClient = useQueryClient();
  
    // Notification state
@@ -3287,7 +3327,7 @@ index f7380611..fca96fea 100644
    const [passkeyVerifiedBanner, setPasskeyVerifiedBanner] = useState<string | null>(null);
  
    // Form states (controlled with fallback to profile)
-@@ -132,6 +154,61 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -132,6 +155,61 @@ export function PersonalSettingsPage(): JSX.Element {
      queryFn: fetchExternalIdentities,
    });
  
@@ -3349,7 +3389,7 @@ index f7380611..fca96fea 100644
    const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
    const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
  
-@@ -433,6 +510,65 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -433,6 +511,65 @@ export function PersonalSettingsPage(): JSX.Element {
      await action();
    };
  
@@ -3415,7 +3455,7 @@ index f7380611..fca96fea 100644
    if (isProfileLoading) {
      return (
        <div className="kb-personal-settings-container" data-testid="personal-settings-loading">
-@@ -913,15 +1049,60 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -913,15 +1050,60 @@ export function PersonalSettingsPage(): JSX.Element {
  
        {/* Section 5: Connected Accounts & External Identities */}
        <section className="kb-personal-settings-section" aria-labelledby="section-identities-title">
@@ -3483,7 +3523,7 @@ index f7380611..fca96fea 100644
              <thead>
                <tr>
                  <th className="kb-personal-settings-th">Provider</th>
-@@ -933,16 +1114,16 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -933,16 +1115,16 @@ export function PersonalSettingsPage(): JSX.Element {
              <tbody>
                {identities.map((ident) => (
                  <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
@@ -3492,7 +3532,7 @@ index f7380611..fca96fea 100644
                      <strong>{ident.card_slug}</strong> ({(ident.provider_kind ?? ident.provider_type ?? '').toUpperCase()})
                    </td>
 -                  <td className="kb-personal-settings-td">
-+                  <td className="kb-personal-settings-td" data-label="Subject / Email">
++                  <td className="kb-personal-settings-td" data-label="Subject / Account">
                      {ident.subject_email_at_link ?? ident.immutable_subject_id ?? ident.card_display_name ?? ident.display_name ?? ident.email ?? ident.subject_id ?? 'Unknown'}
                    </td>
 -                  <td className="kb-personal-settings-td">
@@ -3504,7 +3544,7 @@ index f7380611..fca96fea 100644
                      <button
                        type="button"
                        className="kb-personal-settings-btn kb-personal-settings-btn-danger"
-@@ -956,6 +1137,7 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -956,6 +1138,7 @@ export function PersonalSettingsPage(): JSX.Element {
                ))}
              </tbody>
            </table>
@@ -3512,7 +3552,24 @@ index f7380611..fca96fea 100644
          ) : (
            <p className="kb-personal-settings-empty">
              No external identities linked.
-@@ -1225,6 +1407,99 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -963,6 +1146,16 @@ export function PersonalSettingsPage(): JSX.Element {
+         )}
+       </section>
+ 
++      <footer className="kb-personal-settings-footer">
++        <Link
++          to="/about"
++          className="kb-personal-settings-about-link"
++          data-testid="personal-settings-about-link"
++        >
++          ℹ️ About 👍kanban
++        </Link>
++      </footer>
++
+       {/* TOTP Setup Modal */}
+       {totpSetupStep && (
+         <div className="kb-personal-settings-modal-backdrop" role="presentation">
+@@ -1225,6 +1418,99 @@ export function PersonalSettingsPage(): JSX.Element {
          onInterceptAal2={handleInterceptAal2}
        />
  
@@ -3613,11 +3670,14 @@ index f7380611..fca96fea 100644
          <AvatarCropModal
            file={cropFile}
 diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
-index acd1d6ee..b3bd64cf 100644
+index acd1d6ee..bb06ac80 100644
 --- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
-@@ -7,9 +7,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+@@ -5,11 +5,14 @@ import React from 'react';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
  import { PersonalSettingsPage } from '../PersonalSettingsPage';
  import * as api from '../personalSettingsApi';
 +import * as authApi from '../../auth/authApi';
@@ -3628,7 +3688,7 @@ index acd1d6ee..b3bd64cf 100644
  
  vi.mock('../../auth/SecondFactorStep', () => ({
    SecondFactorStep: ({
-@@ -82,6 +84,7 @@ describe('PersonalSettingsPage', () => {
+@@ -82,13 +85,16 @@ describe('PersonalSettingsPage', () => {
      vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
      vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
      vi.mocked(api.fetchExternalIdentities).mockResolvedValue([]);
@@ -3636,7 +3696,64 @@ index acd1d6ee..b3bd64cf 100644
    });
  
    const renderComponent = () =>
-@@ -2031,4 +2034,571 @@ describe('PersonalSettingsPage', () => {
+     render(
+-      <QueryClientProvider client={queryClient}>
+-        <PersonalSettingsPage />
+-      </QueryClientProvider>,
++      <MemoryRouter>
++        <QueryClientProvider client={queryClient}>
++          <PersonalSettingsPage />
++        </QueryClientProvider>
++      </MemoryRouter>,
+     );
+ 
+   it('renders personal settings sections with loaded profile data', async () => {
+@@ -921,9 +927,11 @@ describe('PersonalSettingsPage', () => {
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+ 
+     render(
+-      <QueryClientProvider client={localClient}>
+-        <PersonalSettingsPage />
+-      </QueryClientProvider>,
++      <MemoryRouter>
++        <QueryClientProvider client={localClient}>
++          <PersonalSettingsPage />
++        </QueryClientProvider>
++      </MemoryRouter>,
+     );
+ 
+     await waitFor(() => {
+@@ -960,9 +968,11 @@ describe('PersonalSettingsPage', () => {
+     });
+ 
+     render(
+-      <QueryClientProvider client={localClient}>
+-        <PersonalSettingsPage />
+-      </QueryClientProvider>,
++      <MemoryRouter>
++        <QueryClientProvider client={localClient}>
++          <PersonalSettingsPage />
++        </QueryClientProvider>
++      </MemoryRouter>,
+     );
+ 
+     const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
+@@ -999,9 +1009,11 @@ describe('PersonalSettingsPage', () => {
+     vi.mocked(api.renamePasskey).mockRejectedValue('String rename reject');
+ 
+     render(
+-      <QueryClientProvider client={localClient}>
+-        <PersonalSettingsPage />
+-      </QueryClientProvider>,
++      <MemoryRouter>
++        <QueryClientProvider client={localClient}>
++          <PersonalSettingsPage />
++        </QueryClientProvider>
++      </MemoryRouter>,
+     );
+ 
+     const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
+@@ -2031,4 +2043,571 @@ describe('PersonalSettingsPage', () => {
  
      confirmSpy.mockRestore();
    });
@@ -4129,7 +4246,7 @@ index acd1d6ee..b3bd64cf 100644
 +      const cells = row.querySelectorAll('td');
 +      expect(cells.length).toBe(4);
 +      expect(cells[0]?.getAttribute('data-label')).toBe('Provider');
-+      expect(cells[1]?.getAttribute('data-label')).toBe('Subject / Email');
++      expect(cells[1]?.getAttribute('data-label')).toBe('Subject / Account');
 +      expect(cells[2]?.getAttribute('data-label')).toBe('Linked');
 +      expect(cells[3]?.getAttribute('data-label')).toBe('Actions');
 +    });

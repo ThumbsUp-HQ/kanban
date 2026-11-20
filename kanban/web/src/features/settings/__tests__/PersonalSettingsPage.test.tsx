@@ -5,6 +5,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router';
 import { PersonalSettingsPage } from '../PersonalSettingsPage';
 import * as api from '../personalSettingsApi';
 import * as authApi from '../../auth/authApi';
@@ -89,9 +90,11 @@ describe('PersonalSettingsPage', () => {
 
   const renderComponent = () =>
     render(
-      <QueryClientProvider client={queryClient}>
-        <PersonalSettingsPage />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <PersonalSettingsPage />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
   it('renders personal settings sections with loaded profile data', async () => {
@@ -924,9 +927,11 @@ describe('PersonalSettingsPage', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     render(
-      <QueryClientProvider client={localClient}>
-        <PersonalSettingsPage />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={localClient}>
+          <PersonalSettingsPage />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -963,9 +968,11 @@ describe('PersonalSettingsPage', () => {
     });
 
     render(
-      <QueryClientProvider client={localClient}>
-        <PersonalSettingsPage />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={localClient}>
+          <PersonalSettingsPage />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
@@ -1002,9 +1009,11 @@ describe('PersonalSettingsPage', () => {
     vi.mocked(api.renamePasskey).mockRejectedValue('String rename reject');
 
     render(
-      <QueryClientProvider client={localClient}>
-        <PersonalSettingsPage />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={localClient}>
+          <PersonalSettingsPage />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     const enableTotpBtn = await screen.findByTestId('enable-totp-btn');
@@ -2523,7 +2532,7 @@ describe('PersonalSettingsPage', () => {
       const cells = row.querySelectorAll('td');
       expect(cells.length).toBe(4);
       expect(cells[0]?.getAttribute('data-label')).toBe('Provider');
-      expect(cells[1]?.getAttribute('data-label')).toBe('Subject / Email');
+      expect(cells[1]?.getAttribute('data-label')).toBe('Subject / Account');
       expect(cells[2]?.getAttribute('data-label')).toBe('Linked');
       expect(cells[3]?.getAttribute('data-label')).toBe('Actions');
     });

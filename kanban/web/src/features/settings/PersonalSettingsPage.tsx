@@ -1118,7 +1118,7 @@ export function PersonalSettingsPage(): JSX.Element {
                   <td className="kb-personal-settings-td" data-label="Provider">
                     <strong>{ident.card_slug}</strong> ({(ident.provider_kind ?? ident.provider_type ?? '').toUpperCase()})
                   </td>
-                  <td className="kb-personal-settings-td" data-label="Subject / Email">
+                  <td className="kb-personal-settings-td" data-label="Subject / Account">
                     {ident.subject_email_at_link ?? ident.immutable_subject_id ?? ident.card_display_name ?? ident.display_name ?? ident.email ?? ident.subject_id ?? 'Unknown'}
                   </td>
                   <td className="kb-personal-settings-td" data-label="Linked">
