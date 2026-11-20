@@ -1,82 +1,283 @@
-KAN-21 ([KB-P3-AUDIT-15]) LIVE FULL-STACK QA PROOF
-======================================================================
-Target Container : kanban-liveqa-4 (thumbs-up-kanban:local-qa)
-Target URL       : http://localhost:18954
-Execution Mode   : Real live standalone container, real PostgreSQL 16 + FORCE RLS,
-                   real server-side httpx probing against in-container HTTP servers
-                   on 127.0.0.1:11434 (Ollama /api/tags) and 127.0.0.1:18080 (/v1/models)
-Timestamp (UTC)  : 2026-11-20T02:51:29Z - 2026-11-20T02:52:09Z
+LIVE FULL-STACK BLACK-BOX & INTEGRATION PROOF: KAN-21 ([KB-P3-AUDIT-15])
+========================================================================
+Target Container: kanban-liveqa-4 (http://localhost:18954)
+Runtime Mode: standalone_embedded_pg (PostgreSQL 16 FORCE RLS, UID 65532 uvicorn)
+Mocks/Stubs Used: 0 HTTP/Playwright mocks; real in-container loopback upstream listeners on 127.0.0.1:11434 (Ollama), 127.0.0.1:18080 (OpenAI-compat), 127.0.0.1:18081 (Gemini)
+Timestamp (UTC): 2026-11-20T04:14:00Z
 
-----------------------------------------------------------------------
-RAW API & POSTGRES TRANSCRIPT (test_kan21_api.py)
-----------------------------------------------------------------------
-Admin AAL2 session check -> 200: {"authenticated":true,"principal_id":"01a1f6d9-6054-7595-85a9-5181efcc2409","workspace_id":"01a1f6d9-6053-71d5-aa7e-e02cbb8113da","session_id":"01a1f6db-c892-7810-b74a-e0cd0dbbe970","aal_level":2,"mfa_pending":false,"csrf_token":"322lAekoJS4jKpVKsfj4Pg.5XWXAXqzttTVV58jDvlPLSz3Fy9l1kEvhPGLYsyvThs","idle_expires_at":"2026-11-27T02:51:29.028369+00:00","absolute_expires_at":"2026-12-20T02:49:21.258686+00:00","remember_me":true}
+1. AAL2 & RBAC Gate Verification
+--------------------------------
+[Check 1a] Unauthenticated GET /api/v1/admin/ai/providers
+  HTTP Status: 401 (Expected 401)
+  Problem Verdict: PASS
 
-=== 1. GET /api/v1/admin/workspace-settings (fetchAirGapMode path) ===
-GET /api/v1/admin/workspace-settings -> 200: {"workspace_id":"01a1f6d9-6053-71d5-aa7e-e02cbb8113da","name":"kanban","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"updated_at":"2026-11-20T02:46:43.539792Z"}
+[Check 1b] @member user GET /api/v1/admin/ai/providers
+  HTTP Status: 403 (Expected 403 FORBIDDEN)
+  Problem Verdict: PASS
 
-=== 2. SSRF & Cleartext Rejection + Local/LAN No-Key 201 ===
-POST metadata SSRF (http://169.254.169.254/latest/meta-data) -> HTTP 422:
-  {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must not target link-local, multicast, or metadata address '169.254.169.254'","request_id":"973fc57bfeb6443dbecc92b1565559db"}
+[Check 1c] @admin AAL1 (mfa_pending) GET /api/v1/admin/ai/providers
+  HTTP Status: 401
+  Response Body: {"type":"urn:kanban:problem:MFA_REQUIRED","title":"Multi-Factor Authentication Required","status":401,"code":"MFA_REQUIRED","detail":"Session requires second-factor verification before accessing this resource.","request_id":"cc313f113c2b4e888cbe5c8348e223ca"}
+  Problem Verdict: PASS (Blocked before MFA verification)
 
-POST cleartext public (http://api.openai.com/v1) -> HTTP 422:
-  {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) or private LAN","request_id":"ec3629d1642b4141be814c293dc5e48f"}
+[Check 1d] GET /api/v1/admin/workspace-settings (AAL2 @admin)
+  HTTP Status: 200
+  Problem Verdict: PASS
 
-POST create #1 Ollama Primary (http://127.0.0.1:11434, NO API key) -> HTTP 201:
-  {"id":"c84e0890-51a7-4dfb-845c-57095842a5c0","provider_kind":"ollama","display_name":"#1 Ollama Primary","base_url":"http://127.0.0.1:11434","model_allowlist":["qwen2.5-coder:32b","llama3.3:70b"],"residency_tier":"local","priority":10,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+2. SSRF Protection & Private-LAN URL Policy
+-------------------------------------------
+[Check 2a] POST /api/v1/admin/ai/providers (http://169.254.169.254)
+  HTTP Status: 422
+  Response Body: {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must not target link-local, multicast, or metadata address '169.254.169.254'","request_id":"a3cf58039f014828ab8a4892c4078337"}
+  Problem Verdict: PASS (422 INVALID_BASE_URL)
 
-POST create #2 Ollama LAN 192.168.1.101 (http://192.168.1.101:11434, NO API key) -> HTTP 201:
-  {"id":"88c403a4-8c32-4fe6-bde8-bf730ed16f1a","provider_kind":"ollama","display_name":"#2 Ollama LAN 192.168.1.101","base_url":"http://192.168.1.101:11434","model_allowlist":["qwen2.5-coder:32b"],"residency_tier":"local","priority":20,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
-  (Note: Created config record only; 192.168.1.101 was NEVER probed or contacted.)
+[Check 2b] POST /api/v1/admin/ai/providers (http://api.openai.com)
+  HTTP Status: 422
+  Response Body: {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) or private LAN","request_id":"3e9c8d0cee19413586d623c120f56891"}
+  Problem Verdict: PASS (422 INVALID_BASE_URL)
 
-POST create #3 OpenAI Local vLLM (http://127.0.0.1:18080/v1, NO API key) -> HTTP 201:
-  {"id":"9e90b8b2-1f26-442d-b83a-4ca37a729444","provider_kind":"openai","display_name":"#3 OpenAI Local vLLM","base_url":"http://127.0.0.1:18080/v1","model_allowlist":["local-vllm-coder","mistral-24b"],"residency_tier":"local","priority":30,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+[Check 2c] POST /api/v1/admin/ai/providers/probe-models SSRF rejections
+  http://169.254.169.254 -> 200 {"ok":false,"latency_ms":0.0,"models":[],"model_count":0,"error_code":"INVALID_BASE_URL","message":"base_url must not target link-local, multicast, or metadata address '169.254.169.254'"}
+  http://api.openai.com -> 200 {"ok":false,"latency_ms":0.0,"models":[],"model_count":0,"error_code":"INVALID_BASE_URL","message":"base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) or private LAN"}
+  Problem Verdict: PASS
 
-POST create #4 Google Gemini (https://generativelanguage.googleapis.com, key configured) -> HTTP 201:
-  {"id":"86b1621e-3dac-4a50-b8d8-f53e134f1b92","provider_kind":"gemini","display_name":"#4 Google Gemini","base_url":"https://generativelanguage.googleapis.com","model_allowlist":["gemini-2.5-pro","gemini-2.5-flash"],"residency_tier":"cloud","priority":40,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+[Check 2d] Private-LAN validate_base_url acceptance (zero network probes to LAN host)
+  validate_base_url('http://192.168.1.101:11434') -> http://192.168.1.101:11434
+  POST /api/v1/admin/ai/providers (save-only, immediately deleted) -> 201
+  Problem Verdict: PASS
 
-POST create #5 OpenAI Cloud (https://api.openai.com/v1, key configured) -> HTTP 201:
-  {"id":"315239f3-8486-4ef8-a46f-127faeee6a08","provider_kind":"openai","display_name":"#5 OpenAI Cloud","base_url":"https://api.openai.com/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"cloud","priority":50,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+3. Live Upstream Probe & Test Connection (Draft & Saved)
+--------------------------------------------------------
+[Check 3a] Draft Endpoints (/providers/probe-models, /providers/test-connection)
+  Ollama (127.0.0.1:11434): {"probe": {"ok": true, "latency_ms": 31.3, "models": ["qwen2.5-coder:7b", "llama3.2:3b", "deepseek-r1:14b"], "model_count": 3, "error_code": null, "message": "Successfully connected to Ollama (3 models available)"}, "test": {"ok": true, "latency_ms": 25.73, "models": ["qwen2.5-coder:7b", "llama3.2:3b", "deepseek-r1:14b"], "model_count": 3, "error_code": null, "message": "Successfully connected to Ollama (3 models available)"}}
+  OpenAI-compat (127.0.0.1:18080/v1): {"probe": {"ok": true, "latency_ms": 22.08, "models": ["local-vllm-8b", "mistral-small-24b"], "model_count": 2, "error_code": null, "message": "Successfully connected to OpenAI (2 models available)"}, "test": {"ok": true, "latency_ms": 23.99, "models": ["local-vllm-8b", "mistral-small-24b"], "model_count": 2, "error_code": null, "message": "Successfully connected to OpenAI (2 models available)"}}
+  Gemini (127.0.0.1:18081): {"probe": {"ok": true, "latency_ms": 22.38, "models": ["gemini-2.5-flash", "gemini-2.5-pro"], "model_count": 2, "error_code": null, "message": "Successfully connected to Gemini (2 models available)"}, "test": {"ok": true, "latency_ms": 22.68, "models": ["gemini-2.5-flash", "gemini-2.5-pro"], "model_count": 2, "error_code": null, "message": "Successfully connected to Gemini (2 models available)"}}
+  Problem Verdict: PASS
 
-=== 3. Probe Models & Test Connection (Unsaved + Saved via real server-side httpx) ===
-POST /api/v1/admin/ai/providers/probe-models (ollama 127.0.0.1:11434) -> HTTP 200:
-  {"ok":true,"latency_ms":22.54,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+[Check 3b] Saved Provider Endpoints (/providers/{id}/probe-models, /providers/{id}/test-connection)
+  {
+  "Primary Ollama Loopback": {
+    "probe": {
+      "ok": true,
+      "latency_ms": 22.55,
+      "models": [
+        "qwen2.5-coder:7b",
+        "llama3.2:3b",
+        "deepseek-r1:14b"
+      ],
+      "model_count": 3,
+      "error_code": null,
+      "message": "Successfully connected to Ollama (3 models available)"
+    },
+    "test": {
+      "ok": true,
+      "latency_ms": 22.25,
+      "models": [
+        "qwen2.5-coder:7b",
+        "llama3.2:3b",
+        "deepseek-r1:14b"
+      ],
+      "model_count": 3,
+      "error_code": null,
+      "message": "Successfully connected to Ollama (3 models available)"
+    }
+  },
+  "Local vLLM OpenAI-Compat": {
+    "probe": {
+      "ok": true,
+      "latency_ms": 22.01,
+      "models": [
+        "local-vllm-8b",
+        "mistral-small-24b"
+      ],
+      "model_count": 2,
+      "error_code": null,
+      "message": "Successfully connected to OpenAI (2 models available)"
+    },
+    "test": {
+      "ok": true,
+      "latency_ms": 21.95,
+      "models": [
+        "local-vllm-8b",
+        "mistral-small-24b"
+      ],
+      "model_count": 2,
+      "error_code": null,
+      "message": "Successfully connected to OpenAI (2 models available)"
+    }
+  },
+  "Gemini Loopback Test": {
+    "probe": {
+      "ok": true,
+      "latency_ms": 22.01,
+      "models": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro"
+      ],
+      "model_count": 2,
+      "error_code": null,
+      "message": "Successfully connected to Gemini (2 models available)"
+    },
+    "test": {
+      "ok": true,
+      "latency_ms": 22.06,
+      "models": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro"
+      ],
+      "model_count": 2,
+      "error_code": null,
+      "message": "Successfully connected to Gemini (2 models available)"
+    }
+  }
+}
+  Problem Verdict: PASS
 
-POST /api/v1/admin/ai/providers/probe-models (openai 127.0.0.1:18080/v1) -> HTTP 200:
-  {"ok":true,"latency_ms":22.46,"models":["local-vllm-coder","mistral-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+[Check 3c] Gemini Header Custody & Zero Query-Param Verification (/tmp/live_upstreams.jsonl)
+  Verified /v1beta/models requests received with x-goog-api-key header and query="":
+  [
+  {
+    "service": "gemini",
+    "method": "GET",
+    "path": "/v1beta/models",
+    "query": "",
+    "headers": {
+      "host": "127.0.0.1:18081",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "python-httpx/0.28.1",
+      "x-goog-api-key": "gemini-qa-header-secret-2026"
+    }
+  },
+  {
+    "service": "gemini",
+    "method": "GET",
+    "path": "/v1beta/models",
+    "query": "",
+    "headers": {
+      "host": "127.0.0.1:18081",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "python-httpx/0.28.1",
+      "x-goog-api-key": "gemini-qa-header-secret-2026"
+    }
+  },
+  {
+    "service": "gemini",
+    "method": "GET",
+    "path": "/v1beta/models",
+    "query": "",
+    "headers": {
+      "host": "127.0.0.1:18081",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "python-httpx/0.28.1",
+      "x-goog-api-key": "gemini-qa-header-secret-2026"
+    }
+  },
+  {
+    "service": "gemini",
+    "method": "GET",
+    "path": "/v1beta/models",
+    "query": "",
+    "headers": {
+      "host": "127.0.0.1:18081",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "python-httpx/0.28.1",
+      "x-goog-api-key": "gemini-qa-header-secret-2026"
+    }
+  }
+]
+  Problem Verdict: PASS (x-goog-api-key header present, 0 ?key= query params)
 
-POST /api/v1/admin/ai/providers/test-connection (ollama 127.0.0.1:11434) -> HTTP 200:
-  {"ok":true,"latency_ms":22.31,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+4. 5-Provider Atomic Reorder & PostgreSQL Audit Ledger
+------------------------------------------------------
+[Check 4a] PUT /api/v1/admin/ai/providers/order (5 providers)
+  HTTP Status: 200
+  Normalized Priorities: [10, 20, 30, 40, 50]
+  Problem Verdict: PASS
 
-POST /api/v1/admin/ai/providers/c84e0890-51a7-4dfb-845c-57095842a5c0/probe-models -> HTTP 200:
-  {"ok":true,"latency_ms":22.69,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+[Check 4b] PostgreSQL activity_records Audit Verification
+  Query: SELECT event_type, recorded_at, payload::text FROM activity_records WHERE event_type = 'AI_PROVIDER_REORDERED' ORDER BY recorded_at DESC LIMIT 5;
+  Output:
+AI_PROVIDER_REORDERED|2026-11-20 04:11:54.796449+00|{"ordered_ids": ["08e731db-645a-4472-b3cf-bc3d32e2e094", "828aeccf-87ea-490b-98a7-b3d988f580e1", "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9", "82efe90c-a246-4f9a-9f32-71210369409d", "4a421e13-7b77-4e1d-aaac-e262fecba54e"], "assigned_priorities": {"08e731db-645a-4472-b3cf-bc3d32e2e094": 10, "4a421e13-7b77-4e1d-aaac-e262fecba54e": 50, "828aeccf-87ea-490b-98a7-b3d988f580e1": 20, "82efe90c-a246-4f9a-9f32-71210369409d": 40, "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9": 30}}
+AI_PROVIDER_REORDERED|2026-11-20 04:11:54.763506+00|{"ordered_ids": ["4a421e13-7b77-4e1d-aaac-e262fecba54e", "82efe90c-a246-4f9a-9f32-71210369409d", "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9", "828aeccf-87ea-490b-98a7-b3d988f580e1", "08e731db-645a-4472-b3cf-bc3d32e2e094"], "assigned_priorities": {"08e731db-645a-4472-b3cf-bc3d32e2e094": 50, "4a421e13-7b77-4e1d-aaac-e262fecba54e": 10, "828aeccf-87ea-490b-98a7-b3d988f580e1": 40, "82efe90c-a246-4f9a-9f32-71210369409d": 20, "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9": 30}}
+AI_PROVIDER_REORDERED|2026-11-20 04:09:43.82878+00|{"ordered_ids": ["7190ea33-956f-4163-990e-e89764ec33b9", "29bc6d28-2ffa-4505-89c5-433746c7c92d", "c69f716a-7791-4166-bd5d-83c872f43803", "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd", "31742c57-7aed-41e7-a343-a691712ac4ef"], "assigned_priorities": {"29bc6d28-2ffa-4505-89c5-433746c7c92d": 20, "31742c57-7aed-41e7-a343-a691712ac4ef": 50, "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd": 40, "7190ea33-956f-4163-990e-e89764ec33b9": 10, "c69f716a-7791-4166-bd5d-83c872f43803": 30}}
+AI_PROVIDER_REORDERED|2026-11-20 04:09:43.794615+00|{"ordered_ids": ["31742c57-7aed-41e7-a343-a691712ac4ef", "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd", "c69f716a-7791-4166-bd5d-83c872f43803", "29bc6d28-2ffa-4505-89c5-433746c7c92d", "7190ea33-956f-4163-990e-e89764ec33b9"], "assigned_priorities": {"29bc6d28-2ffa-4505-89c5-433746c7c92d": 40, "31742c57-7aed-41e7-a343-a691712ac4ef": 10, "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd": 20, "7190ea33-956f-4163-990e-e89764ec33b9": 50, "c69f716a-7791-4166-bd5d-83c872f43803": 30}}
+  Problem Verdict: PASS
 
-POST /api/v1/admin/ai/providers/c84e0890-51a7-4dfb-845c-57095842a5c0/test-connection -> HTTP 200:
-  {"ok":true,"latency_ms":22.49,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+5. Raw API QA Execution Output
+------------------------------
+=== 1. SESSION & SETUP VERIFICATION ===
+GET /api/v1/setup/status -> 200 {"initialized":true}
+GET /api/v1/auth/session -> 200 {"authenticated":true,"principal_id":"eef898c2-73c1-4ee4-be9e-a9b9454c600c","workspace_id":"01a1f723-ee6f-7b3f-9b98-0ce3f849774c","session_id":"01a1f726-cc65-7a72-824b-aceb5d242a27","aal_level":2,"mfa_pending":false,"csrf_token":"IZiHvamoa2SKztH4ZBSmYw.gsTbevRTWGptGn01irdAQPxGGAKeldaSGsu3wyhi7G0","idle_expires_at":"2026-11-27T04:11:17.477173+00:00","absolute_expires_at":"2026-12-20T04:11:17.453102+00:00","remember_me":true}
 
-POST /api/v1/admin/ai/providers/9e90b8b2-1f26-442d-b83a-4ca37a729444/probe-models -> HTTP 200:
-  {"ok":true,"latency_ms":22.31,"models":["local-vllm-coder","mistral-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+=== 2. KAN-10 API & LIVE GIT ===
+POST /api/v1/sparkle/complete (project_id=KAN) -> 200 content-type=text/event-stream; charset=utf-8 body='event: done\ndata: {"status": "unavailable", "ttft_ms": 0.0, "total_ms": 0.19}\n\n'
+POST /api/v1/sparkle/complete (project_id=NOPE) -> 404 {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"5f3daaefcfe94d8e9f997dc723f36990"}
+POST repo-bindings file:///tmp/x.git -> 422 {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"file:// scheme is forbidden","request_id":"375281c55e5a4b39a36658ee31c61a86","reason":"SCHEME_FILE_DISALLOWED"}
+POST repo-bindings http://127.0.0.1:18088/x.git -> 422 {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"http:// cleartext protocol is forbidden","request_id":"17859a54d2b544c5a25426f18d5b2e73","reason":"INSECURE_HTTP_SCHEME"}
+Repo binding hello-world (verified via GET) -> {'id': 'b477094c-980a-4f53-864f-a3cdda491eb8', 'workspace_id': '01a1f723-ee6f-7b3f-9b98-0ce3f849774c', 'project_id': '01a1f723-ee7e-7675-8f53-2220accfb8c4', 'slug': 'hello-world', 'remote_url': 'https://github.com/octocat/Hello-World.git', 'default_ref': 'master', 'access_mode': 'ro_vfs_mount', 'last_fetched_commit': '7fd1a60b01f91b314f59955a4e4d4e80d8edf11d', 'last_fetched_at': None, 'last_fetch_error': None, 'created_by': '01a1f723-ee70-7470-a9c0-d0d11388270d', 'created_at': '2026-11-20T04:08:09.869938Z'}
+Mirror parent dir:
+total 12
+drwxr-x--- 3 kanban kanban 4096 Nov 20 04:08 .
+drwxr-x--- 3 kanban kanban 4096 Nov 20 04:08 ..
+drwxr-x--- 7 kanban kanban 4096 Nov 20 04:08 b477094c-980a-4f53-864f-a3cdda491eb8.git
 
-POST /api/v1/admin/ai/providers/9e90b8b2-1f26-442d-b83a-4ca37a729444/test-connection -> HTTP 200:
-  {"ok":true,"latency_ms":24.05,"models":["local-vllm-coder","mistral-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+Bare mirror dir:
+total 288
+drwxr-x--- 7 kanban kanban   4096 Nov 20 04:08 .
+drwxr-x--- 3 kanban kanban   4096 Nov 20 04:08 ..
+-rw-r--r-- 1 kanban kanban     23 Nov 20 04:08 HEAD
+drwxr-xr-x 2 kanban kanban   4096 Nov 20 04:08 branches
+-rw-r--r-- 1 kanban kanban    173 Nov 20 04:08 config
+-rw-r--r-- 1 kanban kanban     73 Nov 20 04:08 description
+drwxr-xr-x 2 kanban kanban   4096 Nov 20 04:08 hooks
+drwxr-xr-x 2 kanban kanban   4096 Nov 20 04:08 info
+drwxr-xr-x 4 kanban kanban   4096 Nov 20 04:08 objects
+-rw-r--r-- 1 kanban kanban 250968 Nov 20 04:08 packed-refs
+drwxr-xr-x 4 kanban kanban   4096 Nov 20 04:08 refs
 
-=== 4. Non-AAL2 and Non-Admin Access Control ===
-AAL1 @admin (mfa_pending=true) GET /api/v1/admin/ai/providers -> HTTP 401 MFA_REQUIRED
-AAL1 @admin (mfa_pending=true) POST /api/v1/admin/ai/providers/probe-models -> HTTP 401 MFA_REQUIRED
-AAL1 @admin (mfa_pending=true) POST /api/v1/admin/ai/providers/test-connection -> HTTP 401 MFA_REQUIRED
-@member (WORKSPACE_MEMBER) GET /api/v1/admin/ai/providers -> HTTP 403 FORBIDDEN
-@member (WORKSPACE_MEMBER) POST /api/v1/admin/ai/providers/probe-models -> HTTP 403 FORBIDDEN
-@member (WORKSPACE_MEMBER) POST /api/v1/admin/ai/providers/test-connection -> HTTP 403 FORBIDDEN
-@member (WORKSPACE_MEMBER) PUT /api/v1/admin/ai/providers/order -> HTTP 403 FORBIDDEN
+Container log PermissionError/missing-git matches: 0
 
-=== 5. PUT /api/v1/admin/ai/providers/order Atomic 10,20,30,40,50 + Audit Event ===
-PUT /api/v1/admin/ai/providers/order -> HTTP 200
-Returned priorities in order: 10 (#3 OpenAI Local vLLM), 20 (#1 Ollama Primary), 30 (#5 OpenAI Cloud), 40 (#2 Ollama LAN 192.168.1.101), 50 (#4 Google Gemini)
+=== 3. KAN-21 API & SECURITY GATES ===
+Unauth GET /api/v1/admin/ai/providers -> 401 {"type":"urn:kanban:problem:AUTHENTICATION_REQUIRED","title":"Authentication Required","status":401,"code":"AUTHENTICATION_REQUIRED","request_id":"6ffc5374d45148cfa7e2c81892f6dd86"}
+Member login -> 200 {"authenticated":true,"status":"authenticated","challenge_id":"89945d00-3e21-497e-9443-3404d5f4ee25","methods":["totp","webauthn","recovery"],"session_id":"89945d00-3e21-497e-9443-3404d5f4ee25","aal_level":1,"mfa_pending":false,"csrf_token":"5Oq7OBFJWRxoZQZ1EwOPYQ.jhT0dDZUYilnXM1rcOVda8gPHiQUU_fTYWYetPsIELg"}
+Member GET /api/v1/admin/ai/providers -> 403 {"type":"urn:kanban:problem:FORBIDDEN","title":"Forbidden","status":403,"code":"FORBIDDEN","detail":"Principal does not possess an administrative role.","request_id":"91d4b1bab2324231b16cf1eb80e9ab67"}
+Admin login (AAL1) -> 200 {"authenticated":true,"status":"mfa_required","challenge_id":"64fdb0e9-3d5f-4948-9c03-768e860db0a4","methods":["totp","webauthn","recovery"],"session_id":"64fdb0e9-3d5f-4948-9c03-768e860db0a4","aal_level":1,"mfa_pending":true,"csrf_token":"vOQZFQUw-YrXbp4o3grZ8A.2BzLWTKEhJVIUh_uky2zV6Uj3F32-0sVSi0b5cmLWeU"}
+Admin AAL1 GET /api/v1/admin/ai/providers -> 401 {"type":"urn:kanban:problem:MFA_REQUIRED","title":"Multi-Factor Authentication Required","status":401,"code":"MFA_REQUIRED","detail":"Session requires second-factor verification before accessing this resource.","request_id":"cc313f113c2b4e888cbe5c8348e223ca"}
+POST provider http://169.254.169.254 -> 422 {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must not target link-local, multicast, or metadata address '169.254.169.254'","request_id":"a3cf58039f014828ab8a4892c4078337"}
+POST provider http://api.openai.com -> 422 {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) or private LAN","request_id":"3e9c8d0cee19413586d623c120f56891"}
+POST probe-models http://169.254.169.254 -> 200 {"ok":false,"latency_ms":0.0,"models":[],"model_count":0,"error_code":"INVALID_BASE_URL","message":"base_url must not target link-local, multicast, or metadata address '169.254.169.254'"}
+POST probe-models http://api.openai.com -> 200 {"ok":false,"latency_ms":0.0,"models":[],"model_count":0,"error_code":"INVALID_BASE_URL","message":"base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) or private LAN"}
+validate_base_url('http://192.168.1.101:11434') -> http://192.168.1.101:11434
+POST provider http://192.168.1.101:11434 (save-only) -> 201 {"id":"3bc82b14-8f20-4ee3-bf1f-b215fb6d7057","provider_kind":"ollama","display_name":"LAN Validation Check","base_url":"http://192.168.1.101:11434","model_allowlist":["qwen2.5-coder:7b"],"residency_tier":"local_only","priority":100,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+DELETE LAN validation provider 3bc82b14-8f20-4ee3-bf1f-b215fb6d7057 -> 204 
+GET /api/v1/admin/workspace-settings -> 200 {"workspace_id":"01a1f723-ee6f-7b3f-9b98-0ce3f849774c","name":"Kanban QA","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"updated_at":"2026-11-20T04:08:09.583663Z"}
+Draft probe ollama_draft: probe=200 {"ok":true,"latency_ms":31.3,"models":["qwen2.5-coder:7b","llama3.2:3b","deepseek-r1:14b"],"model_count":3,"error_code":null,"message":"Successfully connected to Ollama (3 models available)"} | test=200 {"ok":true,"latency_ms":25.73,"models":["qwen2.5-coder:7b","llama3.2:3b","deepseek-r1:14b"],"model_count":3,"error_code":null,"message":"Successfully connected to Ollama (3 models available)"}
+Draft probe openai_draft: probe=200 {"ok":true,"latency_ms":22.08,"models":["local-vllm-8b","mistral-small-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"} | test=200 {"ok":true,"latency_ms":23.99,"models":["local-vllm-8b","mistral-small-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+Draft probe gemini_draft: probe=200 {"ok":true,"latency_ms":22.38,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"} | test=200 {"ok":true,"latency_ms":22.68,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"}
+Create provider Primary Ollama Loopback -> 201 {"id":"08e731db-645a-4472-b3cf-bc3d32e2e094","provider_kind":"ollama","display_name":"Primary Ollama Loopback","base_url":"http://127.0.0.1:11434","model_allowlist":["qwen2.5-coder:7b","llama3.2:3b"],"residency_tier":"local_only","priority":10,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+Create provider Local vLLM OpenAI-Compat -> 201 {"id":"828aeccf-87ea-490b-98a7-b3d988f580e1","provider_kind":"openai","display_name":"Local vLLM OpenAI-Compat","base_url":"http://127.0.0.1:18080/v1","model_allowlist":["local-vllm-8b","mistral-small-24b"],"residency_tier":"local_only","priority":20,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+Create provider Gemini Loopback Test -> 201 {"id":"f8d8193a-bd88-4043-9c7a-2b1e6c1570a9","provider_kind":"gemini","display_name":"Gemini Loopback Test","base_url":"http://127.0.0.1:18081","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"cloud_standard","priority":30,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+Create provider Legacy Cloud OpenAI -> 201 {"id":"82efe90c-a246-4f9a-9f32-71210369409d","provider_kind":"openai","display_name":"Legacy Cloud OpenAI","base_url":"https://api.openai.com/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"cloud","priority":40,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+Create provider Secondary Ollama Fallback -> 201 {"id":"4a421e13-7b77-4e1d-aaac-e262fecba54e","provider_kind":"ollama","display_name":"Secondary Ollama Fallback","base_url":"http://127.0.0.1:11434","model_allowlist":["deepseek-r1:14b"],"residency_tier":"local_only","priority":50,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+Saved probe Primary Ollama Loopback: probe=200 {"ok":true,"latency_ms":22.55,"models":["qwen2.5-coder:7b","llama3.2:3b","deepseek-r1:14b"],"model_count":3,"error_code":null,"message":"Successfully connected to Ollama (3 models available)"} | test=200 {"ok":true,"latency_ms":22.25,"models":["qwen2.5-coder:7b","llama3.2:3b","deepseek-r1:14b"],"model_count":3,"error_code":null,"message":"Successfully connected to Ollama (3 models available)"}
+Saved probe Local vLLM OpenAI-Compat: probe=200 {"ok":true,"latency_ms":22.01,"models":["local-vllm-8b","mistral-small-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"} | test=200 {"ok":true,"latency_ms":21.95,"models":["local-vllm-8b","mistral-small-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+Saved probe Gemini Loopback Test: probe=200 {"ok":true,"latency_ms":22.01,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"} | test=200 {"ok":true,"latency_ms":22.06,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"}
+Gemini upstream requests recorded: 9
+PUT /api/v1/admin/ai/providers/order -> 200 [{"id":"4a421e13-7b77-4e1d-aaac-e262fecba54e","provider_kind":"ollama","display_name":"Secondary Ollama Fallback","base_url":"http://127.0.0.1:11434","model_allowlist":["deepseek-r1:14b"],"residency_tier":"local_only","priority":10,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null},{"id":"82efe90c-a246-4f9a-9f32-71210369409d","provider_kind":"openai","display_name":"Legacy Cloud OpenAI","base_url":"https://api.openai.com/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"cloud","priority":20,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null},{"id":"f8d8193a-bd88-4043-9c7a-2b1e6c1570a9","provider_kind":"gemini","display_name":"Gemini Loopback Test","base_url":"http://127.0.0.1:18081","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"cloud_standard","priority":30,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null},{"id":"828aeccf-87ea-490b-98a7-b3d988f580e1","provider_kind":"openai","display_name":"Local vLLM OpenAI-Compat","base_url":"http://127.0.0.1:18080/v1","model_allowlist":["local-vllm-8b","mistral-small-24b"],"residency_tier":"local_only","priority":40,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null},{"id":"08e731db-645a-4472-b3cf-bc3d32e2e094","provider_kind":"ollama","display_name":"Primary Ollama Loopback","base_url":"http://127.0.0.1:11434","model_allowlist":["qwen2.5-coder:7b","llama3.2:3b"],"residency_tier":"local_only","priority":50,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}]
+DB audit AI_PROVIDER_REORDERED:
+AI_PROVIDER_REORDERED|2026-11-20 04:11:54.796449+00|{"ordered_ids": ["08e731db-645a-4472-b3cf-bc3d32e2e094", "828aeccf-87ea-490b-98a7-b3d988f580e1", "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9", "82efe90c-a246-4f9a-9f32-71210369409d", "4a421e13-7b77-4e1d-aaac-e262fecba54e"], "assigned_priorities": {"08e731db-645a-4472-b3cf-bc3d32e2e094": 10, "4a421e13-7b77-4e1d-aaac-e262fecba54e": 50, "828aeccf-87ea-490b-98a7-b3d988f580e1": 20, "82efe90c-a246-4f9a-9f32-71210369409d": 40, "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9": 30}}
+AI_PROVIDER_REORDERED|2026-11-20 04:11:54.763506+00|{"ordered_ids": ["4a421e13-7b77-4e1d-aaac-e262fecba54e", "82efe90c-a246-4f9a-9f32-71210369409d", "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9", "828aeccf-87ea-490b-98a7-b3d988f580e1", "08e731db-645a-4472-b3cf-bc3d32e2e094"], "assigned_priorities": {"08e731db-645a-4472-b3cf-bc3d32e2e094": 50, "4a421e13-7b77-4e1d-aaac-e262fecba54e": 10, "828aeccf-87ea-490b-98a7-b3d988f580e1": 40, "82efe90c-a246-4f9a-9f32-71210369409d": 20, "f8d8193a-bd88-4043-9c7a-2b1e6c1570a9": 30}}
+AI_PROVIDER_REORDERED|2026-11-20 04:09:43.82878+00|{"ordered_ids": ["7190ea33-956f-4163-990e-e89764ec33b9", "29bc6d28-2ffa-4505-89c5-433746c7c92d", "c69f716a-7791-4166-bd5d-83c872f43803", "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd", "31742c57-7aed-41e7-a343-a691712ac4ef"], "assigned_priorities": {"29bc6d28-2ffa-4505-89c5-433746c7c92d": 20, "31742c57-7aed-41e7-a343-a691712ac4ef": 50, "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd": 40, "7190ea33-956f-4163-990e-e89764ec33b9": 10, "c69f716a-7791-4166-bd5d-83c872f43803": 30}}
+AI_PROVIDER_REORDERED|2026-11-20 04:09:43.794615+00|{"ordered_ids": ["31742c57-7aed-41e7-a343-a691712ac4ef", "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd", "c69f716a-7791-4166-bd5d-83c872f43803", "29bc6d28-2ffa-4505-89c5-433746c7c92d", "7190ea33-956f-4163-990e-e89764ec33b9"], "assigned_priorities": {"29bc6d28-2ffa-4505-89c5-433746c7c92d": 40, "31742c57-7aed-41e7-a343-a691712ac4ef": 10, "3b7cfd03-0de4-4a8d-9d2e-a636fbc7b0bd": 20, "7190ea33-956f-4163-990e-e89764ec33b9": 50, "c69f716a-7791-4166-bd5d-83c872f43803": 30}}
 
-PostgreSQL activity_records audit row:
-AI_PROVIDER_REORDERED | {"ordered_ids": ["9e90b8b2-1f26-442d-b83a-4ca37a729444", "c84e0890-51a7-4dfb-845c-57095842a5c0", "315239f3-8486-4ef8-a46f-127faeee6a08", "88c403a4-8c32-4fe6-bde8-bf730ed16f1a", "86b1621e-3dac-4a50-b8d8-f53e134f1b92"], "assigned_priorities": {"315239f3-8486-4ef8-a46f-127faeee6a08": 30, "86b1621e-3dac-4a50-b8d8-f53e134f1b92": 50, "88c403a4-8c32-4fe6-bde8-bf730ed16f1a": 40, "9e90b8b2-1f26-442d-b83a-4ca37a729444": 10, "c84e0890-51a7-4dfb-845c-57095842a5c0": 20}}
+ALL API CHECKS PASSED! State written to /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-r4/qa_state.json
 
-----------------------------------------------------------------------
-OVERALL KAN-21 VERDICT
-----------------------------------------------------------------------
 LIVE_STACK_VERDICT: PASS

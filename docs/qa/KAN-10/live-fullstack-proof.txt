@@ -1,147 +1,105 @@
-KAN-10 ([KB-P3-AUDIT-04]) LIVE FULL-STACK QA PROOF
-======================================================================
-Target Container : kanban-liveqa-4 (thumbs-up-kanban:local-qa)
-Target URL       : http://localhost:18954
-Execution Mode   : Real live standalone container, real PostgreSQL 16 + FORCE RLS,
-                   UID 65532 runtime, ZERO mockApi / ZERO page.route stubs
-Timestamp (UTC)  : 2026-11-20T02:46:41Z - 2026-11-20T02:55:49Z
+LIVE FULL-STACK BLACK-BOX & INTEGRATION PROOF: KAN-10 ([KB-P3-AUDIT-04])
+========================================================================
+Target Container: kanban-liveqa-4 (http://localhost:18954)
+Runtime Mode: standalone_embedded_pg (PostgreSQL 16 FORCE RLS, UID 65532 uvicorn)
+Mocks/Stubs Used: 0 (0 mockApi, 0 page.route, 0 context.route)
+Timestamp (UTC): 2026-11-20T04:14:00Z
 
-----------------------------------------------------------------------
-BOOTSTRAP & AAL2 SETUP
-----------------------------------------------------------------------
-- Read setup token from /run/kanban/setup_token via docker exec kanban-liveqa-4.
-- GET /api/v1/setup/status -> HTTP 200 {"initialized":false}
-- POST /api/v1/setup/claim (workspace_slug="kanban", project_key="KAN", username="admin") -> HTTP 200
-- POST /api/v1/auth/mfa/totp/enroll -> HTTP 200 (enrolled real TOTP factor)
-- POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 {"confirmed":true,"status":"enrolled","verified":true,"aal_level":2,...}
-- GET /api/v1/auth/session -> HTTP 200 {"authenticated":true,"aal_level":2,"mfa_pending":false,...}
+1. Bootstrap & AAL2 Session
+---------------------------
+Setup Status: {"initialized": true}
+Authenticated AAL2 Session: {"authenticated": true, "principal_id": "eef898c2-73c1-4ee4-be9e-a9b9454c600c", "workspace_id": "01a1f723-ee6f-7b3f-9b98-0ce3f849774c", "session_id": "01a1f726-cc65-7a72-824b-aceb5d242a27", "aal_level": 2, "mfa_pending": false, "csrf_token": "IZiHvamoa2SKztH4ZBSmYw.gsTbevRTWGptGn01irdAQPxGGAKeldaSGsu3wyhi7G0", "idle_expires_at": "2026-11-27T04:11:17.477173+00:00", "absolute_expires_at": "2026-12-20T04:11:17.453102+00:00", "remember_me": true}
 
-----------------------------------------------------------------------
-PROBLEM 1: Sparkle String Project Key Resolution (POST /api/v1/sparkle/complete)
-----------------------------------------------------------------------
-Command: python3 test_kan10_api.py
+2. Sparkle FIM SSE Endpoint Verification
+----------------------------------------
+[Check 2a] POST /api/v1/sparkle/complete (project_id="KAN")
+  HTTP Status: 200
+  Content-Type: text/event-stream; charset=utf-8
+  Response Body:
+event: done
+data: {"status": "unavailable", "ttft_ms": 0.0, "total_ms": 0.19}
+  Problem Verdict: PASS (200 text/event-stream)
 
-1) Valid project key string ("project_id": "KAN"):
-   POST http://localhost:18954/api/v1/sparkle/complete
-   Request JSON: {"project_id":"KAN","surface":"summary","prefix":"Implement passwordless WebAuthn ","suffix":" for admin login.","client_request_id":"<uuid>"}
-   Response: HTTP 200
-   Content-Type: text/event-stream; charset=utf-8
-   Body:
-   event: done
-   data: {"status": "unavailable", "ttft_ms": 0.0, "total_ms": 0.23}
-   Result: "KAN" resolved cleanly without 422 uuid_parsing.
+[Check 2b] POST /api/v1/sparkle/complete (project_id="NOPE")
+  HTTP Status: 404
+  Response Body: {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"5f3daaefcfe94d8e9f997dc723f36990"}
+  Problem Verdict: PASS (404 NOT_FOUND)
 
-2) Unknown / cross-tenant project key string ("project_id": "NOPE"):
-   POST http://localhost:18954/api/v1/sparkle/complete
-   Request JSON: {"project_id":"NOPE","surface":"summary","prefix":"Implement passwordless WebAuthn ","suffix":" for admin login.","client_request_id":"<uuid>"}
-   Response: HTTP 404
-   Content-Type: application/problem+json
-   Body: {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"d67000117adc4a11bc8f4c553909416e"}
+3. Repo Bindings URL Validation & Live Bare Git Mirror Execution
+----------------------------------------------------------------
+[Check 3a] POST /api/v1/projects/KAN/repo-bindings (file:///tmp/x.git)
+  HTTP Status: 422
+  Response Body: {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"file:// scheme is forbidden","request_id":"375281c55e5a4b39a36658ee31c61a86","reason":"SCHEME_FILE_DISALLOWED"}
+  Problem Verdict: PASS (422 REPO_URL_REJECTED, SCHEME_FILE_DISALLOWED)
 
-LIVE_STACK_VERDICT (Problem 1): PASS
+[Check 3b] POST /api/v1/projects/KAN/repo-bindings (http://127.0.0.1:18088/x.git)
+  HTTP Status: 422
+  Response Body: {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"http:// cleartext protocol is forbidden","request_id":"17859a54d2b544c5a25426f18d5b2e73","reason":"INSECURE_HTTP_SCHEME"}
+  Problem Verdict: PASS (422 REPO_URL_REJECTED, INSECURE_HTTP_SCHEME)
 
-----------------------------------------------------------------------
-PROBLEM 2: Git Bare Mirror Writable Fallback under UID 65532
-----------------------------------------------------------------------
-Setup inside kanban-liveqa-4:
-- Created valid bare git repo with 1 commit at /tmp/sample-repo.git owned by 65532:65532 (kanban:kanban).
+[Check 3c] POST /api/v1/projects/KAN/repo-bindings (https://github.com/octocat/Hello-World.git)
+  HTTP Status: 201
+  Response Body: {"id": "b477094c-980a-4f53-864f-a3cdda491eb8", "workspace_id": "01a1f723-ee6f-7b3f-9b98-0ce3f849774c", "project_id": "01a1f723-ee7e-7675-8f53-2220accfb8c4", "slug": "hello-world", "remote_url": "https://github.com/octocat/Hello-World.git", "default_ref": "master", "access_mode": "ro_vfs_mount", "last_fetched_commit": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d", "last_fetched_at": null, "last_fetch_error": null, "created_by": "01a1f723-ee70-7470-a9c0-d0d11388270d", "created_at": "2026-11-20T04:08:09.869938Z"}
+  docker exec kanban-liveqa-4 ls -la /var/lib/kanban/data/git-mirrors/01a1f723-ee6f-7b3f-9b98-0ce3f849774c/:
+total 12
+drwxr-x--- 3 kanban kanban 4096 Nov 20 04:08 .
+drwxr-x--- 3 kanban kanban 4096 Nov 20 04:08 ..
+drwxr-x--- 7 kanban kanban 4096 Nov 20 04:08 b477094c-980a-4f53-864f-a3cdda491eb8.git
+  docker exec kanban-liveqa-4 ls -la /var/lib/kanban/data/git-mirrors/01a1f723-ee6f-7b3f-9b98-0ce3f849774c/b477094c-980a-4f53-864f-a3cdda491eb8.git/:
+total 288
+drwxr-x--- 7 kanban kanban   4096 Nov 20 04:08 .
+drwxr-x--- 3 kanban kanban   4096 Nov 20 04:08 ..
+-rw-r--r-- 1 kanban kanban     23 Nov 20 04:08 HEAD
+drwxr-xr-x 2 kanban kanban   4096 Nov 20 04:08 branches
+-rw-r--r-- 1 kanban kanban    173 Nov 20 04:08 config
+-rw-r--r-- 1 kanban kanban     73 Nov 20 04:08 description
+drwxr-xr-x 2 kanban kanban   4096 Nov 20 04:08 hooks
+drwxr-xr-x 2 kanban kanban   4096 Nov 20 04:08 info
+drwxr-xr-x 4 kanban kanban   4096 Nov 20 04:08 objects
+-rw-r--r-- 1 kanban kanban 250968 Nov 20 04:08 packed-refs
+drwxr-xr-x 4 kanban kanban   4096 Nov 20 04:08 refs
+  Container Log PermissionError / Missing-Git Errors: 0
+  Problem Verdict: PASS (Real bare git mirror cloned under UID 65532 with HEAD, objects/, refs/)
 
-1) Attempt file:// URL:
-   POST http://localhost:18954/api/v1/projects/KAN/repo-bindings
-   Payload: {"slug":"local-file-test","remote_url":"file:///tmp/sample-repo.git","default_ref":"main","access_mode":"bare_git_tools"}
-   Response: HTTP 422
-   Body: {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"file:// scheme is forbidden","request_id":"a6cdc700da6c49bcaad6b340322e0c97","reason":"SCHEME_FILE_DISALLOWED"}
+4. Playwright Unmocked UI Verification (1440x900 & 390x844, Light & Dark)
+--------------------------------------------------------------------------
+[Check 4a] Navigate /projects/KAN/settings
+  404 responses on /api/v1/projects/KAN/modules: 0
+  Problem Verdict: PASS (0 404 console/network errors on /modules)
 
-2) Attempt cleartext loopback http:// URL:
-   POST http://localhost:18954/api/v1/projects/KAN/repo-bindings
-   Payload: {"slug":"local-http-test","remote_url":"http://127.0.0.1:18088/sample-repo.git","default_ref":"main","access_mode":"bare_git_tools"}
-   Response: HTTP 422
-   Body: {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"http:// cleartext protocol is forbidden","request_id":"8bf99ce898a542dbb53d26b248fa61d9","reason":"INSECURE_HTTP_SCHEME"}
+[Check 4b] Custom Fields /projects/KAN/settings/custom-fields
+  Slug pattern attribute: ^[a-z0-9][a-z0-9\-]{1,62}$
+  new RegExp(pattern, 'v') valid: True
+  checkValidity('INVALID SLUG!'): False
+  checkValidity('cvss-score'): True
+  Immediate Dual-Control Banner (WORKSPACE, unsaved):
+    🛡️ Dual-Control Policy: Another distinct administrator holding WORKSPACE_ADMIN authority with a fresh AAL2 step-up must approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to script source or format metadata will immediately revoke approval and reset state.
+  Immediate Dual-Control Banner (SERVER, unsaved):
+    🛡️ Dual-Control Policy: Another distinct administrator holding SERVER_ADMIN authority with a fresh AAL2 step-up must approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to script source or format metadata will immediately revoke approval and reset state.
+  Problem Verdict: PASS
 
-3) Valid HTTPS URL (https://github.com/octocat/Hello-World.git):
-   POST http://localhost:18954/api/v1/projects/KAN/repo-bindings
-   Response: HTTP 201
-   Body: {"id":"1603f265-6792-4e6b-b323-7baf0bf4411c","workspace_id":"01a1f6d9-6053-71d5-aa7e-e02cbb8113da","project_id":"01a1f6d9-6062-7fb7-bf68-5178ffd09339","slug":"https-mirror-probe","remote_url":"https://github.com/octocat/Hello-World.git","default_ref":"master","access_mode":"bare_git_tools","last_fetched_commit":null,"last_fetched_at":null,"last_fetch_error":null,"created_by":"01a1f6d9-6054-7595-85a9-5181efcc2409","created_at":"2026-11-20T02:47:12.608369Z"}
+[Check 4c] Workflow Studio /projects/KAN/settings/workflows & Repo Modal
+  Rendered repo card: hello-world VFS Mount (:ro) Synced (7fd1a60) Refresh Mirror Remove https://github.com/octocat/Hello-World.git ref: master
+  Modal opened (#bind-repo-title visible) in Desktop & Mobile, Light & Dark.
+  Problem Verdict: PASS
 
-4) Container filesystem & log inspection:
-   ls -la /var/lib/kanban/data/git-mirrors:
-   drwxr-x--- 3 kanban kanban 4096 Nov 20 02:47 /var/lib/kanban/data/git-mirrors
-   drwxr-x--- 2 kanban kanban 4096 Nov 20 02:47 /var/lib/kanban/data/git-mirrors/01a1f6d9-6053-71d5-aa7e-e02cbb8113da
-   Zero 500 PermissionError! UID 65532 resolved and created /var/lib/kanban/data/git-mirrors/<workspace_id>.
+[Check 4d] Console & Page Errors
+  console.error count: 0
+  pageerror count: 0
 
-   HOWEVER, container binary & log inspection revealed an image defect in standalone mode:
-   - `which git` / `find / -name git` inside kanban-liveqa-4 returned empty (Dockerfile `standalone` stage inherits `runtime-slim`, which omits `git`; only `agent-runner` stage installs `git`).
-   - Container log line:
-     `2026-11-20 02:47:12,621 [WARNING] [kanban.api.v1.repo_bindings] Initial mirror clone failed: [Errno 2] No such file or directory`
-   - As a result, while UID 65532 writable directory fallback (/var/lib/kanban/data/git-mirrors) worked with 0 PermissionError, no actual bare git mirror (HEAD, objects/, refs/) could be cloned inside the standalone container because the `git` binary is missing from the standalone Docker image.
+5. Saved Screenshots (docs/qa/KAN-10/screenshots/)
+--------------------------------------------------
+- docs/qa/KAN-10/screenshots/live-custom-fields-basic-desktop-light.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-basic-desktop-dark.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-workspace-desktop-light.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-workspace-desktop-dark.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-server-desktop-light.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-server-desktop-dark.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-mobile-light.png
+- docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-mobile-dark.png
+- docs/qa/KAN-10/screenshots/live-workflow-repo-modal-desktop-light.png
+- docs/qa/KAN-10/screenshots/live-workflow-repo-modal-desktop-dark.png
+- docs/qa/KAN-10/screenshots/live-workflow-repo-modal-mobile-light.png
+- docs/qa/KAN-10/screenshots/live-workflow-repo-modal-mobile-dark.png
 
-LIVE_STACK_VERDICT (Problem 2): FAIL (writable fallback dir /var/lib/kanban/data/git-mirrors under UID 65532 verified with 0 PermissionError and HTTP 201, but actual bare mirror clone fails in standalone image with `[Errno 2] No such file or directory` because `git` binary is absent from the `standalone` Dockerfile stage)
-
-----------------------------------------------------------------------
-PROBLEM 3: Custom Fields /v Regex & Immediate Dual-Control Banner + Workflow Modal UI
-----------------------------------------------------------------------
-Command: node test_kan10_ui.mjs (Playwright Chromium 159.0.8154.6, ZERO mockApi)
-
-1) Slug input pattern /v regex compilation in Chromium:
-   - [data-testid="field-slug-input"] pattern attribute: "^[a-z0-9][a-z0-9\\-]{1,62}$"
-   - new RegExp(pattern, 'v') compiled cleanly in Chromium (Desktop Light & Dark): compilesV=true, compileError=null
-   - checkValidity() on "release-risk-01": true
-
-2) Immediate Dual-Control Explanation Banner BEFORE saving:
-   - Default Target Scope = PROJECT: [data-testid="dual-control-explanation-banner"] count = 0
-   - Switch Target Scope -> WORKSPACE (before saving): banner visible immediately = true
-     Text: "Dual-Control Policy: Another distinct administrator holding WORKSPACE_ADMIN authority with a fresh AAL2 step-up must approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to script source or format metadata will immediately revoke approval and reset state."
-   - Switch Target Scope -> SERVER (before saving): banner visible immediately = true
-     Text: "Dual-Control Policy: Another distinct administrator holding SERVER_ADMIN authority with a fresh AAL2 step-up must approve this escalation. Self-approval is blocked (403 Forbidden). Any subsequent edit to script source or format metadata will immediately revoke approval and reset state."
-   - Verified on Desktop 1440x900 (Light & Dark) and Mobile 390x844 (Light & Dark).
-
-3) Workflow Studio Git Repo Binding Modal (/projects/KAN/settings/workflows):
-   - Persisted card [data-testid="repo-card-https-mirror-probe"] rendered from PostgreSQL.
-   - Modal URL validator rejected file:///tmp/sample-repo.git ("Insecure URL scheme rejected: 'file://'. Only HTTPS or SSH URLs are permitted.") and accepted https://github.com/octocat/Spoon-Knife.git ("Valid remote git URL (HTTPS / SSH).").
-
-4) Console / PageError / Network Audit:
-   - Direct navigation to /projects/KAN/settings/custom-fields and /projects/KAN/settings/workflows:
-     consoleErrors = [], pageErrors = [], http >= 400 = [].
-   - Navigating via /projects/KAN/settings first logged 1 unrelated 404 console error on GET /api/v1/projects/KAN/modules (because modules_enabled=false on KAN project).
-
-5) Screenshots captured & visually inspected:
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-basic-desktop-light.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-basic-desktop-dark.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-workspace-desktop-light.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-workspace-desktop-dark.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-server-desktop-light.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-server-desktop-dark.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-mobile-light.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-custom-fields-dual-control-mobile-dark.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-workflow-repo-modal-desktop-light.png
-   - /home/adamoutler/kanban/docs/qa/KAN-10/screenshots/live-workflow-repo-modal-desktop-dark.png
-
-LIVE_STACK_VERDICT (Problem 3): PASS
-
-----------------------------------------------------------------------
-SURGICAL LIVE-STACK REMEDIATION (Problem 2 Git Binary Fix)
-----------------------------------------------------------------------
-1) Root cause and remediation applied:
-   - Defect: Dockerfile Stage 3 (`runtime-slim`) installed tini, libpq5, ca-certificates, but omitted git. Standalone and runtime-slim images therefore lacked /usr/bin/git under UID 65532.
-   - Fix: Added `git` (`--no-install-recommends`, Debian bookworm package) to Dockerfile Stage 3 (`runtime-slim`).
-   - Simplified Stage 4 (`agent-runner`) by removing redundant `apt-get install git` while preserving non-root UID 65532:65532 and zero EXPOSE directives.
-   - Verified that `runtime-slim`, `agent-runner`, and `standalone` all inherit `/usr/bin/git` under UID 65532.
-   - Verified `ExecGitCommandRunner` and `MirrorManager` env:
-     * GIT_CONFIG_NOSYSTEM=1
-     * GIT_CONFIG_GLOBAL=/dev/null
-     * GIT_TERMINAL_PROMPT=0
-     * HOME=tmp_dir (safe non-interactive environment avoiding hanging under UID 65532)
-     * PATH=/usr/bin:/bin
-2) Unit and deployment regression testing:
-   - Added `test_dockerfile_runtime_slim_git_and_ca_certificates` in `tests/deploy/test_dockerfile_agent_runner.py`.
-   - `tests/deploy/test_dockerfile.py` and `test_dockerfile_agent_runner.py`: 13 passed in 0.04s.
-   - All deploy and security tests: 74 passed, 0 failed.
-   - Repos and mirror tests: 65 passed, >=95% coverage maintained.
-   - Zero em/en-dashes verified.
-
-REMEDIATION_VERDICT (Problem 2): PASS
-
-----------------------------------------------------------------------
-OVERALL KAN-10 FINAL VERDICT
-----------------------------------------------------------------------
-LIVE_STACK_VERDICT: PASS (Problem 1 PASS, Problem 2 REMEDIATED & PASS, Problem 3 PASS)
+LIVE_STACK_VERDICT: PASS
