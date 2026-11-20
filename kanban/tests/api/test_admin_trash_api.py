@@ -352,3 +352,63 @@ async def test_admin_trash_project_admin_edge_cases(
     r_mismatch = await api_env.client.get(f"/api/v1/admin/trash?project_id={proj_b}")
     assert r_mismatch.status_code == 200
     assert r_mismatch.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_admin_trash_pagination_limit_and_offset(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """GET /api/v1/admin/trash enforces limit and offset query pagination."""
+    admin = await make_user("trash_page_admin", workspace_role="WORKSPACE_ADMIN")
+    await make_project("PGTR", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+    await _as_admin_aal2(api_env, admin)
+
+    # Create 4 issues
+    created_ids: list[uuid.UUID] = []
+    for idx in range(4):
+        r = await client.post(
+            "/api/v1/projects/PGTR/issues",
+            json={"summary": f"Pagination Issue {idx}"},
+        )
+        assert r.status_code == 201
+        created_ids.append(uuid.UUID(r.json()["id"]))
+
+    # Soft-delete all 4 with slightly staggered timestamps (descending order by deleted_at)
+    now = datetime.now(UTC)
+    for idx, iss_id in enumerate(created_ids):
+        t_del = now - timedelta(hours=idx + 1)
+        await api_env.seed.execute(
+            text("UPDATE objects SET deleted_at = :ts WHERE id = :id"),
+            {"ts": t_del, "id": iss_id},
+        )
+    await api_env.seed.commit()
+
+    # 1. limit=2, offset=0 returns first 2 items
+    resp1 = await api_env.client.get("/api/v1/admin/trash?kind=issue&limit=2&offset=0")
+    assert resp1.status_code == 200
+    data1 = resp1.json()
+    assert len(data1["items"]) == 2
+    assert data1["items"][0]["id"] == str(created_ids[0])
+    assert data1["items"][1]["id"] == str(created_ids[1])
+
+    # 2. limit=2, offset=2 returns next 2 items
+    resp2 = await api_env.client.get("/api/v1/admin/trash?kind=issue&limit=2&offset=2")
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert len(data2["items"]) == 2
+    assert data2["items"][0]["id"] == str(created_ids[2])
+    assert data2["items"][1]["id"] == str(created_ids[3])
+
+    # 3. limit bounds validation
+    r_bad_limit = await api_env.client.get("/api/v1/admin/trash?limit=0")
+    assert r_bad_limit.status_code == 422
+
+    r_exceed_limit = await api_env.client.get("/api/v1/admin/trash?limit=501")
+    assert r_exceed_limit.status_code == 422
+
+    r_bad_offset = await api_env.client.get("/api/v1/admin/trash?offset=-1")
+    assert r_bad_offset.status_code == 422

@@ -87,6 +87,18 @@ const TRASH_KIND_LABELS: Record<string, string> = {
   view: '👁️ View',
 };
 
+export const TRASH_FILTER_LABELS: Record<string, string> = {
+  all: 'All Items',
+  project: 'Projects',
+  issue: 'Issues',
+  doc: 'Docs',
+  page: 'Pages',
+  sticky: 'Stickies',
+  cycle: 'Cycles',
+  module: 'Modules',
+  view: 'Views',
+};
+
 function getTrashError(err: unknown, fallback: string): string {
   const o = err as { detail?: string; message?: string } | undefined;
   return o?.detail ?? o?.message ?? fallback;
@@ -101,22 +113,33 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const queryClient = useQueryClient();
   const locationHash = location.hash;
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => {
+  const [currentUser, setCurrentUser] = useState<{
+    is_server_admin?: boolean;
+    is_workspace_admin?: boolean;
+    is_project_admin?: boolean;
+  } | null>(null);
+
+  const isWsOrServerAdmin = (currentUser?.is_server_admin === true) || (currentUser?.is_workspace_admin === true);
+  const isProjectAdminOnly = Boolean(!isWsOrServerAdmin && currentUser?.is_project_admin);
+
+  const [rawActiveTab, setActiveTab] = useState<WorkspaceTab>(() => {
     const rawHash = window.location.hash || locationHash;
     return parseTabFromHash(rawHash) ?? 'general';
   });
+
+  const activeTab: WorkspaceTab = isProjectAdminOnly ? 'trash' : rawActiveTab;
 
   useEffect(() => {
     const syncFromHash = (): void => {
       const currentHash = window.location.hash;
       const clean = currentHash.replace(/^#+/, '').trim();
       if (!clean) {
-        setActiveTab('general');
+        setActiveTab(isProjectAdminOnly ? 'trash' : 'general');
         return;
       }
       const parsed = parseTabFromHash(currentHash);
       if (parsed) {
-        setActiveTab(parsed);
+        setActiveTab(isProjectAdminOnly ? 'trash' : parsed);
       }
     };
 
@@ -124,7 +147,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
     return () => {
       window.removeEventListener('hashchange', syncFromHash);
     };
-  }, []);
+  }, [isProjectAdminOnly]);
 
   const handleTabChange = (tab: WorkspaceTab): void => {
     setActiveTab(tab);
@@ -183,14 +206,10 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const [purgeConfirmationToken, setPurgeConfirmationToken] = useState<string | null>(null);
   const [purgeBlastHash, setPurgeBlastHash] = useState<string | null>(null);
   const [purgeConfirmPhrase, setPurgeConfirmPhrase] = useState<string | null>(null);
-  const [purgeReason, setPurgeReason] = useState<string>('Permanent cryptographic purge');
+  const [typedConfirmPhrase, setTypedConfirmPhrase] = useState<string>('');
+  const [purgeReason, setPurgeReason] = useState<string>('');
   const [isRequestingPurge, setIsRequestingPurge] = useState<boolean>(false);
   const [isExecutingPurge, setIsExecutingPurge] = useState<boolean>(false);
-
-  const [currentUser, setCurrentUser] = useState<{
-    is_server_admin?: boolean;
-    is_workspace_admin?: boolean;
-  } | null>(null);
 
   const refreshPrincipals = async (): Promise<void> => {
     try {
@@ -232,14 +251,47 @@ export function WorkspaceSettingsPage(): JSX.Element {
           const me = (await apiFetch('GET', '/api/v1/auth/me' as never)) as {
             is_server_admin?: boolean;
             is_workspace_admin?: boolean;
+            is_project_admin?: boolean;
           };
           if (active) setCurrentUser(me);
-          if (!me.is_server_admin && !me.is_workspace_admin) {
-            if (active) setIsLoading(false);
+
+          const isOpeningTrash = window.location.hash.includes('tab-trash') || (parseTabFromHash(window.location.hash) === 'trash');
+          const isServerAdmin = Boolean(me.is_server_admin);
+          const isWsAdmin = Boolean(me.is_workspace_admin);
+          let isProjAdmin = Boolean(me.is_project_admin);
+
+          if (!isServerAdmin && !isWsAdmin) {
+            if (!isProjAdmin && isOpeningTrash) {
+              try {
+                const probeRes = (await apiFetch('GET', '/api/v1/admin/trash' as never)) as {
+                  items?: unknown[];
+                  retention_days?: number;
+                };
+                if (Array.isArray(probeRes.items) || probeRes.retention_days != null) {
+                  isProjAdmin = true;
+                  if (active) {
+                    setCurrentUser({ ...me, is_project_admin: true });
+                  }
+                }
+              } catch {
+                isProjAdmin = false;
+              }
+            }
+
+            if (!isProjAdmin) {
+              if (active) setIsLoading(false);
+              return;
+            }
+
+            // Project admin: lock to trash tab and skip workspace-level admin fetches
+            if (active) {
+              setActiveTab('trash');
+              setIsLoading(false);
+            }
             return;
           }
         } catch {
-          // Fall back gracefully in offline unit tests
+          // If auth/me failed because of network error or in offline unit tests, fall through to workspace-settings fetch
         }
 
         // 1. Fetch workspace settings
@@ -402,12 +454,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setPurgeConfirmationToken(res.confirmation_token ?? null);
       setPurgeBlastHash(res.blast_hash ?? null);
       setPurgeConfirmPhrase(res.confirm_phrase ?? null);
+      setTypedConfirmPhrase('');
+      setPurgeReason('');
     } catch (err: unknown) {
       setTrashActionError(getTrashError(err, 'Failed to request permanent purge.'));
       setPurgeTarget(null);
       setPurgeConfirmationToken(null);
       setPurgeBlastHash(null);
       setPurgeConfirmPhrase(null);
+      setTypedConfirmPhrase('');
+      setPurgeReason('');
     } finally {
       setIsRequestingPurge(false);
     }
@@ -423,8 +479,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (csrf) headers['X-CSRF-Token'] = csrf;
 
-      const defaultReason = 'Permanent cryptographic purge';
-      const cleanReason = purgeReason.trim().length >= 10 ? purgeReason.trim() : defaultReason;
       const expectedConfirmPhrase =
         purgeConfirmPhrase ??
         `PURGE ${purgeTarget.kind.toUpperCase()} ${(purgeTarget.key ?? purgeTarget.id)}`;
@@ -435,7 +489,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         mode: 'permanent_purge',
         confirmation_token: purgeConfirmationToken,
         confirm_phrase: expectedConfirmPhrase,
-        reason: cleanReason.slice(0, 500),
+        reason: purgeReason.trim().slice(0, 500),
       };
       await apiFetch('POST', '/api/v1/admin/destructive:execute' as never, {
         headers,
@@ -449,7 +503,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setPurgeConfirmationToken(null);
       setPurgeBlastHash(null);
       setPurgeConfirmPhrase(null);
-      setPurgeReason('Permanent cryptographic purge');
+      setTypedConfirmPhrase('');
+      setPurgeReason('');
       await loadWorkspaceTrash();
     } catch (err: unknown) {
       setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
@@ -463,6 +518,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
     setPurgeConfirmationToken(null);
     setPurgeBlastHash(null);
     setPurgeConfirmPhrase(null);
+    setTypedConfirmPhrase('');
+    setPurgeReason('');
   };
 
   const handleSaveGeneral = (e: SyntheticEvent) => {
@@ -711,7 +768,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
     );
   }
 
-  if (currentUser && !currentUser.is_server_admin && !currentUser.is_workspace_admin) {
+  if (currentUser && !isWsOrServerAdmin && !isProjectAdminOnly) {
     return (
       <div data-testid="workspace-settings-page" className="kb-settings-container">
         <div data-testid="access-denied-message" className="kb-settings-alert kb-settings-alert-error" role="alert">
@@ -755,39 +812,43 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
       {/* Tabs */}
       <nav className="kb-settings-tabs" role="tablist" aria-label="Workspace Settings Navigation">
-        <button
-          type="button"
-          role="tab"
-          id="tab-general"
-          aria-selected={activeTab === 'general'}
-          data-testid="tab-general"
-          className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { handleTabChange('general'); }}
-        >
-          General & Policy
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-members"
-          aria-selected={activeTab === 'members'}
-          data-testid="tab-members"
-          className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { handleTabChange('members'); }}
-        >
-          Workspace Members
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-groups"
-          aria-selected={activeTab === 'groups'}
-          data-testid="tab-groups"
-          className={`kb-settings-tab ${activeTab === 'groups' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { handleTabChange('groups'); }}
-        >
-          Groups & Governance
-        </button>
+        {isWsOrServerAdmin && (
+          <>
+            <button
+              type="button"
+              role="tab"
+              id="tab-general"
+              aria-selected={activeTab === 'general'}
+              data-testid="tab-general"
+              className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('general'); }}
+            >
+              General & Policy
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-members"
+              aria-selected={activeTab === 'members'}
+              data-testid="tab-members"
+              className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('members'); }}
+            >
+              Workspace Members
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-groups"
+              aria-selected={activeTab === 'groups'}
+              data-testid="tab-groups"
+              className={`kb-settings-tab ${activeTab === 'groups' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('groups'); }}
+            >
+              Groups & Governance
+            </button>
+          </>
+        )}
         <button
           type="button"
           role="tab"
@@ -1361,32 +1422,36 @@ export function WorkspaceSettingsPage(): JSX.Element {
             <div className="kb-retention-settings-card" data-testid="workspace-trash-retention-card">
               <h3 className="kb-settings-title">Retention Policy</h3>
               <p className="kb-settings-subtitle">
-                Set how long soft-deleted items remain in trash before automated multi-object sweep (7 to 365 days).
+                {isWsOrServerAdmin
+                  ? 'Set how long soft-deleted items remain in trash before automated multi-object sweep (7 to 365 days).'
+                  : `Soft-deleted items are retained for ${String(trashRetention)} days per workspace policy.`}
               </p>
-              <form onSubmit={handleSaveRetention} className="kb-edit-cell-row">
-                <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-visually-hidden">
-                  Trash Retention Days
-                </label>
-                <input
-                  id="ws-trash-retention-input-trash-tab"
-                  type="number"
-                  data-testid="workspace-trash-retention-input-trash-tab"
-                  className="kb-input"
-                  min="7"
-                  max="365"
-                  value={trashRetention}
-                  onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
-                  required
-                />
-                <button
-                  type="submit"
-                  data-testid="save-trash-retention-btn"
-                  className="kb-btn kb-btn-primary"
-                  disabled={isSavingRetention}
-                >
-                  {isSavingRetention ? 'Saving...' : 'Save Retention Policy'}
-                </button>
-              </form>
+              {isWsOrServerAdmin && (
+                <form onSubmit={handleSaveRetention} className="kb-edit-cell-row">
+                  <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-visually-hidden">
+                    Trash Retention Days
+                  </label>
+                  <input
+                    id="ws-trash-retention-input-trash-tab"
+                    type="number"
+                    data-testid="workspace-trash-retention-input-trash-tab"
+                    className="kb-input"
+                    min="7"
+                    max="365"
+                    value={trashRetention}
+                    onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    data-testid="save-trash-retention-btn"
+                    className="kb-btn kb-btn-primary"
+                    disabled={isSavingRetention}
+                  >
+                    {isSavingRetention ? 'Saving...' : 'Save Retention Policy'}
+                  </button>
+                </form>
+              )}
             </div>
 
             {/* Toolbar: Filter Pills + Search */}
@@ -1400,9 +1465,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     className={`kb-trash-filter-btn ${trashKindFilter === kind ? 'kb-trash-filter-btn-active' : ''}`}
                     onClick={() => { setTrashKindFilter(kind); }}
                   >
-                    {kind === 'all'
-                      ? 'All'
-                      : kind.charAt(0).toUpperCase() + kind.slice(1) + 's'}
+                    {TRASH_FILTER_LABELS[kind]}
                   </button>
                 ))}
               </div>
@@ -1449,6 +1512,21 @@ export function WorkspaceSettingsPage(): JSX.Element {
                       Blast Hash: <code>{purgeBlastHash}</code>
                     </p>
                   )}
+                  <div className="kb-form-group kb-danger-confirm-phrase-input">
+                    <label htmlFor="ws-purge-confirm-phrase-input">
+                      Type Confirmation Phrase to Authorize Purge
+                    </label>
+                    <input
+                      id="ws-purge-confirm-phrase-input"
+                      type="text"
+                      className="kb-input"
+                      data-testid="permanent-purge-confirm-phrase-input"
+                      placeholder={purgeConfirmPhrase ?? `PURGE ${purgeTarget.kind.toUpperCase()} ${(purgeTarget.key ?? purgeTarget.id)}`}
+                      value={typedConfirmPhrase}
+                      onChange={(e) => { setTypedConfirmPhrase(e.target.value); }}
+                      autoComplete="off"
+                    />
+                  </div>
                   <div className="kb-form-group kb-danger-reason-input">
                     <label htmlFor="ws-purge-reason-input">Reason for Purge</label>
                     <input
@@ -1456,6 +1534,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                       type="text"
                       className="kb-input"
                       data-testid="permanent-purge-reason-input"
+                      placeholder="Enter audit reason for permanent purge (min 8 chars)..."
                       value={purgeReason}
                       onChange={(e) => { setPurgeReason(e.target.value); }}
                     />
@@ -1465,7 +1544,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                       type="button"
                       data-testid="confirm-permanent-purge-btn"
                       className="kb-btn kb-btn-purge"
-                      disabled={isExecutingPurge || isRequestingPurge || !purgeConfirmationToken}
+                      disabled={
+                        isExecutingPurge ||
+                        isRequestingPurge ||
+                        !purgeConfirmationToken ||
+                        typedConfirmPhrase.trim() !== (purgeConfirmPhrase ?? `PURGE ${purgeTarget.kind.toUpperCase()} ${(purgeTarget.key ?? purgeTarget.id)}`) ||
+                        purgeReason.trim().length < 8
+                      }
                       onClick={() => { void handleExecutePurge(); }}
                     >
                       {isExecutingPurge ? 'Purging...' : 'Confirm Permanent Purge'}

@@ -227,7 +227,7 @@ async def api_destructive_restore(
     status_code=status.HTTP_200_OK,
     summary="List soft-trashed objects in workspace",
 )
-async def api_admin_list_trash(  # noqa: C901, PLR0912
+async def api_admin_list_trash(  # noqa: C901, PLR0912, PLR0913, PLR0917
     caller: Caller,
     session: Session,
     kind: Annotated[
@@ -236,6 +236,14 @@ async def api_admin_list_trash(  # noqa: C901, PLR0912
     ] = "all",
     project_id: Annotated[uuid.UUID | None, Query(description="Filter by project ID")] = None,
     q: Annotated[str | None, Query(description="Search term for title or key")] = None,
+    limit: Annotated[
+        int,
+        Query(ge=1, le=500, description="Page size limit (1-500)"),
+    ] = 100,
+    offset: Annotated[
+        int,
+        Query(ge=0, description="Page offset"),
+    ] = 0,
 ) -> TrashedObjectList:
     """List soft-trashed objects in caller's workspace.
 
@@ -312,7 +320,7 @@ async def api_admin_list_trash(  # noqa: C901, PLR0912
             | (ObjectRecord.display_title.ilike(search_pattern))
         )
 
-    stmt = stmt.order_by(ObjectRecord.deleted_at.desc()).limit(500)
+    stmt = stmt.order_by(ObjectRecord.deleted_at.desc()).offset(offset).limit(limit)
     rows = (await session.execute(stmt)).scalars().all()
 
     # 4. Strict capability filter: Capability.VIEW and (Capability.DELETE or Capability.ADMIN)

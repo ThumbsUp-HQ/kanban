@@ -5,10 +5,10 @@ OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk
 All checks passed!
 
 === 3. Ruff Format Check ===
-1943 files already formatted
+1966 files already formatted
 
 === 4. Mypy Typecheck ===
-Success: no issues found in 1116 source files
+Success: no issues found in 1125 source files
 
 === 5. Lint Imports ===
 
@@ -26,7 +26,7 @@ Success: no issues found in 1116 source files
 Contracts
 ---------
 
-Analyzed 975 files, 3460 dependencies.
+Analyzed 983 files, 3497 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -36,37 +36,29 @@ Contracts: 2 kept, 0 broken.
 
 === 6. TypeScript Compile Check ===
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd/kanban/web
 > tsc -b --noEmit
 
 === 7. ESLint Check ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd/kanban/web
 > eslint . --max-warnings 0
 
 === 8. Frontend Production Build ===
 
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd/kanban/web
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
-transforming...
-✓ 710 modules transformed.
-rendering chunks...
-computing gzip size...
-dist/index.html                             0.51 kB │ gzip:   0.32 kB
+transforming (636) ../../../../../../../kanban/node_modules/.pnpm/scheduler@0.28transforming (719) src/editor/mermaid/mermaidClient.ts✓ 720 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-CF9gjE3O.css            442.24 kB │ gzip:  62.16 kB
-dist/assets/index-DXLfy6cz.js           2,013.32 kB │ gzip: 542.73 kB
+dist/assets/index-uYpmqwHY.css            460.99 kB │ gzip:  64.86 kB
+dist/assets/index-DzPEEYph.js           2,381.94 kB │ gzip: 661.03 kB
 
-[plugin builtin:vite-reporter] 
-(!) Some chunks are larger than 500 kB after minification. Consider:
-- Using dynamic import() to code-split the application
-- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
-- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.52s
+✓ built in 1.20s
 
-=== 9. Check No Dashes (Codebase) ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-
-=== 10. Check No Dashes (Wiki) ===
+=== 9. Unicode Em/En-Dash Check ===
+python3 -m scripts.check_no_dashes
+Exit code: 0 (0 forbidden unicode dashes found across codebase and wiki)

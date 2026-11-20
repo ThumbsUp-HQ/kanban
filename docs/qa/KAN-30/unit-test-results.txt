@@ -1,14 +1,14 @@
 === Pytest Unit Tests & Coverage for Touched Modules (KAN-30) ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 50 items
+collected 51 items
 
-kanban/tests/api/test_admin_trash_api.py .....                           [ 10%]
-kanban/tests/api/test_workspace_settings.py .............                [ 36%]
+kanban/tests/api/test_admin_trash_api.py ......                          [ 11%]
+kanban/tests/api/test_workspace_settings.py .............                [ 37%]
 kanban/tests/jobs/test_trash_purge.py .........                          [ 54%]
 kanban/tests/auth/test_aal2_policy.py ...                                [ 60%]
 kanban/tests/api/test_destructive_lifecycle.py ......                    [ 72%]
@@ -20,21 +20,21 @@ _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
 Name                                        Stmts   Miss Branch BrPart  Cover   Missing
 ---------------------------------------------------------------------------------------
-kanban/api/v1/admin/destructive.py            133      4     26      4    95%   276, 322, 325, 327
-kanban/api/v1/admin/workspace_settings.py     154      3     54      8    95%   208, 224, 254->261, 257->261, 270->287, 278, 319->322, 334->392
+kanban/api/v1/admin/destructive.py            133      4     26      4    95%   284, 330, 333, 335
+kanban/api/v1/admin/workspace_settings.py     155      3     56      9    94%   208, 214->239, 225, 255->262, 258->262, 271->288, 279, 320->323, 335->393
 kanban/api/v1/schemas/issue_delete.py          52      0      0      0   100%
 kanban/jobs/trash_purge.py                    253      4     94     15    95%   141, 229->227, 231->227, 282->294, 315->319, 351->374, 376->391, 381->386, 395->401, 405->411, 415->429, 431->437, 452, 493->480, 541-542
 kanban/services/activity.py                   213      6      8      2    96%   409, 439-440, 452-453, 491
 kanban/services/destructive_lifecycle.py      463     13    188     20    95%   360, 575->580, 623, 631, 723, 731, 890, 968-969, 975->982, 1004->1119, 1010->1032, 1041-1045, 1048->1053, 1057->1064, 1068->1075, 1079->1092, 1096->1103, 1157, 1165, 1220->1238
 kanban/services/issue_delete.py               163      3     42      7    95%   140, 243, 329->338, 331->338, 339->347, 341->347, 455
 ---------------------------------------------------------------------------------------
-TOTAL                                        1431     33    412     56    95%
-============================= 50 passed in 50.50s ==============================
+TOTAL                                        1432     33    414     57    95%
+============================= 51 passed in 53.20s ==============================
 
 === Admin Routes AAL2 Protection Invariant Test ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -42,45 +42,77 @@ collected 11 items / 10 deselected / 1 selected
 
 kanban/tests/api/test_system_status.py::test_assert_admin_routes_protected_compliance PASSED [100%]
 
-======================= 1 passed, 10 deselected in 0.66s =======================
+======================= 1 passed, 10 deselected in 0.64s =======================
 
 === Vitest WorkspaceSettingsPage Unit Test & Coverage ===
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd/kanban/web
 > vitest run src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx --coverage --coverage.include=src/features/settings/WorkspaceSettingsPage.tsx
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc2-268307cd/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (31 tests) 2346ms
-   ✓ WorkspaceSettingsPage (KANBA-202) (31)
-     ✓ renders workspace settings page and updates workspace name and slug 313ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (34 tests) 2587ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (34)
+     ✓ renders workspace settings page and updates workspace name and slug 370ms
+     ✓ renders 403 access denied when standard member visits workspace settings 6ms
+     ✓ allows creating a new workspace user with role binding in members tab 59ms
+     ✓ handles workspace settings load failure gracefully 18ms
+     ✓ handles PATCH error and non-Error rejection when saving general settings 39ms
+     ✓ validates empty inputs and handles user creation error on members tab 67ms
+     ✓ covers handle with leading @, { items } principals object response, and string error on user creation 64ms
+     ✓ covers fallback error on init and save, principal ID fallback, and empty user ID response 86ms
+     ✓ supports Air-Gap mode, Display Name, and MCP Key Max TTL in general tab (KANBA-210) 50ms
+     ✓ supports inline role selection and remove member actions (KANBA-210) 91ms
+     ✓ supports Groups tab, creating groups, listing members, adding nested groups and cycle rejection (KANBA-210) 178ms
+     ✓ covers empty groups list, null selected group, nested group rendering, and validation early returns 30ms
+     ✓ covers group selection, member table rendering (nested group, bare user, agent), member removal, and member addition cyclic rejection 120ms
+     ✓ covers early return guards and error fallbacks for members, users, and groups 137ms
+     ✓ covers nullish settings fallbacks, empty principals object, and string error fallbacks 30ms
+     ✓ covers csrf token injection and empty input validations across members and groups 67ms
+     ✓ covers role update / member remove in members tab 87ms
+     ✓ covers formatHandle edge cases 1ms
+     ✓ KAN-14: renders live principal payload without handle and resolves p.handle ?? p.principal in members and groups tabs 56ms
+     ✓ KAN-14: sends bound role in DELETE /api/v1/admin/role-bindings and validates required email before creating user 61ms
+     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 281ms
+     ✓ renders id="tab-*" attributes on all settings tab buttons 18ms
+     ✓ synchronizes active tab with window.location.hash on initial mount, click, and hashchange 25ms
+     ✓ resets activeTab to general when window.location.hash becomes empty or hash-only on browser back navigation 33ms
+     ✓ parseTabFromHash handles hash variations and defaults to null 1ms
+     ✓ dispatches CustomEvent kb:system-status-changed on air gap mode update 25ms
+     ✓ supports Trash & Retention tab navigation, retention policy update, and filterable table (KAN-30) 114ms
+     ✓ handles item restoration and 2-stage permanent purge in Workspace Trash Studio (KAN-30) 79ms
+     ✓ handles trash error states, empty search results, and purge cancellation (KAN-30) 144ms
+     ✓ handles empty trash items response and load failure (KAN-30) 48ms
+     ✓ covers remaining defensive branches in WorkspaceSettingsPage (KAN-30) 149ms
+     ✓ allows PROJECT_ADMIN users scoped access to Workspace Trash Studio (KAN-30) 25ms
+     ✓ denies access to standard non-project-admin members (KAN-30) 5ms
+     ✓ covers probe GET /api/v1/admin/trash on #tab-trash for project admins and probe rejection (KAN-30) 18ms
 
  Test Files  1 passed (1)
-      Tests  31 passed (31)
-   Start at  12:07:37
-   Duration  3.76s (tests 70%, environment 20%, import 5%, transform 3%, worker 1%)
+      Tests  34 passed (34)
+   Start at  14:57:54
+   Duration  4.08s (tests 69%, environment 20%, import 6%, transform 4%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.77 |    95.68 |     100 |     100 |                   
- ...ttingsPage.tsx |   99.77 |    95.68 |     100 |     100 | ...15,425,590,617 
+All files          |   99.78 |    95.11 |     100 |     100 |                   
+ ...ttingsPage.tsx |   99.78 |    95.11 |     100 |     100 | ...55,473,649,676 
 -------------------|---------|----------|---------|---------|-------------------
 
-=== Vitest CSS Tokens & Contrast Audit Gate ===
+=== CSS Tokens & Contrast Audit Gate ===
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
-> vitest run src/styles/__tests__/cssTokensAudit.test.ts
-
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-rc1-70c5c57c/kanban/web
-
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 14ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+   ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
+     ✓ verifies 100% of var(--*) usages across all CSS files resolve to canonical tokens 7ms
+     ✓ verifies all static auth-* classes in AuthStudioPage.tsx and AuthCardEditorDrawer.tsx exist in adminAuth.css 2ms
+     ✓ verifies base.css defines color-scheme and button/input/select/textarea color inheritance 1ms
+     ✓ ensures simulated undefined token reference is caught by audit scanner 1ms
 
  Test Files  1 passed (1)
       Tests  4 passed (4)
-   Start at  11:50:22
-   Duration  1.04s (environment 92%, import 3%, tests 2%, transform 2%, worker 1%)
+   Start at  14:58:00
+   Duration  937ms
