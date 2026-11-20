@@ -2,68 +2,71 @@ search_help:
   tool: search
   surface: /mcp/docs
   purpose: CLI-modeled unified search, id read, and tree inspector
-  arguments: {id: help}
+  arguments:
+    id: help
   response:
     tool: search
-    surface: /mcp/docs
-    version: 2.0.0
-    help:
-      description: Search and inspect knowledge base documents, pages, and sticky notes.
-      modes:
-        help: search(id="help") -> Surface usage documentation
-        read_by_id: search(id="docs/architecture", lod="standard"|"full", include_tree=true) -> Single document, page, or
-          sticky node with breadcrumbs, outline, and links
-        hybrid_search: search(query="OAuth PKCE", type="ALL"|"DOC"|"STICKY", project="ARCH", limit=20, cursor=...) -> Ranked
-          matches with snippets and anchors
-        project_list: search(project="ARCH", type="ALL"|"DOC"|"STICKY", include_tree=false) -> Listing of documents and stickies
-          within project
-        workspace_list: search(type="ALL"|"DOC"|"STICKY") -> Listing across entire workspace
-      parameters:
-        id: string (canonical key, path, or UUID; or "help")
-        query: string (1-500 chars for hybrid semantic/fulltext search)
-        type: '"ALL" | "DOC" | "STICKY" (default ALL)'
-        project: string (project identifier key or UUID)
-        lod: '"summary" | "standard" | "full" (default standard)'
-        include_tree: boolean (embed hierarchy tree on doc/project, default false)
-        limit: integer (1-100, default 20)
-        cursor: string (opaque pagination cursor)
+    modes:
+    - read_by_id
+    - hybrid_search
+    - list_project_knowledge
+    parameters:
+      id: Entity key, path, UUID, or 'help' to read
+      query: Search query for lexical/semantic hybrid search
+      type: ALL, DOC, or STICKY
+      project: Project key or UUID scope filter
+      lod: 'Level of detail: summary, standard, full'
+      include_tree: Whether to include page hierarchy or heading outline
+      limit: Max items to return (1..50)
+      cursor: Opaque pagination cursor
 search_read_doc_standard:
   tool: search
-  arguments: {id: docs/architecture/auth-studio, lod: standard}
+  arguments:
+    id: docs/architecture/auth-studio
+    lod: standard
   response:
     kind: page
     key: docs/architecture/auth-studio
     title: Auth Studio
-    version_seq: 2
-    breadcrumbs: [Architecture, Auth Studio]
-    access_pill: project
-    etag: e9b2512f46849492837482818
-    body_markdown: |-
-      ## PKCE S256
-      Hardened PKCE token verification.
+    breadcrumbs:
+    - Architecture
+    - Auth Studio
+    version_seq: 1
+    body_markdown: '## PKCE S256
+
+      Initial PKCE content.
+
 
       ## Overview
-      Authentication overview.
-    outline: [PKCE S256, Overview]
+
+      Authentication overview.'
+    etag: 25da1324e14efbc20ccf12ece7314acf98e606e26782edc41da760b76f9d9383
+    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a1f711-87ca-7eb0-b296-2eaa5ec7dc98'',
+      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a1f711-8829-7a89-83d3-4e7918959d58'', ''project_key'':
+      ''arch'', ''project_name'': ''architecture project''}'
 create_doc:
   tool: create
   arguments:
     type: DOC
     title: Architecture
     project: ARCH
-    content: |-
-      # Architecture
-      Overview of system architecture.
-    links: ['+REL:ARCH-1']
+    content: '# Architecture
+
+      Overview of system architecture.'
+    links:
+    - +REL:ARCH-1
   response:
     status: created
     kind: doc
-    id: 0193457a-1111-7000-8000-000000000001
+    id: 01a1f711-89f2-7ee1-a926-5f5dfb003094
     key: docs/architecture
     title: Architecture
     version_seq: 1
-    etag: 6a7f8e9d0c1b2a345678
-    links: [{action: added, target: ARCH-1, link_type: RELATES_TO}]
+    etag: 37fe50a50626ac94fb9de5da8523e1adb0f3d2b7d684bc3f6d08ecf9814b5837
+    links:
+    - action: failed
+      target: REL:ARCH-1
+      error: Target object does not exist or is not readable
 create_sticky:
   tool: create
   arguments:
@@ -75,55 +78,59 @@ create_sticky:
   response:
     status: created
     kind: sticky
-    id: 0193457a-2222-7000-8000-000000000002
+    id: d2b05957-e663-491d-917f-3f32e9e09cc7
     color: sky
     title: Quick Sticky Note
     promotion_recommended: false
-    etag: 4b5c6d7e8f901a2b3c4d
+    etag: 3f4c3e99b38c24b0554506c67275bf1a1243e728fb53f14c9f784e88ea78b57f
 update_diff_patch:
   tool: update
-  arguments: {id: docs/architecture/auth-studio, original_text: Initial PKCE content., replacement_text: Hardened PKCE token
-      verification., if_match: 6a7f8e9d0c1b2a345678}
+  arguments:
+    id: docs/architecture/auth-studio
+    original_text: Initial PKCE content.
+    replacement_text: Hardened PKCE token verification.
+    if_match: 25da1324e14efbc20ccf12ece7314acf98e606e26782edc41da760b76f9d9383
   response:
     status: updated
     kind: page
-    id: 0193457a-3333-7000-8000-000000000003
+    id: 01a1f711-8a53-79ce-ba63-4d9f20945316
     key: docs/architecture/auth-studio
     title: Auth Studio
     version_seq: 2
-    etag: e9b2512f46849492837482818
+    etag: 2e84995b06e3500cc25bfb3f142fb9b4996cf6b4067f2ff4e83d4c78bfa25030
 update_sticky_auto_promotion:
   tool: update
   arguments:
-    id: 0193457a-2222-7000-8000-000000000002
+    id: d2b05957-e663-491d-917f-3f32e9e09cc7
     type: DOC
     title: TLS Verification Guide
     parent: docs/architecture
-    content: |-
-      # TLS Verification Guide
+    content: '# TLS Verification Guide
 
-      Preserved permissions and converted to Doc.
-    links: [+ARCH-10]
+
+      Preserved permissions and converted to Doc.'
   response:
     status: promoted
-    kind: doc
-    id: 0193457a-4444-7000-8000-000000000004
-    key: docs/architecture/tls-verification-guide
-    title: TLS Verification Guide
-    version_seq: 1
-    etag: 7c8d9e0f1a2b3c4d5e6f
-    links: [{action: added, target: ARCH-10, link_type: RELATES_TO}]
+    id: d2b05957-e663-491d-917f-3f32e9e09cc7
+    doc: docs/architecture
+    link: PROMOTED_TO_DOC
+    title: Architecture
 update_inline_links:
   tool: update
   arguments:
     id: docs/architecture/auth-studio
-    links: [+ARCH-2, -ARCH-1]
+    links:
+    - +ARCH-2
+    - -ARCH-1
   response:
     status: updated
     kind: page
-    id: 0193457a-3333-7000-8000-000000000003
+    id: 01a1f711-8a53-79ce-ba63-4d9f20945316
     key: docs/architecture/auth-studio
     title: Auth Studio
-    version_seq: 3
-    etag: 1a2b3c4d5e6f7a8b9c0d
-    links: [{action: added, target: ARCH-2, link_type: RELATES_TO}, {action: removed, target: ARCH-1, link_type: RELATES_TO}]
+    version_seq: 2
+    etag: 2e84995b06e3500cc25bfb3f142fb9b4996cf6b4067f2ff4e83d4c78bfa25030
+    links:
+    - action: failed
+      target: ARCH-2
+      error: Target object does not exist or is not readable

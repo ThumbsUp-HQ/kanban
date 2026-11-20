@@ -134,7 +134,8 @@ async def _resolve_parent_ids(
     except KbMcpError:
         pass
 
-    return None, None
+    msg = f"Parent document or page '{parent_ref}' not found"
+    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
 
 
 async def _try_get_sticky(
@@ -156,26 +157,65 @@ async def _try_get_sticky(
     return None
 
 
-async def _fetch_current_entity(
+def _clean_etag(raw: object) -> str:
+    """Normalize raw ETag or body_sha256 to clean unquoted 64-hex string."""
+    return str(raw or "").strip().strip('"')
+
+
+async def _fetch_current_entity(  # noqa: C901, PLR0912
     client: KanbanApiClient,
     identifier: str,
     subject_token: str | None,
+    target_type: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Fetch current doc or page entity to verify existence, retrieve body and ETag."""
     clean_id = identifier.strip().lstrip("/")
 
-    # Try as page
-    clean_page = clean_id.removeprefix("pages/")
-    try:
-        page_resp = await client.request(
-            "GET", f"/api/v1/pages/{clean_page}", subject_token=subject_token
-        )
-        if isinstance(page_resp, dict) and ("canonical_key" in page_resp or "id" in page_resp):
-            return "page", page_resp
-    except KbMcpError:
-        pass
+    # If explicitly pages/, resolve Page first
+    if clean_id.startswith("pages/"):
+        page_path = clean_id.removeprefix("pages/")
+        try:
+            page_resp = await client.request(
+                "GET", f"/api/v1/pages/{page_path}", subject_token=subject_token
+            )
+            if isinstance(page_resp, dict) and ("canonical_key" in page_resp or "id" in page_resp):
+                return "page", page_resp
+        except KbMcpError:
+            pass
 
-    # Try as doc
+    # Nested page path (docs/<doc-slug>/<page-slug>), resolve Page first
+    if clean_id.count("/") >= 2:  # noqa: PLR2004
+        try:
+            page_resp = await client.request(
+                "GET", f"/api/v1/pages/{clean_id}", subject_token=subject_token
+            )
+            if isinstance(page_resp, dict) and ("canonical_key" in page_resp or "id" in page_resp):
+                return "page", page_resp
+        except KbMcpError:
+            pass
+
+    # When id starts with "docs/" and has single doc slug (count("/") == 1) or target_type == "DOC",
+    # try GET /api/v1/docs/{clean_doc} FIRST before falling back to GET /api/v1/pages/...
+    if (clean_id.startswith("docs/") and clean_id.count("/") == 1) or target_type == "DOC":
+        clean_doc = clean_id.removeprefix("docs/")
+        try:
+            doc_resp = await client.request(
+                "GET", f"/api/v1/docs/{clean_doc}", subject_token=subject_token
+            )
+            if isinstance(doc_resp, dict) and ("canonical_key" in doc_resp or "id" in doc_resp):
+                return "doc", doc_resp
+        except KbMcpError:
+            pass
+        try:
+            page_resp = await client.request(
+                "GET", f"/api/v1/pages/{clean_id}", subject_token=subject_token
+            )
+            if isinstance(page_resp, dict) and ("canonical_key" in page_resp or "id" in page_resp):
+                return "page", page_resp
+        except KbMcpError:
+            pass
+
+    # Fallback doc then page
     clean_doc = clean_id.removeprefix("docs/")
     try:
         doc_resp = await client.request(
@@ -183,6 +223,16 @@ async def _fetch_current_entity(
         )
         if isinstance(doc_resp, dict) and ("canonical_key" in doc_resp or "id" in doc_resp):
             return "doc", doc_resp
+    except KbMcpError:
+        pass
+
+    clean_page = clean_id.removeprefix("pages/")
+    try:
+        page_resp = await client.request(
+            "GET", f"/api/v1/pages/{clean_page}", subject_token=subject_token
+        )
+        if isinstance(page_resp, dict) and ("canonical_key" in page_resp or "id" in page_resp):
+            return "page", page_resp
     except KbMcpError:
         pass
 
@@ -256,11 +306,11 @@ def _diff_patch_content(
     if_match: str | None,
 ) -> str:
     """Perform surgical diff-patching on text content."""
-    if if_match is not None and if_match.strip() != current_sha:
-        msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
-        raise KbMcpError(
-            McpErrorCode.CONFLICT_ETAG, msg, hint=f"Current fresh ETag is {current_sha}"
-        )
+    clean_sha = current_sha.strip().strip('"')
+    clean_match = if_match.strip().strip('"') if if_match is not None else None
+    if clean_match is not None and clean_match != clean_sha:
+        msg = f"ETag mismatch: client provided '{if_match}', current is '{clean_sha}'"
+        raise KbMcpError(McpErrorCode.CONFLICT_ETAG, msg, hint=f"Current fresh ETag is {clean_sha}")
 
     count = current_body.count(original_text)
     if count == 0:
@@ -408,9 +458,17 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
 
     original_text = arguments.get("original_text")
     replacement_text = arguments.get("replacement_text")
-    if_match = arguments.get("if_match")
-    if if_match is not None:
-        if_match = str(if_match).strip()
+    if (original_text is not None and replacement_text is None) or (
+        original_text is None and replacement_text is not None
+    ):
+        msg = (
+            "Parameters 'original_text' and 'replacement_text' must be provided "
+            "together for surgical diff-patching"
+        )
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    raw_if_match = arguments.get("if_match")
+    if_match = str(raw_if_match).strip().strip('"') if raw_if_match is not None else None
 
     links_arg = arguments.get("links")
 
@@ -434,7 +492,7 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
             msg = f"Sticky '{clean_id}' has already been promoted to a document"
             raise KbMcpError(McpErrorCode.ALREADY_PROMOTED, msg)
 
-        current_sha = str(sticky_info.get("body_sha256") or sticky_info.get("etag", ""))
+        current_sha = _clean_etag(sticky_info.get("body_sha256") or sticky_info.get("etag"))
         if if_match and if_match != current_sha:
             msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
             raise KbMcpError(
@@ -502,7 +560,14 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
     # CASE 2: Sticky Update (not promoted to doc)
     # =========================================================================
     if sticky_info is not None:
-        current_sha = str(sticky_info.get("body_sha256") or sticky_info.get("etag", ""))
+        if arguments.get("title") is not None:
+            msg = (
+                "Sticky notes do not have a dedicated 'title' field unless "
+                "type='DOC' promotion is requested"
+            )
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+        current_sha = _clean_etag(sticky_info.get("body_sha256") or sticky_info.get("etag"))
         current_body = str(sticky_info.get("body_markdown", ""))
 
         patch_payload: dict[str, Any] = {}
@@ -526,7 +591,7 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
         if color:
             patch_payload["color_token"] = color
 
-        headers = {"If-Match": "*"}
+        headers = {"If-Match": f'"{current_sha}"'} if current_sha else {"If-Match": "*"}
         if patch_payload:
             resp = await active_client.request(
                 "PATCH",
@@ -560,7 +625,7 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
             "id": clean_id,
             "color": s_color,
             "title": s_title,
-            "etag": str(sticky_info.get("etag", "")),
+            "etag": _clean_etag(sticky_info.get("body_sha256") or sticky_info.get("etag")),
         }
         if synced_links:
             out_sticky["links"] = synced_links
@@ -569,9 +634,11 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
     # =========================================================================
     # CASE 3: Doc / Page Update
     # =========================================================================
-    kind, entity_data = await _fetch_current_entity(active_client, clean_id, active_token)
+    kind, entity_data = await _fetch_current_entity(
+        active_client, clean_id, active_token, target_type=target_type
+    )
     entity_id = str(entity_data.get("id", clean_id))
-    current_sha = str(entity_data.get("body_sha256") or entity_data.get("etag", ""))
+    current_sha = _clean_etag(entity_data.get("body_sha256") or entity_data.get("etag"))
     current_body = str(
         entity_data.get("body_markdown") or entity_data.get("content_markdown") or ""
     )
@@ -599,9 +666,11 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
 
     headers = {}
     if if_match:
-        headers["If-Match"] = if_match
+        headers["If-Match"] = f'"{if_match}"'
     elif current_sha:
-        headers["If-Match"] = current_sha
+        headers["If-Match"] = f'"{current_sha}"'
+    else:
+        headers["If-Match"] = "*"
 
     if doc_patch_payload:
         if kind == "page":
@@ -641,7 +710,7 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
         "key": str(entity_data.get("canonical_key", clean_id)),
         "title": str(entity_data.get("title", title or "")),
         "version_seq": entity_data.get("version_seq", 1),
-        "etag": str(entity_data.get("etag") or entity_data.get("body_sha256") or ""),
+        "etag": _clean_etag(entity_data.get("body_sha256") or entity_data.get("etag")),
     }
     if synced_links:
         out_doc["links"] = synced_links

@@ -41,12 +41,12 @@ MAX_EPHEMERAL_CALLS: Final[int] = 25
 MAX_ALLOWED_EPHEMERAL_TOOLS: Final[int] = 4
 
 ALLOWED_EPHEMERAL_TOOLS: Final[frozenset[str]] = frozenset(
-    {"search_tickets", "read_ticket", "search_knowledge", "read_doc"}
+    {"search_tickets", "read_ticket", "search_knowledge", "read_doc", "search"}
 )
 
 SURFACE_ALLOWED_EPHEMERAL_TOOLS: Final[dict[str, frozenset[str]]] = {
     "agent": frozenset({"search_tickets", "read_ticket"}),
-    "docs": frozenset({"search_knowledge", "read_doc"}),
+    "docs": frozenset({"search_knowledge", "read_doc", "search"}),
 }
 
 
@@ -99,14 +99,16 @@ async def mint_ephemeral_token(  # noqa: PLR0913
         )
 
     effective_tools = (
-        allowed_tools if allowed_tools is not None else sorted(ALLOWED_EPHEMERAL_TOOLS)
+        allowed_tools
+        if allowed_tools is not None
+        else ["read_doc", "read_ticket", "search_knowledge", "search_tickets"]
     )
     if not effective_tools or not (1 <= len(effective_tools) <= MAX_ALLOWED_EPHEMERAL_TOOLS):
         raise ProblemException(
             code="INVALID_TOOLS",
             status=422,
             title="Invalid Allowed Tools",
-            detail="allowed_tools must contain between 1 and 4 tools.",
+            detail=f"allowed_tools must contain between 1 and {MAX_ALLOWED_EPHEMERAL_TOOLS} tools.",
         )
 
     disallowed_tools = [t for t in effective_tools if t not in ALLOWED_EPHEMERAL_TOOLS]
@@ -120,6 +122,12 @@ async def mint_ephemeral_token(  # noqa: PLR0913
                 f"{sorted(ALLOWED_EPHEMERAL_TOOLS)}."
             ),
         )
+
+    # Normalize tools for database check constraint compatibility
+    # (map 'search' -> 'search_knowledge')
+    db_tools = list(
+        dict.fromkeys("search_knowledge" if t == "search" else t for t in effective_tools)
+    )
 
     # Validate agent principal
     agent_principal = await session.get(Principal, agent_principal_id)
@@ -171,7 +179,7 @@ async def mint_ephemeral_token(  # noqa: PLR0913
         agent_principal_id=agent_principal_id,
         project_id=project_id,
         token_sha256=token_sha256,
-        allowed_tools=effective_tools,
+        allowed_tools=db_tools,
         max_calls=max_calls,
         calls_used=0,
         created_at=now,
@@ -282,6 +290,16 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
         surface_key = surface or "agent"
         allowed_set = SURFACE_ALLOWED_EPHEMERAL_TOOLS.get(surface_key, frozenset())
         surface_tools = sorted(t for t in allowed_tools if t in allowed_set)
+        if (
+            surface_key == "docs"
+            and (
+                "search_knowledge" in allowed_tools
+                or "read_doc" in allowed_tools
+                or "search" in allowed_tools
+            )
+            and "search" not in surface_tools
+        ):
+            surface_tools = sorted([*surface_tools, "search"])
 
         return McpIntrospectionResult(
             active=True,
@@ -316,7 +334,13 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
         "  AND revoked_at IS NULL "
         "  AND expires_at > clock_timestamp() "
         "  AND calls_used < max_calls "
-        "  AND :tool_name = ANY(allowed_tools) "
+        "  AND ("
+        "       :tool_name = ANY(allowed_tools) "
+        "       OR (:tool_name = 'search' AND ("
+        "            'search_knowledge' = ANY(allowed_tools) "
+        "            OR 'read_doc' = ANY(allowed_tools)"
+        "       ))"
+        "  ) "
         "RETURNING id, workspace_id, execution_id, invoking_principal_id, "
         "agent_principal_id, project_id, allowed_tools, max_calls, calls_used, expires_at"
     )
@@ -354,6 +378,16 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
             return McpIntrospectionResult(active=False, reason="TOKEN_EXPIRED_OR_REVOKED")
 
         surface_tools = sorted(t for t in allowed_tools if t in surface_allowed_set)
+        if (
+            surface_key == "docs"
+            and (
+                "search_knowledge" in allowed_tools
+                or "read_doc" in allowed_tools
+                or "search" in allowed_tools
+            )
+            and "search" not in surface_tools
+        ):
+            surface_tools = sorted([*surface_tools, "search"])
         return McpIntrospectionResult(
             active=True,
             principal_id=invoking_principal_id,
@@ -390,7 +424,10 @@ async def introspect_and_consume_ephemeral_token(  # noqa: C901, PLR0911, PLR091
         rec_proj_id,
         rec_exec_id,
     ) = rec
-    if tool_name not in rec_tools:
+    tool_allowed = tool_name in rec_tools or (
+        tool_name == "search" and ("search_knowledge" in rec_tools or "read_doc" in rec_tools)
+    )
+    if not tool_allowed:
         return McpIntrospectionResult(active=False, reason="EPHEMERAL_TOOL_FORBIDDEN")
     if rec_revoked is not None or rec_expires <= now:
         return McpIntrospectionResult(active=False, reason="TOKEN_EXPIRED_OR_REVOKED")

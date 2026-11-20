@@ -232,7 +232,7 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
 
         sticky_id = str(resp.get("id", ""))
         s_color = str(resp.get("color_token", color))
-        etag = str(resp.get("etag", ""))
+        etag = str(resp.get("body_sha256") or resp.get("etag", "")).strip().strip('"')
 
         attached_links: list[dict[str, Any]] = []
         if arguments.get("links"):
@@ -297,14 +297,14 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
             if _UUID_REGEX.match(clean_proj):
                 doc_payload["project_id"] = clean_proj
             else:
-                try:
-                    proj_resp = await active_client.request(
-                        "GET", f"/api/v1/projects/{clean_proj}", subject_token=active_token
-                    )
-                    if isinstance(proj_resp, dict) and "id" in proj_resp:
-                        doc_payload["project_id"] = str(proj_resp["id"])
-                except KbMcpError:
-                    pass
+                proj_resp = await active_client.request(
+                    "GET", f"/api/v1/projects/{clean_proj}", subject_token=active_token
+                )
+                if isinstance(proj_resp, dict) and "id" in proj_resp:
+                    doc_payload["project_id"] = str(proj_resp["id"])
+                else:
+                    msg = f"Project '{clean_proj}' not found"
+                    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
 
         create_resp = await active_client.request(
             "POST",
@@ -321,7 +321,7 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
     created_id = str(create_resp.get("id") or create_resp.get("canonical_key", ""))
     key = str(create_resp.get("canonical_key", created_id))
     version_seq = create_resp.get("version_seq", 1)
-    etag = str(create_resp.get("etag") or create_resp.get("body_sha256") or "")
+    etag = str(create_resp.get("body_sha256") or create_resp.get("etag") or "").strip().strip('"')
 
     attached_links = []
     if arguments.get("links"):

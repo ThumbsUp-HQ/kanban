@@ -1,13 +1,13 @@
-=== 1. RUFF CHECK ===
+=== RUFF CHECK ===
 All checks passed!
 
-=== 2. RUFF FORMAT CHECK ===
-113 files already formatted
+=== RUFF FORMAT CHECK ===
+114 files already formatted
 
-=== 3. MYPY TYPECHECK ===
-Success: no issues found in 111 source files
+=== MYPY TYPECHECK ===
+Success: no issues found in 13 source files
 
-=== 4. LINT IMPORTS ARCHITECTURAL BOUNDARY ===
+=== IMPORT LINTER ===
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -23,7 +23,7 @@ Success: no issues found in 111 source files
 Contracts
 ---------
 
-Analyzed 953 files, 3324 dependencies.
+Analyzed 953 files, 3327 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -31,5 +31,5 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
 
-=== 5. CHECK NO DASHES ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-9a5e6950/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== CHECK NO DASHES ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-fix-5f154820/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

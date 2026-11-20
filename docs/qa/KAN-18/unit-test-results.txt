@@ -1,31 +1,26 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-9a5e6950
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-fix-5f154820
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 38 items
+collected 46 items
 
-mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 34%]
-mcp/tests/docs/test_docs_tools.py .....                                  [ 47%]
-mcp/tests/test_ephemeral_auth.py ..................                      [ 94%]
-mcp/tests/test_schema_budget.py ..                                       [100%]
+mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 28%]
+mcp/tests/docs/test_docs_tools.py .......                                [ 43%]
+mcp/tests/test_ephemeral_auth.py ...................                     [ 84%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py .......               [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                                         Stmts   Miss Branch BrPart  Cover   Missing
-----------------------------------------------------------------------------------------
-mcp/surfaces/docs/__init__.py                   16      0      0      0   100%
-mcp/surfaces/docs/create.py                    165      0     76      5    98%   108->123, 113->115, 116->109, 127->124, 304->309
-mcp/surfaces/docs/link_knowledge.py            115      8     42     11    87%   89->93, 93->102, 98->102, 105-106, 136-137, 141-142, 159-160, 161->174, 167->174, 201->215, 203->215, 204->215, 211->204
-mcp/surfaces/docs/manage_stickies.py           108      0     50      2    99%   133->148, 194->200
-mcp/surfaces/docs/promote_sticky_to_doc.py      84      5     26      3    93%   70->78, 83->88, 100-101, 106-108
-mcp/surfaces/docs/read_doc.py                  163      9     56      7    92%   97-99, 117->123, 119-120, 128->134, 137->143, 145->150, 180->216, 276-279, 283
-mcp/surfaces/docs/search.py                    322      6    140     11    96%   160->165, 162-163, 170->175, 178->183, 185->190, 244, 309->313, 340, 413->427, 530->542, 543-544, 554->570, 583->595
-mcp/surfaces/docs/search_knowledge.py           70      5     26      2    91%   74-75, 79-81
-mcp/surfaces/docs/update.py                    328      6    150     10    97%   154-156, 173->179, 184->189, 219->234, 221, 305->325, 313->306, 334->339, 336-337, 354->340, 460->463
-mcp/surfaces/docs/upsert_doc.py                127     20     42     10    82%   90-91, 100-102, 136, 147-148, 168->170, 180-183, 234-235, 244, 246, 250-251, 263-264
-----------------------------------------------------------------------------------------
-TOTAL                                         1498     59    608     61    94%
-============================= 38 passed in 11.16s ==============================
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/security/ephemeral_mcp_tokens.py     115      3     48      3    96%   378, 433, 445
+mcp/scoping.py                              140     74     62     13    40%   62, 86-87, 91->99, 95, 97, 100-101, 104-105, 111-112, 115, 122, 142, 146, 160-249, 276-292, 311-370
+mcp/surfaces/docs/create.py                 164      2     76      5    97%   108->123, 113->115, 116->109, 127->124, 306-307
+mcp/surfaces/docs/search.py                 343     11    150     13    95%   167->173, 169-170, 178->185, 191->195, 199-200, 208->213, 215->220, 274, 339->343, 370, 443->459, 557, 567-568, 577->589, 616-617, 628->640
+mcp/surfaces/docs/update.py                 368      7    166     12    96%   153->157, 181->187, 192->199, 205->209, 213->219, 215-216, 224-225, 234->239, 269->284, 271, 355->375, 363->356, 384->389, 386-387, 404->390
+-------------------------------------------------------------------------------------
+TOTAL                                      1130     97    502     46    89%
+============================= 46 passed in 16.89s ==============================
