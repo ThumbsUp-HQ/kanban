@@ -1,10 +1,12 @@
 # Copyright 2026 Kanban Platform Contributors
 """Tests for MCP Streamable HTTP JSON-RPC 2.0 protocol and session management."""
 
+# ruff: noqa: SLF001, PLR0915, PLC0415, E501, S106, FBT003
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -12,9 +14,16 @@ from starlette.applications import Starlette
 from starlette.routing import Route
 
 from mcp.app import create_mcp_app
-from mcp.protocol import InMemorySessionStore, McpProtocolHandler
+from mcp.errors import KbMcpError, McpErrorCode
+from mcp.protocol import (
+    InMemorySessionStore,
+    McpProtocolHandler,
+    _format_flag_val,
+    _matches_schema_type,
+)
 from mcp.registry import Surface, ToolRegistry, ToolSpec
 from mcp.settings import McpSettings
+from mcp.surfaces.agent.create_ticket import _validate_tree_node
 from mcp.tests.conftest import record_http_exchange
 
 if TYPE_CHECKING:
@@ -95,6 +104,15 @@ async def test_case_1_positive_initialize_and_tools_list(
         assert result["protocolVersion"] == "2025-06-18"
         assert result["serverInfo"]["name"] == expected_server_name
         assert result["capabilities"]["tools"]["listChanged"] is False
+        if mount == "/mcp/agent":
+            assert result["instructions"] == (
+                "Use human keys (e.g. KAN, KAN-142, @handle). Pass identifier='help' "
+                "(or project='help' on create_ticket) for live project options. "
+                "On create_ticket, set 'project' and optional 'parent' on the root object only; "
+                "omit 'project' and 'parent' inside children[]."
+            )
+        else:
+            assert "instructions" not in result
 
         headers = {"mcp-session-id": session_id}
 
@@ -553,3 +571,582 @@ async def test_method_not_allowed_and_tool_result_types(mcp_client: httpx.AsyncC
         )
         assert call_res3.status_code == 200
         assert call_res3.json()["result"]["content"][0]["text"] == "42"
+
+
+@pytest.mark.asyncio
+async def test_protocol_helper_branches(mcp_client: httpx.AsyncClient) -> None:
+    """Verify protocol helper branches for flag formatting, schema types, and session touch."""
+    # 1. _format_flag_val fallback for custom object
+    custom_obj = object()
+    formatted = _format_flag_val(custom_obj)
+    assert str(custom_obj) in formatted
+
+    # 2. _matches_schema_type fallback for unknown type
+    assert _matches_schema_type("val", "unknown_type_specifier") is True
+
+    # 3. session_store touch nonexistent session
+    store = InMemorySessionStore()
+    store.touch_session("nonexistent_session_id")
+    assert store.get_session("nonexistent_session_id") is None
+
+    # 4. Initialize with raw non-bearer authorization header
+    init_req = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0"},
+        },
+    }
+    resp = await mcp_client.post(
+        "/mcp/agent",
+        json=init_req,
+        headers={"Authorization": "RawApiKeyWithoutBearerPrefix"},
+    )
+    assert resp.status_code == 200
+
+    # 5. _validate_tree_node with depth > _MAX_DEPTH
+    with pytest.raises(KbMcpError) as exc:
+        _validate_tree_node({"summary": "X"}, is_root=False, depth=7)
+    assert exc.value.code == McpErrorCode.VALIDATION_FAILED
+    assert "Tree depth (7)" in exc.value.message
+
+
+@pytest.mark.asyncio
+async def test_protocol_advanced_dispatch_branches(mcp_client: httpx.AsyncClient) -> None:
+    """Verify delete session, ping, unknown method, header parsing, and session deletion."""
+    # 1. Initialize to get session
+    init_res = await mcp_client.post(
+        "/mcp/agent",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0"},
+            },
+        },
+    )
+    assert init_res.status_code == 200
+    sid = init_res.headers["mcp-session-id"]
+
+    # 2. Ping via tools dispatch
+    ping_res = await mcp_client.post(
+        "/mcp/agent",
+        json={"jsonrpc": "2.0", "id": 2, "method": "ping"},
+        headers={"mcp-session-id": sid},
+    )
+    assert ping_res.status_code == 200
+    assert ping_res.json()["result"] == {}
+
+    # 3. Unknown method
+    unknown_res = await mcp_client.post(
+        "/mcp/agent",
+        json={"jsonrpc": "2.0", "id": 3, "method": "unknown/method"},
+        headers={"mcp-session-id": sid},
+    )
+    assert unknown_res.status_code == 200
+    assert unknown_res.json()["error"]["code"] == -32601
+
+    # 4. Header X-KB-Scopes and X-KB-AAL-Level invalid int
+    call_headers = {
+        "mcp-session-id": sid,
+        "X-KB-Scopes": "agent:read,agent:write",
+        "X-KB-AAL-Level": "invalid_number",
+    }
+    call_res = await mcp_client.post(
+        "/mcp/agent",
+        json={"jsonrpc": "2.0", "id": 4, "method": "tools/list"},
+        headers=call_headers,
+    )
+    assert call_res.status_code == 200
+
+    # 5. Delete session
+    del_res = await mcp_client.request(
+        "DELETE",
+        "/mcp/agent",
+        headers={"mcp-session-id": sid},
+    )
+    assert del_res.status_code == 204
+
+    # Delete non-existent session
+    del_nf = await mcp_client.request(
+        "DELETE",
+        "/mcp/agent",
+        headers={"mcp-session-id": "missing_sid"},
+    )
+    assert del_nf.status_code == 404
+
+    # Delete without header
+    del_no_header = await mcp_client.request("DELETE", "/mcp/agent")
+    assert del_no_header.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_protocol_schema_validation_special_branches() -> None:
+    """Verify state and custom_fields hints, nullable types, and pattern checks."""
+    registry = ToolRegistry(Surface.AGENT)
+    handler = McpProtocolHandler(
+        Surface.AGENT, registry, InMemorySessionStore(), McpSettings()
+    )
+
+    spec_update = ToolSpec(
+        name="update_ticket",
+        description="Update ticket.",
+        input_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "additionalProperties": False,
+        },
+        surface=Surface.AGENT,
+        handler=lambda _args: {},
+    )
+
+    # 1. state hint in update_ticket
+    with pytest.raises(KbMcpError) as exc_st:
+        handler._validate_tool_arguments_schema(spec_update, {"state": "Todo"})
+    assert exc_st.value.code == McpErrorCode.VALIDATION_FAILED
+    assert exc_st.value.hint == "use transition_ticket"
+
+    # 2. custom_fields hint in update_ticket
+    with pytest.raises(KbMcpError) as exc_cf:
+        handler._validate_tool_arguments_schema(spec_update, {"custom_fields": {}})
+    assert exc_cf.value.code == McpErrorCode.VALIDATION_FAILED
+    assert exc_cf.value.hint == "custom fields arrive in Phase 5"
+
+    # 3. Nullable type
+    spec_nullable = ToolSpec(
+        name="test_tool",
+        description="Test.",
+        input_schema={"type": "object", "properties": {"val": {"type": ["string", "null"]}}},
+        surface=Surface.AGENT,
+        handler=lambda _args: {},
+    )
+    handler._validate_tool_arguments_schema(spec_nullable, {"val": None})
+
+    # 4. Enum non-string
+    spec_enum = ToolSpec(
+        name="test_enum",
+        description="Test.",
+        input_schema={"type": "object", "properties": {"choice": {"enum": [10, 20]}}},
+        surface=Surface.AGENT,
+        handler=lambda _args: {},
+    )
+    with pytest.raises(KbMcpError) as exc_enum:
+        handler._validate_tool_arguments_schema(spec_enum, {"choice": 99})
+    assert exc_enum.value.code == McpErrorCode.VALIDATION_FAILED
+
+
+@pytest.mark.asyncio
+async def test_protocol_initialize_and_admin_scope_branches() -> None:
+    """Verify initialize request parsing, Bearer extraction, and admin write enforcement."""
+    from starlette.requests import Request
+
+    registry = ToolRegistry(Surface.ADMIN)
+    admin_tool = ToolSpec(
+        name="manage_something",
+        description="Admin tool",
+        input_schema={"type": "object", "properties": {"action": {"type": "string"}}},
+        surface=Surface.ADMIN,
+        handler=lambda _args: "done",
+    )
+    registry.register(admin_tool)
+    handler = McpProtocolHandler(
+        Surface.ADMIN, registry, InMemorySessionStore(), McpSettings()
+    )
+
+    # 1. _handle_initialize with request=None
+    res_none = await handler._handle_initialize(1, request=None)
+    assert res_none.status_code == 200
+
+    # 2. _handle_initialize with Bearer header
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp/admin",
+        "headers": [(b"authorization", b"Bearer test_bearer_token")],
+    }
+    req_bearer = Request(scope)
+    res_bearer = await handler._handle_initialize(2, request=req_bearer)
+    assert res_bearer.status_code == 200
+
+    # 3. Notification dispatch (req_id is None)
+    res_notif = await handler._dispatch_method("any_method", None, {})
+    assert res_notif.status_code == 204
+
+    # 4. Admin write scope check failure
+    res_admin = await handler._dispatch_method(
+        "tools/call",
+        3,
+        {"name": "manage_something", "arguments": {"action": "create_item"}},
+        caller_scopes=frozenset({"admin:read"}),
+    )
+    assert res_admin.status_code == 200
+    assert "admin:write" in str(res_admin.body)
+
+    # 5. Admin destructive scope check failure (caller has admin:write only)
+    res_destr = await handler._dispatch_method(
+        "tools/call",
+        4,
+        {"name": "manage_something", "arguments": {"action": "delete_item"}},
+        caller_scopes=frozenset({"admin:write"}),
+    )
+    assert res_destr.status_code == 200
+    assert "admin:destructive" in str(res_destr.body)
+
+    # 6. Admin write allowed
+    res_allowed = await handler._dispatch_method(
+        "tools/call",
+        5,
+        {"name": "manage_something", "arguments": {"action": "create_item"}},
+        caller_scopes=frozenset({"admin:write"}),
+    )
+    assert res_allowed.status_code == 200
+    assert "done" in str(res_allowed.body)
+
+    # 7. Connection scope error on initialize
+    scope_bad = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp/admin",
+        "headers": [(b"x-project-key", b"invalid space key")],
+    }
+    req_bad = Request(scope_bad)
+    res_bad = await handler._handle_initialize(6, request=req_bad)
+    assert res_bad.status_code == 400
+
+    # 8. x-kb-aal-level header with auth_context
+    from dataclasses import replace
+
+    from mcp.auth import McpAuthContext
+    scope_auth = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp/admin",
+        "headers": [
+            (b"x-kb-aal-level", b"1"),
+            (b"mcp-session-id", b"sess_dummy"),
+        ],
+    }
+    req_auth = Request(scope_auth)
+    req_auth.state.mcp_auth = McpAuthContext(
+        token="tok",
+        token_sha256=b"hash",
+        surface=Surface.ADMIN,
+        scopes=frozenset({"admin:read"}),
+        aal_level=2,
+    )
+    session = handler.session_store.create_session(Surface.ADMIN)
+    req_auth.headers._list = [
+        (b"x-kb-aal-level", b"1"),
+        (b"mcp-session-id", session.session_id.encode()),
+    ]
+    await handler._process_valid_payload(
+        {"jsonrpc": "2.0", "id": 7, "method": "ping"}, req_auth
+    )
+
+    # 9. Ephemeral introspect branches
+    docs_registry = ToolRegistry(Surface.DOCS)
+    docs_registry.register(
+        ToolSpec("search", "Search tool", {}, Surface.DOCS, lambda _args: {})
+    )
+    mock_client = MagicMock()
+    mock_client.request = AsyncMock(side_effect=RuntimeError("internal err"))
+    handler_eph = McpProtocolHandler(
+        Surface.DOCS,
+        docs_registry,
+        InMemorySessionStore(),
+        McpSettings(),
+        internal_client=mock_client,
+    )
+    eph_auth = McpAuthContext(
+        token="tok",
+        token_sha256=b"h",
+        surface=Surface.DOCS,
+        scopes=frozenset(),
+        aal_level=2,
+        token_kind="ephemeral",
+        allowed_tools=frozenset({"search"}),
+    )
+    res_eph_err = await handler_eph._dispatch_method(
+        "tools/call", 8, {"name": "search", "arguments": {}}, auth_context=eph_auth
+    )
+    assert "UPSTREAM_UNAVAILABLE" in str(res_eph_err.body)
+
+    mock_client.request = AsyncMock(
+        return_value={"active": False, "reason": "EPHEMERAL_TOOL_FORBIDDEN"}
+    )
+    res_eph_forb = await handler_eph._dispatch_method(
+        "tools/call", 9, {"name": "search", "arguments": {}}, auth_context=eph_auth
+    )
+    assert "EPHEMERAL_TOOL_FORBIDDEN" in str(res_eph_forb.body)
+
+    mock_client.request = AsyncMock(
+        return_value={"active": False, "reason": "TOKEN_EXPIRED_OR_REVOKED"}
+    )
+    res_eph_exp = await handler_eph._dispatch_method(
+        "tools/call", 10, {"name": "search", "arguments": {}}, auth_context=eph_auth
+    )
+    assert "TOKEN_EXPIRED_OR_REVOKED" in str(res_eph_exp.body)
+
+    mock_client.request = AsyncMock(return_value={"active": False, "reason": "OTHER"})
+    res_eph_oth = await handler_eph._dispatch_method(
+        "tools/call", 11, {"name": "search", "arguments": {}}, auth_context=eph_auth
+    )
+    assert "UNAUTHENTICATED" in str(res_eph_oth.body)
+
+    eph_read_doc = replace(eph_auth, allowed_tools=frozenset({"read_doc"}))
+    mock_client.request = AsyncMock(return_value={"active": True})
+    await handler_eph._dispatch_method(
+        "tools/call", 12, {"name": "search", "arguments": {}}, auth_context=eph_read_doc
+    )
+    eph_other = replace(eph_auth, allowed_tools=frozenset({"other"}))
+    await handler_eph._dispatch_method(
+        "tools/call", 13, {"name": "search", "arguments": {}}, auth_context=eph_other
+    )
+
+
+@pytest.mark.asyncio
+async def test_case_13_protocol_coverage_exhaustion() -> None:
+    """Exhaustively cover remaining protocol formatting, validation, and error branches."""
+    from starlette.requests import Request
+
+    from mcp.auth import McpAuthContext
+    from mcp.scoping import ConnectionScope, ScopeMode
+
+    # 1. _format_flag_val and _matches_schema_type branches
+    assert _format_flag_val(True) == "true"
+    assert _format_flag_val(False) == "false"
+    assert _format_flag_val(42) == "42"
+    assert _format_flag_val(3.14) == "3.14"
+    assert _format_flag_val([1, "x"]) == "'[1, \"x\"]'"
+    assert _format_flag_val({"key": "val"}) == "'{\"key\": \"val\"}'"
+    dummy_obj = object()
+    assert _format_flag_val(dummy_obj) == f'"{dummy_obj}"'
+
+    assert _matches_schema_type(10, "integer") is True
+    assert _matches_schema_type(True, "integer") is False
+    assert _matches_schema_type(True, "boolean") is True
+    assert _matches_schema_type("str", "boolean") is False
+    assert _matches_schema_type({"a": 1}, "object") is True
+    assert _matches_schema_type([1], "object") is False
+    assert _matches_schema_type("foo", "unsupported_type") is True
+
+    # 2. Session token & scope fingerprint mismatch
+    registry = ToolRegistry(Surface.AGENT)
+    registry.register(
+        ToolSpec("ping", "Ping tool", {"type": "object"}, Surface.AGENT, lambda _args: {"pong": True})
+    )
+    registry.register(
+        ToolSpec("read_ticket", "Read ticket", {"type": "object"}, Surface.AGENT, lambda _args: {"ticket": "1"})
+    )
+    store = InMemorySessionStore()
+    handler = McpProtocolHandler(Surface.AGENT, registry, store, McpSettings())
+
+    session = store.create_session(
+        Surface.AGENT,
+        token_sha256=b"token_a",
+        scope_fingerprint=b"scope_a",
+    )
+
+    # Request with mismatched token
+    req_scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp/agent",
+        "headers": [
+            (b"mcp-session-id", session.session_id.encode()),
+            (b"x-kb-subject-token", b"Bearer different_token"),
+        ],
+    }
+    req_token_mismatch = Request(req_scope)
+    req_token_mismatch.state.mcp_token_sha256 = b"token_b"
+    req_token_mismatch.state.connection_scope = ConnectionScope(mode=ScopeMode.WORKSPACE, workspace_slug="ws")
+    res_mismatch = await handler._process_valid_payload(
+        {"jsonrpc": "2.0", "id": 1, "method": "ping"}, req_token_mismatch
+    )
+    assert res_mismatch.status_code == 404
+    assert b"Session bound to different token" in res_mismatch.body
+
+    # Request with matching token but mismatched scope fingerprint
+    req_scope_mismatch = Request(req_scope)
+    req_scope_mismatch.state.mcp_token_sha256 = b"token_a"
+    req_scope_mismatch.state.connection_scope = ConnectionScope(mode=ScopeMode.WORKSPACE, workspace_slug="other_ws")
+    res_scope_mismatch = await handler._process_valid_payload(
+        {"jsonrpc": "2.0", "id": 2, "method": "ping"}, req_scope_mismatch
+    )
+    assert res_scope_mismatch.status_code == 404
+    assert b"Session bound to different scope" in res_scope_mismatch.body
+
+    # 3. _handle_tools_list with ephemeral tokens and allowed/disabled tools
+    eph_auth = McpAuthContext(
+        token="tok",
+        token_sha256=b"h",
+        surface=Surface.AGENT,
+        scopes=frozenset(),
+        aal_level=2,
+        token_kind="ephemeral",
+        allowed_tools=frozenset({"read_ticket"}),
+    )
+    res_tools_eph = handler._handle_tools_list(1, auth_context=eph_auth)
+    assert res_tools_eph.status_code == 200
+
+    disabled_auth = McpAuthContext(
+        token="tok",
+        token_sha256=b"h",
+        surface=Surface.AGENT,
+        scopes=frozenset({"agent:read"}),
+        aal_level=2,
+        allowed_tools=frozenset({"ping"}),
+        disabled_tools=frozenset({"ping"}),
+    )
+    res_tools_dis = handler._handle_tools_list(2, auth_context=disabled_auth)
+    assert res_tools_dis.status_code == 200
+    tools_dis = json.loads(bytes(res_tools_dis.body).decode())["result"]["tools"]
+    assert len(tools_dis) == 0
+
+    # 4. _handle_tool_call with disabled_tools & allowed_tools narrowing
+    res_dis_call = await handler._dispatch_method(
+        "tools/call", 3, {"name": "ping", "arguments": {}}, auth_context=disabled_auth
+    )
+    assert res_dis_call.status_code == 200
+    assert "disabled for this API key" in bytes(res_dis_call.body).decode()
+
+    narrowed_auth = McpAuthContext(
+        token="tok",
+        token_sha256=b"h",
+        surface=Surface.AGENT,
+        scopes=frozenset({"agent:read"}),
+        aal_level=2,
+        allowed_tools=frozenset({"other_tool"}),
+    )
+    res_narrow_call = await handler._dispatch_method(
+        "tools/call", 4, {"name": "ping", "arguments": {}}, auth_context=narrowed_auth
+    )
+    assert res_narrow_call.status_code == 200
+    assert "not in allowed_tools" in bytes(res_narrow_call.body).decode()
+
+    # 5. Ephemeral budget exceeded branch
+    mock_client = MagicMock()
+    mock_client.request = AsyncMock(
+        return_value={
+            "active": False,
+            "reason": "EPHEMERAL_CALL_BUDGET_EXCEEDED",
+            "calls_used": 25,
+            "max_calls": 25,
+        }
+    )
+    handler_budget = McpProtocolHandler(
+        Surface.AGENT,
+        registry,
+        store,
+        McpSettings(),
+        internal_client=mock_client,
+    )
+    res_budget = await handler_budget._dispatch_method(
+        "tools/call", 5, {"name": "read_ticket", "arguments": {}}, auth_context=eph_auth
+    )
+    assert res_budget.status_code == 200
+    assert "EPHEMERAL_CALL_BUDGET_EXCEEDED" in bytes(res_budget.body).decode()
+
+    # 6. Caller lacks required scopes branch
+    reg_scoped = ToolRegistry(Surface.AGENT)
+    reg_scoped.register(
+        ToolSpec("create_ticket", "Create ticket", {"type": "object"}, Surface.AGENT, lambda _args: {})
+    )
+    handler_scoped = McpProtocolHandler(Surface.AGENT, reg_scoped, store, McpSettings())
+    res_no_scope = await handler_scoped._dispatch_method(
+        "tools/call",
+        6,
+        {"name": "create_ticket", "arguments": {}},
+        caller_scopes=frozenset({"agent:read"}),
+    )
+    assert res_no_scope.status_code == 200
+    assert "Caller lacks required scope(s)" in bytes(res_no_scope.body).decode()
+
+    # 7. _handle_jit_help project argument
+    mock_help_client = MagicMock()
+    mock_help_client.request = AsyncMock(return_value={"options": []})
+    handler_help = McpProtocolHandler(
+        Surface.AGENT,
+        reg_scoped,
+        store,
+        McpSettings(),
+        internal_client=mock_help_client,
+    )
+    res_help = await handler_help._handle_jit_help(7, "create_ticket", {"project": "KAN"})
+    assert res_help.status_code == 200
+    assert "create_ticket" in bytes(res_help.body).decode()
+
+    # 8. Schema validation branches: unknown parameter, missing required, type mismatch, pattern
+    spec_schema = ToolSpec(
+        "sample",
+        "Sample tool",
+        {
+            "type": "object",
+            "required": ["mandatory"],
+            "properties": {
+                "mandatory": {"type": "string"},
+                "summary": {"type": "string"},
+                "int_val": {"type": "integer"},
+                "bool_val": {"type": "boolean"},
+                "arr_val": {"type": "array"},
+                "obj_val": {"type": "object"},
+                "nullable_str": {"type": ["string", "null"]},
+                "etag": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                "bad_prop": "not_a_dict",  # non-dict prop_schema (line 1268)
+            },
+            "additionalProperties": False,
+        },
+        Surface.AGENT,
+        lambda _args: {},
+    )
+    # Unknown parameter without close match
+    with pytest.raises(KbMcpError) as exc_unknown:
+        handler._validate_tool_arguments_schema(spec_schema, {"completely_unknown_xyz": 1, "mandatory": "ok"})
+    assert exc_unknown.value.code == McpErrorCode.VALIDATION_FAILED
+    assert "Unknown parameter 'completely_unknown_xyz'" in exc_unknown.value.message
+
+    # Unknown parameter with close match (did_you_mean)
+    with pytest.raises(KbMcpError) as exc_typo:
+        handler._validate_tool_arguments_schema(spec_schema, {"sumary": "typo", "mandatory": "ok"})
+    assert exc_typo.value.code == McpErrorCode.VALIDATION_FAILED
+    assert exc_typo.value.fix_hint is not None
+    assert "Did you mean 'summary'?" in exc_typo.value.fix_hint
+
+    # Missing required parameter
+    with pytest.raises(KbMcpError) as exc_missing:
+        handler._validate_tool_arguments_schema(spec_schema, {"summary": "no mandatory"})
+    assert exc_missing.value.code == McpErrorCode.VALIDATION_FAILED
+    assert "Missing required parameter 'mandatory'" in exc_missing.value.message
+
+    # Type mismatch branches (integer, boolean, array, object)
+    with pytest.raises(KbMcpError) as exc_type_int:
+        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "int_val": "not_int"})
+    assert exc_type_int.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc_type_bool:
+        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "bool_val": "not_bool"})
+    assert exc_type_bool.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc_type_arr:
+        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "arr_val": "not_arr"})
+    assert exc_type_arr.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc_type_obj:
+        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "obj_val": "not_obj"})
+    assert exc_type_obj.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # Pattern mismatch branch
+    with pytest.raises(KbMcpError) as exc_pat:
+        handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "etag": "short_not_64"})
+    assert exc_pat.value.code == McpErrorCode.VALIDATION_FAILED
+    assert exc_pat.value.fix_hint is not None
+    assert "64-character SHA-256 hex ETag" in exc_pat.value.fix_hint
+
+    # Nullable property with None and bad_prop non-dict
+    handler._validate_tool_arguments_schema(spec_schema, {"mandatory": "ok", "nullable_str": None, "bad_prop": 123})

@@ -1,0 +1,35 @@
+commit 62204208deb2a152d4b0e3266210bdfffa3b5672
+Author: Adam Outler <adamoutler@gmail.com>
+Date:   Fri Nov 20 07:42:48 2026 -0500
+
+    docs(mcp): document create_ticket children inheritance and root-only parameters (KAN-41)
+
+diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
+index a488410..422c815 100644
+--- a/MCP-Tools-Reference.md
++++ b/MCP-Tools-Reference.md
+@@ -64,9 +64,9 @@ Dedicated to autonomous coding agents, test runners, and QA bots. Bounded strict
+ - **CLI Example:** `kanban-cli-agent read_ticket --identifier=KAN-19 --lod=standard`
+ 
+ ### 3. `create_ticket`
+-- **Description:** Create a new work item with canonical Markdown description, properties, and optional sub-tasks.
++- **Description:** Create ticket or atomic child tree (max 50 nodes, depth <=6; omit project and parent inside children).
+ - **Required Parameters:**
+-  - `project` (string): Target project key (e.g. `KAN`).
++  - `project` (string): Target project key (e.g. `KAN`). Root only; inherited by children.
+   - `summary` (string): Single-line ticket title.
+ - **Optional Parameters:**
+   - `description_markdown` (string): Canonical Markdown description.
+@@ -76,10 +76,10 @@ Dedicated to autonomous coding agents, test runners, and QA bots. Bounded strict
+   - `labels` (array of strings): Label names.
+   - `cycle` (string): Cycle slug or UUID.
+   - `modules` (array of strings): Module slugs.
+-  - `parent` (string): Parent issue identifier.
++  - `parent` (string): Parent issue identifier. Root only; omit in children.
+   - `start_date` (string): ISO 8601 start date.
+   - `due_date` (string): ISO 8601 due date.
+-  - `children` (array of objects): Sub-issues to create atomically.
++  - `children` (array of objects): Sub-issues to create atomically. Each child object requires `summary` and inherits `project` from the root and `parent` from its enclosing node; both `project` and `parent` must be omitted inside `children`. Max 49 items per node, total nodes <= 50, maximum depth <= 6.
+ - **CLI Example:** `kanban-cli-agent create_ticket --project=KAN --summary="Self-correcting error UX"`
+ 
+ ### 4. `update_ticket`

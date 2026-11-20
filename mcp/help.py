@@ -24,6 +24,11 @@ _TOOL_PARAM_DEFAULTS: dict[str, dict[str, str]] = {
         "project": "KAN",
         "summary": "str",
         "priority": "urgent | high | medium | low | none",
+        "parent": "KAN-142 | uuid (root only)",
+        "children": (
+            "array of child objects "
+            "(require summary; omit project and parent; max 49/node, <=50 total, depth <=6)"
+        ),
     },
     "search_tickets": {"query": "str", "project": "KAN", "lod": "summary | standard | full"},
     "begin_work": {"identifier": "KAN-142 | uuid"},

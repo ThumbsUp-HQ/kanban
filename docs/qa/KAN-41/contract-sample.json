@@ -1,0 +1,177 @@
+{
+  "agent_initialize_instructions": "Use human keys (e.g. KAN, KAN-142, @handle). Pass identifier='help' (or project='help' on create_ticket) for live project options. On create_ticket, set 'project' and optional 'parent' on the root object only; omit 'project' and 'parent' inside children[].",
+  "create_ticket_input_schema": {
+    "type": "object",
+    "$defs": {
+      "child": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Summary"
+          },
+          "description_markdown": {
+            "type": "string",
+            "description": "Description"
+          },
+          "state": {
+            "type": "string",
+            "description": "State name or UUID"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority slug"
+          },
+          "assignees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "description": "Assignees"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "description": "Labels"
+          },
+          "cycle": {
+            "type": "string",
+            "description": "Cycle"
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "description": "Modules"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Due date"
+          },
+          "children": {
+            "type": "array",
+            "maxItems": 49,
+            "items": {
+              "$ref": "#/$defs/child"
+            }
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "properties": {
+      "project": {
+        "type": "string",
+        "description": "Project ref (root only; inherited by children)"
+      },
+      "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500,
+        "description": "Summary"
+      },
+      "description_markdown": {
+        "type": "string",
+        "description": "Description"
+      },
+      "state": {
+        "type": "string",
+        "description": "State name or UUID"
+      },
+      "priority": {
+        "type": "string",
+        "description": "Priority slug"
+      },
+      "assignees": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Assignees"
+      },
+      "labels": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Labels"
+      },
+      "cycle": {
+        "type": "string",
+        "description": "Cycle"
+      },
+      "modules": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "description": "Modules"
+      },
+      "parent": {
+        "type": "string",
+        "description": "Parent issue ref (root only; omit in children)"
+      },
+      "start_date": {
+        "type": "string",
+        "format": "date",
+        "description": "Start date"
+      },
+      "due_date": {
+        "type": "string",
+        "format": "date",
+        "description": "Due date"
+      },
+      "children": {
+        "type": "array",
+        "maxItems": 49,
+        "items": {
+          "$ref": "#/$defs/child"
+        },
+        "description": "Child sub-issues (inherit root project and enclosing parent; omit project and parent)"
+      }
+    },
+    "required": [
+      "project",
+      "summary"
+    ],
+    "additionalProperties": false
+  },
+  "validation_failed_child_project_hint": {
+    "error": {
+      "code": "VALIDATION_FAILED",
+      "message": "Parameter 'project' is only allowed on the root ticket",
+      "hint": "Omit 'project' inside children[]; child issues automatically inherit the root project.",
+      "fix_hint": "Omit 'project' inside children[]; child issues automatically inherit the root project.",
+      "cli_example": "kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\""
+    }
+  },
+  "validation_failed_child_parent_hint": {
+    "error": {
+      "code": "VALIDATION_FAILED",
+      "message": "Parameter 'parent' is only allowed on the root ticket",
+      "hint": "Omit 'parent' inside children[]; each child's parent is its enclosing node in children[].",
+      "fix_hint": "Omit 'parent' inside children[]; each child's parent is its enclosing node in children[].",
+      "cli_example": "kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\""
+    }
+  }
+}

@@ -65,7 +65,10 @@ def create_agent_registry() -> ToolRegistry:
     registry.register(
         ToolSpec(
             name="create_ticket",
-            description="Create ticket.",
+            description=(
+                "Create ticket or atomic child tree "
+                "(max 50 nodes, depth <=6; omit project and parent inside children)."
+            ),
             input_schema=CREATE_TICKET_SCHEMA,
             surface=Surface.AGENT,
             handler=create_ticket,

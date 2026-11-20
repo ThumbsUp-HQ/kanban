@@ -9,6 +9,8 @@ from typing import Any, Final
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
+from mcp.protocol import format_cli_example
+from mcp.registry import Surface
 
 __all__ = [
     "CREATE_TICKET_SCHEMA",
@@ -20,11 +22,84 @@ _MAX_CHILDREN_PER_NODE: Final[int] = 49
 _MAX_DEPTH: Final[int] = 6
 _MAX_SUMMARY_LEN: Final[int] = 500
 _MAX_DESCRIPTION_BYTES: Final[int] = 1048576
+_SURROGATE_MIN: Final[int] = 0xD800
+_SURROGATE_MAX: Final[int] = 0xDFFF
+
+_CREATE_TICKET_CLI_EXAMPLE: Final[str] = format_cli_example(
+    Surface.AGENT, "create_ticket", {"project": "KAN", "summary": "<summary>"}
+)
 
 CREATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
+    "$defs": {
+        "child": {
+            "type": "object",
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Summary",
+                },
+                "description_markdown": {
+                    "type": "string",
+                    "description": "Description",
+                },
+                "state": {
+                    "type": "string",
+                    "description": "State name or UUID",
+                },
+                "priority": {
+                    "type": "string",
+                    "description": "Priority slug",
+                },
+                "assignees": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 20,
+                    "description": "Assignees",
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 20,
+                    "description": "Labels",
+                },
+                "cycle": {
+                    "type": "string",
+                    "description": "Cycle",
+                },
+                "modules": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 20,
+                    "description": "Modules",
+                },
+                "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Start date",
+                },
+                "due_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Due date",
+                },
+                "children": {
+                    "type": "array",
+                    "maxItems": 49,
+                    "items": {"$ref": "#/$defs/child"},
+                },
+            },
+            "required": ["summary"],
+            "additionalProperties": False,
+        },
+    },
     "properties": {
-        "project": {"type": "string", "description": "Project ref"},
+        "project": {
+            "type": "string",
+            "description": "Project ref (root only; inherited by children)",
+        },
         "summary": {
             "type": "string",
             "minLength": 1,
@@ -67,7 +142,7 @@ CREATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
         },
         "parent": {
             "type": "string",
-            "description": "Parent issue ref",
+            "description": "Parent issue ref (root only; omit in children)",
         },
         "start_date": {
             "type": "string",
@@ -82,8 +157,11 @@ CREATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
         "children": {
             "type": "array",
             "maxItems": 49,
-            "items": {"$ref": "#"},
-            "description": "Child sub-issues",
+            "items": {"$ref": "#/$defs/child"},
+            "description": (
+                "Child sub-issues (inherit root project and enclosing parent; "
+                "omit project and parent)"
+            ),
         },
     },
     "required": ["project", "summary"],
@@ -92,7 +170,7 @@ CREATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
 
 _ALLOWED_ROOT_KEYS: Final[frozenset[str]] = frozenset(CREATE_TICKET_SCHEMA["properties"].keys())
 _ALLOWED_CHILD_KEYS: Final[frozenset[str]] = frozenset(
-    k for k in CREATE_TICKET_SCHEMA["properties"] if k != "project"
+    CREATE_TICKET_SCHEMA["$defs"]["child"]["properties"].keys()
 )
 
 
@@ -121,6 +199,8 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
     summary = node["summary"]
     if not isinstance(summary, str) or not summary.strip():
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "summary must be a non-empty string")
+    if any(_SURROGATE_MIN <= ord(c) <= _SURROGATE_MAX for c in summary):
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "INVALID_UTF8_SURROGATE")
     if len(summary.strip()) > _MAX_SUMMARY_LEN:
         msg = f"summary length ({len(summary.strip())}) exceeds maximum of {_MAX_SUMMARY_LEN}"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
@@ -131,6 +211,8 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
             raise KbMcpError(
                 McpErrorCode.VALIDATION_FAILED, "description_markdown must be a string"
             )
+        if any(_SURROGATE_MIN <= ord(c) <= _SURROGATE_MAX for c in desc):
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "INVALID_UTF8_SURROGATE")
         if len(desc.encode("utf-8")) > _MAX_DESCRIPTION_BYTES:
             raise KbMcpError(
                 McpErrorCode.VALIDATION_FAILED,
@@ -145,26 +227,73 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
         )
 
 
-def _validate_tree_node(node: dict[str, Any], *, is_root: bool) -> None:
+def _validate_child_key(k: str, allowed_keys: frozenset[str]) -> None:
+    """Validate invalid child keys and raise self-correcting progressive disclosure error."""
+    if k == "project":
+        raise KbMcpError(
+            McpErrorCode.VALIDATION_FAILED,
+            "Parameter 'project' is only allowed on the root ticket",
+            hint=(
+                "Omit 'project' inside children[]; "
+                "child issues automatically inherit the root project."
+            ),
+            cli_example=_CREATE_TICKET_CLI_EXAMPLE,
+        )
+    if k == "parent":
+        raise KbMcpError(
+            McpErrorCode.VALIDATION_FAILED,
+            "Parameter 'parent' is only allowed on the root ticket",
+            hint=(
+                "Omit 'parent' inside children[]; "
+                "each child's parent is its enclosing node in children[]."
+            ),
+            cli_example=_CREATE_TICKET_CLI_EXAMPLE,
+        )
+    raise KbMcpError(
+        McpErrorCode.VALIDATION_FAILED,
+        f"Unknown parameter '{k}'",
+        hint=f"Allowed parameters: {', '.join(sorted(allowed_keys))}",
+    )
+
+
+def _validate_children(children: object, depth: int) -> None:
+    """Validate children list bounds and recursively validate each child node."""
+    if not isinstance(children, list):
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "children must be an array")
+    if len(children) > _MAX_CHILDREN_PER_NODE:
+        msg = f"children cannot exceed {_MAX_CHILDREN_PER_NODE} items per node"
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+    if children and depth >= _MAX_DEPTH:
+        msg = f"Tree depth ({depth + 1}) exceeds maximum hierarchy depth of {_MAX_DEPTH}"
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+    for child in children:
+        if not isinstance(child, dict):
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "child nodes must be JSON objects")
+        _validate_tree_node(child, is_root=False, depth=depth + 1)
+
+
+def _validate_tree_node(node: dict[str, Any], *, is_root: bool, depth: int = 1) -> None:
     """Recursively validate tree nodes against structural and bounds constraints."""
+    if depth > _MAX_DEPTH:
+        msg = f"Tree depth ({depth}) exceeds maximum hierarchy depth of {_MAX_DEPTH}"
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
     allowed_keys = _ALLOWED_ROOT_KEYS if is_root else _ALLOWED_CHILD_KEYS
     for k in node:
         if k not in allowed_keys:
-            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, f"Unknown parameter '{k}'")
+            if not is_root:
+                _validate_child_key(k, allowed_keys)
+            raise KbMcpError(
+                McpErrorCode.VALIDATION_FAILED,
+                f"Unknown parameter '{k}'",
+                hint=f"Allowed parameters: {', '.join(sorted(allowed_keys))}",
+            )
 
     _validate_node_scalars(node)
 
     children = node.get("children")
     if children is not None:
-        if not isinstance(children, list):
-            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "children must be an array")
-        if len(children) > _MAX_CHILDREN_PER_NODE:
-            msg = f"children cannot exceed {_MAX_CHILDREN_PER_NODE} items per node"
-            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
-        for child in children:
-            if not isinstance(child, dict):
-                raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "child nodes must be JSON objects")
-            _validate_tree_node(child, is_root=False)
+        _validate_children(children, depth)
 
 
 async def create_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -177,8 +306,17 @@ async def create_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
     project_arg = arguments.get("project")
     summary_arg = arguments.get("summary")
     if project_arg == "help" or summary_arg == "help":
+        target_project: str | None = None
+        if (
+            summary_arg == "help"
+            and isinstance(project_arg, str)
+            and project_arg.strip()
+            and project_arg.strip() != "help"
+        ):
+            target_project = project_arg.strip()
         return await build_help(
             "create_ticket",
+            project=target_project,
             client=ctx.client,
             subject_token=ctx.subject_token,
             mcp_session_id=ctx.session_id,
