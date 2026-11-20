@@ -3,23 +3,25 @@
 ## Audit Metadata
 - Ticket ID: KAN-31 ([KB-P3-AUDIT-25])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-fix-d3e0178a`
-- Target Branch: fix/KAN-31-liveqa
-- Base Commit: 6eab593
-- Head Commit: 50f0089
+- Date: 2026-11-20
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-rcfix-6c02ef64`
+- Target Branch: fix/KAN-31-rc2
+- Base Commit: 036216b
+- Head Commit: 4a24d1a
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review evaluates the UI layout, responsive behaviors, visual design token compliance, interaction ergonomics, and code standards for ticket KAN-31 and its clean-room live stack remediation ([KB-P3-AUDIT-25]). The remediations address:
-1. Dynamic project resolution in `McpAccessStudio.tsx` via `GET /api/v1/projects`, populating the Target Project selector dynamically and eliminating hardcoded `'KANBA'` options.
-2. Dynamic workspace slug and project key interpolation into `ConnectOAuthAppModal` and `McpConfigSnippetModal` without hardcoded fallbacks.
-3. Cache invalidation on key minting (`queryClient.invalidateQueries({ queryKey: ['mcp-keys'] })`), preventing stale table state.
-4. Scope tier alignment for `server` scopes returning standard 403 on non-admin mint requests.
+This review evaluates the UI layout, responsive behaviors, visual design token compliance, interaction ergonomics, and code standards for ticket KAN-31 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-25]).
 
-All live Playwright visual proof screenshots (Desktop 1440x900 and Mobile 390x844 across Light and Dark themes, modal minting flows, governance tabs, and topbar navigation) were inspected and verified via binary image analysis.
+The Round 2 remediation resolves:
+1. Migration of key operations across `/settings/mcp` to the unified `/api/v1/mcp-keys` REST router (`fetchUnifiedMcpKeys`, `mintUnifiedMcpKey`, `revokeUnifiedMcpKey`), eliminating 404 errors in Governance view when revoking service bot or foreign user keys.
+2. Separation of Key Type (`owner_kind`: `personal_user` vs `service_bot`) from Scope Tier (`scope_tier`: `workspace`, `project`, `global`, `server`) in the Mint Modal, eliminating HTTP 422 VALIDATION_FAILED errors.
+3. Clean error surfacing in an inline alert banner (`.kb-mcp-mint-error.kb-mcp-mint-error--banner`) using canonical theme tokens (`margin: var(--space-3, 12px) 0;`) with zero inline `style={...}` attributes.
+4. Dynamic project resolution in `McpAccessStudio.tsx` via `GET /api/v1/projects`, dynamic workspace slug interpolation (`Workspace: ${currentWorkspaceSlug}`), and cache invalidation on key minting.
+
+All live Playwright visual proof screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis.
 
 ---
 
@@ -44,11 +46,11 @@ All live Playwright visual proof screenshots (Desktop 1440x900 and Mobile 390x84
 
 ### 4. Key Minting Modal Flow (live-mint-modal-desktop-light.png & live-settings-mcp-after-mint-desktop-light.png)
 - Modal Ergonomics: Centered dialog with backdrop blur, clear field groupings, and tool narrowing checkboxes.
-- Secret Display & Config Snippets: One-time secret display banner with Copy Key button, client integration tabs (Claude Code, Cursor, Gemini CLI, Antigravity, OpenAI Codex, OAuth 2.1), and formatted configuration snippet box.
-- Cache Invalidation: Upon key creation, the key table refetches immediately, displaying the newly minted key without manual refresh.
+- Key Type & Scope Decoupling: Key Type dropdown allows choosing Personal User Key vs Service Bot Key, while Scope Tier allows choosing Workspace, Project, or Server.
+- Secret Display & Config Snippets: One-time secret display banner with Copy Key button, client integration tabs, and formatted configuration snippet box.
 
 ### 5. Governance View & Topbar Navigation (live-settings-mcp-governance-desktop-light.png & live-topbar-avatar-menu-desktop-light.png)
-- Governance Scope: Administrators cleanly access governance-scoped keys across workspaces and projects.
+- Governance Scope: Administrators cleanly access and revoke governance-scoped keys across workspaces and projects using unified API endpoints without 404 errors.
 - Topbar Ergonomics: Consolidated menu entry `🔑 MCP Keys & OAuth Apps` -> `/settings/mcp` functions smoothly with circular avatar profile rendering.
 
 ---
@@ -57,7 +59,8 @@ All live Playwright visual proof screenshots (Desktop 1440x900 and Mobile 390x84
 
 ### 1. Content Security Policy (CSP) Compliance
 - Zero inline `style={...}` JSX attributes added in `McpAccessStudio.tsx` or `McpConfigSnippetModal.tsx`.
-- All styles leverage canonical CSS classes and design system tokens.
+- All styles leverage canonical CSS classes (`.kb-mcp-mint-error--banner`) and design system tokens (`var(--space-3, 12px)`).
+- Verified by automated test: `cssTokensAudit.test.ts` passes 4 of 4 tests.
 
 ### 2. Nullish Coalescing & Type Safety
 - Strict nullish coalescing (`??`) across all new code paths:
@@ -72,16 +75,17 @@ All live Playwright visual proof screenshots (Desktop 1440x900 and Mobile 390x84
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-25)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-25 Round 2)
 
-- Target Branch: `fix/KAN-31-liveqa`
-- Remediation Head Commit: `50f0089`
+- Target Branch: `fix/KAN-31-rc2`
+- Remediation Head Commit: `4a24d1a`
 - Remediations Verified:
-  1. Dynamic project resolution in `McpAccessStudio.tsx` queries `GET /api/v1/projects` via TanStack Query.
-  2. Cache invalidation on key minting ensures active key list is synchronized immediately.
-  3. Dynamic workspace and project slug interpolation in `McpConfigSnippetModal.tsx`.
-  4. Unit test coverage across `McpAccessStudio.test.tsx` (19 tests) and `McpConfigSnippetModal.test.tsx` (4 tests) with >= 95% statement and line coverage.
-  5. 100% zero em/en-dashes.
+  1. Unified MCP API methods wired into `McpAccessStudio.tsx` (`fetchUnifiedMcpKeys`, `mintUnifiedMcpKey`, `revokeUnifiedMcpKey`), eliminating 404 on governance revocations.
+  2. Mint modal decouples `owner_kind` from `scope_tier`, eliminating 422 errors.
+  3. Inline style in `McpAccessStudio.tsx:638` removed and replaced with `.kb-mcp-mint-error--banner`.
+  4. 52/52 Vitest unit tests passing across touched files with >= 96% branch coverage and 0 console warnings.
+  5. 21/21 backend Pytest tests passing with 97% coverage.
+  6. 100% zero em/en-dashes.
 
 ---
 
@@ -94,13 +98,14 @@ All live Playwright visual proof screenshots (Desktop 1440x900 and Mobile 390x84
 5. [x] Key minting cache invalidation verified
 6. [x] Topbar menu items consolidated into single `🔑 MCP Keys & OAuth Apps` link
 7. [x] Zero inline `style={...}` attributes (CSP compliant)
-8. [x] Strict nullish coalescing (`??`) conventions maintained
-9. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
-10. [x] Frontend test suite passes with >= 95% coverage across touched files
+8. [x] Dedicated `.kb-mcp-mint-error--banner` CSS class verified
+9. [x] Strict nullish coalescing (`??`) conventions maintained
+10. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
+11. [x] Frontend test suite passes: 52 Vitest tests passing with 0 console warnings
 
 ---
 
 ## Verdict & Certification
 STATUS: APPROVED
 
-All visual, UX, ergonomics, accessibility, and frontend code quality criteria have been verified and certified. Ready for dual specialist completion and coordinator merge into `main`.
+All visual, UX, ergonomics, accessibility, and frontend code quality criteria have been verified and certified. Ready for dual specialist signoff and coordinator merge into `main`.
