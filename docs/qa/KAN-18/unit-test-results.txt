@@ -1,26 +1,82 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-fix-5f154820
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-rcfix-4876d148
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 46 items
+collected 344 items
 
-mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 28%]
-mcp/tests/docs/test_docs_tools.py .......                                [ 43%]
-mcp/tests/test_ephemeral_auth.py ...................                     [ 84%]
+mcp/tests/admin/test_architect_project.py .......                        [  2%]
+mcp/tests/admin/test_audit_and_purge_links.py .........                  [  4%]
+mcp/tests/admin/test_bind_project_repo.py ...                            [  5%]
+mcp/tests/admin/test_configure_workspace.py ........                     [  7%]
+mcp/tests/admin/test_destructive_lifecycle.py ..........                 [ 10%]
+mcp/tests/admin/test_manage_access_policies.py ......                    [ 12%]
+mcp/tests/admin/test_manage_ai_and_agent_runners.py .......              [ 14%]
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py .....           [ 15%]
+mcp/tests/admin/test_manage_auth_cards.py ......                         [ 17%]
+mcp/tests/admin/test_manage_custom_fields_and_scripts.py ...........     [ 20%]
+mcp/tests/admin/test_manage_cycles_and_modules.py .........              [ 23%]
+mcp/tests/admin/test_manage_principals.py .....                          [ 25%]
+mcp/tests/admin/test_manage_workflow_interceptors.py ..............      [ 29%]
+mcp/tests/admin/test_override_ticket_provenance.py ..........            [ 31%]
+mcp/tests/agent/test_add_comment.py ........                             [ 34%]
+mcp/tests/agent/test_create_ticket.py ........                           [ 36%]
+mcp/tests/agent/test_link_objects.py ........                            [ 38%]
+mcp/tests/agent/test_pending_gate_contract.py ...                        [ 39%]
+mcp/tests/agent/test_read_ticket.py ............                         [ 43%]
+mcp/tests/agent/test_search_tickets.py ......                            [ 45%]
+mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 45%]
+mcp/tests/agent/test_update_ticket.py ...........                        [ 49%]
+mcp/tests/agent/test_workflow_argument_validation.py ......              [ 50%]
+mcp/tests/agent/test_workflow_tools.py .........                         [ 53%]
+mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 57%]
+mcp/tests/docs/test_docs_tools.py .......                                [ 59%]
+mcp/tests/test_admin_scope_requirements_all_12.py ..                     [ 59%]
+mcp/tests/test_app.py ................                                   [ 64%]
+mcp/tests/test_auth.py .............                                     [ 68%]
+mcp/tests/test_connection_scoping.py ..............                      [ 72%]
+mcp/tests/test_docs_kan18_coverage.py ....                               [ 73%]
+mcp/tests/test_ephemeral_auth.py ...................                     [ 79%]
+mcp/tests/test_internal_client.py ........                               [ 81%]
+mcp/tests/test_key_narrowing.py ...                                      [ 82%]
+mcp/tests/test_lod_help.py ...............                               [ 86%]
+mcp/tests/test_markdown_sections.py .......                              [ 88%]
+mcp/tests/test_metadata.py ..                                            [ 89%]
+mcp/tests/test_protocol.py .......                                       [ 91%]
+mcp/tests/test_registry_isolation.py ...                                 [ 92%]
+mcp/tests/test_resolver.py ....                                          [ 93%]
+mcp/tests/test_schema_budget.py ..                                       [ 93%]
+mcp/tests/test_smoke.py .                                                [ 94%]
+mcp/tests/test_token_benchmark.py .....                                  [ 95%]
+mcp/tests/test_yaml_out.py ........                                      [ 97%]
 kanban/tests/security/test_ephemeral_mcp_tokens.py .......               [100%]
 
-================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+=============================== warnings summary ===============================
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py::test_mcp_mint_enrollment_token_and_list_runners
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-rcfix-4876d148/.venv/lib/python3.12/site-packages/fastapi/routing.py:372: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
 
+kanban/tests/security/test_ephemeral_mcp_tokens.py::test_case_5_internal_endpoints_and_mtls_boundary
+  /home/adamoutler/.local/share/uv/python/cpython-3.12.7-linux-x86_64-gnu/lib/python3.12/weakref.py:415: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    return self.data[ref(key)]
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 344 passed, 2 warnings in 104.23s (0:01:44) ==================
+
+================================ tests coverage ================================
 Name                                      Stmts   Miss Branch BrPart  Cover   Missing
 -------------------------------------------------------------------------------------
 kanban/security/ephemeral_mcp_tokens.py     115      3     48      3    96%   378, 433, 445
-mcp/scoping.py                              140     74     62     13    40%   62, 86-87, 91->99, 95, 97, 100-101, 104-105, 111-112, 115, 122, 142, 146, 160-249, 276-292, 311-370
+mcp/auth.py                                 289      6     84      7    97%   366-370, 382->389, 428-432, 475->478, 478->507, 598->600, 600->602
+mcp/errors.py                                85      1     12      1    98%   118
+mcp/protocol.py                             340     11    152      9    96%   161->exit, 273, 313, 327-328, 382-384, 410->442, 420, 432-433, 540->565, 749->874, 761
+mcp/scoping.py                              140      1     62      1    99%   249
+mcp/surfaces/docs/__init__.py                16      0      0      0   100%
 mcp/surfaces/docs/create.py                 164      2     76      5    97%   108->123, 113->115, 116->109, 127->124, 306-307
 mcp/surfaces/docs/search.py                 343     11    150     13    95%   167->173, 169-170, 178->185, 191->195, 199-200, 208->213, 215->220, 274, 339->343, 370, 443->459, 557, 567-568, 577->589, 616-617, 628->640
 mcp/surfaces/docs/update.py                 368      7    166     12    96%   153->157, 181->187, 192->199, 205->209, 213->219, 215-216, 224-225, 234->239, 269->284, 271, 355->375, 363->356, 384->389, 386-387, 404->390
 -------------------------------------------------------------------------------------
-TOTAL                                      1130     97    502     46    89%
-============================= 46 passed in 16.89s ==============================
+TOTAL                                      1860     42    750     51    96%
