@@ -7,12 +7,16 @@ from __future__ import annotations
 import base64
 import time
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from joserfc import jwt
 from starlette.requests import Request
 
+from database.models.oauth import OAuthClient
+from kanban.api.deps import PrincipalContext
 from kanban.api.problems import format_validation_error
+from kanban.api.v1.oauth import oauth_authorize
 from kanban.auth.ldap.config import LdapCardConfig
 from kanban.auth.oidc.config import OidcCardConfig
 from kanban.auth.sessions.csrf import verify_same_origin_request
@@ -726,3 +730,113 @@ def test_resolve_public_base_url_and_parse_target(monkeypatch: pytest.MonkeyPatc
     assert surface == "agent"
     assert ws is None
     assert proj is None
+
+
+@pytest.mark.asyncio
+async def test_oauth_authorize_fail_closed_missing_key_material(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When key_material and session_service are absent and cannot be loaded, raise RuntimeError."""
+    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
+    monkeypatch.delenv("KANBAN_MASTER_KEK", raising=False)
+    monkeypatch.delenv("KANBAN_SESSION_HMAC_KEY", raising=False)
+
+    app = MagicMock()
+    app.state.key_material = None
+    app.state.session_service = None
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/oauth/authorize",
+        "query_string": b"",
+        "headers": [(b"host", b"localhost:8000")],
+        "app": app,
+    }
+    req = Request(scope)
+    caller = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("auth",),
+        aal_level=1,
+        session_id=uuid.uuid4(),
+    )
+    resolver = AsyncMock()
+    resolver.resolve.return_value = caller
+    app.state.principal_resolver = resolver
+    mock_session = AsyncMock()
+    mock_client = OAuthClient(
+        client_id="cid_1",
+        client_name="Test App",
+        client_type="public",
+        redirect_uris=["http://127.0.0.1:8080/cb"],
+        status="active",
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = mock_client
+    result.all.return_value = []
+    mock_session.execute.return_value = result
+
+    with pytest.raises(RuntimeError, match="Session HMAC key material is not configured"):
+        await oauth_authorize(
+            request=req,
+            session=mock_session,
+            response_type="code",
+            client_id="cid_1",
+            redirect_uri="http://127.0.0.1:8080/cb",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            code_challenge_method="S256",
+            state="state123",
+        )
+
+
+@pytest.mark.asyncio
+async def test_oauth_authorize_rejects_inactive_client_statuses() -> None:
+    """GET /oauth/authorize redirects inactive clients with unauthorized_client."""
+    app = MagicMock()
+    req = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/oauth/authorize",
+            "query_string": b"",
+            "headers": [(b"host", b"localhost:8000")],
+            "app": app,
+        }
+    )
+    caller = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("auth",),
+        aal_level=1,
+        session_id=uuid.uuid4(),
+    )
+    resolver = AsyncMock()
+    resolver.resolve.return_value = caller
+    app.state.principal_resolver = resolver
+
+    for inactive_status in ("suspended", "revoked", "pending_admin_approval", "disabled"):
+        mock_session = AsyncMock()
+        mock_client = OAuthClient(
+            client_id="cid_1",
+            client_name="Test App",
+            client_type="public",
+            redirect_uris=["http://127.0.0.1:8080/cb"],
+            status=inactive_status,
+        )
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = mock_client
+        mock_session.execute.return_value = result
+
+        resp = await oauth_authorize(
+            request=req,
+            session=mock_session,
+            response_type="code",
+            client_id="cid_1",
+            redirect_uri="http://127.0.0.1:8080/cb",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            code_challenge_method="S256",
+            state="state123",
+        )
+        assert resp.status_code == 302
+        assert f"error_description=client_{inactive_status}" in resp.headers["location"]

@@ -113,6 +113,37 @@ All 16 visual screenshots confirm WCAG AA contrast compliance, correct component
 
 ---
 
+## Clean-Room Reality-Checker Remediation (Round 2)
+
+### Defect 1: DeviceActivatePage Project ID Contract & Authorize Fail-Closed Invariants
+- Finding: `DeviceActivatePage.tsx` previously sent string project identifiers (`["KAN", "OPS"]`) in `allowed_projects` to `POST /api/v1/oauth/device/activate`, which requires `list[uuid.UUID] | None`, resulting in HTTP 422 upon approval. Additionally, `kanban/api/v1/oauth.py` fell back to null byte keys (`b"\x00" * 32`) if key material was missing, and only checked `pending_admin_approval` and `disabled` on GET `/oauth/authorize`.
+- Remediation:
+  - Updated `DeviceActivatePage.tsx` to fetch `/api/v1/projects`, parse `{ id: string, identifier: string, name?: string }`, display `Project: {p.identifier}`, and store/submit `p.id` (UUID strings) in `selectedProjects` / `allowed_projects`.
+  - Updated `DeviceActivatePage.test.tsx` to assert valid UUID strings (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`) are submitted on approve.
+  - In `kanban/api/v1/oauth.py`: Fail closed (`raise RuntimeError("Session HMAC key material is not configured.")`) if `key_material` and `session_service` are absent and fail to load; reject `client_record.status != "active"` consistently on `GET /oauth/authorize` (redirecting 302 `unauthorized_client&error_description=client_{status}`).
+  - Added unit test coverage in `kanban/tests/oauth/test_oauth_unit.py` verifying fail-closed runtime error and rejection of all non-active client statuses (`suspended`, `revoked`, `pending_admin_approval`, `disabled`).
+- Status: VERIFIED RESOLVED
+
+### Defect 2: Mobile 390x844 Viewport Horizontal Overflow Remediation
+- Finding: `OAuthClientGovernanceStudio.css` and `DeviceActivatePage.css` suffered from horizontal scrolling/overflow on mobile 390x844 viewports due to fixed padding, non-wrapping header rows, and long Target Resource URLs.
+- Remediation:
+  - In `OAuthClientGovernanceStudio.css`: added `min-width: 0; max-width: 100%; box-sizing: border-box;` on container and sections, `flex-wrap: wrap; gap: 12px;` on section header and subnav, compact padding (`padding: 16px 12px` under `@media (max-width: 640px)`), and `overflow-x: auto; max-width: 100%;` on table wrap, guaranteeing `document.documentElement.scrollWidth <= 390`.
+  - In `DeviceActivatePage.css`: reduced mobile card padding (`padding: 20px 16px` under `@media (max-width: 480px)`), added `flex-wrap: wrap; gap: 4px 12px;` on `.kb-device-app-row`, and `overflow-wrap: anywhere; word-break: break-all; max-width: 100%;` on `.kb-device-app-prop-value` so long Target Resource URLs never overflow card boundaries or viewport. Zero inline `style={{...}}`, canonical `theme.css` tokens.
+- Status: VERIFIED RESOLVED
+
+### Defect 3: Complete Unit Suite, Static Gates, and Cumulative Diff Patch
+- Verification:
+  - Python Pytest: 44 passed in 23.12s (`test_device_flow.py`, `test_oauth_flow.py`, `test_oauth_unit.py`, `test_web_static.py`, `test_aal2_policy.py`).
+  - Python Coverage: 98% total across touched modules (`kanban/oauth/server.py` 97%, `kanban/web_static.py` 100%).
+  - Frontend Vitest: 40 passed in 2.77s (`ConnectOAuthAppModal.test.tsx`, `DeviceActivatePage.test.tsx`, `OAuthClientGovernanceStudio.test.tsx`).
+  - Frontend Coverage: 99.7% Statements, 96.38% Branches, 99.02% Functions, 100% Lines (exceeding mandatory >= 95% threshold).
+  - CSS Tokens Audit: 4 passed in 0.88s (`cssTokensAudit.test.ts`).
+  - Static Gates: `ruff check` (clean), `ruff format` (clean), `mypy` (clean across 3 files), `lint-imports` (2 kept, 0 broken), `check_no_dashes --all` (0 em/en-dashes), `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 errors/warnings), `vite build` (clean in 1.18s).
+  - Cumulative Diff: Clean patch `docs/qa/KAN-28/git-diff.patch` generated via `git diff 31aca8e HEAD -- ...` (zero `docs/qa/*` files included).
+- Status: VERIFIED RESOLVED
+
+---
+
 ## Final Gate Certification
 - Overall Quality Rating: A
 - Production Readiness: READY

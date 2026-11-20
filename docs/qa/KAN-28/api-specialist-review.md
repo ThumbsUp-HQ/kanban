@@ -4,16 +4,16 @@
 - Ticket ID: KAN-28 ([KB-P3-AUDIT-22])
 - Reviewer: api-spec-2 (Clean-Room Backend/API Specialist)
 - Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-b42849d9`
-- Target Branch: feat/KAN-28
-- Base Commit: 3dd6b9d
-- Head Commit: 476daa4
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rcfix-5b04ce70`
+- Target Branch: fix/KAN-28-rc2
+- Base Commit: 036216b
+- Head Commit: deefc6c
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room audit evaluates the OAuth 2.1 protocol implementation, cryptographic CSRF token generation and validation, same-origin protections, consent screen Content-Security-Policy (CSP), and administrative client governance endpoints delivered for ticket KAN-28. The delivery resolves four core architectural and security requirements across user and administrative OAuth flows without introducing new dependencies or compromising security invariants.
+This clean-room audit evaluates the OAuth 2.1 protocol implementation, cryptographic CSRF token generation and validation, same-origin protections, consent screen Content-Security-Policy (CSP), administrative client governance endpoints, and Clean-Room Reality-Checker Round 2 surgical remediations ([KB-P3-AUDIT-22]) delivered for ticket KAN-28. The delivery resolves four core architectural and security requirements across user and administrative OAuth flows without introducing new dependencies or compromising security invariants.
 
 All changes adhere strictly to the authoritative specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and `kanban/GEMINI.md`.
 
@@ -59,37 +59,41 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 
 ---
 
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-22 Round 2)
+
+- Target Branch: `fix/KAN-28-rc2`
+- Remediation Head Commit: `deefc6c`
+- Remediations Verified:
+  1. **DeviceActivatePage Project ID Contract Alignment:**
+     - In `DeviceActivatePage.tsx`: queries `/api/v1/projects`, maps `id`, `identifier`, and `name`. Displays `Project: {p.identifier}` in UI while storing and submitting project UUIDs in `allowed_projects` on approval.
+     - In `DeviceActivatePage.test.tsx`: verified assertions confirming UUID-formatted strings are submitted in payload, eliminating HTTP 422 validation errors.
+  2. **Fail-Closed Backend Authorization Invariants (`kanban/api/v1/oauth.py`):**
+     - In `oauth_authorize` and `oauth_authorize_decision`: fails closed (`raise RuntimeError("Session HMAC key material is not configured.")`) if HMAC key material cannot be resolved.
+     - In `oauth_authorize`: rejects all non-active client statuses (`client_record.status != "active"`) consistently, redirecting 302 with `unauthorized_client&error_description=client_{status}`.
+  3. **Quality Gates & Test Coverage:**
+     - Pytest: 44 unit and integration tests passing in `kanban/tests/oauth/` with 98% coverage on touched backend modules.
+     - Vitest: 40 tests passing across 3 touched frontend suites with 99.7% statements and 96.38% branches.
+     - Static checks: `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 warnings/errors), `vite build` (clean in 1.18s), `ruff check` (clean), `mypy` (clean), `lint-imports` (clean: 2 kept, 0 broken).
+     - Strict punctuation: 0 em-dashes and 0 en-dashes across all code, tests, and documentation.
+     - Clean evidence packet: `git-diff.patch` generated against `31aca8e` with zero `docs/qa/` files included.
+
+---
+
 ## Gate & Invariant Checklist
 
 1. [x] Zero New Dependencies: No additions to `pyproject.toml` or `package.json`.
 2. [x] Admin Route Security: All `/api/v1/admin/*` endpoints maintain mandatory `Depends(require_admin_aal2)`. Verified by `kanban/tests/auth/test_aal2_policy.py`.
 3. [x] Architectural Layering: `uv run lint-imports` verified 2 kept contracts, 0 broken (`agent -> mcp -> kanban -> database`).
 4. [x] Test Coverage:
-   - Backend: 36 unit and integration tests passing in `kanban/tests/oauth/` (device flow, authorization flows, PKCE, CSRF).
-   - Frontend: 28 vitest tests passing across touched components (`ConnectOAuthAppModal.tsx`, `OAuthClientGovernanceStudio.tsx`, `oauthApi.ts`).
-   - Combined frontend coverage: 100% Statements, 99.06% Branches, 100% Functions, 100% Lines (all exceeding >= 95.10% threshold).
-5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy` (4 source files), `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
+   - Backend: 44 tests passing in `kanban/tests/oauth/` (98% coverage on touched files).
+   - Frontend: 40 vitest tests passing across touched components (99.7% Statements, 96.38% Branches).
+5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy`, `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
 6. [x] Zero Em/En-Dashes: Clean verification across code, tests, docs, and review markdown (0 em/en-dashes).
-7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `message-to-reality-checker.md`, and 16 Playwright screenshot PNGs verified in `docs/qa/KAN-28/`.
-
----
-
-## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-22)
-
-- Target Branch: `fix/KAN-28-liveqa`
-- Remediation Head Commit: `e895795`
-- Remediation Scope:
-  1. Modal Tab Layout and Interaction: Fixed `.kb-connect-oauth-tabs` height collapse by configuring `flex-shrink: 0`, `flex-wrap: wrap`, and `min-height: 40px` with child `height: 36px`, ensuring all 4 tabs remain visible and clickable without pointer interception on Desktop and Mobile viewports.
-  2. Dynamic Resource URL Formatting: Replaced hardcoded `'KANBA'` fallback in `ConnectOAuthAppModal.tsx` with dynamic workspace project resolution via `GET /api/v1/projects`, emitting canonical workspace or project URLs without hardcoded tenant keys.
-  3. Direct SPA Routing to `/oauth/device`: In `kanban/web_static.py`, implemented `is_oauth_device_spa` allowing direct browser access to `/oauth/device` via SPA fallback to `index.html` while strictly preserving 404/405 protection on backend OAuth protocol routes.
-  4. Device Activation Project Scoping: Updated `DeviceActivatePage.tsx` with dynamic project loading via `GET /api/v1/projects` to populate project scope selection dynamically.
-  5. Chromium CSP Compliance: In `kanban/oauth/server.py`, replaced invalid W3C CSP3 `http://[::1]:*` grammar with exact dynamic origin extraction (`f"{scheme}://{netloc}"`) appended to `form-action`, eliminating Chromium console errors.
-  6. Test and Coverage Verification: 26 Pytest backend tests passing (100% coverage on `kanban.web_static`, 95% total across touched files); 23 Vitest unit tests passing with 100% lines and 96.49% branch coverage (exceeding >= 95.10%); `cssTokensAudit.test.ts` (4/4 passed); zero em/en-dashes; clean ruff, mypy, and typecheck.
+7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, and screenshots verified in `docs/qa/KAN-28/`.
 
 ---
 
 ## Verdict & Handoff
 STATUS: APPROVED
 
-The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-28/screenshots/`.
-
+The OAuth protocol contracts, security invariants, device activation scoping, and test evidence are verified clean. Ready for final coordinator merge into `main`.

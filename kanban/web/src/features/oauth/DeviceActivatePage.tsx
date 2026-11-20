@@ -25,7 +25,13 @@ export function formatUserCodeInput(raw: string): string {
   return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}`;
 }
 
-async function fetchWorkspaceProjects(): Promise<string[]> {
+export interface WorkspaceProject {
+  id: string;
+  identifier: string;
+  name?: string | undefined;
+}
+
+async function fetchWorkspaceProjects(): Promise<WorkspaceProject[]> {
   try {
     const res = await fetch('/api/v1/projects', {
       method: 'GET',
@@ -36,12 +42,18 @@ async function fetchWorkspaceProjects(): Promise<string[]> {
       return [];
     }
     const data = (await res.json()) as
-      | { items?: { key?: string; identifier?: string }[] }
-      | { key?: string; identifier?: string }[];
+      | { items?: { id?: string; identifier?: string; key?: string; name?: string }[] }
+      | { id?: string; identifier?: string; key?: string; name?: string }[];
     const items = Array.isArray(data) ? data : (data.items ?? []);
     return items
-      .map((p) => p.key ?? p.identifier ?? '')
-      .filter((k): k is string => Boolean(k));
+      .map(
+        (p): WorkspaceProject => ({
+          id: p.id ?? p.key ?? p.identifier ?? '',
+          identifier: p.identifier ?? p.key ?? p.id ?? '',
+          name: p.name,
+        }),
+      )
+      .filter((p) => Boolean(p.id));
   } catch {
     return [];
   }
@@ -59,8 +71,8 @@ export function DeviceActivatePage(): JSX.Element {
   const [completionStatus, setCompletionStatus] = useState<'approved' | 'denied' | null>(null);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [workspaceProjects, setWorkspaceProjects] = useState<string[]>([]);
-  const workspaceProjectsRef = useRef<string[]>([]);
+  const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
+  const workspaceProjectsRef = useRef<WorkspaceProject[]>([]);
   useEffect(() => {
     workspaceProjectsRef.current = workspaceProjects;
   }, [workspaceProjects]);
@@ -68,9 +80,9 @@ export function DeviceActivatePage(): JSX.Element {
 
   useEffect(() => {
     let active = true;
-    void fetchWorkspaceProjects().then((keys) => {
-      if (active && keys.length > 0) {
-        setWorkspaceProjects(keys);
+    void fetchWorkspaceProjects().then((projects) => {
+      if (active && projects.length > 0) {
+        setWorkspaceProjects(projects);
       }
     });
     return () => {
@@ -107,7 +119,7 @@ export function DeviceActivatePage(): JSX.Element {
           const effectiveProjects =
             data.allowed_projects && data.allowed_projects.length > 0
               ? data.allowed_projects
-              : wsProjects;
+              : wsProjects.map((p) => p.id);
           setSelectedProjects(effectiveProjects);
         }
       } catch (err: unknown) {
@@ -151,7 +163,7 @@ export function DeviceActivatePage(): JSX.Element {
       const effectiveProjects =
         data.allowed_projects && data.allowed_projects.length > 0
           ? data.allowed_projects
-          : wsProjects;
+          : wsProjects.map((p) => p.id);
       setSelectedProjects(effectiveProjects);
     } catch (err: unknown) {
       const errObj = err as { code?: string; message?: string };
@@ -364,9 +376,12 @@ export function DeviceActivatePage(): JSX.Element {
             </div>
 
             {(() => {
-              const displayProjects =
+              const displayProjects: WorkspaceProject[] =
                 info.allowed_projects && info.allowed_projects.length > 0
-                  ? info.allowed_projects
+                  ? info.allowed_projects.map((projId) => {
+                      const found = workspaceProjects.find((wp) => wp.id === projId);
+                      return found ?? { id: projId, identifier: projId };
+                    })
                   : workspaceProjects;
               if (displayProjects.length === 0) {
                 return null;
@@ -375,16 +390,16 @@ export function DeviceActivatePage(): JSX.Element {
                 <div className="kb-device-projects-group">
                   <div className="kb-device-group-title">Project Narrowing:</div>
                   {displayProjects.map((proj) => (
-                    <label key={proj} className="kb-device-checkbox-label">
+                    <label key={proj.id} className="kb-device-checkbox-label">
                       <input
                         type="checkbox"
-                        checked={selectedProjects.includes(proj)}
+                        checked={selectedProjects.includes(proj.id)}
                         onChange={() => {
-                          toggleProject(proj);
+                          toggleProject(proj.id);
                         }}
-                        data-testid={`project-checkbox-${proj}`}
+                        data-testid={`project-checkbox-${proj.id}`}
                       />
-                      <span>Project: {proj}</span>
+                      <span>Project: {proj.identifier}</span>
                     </label>
                   ))}
                 </div>
