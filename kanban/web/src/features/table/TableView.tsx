@@ -61,21 +61,16 @@ export function TableView({
   }
 
   const effectiveCaps = capabilities ?? currentUserCapabilities;
+  const hasEditOrAdmin = (caps: string[]): boolean =>
+    caps.includes('EDIT') || caps.includes('ADMIN');
   const isViewerOnly = Boolean(
-    effectiveCaps &&
-      (effectiveCaps.includes('VIEWER') ||
-        (!effectiveCaps.includes('EDIT') && !effectiveCaps.includes('ADMIN'))),
+    effectiveCaps && effectiveCaps.length > 0 && !hasEditOrAdmin(effectiveCaps),
   );
 
   const canEditIssue = (issue: IssueItem): boolean => {
     if (isViewerOnly) return false;
     if (issue.capabilities && issue.capabilities.length > 0) {
-      if (
-        issue.capabilities.includes('VIEWER') ||
-        (!issue.capabilities.includes('EDIT') && !issue.capabilities.includes('ADMIN'))
-      ) {
-        return false;
-      }
+      return hasEditOrAdmin(issue.capabilities);
     }
     return true;
   };

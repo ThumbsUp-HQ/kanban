@@ -211,29 +211,30 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
                 title="AAL2 Required",
                 detail="Updating trash_retention_days requires AAL2 authentication.",
             )
-        verified_at = caller.aal2_verified_at
-        if verified_at is None:
-            raise ProblemException(
-                code="AAL2_STALE",
-                status=403,
-                title="AAL2 Session Stale",
-                detail="AAL2 verification timestamp is missing or stale.",
-            )
-        now_utc = datetime.now(UTC)
-        if verified_at.tzinfo is None:
-            verified_at = verified_at.replace(tzinfo=UTC)
-        age_sec = (now_utc - verified_at).total_seconds()
-        if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
-            stale_msg = (
-                f"AAL2 verification is stale ({int(age_sec)}s > "
-                f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
-            )
-            raise ProblemException(
-                code="AAL2_STALE",
-                status=403,
-                title="AAL2 Session Stale",
-                detail=stale_msg,
-            )
+        if "session" in caller.token_scopes:
+            verified_at = caller.aal2_verified_at
+            if verified_at is None:
+                raise ProblemException(
+                    code="AAL2_STALE",
+                    status=403,
+                    title="AAL2 Session Stale",
+                    detail="AAL2 verification timestamp is missing or stale.",
+                )
+            now_utc = datetime.now(UTC)
+            if verified_at.tzinfo is None:
+                verified_at = verified_at.replace(tzinfo=UTC)
+            age_sec = (now_utc - verified_at).total_seconds()
+            if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
+                stale_msg = (
+                    f"AAL2 verification is stale ({int(age_sec)}s > "
+                    f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
+                )
+                raise ProblemException(
+                    code="AAL2_STALE",
+                    status=403,
+                    title="AAL2 Session Stale",
+                    detail=stale_msg,
+                )
 
     before: dict[str, Any] = {
         "name": ws.name if ws else settings.display_name,
