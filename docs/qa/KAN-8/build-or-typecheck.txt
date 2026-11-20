@@ -1,0 +1,48 @@
+=== 1. RUFF CHECK ===
+$ uv run ruff check .
+All checks passed!
+
+=== 2. RUFF FORMAT CHECK ===
+$ uv run ruff format --check .
+1900 files already formatted
+
+=== 3. MYPY TYPE CHECK ===
+$ uv run mypy
+Success: no issues found in 1100 source files
+
+=== 4. LINT-IMPORTS ARCHITECTURE CONTRACTS ===
+$ uv run lint-imports
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+---------
+Contracts
+---------
+
+Analyzed 964 files, 3389 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== 5. CHECK NO DASHES (EM-DASH / EN-DASH AUDIT) ===
+$ uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== 6. FRONTEND TYPECHECK ===
+$ cd kanban/web && pnpm run typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/kanban/web
+> tsc -b --noEmit
+
+=== 7. FRONTEND ESLINT ===
+$ cd kanban/web && pnpm run lint
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/kanban/web
+> eslint . --max-warnings 0

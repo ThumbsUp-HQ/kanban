@@ -101,6 +101,8 @@ async def test_case_1_positive_create_get_etag_304_and_activity(  # noqa: PLR091
 
     body = resp.json()
     assert body["key"] == "POS-1"
+    assert body["object_id"] == body["id"]
+    assert str(uuid.UUID(body["object_id"])) == body["object_id"]
     assert body["summary"] == "Fix authentication bug"
     assert body["description_markdown"] == desc
     assert body["description_sha256"] == expected_sha256

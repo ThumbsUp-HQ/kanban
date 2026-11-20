@@ -39,7 +39,7 @@ MAX_TOTAL_ASSIGNEES: Final[int] = 20
 MAX_FREE_TEXT_ASSIGNEES: Final[int] = 10
 MIN_FREE_TEXT_LENGTH: Final[int] = 1
 MAX_FREE_TEXT_LENGTH: Final[int] = 120
-MIN_QUERY_LENGTH: Final[int] = 1
+MIN_QUERY_LENGTH: Final[int] = 0
 MAX_QUERY_LENGTH: Final[int] = 64
 DEFAULT_SUGGESTION_LIMIT: Final[int] = 10
 MAX_SUGGESTION_LIMIT: Final[int] = 20
@@ -400,52 +400,65 @@ async def get_assignee_suggestions(
             code="INVALID_QUERY",
             status=422,
             title="Invalid Query Parameter",
-            detail="Query string 'q' must be between 1 and 64 characters",
+            detail="Query string 'q' must be between 0 and 64 characters",
         )
 
     clamped_limit = max(1, min(MAX_SUGGESTION_LIMIT, limit))
-    escaped_q = escape_like(q)
-    pattern = f"{escaped_q}%"
-
-    stmt = text(
-        "SELECT "
-        "  p.id AS id, "
-        "  o.canonical_key AS handle, "
-        "  p.display_name AS display_name, "
-        "  p.principal_type AS type "
-        "FROM principals p "
-        "JOIN objects o ON o.id = p.id "
-        "JOIN effective_resource_access era ON era.principal_id = p.id "
-        "WHERE era.object_id = :project_id "
-        "  AND era.workspace_id = :workspace_id "
-        "  AND (era.allow_mask & 1) = 1 "
-        "  AND (era.deny_mask & 1) = 0 "
-        "  AND p.workspace_id = :workspace_id "
-        "  AND p.status = 'ACTIVE' "
-        "  AND p.principal_type IN ('USER', 'AGENT') "
-        "  AND ( "
-        "    o.canonical_key ILIKE :pattern ESCAPE '\\' "
-        "    OR p.display_name ILIKE :pattern ESCAPE '\\' "
-        "  ) "
-        "ORDER BY p.display_name ASC, o.canonical_key ASC "
-        "LIMIT :limit"
-    )
-
-    rows = (
-        (
-            await session.execute(
-                stmt,
-                {
-                    "project_id": project.id,
-                    "workspace_id": caller.workspace_id,
-                    "pattern": pattern,
-                    "limit": clamped_limit,
-                },
-            )
+    params: dict[str, Any] = {
+        "project_id": project.id,
+        "workspace_id": caller.workspace_id,
+        "limit": clamped_limit,
+    }
+    if q:
+        escaped_q = escape_like(q)
+        params["pattern"] = f"{escaped_q}%"
+        query_sql = (
+            "SELECT "
+            "  p.id AS id, "
+            "  o.canonical_key AS handle, "
+            "  p.display_name AS display_name, "
+            "  p.principal_type AS type "
+            "FROM principals p "
+            "JOIN objects o ON o.id = p.id "
+            "JOIN effective_resource_access era ON era.principal_id = p.id "
+            "WHERE era.object_id = :project_id "
+            "  AND era.workspace_id = :workspace_id "
+            "  AND (era.allow_mask & 1) = 1 "
+            "  AND (era.deny_mask & 1) = 0 "
+            "  AND p.workspace_id = :workspace_id "
+            "  AND p.status = 'ACTIVE' "
+            "  AND p.principal_type IN ('USER', 'AGENT') "
+            "  AND ( "
+            "    o.canonical_key ILIKE :pattern ESCAPE '\\' "
+            "    OR p.display_name ILIKE :pattern ESCAPE '\\' "
+            "  ) "
+            "ORDER BY p.display_name ASC, o.canonical_key ASC "
+            "LIMIT :limit"
         )
-        .mappings()
-        .all()
-    )
+    else:
+        query_sql = (
+            "SELECT "
+            "  p.id AS id, "
+            "  o.canonical_key AS handle, "
+            "  p.display_name AS display_name, "
+            "  p.principal_type AS type "
+            "FROM principals p "
+            "JOIN objects o ON o.id = p.id "
+            "JOIN effective_resource_access era ON era.principal_id = p.id "
+            "WHERE era.object_id = :project_id "
+            "  AND era.workspace_id = :workspace_id "
+            "  AND (era.allow_mask & 1) = 1 "
+            "  AND (era.deny_mask & 1) = 0 "
+            "  AND p.workspace_id = :workspace_id "
+            "  AND p.status = 'ACTIVE' "
+            "  AND p.principal_type IN ('USER', 'AGENT') "
+            "ORDER BY p.display_name ASC, o.canonical_key ASC "
+            "LIMIT :limit"
+        )
+
+    stmt = text(query_sql)
+
+    rows = (await session.execute(stmt, params)).mappings().all()
 
     items = [
         AssigneeSuggestionItem(

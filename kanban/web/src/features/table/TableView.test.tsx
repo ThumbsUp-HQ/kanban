@@ -159,9 +159,11 @@ describe('TableView', () => {
 
     // Sort by start_date and created_by
     const startSortBtn = screen.getByRole('button', { name: 'Start date' });
-    fireEvent.click(startSortBtn);
+    fireEvent.click(startSortBtn); // asc
+    fireEvent.click(startSortBtn); // desc
     const createdBySortBtn = screen.getByRole('button', { name: 'Created by' });
-    fireEvent.click(createdBySortBtn);
+    fireEvent.click(createdBySortBtn); // asc
+    fireEvent.click(createdBySortBtn); // desc
   });
 
   it('handles row selection toggle, future due dates, and priority variants', () => {
@@ -443,6 +445,44 @@ describe('TableView', () => {
       assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]) as unknown as Record<string, unknown>[],
     }));
 
+    // 6b. Assignee toggle when adam is already assigned (unassign)
+    const firstIssue = testIssues[0];
+    if (!firstIssue) throw new Error('Expected firstIssue');
+    const issuesWithAdam: IssueItem[] = [
+      {
+        id: firstIssue.id,
+        key: firstIssue.key,
+        summary: firstIssue.summary,
+        state: firstIssue.state,
+        priority: firstIssue.priority,
+        assignees: [
+          {
+            id: 'asg-me',
+            kind: 'principal',
+            principal: {
+              id: 'u-me',
+              handle: 'adam',
+              display_name: 'Adam Outler',
+              type: 'USER',
+            },
+          },
+        ],
+      },
+    ];
+    rerender(
+      <TableView
+        issues={issuesWithAdam}
+        projectKey="KAN"
+        modulesEnabled={true}
+        capabilities={['ADMIN']}
+        onUpdateIssue={onUpdateIssue}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Assign issue KAN-99' }));
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+      assignees: [],
+    }));
+
     // 7. VIEWER capability gates out inline editing
     rerender(
       <TableView
@@ -459,5 +499,126 @@ describe('TableView', () => {
     expect(screen.queryByRole('button', { name: 'Assign issue KAN-99' })).toBeNull();
 
     dispatchSpy.mockRestore();
+  });
+
+  it('renders exactly 0 select elements and read-only cells for callers with VIEW or VIEW/COMMENT capabilities', () => {
+    const testIssues: IssueItem[] = [
+      {
+        id: 'read-1',
+        key: 'KAN-VIEWER-1',
+        summary: 'Viewer read-only task',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        assignees: [],
+        start_date: '2026-11-01',
+        due_date: '2026-11-15',
+        cycle_id: 'cycle-1',
+        cycle: { id: 'cycle-1', name: 'Cycle 1' },
+      },
+      {
+        id: 'read-2',
+        key: 'KAN-VIEWER-2',
+        summary: 'Second read-only task',
+        state: { id: 's-prog', name: 'In Progress', group: 'started' },
+        priority: { slug: 'high', label: 'High' },
+        assignees: [],
+        cycle_id: null,
+      },
+    ];
+
+    // 1. Caller with capabilities=['VIEW']
+    const { container: containerView, rerender } = render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        modulesEnabled={true}
+        capabilities={['VIEW']}
+      />,
+    );
+    expect(containerView.querySelectorAll('select').length).toBe(0);
+    expect(containerView.querySelectorAll('input.table-inline-input').length).toBe(0);
+    expect(containerView.querySelectorAll('.table-inline-assign-btn').length).toBe(0);
+
+    // 2. Caller with currentUserCapabilities=['VIEW', 'COMMENT']
+    rerender(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        modulesEnabled={true}
+        currentUserCapabilities={['VIEW', 'COMMENT']}
+      />,
+    );
+    expect(containerView.querySelectorAll('select').length).toBe(0);
+    expect(containerView.querySelectorAll('input.table-inline-input').length).toBe(0);
+    expect(containerView.querySelectorAll('.table-inline-assign-btn').length).toBe(0);
+
+    // 3. Issue-level capabilities=['VIEW'] prevents editing on that issue even if caller has EDIT
+    const baseFirst = testIssues[0];
+    if (!baseFirst) throw new Error('Expected baseFirst');
+    const mixedIssues: IssueItem[] = [
+      {
+        id: baseFirst.id,
+        key: baseFirst.key,
+        summary: baseFirst.summary,
+        state: baseFirst.state,
+        priority: baseFirst.priority,
+        capabilities: ['VIEW'],
+      },
+    ];
+    rerender(
+      <TableView
+        issues={mixedIssues}
+        projectKey="KAN"
+        modulesEnabled={true}
+        capabilities={['EDIT']}
+      />,
+    );
+    expect(containerView.querySelectorAll('select').length).toBe(0);
+    expect(containerView.querySelectorAll('input.table-inline-input').length).toBe(0);
+  });
+
+  it('handles row click and issue key link click to trigger onOpenPeek and renders read-only start date', () => {
+    const onOpenPeek = vi.fn();
+    const testIssues: IssueItem[] = [
+      {
+        id: 'read-3',
+        key: 'KAN-PEEK-1',
+        summary: 'Peek test task',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        assignees: [],
+        start_date: '2026-11-01',
+        due_date: '2026-11-15',
+      },
+    ];
+
+    // Store column configuration with start_date enabled
+    localStorage.setItem('kb.tableCols.KAN', JSON.stringify(['key', 'summary', 'state', 'priority', 'start_date', 'due_date']));
+
+    const { container } = render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        modulesEnabled={false}
+        capabilities={['VIEW']}
+        onOpenPeek={onOpenPeek}
+      />,
+    );
+
+    // Verify read-only start date rendered
+    expect(screen.getByText('2026-11-01')).toBeDefined();
+
+    // Click key link
+    const keyLink = screen.getByRole('link', { name: 'KAN-PEEK-1' });
+    fireEvent.click(keyLink);
+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-PEEK-1');
+
+    // Click table row (outside interactive elements)
+    const row = container.querySelector('tr[data-issue-key="KAN-PEEK-1"]');
+    if (!row) throw new Error('Expected row');
+    fireEvent.click(row);
+    expect(onOpenPeek).toHaveBeenCalledTimes(2);
+
+    localStorage.removeItem('kb.tableCols.KAN');
   });
 });

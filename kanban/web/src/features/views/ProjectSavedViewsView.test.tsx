@@ -147,6 +147,74 @@ describe('ProjectSavedViewsView (KANBA-221)', () => {
     expect(screen.getByTestId('error-views').textContent).toContain('Network error loading views');
   });
 
+  it('displays empty state when project has no custom saved views (items envelope)', async () => {
+    const apiFetchMock = vi.mocked(clientModule.apiFetch);
+    apiFetchMock.mockResolvedValueOnce({ items: [] });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/views']}>
+          <Routes>
+            <Route path="/projects/:projectKey/views" element={<ProjectSavedViewsView />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId('no-saved-views')).toBeDefined();
+    expect(screen.getByText(/No custom saved views found for KAN/i)).toBeDefined();
+  });
+
+  it('renders list of saved views from items array envelope', async () => {
+    const apiFetchMock = vi.mocked(clientModule.apiFetch);
+    apiFetchMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'view-items-1',
+          name: 'Items Envelope View',
+          layout: 'list',
+          is_shared: true,
+        },
+      ],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ProjectSavedViewsViewInner projectKey="KAN" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Items Envelope View')).toBeDefined();
+    expect(screen.getByTestId('saved-view-card-view-items-1')).toBeDefined();
+  });
+
+  it('renders list of saved views from views array envelope', async () => {
+    const apiFetchMock = vi.mocked(clientModule.apiFetch);
+    apiFetchMock.mockResolvedValueOnce({
+      views: [
+        {
+          id: 'view-views-1',
+          name: 'Views Envelope View',
+          layout: 'table',
+          is_shared: false,
+        },
+      ],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ProjectSavedViewsViewInner projectKey="KAN" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Views Envelope View')).toBeDefined();
+    expect(screen.getByTestId('saved-view-card-view-views-1')).toBeDefined();
+  });
+
   it('renders default error message when rejection is not an Error instance', async () => {
     const apiFetchMock = vi.mocked(clientModule.apiFetch);
     apiFetchMock.mockRejectedValueOnce('raw string rejection');

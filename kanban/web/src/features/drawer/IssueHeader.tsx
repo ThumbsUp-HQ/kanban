@@ -132,7 +132,12 @@ export function IssueHeader({
         </button>
       </div>
 
-      <AccessPill issue={issue} />
+      <AccessPill
+        issue={{
+          ...issue,
+          object_id: issue.object_id ?? issue.id,
+        }}
+      />
 
       <div className="issue-header__slots">
         {SubscribeSlot && <SubscribeSlot issue={issue} />}

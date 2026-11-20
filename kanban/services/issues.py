@@ -665,6 +665,7 @@ async def serialize_issue(
 
     res = IssueResponse(
         id=issue.id,
+        object_id=issue.id,
         key=f"{project.identifier}-{issue.sequence_id}",
         summary=issue.summary,
         description_markdown=(

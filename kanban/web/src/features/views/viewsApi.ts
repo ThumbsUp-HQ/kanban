@@ -129,6 +129,19 @@ export interface SavedView {
   };
 }
 
+export interface SavedViewsEnvelope {
+  items?: SavedView[];
+  views?: SavedView[];
+}
+
+export function extractSavedViews(
+  data: SavedViewsEnvelope | SavedView[] | null | undefined,
+): SavedView[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  return data.items ?? data.views ?? [];
+}
+
 export interface IssueQueryParams {
   tab?: string;
   layout?: ViewLayout;
@@ -451,4 +464,23 @@ export async function deleteProjectIssue(issueKey: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to delete issue: ${String(response.status)} ${response.statusText}`);
   }
+}
+
+/**
+ * Fetch saved views for a project, normalizing items and views envelopes.
+ */
+export async function fetchProjectSavedViews(projectKey: string): Promise<SavedView[]> {
+  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/views`;
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch project views: ${String(response.status)} ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as SavedViewsEnvelope | SavedView[];
+  return extractSavedViews(data);
 }

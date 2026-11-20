@@ -31,6 +31,7 @@ export interface SavedViewRecord {
 }
 
 interface SavedViewsResponse {
+  items?: SavedViewRecord[];
   views?: SavedViewRecord[];
 }
 
@@ -59,7 +60,7 @@ export function ProjectSavedViewsViewInner({ projectKey }: { projectKey: string 
 
   const views: SavedViewRecord[] = Array.isArray(data)
     ? data
-    : (data?.views ?? []);
+    : (data?.items ?? data?.views ?? []);
 
   return (
     <section data-testid="project-views-view" className="kb-workspace-section kb-views-view">

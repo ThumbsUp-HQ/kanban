@@ -34,6 +34,7 @@ export interface ParentIssueInfo {
 }
 
 export interface IssueDetail {
+  id?: string | undefined;
   key: string;
   object_id?: string | undefined;
   project_key: string;
