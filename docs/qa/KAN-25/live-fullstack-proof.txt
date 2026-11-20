@@ -1,0 +1,69 @@
+KAN-25 [KB-P3-AUDIT-19] LIVE FULL-STACK VERIFICATION PROOF
+Target: http://localhost:18951 (container kanban-liveqa-1, commit cd89d77)
+Timestamp: 2026-11-20T08:48:46.857Z
+Mode: ZERO-MOCK real headless Chromium Playwright + CDP CTAP2 Virtual Authenticators
+
+--- EXECUTION LOG ---
+CDP Setup Platform Virtual Authenticator added: 6565f7b1-2fa9-4a04-96e3-a6f184246093 (ctap2/internal)
+GET /api/v1/setup/status -> 200 {"initialized":false}
+Setup claim + WebAuthn MFA completed with initial project ACME
+GET /api/v1/auth/me -> 200 aal_level=2 is_server_admin=true
+Desktop 1440x900: + Add Passkey enabled=true, + Add FIDO2 Security Key enabled=true
+Mobile 390x844 (initial profile): document.documentElement.scrollWidth=390
+Captured live-kan25-enroll-modal-mobile-light.png
+Captured live-kan25-enroll-modal-desktop-light.png
+Captured live-kan25-enroll-modal-desktop-dark.png
+CDP Platform Virtual Authenticator (MacBook Touch ID) added: 2697cd53-e1f4-4dc7-a256-991cc48b41bc (ctap2/internal)
+Passkey 1 (MacBook Touch ID): register/options -> 200, register/verify -> 200
+CDP USB Virtual Authenticator added: 8df1536d-be84-4dcb-9c58-8cbcc79c52c7 (ctap2/usb)
+FIDO2 Key 2 (YubiKey 5C NFC): register/options -> 200, register/verify -> 200
+Passkeys table check: hasTouchId=true, hasYubiKey=true, hasPasskeyBadge=true, hasFido2Badge=true
+GET /api/v1/auth/webauthn/credentials (before Test Key) -> 200 count=3
+Test Key: authenticate/options -> 200, authenticate/verify -> 200
+Success alert banner text: "👍 Key verified\nDismiss"
+GET /api/v1/auth/webauthn/credentials (after Test Key) -> 200, creds with last_used_at=1
+  Credential id=01a1f824-bc58-7277-b50f-5131dfe94514 nickname="YubiKey 5C NFC" transports=["usb"] last_used_at=null
+  Credential id=01a1f824-bbc4-70ac-b01d-caff862b659f nickname="MacBook Touch ID" transports=["internal"] last_used_at=2026-11-20T08:48:39.639536+00:00
+  Credential id=01a1f824-b201-764b-88eb-041cccc52020 nickname=null transports=["internal"] last_used_at=null
+Captured live-kan25-profile-verified-desktop-light.png
+Captured live-kan25-profile-verified-desktop-dark.png
+Mobile 390x844 (verified profile): document.documentElement.scrollWidth=390
+Captured live-kan25-profile-mobile-light.png
+Captured live-kan25-profile-mobile-dark.png
+KAN-25 telemetry: console.error=0, pageerror=0
+
+--- HTTP TELEMETRY ---
+  POST /api/v1/setup/claim -> 200
+  POST /api/v1/auth/webauthn/registration/options -> 200
+  POST /api/v1/auth/webauthn/registration/verify -> 200
+  GET /api/v1/setup/status -> 200
+  GET /api/v1/setup/status -> 200
+  GET /api/v1/auth/webauthn/credentials -> 200
+  GET /api/v1/auth/me -> 200
+  GET /api/v1/auth/me -> 200
+  POST /api/v1/auth/webauthn/register/options -> 200
+  POST /api/v1/auth/webauthn/register/verify -> 200
+  GET /api/v1/auth/webauthn/credentials -> 200
+  GET /api/v1/auth/me -> 200
+  GET /api/v1/auth/me -> 200
+  POST /api/v1/auth/webauthn/register/options -> 200
+  POST /api/v1/auth/webauthn/register/verify -> 200
+  GET /api/v1/auth/webauthn/credentials -> 200
+  GET /api/v1/auth/me -> 200
+  GET /api/v1/auth/me -> 200
+  POST /api/v1/auth/webauthn/authenticate/options -> 200
+  POST /api/v1/auth/webauthn/authenticate/verify -> 200
+  GET /api/v1/auth/webauthn/credentials -> 200
+  GET /api/v1/setup/status -> 200
+  GET /api/v1/auth/me -> 200
+  GET /api/v1/setup/status -> 200
+  GET /api/v1/auth/me -> 200
+  GET /api/v1/setup/status -> 200
+  GET /api/v1/auth/me -> 200
+  GET /api/v1/auth/me -> 200
+
+--- ERROR TELEMETRY ---
+console.error count: 0
+pageerror count: 0
+
+LIVE_STACK_VERDICT: PASS

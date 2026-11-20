@@ -42,6 +42,37 @@
   color: var(--fg-primary);
 }
 
+.kb-passkey-enroll-close-btn {
+  background: transparent;
+  border: none;
+  font-size: var(--text-base);
+  color: var(--fg-secondary);
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.kb-passkey-enroll-close-btn:hover:not(:disabled) {
+  color: var(--fg-primary);
+  background-color: var(--bg-hover);
+}
+
+.kb-passkey-enroll-close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.kb-passkey-enroll-close-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .kb-passkey-enroll-body {
   padding: 20px;
   display: flex;
