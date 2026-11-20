@@ -189,16 +189,21 @@ class TransitionEngine:
             not_found()
         issue = locked_issue
 
-        # Description ETag check (If-Match)
+        # Description ETag check (If-Match accepts composite compute_issue_etag
+        # or backward-compatible description_sha256)
         current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-        current_etag = f'"{current_sha256_hex}"'
+        from kanban.services.issues import serialize_issue  # noqa: PLC0415
+
+        current_serialized = await serialize_issue(session, actor, issue)
+        current_etag = current_serialized.etag or f'"{current_sha256_hex}"'
+        current_etag_hex = current_etag.strip('"')
 
         if if_match is not None:
             raw_etag = if_match.strip()
             if raw_etag.startswith("W/"):
                 raw_etag = raw_etag[2:].strip()
             client_hex = raw_etag.strip('"')
-            if client_hex.lower() != current_sha256_hex.lower():
+            if client_hex.lower() not in (current_etag_hex.lower(), current_sha256_hex.lower()):
                 raise ProblemException(
                     code="PRECONDITION_FAILED",
                     status=412,

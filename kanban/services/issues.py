@@ -656,7 +656,7 @@ async def serialize_issue(
 
     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
 
-    obj = await session.get(ObjectRecord, issue.id)
+    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
     archived_at = obj.archived_at if obj is not None else None
     archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
 
@@ -851,7 +851,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
 ) -> tuple[IssueResponse, str]:
     """Patch issue fields under description ETag concurrency check and emit activity."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
-    obj = await session.get(ObjectRecord, issue.id)
+    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
     if obj is not None and obj.archived_at is not None:
         raise _problem(
             code="ISSUE_ARCHIVED",
@@ -1135,11 +1135,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
             },
         )
 
-    updated_issue = (
-        await session.execute(select(Issue).where(Issue.id == issue_id))
-    ).scalar_one_or_none()
-    if updated_issue is None:  # pragma: no cover
-        not_found()
+    await session.flush()
+    await session.refresh(issue)
+    obj_rec = await session.get(ObjectRecord, issue_id, populate_existing=True)
+    if obj_rec is not None:
+        await session.refresh(obj_rec)
+    updated_issue = issue
 
     serialized = await serialize_issue(session, caller, updated_issue)
     new_etag = serialized.etag or (

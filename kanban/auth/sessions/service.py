@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Final
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from database.models.auth import UserSession
 from kanban.auth.sessions.cookies import (
@@ -267,6 +267,115 @@ class SessionService:
         stmt = text("SELECT kb_auth.session_revoke(:p_id)")
         res = await session.execute(stmt, {"p_id": session_id})
         return bool(res.scalar_one())
+
+    async def rotate_for_workspace_switch(  # noqa: PLR0913
+        self,
+        session: AsyncSession,
+        *,
+        target_principal_id: uuid.UUID,
+        target_workspace_id: uuid.UUID,
+        old_session_id: uuid.UUID | None = None,
+        existing_cookie: str | None = None,
+        originating_session: UserSession | None = None,
+    ) -> IssuedSession:
+        """Rotate session during workspace switch preserving TTL, persistence, and AAL2.
+
+        Adheres to CWE-613 session expiration and privilege retention standards.
+        """
+        orig: UserSession | None = originating_session
+        if orig is None and existing_cookie:
+            old_token = parse_session_cookie(existing_cookie, self._session_hmac_key)
+            if old_token:
+                old_sha = hash_session_token(old_token)
+                orig = await self.resolve_session(session, old_sha)
+
+        if orig is None and old_session_id is not None:
+            res = await session.execute(
+                select(UserSession).where(
+                    UserSession.id == old_session_id,
+                    UserSession.revoked_at.is_(None),
+                )
+            )
+            orig = res.scalar_one_or_none()
+
+        if orig is None:
+            msg = "Originating session could not be resolved or does not exist"
+            raise ValueError(msg)
+
+        now = datetime.now(UTC)
+        if orig.revoked_at is not None:
+            msg = "Originating session has already been revoked"
+            raise ValueError(msg)
+
+        idle_at = (
+            orig.idle_expires_at
+            if orig.idle_expires_at.tzinfo
+            else orig.idle_expires_at.replace(tzinfo=UTC)
+        )
+        abs_at = (
+            orig.absolute_expires_at
+            if orig.absolute_expires_at.tzinfo
+            else orig.absolute_expires_at.replace(tzinfo=UTC)
+        )
+
+        if now >= idle_at or now >= abs_at:
+            msg = "Originating session is expired"
+            raise ValueError(msg)
+
+        # Revoke the originating session prior to issuing the rotated session
+        await self.logout(session, orig.id)
+
+        is_persistent = bool(orig.is_persistent)
+        absolute_expires_at = orig.absolute_expires_at
+        idle_seconds = (
+            self._policy.remember_idle_seconds if is_persistent else self._policy.idle_seconds
+        )
+        idle_expires_at = min(now + timedelta(seconds=idle_seconds), absolute_expires_at)
+
+        new_session_id = uuid.uuid4()
+        token = generate_session_token()
+        token_sha256 = hash_session_token(token)
+
+        stmt = text(
+            "SELECT kb_auth.session_create("
+            "  :p_id, :p_token_sha256, :p_principal_id, :p_workspace_id, "
+            "  :p_auth_card_id, :p_aal_level, :p_aal2_verified_at, :p_mfa_pending, "
+            "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id, "
+            "  :p_is_persistent"
+            ")"
+        )
+        await session.execute(
+            stmt,
+            {
+                "p_id": new_session_id,
+                "p_token_sha256": token_sha256,
+                "p_principal_id": target_principal_id,
+                "p_workspace_id": target_workspace_id,
+                "p_auth_card_id": orig.auth_card_id,
+                "p_aal_level": orig.aal_level,
+                "p_aal2_verified_at": orig.aal2_verified_at,
+                "p_mfa_pending": orig.mfa_pending,
+                "p_idle_expires_at": idle_expires_at,
+                "p_absolute_expires_at": absolute_expires_at,
+                "p_rotated_from_id": orig.id,
+                "p_is_persistent": is_persistent,
+            },
+        )
+
+        cookie_val = encode_session_cookie(token, self._session_hmac_key)
+        csrf_token = generate_csrf_token(new_session_id, self._session_hmac_key)
+
+        return IssuedSession(
+            session_id=new_session_id,
+            token=token,
+            cookie_val=cookie_val,
+            csrf_token=csrf_token,
+            aal_level=orig.aal_level,
+            mfa_pending=orig.mfa_pending,
+            idle_expires_at=idle_expires_at,
+            absolute_expires_at=absolute_expires_at,
+            is_persistent=is_persistent,
+        )
 
     async def resolve_session(
         self, session: AsyncSession, token_sha256: bytes

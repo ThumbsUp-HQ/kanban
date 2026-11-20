@@ -401,8 +401,12 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
                         subject_token=ctx.subject_token,
                         mcp_session_id=ctx.session_id,
                     )
-                    if isinstance(fresh_issue, dict) and "description_sha256" in fresh_issue:
-                        fresh_sha = str(fresh_issue["description_sha256"])
+                    if isinstance(fresh_issue, dict):
+                        fresh_sha = str(
+                            fresh_issue.get("etag")
+                            or fresh_issue.get("description_sha256")
+                            or current_sha
+                        )
                 raise KbMcpError(
                     McpErrorCode.CONFLICT_ETAG,
                     "concurrency conflict: ticket description was modified concurrently",
@@ -545,7 +549,7 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
     )
     pri_val = patched_issue.get("priority")
     pri_str = str(pri_val.get("slug", "")) if isinstance(pri_val, dict) else str(pri_val or "")
-    etag_val = patched_issue.get("description_sha256") or patched_issue.get("etag") or ""
+    etag_val = patched_issue.get("etag") or patched_issue.get("description_sha256") or ""
 
     return {
         "key": issue_key,

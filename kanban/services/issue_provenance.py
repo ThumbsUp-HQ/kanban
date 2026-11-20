@@ -311,4 +311,4 @@ async def override_issue_created_by(
 
     resp = await serialize_issue(session, caller, issue)
     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-    return resp, f'"{sha256_hex}"'
+    return resp, resp.etag or (f'"{sha256_hex}"' if sha256_hex else '""')
