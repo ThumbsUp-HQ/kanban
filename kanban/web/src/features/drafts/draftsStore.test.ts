@@ -20,6 +20,15 @@ describe('draftsStore', () => {
     vi.restoreAllMocks();
   });
 
+  it('getDrafts returns empty array when window is undefined', () => {
+    vi.stubGlobal('window', undefined);
+    try {
+      expect(getDrafts()).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('getDrafts returns empty array when storage is empty, corrupted, or not an array', () => {
     expect(getDrafts()).toEqual([]);
 
@@ -58,12 +67,20 @@ describe('draftsStore', () => {
   });
 
   it('saveDraft updates an existing draft preserving original createdAt', () => {
+    // Seed two drafts to exercise the map branch where d.id !== input.id
     const draft1 = saveDraft({
       id: 'custom-draft-1',
       projectKey: 'KAN',
       summary: 'Initial draft',
       stateId: 'state-todo',
       prioritySlug: 'medium',
+    });
+    saveDraft({
+      id: 'custom-draft-2',
+      projectKey: 'KAN',
+      summary: 'Second draft',
+      stateId: 'state-todo',
+      prioritySlug: 'low',
     });
 
     const updated = saveDraft({
@@ -79,8 +96,22 @@ describe('draftsStore', () => {
     expect(updated.createdAt).toBe(draft1.createdAt);
 
     const all = getDrafts();
-    expect(all).toHaveLength(1);
-    expect(all[0]?.summary).toBe('Updated draft summary');
+    expect(all).toHaveLength(2);
+    expect(all.find((d) => d.id === 'custom-draft-1')?.summary).toBe('Updated draft summary');
+
+    // Test updating a legacy draft missing createdAt to hit the ?? now branch
+    window.localStorage.setItem(
+      DRAFTS_STORAGE_KEY,
+      JSON.stringify([{ id: 'legacy-draft', projectKey: 'KAN', summary: 'Legacy' }]),
+    );
+    const updatedLegacy = saveDraft({
+      id: 'legacy-draft',
+      projectKey: 'KAN',
+      summary: 'Updated legacy',
+      stateId: 'state-todo',
+      prioritySlug: 'medium',
+    });
+    expect(updatedLegacy.createdAt).toBeDefined();
   });
 
   it('deleteDraft removes draft by id and emits event', () => {
@@ -101,6 +132,56 @@ describe('draftsStore', () => {
     expect(listener).toHaveBeenCalled();
 
     window.removeEventListener(DRAFTS_CHANGED_EVENT, listener);
+  });
+
+  it('saveDraft and deleteDraft handle SSR and storage quota exceptions gracefully', () => {
+    // Test saveDraft with brand new explicit id
+    const savedWithId = saveDraft({
+      id: 'explicit-new-id',
+      projectKey: 'KAN',
+      summary: 'Brand new draft with explicit id',
+      stateId: 'state-todo',
+      prioritySlug: 'low',
+    });
+    expect(savedWithId.id).toBe('explicit-new-id');
+
+    // Test storage setItem exception (quota exceeded)
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+
+    expect(() => {
+      saveDraft({
+        projectKey: 'KAN',
+        summary: 'Draft with storage failure',
+        stateId: 'state-todo',
+        prioritySlug: 'low',
+      });
+    }).not.toThrow();
+
+    expect(() => {
+      deleteDraft('explicit-new-id');
+    }).not.toThrow();
+
+    setItemSpy.mockRestore();
+
+    // Test SSR environment where window is undefined
+    vi.stubGlobal('window', undefined);
+    try {
+      expect(() => {
+        saveDraft({
+          projectKey: 'KAN',
+          summary: 'SSR draft',
+          stateId: 'state-todo',
+          prioritySlug: 'low',
+        });
+      }).not.toThrow();
+      expect(() => {
+        deleteDraft('any-id');
+      }).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('useDrafts hook reacts to drafts-changed and storage events', () => {
