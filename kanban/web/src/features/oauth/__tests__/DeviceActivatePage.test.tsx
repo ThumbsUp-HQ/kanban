@@ -25,6 +25,7 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
   });
 
   it('renders input field, accepts user code, and fetches device info (Test Case 1)', async () => {
+    const PROJECT_UUID = '01a1f738-f55e-77f8-94bd-4a5c7960f807';
     const mockInfo: oauthApi.DeviceCodeInfoResponse = {
       user_code: 'WDJB-MJHT',
       client_name: 'Antigravity CLI',
@@ -32,7 +33,7 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
       resource: 'https://kanban.example.com/mcp/agent',
       surface: 'agent',
       requested_scopes: ['agent:read', 'agent:write'],
-      allowed_projects: ['KANBA'],
+      allowed_projects: [PROJECT_UUID],
       expires_at: new Date(Date.now() + 600000).toISOString(),
     };
 
@@ -75,10 +76,10 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     fireEvent.click(scopeRead); // Re-check read
     expect(approveBtn.disabled).toBe(false);
 
-    // Toggle project
-    const projBox = screen.getByTestId('project-checkbox-KANBA');
-    fireEvent.click(projBox); // Uncheck KANBA
-    fireEvent.click(projBox); // Check KANBA back
+    // Toggle project using valid UUID
+    const projBox = screen.getByTestId(`project-checkbox-${PROJECT_UUID}`);
+    fireEvent.click(projBox); // Uncheck project
+    fireEvent.click(projBox); // Check project back
 
     fireEvent.click(approveBtn);
 
@@ -87,8 +88,15 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
         user_code: 'WDJB-MJHT',
         approved: true,
         scopes: ['agent:read'],
-        allowed_projects: ['KANBA'],
+        allowed_projects: [PROJECT_UUID],
       });
+      const submittedProjects = (
+        vi.mocked(oauthApi.submitDeviceActivation).mock.calls[0]?.[0]
+      )?.allowed_projects;
+      expect(submittedProjects).toHaveLength(1);
+      expect(submittedProjects?.[0]).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       expect(screen.getByTestId('completion-approved')).not.toBeNull();
     });
   });
@@ -353,7 +361,7 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
       resource: 'https://kanban.example.com/mcp/agent',
       surface: 'agent',
       requested_scopes: ['agent:read'],
-      allowed_projects: ['KANBA'],
+      allowed_projects: ['01a1f738-f55e-77f8-94bd-4a5c7960f807'],
       expires_at: new Date().toISOString(),
     };
 
@@ -454,6 +462,8 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
   });
 
   it('fetches real workspace projects from /api/v1/projects when allowed_projects is not specified', async () => {
+    const KAN_UUID = '01a1f738-f55e-77f8-94bd-4a5c7960f807';
+    const OPS_UUID = '01a1f738-f55e-77f8-94bd-4a5c7960f808';
     const mockInfo: oauthApi.DeviceCodeInfoResponse = {
       user_code: 'WDJB-MJHT',
       client_name: 'Test Device Client',
@@ -471,7 +481,13 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
       if (url.includes('/api/v1/projects')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [{ key: 'KAN' }, { key: 'OPS' }] }),
+          json: () =>
+            Promise.resolve({
+              items: [
+                { id: KAN_UUID, identifier: 'KAN' },
+                { id: OPS_UUID, identifier: 'OPS' },
+              ],
+            }),
         });
       }
       return Promise.reject(new Error('Unknown url'));
@@ -485,9 +501,10 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('project-checkbox-KAN')).not.toBeNull();
-      expect(screen.getByTestId('project-checkbox-OPS')).not.toBeNull();
-      expect(screen.queryByTestId('project-checkbox-KANBA')).toBeNull();
+      expect(screen.getByTestId(`project-checkbox-${KAN_UUID}`)).not.toBeNull();
+      expect(screen.getByTestId(`project-checkbox-${OPS_UUID}`)).not.toBeNull();
+      expect(screen.getByText('Project: KAN')).not.toBeNull();
+      expect(screen.getByText('Project: OPS')).not.toBeNull();
     });
 
     vi.unstubAllGlobals();
@@ -495,6 +512,7 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
 
   it('populates workspace projects during manual code lookup and handles fetch failures', async () => {
     // 1. Manual code lookup populates workspace projects from fetch
+    const PROJ_X_UUID = '01a1f738-f55e-77f8-94bd-4a5c7960f809';
     const mockInfo: oauthApi.DeviceCodeInfoResponse = {
       user_code: 'WDJB-MJHT',
       client_name: 'Manual Client',
@@ -511,7 +529,7 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
       if (url.includes('/api/v1/projects')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([{ key: 'PROJECT_X' }]),
+          json: () => Promise.resolve([{ id: PROJ_X_UUID, identifier: 'PROJECT_X' }]),
         });
       }
       return Promise.reject(new Error('Fail'));
@@ -529,7 +547,8 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('lookup-button'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('project-checkbox-PROJECT_X')).not.toBeNull();
+      expect(screen.getByTestId(`project-checkbox-${PROJ_X_UUID}`)).not.toBeNull();
+      expect(screen.getByText('Project: PROJECT_X')).not.toBeNull();
     });
     unmount();
 
@@ -558,11 +577,12 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     u3();
 
     // 4. Identifier mapping and cached workspaceProjects branch in handleLookup
+    const ID_PROJ_UUID = '01a1f738-f55e-77f8-94bd-4a5c7960f810';
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ items: [{ identifier: 'ID_PROJECT' }] }),
+        json: () => Promise.resolve({ items: [{ id: ID_PROJ_UUID, identifier: 'ID_PROJECT' }] }),
       }),
     );
     const { unmount: u4 } = render(
@@ -580,9 +600,42 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('lookup-button'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('project-checkbox-ID_PROJECT')).not.toBeNull();
+      expect(screen.getByTestId(`project-checkbox-${ID_PROJ_UUID}`)).not.toBeNull();
+      expect(screen.getByText('Project: ID_PROJECT')).not.toBeNull();
     });
     u4();
+
+    // 5. Query param error with no message or code fallback
+    vi.spyOn(oauthApi, 'fetchDeviceCodeInfo').mockRejectedValueOnce({});
+    const { unmount: u5 } = render(
+      <MemoryRouter initialEntries={['/activate?user_code=BCDFGHJK']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('error-banner').textContent).toContain(
+        'Invalid code or code not found.',
+      );
+    });
+    u5();
+
+    // 6. fetchWorkspaceProjects with empty data object and empty items
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      }),
+    );
+    const { unmount: u6 } = render(
+      <MemoryRouter initialEntries={['/activate']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    u6();
 
     vi.unstubAllGlobals();
   });

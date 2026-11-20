@@ -65,6 +65,7 @@ from kanban.oauth.server import (
     verify_consent_csrf_token,
     verify_pkce_s256,
 )
+from kanban.security.keys import KeyMaterialError, load_key_material
 from kanban.services.activity import ActivityEventType, record_activity
 
 
@@ -531,18 +532,11 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         desc = "redirect_uri does not match registered URIs"
         raise OAuth2Error(err, desc, 400)
 
-    # 6. Check client approval status
-    if client_record.status == "pending_admin_approval":
+    # 6. Check client approval status (client must be active)
+    if client_record.status != "active":
         params = {
             "error": "unauthorized_client",
-            "error_description": "client_pending_admin_approval",
-            "state": state,
-        }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
-    if client_record.status == "disabled":
-        params = {
-            "error": "unauthorized_client",
-            "error_description": "client_disabled",
+            "error_description": f"client_{client_record.status}",
             "state": state,
         }
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
@@ -619,11 +613,23 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
 
     key_material = getattr(request.app.state, "key_material", None)
     session_service = getattr(request.app.state, "session_service", None)
-    session_hmac_key = (
+    session_hmac_key: bytes | None = (
         key_material.session_hmac_key
-        if key_material is not None
-        else (session_service.session_hmac_key if session_service is not None else b"\x00" * 32)
+        if key_material is not None and getattr(key_material, "session_hmac_key", None)
+        else (
+            session_service.session_hmac_key
+            if session_service is not None and getattr(session_service, "session_hmac_key", None)
+            else None
+        )
     )
+    if session_hmac_key is None:
+        try:
+            session_hmac_key = load_key_material().session_hmac_key
+        except (KeyMaterialError, OSError):
+            session_hmac_key = None
+    if not session_hmac_key:
+        msg = "Session HMAC key material is not configured."
+        raise RuntimeError(msg)
 
     csrf_token = generate_consent_csrf_token(
         session_hmac_key=session_hmac_key,
@@ -655,7 +661,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     "/oauth/authorize/decision",
     summary="Process OAuth 2.1 Consent Decision",
 )
-async def oauth_authorize_decision(  # noqa: C901, PLR0915
+async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
     request: Request,
     caller: Caller,
     session: Session,
@@ -696,11 +702,23 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0915
     # 3. HMAC-SHA256 CSRF verification bound to caller session and OAuth parameters
     key_material = getattr(request.app.state, "key_material", None)
     session_service = getattr(request.app.state, "session_service", None)
-    session_hmac_key = (
+    session_hmac_key: bytes | None = (
         key_material.session_hmac_key
-        if key_material is not None
-        else (session_service.session_hmac_key if session_service is not None else b"\x00" * 32)
+        if key_material is not None and getattr(key_material, "session_hmac_key", None)
+        else (
+            session_service.session_hmac_key
+            if session_service is not None and getattr(session_service, "session_hmac_key", None)
+            else None
+        )
     )
+    if session_hmac_key is None:
+        try:
+            session_hmac_key = load_key_material().session_hmac_key
+        except (KeyMaterialError, OSError):
+            session_hmac_key = None
+    if not session_hmac_key:
+        msg = "Session HMAC key material is not configured."
+        raise RuntimeError(msg)
 
     if not verify_consent_csrf_token(
         token=csrf_token,
