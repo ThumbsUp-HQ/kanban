@@ -22,7 +22,6 @@ from kanban.realtime.replay import OutboxReplayer
 from kanban.realtime.rls_filter import (
     authorize_event_recipients,
 )
-from kanban.security.permissions import Capability
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -297,6 +296,187 @@ class RealtimeHub:
         conn_ids = self._user_connections.get((workspace_id, principal_id), set())
         return [self._connections[cid] for cid in conn_ids if cid in self._connections]
 
+    async def _check_object_view(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        principal_id: uuid.UUID,
+        target_uuid: uuid.UUID,
+    ) -> bool:
+        await session.execute(
+            text(
+                "SELECT set_config('app.workspace_id', :ws_id, true), "
+                "       set_config('app.principal_id', :pid, true)"
+            ),
+            {"ws_id": str(workspace_id), "pid": str(principal_id)},
+        )
+        return bool(
+            await session.scalar(
+                text("SELECT app_has_object_capability(:obj_id, 1)"),
+                {"obj_id": target_uuid},
+            )
+        )
+
+    async def _resolve_workspace_channel(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        raw_id: str,
+    ) -> tuple[str, uuid.UUID, str] | None:
+        if raw_id == "stickies":
+            return ("workspace:stickies", workspace_id, "workspace")
+
+        try:
+            target_uuid = uuid.UUID(raw_id)
+        except ValueError:
+            stmt = text("SELECT id FROM workspaces WHERE slug = :slug")
+            row = (await session.execute(stmt, {"slug": raw_id})).first()
+            if row is None:
+                return None
+            target_uuid = uuid.UUID(str(row[0]))
+
+        if target_uuid != workspace_id:
+            return None
+        return (f"workspace:{target_uuid}", target_uuid, "workspace")
+
+    async def _resolve_project_channel(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        principal_id: uuid.UUID,
+        raw_id: str,
+    ) -> tuple[str, uuid.UUID, str] | None:
+        try:
+            target_uuid = uuid.UUID(raw_id)
+        except ValueError:
+            stmt = text(
+                "SELECT p.id FROM projects p "
+                "JOIN objects o ON o.id = p.id "
+                "WHERE p.workspace_id = :ws_id "
+                "  AND p.identifier = :ident "
+                "  AND o.deleted_at IS NULL"
+            )
+            row = (
+                await session.execute(stmt, {"ws_id": workspace_id, "ident": raw_id.upper()})
+            ).first()
+            if row is None:
+                return None
+            target_uuid = uuid.UUID(str(row[0]))
+
+        if not await self._check_object_view(session, workspace_id, principal_id, target_uuid):
+            return None
+        return (f"project:{target_uuid}", target_uuid, "project")
+
+    async def _resolve_issue_channel(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        principal_id: uuid.UUID,
+        raw_id: str,
+    ) -> tuple[str, uuid.UUID, str] | None:
+        target_uuid: uuid.UUID | None = None
+        try:
+            target_uuid = uuid.UUID(raw_id)
+        except ValueError:
+            if "-" in raw_id:
+                ident, seq_str = raw_id.rsplit("-", 1)
+                if seq_str.isdigit():
+                    stmt = text(
+                        "SELECT i.id FROM issues i "
+                        "JOIN projects p ON p.id = i.project_id "
+                        "JOIN objects o ON o.id = i.id "
+                        "WHERE p.identifier = :ident AND i.sequence_id = :seq_id "
+                        "  AND i.workspace_id = :ws_id AND o.deleted_at IS NULL"
+                    )
+                    row = (
+                        await session.execute(
+                            stmt,
+                            {
+                                "ws_id": workspace_id,
+                                "ident": ident.upper(),
+                                "seq_id": int(seq_str),
+                            },
+                        )
+                    ).first()
+                    if row is not None:
+                        target_uuid = uuid.UUID(str(row[0]))
+            if target_uuid is None:
+                stmt = text(
+                    "SELECT id FROM objects "
+                    "WHERE workspace_id = :ws_id "
+                    "  AND (canonical_key = :raw_id OR display_title = :raw_id) "
+                    "  AND object_type = 'issue' AND deleted_at IS NULL"
+                )
+                row = (
+                    await session.execute(
+                        stmt,
+                        {"ws_id": workspace_id, "raw_id": raw_id},
+                    )
+                ).first()
+                if row is not None:
+                    target_uuid = uuid.UUID(str(row[0]))
+
+        if target_uuid is None:
+            return None
+
+        if not await self._check_object_view(session, workspace_id, principal_id, target_uuid):
+            return None
+        return (f"issue:{target_uuid}", target_uuid, "issue")
+
+    async def _resolve_doc_channel(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        principal_id: uuid.UUID,
+        raw_id: str,
+    ) -> tuple[str, uuid.UUID, str] | None:
+        try:
+            target_uuid = uuid.UUID(raw_id)
+        except ValueError:
+            return None
+
+        if not await self._check_object_view(session, workspace_id, principal_id, target_uuid):
+            return None
+        return (f"doc:{target_uuid}", target_uuid, "doc")
+
+    async def resolve_channel(
+        self,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        principal_id: uuid.UUID,
+        channel: str,
+    ) -> tuple[str, uuid.UUID, str] | None:
+        """Resolve channel identifier to (canonical_channel, target_uuid, kind).
+
+        Supports:
+        - workspace:<UUID> or workspace:<SLUG> or workspace:stickies
+        - project:<UUID> or project:<KEY>
+        - issue:<UUID> or issue:<KEY>
+        - doc:<UUID>
+
+        Returns None if channel format is invalid, target does not exist, or principal lacks VIEW.
+        """
+        if ":" not in channel:
+            return None
+
+        kind, raw_id = channel.split(":", 1)
+        raw_id = raw_id.strip()
+        if not raw_id:
+            return None
+
+        result: tuple[str, uuid.UUID, str] | None = None
+        if kind == "workspace":
+            result = await self._resolve_workspace_channel(session, workspace_id, raw_id)
+        elif kind == "project":
+            result = await self._resolve_project_channel(
+                session, workspace_id, principal_id, raw_id
+            )
+        elif kind == "issue":
+            result = await self._resolve_issue_channel(session, workspace_id, principal_id, raw_id)
+        elif kind == "doc":
+            result = await self._resolve_doc_channel(session, workspace_id, principal_id, raw_id)
+        return result
+
     async def check_channel_viewable(
         self,
         session: AsyncSession,
@@ -305,42 +485,8 @@ class RealtimeHub:
         channel: str,
     ) -> bool:
         """Evaluate VIEW permission on target channel, preventing enumeration."""
-        match = _CHANNEL_REGEX.match(channel)
-        if not match:
-            return False
-
-        kind = match.group("kind")
-        try:
-            obj_id = uuid.UUID(match.group("id"))
-        except ValueError:
-            return False
-
-        if kind == "workspace":
-            return obj_id == workspace_id
-
-        stmt = text(
-            "SELECT allow_mask, deny_mask "
-            "FROM effective_resource_access "
-            "WHERE object_id = :obj_id "
-            "  AND workspace_id = :ws_id "
-            "  AND principal_id = :p_id"
-        )
-        res = await session.execute(
-            stmt,
-            {
-                "obj_id": obj_id,
-                "ws_id": workspace_id,
-                "p_id": principal_id,
-            },
-        )
-        row = res.mappings().first()
-        if not row:
-            return False
-
-        allow = int(row["allow_mask"])
-        deny = int(row["deny_mask"])
-        view_bit = Capability.VIEW.value
-        return (allow & view_bit) == view_bit and (deny & view_bit) == 0
+        resolved = await self.resolve_channel(session, workspace_id, principal_id, channel)
+        return resolved is not None
 
     async def handle_subscribe(
         self,
@@ -365,10 +511,8 @@ class RealtimeHub:
                 )
                 continue
 
-            can_view = await self.check_channel_viewable(
-                session, conn.workspace_id, conn.principal_id, ch
-            )
-            if not can_view:
+            resolved = await self.resolve_channel(session, conn.workspace_id, conn.principal_id, ch)
+            if resolved is None:
                 await conn.send_json(
                     {
                         "code": "NOT_FOUND",
@@ -379,7 +523,9 @@ class RealtimeHub:
                 )
                 continue
 
+            canonical_ch, _, _ = resolved
             conn.subscribed_channels.add(ch)
+            conn.subscribed_channels.add(canonical_ch)
             successful_channels.append(ch)
 
         if successful_channels:
@@ -453,6 +599,23 @@ class RealtimeHub:
             await conn.close(code=WS_CLOSE_UNAUTHENTICATED, reason="SESSION_REVOKED")
             await self.unregister_connection(conn.id)
 
+    @staticmethod
+    def _match_channel(
+        conn: RealtimeConnection,
+        channels: tuple[str | None, ...],
+        ws_chan: str,
+        *,
+        is_sticky: bool = False,
+    ) -> str | None:
+        for chan in channels:
+            if chan and chan in conn.subscribed_channels:
+                return chan
+        if is_sticky and "workspace:stickies" in conn.subscribed_channels:
+            return "workspace:stickies"
+        if ws_chan in conn.subscribed_channels:
+            return ws_chan
+        return None
+
     async def _resolve_candidate_connections(
         self, envelope: OutboxEnvelope
     ) -> list[tuple[RealtimeConnection, str]]:
@@ -462,24 +625,30 @@ class RealtimeHub:
         issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
         doc_chan = f"doc:{envelope.object_id}" if envelope.object_id is not None else None
 
+        raw_payload = envelope.payload or {}
+        issue_key = str(raw_payload.get("key") or raw_payload.get("issue_key") or "")
+        proj_key = str(
+            raw_payload.get("project_key")
+            or (issue_key.split("-", 1)[0] if "-" in issue_key else "")
+        )
+
+        proj_key_chan = f"project:{proj_key}" if proj_key else None
+        issue_key_chan = f"issue:{issue_key}" if issue_key else None
+
         candidates: list[tuple[RealtimeConnection, str]] = []
         async with self._lock:
             all_conns = list(self._connections.values())
+
+        is_sticky = envelope.topic.startswith("sticky.")
+        channel_priority = (issue_key_chan, issue_chan, doc_chan, proj_key_chan, proj_chan)
 
         for conn in all_conns:
             if conn.workspace_id != envelope.workspace_id:
                 continue
 
-            matching_chan: str | None = None
-            if issue_chan and issue_chan in conn.subscribed_channels:
-                matching_chan = issue_chan
-            elif doc_chan and doc_chan in conn.subscribed_channels:
-                matching_chan = doc_chan
-            elif proj_chan and proj_chan in conn.subscribed_channels:
-                matching_chan = proj_chan
-            elif ws_chan in conn.subscribed_channels:
-                matching_chan = ws_chan
-
+            matching_chan = self._match_channel(
+                conn, channel_priority, ws_chan, is_sticky=is_sticky
+            )
             if matching_chan is not None:
                 candidates.append((conn, matching_chan))
 

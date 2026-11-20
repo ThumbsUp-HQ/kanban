@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, type ComponentType, type JSX } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { qk } from '../../api/queryKeys';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
 import type { BoardIssue, BoardWorkflowState } from '../board/boardApi.ts';
 import { ListView } from './ListView';
@@ -232,8 +233,42 @@ export function IssuesWorkspaceRoute({
     return 'none';
   });
 
-  const [issues, setIssues] = useState<IssueItem[]>(() => initialIssues ?? []);
+  useState(() => {
+    if (initialIssues !== undefined) {
+      queryClient.setQueryData(qk.issues(projectKey, {}), initialIssues);
+    }
+    return 0;
+  });
+
+  const issuesQuery = useQuery(
+    {
+      queryKey: qk.issues(projectKey, {}),
+      queryFn: async () => {
+        const res = await fetchProjectIssues(projectKey);
+        return res.items;
+      },
+      enabled: Boolean(projectKey) && isLiveMode,
+      initialData: initialIssues,
+    },
+    queryClient,
+  );
+
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+
+  const issues = useMemo(
+    () => issuesQuery.data ?? initialIssues ?? [],
+    [issuesQuery.data, initialIssues],
+  );
+
+  const setIssues = useCallback(
+    (updater: IssueItem[] | ((prev: IssueItem[]) => IssueItem[])) => {
+      queryClient.setQueryData<IssueItem[]>(qk.issues(projectKey, {}), (old) => {
+        const base = old ?? initialIssues ?? [];
+        return typeof updater === 'function' ? updater(base) : updater;
+      });
+    },
+    [initialIssues, projectKey, queryClient],
+  );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [peekParam, setPeekParam] = useState<string | null>(() =>
@@ -293,7 +328,7 @@ export function IssuesWorkspaceRoute({
       active = false;
       window.removeEventListener('kb:issue-updated', refreshLive);
     };
-  }, [isLiveMode, projectKey]);
+  }, [isLiveMode, projectKey, setIssues, setProjectStates]);
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() => {
     const filters: ActiveFilters = {};
     const stateParam = searchParams.get('filter_state');

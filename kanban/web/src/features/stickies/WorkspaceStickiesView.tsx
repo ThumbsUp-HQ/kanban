@@ -32,10 +32,14 @@ export function WorkspaceStickiesView({
   defaultProjectKey = 'KAN',
   readOnly: propReadOnly,
 }: WorkspaceStickiesViewProps = {}): JSX.Element {
-  useRealtimeSubscription('workspace:stickies');
   const queryClient = useQueryClient();
+  const cachedUser = queryClient.getQueryData<{ workspace_role?: string; workspace_id?: string }>(qk.me());
+  const workspaceId = cachedUser?.workspace_id;
 
-  const cachedUser = queryClient.getQueryData<{ workspace_role?: string }>(qk.me());
+  useRealtimeSubscription([
+    'workspace:stickies',
+    workspaceId ? `workspace:${workspaceId}` : null,
+  ]);
   const isViewer = propReadOnly ?? (cachedUser?.workspace_role === 'VIEWER' || cachedUser?.workspace_role === 'WORKSPACE_GUEST');
 
   const { data: stickies = [], isLoading } = useQuery<StickyItem[]>({

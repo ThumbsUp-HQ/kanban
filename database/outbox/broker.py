@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import insert
+
+from database.models.outbox import OutboxEvent
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping
@@ -129,22 +132,18 @@ async def enqueue_outbox_event(  # noqa: PLR0913
         )
         raise OutboxPayloadTooLargeError(msg)
 
-    result = await session.execute(
-        text(
-            "INSERT INTO outbox_events ("
-            "  workspace_id, project_id, object_id, topic, payload"
-            ") VALUES (:ws_id, :proj_id, :obj_id, :topic, CAST(:payload AS jsonb)) "
-            "RETURNING id"
-        ),
-        {
-            "ws_id": workspace_id,
-            "proj_id": project_id,
-            "obj_id": object_id,
-            "topic": topic,
-            "payload": payload_json,
-        },
+    event_id = uuid.uuid4()
+    await session.execute(
+        insert(OutboxEvent).values(
+            id=event_id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            object_id=object_id,
+            topic=topic,
+            payload=payload,
+        )
     )
-    return UUID(str(result.scalar_one()))
+    return event_id
 
 
 def build_realtime_broker(

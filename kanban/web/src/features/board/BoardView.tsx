@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { announce } from '../../api/RealtimeStatus.tsx';
@@ -23,6 +23,7 @@ import './board.css';
 
 export interface BoardViewProps {
   projectKey: string;
+  projectId?: string | undefined;
   workspaceSlug?: string | undefined;
   states?: BoardWorkflowState[] | undefined;
   issues?: BoardIssue[] | undefined;
@@ -53,6 +54,7 @@ const DEFAULT_STATES: BoardWorkflowState[] = [
  */
 export function BoardView({
   projectKey,
+  projectId,
   workspaceSlug,
   states: propStates,
   issues: propIssues,
@@ -71,7 +73,27 @@ export function BoardView({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pendingHardWipMove, setPendingHardWipMove] = useState<PendingHardWipMove | null>(null);
 
-  useRealtimeSubscription(projectKey ? `project:${projectKey}` : null);
+  // Fetch project details for states and capabilities when omitted
+  const projectQuery = useQuery({
+    queryKey: qk.project(projectKey),
+    queryFn: async () => {
+      const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}', {
+        params: { project_ref: projectKey },
+      });
+      return data;
+    },
+    enabled: propStates === undefined,
+  });
+
+  const resolvedProjectId =
+    projectId ??
+    (projectQuery.data as { id?: string; object_id?: string } | undefined)?.id ??
+    (projectQuery.data as { id?: string; object_id?: string } | undefined)?.object_id;
+
+  useRealtimeSubscription([
+    projectKey ? `project:${projectKey}` : null,
+    resolvedProjectId ? `project:${resolvedProjectId}` : null,
+  ]);
 
   useGateRealtimeSync({
     client: realtimeClient,
@@ -83,18 +105,6 @@ export function BoardView({
         setToastMessage((prev) => (prev === msg ? null : prev));
       }, 5000);
     },
-  });
-
-  // Fetch project details for states and capabilities when omitted
-  const projectQuery = useQuery({
-    queryKey: qk.project(projectKey),
-    queryFn: async () => {
-      const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}', {
-        params: { project_ref: projectKey },
-      });
-      return data;
-    },
-    enabled: propStates === undefined,
   });
 
   const states = useMemo(() => {
@@ -164,6 +174,16 @@ export function BoardView({
       };
     });
   }, [localIssues, propIssues, rawQueryIssues]);
+
+  const incomingIssues = propIssues ?? rawQueryIssues;
+  const prevIncomingRef = useRef(incomingIssues);
+
+  useEffect(() => {
+    if (prevIncomingRef.current !== incomingIssues) {
+      prevIncomingRef.current = incomingIssues;
+      setLocalIssues(null);
+    }
+  }, [incomingIssues]);
 
   const isAdmin = useMemo(() => {
     return currentUserCapabilities.some((cap) =>

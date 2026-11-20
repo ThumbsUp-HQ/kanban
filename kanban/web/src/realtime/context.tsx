@@ -183,7 +183,7 @@ export function useRealtimeLiveState(): RealtimeState {
  * Keeps the channel subscribed for the component lifetime and routes events to handler.
  */
 export function useRealtimeSubscription(
-  channel: string | null | undefined,
+  channel: string | (string | null | undefined)[] | null | undefined,
   handler?: RealtimeEventHandler,
 ): void {
   const client = useRealtimeClient();
@@ -193,13 +193,26 @@ export function useRealtimeSubscription(
     savedHandler.current = handler;
   });
 
+  const channels = useMemo(() => {
+    if (!channel) return [];
+    if (Array.isArray(channel)) {
+      return channel.filter((c): c is string => typeof c === 'string' && c.length > 0);
+    }
+    return [channel];
+  }, [channel]);
+
   useEffect(() => {
-    if (!channel) {
+    if (channels.length === 0) {
       return undefined;
     }
     const stableHandler: RealtimeEventHandler = (event: RealtimeEvent) => {
       savedHandler.current?.(event);
     };
-    return client.subscribe(channel, stableHandler);
-  }, [client, channel]);
+    const unsubs = channels.map((ch) => client.subscribe(ch, stableHandler));
+    return () => {
+      for (const unsub of unsubs) {
+        unsub();
+      }
+    };
+  }, [client, channels]);
 }

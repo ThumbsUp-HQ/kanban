@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 from datetime import UTC, datetime
@@ -1263,3 +1264,63 @@ async def test_ws_additional_frame_handling(
 
     await client.close()
     await hub.drain(0.5)
+
+
+@pytest.mark.asyncio
+async def test_hub_additional_branches(
+    pg_worker_db: AsyncEngine,
+    session_service: SessionService,
+) -> None:
+    """Test doc channel resolution, broker none, and session token None branches."""
+    factory = RLSSessionFactory(pg_worker_db)
+    fixtures = await create_realtime_test_fixtures(factory)
+    hub = RealtimeHub(broker=None, session_factory=factory, session_service=session_service)
+
+    # 1. _broker_listener_loop returns immediately when broker is None
+    await hub._broker_listener_loop()
+
+    ctx = RLSContext(
+        principal_id=fixtures["admin_id"],
+        workspace_id=fixtures["ws_id"],
+        token_scopes=("realtime",),
+        aal_level=1,
+    )
+    async with factory.session(ctx) as session:
+        # 2. _resolve_doc_channel with non-uuid
+        doc_res = await hub._resolve_doc_channel(
+            session,
+            fixtures["ws_id"],
+            fixtures["admin_id"],
+            "not-a-uuid",
+        )
+        assert doc_res is None
+
+        # 3. _resolve_doc_channel with random uuid where view check fails
+        rand_doc = uuid.uuid4()
+        doc_res2 = await hub._resolve_doc_channel(
+            session,
+            fixtures["ws_id"],
+            fixtures["admin_id"],
+            str(rand_doc),
+        )
+        assert doc_res2 is None
+
+    # 4. conn without token_sha256 in session recheck
+    sse_conn = SSEConnection(
+        id=uuid.uuid4(),
+        principal_id=fixtures["admin_id"],
+        workspace_id=fixtures["ws_id"],
+        session_id=uuid.uuid4(),
+        token_sha256=None,
+    )
+    await hub.register_connection(sse_conn)
+    hub._running = True
+    hub._session_check_interval_s = 0.01
+
+    # Run one pass of session recheck then cancel
+    task = asyncio.create_task(hub._session_recheck_loop())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    await hub.unregister_connection(sse_conn.id)

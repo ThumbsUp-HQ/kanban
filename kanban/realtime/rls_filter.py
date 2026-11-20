@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from sqlalchemy import text
 
-from kanban.security.permissions import Capability
-
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from collections.abc import Set as AbstractSet
@@ -89,38 +87,40 @@ async def authorize_event_recipients(
         # workspace are authorized recipients.
         return set(candidate_principals)
 
-    candidate_list = list(candidate_principals)
-    params: dict[str, Any] = {
-        "obj_id": target_id,
-        "candidate_ids": candidate_list,
-    }
-
-    if workspace_id is not None:
-        stmt = text(
-            "SELECT principal_id, allow_mask, deny_mask "
-            "FROM effective_resource_access "
-            "WHERE object_id = :obj_id "
-            "  AND workspace_id = :ws_id "
-            "  AND principal_id = ANY(CAST(:candidate_ids AS uuid[]))"
+    if workspace_id is None:
+        ws_val = await session.scalar(
+            text("SELECT workspace_id FROM objects WHERE id = :obj_id"),
+            {"obj_id": target_id},
         )
-        params["ws_id"] = workspace_id
-    else:
-        stmt = text(
-            "SELECT principal_id, allow_mask, deny_mask "
-            "FROM effective_resource_access "
-            "WHERE object_id = :obj_id "
-            "  AND principal_id = ANY(CAST(:candidate_ids AS uuid[]))"
-        )
-
-    result = await session.execute(stmt, params)
-    rows = result.mappings().all()
+        if ws_val is not None:
+            workspace_id = uuid.UUID(str(ws_val))
 
     authorized: set[uuid.UUID] = set()
-    view_bit = Capability.VIEW.value
-    for row in rows:
-        allow = int(row["allow_mask"])
-        deny = int(row["deny_mask"])
-        if (allow & view_bit) == view_bit and (deny & view_bit) == 0:
-            authorized.add(uuid.UUID(str(row["principal_id"])))
+    ws_str = str(workspace_id) if workspace_id is not None else ""
+
+    for candidate in candidate_principals:
+        if ws_str:
+            await session.execute(
+                text(
+                    "SELECT set_config('app.workspace_id', :ws_id, true), "
+                    "       set_config('app.principal_id', :pid, true)"
+                ),
+                {"ws_id": ws_str, "pid": str(candidate)},
+            )
+        else:
+            await session.execute(
+                text("SELECT set_config('app.principal_id', :pid, true)"),
+                {"pid": str(candidate)},
+            )
+
+        has_view = bool(
+            await session.scalar(
+                text("SELECT app_has_object_capability(:obj_id, 1)"),
+                {"obj_id": target_id},
+            )
+        )
+
+        if has_view:
+            authorized.add(candidate)
 
     return authorized

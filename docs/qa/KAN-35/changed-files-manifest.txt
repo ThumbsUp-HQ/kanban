@@ -1,0 +1,34 @@
+# Changed Files Manifest for KAN-35 (feat/KAN-35)
+# Wave P3-5: Fix End-to-End Realtime Board & View Refresh for Agent/MCP & REST Ticket Mutations (5 Problems)
+
+## Database Schema & Migrations
+database/migrations/sql/p4_22_outbox_replay_reader.up.sql
+database/migrations/sql/p4_22_outbox_replay_reader.down.sql
+database/migrations/versions/p4_22_outbox_replay_reader.py
+database/tests/migrations/test_p4_22_outbox_replay_reader_migration.py
+
+## Backend Outbox, Relay & Services
+database/outbox/broker.py
+kanban/services/realtime_outbox.py
+kanban/tests/services/test_realtime_outbox.py
+kanban/app.py
+kanban/ops/compose_export.py
+
+## Backend Realtime Hub, Replay, RLS Filter & SSE
+kanban/realtime/hub.py
+kanban/realtime/replay.py
+kanban/realtime/rls_filter.py
+kanban/api/sse.py
+kanban/tests/realtime/conftest.py
+kanban/tests/realtime/test_hub_unit.py
+kanban/tests/realtime/test_realtime_e2e_pipeline.py
+
+## Frontend Realtime Client, Views & State
+kanban/web/src/api/realtime.ts
+kanban/web/src/api/realtime.test.ts
+kanban/web/src/app/AppShell.tsx
+kanban/web/src/features/board/BoardView.tsx
+kanban/web/src/features/drawer/IssueSurface.tsx
+kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
+kanban/web/src/features/views/viewRegistry.tsx
+kanban/web/src/realtime/context.tsx
