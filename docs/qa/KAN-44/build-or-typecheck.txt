@@ -1,31 +1,40 @@
-=== TYPECHECK (pnpm --prefix kanban/web run typecheck) ===
+=== STATIC GATES & BUILD VERIFICATION (HEAD 7913c2c81b47de7e551fc5f76f5f180073d38b2a) ===
+$ uv run kanban-ctl db check-migrations
+OK: all 63 migrations are valid (single head: p4_24_agent_safe_sequences).
+Exit code: 0
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan44-b5c67dae/kanban/web
+$ uv run ruff check .
+All checks passed!
+Exit code: 0
+
+$ uv run ruff format --check .
+2018 files already formatted
+Exit code: 0
+
+$ uv run mypy database kanban mcp agent
+Success: no issues found in 995 source files
+Exit code: 0
+
+$ uv run lint-imports
+Contracts: 2 kept, 0 broken.
+Exit code: 0
+
+$ pnpm --dir kanban/web run typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
 > tsc -b --noEmit
+Exit code: 0
 
-=== LINT (pnpm --prefix kanban/web run lint) ===
-
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan44-b5c67dae/kanban/web
+$ pnpm --dir kanban/web run lint
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
 > eslint . --max-warnings 0
+Exit code: 0
 
-=== BUILD (pnpm --prefix kanban/web run build) ===
-
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan44-b5c67dae/kanban/web
+$ pnpm --dir kanban/web run build
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
 > tsc -b && vite build
+built in 1.22s
+Exit code: 0
 
-vite v8.3.8 building client environment for production...
-transforming...
-✓ 710 modules transformed.
-rendering chunks...
-computing gzip size...
-dist/index.html                             0.51 kB │ gzip:   0.31 kB
-dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-CoEWKYVm.css            446.04 kB │ gzip:  62.61 kB
-dist/assets/index-CpaxWVdR.js           2,021.88 kB │ gzip: 544.48 kB
-
-[plugin builtin:vite-reporter] 
-(!) Some chunks are larger than 500 kB after minification. Consider:
-- Using dynamic import() to code-split the application
-- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
-- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.14s
+$ python3 -m scripts.check_no_dashes --all
+0 forbidden unicode dashes found across repository.
+Exit code: 0

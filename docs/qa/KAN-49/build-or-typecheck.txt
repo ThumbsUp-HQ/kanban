@@ -1,37 +1,40 @@
-=== kanban-ctl db check-migrations ===
-OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
+=== STATIC GATES & BUILD VERIFICATION (HEAD 7913c2c81b47de7e551fc5f76f5f180073d38b2a) ===
+$ uv run kanban-ctl db check-migrations
+OK: all 63 migrations are valid (single head: p4_24_agent_safe_sequences).
+Exit code: 0
 
-=== ruff check database kanban ===
+$ uv run ruff check .
 All checks passed!
+Exit code: 0
 
-=== mypy database kanban ===
-Success: no issues found in 748 source files
+$ uv run ruff format --check .
+2018 files already formatted
+Exit code: 0
 
-=== lint-imports ===
+$ uv run mypy database kanban mcp agent
+Success: no issues found in 995 source files
+Exit code: 0
 
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 986 files, 3512 dependencies.
---------------------------------------
-
-Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-mcp forbidden from importing database KEPT (48 ignored imports)
-
+$ uv run lint-imports
 Contracts: 2 kept, 0 broken.
+Exit code: 0
 
-=== check_no_dashes --all ===
+$ pnpm --dir kanban/web run typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
+> tsc -b --noEmit
+Exit code: 0
+
+$ pnpm --dir kanban/web run lint
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
+> eslint . --max-warnings 0
+Exit code: 0
+
+$ pnpm --dir kanban/web run build
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
+> tsc -b && vite build
+built in 1.22s
+Exit code: 0
+
 $ python3 -m scripts.check_no_dashes --all
-Notice: skipping /home/adamoutler/kanban/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-[PASS] Zero forbidden unicode dashes detected across repository (exit code: 0).
+0 forbidden unicode dashes found across repository.
+Exit code: 0

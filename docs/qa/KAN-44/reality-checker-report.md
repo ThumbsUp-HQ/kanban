@@ -1,126 +1,95 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands, zero URLs visited, zero files modified per protocol).
+**Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands, zero URLs visited, zero files modified) against `/home/adamoutler/kanban/docs/qa/KAN-44/` and on-disk sources under `/home/adamoutler/kanban/kanban/web/src/`.
 **Evidence Captured**:
-- `docs/qa/KAN-44/message-to-reality-checker.md` (58 lines)
-- `docs/qa/KAN-44/changed-files-manifest.txt` (22 lines)
-- `docs/qa/KAN-44/git-diff.patch` (3337 lines)
-- `docs/qa/KAN-44/unit-test-results.txt` (43 lines, 11 test files / 198 tests)
-- `docs/qa/KAN-44/build-or-typecheck.txt` (31 lines)
-- `docs/qa/KAN-44/live-fullstack-proof.txt` (68 lines, `http://127.0.0.1:18962`, `kanban-liveqa-2`, commit `07d04cde`)
-- `docs/qa/KAN-44/ui-specialist-review.md` (134 lines)
-- All 12 live PNG screenshots in `docs/qa/KAN-44/screenshots/`
-- On-disk source files verified: `kanban/web/src/features/views/QuickFieldPopover.tsx`, `kanban/web/src/features/views/filterBulk.css`, `kanban/web/src/features/board/BoardCard.tsx`, `kanban/web/src/features/board/BoardView.tsx`, `kanban/web/src/features/table/TableView.tsx`, `kanban/web/src/features/table/TableView.css`, `kanban/web/src/features/drawer/IssueSurface.tsx`, `kanban/web/src/features/drawer/IssueSurface.css`, `kanban/web/src/features/list/ListView.tsx`, `kanban/web/src/features/list/ListView.test.tsx`, `kanban/web/src/features/list/ListRow.tsx`, `kanban/web/src/features/views/listTable.css`, `kanban/web/src/features/views/SwimlaneBoardGrid.tsx`, `kanban/web/src/features/views/viewRegistry.tsx`, `kanban/web/src/app/AppShell.tsx`, `kanban/web/src/app/AppShell.css`, `kanban/web/src/app/Topbar.css`
-- Note on path discrepancies: `kanban/web/src/features/board/QuickFieldPopover.tsx`, `kanban/web/src/features/board/QuickFieldPopover.css`, `kanban/web/src/features/board/TableView.tsx`, and `kanban/web/src/features/issues/IssueSurface.tsx` do not exist on disk; actual locations are `features/views/QuickFieldPopover.tsx`, `features/views/filterBulk.css`, `features/table/TableView.tsx`, and `features/drawer/IssueSurface.tsx`.
+- Verification manifests and logs: `docs/qa/KAN-44/message-to-reality-checker.md`, `docs/qa/KAN-44/changed-files-manifest.txt`, `docs/qa/KAN-44/git-diff.patch` (5,032 lines, 185,307 bytes), `docs/qa/KAN-44/unit-test-results.txt`, `docs/qa/KAN-44/build-or-typecheck.txt`, `docs/qa/KAN-44/live-fullstack-proof.txt`, and `docs/qa/KAN-44/ui-specialist-review.md`.
+- 16 live full-stack Playwright PNG screenshots in `docs/qa/KAN-44/screenshots/` captured against `kanban-liveqa-2` (`http://127.0.0.1:18962`, commit `7913c2c8`).
+- On-disk source inspection: `QuickFieldPopover.tsx`, `filterBulk.css`, `listTable.css`, `BoardCard.tsx`, `ListView.tsx`, `TableView.tsx`, `TableView.css`, `IssueSurface.tsx`, `IssueSurface.css`, `IssueHeader.tsx`, `SwimlaneBoardGrid.tsx`, `ListRow.tsx`, `viewRegistry.tsx`, `AppShell.tsx`, `AppShell.css`, and `Topbar.css`.
 
 **QA Cross-Validation**:
-- Challenged `docs/qa/KAN-44/ui-specialist-review.md` ("STATUS: APPROVED") and `docs/qa/KAN-44/live-fullstack-proof.txt` ("OVERALL LIVE_STACK_VERDICT (KAN-44): PASS"):
-  1. Visual inspection of `live-list-mobile.png` and `live-list-bottom-sheet-mobile.png` reveals severe card-height overflow where issue summary text collides with and bleeds past the bottom border of every list card.
-  2. Visual inspection of `live-list-split-mobile.png` reveals header wrapping across 3 lines, triplicate State `<select>` dropdowns stacked on the same mobile screen, 28px-tall toolbar controls instead of 44px touch targets, and collapsed/clipped `DESCRIPTION` and `PEOPLE` accordion bodies.
-  3. On-disk `ListView.tsx` (refactored for KAN-52) dropped `ListRow` and its `canTransition` RBAC guard, unconditionally rendering `list-row-state-btn-*` even for `VIEWER` users; `live-fullstack-proof.txt` only checked `VIEWER` RBAC on the single-issue page (`KAN-1`), not on List, Board, Swimlane, or Table views.
-  4. Table View (`?layout=table`), explicitly named in the ticket title, has zero live screenshots, zero live tests, and lacks 44px mobile touch sizing and `TRANSITION` capability alignment.
-  5. Verification packet artifacts are internally inconsistent and out of sync with on-disk code (`changed-files-manifest.txt` truncated at 22 lines, `git-diff.patch` pre-dates on-disk KAN-52 changes in `ListView.tsx` and `IssueSurface.tsx`, `unit-test-results.txt` reports 198 tests while `message-to-reality-checker.md` states 195, and `ui-specialist-review.md` cites `AppShell.test.tsx` 7/7 which is absent from `unit-test-results.txt`).
+Challenged multiple claims across `docs/qa/KAN-44/ui-specialist-review.md`, `docs/qa/KAN-44/message-to-reality-checker.md`, and `docs/qa/KAN-44/unit-test-results.txt`:
+1. **`ui-specialist-review.md` contains unverified and inaccurate claims:**
+   - References non-existent/untouched filenames `issueList.css` and `board.css` instead of the actual modified stylesheets `kanban/web/src/features/views/listTable.css` and `kanban/web/src/features/views/filterBulk.css`.
+   - States the mobile bottom sheet breakpoint is `<=480px`, whereas `filterBulk.css:618` uses `@media (max-width: 768px)`.
+   - Claims "All tests in `src/features/issues/`, `src/features/board/`, and `src/features/table/` passed cleanly", whereas `unit-test-results.txt` did not execute `src/features/issues/` or `src/features/table/` (`TableView.test.tsx`).
+2. **`unit-test-results.txt` provenance & scope mismatch:**
+   - `unit-test-results.txt` was executed inside a pre-integration worktree (`/home/adamoutler/.gemini/antigravity-cli/worktrees/.../swarm-b-kan43-44-fix-08c429e0/kanban/web`) rather than `/home/adamoutler/kanban/kanban/web` at commit `7913c2c8`, reports 198 passed tests (while `message-to-reality-checker.md` claims 195), and reports slightly different coverage figures for `IssueSurface.tsx` (`99.33%` / `95.39%` vs `99.31%` / `95.25%` in `message-to-reality-checker.md`). Similarly, `build-or-typecheck.txt` reports `vite build` in `1.22s` vs `1.14s` in `message-to-reality-checker.md`.
+   - `COVERAGE_INCLUDE` in `unit-test-results.txt` omits `TableView.tsx` and `AppShell.tsx`, even though both files are modified in `changed-files-manifest.txt` and `git-diff.patch`, and neither `TableView.test.tsx` nor `AppShell.test.tsx` was run.
+   - `git-diff.patch` (lines 2116-2812) deletes 334 lines of legacy `ListView.test.tsx` coverage (because `ListView.tsx` was rewritten into the KAN-52 Left Master Rail without delegating to `ListRow.tsx`).
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots inspected (12 PNGs in `docs/qa/KAN-44/screenshots/`):
-  - Desktop (1440x900): `live-board-popover-desktop.png`, `live-swimlane-popover-desktop.png`, `live-issue-desktop-light.png`, `live-issue-desktop-dark.png`, `live-topbar-menu-above-surface.png`
-  - Tablet (768x1024): `live-issue-tablet.png`
-  - Mobile (390x844): `live-board-bottom-sheet-mobile.png`, `live-list-mobile.png`, `live-list-bottom-sheet-mobile.png`, `live-list-split-mobile.png`, `live-issue-mobile.png`, `live-viewer-readonly-mobile.png`
-- User journey evidence: Board popover open (`live-board-popover-desktop.png`), Swimlane popover open (`live-swimlane-popover-desktop.png`), Mobile board bottom sheet (`live-board-bottom-sheet-mobile.png`), Mobile list initial load -> bottom sheet -> split detail view (`live-list-mobile.png`, `live-list-bottom-sheet-mobile.png`, `live-list-split-mobile.png`), Full-screen issue Light/Dark/Tablet/Mobile + Viewer RBAC + Topbar avatar z-index (`live-issue-desktop-light.png`, `live-issue-desktop-dark.png`, `live-issue-tablet.png`, `live-issue-mobile.png`, `live-viewer-readonly-mobile.png`, `live-topbar-menu-above-surface.png`).
-- Cross-browser comparison: Single headless Chromium engine only (no Firefox/WebKit captures provided).
+- Desktop (1440x900): `live-board-popover-desktop.png`, `live-swimlane-popover-desktop.png`, `live-table-desktop.png`, `live-issue-desktop-light.png`, `live-issue-desktop-dark.png`, `live-topbar-menu-above-surface.png`.
+- Tablet (768x1024): `live-issue-tablet.png`.
+- Mobile (390x844): `live-board-bottom-sheet-mobile.png`, `live-table-mobile.png`, `live-list-mobile.png`, `live-list-bottom-sheet-mobile.png`, `live-list-split-mobile.png`, `live-issue-mobile.png`, `live-viewer-list-mobile.png`, `live-viewer-table-mobile.png`, `live-viewer-readonly-mobile.png`.
 
 **What System Actually Delivers**:
-- **Working well**:
-  - `QuickFieldPopover.tsx` uses `createPortal(..., document.body)` with CSS custom properties (`--popover-top`, `--popover-left`), avoiding virtualized `.board-card-wrapper` transform clipping on desktop (`live-board-popover-desktop.png`, `live-swimlane-popover-desktop.png`) and rendering a full-width mobile bottom sheet at `z-index: 350` (`live-board-bottom-sheet-mobile.png`, `live-list-bottom-sheet-mobile.png`).
-  - Board cards (`BoardCard.tsx`, `SwimlaneBoardGrid.tsx`) render a clear `board-card-state-btn-*` pill (`111x44px` on mobile per telemetry) with `e.stopPropagation()`.
-  - Full-page issue views (`live-issue-desktop-light.png`, `live-issue-desktop-dark.png`, `live-issue-tablet.png`, `live-issue-mobile.png`) render `header-state-select`, `quick-properties-bar` below 879px, clean light/dark contrast, and `VIEWER` read-only badge fallback on the single-issue route (`live-viewer-readonly-mobile.png`).
-  - Topbar avatar menu (`Topbar.css` `z-index: 150`) renders above `.surface--full` (`z-index: 100`) on desktop (`live-topbar-menu-above-surface.png`), and `AppShell.tsx` + `IssueSurface.tsx` prevent the duplicate global drawer overlay on `?layout=list&peek=...`.
-- **Broken / Incomplete in visual & code reality**:
-  - `live-list-mobile.png` and `live-list-bottom-sheet-mobile.png`: Every `.issue-list-card` also carries `.list-row` (`listTable.css` line 161 `height: var(--list-row-h, 46px)`). Because the mobile state button is `44px` tall, the 2-line card overflows its `46px` fixed box, causing the summary text on `KAN-6`, `KAN-5`, `KAN-4`, `KAN-3`, `KAN-2`, `KAN-1` to overlap/bleed across the bottom border of every card.
-  - `live-list-split-mobile.png`: Shows 3 stacked state `<select>` controls (`header-state-select` in wrapped header, `split-state-select` in toolbar, `quick-props-state-select` in Details), 28px-tall toolbar controls (`IssueSurface.css` lines 667, 690), and empty/clipped `DESCRIPTION` and `PEOPLE` `<details>` bodies due to `.split-body-grid { height: 100%; }` constraining implicit grid rows on `< 900px` (`IssueSurface.css` lines 831-846).
-  - `ListView.tsx` lines 339-352: Unconditionally renders `list-row-state-btn-*` without checking `canTransition` or accepting `capabilities`.
-  - `TableView.tsx` / `TableView.css`: No mobile touch target sizing (`42px` row height, no `44px` `.table-inline-select` rule) and zero live screenshots or proof.
+- **Board & Swimlane Popover / Mobile Bottom Sheet**: `live-board-popover-desktop.png` and `live-swimlane-popover-desktop.png` show `QuickFieldPopover` portaled to `document.body` (`isDirectBodyChild: true`, `peekDrawers: 0`) above adjacent cards without clipping. `live-board-bottom-sheet-mobile.png` shows the full-width bottom sheet (`390px` wide, `z-index: 350`, `44px` option rows) with dimmed backdrop and HTTP 200 state transition.
+- **List View & Mobile Split Detail**: `live-list-mobile.png` shows compact two-line cards with `height: auto; min-height: 68px` (measured `85px`) and zero summary overflow (`allCardsNoBleed: true`). `live-list-bottom-sheet-mobile.png` shows the bottom sheet opening cleanly from the `44x44` state pill button. `live-list-split-mobile.png` shows the `44x44` back button (`split-surface-close-btn`), readable `DESCRIPTION` and `ATTACHMENTS` sections, and `44px` toolbar controls, but visibly displays two separate state `<select>` controls (`split-state-select` in the action toolbar and `quick-props-state-select` inside `DETAILS`).
+- **Single Issue View & Topbar Layering**: `live-issue-desktop-light.png`, `live-issue-desktop-dark.png`, `live-issue-tablet.png`, and `live-issue-mobile.png` show working header and quick-properties state transitions across light/dark themes and viewports. `live-topbar-menu-above-surface.png` confirms the avatar dropdown (`z-index: 150`) renders cleanly above `.surface--full` (`z-index: 100`).
+- **Table View Mobile Cramping & Truncation**: `live-table-desktop.png` renders cleanly, but `live-table-mobile.png` (390px) visibly truncates `State` dropdown text (`In Pr`, `Purp`, `Back`), truncates `Priority` dropdown text (`Mediu`, `Urgen`), and clips the `Assignees` header (`A`) and `+` button at the right container border. In `live-viewer-table-mobile.png`, read-only `StateBadge` pills truncate state names down to a single character (`I...`, `P...`, `B...`).
+- **VIEWER RBAC Read-Only Parity**: `live-viewer-list-mobile.png`, `live-viewer-table-mobile.png`, and `live-viewer-readonly-mobile.png` confirm interactive state controls are omitted and replaced by static `StateBadge` pills for `viewer2`.
 
 ## 🧪 Integration Testing Results
-- **End-to-End User Journeys**: PARTIAL PASS / FAIL
-  - Board & Swimlane state button -> popover/bottom-sheet -> HTTP 200 transition: PASS (`live-board-popover-desktop.png`, `live-swimlane-popover-desktop.png`, `live-board-bottom-sheet-mobile.png`).
-  - Mobile List initial load (no peek trap) -> bottom sheet -> split open -> close: FUNCTIONAL IN TELEMETRY, VISUAL FAIL (`live-list-mobile.png` card text overflow; `live-list-split-mobile.png` empty `DESCRIPTION`/`PEOPLE` panels and 3x duplicate state dropdowns).
-  - Full-page Issue view (Desktop Light/Dark, Tablet, Mobile, Viewer RBAC, Topbar z-index): PASS (`live-issue-desktop-light.png`, `live-issue-desktop-dark.png`, `live-issue-tablet.png`, `live-issue-mobile.png`, `live-viewer-readonly-mobile.png`, `live-topbar-menu-above-surface.png`).
-  - Table view (`?layout=table`) mobile & desktop state transition journey: FAIL (not tested, zero screenshots).
-  - VIEWER RBAC on Board, Swimlane, List, and Table views: FAIL (not tested in live QA; broken in `ListView.tsx` and `viewRegistry.tsx` -> `SwimlaneBoardGrid`).
-- **Cross-Device Consistency**: FAIL
-  - Desktop (1440x900) and Tablet (768x1024) single-issue views are consistent, and Board mobile bottom sheet is clean, but Mobile (390x844) List cards (`live-list-mobile.png`) and Mobile Split Detail (`live-list-split-mobile.png`) exhibit severe clipping/compression regressions, and Mobile Topbar wraps `"Work Items"` across two lines (`live-board-bottom-sheet-mobile.png`, `live-list-mobile.png`).
-- **Performance Validation**: NOT MEASURED
-  - `live-fullstack-proof.txt` does not record page load times, LCP, or interaction latency metrics (no `test-results.json` present). Only runtime error counts (0 JS errors, 0 page errors, 0 5xx, 0 CSP violations) and Vite build duration (`1.14s`) are recorded.
-- **Specification Compliance**: FAIL
-  - **Spec Required**: `[KB-MOBILE-TRANSITION] Mobile Touch State Transition Controls Across Board, List, Table & Issue Views`; 44px minimum touch targets on mobile (`<= 768px`); read-only `VIEWER` capability gating across views; error surfacing and state rollback on WIP limit / gate / 412 failures.
-  - **Evidence & Gaps**:
-    1. Table View (`?layout=table`) has zero live evidence and no 44px mobile touch target CSS (`TableView.css` lines 67-76, 163-167), and `TableView.tsx` checks `EDIT`/`ADMIN` without `TRANSITION` and swallows `patchProjectIssue` errors (`.catch(() => undefined)`).
-    2. `ListView.tsx` lines 339-352 lacks `canTransition` RBAC gating (regression vs `ListRow.tsx` lines 53-57, 144-165), and `viewRegistry.tsx` line 839 swallows `patchProjectIssue` errors on list/popover transitions without rollback or error alert.
-    3. `viewRegistry.tsx` lines 986-997 omits `currentUserCapabilities` and `onCardMove`/`onStateTransition` on `<SwimlaneBoardGrid>`, breaking `VIEWER` gating (when `issue.capabilities` is absent) and bypassing WIP checks/local state sync.
-    4. `IssueSurface.css` lines 667, 690 leaves `.split-toolbar-btn` and `.split-state-select` at `28px` height on mobile.
+- **End-to-End User Journeys**: CONDITIONAL PASS for Board, Swimlane, List, and Single Issue state transitions and RBAC gating (HTTP 200 live transitions, 0 console/page/5xx/CSP errors); FAIL for Mobile Table readability (`live-table-mobile.png`, `live-viewer-table-mobile.png`) and unit-test coverage verification on `TableView.tsx` / `AppShell.tsx`.
+- **Cross-Device Consistency**: PARTIAL PASS - Board, Swimlane, List, and Single Issue layouts adapt cleanly across 1440px, 768px, and 390px; Table View at 390px suffers severe column text truncation (`I...`, `P...`, `B...`, `In Pr`, `Purp`, `Mediu`) and right-edge clipping of `Assignees`.
+- **Performance Validation**: PASS - All measured live container page loads are 741 ms to 941 ms (< 3000 ms threshold), and live PATCH transitions complete in 56 ms to 144 ms.
+- **Specification Compliance**: PARTIAL PASS - Strict CSP compliance (zero inline JSX `style={...}`, CSS custom properties via ref in `QuickFieldPopover.tsx`), 44px mobile touch targets, `QuickFieldPopover` portal/bottom sheet, mobile split auto-peek suppression, and VIEWER RBAC gating are implemented; however, `TableView.tsx` and `AppShell.tsx` lack post-integration `>=95%` coverage proof, `IssueSurface.css:874` uses a dead `.split-side-col` selector, and `ui-specialist-review.md` cites inaccurate files/test runs.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- Mobile list card text overflow / clipping in `live-list-mobile.png` and `live-list-bottom-sheet-mobile.png` (missed by `ui-spec-2` despite being clearly visible in the screenshots).
-- Mobile split-pane layout degradation in `live-list-split-mobile.png` (empty/clipped `DESCRIPTION` and `PEOPLE` panels, wrapped 3-row header, 3 duplicate state dropdowns, 28px toolbar targets).
+1. **Mobile Table View (`390x844`) truncation and unreadable read-only state badges (`TableView.css:126-168`, `live-table-mobile.png`, `live-viewer-table-mobile.png`)**: Constraining `.table-state-cell` to `78px` (`max-width: 82px`) and `.table-priority-cell-wrap` to `70px` on `<= 640px` causes interactive `<select>` values to clip to `In Pr`, `Purp`, `Back`, `Mediu` and reduces read-only `StateBadge` pills to single letters (`I...`, `P...`, `B...`), while `Assignees` clips at `A` / `S` on the right edge.
 
 **New Issues Discovered**:
-1. **RBAC bypass in `ListView.tsx` and `viewRegistry.tsx` -> `SwimlaneBoardGrid`**: `ListView.tsx` (post-KAN-52) never checks `TRANSITION`/`EDIT`/`ADMIN` before rendering `list-row-state-btn-*`, and `viewRegistry.tsx` never passes `capabilities` to `<ListView>` or `currentUserCapabilities` to `<SwimlaneBoardGrid>`.
-2. **Table View completely unverified and non-compliant on mobile**: Zero screenshots or live tests for `?layout=table`; `TableView.css` uses 42px rows and tiny inline selects on `<= 640px`, `TableView.tsx` omits `TRANSITION` capability check and swallows `patchProjectIssue` failures.
-3. **Silent transition failures in `viewRegistry.tsx` (`handleFieldSelect`)**: `patchProjectIssue` errors (412 ETag, WIP limit, workflow gate) are caught with `.catch(() => undefined)` without reverting `setIssues` or surfacing an alert.
-4. **Verification packet integrity / drift**: `changed-files-manifest.txt` is truncated at line 22; `git-diff.patch` does not match on-disk `ListView.tsx`, `IssueSurface.tsx`, `QuickFieldPopover.tsx`, or `Topbar.css`; `unit-test-results.txt` was captured in another worktree (`swarm-b-kan43-44-fix-08c429e0`) before KAN-52 changes and disagrees with counts/files cited in `message-to-reality-checker.md` and `ui-specialist-review.md`.
+1. **Missing test execution & `>=95%` coverage proof for modified files `TableView.tsx` and `AppShell.tsx` (`unit-test-results.txt`, `changed-files-manifest.txt`)**: Both `TableView.tsx` and `AppShell.tsx` are in the diff (`git-diff.patch` lines 1-48 and 3708-3923), yet neither file is included in `COVERAGE_INCLUDE` and neither `TableView.test.tsx` nor `AppShell.test.tsx` was executed in `unit-test-results.txt`. Furthermore, `unit-test-results.txt` was run in an older worktree rather than on integrated `HEAD` `7913c2c8`, causing metric discrepancies against `message-to-reality-checker.md`.
+2. **Inaccurate / hallucinated references in `docs/qa/KAN-44/ui-specialist-review.md`**: The UI specialist sign-off cites non-existent stylesheets (`issueList.css`, `board.css`), an incorrect mobile breakpoint (`<=480px` instead of `<=768px`), and unexecuted test suites (`src/features/issues/`, `src/features/table/`).
+3. **Dead CSS selector in `IssueSurface.css:874-876` leaving duplicate state `<select>` in mobile split view (`live-list-split-mobile.png`)**: `IssueSurface.css:874` targets `.surface--split .split-side-col [data-testid="quick-props-state-select"] { display: none; }`, but `IssueSurface.tsx:1473-1510` renders `[data-testid="quick-props-state-select"]` inside `.split-main-col` (`[data-testid="split-section-details"]`), not `.split-side-col`. As a result, `live-list-split-mobile.png` and `live-fullstack-proof.txt` still render two state dropdowns (`split-state-select` and `quick-props-state-select`) in mobile split view.
+4. **Dead/orphaned `ListRow.tsx` modifications in diff**: `git-diff.patch` (lines 2001-2114) modifies `ListRow.tsx` to add `QuickFieldPopover` and `canTransition`, while `ListView.tsx` (lines 2813-3677) was rewritten to stop importing or rendering `ListRow` altogether (rendering inline `.issue-list-card.list-row` divs instead).
 
-**Critical Issues** (Must-fix before production consideration):
-1. Fix `.issue-list-card.list-row` fixed `height: 46px` override in `listTable.css` so mobile list cards expand cleanly around the 44px touch button and 2-line summary (`live-list-mobile.png`).
-2. Fix `ListView.tsx` and `viewRegistry.tsx` (`ListView` + `SwimlaneBoardGrid`) RBAC gating so `VIEWER` users receive static `<StateBadge>` instead of interactive transition controls, and add live `VIEWER` Playwright verification across Board, Swimlane, List, and Table views.
-3. Fix mobile `.surface--split` grid sizing (`IssueSurface.css` `.split-body-grid` on `<= 900px` / `<= 768px`) so `DESCRIPTION` and `PEOPLE` sections do not collapse/clip (`live-list-split-mobile.png`), and enforce 44px touch targets on mobile split toolbar controls.
-4. Add Table View (`?layout=table`) mobile touch state transition support (44px select/control height on mobile, `TRANSITION` capability support, error rollback) and capture live Playwright desktop/mobile proof.
+**Critical Issues**:
+1. Missing unit test run and `>=95%` branch/line coverage evidence on integrated `HEAD` `7913c2c8` covering ALL touched files (specifically including `TableView.tsx` and `AppShell.tsx`, plus `viewRegistry.tsx` and `ListView.tsx`).
+2. `ui-specialist-review.md` fails forensic accuracy cross-check (references non-existent `issueList.css`/`board.css` and unexecuted `src/features/issues/` and `src/features/table/` tests) and must be re-audited against actual changed files.
+3. Mobile Table View (`390px`) column widths in `TableView.css` produce unreadable 1-character state pills (`I...`, `P...`, `B...`) for viewers and clipped dropdowns/Assignees column (`live-table-mobile.png`, `live-viewer-table-mobile.png`).
 
-**Medium Issues** (Should-fix for better quality):
-1. Consolidate redundant State `<select>` controls in mobile split view (`live-list-split-mobile.png` shows 3 simultaneously: header, toolbar, and Details) and prevent 3-line wrapping in `.surface__header--split` on 390px viewports.
-2. Surface errors and roll back optimistic state in `viewRegistry.tsx` (`handleFieldSelect`) and `TableView.tsx` when `patchProjectIssue` rejects (WIP/gate/412).
-3. Reset `focusedIndex` in `QuickFieldPopover.tsx` when `isOpen`/`field`/`issue` changes and prevent negative `viewportHeight - 250` clamping on short viewports.
-4. Regenerate `changed-files-manifest.txt`, `git-diff.patch`, `unit-test-results.txt`, and `build-or-typecheck.txt` from the actual integrated commit so the QA packet matches on-disk code 1:1.
+**Medium Issues**:
+1. Fix dead CSS selector `.surface--split .split-side-col [data-testid="quick-props-state-select"]` in `IssueSurface.css:874` (or clarify intentional consolidation) so mobile split view does not display redundant state `<select>` controls (`live-list-split-mobile.png`).
+2. Reconcile `ListRow.tsx` vs `ListView.tsx` (confirm whether `ListRow.tsx` is still used by any view or dead code from KAN-52 consolidation).
+3. Verify `All | Comments (0) | History | Gates (0)` tab bar spacing on 390px mobile (`live-issue-mobile.png`) with `scrollWidth === innerWidth` telemetry.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B-
-**Design Implementation Level**: Basic (Board popover/bottom-sheet and single-issue light/dark/tablet/mobile screens are solid, but List mobile cards and Split mobile view have visible layout defects and Table view is unverified)
-**System Completeness**: ~70% (Board and Single-Issue flows verified; List mobile layout clipped + missing RBAC; Split mobile layout compressed/triplicated; Table View missing live proof and mobile 44px targets; performance metrics absent)
+**Overall Quality Rating**: B
+**Design Implementation Level**: Good
+**System Completeness**: 85%
 **Production Readiness**: NEEDS WORK
 
 ## 🔄 Deployment Readiness Assessment
 **Status**: NEEDS WORK
 
 **Required Fixes Before Production**:
-1. Remove the `height: var(--list-row-h, 46px)` constraint on `.issue-list-card` in `kanban/web/src/features/views/listTable.css` (e.g., `height: auto; min-height: 64px;`) so card summaries no longer bleed across card bottom borders (evidenced in `live-list-mobile.png` and `live-list-bottom-sheet-mobile.png`).
-2. Restore `canTransition` (`TRANSITION | EDIT | ADMIN`) RBAC gating in `kanban/web/src/features/list/ListView.tsx`, pass `capabilities={effectiveCaps}` to `<ListView>` and `currentUserCapabilities={effectiveCaps}` + `onStateTransition` to `<SwimlaneBoardGrid>` in `kanban/web/src/features/views/viewRegistry.tsx`, and surface/revert failed `patchProjectIssue` calls.
-3. Fix `.split-body-grid` and `.split-action-toolbar` mobile layout in `kanban/web/src/features/drawer/IssueSurface.css` so `DESCRIPTION` and `PEOPLE` sections render full content without clipping, split toolbar buttons/selects meet 44px touch targets on mobile, and duplicate state selects are consolidated (`live-list-split-mobile.png`).
-4. Implement and test Table View (`kanban/web/src/features/table/TableView.tsx`, `TableView.css`) mobile touch state transition controls (44px target on `<= 768px`, `TRANSITION` capability parity, error rollback) with live desktop + mobile Playwright screenshots.
-5. Regenerate the full QA packet (`changed-files-manifest.txt`, `git-diff.patch`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt` with load-time telemetry and multi-view `VIEWER` RBAC checks) from a single integrated commit.
+1. Re-run Vitest + V8 coverage in `/home/adamoutler/kanban/kanban/web` at current `HEAD` (`7913c2c8` or newer) with ALL modified `.ts`/`.tsx` files included in `COVERAGE_INCLUDE` (explicitly adding `TableView.tsx`, `AppShell.tsx`, and `viewRegistry.tsx`) and execute `TableView.test.tsx` and `AppShell.test.tsx`, saving the exact raw output to `docs/qa/KAN-44/unit-test-results.txt` and matching numbers in `message-to-reality-checker.md`.
+2. Fix mobile (`<= 640px` / `390px`) Table View column sizing in `kanban/web/src/features/table/TableView.css` so `State` pills/selects (`live-table-mobile.png`, `live-viewer-table-mobile.png`) display legible state names (e.g., expanding `.table-state-cell` min-width and allowing horizontal scroll cleanly inside `.table-scroll-wrap` without cramping `State` to 1-letter `I...`/`P...`/`B...`), and recapture live mobile Table screenshots (`live-table-mobile.png`, `live-viewer-table-mobile.png`).
+3. Fix the dead selector `.surface--split .split-side-col [data-testid="quick-props-state-select"]` in `kanban/web/src/features/drawer/IssueSurface.css:874` to target `.surface--split .surface__quick-props [data-testid="quick-props-state-select"]` (or `[data-testid="split-section-details"]` if mobile split should use `split-state-select` only), and recapture `live-list-split-mobile.png` if layout changes.
+4. Obtain a clean, factually accurate `docs/qa/KAN-44/ui-specialist-review.md` that cites the actual modified files (`listTable.css`, `filterBulk.css`, `TableView.css`, `IssueSurface.css`, `Topbar.css`), exact `@media (max-width: 768px)` breakpoint, and exact test files executed.
 
-**Timeline for Production Readiness**: 1 to 2 focused revision cycles (estimated 1 to 2 days including live Playwright re-capture and clean-room re-audit).
+**Timeline for Production Readiness**: 1 short remediation cycle (approx. 1-2 hours)
 **Revision Cycle Required**: YES
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Zero visual clipping or border collisions on mobile list cards and mobile split-pane sections.
-- Consistent `TRANSITION | EDIT | ADMIN` vs `VIEWER` RBAC enforcement across all 5 surfaces (Board, Swimlane, List, Table, Issue Surface).
-- Honest, synchronized QA verification packet generated from the exact commit deployed to the live container, with real load-time/interaction metrics.
+- Eliminating forensic packet discrepancies between `message-to-reality-checker.md`, `unit-test-results.txt`, `build-or-typecheck.txt`, and `ui-specialist-review.md`.
+- Ensuring `TableView.tsx` and `AppShell.tsx` are tested and meet the `>=95%` coverage gate.
+- Making 390px mobile Table View state cells readable without 1-letter truncation, and removing the dead `.split-side-col` CSS rule.
 
 **Quality Targets**:
-- `>= 95%` statement and branch coverage across all modified files including `ListView.tsx`, `TableView.tsx`, and `viewRegistry.tsx` on the integrated commit.
-- 0 overlapping/clipped elements, 44x44px minimum touch targets across all mobile interactive state controls (`Board`, `List`, `Table`, `Split`, `Full Issue`), and `< 3000ms` measured page/view load times.
+- 100% of modified `.ts`/`.tsx` files in `changed-files-manifest.txt` at `>=95%` statement/branch/line coverage on `HEAD`.
+- Zero truncated 1-letter state badges in 390px mobile Table View (`live-viewer-table-mobile.png`, `live-table-mobile.png`).
+- Zero dead CSS selectors or unverified file/test references in `ui-specialist-review.md`.
 
 **Evidence Requirements**:
-- Updated live Playwright screenshots showing:
-  - Fixed `live-list-mobile.png` with zero summary text touching card borders.
-  - Fixed `live-list-split-mobile.png` with visible Description & People content and non-duplicated state controls.
-  - New `live-table-desktop.png` and `live-table-mobile.png` demonstrating Table View state transitions and 44px touch targets.
-  - Live `VIEWER` RBAC screenshots on Board, List, and Table views (not only single-issue view).
-- Measured page load and transition timing JSON/telemetry alongside `test-results` from the exact integrated commit.
+- Fresh `unit-test-results.txt` run from `/home/adamoutler/kanban/kanban/web` on `HEAD` showing `TableView.test.tsx`, `AppShell.test.tsx`, and all touched files `>=95%`.
+- Updated `live-table-mobile.png`, `live-viewer-table-mobile.png`, and `live-list-split-mobile.png` from `kanban-liveqa-2` showing readable mobile state cells and clean split controls.
+- Corrected `ui-specialist-review.md` and `message-to-reality-checker.md` matching exact logs.
 
 ---
 **Integration Agent**: RealityIntegration

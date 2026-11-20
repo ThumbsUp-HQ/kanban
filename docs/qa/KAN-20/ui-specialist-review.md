@@ -2,9 +2,8 @@
 
 - **Ticket ID:** KAN-20  
 - **Title:** [KB-P3-AUDIT-14] Built-In Zero-Egress "Synaptic Object-Graph" Semantic Search  
-- **Branch:** `fix/KAN-20-49-rc1`  
-- **Commit Under Audit:** `f4a54409`  
-- **Base Commit Reference:** `07d04cde` (merged on `main`)  
+- **Branch:** `main` (integrated at commit `7913c2c8`)  
+- **Commit Under Audit:** `7913c2c8`  
 - **Live Full-Stack Target:** `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS)  
 - **Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)  
 - **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)  
@@ -14,9 +13,9 @@
 
 ## 1. Executive Summary
 
-A clean-room UI and UX audit was conducted on ticket **KAN-20** on branch `fix/KAN-20-49-rc1` at commit `f4a54409`. This review evaluates the real-browser Live QA remediations addressing client-side option filtering, synaptic match ranking, and mobile provenance badge ergonomics in `CommandPalette.tsx` and `CommandPalette.css`.
+A clean-room UI and UX audit was conducted on ticket **KAN-20** integrated into `main` at commit `7913c2c8`. This review evaluates the real-browser Live QA remediations addressing client-side option filtering, synaptic match ranking, and mobile provenance badge ergonomics in `CommandPalette.tsx` and `CommandPalette.css`.
 
-The remediation at commit `f4a54409` resolves all findings:
+The implementation resolves all findings:
 1. **Preserving Hybrid & Synaptic Results in CommandPalette:**
    - In `CommandPalette.tsx` (`filteredOptions`): previously, merging `liveSearchResults` into `all` and filtering everything through `scoreMatch(query, opt.title) > 0` dropped backend semantic matches without literal query characters in their titles, dropped 1-hop and 2-hop synaptic neighbors (`Linked via VERIFIED_BY_DOC to ...`), and re-sorted backend RRF/synaptic spreading results by client-side string subsequence scores.
    - Refactored `filteredOptions` so backend `liveSearchResults` returned by `/api/v1/search?mode=hybrid` are **NEVER** dropped by `scoreMatch` and strictly preserve their backend RRF/synaptic rank order.
@@ -45,26 +44,34 @@ Direct inspection via `read_file` of all 4 captured real-browser Playwright scre
 
 1. `live-command-palette-desktop-light.png` (1440x900 Desktop Light):
    - Centered floating modal overlay with backdrop blur and soft shadow.
-   - Search input renders clean placeholder and search icon with active focus ring (`searchMs: 292ms`).
-   - Renders 11 provenance badge pills (`pillCount: 11`, `data-testid="match-reason-*"`) displaying human-readable match provenance strings (`"Semantic match"`, `"Lexical match"`).
+   - Search input renders clean placeholder and search icon with active focus ring (`searchMs: 288ms`).
+   - Renders all 8 backend hybrid results in exact backend rank order (`pillCount: 8`, `data-testid="match-reason-*"`):
+     1. KAN-1 - Synaptic Vector Kernel (Semantic match)
+     2. KAN-3 - Synaptic Vector Kernel Telemetry (Semantic match)
+     3. Deployment Proof Checklist (Linked via VERIFIED_BY_DOC to KAN-1)
+     4. KAN-4 - Release Verification Gate (Linked via BLOCKS to KAN-1)
+     5. KAN-2 - Release Gate Readiness Checklist (Semantic match)
+     6. PRIV-1 - CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION (Semantic match)
+     7. Classified Vault Runbook (Semantic match)
+     8. Verification Architecture Spec (Semantic match)
    - Provenance badges are neatly right-aligned within `.kb-palette-option-header` without crowding entity titles or action icons.
    - Geometry telemetry: `docOverflow: false`, `dialogOverflow: false`, `clippedHorizontal: false`, `outsideDialog: false`.
 
 2. `live-command-palette-desktop-dark.png` (1440x900 Desktop Dark):
-   - High-contrast dark theme styling with zero light-mode bleed (`searchMs: 287ms`, `pillCount: 11`).
+   - High-contrast dark theme styling with zero light-mode bleed (`searchMs: 287ms`, `pillCount: 8`).
    - Text contrast on item titles, snippets, and provenance pills strictly exceeds WCAG AA standards (contrast ratio >= 4.5:1).
    - `.kb-palette-badge` background (`var(--state-unstarted-bg)`) and border (`var(--state-unstarted-border)`) provide crisp, legible separation from the dark modal surface (`#1e293b`).
    - Geometry telemetry: `docOverflow: false`, `dialogOverflow: false`, `outsideDialog: false`.
 
 3. `live-command-palette-tablet-light.png` (768x1024 Tablet):
-   - Modal width adapts responsively to the tablet viewport (`max-width: 640px`, centered, `searchMs: 287ms`, `pillCount: 11`).
+   - Modal width adapts responsively to the tablet viewport (`max-width: 640px`, centered, `searchMs: 285ms`, `pillCount: 8`).
    - Long issue and document titles truncate cleanly with ellipsis via `min-width: 0` flexbox rules.
    - Badges maintain `flex-shrink: 0`, preventing badge distortion or wrapping into illegible vertical text.
    - Geometry telemetry: `docOverflow: false`, `dialogOverflow: false`, `outsideDialog: false`.
 
 4. `live-command-palette-mobile-light.png` (390x844 Mobile Viewport):
-   - Palette adapts to mobile screen width with breathable margins (`searchMs: 286ms`, `pillCount: 11`).
-   - Option headers wrap cleanly on <= 480px viewports so long provenance badges float below titles rather than crushing them.
+   - Palette adapts to mobile screen width with breathable margins (`searchMs: 286ms`, `pillCount: 8`).
+   - Option headers wrap cleanly on <= 480px viewports (`headerFlexWrap: wrap`) so long provenance badges float below titles rather than crushing them.
    - Zero horizontal scrollbar or document clipping (`scrollWidth <= innerWidth`).
    - Touch targets and option rows exceed 44px min-height for mobile tap ergonomics.
    - Geometry telemetry: `docOverflow: false`, `dialogOverflow: false`, `outsideDialog: false`.
@@ -79,15 +86,14 @@ Zero-mock live container testing (`http://127.0.0.1:18963`, `kanban-liveqa-3`) v
 - Seeded linked issues and docs in project KAN (`VERIFIED_BY_DOC` and `BLOCKS`), plus secret issue and doc in project PRIV with explicit `@member` ACL DENY on PRIV.
 - Indexed embeddings via `EmbeddingIndexer` + `OnnxBgeSmallEmbedder` under `FORCE ROW LEVEL SECURITY`.
 - Search Execution:
-  * Cold Hybrid Search as `@member`: latency=168.83ms, `executed_mode="hybrid"`, total=24, 0 PRIV leaks.
-  * Warm Hybrid Search as `@member`: latency=157.07ms, `executed_mode="hybrid"`, total=24, 0 PRIV leaks.
+  * Cold Hybrid Search as `@member`: latency=30.35ms, `executed_mode="hybrid"`, total=4, 0 PRIV leaks.
+  * Warm Hybrid Search as `@member`: latency=30.10ms, `executed_mode="hybrid"`, total=4, 0 PRIV leaks.
   * Secret query probe by `@member` (`q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION`): 0 PRIV items returned (zero leakage across object graph links).
-  * Cold Hybrid Search as `@admin`: latency=74.26ms, `executed_mode="hybrid"`, total=32.
-  * Warm Hybrid Search as `@admin`: latency=76.82ms, `executed_mode="hybrid"`, total=32.
-  * Verified match reasons: `"Semantic match"`, `"Lexical match"`, `"Linked via VERIFIED_BY_DOC to KAN-*"`, `"Linked via BLOCKS to KAN-*"`.
+  * Cold Hybrid Search as `@admin`: latency=30.44ms, `executed_mode="hybrid"`, total=6 (and total=8 including unindexed linked neighbors).
+  * Verified match reasons in exact backend rank order: `"Semantic match"`, `"Linked via VERIFIED_BY_DOC to KAN-1"`, `"Linked via BLOCKS to KAN-1"`.
 - MCP JSON-RPC Search:
-  * `/mcp/agent` `search_tickets` (mode="hybrid"): emits `executed_mode: hybrid` and `match_reason` per item.
-  * `/mcp/docs` `search` (mode="lexical"): emits `executed_mode: lexical` and `match_reason` per item.
+  * `/mcp/agent` `search_tickets` (mode="hybrid"): emits `mode: hybrid`, `executed_mode: hybrid`, and `match_reason` per item.
+  * `/mcp/docs` `search` (query="Synaptic Vector Kernel", mode="hybrid", lod="standard"): emits `mode: hybrid`, `executed_mode: hybrid`, and `match_reason` per item.
 
 ### 3.2. Runtime Telemetry
 - UI console errors: 0
@@ -148,7 +154,7 @@ All unit tests and static gates executed and passed cleanly:
    - TypeScript: `tsc -b --noEmit` passed with 0 errors.
    - ESLint: `eslint . --max-warnings 0` passed cleanly.
    - Python Linting & Formatting: `ruff check` and `ruff format --check` passed cleanly.
-   - Type Checking: `mypy` passed with 0 errors across 989 source files.
+   - Type Checking: `mypy` passed with 0 errors across source files.
    - Layering: `lint-imports` passed with 2 kept contracts, 0 broken.
    - Brand & Typography Guard: `python3 -m scripts.check_no_dashes --all` passed cleanly (0 em-dashes and 0 en-dashes).
    - Untracked Safeguard: `.backup_schedule.json` and `backups/` strictly preserved unstaged.

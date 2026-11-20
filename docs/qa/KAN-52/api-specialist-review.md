@@ -5,17 +5,16 @@
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
 - Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-52`
-- Branch: `fix/KAN-52-liveqa`
-- Commit: `8921cae8`
-- Base Reference: `07d04cde` (on `main`)
+- Branch: `main` (commit `7913c2c8`)
 - Container Environment: `http://127.0.0.1:18962` (container: `kanban-liveqa-2`)
+- Live Stack Status: `LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-52 on branch `fix/KAN-52-liveqa` at commit `8921cae8`. In addition to the core Master-Detail Issue Navigator view implementation (unified `IssueNavigatorBar`, 300px left master rail, sequential keyboard pager, and 2-column detail canvas with `created_at` and `updated_at` serialization), this audit specifically verifies the remediations for the live-stack findings caught by zero-mock full-stack QA (`live_qa_suite.mjs` against container `kanban-liveqa-2`):
+This clean-room API, Security, and Architecture audit inspects ticket KAN-52 on branch `main` at commit `7913c2c8`. In addition to the core Master-Detail Issue Navigator view implementation (unified `IssueNavigatorBar`, 300px left master rail, sequential keyboard pager, and 2-column detail canvas with `created_at` and `updated_at` serialization), this audit specifically verifies the remediations for the live-stack findings caught by zero-mock full-stack QA (`live_qa_suite_v2.mjs` against container `kanban-liveqa-2`, commit `7913c2c8`, `LIVE_STACK_VERDICT: PASS`):
 
 1. **Assignee REST API Schema Parity (Resolving HTTP 422 FAIL 1):**
    - In `kanban/web/src/features/drawer/IssueSurface.tsx`: `handleAssignToMe` was refactored to hit `railApi.addAssignee(currentIssue.key, { principal: myId })` which translates directly to `POST /api/v1/issues/{issue_ref}/assignees` with payload `{ principal: myId }`.
@@ -148,4 +147,4 @@ All API contracts, security invariants, database transaction boundaries, import 
 
 STATUS: APPROVED
 
-All backend mutation commit boundaries, assignee API contracts, error surfacing mechanisms, clipboard crash protections, popover stacking hierarchies, and test suites for KAN-52 on branch `fix/KAN-52-liveqa` at commit `8921cae8` have been thoroughly audited, verified against all architectural and security invariants, and certified. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Reality-Checker QA.
+All backend mutation commit boundaries, assignee API contracts, error surfacing mechanisms, clipboard crash protections, popover stacking hierarchies, and test suites for KAN-52 on branch `main` at commit `7913c2c8` have been thoroughly audited, verified against all architectural and security invariants, and certified on live stack `kanban-liveqa-2` with `LIVE_STACK_VERDICT: PASS`. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Reality-Checker QA.

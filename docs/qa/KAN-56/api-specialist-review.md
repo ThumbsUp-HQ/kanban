@@ -1,24 +1,28 @@
-# Clean-Room API Specialist Review: KAN-56 (RC1 Remediation)
+# Clean-Room API Specialist Review: KAN-56 (Live Full-Stack QA Verification)
 
-**Reviewer:** `api-spec-2` (Clean-Room Backend, API, MCP, and Security Specialist)  
-**Date:** 2026-11-20  
-**Branch:** `fix/KAN-56-rc1`  
-**Commit:** `97ab8829d2d0ff3c742d6fb3faeb46ba8bf97b09`  
-**Status:** APPROVED  
+- **Ticket:** KAN-56
+- **Title:** Brand Terminology and Wiki Media Audit Suite Portability and Manifest Fallback
+- **Reviewer:** `api-spec-2` (Clean-Room Backend, API, MCP, and Security Specialist)  
+- **Date:** 2026-11-20  
+- **Target Directory:** `/home/adamoutler/kanban/docs/qa/KAN-56`
+- **Branch:** `main` (commit `7913c2c8`)  
+- **Container Environment:** `http://127.0.0.1:18964` (container: `kanban-liveqa-4`)  
+- **Live Stack Status:** `LIVE_STACK_VERDICT: PASS`  
+- **Status:** APPROVED  
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room audit evaluates ticket **KAN-56** on branch `fix/KAN-56-rc1` at commit `97ab8829`. It verifies the complete remediation of all reality-checker findings recorded in `docs/qa/KAN-56/reality-checker-report.md`.
+This clean-room audit evaluates ticket **KAN-56** on branch `main` at commit `7913c2c8`. The review incorporates empirical proof from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-56/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-56/screenshots/`, test execution and coverage logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 The audit confirms that:
-1. Both `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/docs/test_wiki_media_audit.py` have been hardened with path portability (`resolve_wiki_dir` / `get_wiki_dir`) supporting `KANBAN_WIKI_PATH`, relative repository paths, and sibling directories.
-2. The blanket exclusion of `wikiManifest.ts` has been removed; instead, `scan_wiki_manifest_for_violations` inspects bundled `WIKI_CHAPTERS` directly, ensuring full brand hygiene even in containerized or hermetic CI environments where the wiki repo is not checked out on disk.
+1. Both `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/docs/test_wiki_media_audit.py` are hardened with dynamic path portability (`resolve_wiki_dir` / `get_wiki_dir`) supporting `KANBAN_WIKI_PATH`, relative repository paths, and sibling directories.
+2. Blanket exclusions of `wikiManifest.ts` were eliminated; `scan_wiki_manifest_for_violations` inspects bundled `WIKI_CHAPTERS` directly, ensuring brand hygiene in containerized and hermetic CI environments where the wiki repo is not checked out on disk.
 3. Zero skipped tests gate: Under `KANBAN_WIKI_PATH=/nonexistent`, all 17 tests execute and pass cleanly via the manifest fallback mechanism.
 4. Heading regex matching is hardened with line-anchored regex `^### Failure Policies$` and forward-compatible title matching (`^#\s+(?:\[(?:Guide|Informational|Architectural)\]\s+)?Scripted Workflows`). Anchor fragments on internal markdown links (`[text](Page#anchor)` and `[text](#anchor)`) are validated against computed GitHub-style heading slugs in target pages and chapters.
-5. The brand terminology and wiki media audit suites are wired directly into `.github/workflows/ci.yml` under `Fast smoke unit tests`.
-6. Code coverage on both test files reaches 98%, and all static analysis gates pass with zero warnings and zero em/en-dashes.
+5. In live full-stack container execution on `kanban-liveqa-4` (`:18964`), clicking `(?)` inside `AttachHookDialog` opens `HelpDrawer` visibly on top of the modal backdrop (`drawerZ="1210"`, `drawerBackdropZ="1200"`, `modalBackdropZ="1000"`), and pressing `Escape` closes the drawer and restores focus directly to `<button data-testid="hook-kind-help">`.
+6. Code coverage on both audit test files reaches 98%, and all static analysis gates pass with zero warnings and zero em/en-dashes.
 
 ---
 
@@ -103,4 +107,4 @@ In `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/doc
 
 STATUS: APPROVED
 
-All findings from the reality-checker report have been fully resolved. Path portability, manifest fallback, heading anchor validation, and CI workflow integration are verified on disk. KAN-56 is certified ready for reality-checker QA gate on `fix/KAN-56-rc1`.
+All findings from the reality-checker report have been fully resolved. Path portability, manifest fallback, heading anchor validation, CI workflow integration, and live container execution on `kanban-liveqa-4` (`:18964`, commit `7913c2c8`, `OVERALL LIVE_STACK_VERDICT: PASS`) are verified. KAN-56 is certified ready for reality-checker QA gate on `main`.

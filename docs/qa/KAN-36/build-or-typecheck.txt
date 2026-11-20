@@ -1,52 +1,40 @@
-=== 1. Check Database Migrations ===
-OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk
+=== STATIC GATES & BUILD VERIFICATION (HEAD 7913c2c81b47de7e551fc5f76f5f180073d38b2a) ===
+$ uv run kanban-ctl db check-migrations
+OK: all 63 migrations are valid (single head: p4_24_agent_safe_sequences).
+Exit code: 0
 
-=== 2. Ruff Linter Check ===
+$ uv run ruff check .
 All checks passed!
+Exit code: 0
 
-=== 3. Ruff Format Check ===
-659 files already formatted
+$ uv run ruff format --check .
+2018 files already formatted
+Exit code: 0
 
-=== 4. Mypy Typecheck ===
-Success: no issues found in 655 source files
+$ uv run mypy database kanban mcp agent
+Success: no issues found in 995 source files
+Exit code: 0
 
-=== 5. Lint Imports ===
-
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 977 files, 3475 dependencies.
---------------------------------------
-
-Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-mcp forbidden from importing database KEPT (48 ignored imports)
-
+$ uv run lint-imports
 Contracts: 2 kept, 0 broken.
+Exit code: 0
 
-=== 6. Admin Routes Protected Compliance (assert_admin_routes_protected) ===
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan36-6b065404
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 14 items / 12 deselected / 2 selected
+$ pnpm --dir kanban/web run typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
+> tsc -b --noEmit
+Exit code: 0
 
-kanban/tests/auth/test_aal2_policy.py .                                  [ 50%]
-kanban/tests/api/test_system_status.py .                                 [100%]
+$ pnpm --dir kanban/web run lint
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
+> eslint . --max-warnings 0
+Exit code: 0
 
-======================= 2 passed, 12 deselected in 1.23s =======================
+$ pnpm --dir kanban/web run build
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
+> tsc -b && vite build
+built in 1.22s
+Exit code: 0
 
-=== 7. Check No Dashes Check (scripts.check_no_dashes) ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan36-6b065404/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+$ python3 -m scripts.check_no_dashes --all
+0 forbidden unicode dashes found across repository.
+Exit code: 0

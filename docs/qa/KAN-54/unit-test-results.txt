@@ -1,45 +1,39 @@
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan54-938e76d1/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 26ms
- ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx (2 tests) 190ms
- ✓ src/dev/IconStory.test.tsx (1 test) 397ms
-   ✓ IconStory (KB-UX-02) (1)
-     ✓ renders all sections: priorities, states, rings, modules, and SVG registry 391ms
- ✓ src/dev/EmojiStory.test.tsx (4 tests) 323ms
- ✓ src/dev/EditorStory.test.tsx (2 tests) 233ms
- ✓ src/dev/TokenStory.test.tsx (5 tests) 548ms
- ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (5 tests) 630ms
-   ✓ DryRunDrawer (KB-P5-24) (5)
-     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 430ms
- ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (16 tests) 890ms
- ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (6 tests) 1051ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 23ms
+ ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx (2 tests) 187ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (5 tests) 462ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (16 tests) 796ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (6 tests) 869ms
    ✓ AttachHookDialog (KB-P5-24) (6)
-     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 591ms
- ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (11 tests) 1230ms
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 423ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (11 tests) 1173ms
    ✓ WorkflowStudioPage (KB-P5-24, S14.4) (11)
-     ✓ handles edit hook, detach hook, and AAL2 intercept with fallback challenge values and success retry 339ms
- ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (28 tests) 2832ms
-   ✓ Workflow Studio Coverage Booster (28)
+     ✓ handles edit hook, detach hook, and AAL2 intercept with fallback challenge values and success retry 310ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 4690ms
+   ✓ Workflow Studio Coverage Booster (30)
+     ✓ HookPipelineRow variations (6)
+       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2085ms
      ✓ WorkflowStudioPage interactive actions (10)
-       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 568ms
-       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 364ms
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 509ms
+       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 337ms
 
- Test Files  11 passed (11)
-      Tests  84 passed (84)
-   Start at  13:45:42
-   Duration  5.54s (environment 44%, tests 33%, import 16%, transform 4%, worker 3%)
+ Test Files  7 passed (7)
+      Tests  74 passed (74)
+   Start at  17:31:46
+   Duration  7.34s (tests 46%, environment 31%, import 12%, transform 8%, worker 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   98.31 |    96.36 |   98.07 |   98.94 |                   
+All files          |   98.81 |    96.76 |   98.71 |   99.47 |                   
  ...HookDialog.tsx |   98.71 |    95.87 |     100 |     100 | 70,112,172,291    
  DryRunDrawer.tsx  |   96.47 |    93.33 |   95.23 |   96.38 | 105,108-109       
  ...ngsSection.tsx |     100 |    97.43 |     100 |     100 | 73,153            
- ...ipelineRow.tsx |   94.02 |    95.06 |   95.23 |   95.38 | 86,89-90          
+ ...ipelineRow.tsx |    98.5 |    97.53 |     100 |     100 | 54,89             
  ...onRuleCard.tsx |   96.77 |    94.87 |     100 |     100 | 58,88             
  ...StudioPage.tsx |     100 |    97.64 |   96.66 |     100 | 181,225           
  api.ts            |     100 |      100 |     100 |     100 |                   

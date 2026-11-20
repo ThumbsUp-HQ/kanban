@@ -1,5 +1,5 @@
 diff --git a/kanban/web/e2e/workflow-studio.spec.ts b/kanban/web/e2e/workflow-studio.spec.ts
-index fdb0a675..261b3b03 100644
+index fdb0a675..9ffc9c14 100644
 --- a/kanban/web/e2e/workflow-studio.spec.ts
 +++ b/kanban/web/e2e/workflow-studio.spec.ts
 @@ -8,7 +8,7 @@
@@ -11,6 +11,15 @@ index fdb0a675..261b3b03 100644
   * 4. Sample-ticket / existing-issue DryRunDrawer with rejection reasons and copyable CLI validation snippet.
   * 5. Security guards: non-admin 404 anti-enumeration view, AAL2 step-up elevation challenge.
   * 6. Multi-device annotated screenshots across desktop, tablet, and mobile viewports.
+@@ -23,7 +23,7 @@ import { annotatedScreenshot } from './support/annotate';
+ 
+ const SCREENSHOT_DIR = resolve(
+   import.meta.dirname,
+-  '../../../docs/qa/KANBA-158/screenshots',
++  '../test-results/workflow-studio',
+ );
+ 
+ const defaultHooks = [
 @@ -262,7 +262,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
          },
          {
@@ -50,6 +59,244 @@ index fdb0a675..261b3b03 100644
            note: 'Asynchronous agent hooks are skipped in interactive UI dry-runs',
          },
          {
+diff --git a/kanban/web/src/app/Breadcrumb.css b/kanban/web/src/app/Breadcrumb.css
+index 6c6dcd20..342405fb 100644
+--- a/kanban/web/src/app/Breadcrumb.css
++++ b/kanban/web/src/app/Breadcrumb.css
+@@ -80,10 +80,26 @@
+ }
+ 
+ @media (max-width: 767px) {
++  .kb-breadcrumb {
++    min-width: 0;
++    overflow: hidden;
++  }
+   .kb-breadcrumb-desktop {
+     display: none;
+   }
+   .kb-breadcrumb-mobile {
+     display: flex;
++    min-width: 0;
++    overflow: hidden;
++  }
++  .kb-breadcrumb-mobile .kb-breadcrumb-current {
++    min-width: 0;
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++    display: block;
++  }
++  .kb-breadcrumb-back-btn {
++    flex-shrink: 0;
+   }
+ }
+diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
+index 9165d794..d9f37ad0 100644
+--- a/kanban/web/src/app/Topbar.css
++++ b/kanban/web/src/app/Topbar.css
+@@ -9,7 +9,7 @@
+   background: var(--bg-surface, #1e2025);
+   box-sizing: border-box;
+   position: relative;
+-  z-index: 10;
++  z-index: 120;
+   user-select: none;
+   -webkit-user-select: none;
+ }
+@@ -125,6 +125,27 @@
+   -webkit-user-select: none;
+ }
+ 
++.kb-topbar-docs-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 32px;
++  height: 32px;
++  border-radius: 6px;
++  background: transparent;
++  color: var(--fg-secondary);
++  border: 1px solid var(--border-subtle);
++  font-size: 1rem;
++  text-decoration: none;
++  cursor: pointer;
++}
++
++.kb-topbar-docs-btn:hover {
++  background: var(--bg-hover);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
++}
++
+ .kb-avatar-wrapper {
+   position: relative;
+ }
+@@ -178,7 +199,7 @@
+   box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
+   min-width: 220px;
+   padding: var(--space-2, 8px);
+-  z-index: 100;
++  z-index: 150;
+ }
+ 
+ .kb-avatar-user-card {
+@@ -349,7 +370,24 @@
+ 
+   .kb-topbar-left {
+     min-width: 0;
+-    flex-shrink: 1;
++    flex: 1 1 auto;
++    overflow: hidden;
++  }
++
++  .kb-topbar-left .kb-breadcrumb,
++  .kb-topbar-left .kb-breadcrumb-mobile {
++    min-width: 0;
++    overflow: hidden;
++    flex: 1 1 auto;
++  }
++
++  .kb-topbar-left .kb-breadcrumb-current,
++  .kb-topbar-left .kb-breadcrumb-mobile .kb-breadcrumb-current {
++    min-width: 0;
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++    display: block;
+   }
+ 
+   .kb-topbar-center,
+@@ -381,7 +419,30 @@
+   .kb-topbar,
+   .topbar {
+     padding: 0 var(--space-2, 8px);
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-topbar-left {
++    min-width: 0;
++    flex: 1 1 auto;
+     gap: 6px;
++    overflow: hidden;
++  }
++
++  .kb-topbar-left .kb-breadcrumb,
++  .kb-topbar-left .kb-breadcrumb-mobile {
++    min-width: 0;
++    overflow: hidden;
++    flex: 1 1 auto;
++  }
++
++  .kb-topbar-left .kb-breadcrumb-current,
++  .kb-topbar-left .kb-breadcrumb-mobile .kb-breadcrumb-current {
++    min-width: 0;
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++    display: block;
+   }
+ 
+   .kb-search-trigger {
+@@ -390,6 +451,14 @@
+     height: 36px;
+     padding: 0;
+     justify-content: center;
++    flex-shrink: 0;
++  }
++
++  .kb-topbar-center,
++  .topbar__search {
++    min-width: 0;
++    flex: 0 0 auto;
++    max-width: 36px;
+   }
+ 
+   .kb-search-trigger-text,
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 43a20098..68c973e9 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -83,7 +83,7 @@
+   border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-lg);
+   box-shadow: var(--shadow-lg);
+-  z-index: 1000;
++  z-index: 1220;
+   user-select: text;
+   -webkit-user-select: text;
+   box-sizing: border-box;
+diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
+index 7d57fe82..2a32a444 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.tsx
+@@ -12,6 +12,7 @@ import React, {
+ import { defaultHintController, type HintController } from '../emoji/hintTiming';
+ import { HintPortal } from '../emoji/HintPortal';
+ import { positionHint } from '../emoji/positionHint';
++import { useOptionalShellPanels } from '../../app/shellPanels';
+ import './FieldHelpHint.css';
+ 
+ export interface FieldHelpValueItem {
+@@ -20,9 +21,11 @@ export interface FieldHelpValueItem {
+ }
+ 
+ export interface FieldHelpHintProps {
+-  title: string;
++  title?: string;
++  fieldKey?: string;
+   summary: string;
+-  validValues?: FieldHelpValueItem[] | Record<string, string>;
++  validValues?: (FieldHelpValueItem | string)[] | Record<string, string>;
++  defaultValue?: string;
+   example?: string;
+   caution?: string;
+   docHref?: string;
+@@ -49,6 +52,7 @@ export function FieldHelpHint({
+   controller,
+ }: FieldHelpHintProps): JSX.Element {
+   const ctrl = controller ?? defaultHintController;
++  const shellPanels = useOptionalShellPanels();
+ 
+   const rawId = useId();
+   const sanitizedId = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
+@@ -278,14 +282,27 @@ export function FieldHelpHint({
+   // Normalize validValues into array
+   const normalizedValues: FieldHelpValueItem[] = React.useMemo(() => {
+     if (!validValues) return [];
+-    if (Array.isArray(validValues)) return validValues;
++    if (Array.isArray(validValues)) {
++      return validValues.map((v) =>
++        typeof v === 'string' ? { label: v, description: '' } : v,
++      );
++    }
+     return Object.entries(validValues).map(([label, description]) => ({
+       label,
+       description,
+     }));
+   }, [validValues]);
+ 
+-  const effectiveAriaLabel = ariaLabel ?? `Help for ${title}`;
++  const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
++    if (shellPanels && docHref) {
++      e.preventDefault();
++      triggerRef.current?.focus();
++      ctrl.close(popupId);
++      shellPanels.openPanel('help', { href: docHref, title });
++    }
++  };
++
++  const effectiveAriaLabel = ariaLabel ?? (title ? `Help for ${title}` : 'Help information');
+ 
+   return (
+     <>
+@@ -371,6 +388,7 @@ export function FieldHelpHint({
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 data-testid={testId ? `${testId}-doc-link` : 'field-help-doc-link'}
++                onClick={handleDocLinkClick}
+               >
+                 More info -&gt;
+               </a>
 diff --git a/kanban/web/src/dev/IconStory.tsx b/kanban/web/src/dev/IconStory.tsx
 index 5a289fb4..9ebd3d1b 100644
 --- a/kanban/web/src/dev/IconStory.tsx
@@ -64,10 +311,18 @@ index 5a289fb4..9ebd3d1b 100644
    ];
  
 diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
-index 379c281f..ccd52568 100644
+index 7651eb2d..694b6eba 100644
 --- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
 +++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
-@@ -148,7 +148,7 @@ function AttachHookDialogInner({
+@@ -3,6 +3,7 @@
+ 
+ import React, { useState, type JSX } from 'react';
+ import { Link } from 'react-router';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import {
+   MUTABLE_FIELD_UNIVERSE,
+   IMMUTABLE_FIELDS_NOTICE,
+@@ -147,7 +148,7 @@ function AttachHookDialogInner({
        >
          <div className="workflow-dialog-header">
            <h2 id="attach-hook-title" className="workflow-dialog-title">
@@ -76,21 +331,29 @@ index 379c281f..ccd52568 100644
            </h2>
          </div>
  
-@@ -221,11 +221,11 @@ function AttachHookDialogInner({
-                 Hook Kind
-                 <FieldHelpHint
-                   title="Workflow Hook Kind"
--                  summary="The execution tier for this transition interceptor rule."
+@@ -216,7 +217,20 @@ function AttachHookDialogInner({
+ 
+             {/* Hook Kind RadioGroup */}
+             <div className="workflow-form-group">
+-              <label className="workflow-form-label">Hook Kind</label>
++              <label className="workflow-form-label">
++                Hook Kind
++                <FieldHelpHint
++                  title="Workflow Hook Kind"
 +                  summary="The execution tier for this transition helper rule."
-                   validValues={[
-                     { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
-                     { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
--                    { label: 'Agent Interceptor', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
++                  validValues={[
++                    { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
++                    { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
 +                    { label: 'Agent Transition Helper', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
-                   ]}
-                   docHref="/docs/scriptrunner-workflows-and-transition-interceptors#interceptor-architecture"
-                   testId="hook-kind-help"
-@@ -260,7 +260,7 @@ function AttachHookDialogInner({
++                  ]}
++                  docHref="/docs/scripted-workflows-and-transition-helpers#helper-architecture"
++                  testId="hook-kind-help"
++                />
++              </label>
+               <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
+                 <label className="workflow-radio-label">
+                   <input
+@@ -246,7 +260,7 @@ function AttachHookDialogInner({
                      checked={hookKind === 'agent_interceptor'}
                      onChange={() => { setHookKind('agent_interceptor'); }}
                    />
@@ -99,7 +362,7 @@ index 379c281f..ccd52568 100644
                  </label>
                </div>
              </div>
-@@ -286,13 +286,13 @@ function AttachHookDialogInner({
+@@ -272,19 +286,18 @@ function AttachHookDialogInner({
                </div>
              )}
  
@@ -109,41 +372,181 @@ index 379c281f..ccd52568 100644
                agentDefinitions.length === 0 ? (
                  <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
                    <strong>No Agent Definitions configured</strong>
-                   <p style={{ margin: '4px 0 8px' }}>
+-                  <p style={{ margin: '4px 0 8px' }}>
 -                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Interceptor hook.
++                  <p className="no-agents-warning-text">
 +                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
                    </p>
                    <Link
                      to="/workspaces/settings"
-@@ -367,7 +367,7 @@ function AttachHookDialogInner({
+-                    className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++                    className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
+                     data-testid="configure-agents-link"
+-                    style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
+                   >
+                     Configure Agent Definitions &rarr;
+                   </Link>
+@@ -351,6 +364,16 @@ function AttachHookDialogInner({
+             <div className="workflow-form-group">
+               <label htmlFor="failure-policy-select" className="workflow-form-label">
                  Failure Policy
-                 <FieldHelpHint
-                   title="Failure Policy"
--                  summary="Specifies behavior when interceptor times out, returns an error, or crashes."
++                <FieldHelpHint
++                  title="Failure Policy"
 +                  summary="Specifies behavior when helper times out, returns an error, or crashes."
-                   validValues={[
-                     { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
-                     { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
++                  validValues={[
++                    { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
++                    { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
++                  ]}
++                  docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
++                  testId="failure-policy-help"
++                />
+               </label>
+               <select
+                 id="failure-policy-select"
+diff --git a/kanban/web/src/features/workflows/DryRunDrawer.tsx b/kanban/web/src/features/workflows/DryRunDrawer.tsx
+index cb31e16c..72ac441d 100644
+--- a/kanban/web/src/features/workflows/DryRunDrawer.tsx
++++ b/kanban/web/src/features/workflows/DryRunDrawer.tsx
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, type JSX } from 'react';
++import React, { useEffect, useRef, useState, type JSX } from 'react';
+ import {
+   dryRunWorkflowHooks,
+   type DryRunPayload,
+@@ -43,6 +43,15 @@ function DryRunDrawerInner({
+   const [error, setError] = useState<string | null>(null);
+   const [result, setResult] = useState<DryRunResponse | null>(null);
+   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
++  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++
++  useEffect(() => {
++    return () => {
++      if (copyTimeoutRef.current !== null) {
++        clearTimeout(copyTimeoutRef.current);
++      }
++    };
++  }, []);
+ 
+   const handleRun = async (e: React.SyntheticEvent) => {
+     e.preventDefault();
+@@ -92,7 +101,14 @@ function DryRunDrawerInner({
+     try {
+       await navigator.clipboard.writeText(cmd);
+       setCopiedCmd(cmd);
+-      setTimeout(() => { setCopiedCmd(null); }, 2000);
++      if (copyTimeoutRef.current !== null) {
++        clearTimeout(copyTimeoutRef.current);
++      }
++      copyTimeoutRef.current = setTimeout(() => {
++        if (typeof window !== 'undefined') {
++          setCopiedCmd(null);
++        }
++      }, 2000);
+     } catch {
+       // Ignore clipboard fallback
+     }
+diff --git a/kanban/web/src/features/workflows/HookPipelineRow.tsx b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+index 0cf9d8f4..75952717 100644
+--- a/kanban/web/src/features/workflows/HookPipelineRow.tsx
++++ b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+@@ -37,9 +37,18 @@ export function HookPipelineRow({
+   dropTargetFactory = dropTargetForElements,
+ }: HookPipelineRowProps): JSX.Element {
+   const rowRef = useRef<HTMLDivElement | null>(null);
++  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const [isDragging, setIsDragging] = useState(false);
+   const [copiedSha, setCopiedSha] = useState(false);
+ 
++  useEffect(() => {
++    return () => {
++      if (copyTimeoutRef.current !== null) {
++        clearTimeout(copyTimeoutRef.current);
++      }
++    };
++  }, []);
++
+   useEffect(() => {
+     const el = rowRef.current;
+     if (!el) return undefined;
+@@ -73,7 +82,14 @@ export function HookPipelineRow({
+     try {
+       await navigator.clipboard.writeText(hook.manifest_sha256);
+       setCopiedSha(true);
+-      setTimeout(() => { setCopiedSha(false); }, 2000);
++      if (copyTimeoutRef.current !== null) {
++        clearTimeout(copyTimeoutRef.current);
++      }
++      copyTimeoutRef.current = setTimeout(() => {
++        if (typeof window !== 'undefined') {
++          setCopiedSha(false);
++        }
++      }, 2000);
+     } catch {
+       // Fallback ignore in test env
+     }
 diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
-index 0e0b6044..c8f202f3 100644
+index 87df93df..d23549be 100644
 --- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 +++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
-@@ -279,12 +279,12 @@ export function WorkflowStudioPage({
+@@ -30,6 +30,7 @@ import {
+   type CreateWorkflowHookPayload,
+   type ReorderHooksPayload,
+ } from './api';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import './workflows.css';
+ 
+ export interface WorkflowStudioPageProps {
+@@ -276,22 +277,31 @@ export function WorkflowStudioPage({
+       {/* Studio Header */}
+       <header className="workflow-studio-header">
          <h1 className="workflow-studio-title">
-           <span>⚙️ Project</span>
-           <span className="workflow-studio-title-badge">{projectKey}</span>
+-          <span>⚙️ Project</span>
+-          <span className="workflow-studio-title-badge">{projectKey}</span>
 -          <span>&gt; Workflow &amp; Transition Interceptors</span>
-+          <span>&gt; Scripted Workflows &amp; Transition Helpers</span>
++          <span className="workflow-studio-title-prefix">
++            <span>⚙️ Project</span>
++            <span className="workflow-studio-title-badge">{projectKey}</span>
++          </span>
++          <span className="workflow-studio-title-suffix">&gt; Scripted Workflows &amp; Transition Helpers</span>
          </h1>
-         <div className="workflow-studio-actions">
-           <StudioDocLink
-             href="/docs/scriptrunner-workflows-and-transition-interceptors"
--            title="Workflow Interceptor Documentation"
+-        <button
+-          type="button"
+-          className="workflow-btn workflow-btn-primary"
+-          onClick={() => {
+-            setEditingHook(null);
+-            setActiveTransition(null);
+-            setIsAttachDialogOpen(true);
+-          }}
+-          aria-label="Add Transition Rule"
+-        >
+-          + Add Transition Rule
+-        </button>
++        <div className="workflow-studio-actions">
++          <StudioDocLink
++            href="/docs/scripted-workflows-and-transition-helpers"
 +            title="Scripted Workflows &amp; Transition Helpers Documentation"
-             testId="workflow-studio-doc-link"
-           />
-           <button
-@@ -311,7 +311,7 @@ export function WorkflowStudioPage({
++            testId="workflow-studio-doc-link"
++          />
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-primary"
++            onClick={() => {
++              setEditingHook(null);
++              setActiveTransition(null);
++              setIsAttachDialogOpen(true);
++            }}
++            aria-label="Add Transition Rule"
++          >
++            + Add Transition Rule
++          </button>
++        </div>
+       </header>
+ 
+       {/* General Alert */}
+@@ -303,7 +313,7 @@ export function WorkflowStudioPage({
  
        {/* Loading State */}
        {isLoading ? (
@@ -152,66 +555,8 @@ index 0e0b6044..c8f202f3 100644
        ) : rules.length === 0 ? (
          <div className="empty-hooks-cta" data-testid="empty-studio-state">
            No workflow transition rules configured for Project {projectKey}. Click &apos;+ Add Transition Rule&apos; to create one.
-diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
-index 6fc155d8..1a47cf4e 100644
---- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
-+++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
-@@ -89,7 +89,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
-     expect(labelsCheckbox.disabled).toBe(false);
- 
-     // Switch to agent_interceptor: Wasm module hidden, Agent definition visible
--    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
-+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
-     expect(screen.queryByLabelText(/Approved Wasm Module/i)).toBeNull();
-     expect(screen.getByLabelText(/Agent Definition/i)).toBeDefined();
-     expect(screen.getByTestId('agent-details-summary')).toBeDefined();
-@@ -149,7 +149,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
-     fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
- 
-     // Switch to agent_interceptor
--    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
-+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
-     fireEvent.change(screen.getByLabelText(/Agent Definition/i), { target: { value: 'forensic-code-check' } });
- 
-     // Check mutable fields
-diff --git a/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx b/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
-index 4d9b8610..4efd965d 100644
---- a/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
-+++ b/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
-@@ -112,6 +112,9 @@ describe('DryRunDrawer (KB-P5-24)', () => {
-     expect(writeTextSpy).toHaveBeenCalledWith(
-       expect.stringContaining('uv run kanban-agent validate-transition'),
-     );
-+    await waitFor(() => {
-+      expect(screen.getByText('Copied!')).toBeDefined();
-+    });
-   });
- 
-   it('switches between sample ticket and existing issue modes', async () => {
-diff --git a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
-index f21d2d74..2f04a4da 100644
---- a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
-+++ b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
-@@ -48,7 +48,7 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
- 
-     // Verify header
-     await waitFor(() => {
--      expect(screen.getByText(/Workflow & Transition Interceptors/i)).toBeDefined();
-+      expect(screen.getByText(/Scripted Workflows & Transition Helpers/i)).toBeDefined();
-       expect(screen.getByText('KAN')).toBeDefined();
-     });
- 
-@@ -128,7 +128,7 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
-       expect(screen.getByText('Not found or no access')).toBeDefined();
-     });
- 
--    expect(screen.queryByText(/Workflow & Transition Interceptors/i)).toBeNull();
-+    expect(screen.queryByText(/Scripted Workflows & Transition Helpers/i)).toBeNull();
-     expect(createSpy).not.toHaveBeenCalled();
-     expect(reorderSpy).not.toHaveBeenCalled();
-   });
 diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
-index 5350d0f4..d704dc70 100644
+index 5350d0f4..bdb65a6e 100644
 --- a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
 +++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
 @@ -3,7 +3,7 @@
@@ -269,7 +614,77 @@ index 5350d0f4..d704dc70 100644
      });
  
      it('exercises copy SHA success', async () => {
-@@ -531,7 +539,9 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -465,6 +473,69 @@ describe('Workflow Studio Coverage Booster', () => {
+         expect(screen.getByText('Copied!')).toBeDefined();
+       });
+     });
++
++    it('exercises copy SHA timeout reset, repeat click, and unmount cleanup', async () => {
++      Object.assign(navigator, {
++        clipboard: {
++          writeText: vi.fn().mockResolvedValue(undefined),
++        },
++      });
++
++      const { unmount } = render(
++        <HookPipelineRow
++          hook={DEFAULT_TEST_HOOK}
++          index={0}
++          total={1}
++          projectKey="KAN"
++        />,
++      );
++
++      const copyBtn = screen.getByRole('button', { name: /Copy SHA256/i });
++      fireEvent.click(copyBtn);
++      await waitFor(() => {
++        expect(screen.getByText('Copied!')).toBeDefined();
++      });
++
++      // Click again while timeout is pending to exercise clearTimeout branch (line 86)
++      fireEvent.click(copyBtn);
++      await waitFor(() => {
++        expect(screen.getByText('Copied!')).toBeDefined();
++      });
++
++      // Wait 2050ms inside act for real timer to expire and reset
++      await act(async () => {
++        await new Promise((r) => setTimeout(r, 2050));
++      });
++      await waitFor(() => {
++        expect(screen.queryByText('Copied!')).toBeNull();
++      });
++
++      // Click once more and unmount while timer is pending to exercise unmount cleanup (lines 47-49)
++      fireEvent.click(copyBtn);
++      unmount();
++    }, 10000);
++
++    it('exercises copy SHA clipboard rejection catch branch', async () => {
++      Object.assign(navigator, {
++        clipboard: {
++          writeText: vi.fn().mockRejectedValueOnce(new Error('clipboard denied')),
++        },
++      });
++
++      render(
++        <HookPipelineRow
++          hook={DEFAULT_TEST_HOOK}
++          index={0}
++          total={1}
++          projectKey="KAN"
++        />,
++      );
++
++      const copyBtn = screen.getByRole('button', { name: /Copy SHA256/i });
++      fireEvent.click(copyBtn);
++      await Promise.resolve();
++      expect(screen.queryByText('Copied!')).toBeNull();
++    });
+   });
+ 
+   describe('TransitionRuleCard edge cases', () => {
+@@ -531,7 +602,9 @@ describe('Workflow Studio Coverage Booster', () => {
        );
  
        // Trigger drop from hook-2 to hook-1
@@ -280,7 +695,7 @@ index 5350d0f4..d704dc70 100644
  
        await waitFor(() => {
          expect(onReorder).toHaveBeenCalledWith(
-@@ -541,12 +551,12 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -541,12 +614,12 @@ describe('Workflow Studio Coverage Booster', () => {
        });
  
        // Same hook drop does nothing
@@ -299,7 +714,7 @@ index 5350d0f4..d704dc70 100644
      });
  
      it('handles non-Error rejection and drop error catch in TransitionRuleCard', async () => {
-@@ -583,14 +593,18 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -583,14 +656,18 @@ describe('Workflow Studio Coverage Booster', () => {
  
        // Drop reorder with Error rejection
        onReorder.mockRejectedValueOnce(new Error('Drop failed error'));
@@ -320,7 +735,7 @@ index 5350d0f4..d704dc70 100644
        await waitFor(() => {
          expect(screen.getByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
        });
-@@ -736,7 +750,7 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -736,7 +813,7 @@ describe('Workflow Studio Coverage Booster', () => {
  
        // 1. Open Add Transition Rule dialog
        fireEvent.click(screen.getByRole('button', { name: 'Add Transition Rule' }));
@@ -329,7 +744,7 @@ index 5350d0f4..d704dc70 100644
  
        // Submit creating a new hook
        fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'new-rule-hook' } });
-@@ -813,11 +827,14 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -813,11 +890,14 @@ describe('Workflow Studio Coverage Booster', () => {
  
        // 1. Click + Add Hook to Transition from the card
        fireEvent.click(screen.getByRole('button', { name: /Add hook to In Review to Done/i }));
@@ -345,7 +760,7 @@ index 5350d0f4..d704dc70 100644
  
        // Close dialog
        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-@@ -827,6 +844,9 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -827,6 +907,9 @@ describe('Workflow Studio Coverage Booster', () => {
  
        // 3. Move hook down with non-AAL2 error
        fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
@@ -355,7 +770,7 @@ index 5350d0f4..d704dc70 100644
      });
  
      it('exercises AAL2 challenge TOTP verification and replay', async () => {
-@@ -1152,8 +1172,8 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1152,8 +1235,8 @@ describe('Workflow Studio Coverage Booster', () => {
          />,
        );
  
@@ -366,7 +781,7 @@ index 5350d0f4..d704dc70 100644
        expect(screen.getByText('Remote Pool Agent')).toBeDefined();
  
        // Click Cancel
-@@ -1161,7 +1181,7 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1161,7 +1244,7 @@ describe('Workflow Studio Coverage Booster', () => {
        expect(handleClose).toHaveBeenCalled();
      });
  
@@ -375,7 +790,7 @@ index 5350d0f4..d704dc70 100644
        const onSave = vi.fn();
        const onClose = vi.fn();
  
-@@ -1203,7 +1223,7 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1203,7 +1286,7 @@ describe('Workflow Studio Coverage Booster', () => {
        fireEvent.change(wasmSelect, { target: { value: api.DEFAULT_WASM_MODULES[1]?.sha256 ?? 'sha' } });
  
        // Change Failure Policy select
@@ -384,7 +799,7 @@ index 5350d0f4..d704dc70 100644
        fireEvent.change(failurePolicySelect, { target: { value: 'fail_open_warn' } });
  
        // Toggle mutable field ON then OFF
-@@ -1217,14 +1237,17 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1217,14 +1300,17 @@ describe('Workflow Studio Coverage Booster', () => {
  
        // Submit
        fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
@@ -410,7 +825,7 @@ index 5350d0f4..d704dc70 100644
  
        // Rerender with empty states
        rerender(
-@@ -1237,7 +1260,7 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1237,7 +1323,7 @@ describe('Workflow Studio Coverage Booster', () => {
            onClose={vi.fn()}
          />,
        );
@@ -419,7 +834,7 @@ index 5350d0f4..d704dc70 100644
      });
  
      it('handles empty to_state and non-Error save failure', async () => {
-@@ -1313,8 +1336,8 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1313,8 +1399,8 @@ describe('Workflow Studio Coverage Booster', () => {
        fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
        expect(screen.getByText('from_state and to_state cannot be identical.')).toBeDefined();
  
@@ -430,3 +845,49 @@ index 5350d0f4..d704dc70 100644
        expect(screen.getByText(/CLI None \(cli\)/i)).toBeDefined();
        expect(screen.getByText(/SDK No Model \(ollama\)/i)).toBeDefined();
      });
+diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
+index 1f518b22..59df5d1c 100644
+--- a/kanban/web/src/features/workflows/workflows.css
++++ b/kanban/web/src/features/workflows/workflows.css
+@@ -30,11 +30,24 @@
+ .workflow-studio-title {
+   display: flex;
+   align-items: center;
++  flex-wrap: wrap;
+   gap: 8px;
+   font-size: 1.25rem;
+   font-weight: 600;
+   margin: 0;
+   color: var(--fg-primary);
++  line-height: 1.35;
++}
++
++.workflow-studio-title-prefix {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  white-space: nowrap;
++}
++
++.workflow-studio-title-suffix {
++  display: inline;
+ }
+ 
+ .workflow-studio-title-badge {
+@@ -118,6 +131,16 @@
+   border: 1px solid var(--warn-fg);
+ }
+ 
++.no-agents-warning-text {
++  margin: 4px 0 8px;
++}
++
++.no-agents-configure-link {
++  display: inline-flex;
++  align-items: center;
++  text-decoration: none;
++}
++
+ .workflow-alert-success {
+   background-color: var(--bg-surface);
+   color: var(--ok-fg);

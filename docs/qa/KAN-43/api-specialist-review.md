@@ -5,9 +5,7 @@
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
 - Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-43`
-- Branch: `fix/KAN-43-44-53-rc2`
-- Commit: `536e8d7c`
-- Base Reference: `07d04cde` (on `main`)
+- Branch: `main` (commit `7913c2c8`)
 - Container Environment: `http://127.0.0.1:18962` (container: `kanban-liveqa-2`)
 - Live Stack Status: `OVERALL LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
@@ -16,7 +14,7 @@
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-43 on branch `fix/KAN-43-44-53-rc2` at commit `536e8d7c`, incorporating concrete evidence from live zero-mock full-stack verification (`live-fullstack-proof.txt` executed on `http://127.0.0.1:18962` against container `kanban-liveqa-2`), all 11 live visual screenshots in `docs/qa/KAN-43/screenshots/`, unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-43 on branch `main` at commit `7913c2c8`, incorporating concrete evidence from live zero-mock full-stack verification (`live-fullstack-proof.txt` executed on `http://127.0.0.1:18962` against container `kanban-liveqa-2`, commit `7913c2c8`), all 11 live visual screenshots in `docs/qa/KAN-43/screenshots/`, unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
 The ticket resolves four primary problems across workflow state administration, lifecycle invariants, custom color serialization, CSP compliance, and cross-view rendering, and remediates all edge-case findings identified during forensic QA:
 1. Workflow State & Priority Editing UI & Atomic Reorder (`ProjectSettingsPage.tsx` & `.css`):
@@ -228,4 +226,4 @@ The zero-mock Playwright suite was executed against the live Docker standalone c
 
 STATUS: APPROVED
 
-All API schemas, lifecycle group invariant protections, pre-deletion audit impact alignments, CSP-compliant color rendering rules, and unit test suites for KAN-43 on branch `fix/KAN-43-44-53-rc2` at commit `536e8d7c` have been thoroughly audited, verified against all architectural and security invariants, and certified. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Clean-Room Reality-Checker QA.
+All API schemas, lifecycle group invariant protections, pre-deletion audit impact alignments, CSP-compliant color rendering rules, and unit test suites for KAN-43 on branch `main` at commit `7913c2c8` have been thoroughly audited, verified against all architectural and security invariants, and certified on live stack `kanban-liveqa-2` with `OVERALL LIVE_STACK_VERDICT: PASS`. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Clean-Room Reality-Checker QA.

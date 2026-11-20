@@ -46,7 +46,9 @@
           "grade": "A",
           "report_path": "docs/qa/KAN-45/reality-checker-report.md"
         },
-        "artifacts": ["docs/qa/KAN-45/unit-test-results.txt"]
+        "artifacts": [
+          "docs/qa/KAN-45/unit-test-results.txt"
+        ]
       }
     },
     "sample_output_allow": {
@@ -70,7 +72,22 @@
   "async_gate_approval_comment_sample": {
     "author_principal_id": "01a1f000-0000-7000-8000-000000000099",
     "event_type": "COMMENT_CREATED",
-    "header": "### \u2705\ud83e\udd16 Integration Agent Verdict: READY (Grade: A)",
-    "body_markdown": "### \u2705\ud83e\udd16 Integration Agent Verdict: READY (Grade: A)\n**Hook:** `qa-gate-hook` | **Harness:** `kanban-agent` | **Transition:** `In Progress` -> `Done`\n\n---\n\n#### Forensic QA Summary\nAll verification artifacts and test logs verified."
+    "header": "### ✅🤖 Integration Agent Verdict: READY (Grade: A)",
+    "body_markdown": "### ✅🤖 Integration Agent Verdict: READY (Grade: A)\n**Hook:** `qa-gate-hook` | **Harness:** `kanban-agent` | **Transition:** `In Progress` -> `Done`\n\n---\n\n#### Forensic QA Summary\nAll verification artifacts and test logs verified."
+  },
+  "live_qa_observed": {
+    "container": "kanban-liveqa-4",
+    "base_url": "http://127.0.0.1:18964",
+    "commit": "7913c2c8",
+    "wasm_sha256": "fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972",
+    "wasm_dryrun_reject_us": 256,
+    "wasm_dryrun_allow_us": 665,
+    "guard1_agent_patch_status": 403,
+    "guard1_agent_move_status": 403,
+    "guard1_agent_transition_status": 403,
+    "guard1_human_move_status": 200,
+    "guard2_short_status": 403,
+    "guard2_contradictory_status": 403,
+    "guard4_complete_work_is_error": false
   }
 }

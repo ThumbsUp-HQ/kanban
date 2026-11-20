@@ -1,102 +1,78 @@
 ================================================================================
-KAN-16 LIVE UNMOCKED FULL-STACK QA R2/R3 PROOF (main commit 07d04cde)
+KAN-16 LIVE UNMOCKED FULL-STACK QA PROOF (main commit 7913c2c8)
 Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
-1. PRE-BOOTSTRAP UNAUTHENTICATED PUBLIC DOCS & RESPONSIVE CHECKS
+1. PRE-BOOTSTRAP UNAUTHENTICATED DOCS CENTER & RESPONSIVE CHECKS
 --------------------------------------------------------------------------------
-Script: kan16_pre.mjs + kan16_pre_fix_shots.mjs (executed BEFORE /setup claim)
+Script: kan16_kan33_docs.mjs (executed BEFORE /setup claim)
 - GET http://127.0.0.1:18961/docs:
-  * Load latency: 1031 ms
-  * Final URL: http://127.0.0.1:18961/docs (0 redirects to /login or /setup)
+  * Load latency: 1420 ms (0 redirects to /login or /setup)
   * H1: "👍kanban: Executive Architecture and System Overview"
-  * Chapter badge: "Chapter 1 of 27" (Home / Overview is Chapter 1 of 27)
-  * Left category rail chapter links: 27
-  * Desktop 1440x900 Light: scrollWidth=1440, innerWidth=1440, horizontalOverflow=false
-  * Screenshot: docs/qa/KAN-16/screenshots/live-docs-desktop-light.png
+  * Chapter badge: "Chapter 1 of 28" (Home / Overview is Chapter 1 of 28)
+  * Total sidebar chapter links: 28
+  * Desktop 1440x900 Light: horizontalOverflow=false
+  * Desktop 1440x900 Dark (.kb-docs-sidebar scrolled): zero mid-line text slicing, zero bottom void
+  * Screenshots:
+    - docs/qa/KAN-16/screenshots/live-docs-desktop-light.png
+    - docs/qa/KAN-16/screenshots/live-docs-desktop-dark.png
 
-- Desktop 1440x900 Dark (.kb-docs-sidebar scrolled to bottom):
-  * scrollTop=812, scrollHeight=1712, clientHeight=900, sbTop=52, sbBottom=952, headerBottom=52
-  * lastLinkBottom=903.6875, visibleCount=16, horizontalOverflow=false
-  * Visual inspection confirmed zero mid-line text slicing and zero bottom void.
-  * Screenshot: docs/qa/KAN-16/screenshots/live-docs-desktop-dark.png
-
-- Tablet 768x1024 Light (/docs):
-  * Single-row header Row 1 height=44px ("Kanban Docs" + "Offline Center" + docs-mobile-chapters-btn height=44px, row1SingleLine=true, zero 2-line wrapping)
-  * Search input Row 2: searchBelowRow1=true, placeholder="Search offline docs...", searchClientWidth=690, searchScrollWidth=690 (unclipped)
-  * horizontalOverflow=false (scrollWidth=768, innerWidth=768)
-  * Click docs-mobile-chapters-btn -> docs-mobile-chapters-drawer opens (width=320px, 27 chapters listed, horizontalOverflow=false)
+- Tablet 768x1024 & Mobile 390x844 (/docs):
+  * Tablet btnHeight=44px, horizontalOverflow=false, drawer chapter count=28
+  * Mobile btnHeight=44px, horizontalOverflow=false, drawer chapter count=28
   * Screenshots:
     - docs/qa/KAN-16/screenshots/live-docs-tablet-light.png
     - docs/qa/KAN-16/screenshots/live-docs-tablet-drawer-light.png
-
-- Mobile 390x844 Light (/docs):
-  * Single-row header Row 1 height=44px ("Kanban Docs" + "Offline Center" + docs-mobile-chapters-btn height=44px, row1SingleLine=true, zero 2-line wrapping)
-  * Search input Row 2: searchBelowRow1=true, placeholder="Search offline docs...", searchClientWidth=312, searchScrollWidth=312 (unclipped)
-  * horizontalOverflow=false (scrollWidth=390, innerWidth=390)
-  * Click docs-mobile-chapters-btn -> docs-mobile-chapters-drawer opens (width=320px, 27 chapters listed, horizontalOverflow=false)
-  * Screenshots:
     - docs/qa/KAN-16/screenshots/live-docs-mobile-light.png
     - docs/qa/KAN-16/screenshots/live-docs-mobile-drawer-light.png
 
-- Embedded local images chapter (/docs/admin-custom-scripted-fields-and-sandbox):
-  * Load latency: 4256 ms
-  * H1: "Admin Custom Scripted Fields and Sandboxed Execution"
-  * Embedded PNGs verified:
-    - /docs-images/14-custom-fields-studio.png (complete=true, naturalWidth=1440, naturalHeight=900)
-    - /docs-images/53-custom-fields-test-execute.png (complete=true, naturalWidth=1440, naturalHeight=900)
-    - /docs-images/36-rail-custom-fields.png (complete=true, naturalWidth=1440, naturalHeight=900)
-    - /docs-images/52-custom-fields-dual-control.png (complete=true, naturalWidth=1440, naturalHeight=900)
-  * rawBangAltTextCount=0, hasRawBangAltLiteral=false (0 "!Alt Text" strings)
+- Embedded /docs-images/*.png chapter (/docs/admin-custom-scripted-fields-and-sandbox):
+  * /docs-images/14-custom-fields-studio.png (complete=true, naturalWidth=1440)
+  * /docs-images/53-custom-fields-test-execute.png (complete=true, naturalWidth=1440)
+  * /docs-images/36-rail-custom-fields.png (complete=true, naturalWidth=1440)
+  * /docs-images/52-custom-fields-dual-control.png (complete=true, naturalWidth=1440)
   * External egress requests: 0
-  * Screenshot: docs/qa/KAN-16/screenshots/live-docs-embedded-images-light.png
 
-- Instant search listbox & /help/Guide-Custom-Fields:
-  * Search "Mermaid": [data-testid="docs-search-results"] [role="option"] count=8
-  * /help/Guide-Custom-Fields load latency: 584 ms, H1: "[Guide] How to Use Custom Fields"
-  * Screenshots:
-    - docs/qa/KAN-16/screenshots/live-docs-search-listbox-light.png
-    - docs/qa/KAN-16/screenshots/live-help-guide-custom-fields-light.png
-
-2. AUTHENTICATED STUDIO HelpDrawer, TOC BACKTICKS, FOCUS TRAP & ESCAPE RESTORE
+2. FieldHelpHint (?) -> More info -> HelpDrawer -> Escape FOCUS RESTORATION
 --------------------------------------------------------------------------------
-Script: kan16_auth.mjs + kan16_trap_check.mjs (authenticated @admin AAL2 session)
-- Studio 1: /projects/KAN/settings (load latency: 1184 ms)
+Script: kan16_focus_fix_qa.mjs (authenticated @admin AAL2 session)
+- Studio 1: /projects/KAN/settings
   * Entered "UNSAVED-DRAFT-42" into [data-testid="project-name-input"].
-  * Clicked (?) [data-testid="proj-modules-help"] -> popover opened with [data-testid="proj-modules-help-doc-link"] ("More info ->").
-  * Clicked "More info ->" -> [data-testid="help-drawer"] opened (width=480px), background URL unchanged, [data-testid="project-name-input"] retained "UNSAVED-DRAFT-42".
-  * TOC backtick check:
-    - Ticket Screen chapter TOC headings: 12 items, backtickTocCount=0
-    - /admin/ai chapter TOC headings: 15 items (load latency: 660 ms), backtickTocCount=0
-  * Tab / Shift+Tab focus trap inside HelpDrawer:
-    - 6x Tab + 6x Shift+Tab steps: tabAllInside=true
-    - Wrap-around verified: Tab on last focusable ("Full Page View") -> moves to first focusable ("help-drawer-open-docs"); Shift+Tab on first focusable ("help-drawer-open-docs") -> moves to last focusable ("Full Page View").
-  * Escape focus restoration check:
-    - From <StudioDocLink> [data-testid="project-settings-doc-link"]: Escape closes HelpDrawer (drawerCount=0), preserves "UNSAVED-DRAFT-42", restores focus to "project-settings-doc-link" (PASS).
-    - From <StudioDocLink> [data-testid="ai-studio-doc-link"] on /admin/ai: Escape closes HelpDrawer (drawerCount=0), restores focus to "ai-studio-doc-link" (PASS).
-    - DEFECT REPRODUCED - From (?) FieldHelpHint [data-testid="proj-modules-help"] -> "More info ->" [data-testid="proj-modules-help-doc-link"]:
-      * Clicking "More info ->" in FieldHelpHint.tsx (handleDocLinkClick) calls ctrl.close(popupId), unmounting the <a> link while it is document.activeElement, before HelpDrawer.tsx captures previousActiveElementRef.current = document.activeElement.
-      * Pressing Escape closes HelpDrawer (drawerCount=0) and preserves "UNSAVED-DRAFT-42", but document.activeElement falls back to BODY (activeTag="BODY", activeTestId=null) instead of restoring focus to [data-testid="proj-modules-help"].
+  * Clicked (?) <button> [data-testid="proj-modules-help"] -> popover opened with [data-testid="proj-modules-help-doc-link"] ("More info ->").
+  * Clicked "More info ->" -> [data-testid="help-drawer"] opened (width=480px, "Offline Documentation • Chapter 24 of 28", tocCount=13, backtickTocCount=0, draftVal="UNSAVED-DRAFT-42").
+  * Tab / Shift+Tab wrap inside HelpDrawer:
+    - Tab from last focusable -> activeElement="help-drawer-open-docs" (inside=true)
+    - Shift+Tab from first focusable -> activeElement="Full Page View" (inside=true)
+  * Pressed Escape:
+    - HelpDrawer closed (drawerCount=0)
+    - document.activeElement restored directly to (?) <button>:
+      activeTag="BUTTON", activeTestId="proj-modules-help", activeAriaLabel="Help for Project Modules", restoredToHelpBtn=true
+    - Unsaved input preserved: draftVal="UNSAVED-DRAFT-42"
   * Screenshots:
     - docs/qa/KAN-16/screenshots/live-project-settings-field-help-popover-light.png
     - docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-light.png
     - docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-dark.png
-    - docs/qa/KAN-16/screenshots/live-help-drawer-mobile-light.png (width=390px, horizontalOverflow=false)
-    - docs/qa/KAN-16/screenshots/live-admin-ai-help-drawer-light.png
+    - docs/qa/KAN-16/screenshots/live-project-settings-escape-focus-restored.png
+
+- Studio 2: /projects/SEC2/settings/custom-fields
+  * Clicked (?) <button> [data-testid="hint-field-flavor"] -> clicked [data-testid="hint-field-flavor-doc-link"] ("More info ->") -> HelpDrawer opened -> pressed Escape:
+    - HelpDrawer closed (drawerCount=0)
+    - document.activeElement restored directly to (?) <button>:
+      activeTag="BUTTON", activeTestId="hint-field-flavor", activeAriaLabel="Help for Field Flavor", restoredToHelpBtn=true
+  * Screenshot: docs/qa/KAN-16/screenshots/live-custom-fields-escape-focus-restored.png
 
 3. TELEMETRY & VERDICT
 --------------------------------------------------------------------------------
 - External egress requests: 0
-- Console errors: 0
+- Browser console errors: 0
 - Browser page errors: 0
 - HTTP 5xx server errors: 0
 
-LIVE_STACK_VERDICT: FAIL
-- Home Chapter 1 of 27 & /docs pre-bootstrap public access: PASS
-- Mobile 390x844 & Tablet 768x1024 single-row header + unclipped search + 27-chapter drawer: PASS
-- Desktop Dark scrolled .kb-docs-sidebar (zero slicing, zero bottom void): PASS
-- Embedded /docs-images/*.png rendering (naturalWidth=1440, 0 "!Alt Text", 0 external requests): PASS
-- HelpDrawer TOC (0 raw backticks), Tab/Shift+Tab focus trap, and unsaved draft preservation: PASS
-- HelpDrawer Escape focus restoration from (?) FieldHelpHint "More info ->": FAIL (focus drops to BODY because FieldHelpHint closes popover and unmounts the <a> link before HelpDrawer captures previousActiveElementRef)
+LIVE_STACK_VERDICT: PASS
+- Home Chapter 1 of 28 & /docs pre-bootstrap public access: PASS
+- Mobile 390x844 & Tablet 768x1024 Chapters drawer toggle (28 chapters): PASS
+- Bundled /docs-images/*.png rendering (naturalWidth=1440, 0 external requests): PASS
+- HelpDrawer TOC (0 backticks), Tab/Shift+Tab focus trap, & unsaved draft preservation: PASS
+- FieldHelpHint (?) -> More info -> HelpDrawer -> Escape focus restore to (?) <button>: PASS

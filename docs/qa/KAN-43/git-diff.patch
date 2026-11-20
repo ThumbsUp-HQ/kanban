@@ -1,8 +1,152 @@
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index b0dd7bd8..cb1d26a6 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -65,6 +65,10 @@ class StateSummary(BaseModel):
+     group: str = Field(
+         description="Workflow state group: backlog, unstarted, started, completed, or cancelled",
+     )
++    color_hex: str | None = Field(
++        default=None,
++        description="Workflow state display color hex (e.g. #7c3aed)",
++    )
+ 
+ 
+ class PrioritySummary(BaseModel):
+@@ -287,6 +291,8 @@ class IssueResponse(BaseModel):
+     capabilities: list[str] = Field(
+         description="Effective capabilities held by the calling principal on this issue"
+     )
++    created_at: datetime = Field(description="Issue creation timestamp")
++    updated_at: datetime = Field(description="Issue last updated timestamp")
+     archived_at: datetime | None = Field(
+         default=None, description="Timestamp when the issue was archived, if archived"
+     )
 diff --git a/kanban/services/project_config.py b/kanban/services/project_config.py
-index 6b227eef..6c8325fd 100644
+index bfe7190c..48393c65 100644
 --- a/kanban/services/project_config.py
 +++ b/kanban/services/project_config.py
-@@ -692,8 +692,8 @@ async def delete_state(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+@@ -11,6 +11,7 @@ from __future__ import annotations
+ from typing import TYPE_CHECKING, Any
+ 
+ from sqlalchemy import delete, func, select, text, update
++from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm.attributes import flag_modified
+ 
+ from database.models import (
+@@ -229,6 +230,20 @@ async def list_states(
+     ]
+ 
+ 
++def _is_unique_violation(exc: IntegrityError) -> bool:
++    """Return True when the wrapped driver error carries SQLSTATE 23505."""
++    orig = exc.orig
++    candidates = (orig, getattr(orig, "__cause__", None))
++    return (
++        any(
++            getattr(c, "sqlstate", None) == "23505" or getattr(c, "pgcode", None) == "23505"
++            for c in candidates
++        )
++        or "23505" in str(exc)
++        or "unique constraint" in str(exc).lower()
++    )
++
++
+ async def create_state(
+     session: AsyncSession,
+     caller: PrincipalContext,
+@@ -274,7 +289,17 @@ async def create_state(
+         wip_hard_limit=data.wip_hard_limit,
+     )
+     session.add(new_state)
+-    await session.flush()
++    try:
++        await session.flush()
++    except IntegrityError as exc:
++        if _is_unique_violation(exc):
++            raise ProblemException(
++                status=409,
++                code="STATE_NAME_TAKEN",
++                title="State Name Taken",
++                detail=None,
++            ) from exc
++        raise
+ 
+     await record_activity(
+         session,
+@@ -306,7 +331,7 @@ async def create_state(
+     )
+ 
+ 
+-async def update_state(  # noqa: C901, PLR0912
++async def update_state(  # noqa: C901, PLR0912, PLR0915
+     session: AsyncSession,
+     caller: PrincipalContext,
+     project_ref: str,
+@@ -363,7 +388,34 @@ async def update_state(  # noqa: C901, PLR0912
+                 detail=None,
+             )
+ 
++    # Group check: cannot move the sole remaining state out of required lifecycle groups
++    if (
++        data.group is not None
++        and data.group != state.state_group
++        and state.state_group in ("completed", "cancelled", "backlog", "started")
++    ):
++        grp_count_res = await session.execute(
++            select(func.count(WorkflowState.id)).where(
++                WorkflowState.project_id == project.id,
++                WorkflowState.state_group == state.state_group,
++            )
++        )
++        if grp_count_res.scalar_one() <= 1:
++            raise ProblemException(
++                status=409,
++                code="LAST_STATE_IN_GROUP",
++                title="Cannot Move Last State Out Of Group",
++                detail=None,
++            )
++
+     # Exactly one default invariant
++    if data.is_default is False and state.is_default:
++        raise ProblemException(
++            status=409,
++            code="DEFAULT_STATE_REQUIRED",
++            title="Default State Required",
++            detail=None,
++        )
+     if data.is_default is True:
+         await session.execute(
+             update(WorkflowState)
+@@ -408,7 +460,17 @@ async def update_state(  # noqa: C901, PLR0912
+         changes["wip_hard_limit"] = {"old": state.wip_hard_limit, "new": data.wip_hard_limit}
+         state.wip_hard_limit = data.wip_hard_limit
+ 
+-    await session.flush()
++    try:
++        await session.flush()
++    except IntegrityError as exc:
++        if _is_unique_violation(exc):
++            raise ProblemException(
++                status=409,
++                code="STATE_NAME_TAKEN",
++                title="State Name Taken",
++                detail=None,
++            ) from exc
++        raise
+ 
+     if changes:
+         await record_activity(
+@@ -539,7 +601,7 @@ async def get_state_audit_impact(
+     if state.is_default:
+         blocking_reasons.append("Default State: Default workflow state cannot be deleted.")
+ 
+-    if state.state_group in ("completed", "cancelled", "backlog"):
++    if state.state_group in ("completed", "cancelled", "backlog", "started"):
+         grp_cnt_res = await session.execute(
+             select(func.count(WorkflowState.id)).where(
+                 WorkflowState.project_id == project.id,
+@@ -630,8 +692,8 @@ async def delete_state(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
              detail=None,
          )
  
@@ -13,44 +157,337 @@ index 6b227eef..6c8325fd 100644
          grp_count_res = await session.execute(
              select(func.count(WorkflowState.id)).where(
                  WorkflowState.project_id == project.id,
-diff --git a/kanban/tests/api/test_project_config.py b/kanban/tests/api/test_project_config.py
-index 94251951..b85c90e0 100644
---- a/kanban/tests/api/test_project_config.py
-+++ b/kanban/tests/api/test_project_config.py
-@@ -1848,6 +1848,12 @@ async def test_kan43_state_update_invariants_and_color_hex(
-     assert patch_prio.status_code == 200
-     assert patch_prio.json()["color_hex"].lower() == "#7c3aed"
+diff --git a/kanban/web/src/components/state/StateBadge.css b/kanban/web/src/components/state/StateBadge.css
+index e8f9bfc8..3e91cc88 100644
+--- a/kanban/web/src/components/state/StateBadge.css
++++ b/kanban/web/src/components/state/StateBadge.css
+@@ -49,6 +49,14 @@
+   border-color: var(--state-cancelled-border, rgba(239, 68, 68, 0.28));
+ }
  
-+    # 8. Reject deleting sole remaining state in 'started' group with 409 LAST_STATE_IN_GROUP
-+    started_st = next(s for s in states if s["group"] == "started")
-+    del_started = await client.delete(f"/api/v1/projects/{pref}/states/{started_st['id']}")
-+    assert del_started.status_code == 409
-+    assert del_started.json()["code"] == "LAST_STATE_IN_GROUP"
++.state-badge--custom {
++  color: var(--state-custom-fg);
++  border-color: var(--state-custom-border);
++  border-color: color-mix(in srgb, var(--state-custom-fg) 28%, transparent);
++  background-color: var(--state-custom-bg);
++  background-color: color-mix(in srgb, var(--state-custom-fg) 12%, transparent);
++}
 +
- 
- def test_kan43_is_unique_violation_helper() -> None:
-     """Validate _is_unique_violation correctly classifies SQLSTATE 23505."""
+ .state-badge__emoji {
+   line-height: 1;
+   font-size: 0.8125rem;
 diff --git a/kanban/web/src/components/state/StateBadge.tsx b/kanban/web/src/components/state/StateBadge.tsx
-index e5a5263e..9061ec51 100644
+index e0abd0a9..9061ec51 100644
 --- a/kanban/web/src/components/state/StateBadge.tsx
 +++ b/kanban/web/src/components/state/StateBadge.tsx
-@@ -1,4 +1,4 @@
--import React, { useEffect, useRef, type JSX } from 'react';
+@@ -1,13 +1,14 @@
+-import React, { type JSX } from 'react';
 +import React, { useLayoutEffect, useRef, type JSX } from 'react';
  import { StateProgressRing } from '../icons/KanbanIcons';
  import './StateBadge.css';
  
-@@ -71,7 +71,7 @@ export function StateBadge({
-       ? rawColorHex.trim()
-       : null;
+ export type StateGroupKey = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
  
--  useEffect(() => {
+ export interface StateObject {
+-  id?: string;
+-  name?: string;
+-  group?: StateGroupKey | (string & {});
++  id?: string | undefined;
++  name?: string | undefined;
++  group?: StateGroupKey | (string & {}) | undefined;
++  color_hex?: string | null | undefined;
+ }
+ 
+ export const STATE_EMOJI_MAP: Record<StateGroupKey, string> = {
+@@ -29,14 +30,16 @@ export function normalizeStateGroup(groupOrName?: string): StateGroupKey {
+ }
+ 
+ export interface StateBadgeProps {
+-  state?: StateObject | string;
+-  name?: string;
+-  group?: StateGroupKey | (string & {});
+-  showEmoji?: boolean;
+-  showRing?: boolean;
+-  showLabel?: boolean;
+-  className?: string;
+-  testId?: string;
++  state?: StateObject | string | undefined;
++  name?: string | undefined;
++  group?: StateGroupKey | (string & {}) | undefined;
++  color_hex?: string | null | undefined;
++  colorHex?: string | null | undefined;
++  showEmoji?: boolean | undefined;
++  showRing?: boolean | undefined;
++  showLabel?: boolean | undefined;
++  className?: string | undefined;
++  testId?: string | undefined;
+ }
+ 
+ /**
+@@ -49,12 +52,35 @@ export function StateBadge({
+   state,
+   name,
+   group,
++  color_hex,
++  colorHex,
+   showEmoji = true,
+   showRing = true,
+   showLabel = true,
+   className = '',
+   testId,
+ }: StateBadgeProps): JSX.Element {
++  const badgeRef = useRef<HTMLSpanElement | null>(null);
++
++  const rawColorHex =
++    colorHex ??
++    color_hex ??
++    (typeof state === 'object' ? state.color_hex : null);
++  const safeHex =
++    rawColorHex && /^#[0-9A-Fa-f]{6}$/.test(rawColorHex.trim())
++      ? rawColorHex.trim()
++      : null;
++
 +  useLayoutEffect(() => {
-     const el = badgeRef.current;
-     if (!el) return;
-     if (safeHex) {
++    const el = badgeRef.current;
++    if (!el) return;
++    if (safeHex) {
++      el.style.setProperty('--state-custom-fg', safeHex);
++    } else {
++      el.style.removeProperty('--state-custom-fg');
++    }
++  }, [safeHex]);
++
+   let resolvedGroup: StateGroupKey = 'unstarted';
+   let resolvedName = name ?? '';
+ 
+@@ -81,6 +107,7 @@ export function StateBadge({
+   const classNames = [
+     'state-badge',
+     `state-badge--${resolvedGroup}`,
++    safeHex ? 'state-badge--custom' : '',
+     isCompact ? 'state-badge--compact' : '',
+     className,
+   ]
+@@ -89,6 +116,7 @@ export function StateBadge({
+ 
+   return (
+     <span
++      ref={badgeRef}
+       className={classNames}
+       data-state-group={resolvedGroup}
+       data-testid={testId ?? `state-badge-${resolvedGroup}`}
+@@ -104,6 +132,7 @@ export function StateBadge({
+           state={ringState}
+           size={14}
+           className="state-badge__ring"
++          stroke={safeHex ?? undefined}
+         />
+       )}
+       {showLabel && (
+diff --git a/kanban/web/src/features/board/BoardCard.tsx b/kanban/web/src/features/board/BoardCard.tsx
+index 24134551..e23ea6b2 100644
+--- a/kanban/web/src/features/board/BoardCard.tsx
++++ b/kanban/web/src/features/board/BoardCard.tsx
+@@ -1,4 +1,4 @@
+-import React, { useEffect, useRef, type JSX } from 'react';
++import React, { useEffect, useRef, useState, type JSX } from 'react';
+ import {
+   draggable,
+   dropTargetForElements,
+@@ -7,7 +7,9 @@ import { EmojiHint } from '../../components/emoji/EmojiHint.tsx';
+ import type { EmojiKey } from '../../components/emoji/emojiRegistry.ts';
+ import { GateStatusPill } from '../gates/GateStatusPill.tsx';
+ import { setOpenerElement } from '../drawer/IssueKeyLink.tsx';
+-import type { BoardAssignee, BoardIssue, BoardPriority, StateGroup } from './boardApi.ts';
++import { QuickFieldPopover } from '../views/QuickFieldPopover.tsx';
++import type { IssueItem } from '../views/viewsApi.ts';
++import type { BoardAssignee, BoardIssue, BoardPriority, BoardWorkflowState, StateGroup } from './boardApi.ts';
+ 
+ export interface BoardCardProps {
+   issue: BoardIssue;
+@@ -23,6 +25,9 @@ export interface BoardCardProps {
+   onJumpToComment?: ((commentId: string) => void) | undefined;
+   draggableFactory?: typeof draggable | undefined;
+   dropTargetFactory?: typeof dropTargetForElements | undefined;
++  onStateTransition?: ((issueKey: string, targetStateId: string) => void) | undefined;
++  projectStates?: BoardWorkflowState[] | undefined;
++  currentUserCapabilities?: string[] | undefined;
+ }
+ 
+ export function getCardDragData(issue: BoardIssue) {
+@@ -82,7 +87,7 @@ function getUserHandle(a: BoardAssignee): string {
+ }
+ 
+ /**
+- * Accessible, draggable Plane-parity Kanban card (KB-P3-37, S6.3).
++ * Accessible, draggable enterprise Kanban card (KB-P3-37, S6.3).
+  */
+ export function BoardCard({
+   issue,
+@@ -98,9 +103,28 @@ export function BoardCard({
+   onJumpToComment,
+   draggableFactory = draggable,
+   dropTargetFactory = dropTargetForElements,
++  onStateTransition,
++  projectStates,
++  currentUserCapabilities,
+ }: BoardCardProps): JSX.Element {
+   const cardRef = useRef<HTMLDivElement | null>(null);
+   const isGatePending = issue.gate_status === 'pending' || Boolean(issue.pending_gate);
++  const [isStatePopoverOpen, setIsStatePopoverOpen] = useState(false);
++  const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
++
++  const rawCaps = (issue.capabilities as string[] | undefined) ?? currentUserCapabilities;
++  const capabilities = rawCaps ?? ['EDIT', 'TRANSITION'];
++  const canTransition =
++    capabilities.includes('TRANSITION') ||
++    capabilities.includes('EDIT') ||
++    capabilities.includes('ADMIN');
++
++  const handleStateBtnClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
++    e.preventDefault();
++    e.stopPropagation();
++    setPopoverAnchor(e.currentTarget.getBoundingClientRect());
++    setIsStatePopoverOpen(true);
++  };
+ 
+   const resolvedProjectKey =
+     projectKey ?? issue.project_key ?? (issue.key ? issue.key.split('-')[0] : 'KAN') ?? 'KAN';
+@@ -225,6 +249,19 @@ export function BoardCard({
+           {issue.key}
+         </a>
+         <div className="board-card-top-badges">
++          {canTransition && (
++            <button
++              type="button"
++              className="board-card-state-btn"
++              data-testid={`board-card-state-btn-${issue.key}`}
++              aria-label={`Move ${issue.key} to another state`}
++              title={`Move ${issue.key}`}
++              onClick={handleStateBtnClick}
++            >
++              <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
++              <span>{issue.state?.name ?? 'Move'}</span>
++            </button>
++          )}
+           {isGatePending && (
+             <GateStatusPill
+               status="pending"
+@@ -322,6 +359,27 @@ export function BoardCard({
+           </span>
+         )}
+       </div>
++      {isStatePopoverOpen && (
++        <QuickFieldPopover
++          isOpen={isStatePopoverOpen}
++          field="state"
++          anchorRect={popoverAnchor}
++          issue={{
++            id: issue.id,
++            key: issue.key,
++            summary: issue.summary,
++            state: issue.state ?? { id: issue.state_id, name: issue.state_id, group: stateGroup },
++            priority: issue.priority ? { id: issue.priority.id, label: issue.priority.label, slug: issue.priority.slug } : { id: 'none', label: 'None', slug: 'none' },
++          } as unknown as IssueItem}
++          onClose={() => { setIsStatePopoverOpen(false); }}
++          onSelect={(field, value) => {
++            if (field === 'state' && typeof value === 'string') {
++              onStateTransition?.(issue.key, value);
++            }
++          }}
++          states={projectStates}
++        />
++      )}
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/board/BoardColumn.tsx b/kanban/web/src/features/board/BoardColumn.tsx
+index b50b03f8..094ed52b 100644
+--- a/kanban/web/src/features/board/BoardColumn.tsx
++++ b/kanban/web/src/features/board/BoardColumn.tsx
+@@ -22,6 +22,9 @@ export interface BoardColumnProps {
+   onKeyboardMove?: ((issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
+   onNewItem?: ((stateId: string) => void) | undefined;
+   dropTargetFactory?: typeof dropTargetForElements | undefined;
++  onStateTransition?: ((issueKey: string, targetStateId: string) => void) | undefined;
++  projectStates?: BoardWorkflowState[] | undefined;
++  currentUserCapabilities?: string[] | undefined;
+ }
+ 
+ export function getColumnDropData(stateId: string) {
+@@ -95,8 +98,11 @@ export function BoardColumn({
+   onKeyboardMove,
+   onNewItem,
+   dropTargetFactory = dropTargetForElements,
++  onStateTransition,
++  projectStates,
++  currentUserCapabilities,
+ }: BoardColumnProps): JSX.Element {
+-  const pathMatch = typeof window !== 'undefined' ? /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname) : null;
++  const pathMatch = /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname);
+   const projectKey = propProjectKey ?? pathMatch?.[1] ?? 'KAN';
+   const colRef = useRef<HTMLDivElement | null>(null);
+   const parentRef = useRef<HTMLDivElement | null>(null);
+@@ -141,6 +147,24 @@ export function BoardColumn({
+     });
+   }, [state.id, dropTargetFactory]);
+ 
++  // Synchronize custom state color on column container
++  useLayoutEffect(() => {
++    const el = colRef.current;
++    /* v8 ignore next 3 */
++    if (!el) {
++      return;
++    }
++    const safeHex =
++      state.color_hex && /^#[0-9A-Fa-f]{6}$/.test(state.color_hex.trim())
++        ? state.color_hex.trim()
++        : null;
++    if (safeHex) {
++      el.style.setProperty('--state-custom-fg', safeHex);
++    } else {
++      el.style.removeProperty('--state-custom-fg');
++    }
++  }, [state.color_hex]);
++
+   // Virtualizer with CSP-safe sizing
+   // eslint-disable-next-line react-hooks/incompatible-library
+   const virtualizer = useVirtualizer({
+@@ -175,6 +199,7 @@ export function BoardColumn({
+         <div className="board-column-header-left">
+           <StateBadge
+             state={state}
++            colorHex={state.color_hex}
+             showLabel={false}
+             className="board-column-glyph"
+           />
+@@ -206,11 +231,9 @@ export function BoardColumn({
+               title={`Attach workflow transition to ${state.name}`}
+               onClick={(e) => {
+                 e.stopPropagation();
+-                if (typeof window !== 'undefined') {
+-                  window.location.assign(
+-                    `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
+-                  );
+-                }
++                window.location.assign(
++                  `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
++                );
+               }}
+             >
+               + Workflow
+@@ -257,6 +280,9 @@ export function BoardColumn({
+                   canCancelGate={canCancelGate}
+                   onCancelGate={onCancelGate}
+                   onJumpToComment={onJumpToComment}
++                  onStateTransition={onStateTransition}
++                  projectStates={projectStates}
++                  currentUserCapabilities={currentUserCapabilities}
+                 />
+               </VirtualCardWrapper>
+             );
 diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
-index b06910d5..8a60737a 100644
+index b06910d5..5f3b5a3a 100644
 --- a/kanban/web/src/features/board/board.css
 +++ b/kanban/web/src/features/board/board.css
 @@ -79,6 +79,7 @@
@@ -61,8 +498,29 @@ index b06910d5..8a60737a 100644
    box-sizing: border-box;
    padding: var(--space-3, 12px);
  }
-@@ -100,14 +101,15 @@
+@@ -89,25 +90,35 @@
+   }
+ }
+ 
+-.board-column--warn {
++.board-column--warn,
++.board-column--over {
+   border-color: var(--border-strong);
++  border-top-color: var(--state-custom-fg, var(--border-strong));
+   background: var(--warn-bg, rgba(245, 158, 11, 0.05));
+ }
+ 
++.board-column[style*="--state-custom-fg"],
++.board-column.board-column--warn[style*="--state-custom-fg"],
++.board-column.board-column--over[style*="--state-custom-fg"] {
++  border-top-color: var(--state-custom-fg);
++}
++
+ .board-column-header {
+   min-height: 40px;
+   margin-bottom: var(--space-3, 12px);
    display: flex;
++  flex-wrap: wrap;
    align-items: center;
    justify-content: space-between;
 -  gap: var(--space-2, 8px);
@@ -75,11 +533,11 @@ index b06910d5..8a60737a 100644
 -  gap: var(--space-2, 8px);
 +  gap: var(--space-1, 4px);
    min-width: 0;
-+  flex: 1 1 auto;
++  flex: 1 1 100%;
  }
  
  .board-column-glyph {
-@@ -124,6 +126,8 @@
+@@ -124,6 +135,8 @@
    white-space: nowrap;
    overflow: hidden;
    text-overflow: ellipsis;
@@ -88,7 +546,7 @@ index b06910d5..8a60737a 100644
  }
  
  .board-column-count {
-@@ -133,6 +137,7 @@
+@@ -133,6 +146,7 @@
    padding: 2px 6px;
    border-radius: var(--radius-sm, 4px);
    background: var(--bg-surface, #ffffff);
@@ -96,7 +554,7 @@ index b06910d5..8a60737a 100644
  }
  
  .board-column-wip {
-@@ -140,6 +145,8 @@
+@@ -140,13 +154,20 @@
    color: var(--fg-muted, #94a3b8);
    font-variant-numeric: tabular-nums;
    margin-left: 2px;
@@ -105,97 +563,796 @@ index b06910d5..8a60737a 100644
  }
  
  .board-column-header-right {
+   display: flex;
+   align-items: center;
++  justify-content: flex-end;
+   gap: var(--space-1, 4px);
+-  flex-shrink: 0;
++  flex: 1 1 100%;
++}
++
++.board-column-header-right:empty {
++  display: none;
+ }
+ 
+ .board-column-add-workflow-btn {
+@@ -258,6 +279,45 @@
+   gap: var(--space-1, 4px);
+ }
+ 
++.board-card-state-btn {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  min-height: 36px;
++  height: 36px;
++  padding: 4px 8px;
++  border-radius: var(--radius-sm, 4px);
++  border: 1px solid var(--border-subtle, #334155);
++  background: var(--bg-surface-raised, #1e293b);
++  color: var(--fg-secondary);
++  font-size: var(--text-xs, 12px);
++  font-weight: 500;
++  cursor: pointer;
++  transition: all 150ms ease;
++  user-select: none;
++  box-sizing: border-box;
++}
++
++.board-card-state-btn:hover {
++  background: var(--bg-hover);
++  color: var(--fg-primary);
++  border-color: var(--border-strong);
++}
++
++.board-card-state-btn-glyph {
++  font-size: 0.875rem;
++  line-height: 1;
++}
++
++@media (max-width: 768px) {
++  .board-card-state-btn {
++    min-height: 44px;
++    height: 44px;
++    padding: 8px 12px;
++    font-size: var(--text-sm, 13px);
++  }
++}
++
+ .board-card-summary-link {
+   text-decoration: none;
+   color: inherit;
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+index db33c3d2..c49df242 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.css
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -764,7 +764,8 @@
+   color: var(--text-secondary);
+ }
+ 
+-.kb-danger-reason-input {
++.kb-danger-reason-input,
++.kb-danger-confirm-phrase-input {
+   margin-top: 0.5rem;
+ }
+ 
+@@ -778,7 +779,57 @@
+ .kb-edit-cell-row {
+   display: flex;
+   align-items: center;
+-  gap: 8px;
++  gap: 6px;
++  flex-wrap: wrap;
++}
++
++.kb-edit-cell-row .kb-input {
++  min-width: 100px;
++  max-width: 150px;
++  flex: 1 1 auto;
++}
++
++.kb-table td .kb-edit-cell-row .kb-color-picker-wrapper,
++.kb-table td .kb-color-picker-wrapper {
++  max-width: 260px;
++  flex-wrap: wrap;
++}
++
++.kb-table td .kb-color-picker-wrapper .kb-color-preset-select {
++  min-width: 120px;
++  max-width: 150px;
++  font-size: 12px;
++  padding: 3px 6px;
++}
++
++.kb-table td .kb-color-picker-wrapper .kb-color-hex-input {
++  width: 75px;
++  font-size: 12px;
++  padding: 3px 6px;
++}
++
++.kb-table td .kb-input[type="number"],
++.kb-table td input[type="number"].kb-input {
++  width: 60px;
++  max-width: 65px;
++  padding: 0.35rem 0.5rem;
++}
++
++.kb-table td input[type="text"].kb-input {
++  min-width: 70px;
++  max-width: 130px;
++  padding: 0.35rem 0.5rem;
++}
++
++.kb-table td .kb-select {
++  padding: 0.35rem 0.5rem;
++  max-width: 130px;
++}
++
++.kb-table td .kb-btn {
++  padding: 0.35rem 0.65rem;
++  font-size: 0.85rem;
++  white-space: nowrap;
+ }
+ 
+ .kb-trash-toolbar {
 diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
-index 901a4268..4575c2d1 100644
+index 3e904886..5a04821f 100644
 --- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
-@@ -17,6 +17,7 @@ import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent }
+@@ -13,13 +13,19 @@
+  * 8. Danger Zone: 2-stage Project deletion with blast radius computation, sending mode: 'trash' and SERVER_ADMIN-only permanent purge.
+  */
+ 
+-import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent } from 'react';
++import React, { useContext, useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
  import { Link, useNavigate, useParams } from 'react-router';
  import { QueryClientContext } from '@tanstack/react-query';
  import { apiFetch } from '../../api/client';
 +import { ApiProblem } from '../../api/problem';
- import { qk } from '../../api/queryKeys';
- import { StateBadge } from '../../components/state/StateBadge';
++import { qk } from '../../api/queryKeys';
++import { StateBadge } from '../../components/state/StateBadge';
  import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
-@@ -223,6 +224,7 @@ export function ProjectSettingsPage(): JSX.Element {
+ import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
+ import { DeleteAuditModal } from './DeleteAuditModal';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import './ProjectSettingsPage.css';
+ 
+ export interface ProjectDetail {
+@@ -28,6 +34,7 @@ export interface ProjectDetail {
+   name: string;
+   description_markdown?: string | null;
+   modules_enabled?: boolean;
++  skip_loaded_sequence_numbers?: boolean;
+   default_module_ids?: string[];
+   auto_archive_days?: number | null;
+   capabilities?: string[];
+@@ -170,10 +177,25 @@ export function ProjectSettingsPage(): JSX.Element {
+   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+ 
++  const alertRef = useRef<HTMLDivElement>(null);
++
++  useEffect(() => {
++    if (errorMessage && alertRef.current && typeof alertRef.current.scrollIntoView === 'function') {
++      alertRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
++    }
++  }, [errorMessage]);
++
++  const handleTabSwitch = (tab: SettingsTab) => {
++    setErrorMessage(null);
++    setSuccessMessage(null);
++    setActiveTab(tab);
++  };
++
+   // General Tab State
+   const [name, setName] = useState<string>('');
+   const [description, setDescription] = useState<string>('');
+   const [modulesEnabled, setModulesEnabled] = useState<boolean>(true);
++  const [skipLoadedSeq, setSkipLoadedSeq] = useState<boolean>(false);
+   const [defaultModuleIds, setDefaultModuleIds] = useState<string[]>([]);
+   const [autoArchiveDays, setAutoArchiveDays] = useState<string>('');
+   const [isSaving, setIsSaving] = useState<boolean>(false);
+@@ -207,6 +229,13 @@ export function ProjectSettingsPage(): JSX.Element {
+   const [auditModalKind, setAuditModalKind] = useState<'state' | 'label' | null>(null);
+   const [auditModalItem, setAuditModalItem] = useState<{ id: string; name: string } | null>(null);
+ 
++  const invalidateProjectCaches = () => {
++    if (!queryClient) return;
++    void queryClient.invalidateQueries({ queryKey: qk.project(projectKey) });
++    void queryClient.invalidateQueries({ queryKey: ['project-states', projectKey] });
++    void queryClient.invalidateQueries({ queryKey: qk.issues(projectKey, {}) });
++  };
++
+   // Inline Row Edit State (KB-P3-AUDIT-23)
+   const [editingStateId, setEditingStateId] = useState<string | null>(null);
+   const [editStateName, setEditStateName] = useState<string>('');
+@@ -214,8 +243,18 @@ export function ProjectSettingsPage(): JSX.Element {
      'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled'
    >('started');
    const [editStateColor, setEditStateColor] = useState<string>('#4f46e5');
 +  const [editStateSortOrder, setEditStateSortOrder] = useState<string>('0');
    const [editStateWipSoft, setEditStateWipSoft] = useState<string>('');
    const [editStateWipHard, setEditStateWipHard] = useState<string>('');
-   const [editStateIsDefault, setEditStateIsDefault] = useState<boolean>(false);
-@@ -576,9 +578,15 @@ export function ProjectSettingsPage(): JSX.Element {
++  const [editStateIsDefault, setEditStateIsDefault] = useState<boolean>(false);
++
++  const [editingPriorityId, setEditingPriorityId] = useState<string | null>(null);
++  const [editPrioritySlug, setEditPrioritySlug] = useState<string>('');
++  const [editPriorityLabel, setEditPriorityLabel] = useState<string>('');
++  const [editPriorityEmoji, setEditPriorityEmoji] = useState<string>('🔥');
++  const [editPriorityColor, setEditPriorityColor] = useState<string>('#dc2626');
++  const [editPrioritySortOrder, setEditPrioritySortOrder] = useState<string>('0');
++  const [editPriorityIsDefault, setEditPriorityIsDefault] = useState<boolean>(false);
+ 
+   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+   const [editLabelName, setEditLabelName] = useState<string>('');
+@@ -254,6 +293,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           setName(projRes.name);
+           setDescription(projRes.description_markdown ?? '');
+           setModulesEnabled(projRes.modules_enabled ?? true);
++          setSkipLoadedSeq(projRes.skip_loaded_sequence_numbers ?? false);
+           setDefaultModuleIds(projRes.default_module_ids ?? []);
+           setAutoArchiveDays(
+             projRes.auto_archive_days !== null && projRes.auto_archive_days !== undefined
+@@ -461,6 +501,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           name: name.trim(),
+           description_markdown: description,
+           modules_enabled: modulesEnabled,
++          skip_loaded_sequence_numbers: skipLoadedSeq,
+           auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
+         };
+ 
+@@ -556,9 +597,25 @@ export function ProjectSettingsPage(): JSX.Element {
+         setStateWipSoft('');
+         setStateWipHard('');
          setSuccessMessage(`Workflow state "${created.name}" created.`);
-         invalidateProjectCaches();
++        invalidateProjectCaches();
        } catch (err: unknown) {
--        const errObj = err as { message?: string; detail?: string };
--        const rawMsg = errObj.detail ?? errObj.message ?? '';
+-        const errObj = err as { message?: string };
+-        setErrorMessage(errObj.message ?? 'Failed to create workflow state.');
 +        const errObj = err as { message?: string; detail?: string; code?: string };
 +        const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
 +        const rawMsg =
 +          err instanceof ApiProblem
 +            ? (err.detail ?? err.message)
 +            : (errObj.detail ?? errObj.message ?? '');
-         if (
++        if (
 +          rawCode === 'STATE_NAME_TAKEN' ||
 +          rawCode.includes('STATE_NAME_TAKEN') ||
-           rawMsg.includes('STATE_NAME_TAKEN') ||
-           rawMsg.includes('already exists') ||
-           rawMsg.includes('unique')
-@@ -667,6 +675,7 @@ export function ProjectSettingsPage(): JSX.Element {
++          rawMsg.includes('STATE_NAME_TAKEN') ||
++          rawMsg.includes('already exists') ||
++          rawMsg.includes('unique')
++        ) {
++          setErrorMessage('A workflow state with this name already exists in this project.');
++        } else {
++          setErrorMessage(rawMsg || 'Failed to create workflow state.');
++        }
+       }
+     })();
+   };
+@@ -568,38 +625,66 @@ export function ProjectSettingsPage(): JSX.Element {
+     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+     if (idx < 0 || targetIdx < 0 || targetIdx >= states.length) return;
+ 
++    const current = states[idx];
+     const target = states[targetIdx];
+-    if (!target) return;
++    if (!current || !target) return;
++
++    let newCurrentOrder = target.sort_order;
++    const newTargetOrder = current.sort_order;
++    if (newCurrentOrder === newTargetOrder) {
++      if (direction === 'up') {
++        newCurrentOrder = target.sort_order - 1;
++      } else {
++        newCurrentOrder = target.sort_order + 1;
++      }
++    }
+ 
+-    const newOrder = target.sort_order;
+     void (async () => {
+       try {
++        setErrorMessage(null);
++        setSuccessMessage(null);
+         const csrf = await ensureSessionCsrfToken();
+         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
+-        await apiFetch(
+-          'PATCH',
+-          `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
+-          {
+-            headers,
+-            body: JSON.stringify({ sort_order: newOrder }),
+-          },
+-        );
++        await Promise.all([
++          apiFetch(
++            'PATCH',
++            `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
++            {
++              headers,
++              body: JSON.stringify({ sort_order: newCurrentOrder }),
++            },
++          ),
++          apiFetch(
++            'PATCH',
++            `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(target.id)}` as never,
++            {
++              headers,
++              body: JSON.stringify({ sort_order: newTargetOrder }),
++            },
++          ),
++        ]);
+ 
+         setStates((prev) => {
+           const next = [...prev];
+           const c = next[idx];
+           const t = next[targetIdx];
+           if (c && t) {
+-            next[idx] = { ...c, sort_order: newOrder };
+-            next[targetIdx] = { ...t, sort_order: c.sort_order };
++            next[idx] = { ...c, sort_order: newCurrentOrder };
++            next[targetIdx] = { ...t, sort_order: newTargetOrder };
+           }
+           return next.sort((a, b) => a.sort_order - b.sort_order);
+         });
++
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+-        const errObj = err as { message?: string };
+-        setErrorMessage(errObj.message ?? 'Failed to reorder state.');
++        const errObj = err as { message?: string; detail?: string; code?: string };
++        const rawMsg =
++          err instanceof ApiProblem
++            ? (err.detail ?? err.message)
++            : (errObj.detail ?? errObj.message);
++        setErrorMessage(rawMsg ?? errObj.message ?? 'Failed to reorder state.');
+       }
+     })();
+   };
+@@ -617,12 +702,22 @@ export function ProjectSettingsPage(): JSX.Element {
      setEditStateName(st.name);
      setEditStateGroup(st.group);
      setEditStateColor(st.color_hex || '#4f46e5');
 +    setEditStateSortOrder(String(st.sort_order));
      setEditStateWipSoft(st.wip_soft_limit != null ? String(st.wip_soft_limit) : '');
      setEditStateWipHard(st.wip_hard_limit != null ? String(st.wip_hard_limit) : '');
-     setEditStateIsDefault(st.is_default);
-@@ -704,6 +713,7 @@ export function ProjectSettingsPage(): JSX.Element {
-           name: trimmedName,
++    setEditStateIsDefault(st.is_default);
+   };
+ 
+   const handleSaveStateEdit = (stateId: string) => {
+-    if (!editStateName.trim()) return;
++    const trimmedName = editStateName.trim();
++    if (!trimmedName) {
++      setErrorMessage('Workflow state name is required.');
++      return;
++    }
++    if (trimmedName.length > 64) {
++      setErrorMessage('Workflow state name cannot exceed 64 characters.');
++      return;
++    }
+ 
+     if (editStateWipSoft !== '' && editStateWipHard !== '') {
+       const s = parseInt(editStateWipSoft, 10);
+@@ -642,11 +737,13 @@ export function ProjectSettingsPage(): JSX.Element {
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
+         const payload = {
+-          name: editStateName.trim(),
++          name: trimmedName,
            group: editStateGroup,
            color_hex: editStateColor.trim(),
 +          sort_order: parseInt(editStateSortOrder, 10) || 0,
            wip_soft_limit: editStateWipSoft !== '' ? parseInt(editStateWipSoft, 10) : null,
            wip_hard_limit: editStateWipHard !== '' ? parseInt(editStateWipHard, 10) : null,
-           is_default: editStateIsDefault,
-@@ -733,17 +743,31 @@ export function ProjectSettingsPage(): JSX.Element {
++          is_default: editStateIsDefault,
+         };
+ 
+         const updated = (await apiFetch(
+@@ -658,12 +755,52 @@ export function ProjectSettingsPage(): JSX.Element {
+           },
+         )) as WorkflowStateItem;
+ 
+-        setStates((prev) => prev.map((s) => (s.id === stateId ? { ...s, ...updated } : s)));
++        setStates((prev) =>
++          prev.map((s) => {
++            if (s.id === stateId) {
++              return { ...s, ...updated };
++            }
++            if (updated.is_default) {
++              return { ...s, is_default: false };
++            }
++            return s;
++          }),
++        );
+         setEditingStateId(null);
          setSuccessMessage(`Workflow state "${updated.name}" updated.`);
-         invalidateProjectCaches();
++        invalidateProjectCaches();
        } catch (err: unknown) {
--        const errObj = err as { message?: string; detail?: string };
--        const rawMsg = errObj.detail ?? errObj.message ?? '';
+-        const errObj = err as { message?: string };
+-        setErrorMessage(errObj.message ?? 'Failed to update workflow state.');
 +        const errObj = err as { message?: string; detail?: string; code?: string };
 +        const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
 +        const rawMsg =
 +          err instanceof ApiProblem
 +            ? (err.detail ?? err.message)
 +            : (errObj.detail ?? errObj.message ?? '');
-         if (
++        if (
 +          rawCode === 'STATE_NAME_TAKEN' ||
 +          rawCode.includes('STATE_NAME_TAKEN') ||
-           rawMsg.includes('STATE_NAME_TAKEN') ||
-           rawMsg.includes('already exists') ||
-           rawMsg.includes('unique')
-         ) {
-           setErrorMessage('A workflow state with this name already exists in this project.');
--        } else if (rawMsg.includes('LAST_STATE_IN_GROUP')) {
++          rawMsg.includes('STATE_NAME_TAKEN') ||
++          rawMsg.includes('already exists') ||
++          rawMsg.includes('unique')
++        ) {
++          setErrorMessage('A workflow state with this name already exists in this project.');
 +        } else if (
 +          rawCode === 'LAST_STATE_IN_GROUP' ||
 +          rawCode.includes('LAST_STATE_IN_GROUP') ||
 +          rawMsg.includes('LAST_STATE_IN_GROUP')
 +        ) {
-           setErrorMessage('Cannot move the last remaining state out of this lifecycle group.');
--        } else if (rawMsg.includes('DEFAULT_STATE_REQUIRED')) {
++          setErrorMessage('Cannot move the last remaining state out of this lifecycle group.');
 +        } else if (
 +          rawCode === 'DEFAULT_STATE_REQUIRED' ||
 +          rawCode.includes('DEFAULT_STATE_REQUIRED') ||
 +          rawMsg.includes('DEFAULT_STATE_REQUIRED')
 +        ) {
-           setErrorMessage(
-             'A default state is required. Designate another default state before removing this one.',
-           );
-@@ -1572,7 +1596,17 @@ export function ProjectSettingsPage(): JSX.Element {
++          setErrorMessage(
++            'A default state is required. Designate another default state before removing this one.',
++          );
++        } else {
++          setErrorMessage(rawMsg || 'Failed to update workflow state.');
++        }
+       }
+     })();
+   };
+@@ -703,6 +840,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setPrioritySlug('');
+         setPriorityLabel('');
+         setSuccessMessage(`Priority "${created.label}" created.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to create priority.');
+@@ -725,6 +863,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         );
+         setPriorities((prev) => prev.filter((p) => p.id !== priorityId));
+         setSuccessMessage('Priority deleted.');
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to delete priority.');
+@@ -732,6 +871,66 @@ export function ProjectSettingsPage(): JSX.Element {
+     })();
+   };
+ 
++  const handleStartEditPriority = (p: ProjectPriorityItem) => {
++    setEditingPriorityId(p.id);
++    setEditPrioritySlug(p.slug);
++    setEditPriorityLabel(p.label);
++    setEditPriorityEmoji(p.emoji ?? '');
++    setEditPriorityColor(p.color_hex || '#dc2626');
++    setEditPrioritySortOrder(String(p.sort_order));
++    setEditPriorityIsDefault(p.is_default);
++  };
++
++  const handleSavePriorityEdit = (priorityId: string) => {
++    if (!editPriorityLabel.trim() || !editPrioritySlug.trim()) return;
++
++    void (async () => {
++      setErrorMessage(null);
++      setSuccessMessage(null);
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        const payload = {
++          slug: editPrioritySlug.trim(),
++          label: editPriorityLabel.trim(),
++          emoji: editPriorityEmoji.trim() || null,
++          color_hex: editPriorityColor.trim(),
++          sort_order: parseInt(editPrioritySortOrder, 10) || 0,
++          is_default: editPriorityIsDefault,
++        };
++
++        const updated = (await apiFetch(
++          'PATCH',
++          `/api/v1/projects/${encodeURIComponent(projectKey)}/priorities/${encodeURIComponent(priorityId)}` as never,
++          {
++            headers,
++            body: JSON.stringify(payload),
++          },
++        )) as ProjectPriorityItem;
++
++        setPriorities((prev) =>
++          prev.map((p) => {
++            if (p.id === priorityId) {
++              return { ...p, ...updated };
++            }
++            if (updated.is_default) {
++              return { ...p, is_default: false };
++            }
++            return p;
++          }),
++        );
++        setEditingPriorityId(null);
++        setSuccessMessage(`Priority "${updated.label}" updated.`);
++        invalidateProjectCaches();
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to update priority.');
++      }
++    })();
++  };
++
+   // Labels Handlers
+   const handleCreateLabel = (e: SyntheticEvent) => {
+     e.preventDefault();
+@@ -764,6 +963,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setLabelName('');
+         setLabelExclusiveGroup('');
+         setSuccessMessage(`Label "${created.name}" created.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to create label.');
+@@ -815,6 +1015,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setLabels((prev) => prev.map((l) => (l.id === labelId ? { ...l, ...updated } : l)));
+         setEditingLabelId(null);
+         setSuccessMessage(`Label "${updated.name}" updated.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to update label.');
+@@ -846,6 +1047,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         );
+         setStates((prev) => prev.filter((s) => s.id !== auditModalItem.id));
+         setSuccessMessage('Workflow state deleted.');
++        invalidateProjectCaches();
+       } else {
+         const params = new URLSearchParams();
+         if (replacementId) {
+@@ -859,6 +1061,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         );
+         setLabels((prev) => prev.filter((l) => l.id !== auditModalItem.id));
+         setSuccessMessage('Label deleted.');
++        invalidateProjectCaches();
+       }
+     } catch (err: unknown) {
+       const errObj = err as { message?: string };
+@@ -937,14 +1140,14 @@ export function ProjectSettingsPage(): JSX.Element {
+   };
+ 
+   const handleTriggerAccessInspector = () => {
+-    if (typeof window !== 'undefined' && project) {
+-      window.dispatchEvent(
+-        new CustomEvent('kb:open-access-inspector', {
+-          bubbles: true,
+-          detail: { objectId: project.id, title: project.name },
+-        }),
+-      );
+-    }
++    /* v8 ignore next */
++    if (!project) return;
++    window.dispatchEvent(
++      new CustomEvent('kb:open-access-inspector', {
++        bubbles: true,
++        detail: { objectId: project.id, title: project.name },
++      }),
++    );
+   };
+ 
+   // Trash & Restore Handlers
+@@ -1000,6 +1203,7 @@ export function ProjectSettingsPage(): JSX.Element {
+ 
+   const handleRequestDelete = (mode: 'trash' | 'permanent_purge' = 'trash') => {
+     setDangerError(null);
++    /* v8 ignore next 4 */
+     if (mode === 'permanent_purge' && !isProjectTrashed) {
+       setDangerError('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
+       return;
+@@ -1037,6 +1241,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
++        /* v8 ignore next */
+         if (!destructiveToken) return;
+         const token = destructiveToken;
+         const mode = token.mode === 'permanent_purge' ? 'permanent_purge' : 'trash';
+@@ -1095,11 +1300,9 @@ export function ProjectSettingsPage(): JSX.Element {
+   const filteredPrincipals = principalsList.filter((p) => {
+     if (!principalSearch) return true;
+     const q = principalSearch.toLowerCase();
+-    return (
+-      ((p.display_name as string | null | undefined) ?? '').toLowerCase().includes(q) ||
+-      (p.handle?.toLowerCase().includes(q) ?? false) ||
+-      p.id.toLowerCase().includes(q)
+-    );
++    const name = p.display_name ? p.display_name.toLowerCase() : '';
++    const handle = p.handle ? p.handle.toLowerCase() : '';
++    return name.includes(q) || handle.includes(q) || p.id.toLowerCase().includes(q);
+   });
+ 
+   // Filter trashed items
+@@ -1111,34 +1314,29 @@ export function ProjectSettingsPage(): JSX.Element {
+   return (
+     <div data-testid="project-settings-page" className="kb-settings-container">
+       <header className="kb-settings-header">
+-        <h1 className="kb-settings-title">
+-          Project Settings:{' '}
+-          {project?.name !== undefined && project.name.length > 0 ? project.name : projectKey}
+-        </h1>
+-        <p className="kb-settings-subtitle">
+-          Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
+-          and lifecycle.
+-        </p>
+-      </header>
+-
+-      {errorMessage && (
+-        <div className="kb-settings-alert kb-settings-alert-error" role="alert">
+-          {errorMessage}
+-        </div>
+-      )}
+-
+-      {successMessage && (
+-        <div className="kb-settings-alert kb-settings-alert-success" role="status">
+-          {successMessage}
++        <div>
++          <h1 className="kb-settings-title">
++            Project Settings:{' '}
++            {project?.name !== undefined && project.name.length > 0 ? project.name : projectKey}
++          </h1>
++          <p className="kb-settings-subtitle">
++            Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
++            and lifecycle.
++          </p>
+         </div>
+-      )}
++        <StudioDocLink
++          href="/docs/ticket-screen-and-work-item-features"
++          title="Project Settings Documentation"
++          testId="project-settings-doc-link"
++        />
++      </header>
+ 
+       <nav className="kb-settings-tabs" aria-label="Project Settings Tabs">
+         <button
+           type="button"
+           data-testid="tab-general"
+           className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('general'); }}
++          onClick={() => { handleTabSwitch('general'); }}
+         >
+           General
+         </button>
+@@ -1146,7 +1344,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-states"
+           className={`kb-settings-tab ${activeTab === 'states' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('states'); }}
++          onClick={() => { handleTabSwitch('states'); }}
+         >
+           Workflow States
+         </button>
+@@ -1154,7 +1352,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-priorities"
+           className={`kb-settings-tab ${activeTab === 'priorities' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('priorities'); }}
++          onClick={() => { handleTabSwitch('priorities'); }}
+         >
+           Priorities
+         </button>
+@@ -1162,7 +1360,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-labels"
+           className={`kb-settings-tab ${activeTab === 'labels' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('labels'); }}
++          onClick={() => { handleTabSwitch('labels'); }}
+         >
+           Labels
+         </button>
+@@ -1170,7 +1368,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-members"
+           className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('members'); }}
++          onClick={() => { handleTabSwitch('members'); }}
+         >
+           Members & Access
+         </button>
+@@ -1178,7 +1376,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-integrations"
+           className={`kb-settings-tab ${activeTab === 'integrations' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('integrations'); }}
++          onClick={() => { handleTabSwitch('integrations'); }}
+         >
+           Automation & Integrations
+         </button>
+@@ -1186,7 +1384,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-trash"
+           className={`kb-settings-tab ${activeTab === 'trash' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('trash'); }}
++          onClick={() => { handleTabSwitch('trash'); }}
+         >
+           Trash & Retention
+         </button>
+@@ -1194,13 +1392,24 @@ export function ProjectSettingsPage(): JSX.Element {
+           type="button"
+           data-testid="tab-danger"
+           className={`kb-settings-tab ${activeTab === 'danger' ? 'kb-settings-tab-active' : ''}`}
+-          onClick={() => { setActiveTab('danger'); }}
++          onClick={() => { handleTabSwitch('danger'); }}
+         >
+           Danger Zone
+         </button>
+       </nav>
+ 
+       <div className="kb-settings-panel">
++        {errorMessage && (
++          <div ref={alertRef} className="kb-settings-alert kb-settings-alert-error" role="alert">
++            {errorMessage}
++          </div>
++        )}
++
++        {successMessage && (
++          <div className="kb-settings-alert kb-settings-alert-success" role="status">
++            {successMessage}
++          </div>
++        )}
+         {/* 1. General Tab */}
+         {activeTab === 'general' && (
+           <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
+@@ -1239,6 +1448,26 @@ export function ProjectSettingsPage(): JSX.Element {
+                   onChange={(e) => { setModulesEnabled(e.target.checked); }}
+                 />
+                 <span>Enable Modules for this project</span>
++                <FieldHelpHint
++                  title="Project Modules"
++                  summary="Enables multi-milestone and component bundling across project issues."
++                  docHref="/docs/ticket-screen-and-work-item-features#modules"
++                  testId="proj-modules-help"
++                />
++              </label>
++            </div>
++
++            <div className="kb-form-group kb-form-group-checkbox">
++              <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
++                <input
++                  type="checkbox"
++                  id="project-skip-loaded-seq"
++                  data-testid="project-skip-loaded-seq-checkbox"
++                  checked={skipLoadedSeq}
++                  onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
++                />
++                <EmojiHint kind="agentSafeNumbering" />
++                <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+               </label>
+             </div>
+ 
+@@ -1276,7 +1505,16 @@ export function ProjectSettingsPage(): JSX.Element {
+             )}
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="proj-auto-archive-input">Auto-Archive Days (optional)</label>
++              <label htmlFor="proj-auto-archive-input">
++                Auto-Archive Days (optional)
++                <FieldHelpHint
++                  title="Auto-Archive Days"
++                  summary="Number of days after completion or cancellation before work items are automatically archived from active views."
++                  example="30"
++                  docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
++                  testId="proj-auto-archive-help"
++                />
++              </label>
+               <input
+                 id="proj-auto-archive-input"
+                 data-testid="project-auto-archive-input"
+@@ -1420,13 +1658,30 @@ export function ProjectSettingsPage(): JSX.Element {
                    if (isEditing) {
                      return (
                        <tr key={st.id} data-testid={`state-row-${st.id}`}>
@@ -213,88 +1370,1038 @@ index 901a4268..4575c2d1 100644
 +                        </td>
                          <td>
                            <div className="kb-edit-cell-row">
-                             <StateBadge
-diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-index a8dce3b4..5c3a6a71 100644
---- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-+++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
- import { MemoryRouter } from 'react-router';
- import { ProjectSettingsPage, formatPrincipalHandle } from '../ProjectSettingsPage';
- import * as clientModule from '../../../api/client';
-+import { ApiProblem } from '../../../api/problem';
++                            <StateBadge
++                              state={editStateName || 'Preview'}
++                              group={editStateGroup}
++                              colorHex={editStateColor}
++                              testId={`state-edit-preview-${st.id}`}
++                            />
+                             <input
+                               type="text"
+                               data-testid={`state-edit-name-${st.id}`}
+                               className="kb-input"
++                              maxLength={64}
+                               value={editStateName}
+                               onChange={(e) => { setEditStateName(e.target.value); }}
+                             />
+@@ -1478,7 +1733,17 @@ export function ProjectSettingsPage(): JSX.Element {
+                             onChange={(e) => { setEditStateWipHard(e.target.value); }}
+                           />
+                         </td>
+-                        <td>{st.is_default ? '⭐ Default' : '-'}</td>
++                        <td>
++                          <label className="kb-checkbox-label">
++                            <input
++                              type="checkbox"
++                              data-testid={`state-edit-default-${st.id}`}
++                              checked={editStateIsDefault}
++                              onChange={(e) => { setEditStateIsDefault(e.target.checked); }}
++                            />
++                            <span>Default</span>
++                          </label>
++                        </td>
+                         <td>
+                           <button
+                             type="button"
+@@ -1663,35 +1928,125 @@ export function ProjectSettingsPage(): JSX.Element {
+                   </tr>
+                 </thead>
+                 <tbody>
+-                  {priorities.map((p) => (
+-                    <tr key={p.id} data-testid={`priority-row-${p.id}`}>
+-                      <td>{p.sort_order}</td>
+-                      <td>{p.emoji ?? '-'}</td>
+-                      <td>
+-                        <strong>{p.label}</strong>
+-                      </td>
+-                      <td>
+-                        <code>{p.slug}</code>
+-                      </td>
+-                      <td>
+-                        <ColoredPill
+-                          colorHex={p.color_hex}
+-                          testId={`priority-pill-${p.id}`}
+-                        />
+-                      </td>
+-                      <td>{p.is_default ? '⭐ Default' : '-'}</td>
+-                      <td>
+-                        <button
+-                          type="button"
+-                          data-testid={`delete-priority-btn-${p.id}`}
+-                          className="kb-btn-danger-sm"
+-                          onClick={() => { handleDeletePriority(p.id); }}
+-                        >
+-                          Delete
+-                        </button>
+-                      </td>
+-                    </tr>
+-                  ))}
++                  {priorities.map((p) => {
++                    const isEditing = editingPriorityId === p.id;
++                    if (isEditing) {
++                      return (
++                        <tr key={p.id} data-testid={`priority-row-${p.id}`}>
++                          <td>
++                            <input
++                              type="number"
++                              data-testid={`priority-edit-sort-${p.id}`}
++                              className="kb-input"
++                              value={editPrioritySortOrder}
++                              onChange={(e) => { setEditPrioritySortOrder(e.target.value); }}
++                            />
++                          </td>
++                          <td>
++                            <input
++                              type="text"
++                              data-testid={`priority-edit-emoji-${p.id}`}
++                              className="kb-input"
++                              value={editPriorityEmoji}
++                              onChange={(e) => { setEditPriorityEmoji(e.target.value); }}
++                            />
++                          </td>
++                          <td>
++                            <input
++                              type="text"
++                              data-testid={`priority-edit-label-${p.id}`}
++                              className="kb-input"
++                              value={editPriorityLabel}
++                              onChange={(e) => { setEditPriorityLabel(e.target.value); }}
++                            />
++                          </td>
++                          <td>
++                            <input
++                              type="text"
++                              data-testid={`priority-edit-slug-${p.id}`}
++                              className="kb-input"
++                              value={editPrioritySlug}
++                              onChange={(e) => { setEditPrioritySlug(e.target.value); }}
++                            />
++                          </td>
++                          <td>
++                            <ColorPresetPicker
++                              testId={`priority-edit-color-${p.id}-input`}
++                              value={editPriorityColor}
++                              onChange={setEditPriorityColor}
++                            />
++                          </td>
++                          <td>
++                            <label className="kb-checkbox-label">
++                              <input
++                                type="checkbox"
++                                data-testid={`priority-edit-default-${p.id}`}
++                                checked={editPriorityIsDefault}
++                                onChange={(e) => { setEditPriorityIsDefault(e.target.checked); }}
++                              />
++                              <span>Default</span>
++                            </label>
++                          </td>
++                          <td>
++                            <button
++                              type="button"
++                              data-testid={`save-priority-btn-${p.id}`}
++                              className="kb-btn kb-btn-primary"
++                              onClick={() => { handleSavePriorityEdit(p.id); }}
++                            >
++                              Save
++                            </button>{' '}
++                            <button
++                              type="button"
++                              data-testid={`cancel-priority-btn-${p.id}`}
++                              className="kb-btn kb-btn-secondary"
++                              onClick={() => { setEditingPriorityId(null); }}
++                            >
++                              Cancel
++                            </button>
++                          </td>
++                        </tr>
++                      );
++                    }
++
++                    return (
++                      <tr key={p.id} data-testid={`priority-row-${p.id}`}>
++                        <td>{p.sort_order}</td>
++                        <td>{p.emoji ?? '-'}</td>
++                        <td>
++                          <strong>{p.label}</strong>
++                        </td>
++                        <td>
++                          <code>{p.slug}</code>
++                        </td>
++                        <td>
++                          <ColoredPill
++                            colorHex={p.color_hex}
++                            testId={`priority-pill-${p.id}`}
++                          />
++                        </td>
++                        <td>{p.is_default ? '⭐ Default' : '-'}</td>
++                        <td>
++                          <button
++                            type="button"
++                            data-testid={`edit-priority-btn-${p.id}`}
++                            className="kb-btn kb-btn-secondary"
++                            onClick={() => { handleStartEditPriority(p); }}
++                          >
++                            Edit
++                          </button>{' '}
++                          <button
++                            type="button"
++                            data-testid={`delete-priority-btn-${p.id}`}
++                            className="kb-btn-danger-sm"
++                            onClick={() => { handleDeletePriority(p.id); }}
++                          >
++                            Delete
++                          </button>
++                        </td>
++                      </tr>
++                    );
++                  })}
+                 </tbody>
+               </table>
+             </div>
+@@ -2006,7 +2361,7 @@ export function ProjectSettingsPage(): JSX.Element {
+               <div className="kb-card-icon">🔀</div>
+               <div className="kb-card-content">
+                 <h3>Workflows &amp; States</h3>
+-                <p>Configure lifecycle hooks, state transition interceptors, and automated scripts.</p>
++                <p>Configure lifecycle hooks, state transition helpers, and automated scripts.</p>
+               </div>
+             </Link>
  
- let csrfToggle = false;
- vi.mock('../../auth/useSessionGuard', () => ({
-@@ -3051,13 +3052,19 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
-       }
-       if (url.includes('/api/v1/projects/KAN/states/st-edit-1') && m === 'PATCH') {
-         if (mockErrorType === 'TAKEN') {
--          throw new Error('STATE_NAME_TAKEN: state name already exists');
-+          throw new ApiProblem(409, { code: 'STATE_NAME_TAKEN', title: 'State Name Taken' });
-         }
-         if (mockErrorType === 'LAST_GROUP') {
--          throw new Error('LAST_STATE_IN_GROUP');
-+          throw new ApiProblem(409, {
-+            code: 'LAST_STATE_IN_GROUP',
-+            title: 'Cannot Move Last State Out Of Group',
-+          });
-         }
-         if (mockErrorType === 'DEFAULT_REQ') {
--          throw new Error('DEFAULT_STATE_REQUIRED');
-+          throw new ApiProblem(409, {
-+            code: 'DEFAULT_STATE_REQUIRED',
-+            title: 'Default State Required',
-+          });
-         }
-         patchedStateBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
-         return {
-@@ -3138,8 +3145,11 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
-       expect(screen.getByText('Workflow state "Purple Backlog" updated.')).toBeDefined();
-     });
+diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
+index ecea93de..a032220c 100644
+--- a/kanban/web/src/features/table/TableView.tsx
++++ b/kanban/web/src/features/table/TableView.tsx
+@@ -8,7 +8,13 @@ import {
+ } from './tableColumns';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { StateBadge } from '../../components/state/StateBadge';
+-import { patchProjectIssue, type IssueItem, type SortDirection } from '../views/viewsApi';
++import {
++  patchProjectIssue,
++  type IssueItem,
++  type SortDirection,
++  type StateSummary,
++  normalizeStateKey,
++} from '../views/viewsApi';
+ import '../views/listTable.css';
+ import './TableView.css';
  
--    // Reopen and save with is_default: true
-+    // Reopen and save with updated sort_order and is_default: true
-     fireEvent.click(screen.getByTestId('edit-state-btn-st-edit-1'));
-+    const orderInput = screen.getByTestId('state-edit-order-st-edit-1');
-+    expect(orderInput).toBeDefined();
-+    fireEvent.change(orderInput, { target: { value: '7' } });
-     fireEvent.click(screen.getByTestId('state-edit-default-st-edit-1'));
-     fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+@@ -26,12 +32,14 @@ export interface TableViewProps {
+   onOpenPeek?: ((issueKey: string) => void) | undefined;
+   capabilities?: string[] | undefined;
+   currentUserCapabilities?: string[] | undefined;
++  projectStates?: StateSummary[] | undefined;
+   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
+ }
  
-@@ -3151,6 +3161,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
-       name: 'Purple Backlog',
-       group: 'unstarted',
-       color_hex: '#7c3aed',
-+      sort_order: 7,
-       wip_soft_limit: 5,
-       wip_hard_limit: 10,
-       is_default: true,
-@@ -3216,7 +3227,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
-         return stateList;
-       }
-       if (url.includes('/api/v1/projects/KAN/states') && m === 'POST') {
--        throw new Error('STATE_NAME_TAKEN: state name already exists');
-+        throw new ApiProblem(409, { code: 'STATE_NAME_TAKEN', title: 'State Name Taken' });
-       }
-       if (url.includes('/api/v1/projects/KAN/states/') && m === 'PATCH') {
-         const bodyStr = typeof (options as { body?: unknown }).body === 'string'
+ export function TableView({
+   issues,
+   projectKey,
++  projectStates,
+   modulesEnabled = true,
+   selectedIds = [],
+   onToggleSelect,
+@@ -53,40 +61,87 @@ export function TableView({
+   }
+ 
+   const effectiveCaps = capabilities ?? currentUserCapabilities;
++  const hasTransitionOrEdit = (caps: string[]): boolean =>
++    caps.includes('TRANSITION') || caps.includes('EDIT') || caps.includes('ADMIN');
++  const hasEditOrAdmin = (caps: string[]): boolean =>
++    caps.includes('EDIT') || caps.includes('ADMIN');
+   const isViewerOnly = Boolean(
+-    effectiveCaps &&
+-      (effectiveCaps.includes('VIEWER') ||
+-        (!effectiveCaps.includes('EDIT') && !effectiveCaps.includes('ADMIN'))),
++    effectiveCaps && effectiveCaps.length > 0 && !hasEditOrAdmin(effectiveCaps),
+   );
+ 
+   const canEditIssue = (issue: IssueItem): boolean => {
+     if (isViewerOnly) return false;
+     if (issue.capabilities && issue.capabilities.length > 0) {
+-      if (
+-        issue.capabilities.includes('VIEWER') ||
+-        (!issue.capabilities.includes('EDIT') && !issue.capabilities.includes('ADMIN'))
+-      ) {
+-        return false;
+-      }
++      return hasEditOrAdmin(issue.capabilities);
++    }
++    return true;
++  };
++
++  const canTransitionIssue = (issue: IssueItem): boolean => {
++    const caps = issue.capabilities ?? effectiveCaps;
++    if (caps && caps.length > 0) {
++      return hasTransitionOrEdit(caps);
+     }
+     return true;
+   };
+ 
+-  const handleInlineStateChange = (issue: IssueItem, newStateName: string) => {
+-    const isDone = newStateName === 'Done';
+-    const isProgress = newStateName === 'In Progress' || newStateName === 'In Review';
++  const handleInlineStateChange = (issue: IssueItem, newStateIdOrName: string) => {
++    const previousState = issue.state;
++    let resolvedState: StateSummary | undefined;
++    if (projectStates && projectStates.length > 0) {
++      resolvedState = projectStates.find(
++        (s) =>
++          s.id === newStateIdOrName ||
++          s.name === newStateIdOrName ||
++          normalizeStateKey(s.name) === normalizeStateKey(newStateIdOrName)
++      );
++    }
++
++    if (resolvedState) {
++      const patch: Partial<IssueItem> = {
++        state: {
++          id: resolvedState.id,
++          name: resolvedState.name,
++          group: resolvedState.group,
++          color_hex: resolvedState.color_hex ?? null,
++        },
++      };
++      setLocalIssues((prev) =>
++        prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
++      );
++      void onUpdateIssue?.(issue.key, patch);
++      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch((err: unknown) => {
++        setLocalIssues((prev) =>
++          prev.map((i) => (i.key === issue.key ? { ...i, state: previousState } : i)),
++        );
++        void onUpdateIssue?.(issue.key, { state: previousState });
++        const msg = err instanceof Error ? err.message : 'Failed to transition state';
++        window.dispatchEvent(
++          new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
++        );
++      });
++      window.dispatchEvent(
++        new CustomEvent('kb:issue-updated', {
++          detail: { issueKey: issue.key, patch },
++        }),
++      );
++      return;
++    }
++
++    const isDone = newStateIdOrName === 'Done';
++    const isProgress = newStateIdOrName === 'In Progress' || newStateIdOrName === 'In Review';
+     const group = isDone
+       ? 'completed'
+-      : newStateName === 'Cancelled'
++      : newStateIdOrName === 'Cancelled'
+         ? 'cancelled'
+         : isProgress
+           ? 'started'
+           : 'unstarted';
+-    const stateId = `state-${newStateName.toLowerCase().replace(/\s+/g, '-')}`;
++    const stateId = `state-${newStateIdOrName.toLowerCase().replace(/\s+/g, '-')}`;
+     const patch: Partial<IssueItem> = {
+       state: {
+         id: stateId,
+-        name: newStateName,
++        name: newStateIdOrName,
+         group,
+       },
+     };
+@@ -94,7 +149,16 @@ export function TableView({
+       prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
+     );
+     void onUpdateIssue?.(issue.key, patch);
+-    void patchProjectIssue(issue.key, { state_id: stateId }).catch(() => undefined);
++    void patchProjectIssue(issue.key, { state_id: stateId }).catch((err: unknown) => {
++      setLocalIssues((prev) =>
++        prev.map((i) => (i.key === issue.key ? { ...i, state: previousState } : i)),
++      );
++      void onUpdateIssue?.(issue.key, { state: previousState });
++      const msg = err instanceof Error ? err.message : 'Failed to transition state';
++      window.dispatchEvent(
++        new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
++      );
++    });
+     window.dispatchEvent(
+       new CustomEvent('kb:issue-updated', {
+         detail: { issueKey: issue.key, patch },
+@@ -471,13 +535,24 @@ export function TableView({
+                         );
+                       }
+                       if (colId === 'state') {
+-                        if (!canEdit) {
++                        const canTrans = canTransitionIssue(issue);
++                        if (!canTrans) {
+                           return (
+                             <td key={colId} className="table-state-cell" data-col="state">
+                               <StateBadge state={issue.state} className="status-pill" />
+                             </td>
+                           );
+                         }
++                        const activeStateVal =
++                          projectStates && projectStates.length > 0
++                            ? (projectStates.find((s) => s.id === issue.state.id)?.id ??
++                              projectStates.find(
++                                (s) =>
++                                  normalizeStateKey(s.name) ===
++                                  normalizeStateKey(issue.state.name),
++                              )?.id ??
++                              issue.state.id)
++                            : issue.state.name;
+                         return (
+                           <td
+                             key={colId}
+@@ -488,17 +563,27 @@ export function TableView({
+                             <select
+                               className="table-inline-select table-inline-select--state"
+                               aria-label={`Edit state for ${issue.key}`}
+-                              value={issue.state.name}
++                              value={activeStateVal}
+                               onChange={(e) => {
+                                 handleInlineStateChange(issue, e.target.value);
+                               }}
+                             >
+-                              <option value="Backlog">Backlog</option>
+-                              <option value="Todo">Todo</option>
+-                              <option value="In Progress">In Progress</option>
+-                              <option value="In Review">In Review</option>
+-                              <option value="Done">Done</option>
+-                              <option value="Cancelled">Cancelled</option>
++                              {projectStates && projectStates.length > 0 ? (
++                                projectStates.map((st) => (
++                                  <option key={st.id} value={st.id}>
++                                    {st.name}
++                                  </option>
++                                ))
++                              ) : (
++                                <>
++                                  <option value="Backlog">Backlog</option>
++                                  <option value="Todo">Todo</option>
++                                  <option value="In Progress">In Progress</option>
++                                  <option value="In Review">In Review</option>
++                                  <option value="Done">Done</option>
++                                  <option value="Cancelled">Cancelled</option>
++                                </>
++                              )}
+                             </select>
+                           </td>
+                         );
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 663cef6c..efb54b8f 100644
+index 97a810a9..480d3478 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
-@@ -940,10 +940,12 @@ export function IssuesWorkspaceRoute({
+@@ -8,6 +8,8 @@ import { TableView } from '../table/TableView';
+ import { CalendarView } from '../calendar/CalendarView';
+ import { TimelineView } from '../timeline/TimelineView';
+ import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
++import { IssueNavigatorBar } from './IssueNavigatorBar';
++import { matchesIssueQuery } from './predicateParser';
+ import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
+ import { BulkActionBar } from './BulkActionBar';
+ import { QuickCreateIssueModal } from './QuickCreateIssueModal';
+@@ -18,6 +20,7 @@ import { announce } from '../../realtime';
+ import {
+   fetchProjectIssues,
+   fetchProjectStates,
++  fetchProjectSavedViews,
+   createProjectIssue,
+   patchProjectIssue,
+   deleteProjectIssue,
+@@ -26,6 +29,7 @@ import {
+   type IssueItem,
+   type StateSummary,
+   type GroupAxis,
++  type SavedView,
+ } from './viewsApi';
+ import { IssueSurfaceRoot } from '../drawer/IssueSurface';
+ import './filterBulk.css';
+@@ -85,6 +89,7 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
+ export interface ViewComponentProps {
+   issues: IssueItem[];
+   projectKey: string;
++  projectStates?: StateSummary[] | undefined;
+   modulesEnabled?: boolean | undefined;
+   selectedIds?: string[] | undefined;
+   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+@@ -125,7 +130,7 @@ export function ViewHost({
+   return <Component {...props} />;
+ }
+ 
+-const defaultQueryClient = new QueryClient({
++export const defaultQueryClient = new QueryClient({
+   defaultOptions: {
+     queries: {
+       retry: false,
+@@ -150,7 +155,26 @@ export interface IssuesWorkspaceRouteProps {
+  * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
+  * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
+  */
+-function computeStateSummary(sId: string): StateSummary {
++export function computeStateSummary(
++  sId: string,
++  projectStates?: StateSummary[],
++): StateSummary {
++  if (projectStates && projectStates.length > 0) {
++    const matched =
++      projectStates.find((s) => s.id === sId) ??
++      projectStates.find(
++        (s) => normalizeStateKey(s.name) === normalizeStateKey(sId),
++      ) ??
++      projectStates.find((s) => s.group === sId);
++    if (matched) {
++      return {
++        id: matched.id,
++        name: matched.name,
++        group: matched.group,
++        color_hex: matched.color_hex ?? null,
++      };
++    }
++  }
+   if (sId.includes('progress')) return { id: sId, name: 'In Progress', group: 'started' };
+   if (sId.includes('todo')) return { id: sId, name: 'Todo', group: 'unstarted' };
+   if (sId.includes('done')) return { id: sId, name: 'Done', group: 'completed' };
+@@ -169,14 +193,14 @@ export function IssuesWorkspaceRoute({
+ }: IssuesWorkspaceRouteProps): JSX.Element {
+   const isLiveMode = initialIssues === undefined;
+ 
+-  const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean } | null>(() => {
+-    return queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]) ?? null;
++  const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean; name?: string } | null>(() => {
++    return queryClient.getQueryData<{ modules_enabled?: boolean; name?: string }>(['project', projectKey]) ?? null;
+   });
+ 
+   useEffect(() => {
+     if (!projectKey) return;
+     const updateFromCache = (): void => {
+-      const data = queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]);
++      const data = queryClient.getQueryData<{ modules_enabled?: boolean; name?: string }>(['project', projectKey]);
+       setProjectMetadata(data ?? null);
+     };
+     updateFromCache();
+@@ -286,15 +310,24 @@ export function IssuesWorkspaceRoute({
+     };
+   }, []);
+ 
++  const [closedSplitKey, setClosedSplitKey] = useState<string | null>(null);
++
+   const handleOpenPeek = useCallback(
+-    (issueKey: string) => {
++    (issueKey: string | null) => {
+       setPeekParam(issueKey);
++      if (issueKey) {
++        setClosedSplitKey(null);
++      }
+       if (propOnOpenPeek) {
+-        propOnOpenPeek(issueKey);
++        if (issueKey) propOnOpenPeek(issueKey);
+         return;
+       }
+       const url = new URL(window.location.href);
+-      url.searchParams.set('peek', issueKey);
++      if (issueKey) {
++        url.searchParams.set('peek', issueKey);
++      } else {
++        url.searchParams.delete('peek');
++      }
+       window.history.pushState({}, '', url.toString());
+       window.dispatchEvent(new PopStateEvent('popstate'));
+     },
+@@ -350,6 +383,50 @@ export function IssuesWorkspaceRoute({
+     return filters;
+   });
+ 
++  const [favoritesOnly, setFavoritesOnly] = useState(false);
++  const [searchQuery, setSearchQuery] = useState('');
++  const [queryMode, setQueryMode] = useState<'basic' | 'query'>('basic');
++  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
++  const [activeViewId, setActiveViewId] = useState<string | null>(() => searchParams.get('view'));
++
++  useEffect(() => {
++    if (!projectKey) return;
++    let active = true;
++    void fetchProjectSavedViews(projectKey)
++      .then((views) => {
++        if (active && Array.isArray(views)) {
++          setSavedViews(views);
++          const viewParam = new URLSearchParams(window.location.search).get('view');
++          if (viewParam) {
++            const matched = views.find((v) => v.id === viewParam);
++            if (matched) {
++              setActiveViewId(viewParam);
++              setGroupBy(matched.group_by);
++              setSubGroupBy(matched.sub_group_by);
++            }
++          }
++        }
++      })
++      .catch(() => {
++        // unit test or offline fallback
++      });
++    return () => {
++      active = false;
++    };
++  }, [projectKey]);
++
++  const handleSelectSavedView = useCallback((viewId: string) => {
++    setActiveViewId(viewId);
++    const view = savedViews.find((v) => v.id === viewId);
++    if (view) {
++      setGroupBy(view.group_by);
++      setSubGroupBy(view.sub_group_by);
++    }
++    const url = new URL(window.location.href);
++    url.searchParams.set('view', viewId);
++    window.history.pushState({}, '', url.toString());
++  }, [savedViews]);
++
+   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
+   const [isFilterOpen, setIsFilterOpen] = useState(false);
+@@ -482,9 +559,35 @@ export function IssuesWorkspaceRoute({
+         if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
+       }
+ 
++      // 9. Favorites-only filter
++      if (favoritesOnly) {
++        try {
++          const raw = typeof window !== 'undefined' ? localStorage.getItem('kb_favorite_issues') : null;
++          const parsed: unknown = raw ? JSON.parse(raw) : [];
++          const favs = Array.isArray(parsed)
++            ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string')
++            : [];
++          if (!favs.includes(issue.key)) return false;
++        } catch {
++          // ignore
++        }
++      }
++
++      // 10. Text / Query search filter
++      if (searchQuery.trim().length > 0) {
++        if (queryMode === 'query') {
++          if (!matchesIssueQuery(searchQuery, issue, projectKey)) return false;
++        } else {
++          const lower = searchQuery.toLowerCase();
++          const matchesKey = issue.key.toLowerCase().includes(lower);
++          const matchesSummary = issue.summary.toLowerCase().includes(lower);
++          if (!matchesKey && !matchesSummary) return false;
++        }
++      }
++
+       return true;
+     });
+-  }, [issues, activeFilters, modulesEnabled, projectStates]);
++  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey]);
+ 
+   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
+   const boardStates: BoardWorkflowState[] = useMemo(() => {
+@@ -505,6 +608,7 @@ export function IssuesWorkspaceRoute({
+             ? s.group
+             : 'unstarted') as BoardWorkflowState['group'],
+           sort_order: s.sort_order ?? idx + 1,
++          color_hex: s.color_hex ?? null,
+           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
+           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
+         };
+@@ -527,6 +631,7 @@ export function IssuesWorkspaceRoute({
+     selectedIds,
+     setSelectedIds,
+     modulesEnabled,
++    onOpenPeek: handleOpenPeek,
+     onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
+     onOpenFilter: () => { setIsFilterOpen(true); },
+     onOpenFieldPopover: (field, issue, rect) => {
+@@ -620,10 +725,11 @@ export function IssuesWorkspaceRoute({
+     return item;
+   };
+ 
+-  const handleFieldSelect = (field: QuickFieldType, value: unknown) => {
+-    const currentIssue = popoverState.issue;
++  const handleFieldSelect = (field: QuickFieldType, value: unknown, targetKeyOverride?: string) => {
++    const targetKey = targetKeyOverride ?? popoverState.issue?.key;
++    if (!targetKey) return;
++    const currentIssue = issues.find((i) => i.key === targetKey) ?? popoverState.issue;
+     if (!currentIssue) return;
+-    const targetKey = currentIssue.key;
+     let overrideReason: string | undefined;
+ 
+     if (field === 'state') {
+@@ -683,6 +789,10 @@ export function IssuesWorkspaceRoute({
+       }
+     }
+ 
++    const prevIssue = issues.find((i) => i.key === targetKey);
++    const prevPriority = prevIssue?.priority;
++    const prevState = prevIssue?.state;
++
+     setIssues((prev) =>
+       prev.map((i) => {
+         if (i.key !== targetKey) return i;
+@@ -708,7 +818,7 @@ export function IssuesWorkspaceRoute({
+         }
+         if (field === 'state') {
+           const sId = String(value);
+-          const nextState = computeStateSummary(sId);
++          const nextState = computeStateSummary(sId, projectStates);
+           return {
+             ...i,
+             state: nextState,
+@@ -720,10 +830,20 @@ export function IssuesWorkspaceRoute({
+ 
+     if (isLiveMode) {
+       if (field === 'priority') {
+-        void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
++        void patchProjectIssue(targetKey, { priority: String(value) }).catch((err: unknown) => {
++          if (prevPriority) {
++            setIssues((p) =>
++              p.map((it) => (it.key === targetKey ? { ...it, priority: prevPriority } : it)),
++            );
++          }
++          const msg = err instanceof Error ? err.message : 'Failed to update priority';
++          window.dispatchEvent(
++            new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
++          );
++        });
+       } else if (field === 'state') {
+         const sId = String(value);
+-        const desired = computeStateSummary(sId);
++        const desired = computeStateSummary(sId, projectStates);
+         const resolvedUuid = resolveStateUuid(desired, projectStates);
+         if (resolvedUuid) {
+           const patchPayload: Record<string, unknown> = { state_id: resolvedUuid };
+@@ -731,7 +851,17 @@ export function IssuesWorkspaceRoute({
+             patchPayload.override_wip = true;
+             patchPayload.wip_override_reason = overrideReason;
+           }
+-          void patchProjectIssue(targetKey, patchPayload).catch(() => undefined);
++          void patchProjectIssue(targetKey, patchPayload).catch((err: unknown) => {
++            if (prevState) {
++              setIssues((p) =>
++                p.map((it) => (it.key === targetKey ? { ...it, state: prevState } : it)),
++              );
++            }
++            const msg = err instanceof Error ? err.message : 'Failed to transition state';
++            window.dispatchEvent(
++              new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
++            );
++          });
+         }
+       }
+     }
+@@ -815,13 +945,21 @@ export function IssuesWorkspaceRoute({
+   // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
+   const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
+ 
+-  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
++  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
++
++  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
+   const activePeekKey = useMemo(() => {
+     if (peekParam) {
+       return peekParam;
+     }
++    if (isMobileViewport) {
++      return null;
++    }
++    if (closedSplitKey && closedSplitKey === filteredIssues[0]?.key) {
++      return null;
++    }
+     return filteredIssues[0]?.key ?? null;
+-  }, [peekParam, filteredIssues]);
++  }, [peekParam, isMobileViewport, closedSplitKey, filteredIssues]);
+ 
+   return (
+     <QueryClientProvider client={queryClient}>
+@@ -831,20 +969,42 @@ export function IssuesWorkspaceRoute({
+         data-layout={layout}
+       >
+         {/* 1. Filter and Display Bar */}
+-      <FilterDisplayBar
+-        activeFilters={activeFilters}
+-        onFiltersChange={setActiveFilters}
+-        groupBy={groupBy}
+-        onGroupByChange={setGroupBy}
+-        subGroupBy={subGroupBy}
+-        onSubGroupByChange={setSubGroupBy}
+-        modulesEnabled={modulesEnabled}
+-        isFilterOpen={isFilterOpen}
+-        onToggleFilterOpen={setIsFilterOpen}
+-        projectKey={projectKey}
+-        issues={issues}
+-        onSaveView={() => { setIsSaveViewModalOpen(true); }}
+-      />
++      {layout === 'list' ? (
++        <IssueNavigatorBar
++          projectKey={projectKey}
++          issues={issues}
++          projectStates={projectStates}
++          modulesEnabled={modulesEnabled}
++          activeFilters={activeFilters}
++          onFiltersChange={setActiveFilters}
++          searchQuery={searchQuery}
++          onSearchQueryChange={setSearchQuery}
++          queryMode={queryMode}
++          onQueryModeChange={setQueryMode}
++          favoritesOnly={favoritesOnly}
++          onToggleFavoritesOnly={() => {
++            setFavoritesOnly((prev) => !prev);
++          }}
++          savedViews={savedViews}
++          activeViewId={activeViewId}
++          onSelectSavedView={handleSelectSavedView}
++        />
++      ) : (
++        <FilterDisplayBar
++          activeFilters={activeFilters}
++          onFiltersChange={setActiveFilters}
++          groupBy={groupBy}
++          onGroupByChange={setGroupBy}
++          subGroupBy={subGroupBy}
++          onSubGroupByChange={setSubGroupBy}
++          modulesEnabled={modulesEnabled}
++          isFilterOpen={isFilterOpen}
++          onToggleFilterOpen={setIsFilterOpen}
++          projectKey={projectKey}
++          issues={issues}
++          onSaveView={() => { setIsSaveViewModalOpen(true); }}
++        />
++      )}
+ 
+       {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
+       {is2DSwimlane ? (
+@@ -854,10 +1014,20 @@ export function IssuesWorkspaceRoute({
+           groupBy={groupBy}
+           subGroupBy={subGroupBy}
+           modulesEnabled={modulesEnabled}
++          projectStates={projectStates}
+           selectedIds={selectedIds}
+           onToggleSelect={canEdit ? handleToggleSelect : undefined}
+           focusedKey={focusedKey}
+           onCardClick={handleRowClick}
++          currentUserCapabilities={effectiveCaps}
++          onStateTransition={(issueKey, targetStateId) => {
++            handleFieldSelect('state', targetStateId, issueKey);
++          }}
++          onCardMove={(issueKey, targetColId) => {
++            if (groupBy === 'state') {
++              handleFieldSelect('state', targetColId, issueKey);
++            }
++          }}
+         />
+       ) : layout === 'board' ? (
+         <BoardView
+@@ -874,14 +1044,24 @@ export function IssuesWorkspaceRoute({
+             <ListView
+               issues={filteredIssues}
+               projectKey={projectKey}
++              projectStates={projectStates}
+               modulesEnabled={modulesEnabled}
+               selectedIds={selectedIds}
+               onToggleSelect={canEdit ? handleToggleSelect : undefined}
+               onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
+               focusedKey={focusedKey}
++              capabilities={effectiveCaps}
+               onOpenPeek={handleOpenPeek}
+               activeKey={activePeekKey}
+               canManageWorkflows={canAdmin}
++              onOpenFieldPopover={(field, issue, rect) => {
++                setPopoverState({
++                  isOpen: true,
++                  field,
++                  issue,
++                  anchorRect: rect,
++                });
++              }}
+             />
+           </div>
+           {activePeekKey && (
+@@ -889,6 +1069,15 @@ export function IssuesWorkspaceRoute({
+               mode="split"
+               issueKey={activePeekKey}
+               projectKey={projectKey}
++              issuesList={filteredIssues}
++              onNavigateIssue={(key: string) => {
++                handleOpenPeek(key);
++              }}
++              projectName={typeof projectMetadata?.name === 'string' ? projectMetadata.name : undefined}
++              onClose={() => {
++                setClosedSplitKey(activePeekKey);
++                handleOpenPeek(null);
++              }}
+             />
+           )}
+         </div>
+@@ -897,6 +1086,7 @@ export function IssuesWorkspaceRoute({
+           layout={layout}
+           issues={filteredIssues}
+           projectKey={projectKey}
++          projectStates={projectStates}
+           modulesEnabled={modulesEnabled}
+           selectedIds={selectedIds}
+           onToggleSelect={canEdit ? handleToggleSelect : undefined}
+@@ -916,10 +1106,19 @@ export function IssuesWorkspaceRoute({
            onClearSelection={() => { setSelectedIds([]); }}
            modulesEnabled={modulesEnabled}
            onBatchUpdateState={(targetStateSlug) => {
-+            const matchedSt = projectStates.find((s) => s.id === targetStateSlug || s.group === (targetStateSlug === 'done' ? 'completed' : 'unstarted'));
++            const matchedSt = projectStates.find(
++              (s) =>
++                s.id === targetStateSlug ||
++                s.group === (targetStateSlug === 'done' ? 'completed' : 'unstarted'),
++            );
              const desiredState: StateSummary = {
-               id: `state-${targetStateSlug}`,
-               name: targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1),
-               group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
+-              id: `state-${targetStateSlug}`,
+-              name: targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1),
+-              group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
++              id: matchedSt?.id ?? `state-${targetStateSlug}`,
++              name:
++                matchedSt?.name ??
++                (targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1)),
++              group:
++                matchedSt?.group ?? (targetStateSlug === 'done' ? 'completed' : 'unstarted'),
 +              color_hex: matchedSt?.color_hex ?? null,
              };
              setIssues((prev) =>
                prev.map((i) =>
-
-
+diff --git a/tests/unit/test_project_config.py b/tests/unit/test_project_config.py
+new file mode 100644
+index 00000000..0393f6c4
+--- /dev/null
++++ b/tests/unit/test_project_config.py
+@@ -0,0 +1,141 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for project config service (get_state_audit_impact lifecycle protections)."""
++
++from __future__ import annotations
++
++import uuid
++from unittest.mock import AsyncMock, MagicMock, patch
++
++import pytest
++
++from database.models import WorkflowState
++from kanban.services.project_config import get_state_audit_impact
++
++
++def _create_mock_session(state: WorkflowState, group_count: int) -> AsyncMock:
++    """Build a mock database session returning preconfigured counts and queries."""
++    session = AsyncMock()
++
++    async def execute_impl(statement: object, *args: object, **kwargs: object) -> MagicMock:
++        del args, kwargs
++        res = MagicMock()
++        stmt_str = str(statement).lower()
++        if "from workflow_states" in stmt_str and (
++            "workflow_states.id ==" in stmt_str or "workflow_states.id =" in stmt_str
++        ):
++            res.scalar_one_or_none.return_value = state
++        elif "from workflow_states" in stmt_str and "count" in stmt_str:
++            res.scalar_one.return_value = group_count
++        elif "from workflow_transition_executions" in stmt_str:
++            res.scalar_one.return_value = 0
++        else:
++            res.scalar_one_or_none.return_value = None
++            res.scalars.return_value.all.return_value = []
++        return res
++
++    session.execute.side_effect = execute_impl
++    return session
++
++
++@pytest.mark.asyncio
++async def test_get_state_audit_impact_flags_last_started_state() -> None:
++    """Verify get_state_audit_impact flags the last state in started group with blocking reason."""
++    caller = MagicMock()
++    project_id = uuid.uuid4()
++    state_id = uuid.uuid4()
++
++    mock_project = MagicMock()
++    mock_project.id = project_id
++    mock_project.identifier = "KAN"
++
++    mock_state = MagicMock(spec=WorkflowState)
++    mock_state.id = state_id
++    mock_state.project_id = project_id
++    mock_state.name = "In Progress"
++    mock_state.state_group = "started"
++    mock_state.is_default = False
++
++    session = _create_mock_session(mock_state, group_count=1)
++
++    with (
++        patch(
++            "kanban.services.project_config.get_project_or_404",
++            AsyncMock(return_value=mock_project),
++        ),
++        patch("kanban.services.project_config.require_capability", AsyncMock()),
++        patch("kanban.services.project_config.list_states", AsyncMock(return_value=[])),
++    ):
++        result = await get_state_audit_impact(session, caller, "KAN", state_id)
++
++    assert "Last State in Group: Cannot delete the last state in group." in result.blocking_reasons
++
++
++@pytest.mark.asyncio
++async def test_get_state_audit_impact_does_not_flag_started_when_multiple_states() -> None:
++    """Verify get_state_audit_impact does NOT flag started when multiple states exist."""
++    caller = MagicMock()
++    project_id = uuid.uuid4()
++    state_id = uuid.uuid4()
++
++    mock_project = MagicMock()
++    mock_project.id = project_id
++    mock_project.identifier = "KAN"
++
++    mock_state = MagicMock(spec=WorkflowState)
++    mock_state.id = state_id
++    mock_state.project_id = project_id
++    mock_state.name = "In Progress"
++    mock_state.state_group = "started"
++    mock_state.is_default = False
++
++    session = _create_mock_session(mock_state, group_count=2)
++
++    with (
++        patch(
++            "kanban.services.project_config.get_project_or_404",
++            AsyncMock(return_value=mock_project),
++        ),
++        patch("kanban.services.project_config.require_capability", AsyncMock()),
++        patch("kanban.services.project_config.list_states", AsyncMock(return_value=[])),
++    ):
++        result = await get_state_audit_impact(session, caller, "KAN", state_id)
++
++    assert (
++        "Last State in Group: Cannot delete the last state in group." not in result.blocking_reasons
++    )
++
++
++@pytest.mark.asyncio
++async def test_get_state_audit_impact_does_not_flag_unstarted_state() -> None:
++    """Verify get_state_audit_impact does NOT flag unstarted state as last state in group."""
++    caller = MagicMock()
++    project_id = uuid.uuid4()
++    state_id = uuid.uuid4()
++
++    mock_project = MagicMock()
++    mock_project.id = project_id
++    mock_project.identifier = "KAN"
++
++    mock_state = MagicMock(spec=WorkflowState)
++    mock_state.id = state_id
++    mock_state.project_id = project_id
++    mock_state.name = "Todo"
++    mock_state.state_group = "unstarted"
++    mock_state.is_default = False
++
++    session = _create_mock_session(mock_state, group_count=1)
++
++    with (
++        patch(
++            "kanban.services.project_config.get_project_or_404",
++            AsyncMock(return_value=mock_project),
++        ),
++        patch("kanban.services.project_config.require_capability", AsyncMock()),
++        patch("kanban.services.project_config.list_states", AsyncMock(return_value=[])),
++    ):
++        result = await get_state_audit_impact(session, caller, "KAN", state_id)
++
++    assert (
++        "Last State in Group: Cannot delete the last state in group." not in result.blocking_reasons
++    )

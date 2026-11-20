@@ -1,33 +1,37 @@
-=== KAN-53 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 07d04cde) ===
-Timestamp: 2026-11-20T20:47:52.893Z - 2026-11-20T20:48:23.857Z
+=== KAN-53 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 7913c2c8) ===
+Timestamp: 2026-11-20T22:14:43.025Z - 2026-11-20T22:15:19.232Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite.mjs
+Test Runner Script: live_qa_suite_v2.mjs
 
---- Setup ---
-Created second project SEC ("Security Core") via POST /api/v1/projects (HTTP 201) alongside KAN ("Kanban Core").
+--- Page Load & Navigation Timings (< 3000ms threshold) ---
+- /projects/KAN/issues?layout=list (Desktop): 857 ms
+- Clicking SEC -> Issues navigation: 279 ms
+- Clicking Home (/) navigation: 285 ms
+- Tablet (768x1024) /projects/KAN/issues?layout=list: 837 ms
+- Mobile (390x844) /projects/KAN/issues?layout=list: 877 ms
 
---- Sidebar Project-Focus Auto-Collapse Verification ---
+--- Sidebar Project-Focus Auto-Collapse Verification (KAN & SEC Both Visibly Rendered) ---
 1. Focusing KAN (/projects/KAN/issues?layout=list):
-   - Desktop Light (1440x900) - live-sidebar-kan-focused-desktop-light.png:
-     {"kanExpanded":"true","secExpanded":"false"}
-   - Desktop Dark (1440x900) - live-sidebar-kan-focused-desktop-dark.png:
-     {"kanExpanded":"true","secExpanded":"false"}
+   - Desktop Light (1440x1050) - live-sidebar-kan-focused-desktop-light.png:
+     {"kanExpanded":"true","secExpanded":"false","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
+   - Desktop Dark (1440x1050) - live-sidebar-kan-focused-desktop-dark.png:
+     {"kanExpanded":"true","secExpanded":"false","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
    - Tablet (768x1024, sidebar opened via .kb-topbar-hamburger) - live-sidebar-kan-focused-tablet.png:
-     {"kanExpanded":"true","secExpanded":"false"}
+     {"kanExpanded":"true","secExpanded":"false","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
    - Mobile (390x844, sidebar opened via .kb-topbar-hamburger) - live-sidebar-kan-focused-mobile.png:
-     {"kanExpanded":"true","secExpanded":"false"}
+     {"kanExpanded":"true","secExpanded":"false","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
 2. Clicking "📋 Issues" under SEC (/projects/SEC/issues?layout=list) - live-sidebar-sec-focused-desktop-light.png:
    - KAN auto-collapsed and SEC expanded:
-     {"kanExpanded":"false","secExpanded":"true"}
+     {"kanExpanded":"false","secExpanded":"true","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
 3. Clicking .kb-project-expand-row arrow on KAN manually while SEC is focused - live-sidebar-both-expanded-desktop-light.png:
-   - KAN manually expanded while keeping SEC expanded:
-     {"kanExpanded":"true","secExpanded":"true"}
+   - Both projects expanded simultaneously:
+     {"kanExpanded":"true","secExpanded":"true","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
 4. Navigating to "/" (Workspace Home) - live-sidebar-home-preserved-desktop-light.png:
-   - Manual expansion state preserved on non-project route:
-     {"kanExpanded":"true","secExpanded":"true"}
+   - Manual expansion state preserved on non-project route, with both "Kanban Core ▾" and "Security Core ▾" visibly rendered expanded in the sidebar simultaneously:
+     {"kanExpanded":"true","secExpanded":"true","kanHeight":36,"secHeight":36,"bothVisibleInViewport":true}
 
 Visual Inspection Confirmation:
-- All 7 Light/Dark/Tablet/Mobile screenshots confirm clean typography, crisp contrast, accurate aria-expanded triangles (▾ vs ▸), and zero layout regressions.
+- Every screenshot shows both "Kanban Core" and "Security Core" simultaneously in the sidebar with crisp contrast, 36px .kb-project-expand-row height, and accurate expansion triangles (▾ vs ▸).
 LIVE_STACK_VERDICT [P1_SIDEBAR_AUTO_COLLAPSE]: PASS
 
 --- Runtime Error Telemetry (KAN-53 scope) ---

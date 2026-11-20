@@ -1,82 +1,87 @@
 ================================================================================
 KAN-20 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 7913c2c8, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
 1. SUMMARY OF LIVE VERIFICATION FINDINGS
 --------------------------------------------------------------------------------
-- Seeded issues and docs in KAN linked via VERIFIED_BY_DOC and BLOCKS, plus secret issue and doc in PRIV with explicit @member ACL DENY on PRIV (and cross-project BLOCKS link from KAN-16 to PRIV-6).
-- Indexed embeddings using EmbeddingIndexer + OnnxBgeSmallEmbedder(fallback_to_fixture=True) under FORCE ROW LEVEL SECURITY.
+- Seeded issues KAN-1, KAN-2, KAN-3, KAN-4 and docs docs/verification-architecture-spec, docs/deployment-proof-checklist in KAN linked via VERIFIED_BY_DOC and BLOCKS, plus secret PRIV-1 and doc docs/classified-vault-runbook in PRIV with explicit @member ACL DENY on PRIV (and cross-project BLOCKS link from KAN-1 to PRIV-1).
+- Indexed embeddings using EmbeddingIndexer + OnnxBgeSmallEmbedder(fallback_to_fixture=True) under FORCE ROW LEVEL SECURITY, leaving KAN-4 and docs/deployment-proof-checklist as unindexed linked neighbors to exercise synaptic activation provenance.
 - COLD & WARM Hybrid Search + Synaptic Activation (0 HTTP 500s):
   * COLD GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @member:
-    status=200 OK, latency=168.83ms, executed_mode="hybrid", total=24, 0 PRIV leaks.
-    Proves SET LOCAL statement_timeout = 0 reset in _query_vector_candidates and nested savepoint resilience in spread_synaptic_activation.
+    status=200 OK, latency=30.35ms, executed_mode="hybrid", total=4, 0 PRIV leaks.
   * WARM GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @member:
-    status=200 OK, latency=157.07ms, executed_mode="hybrid", total=24, 0 PRIV leaks.
+    status=200 OK, latency=30.10ms, executed_mode="hybrid", total=4, 0 PRIV leaks.
   * @member secret query probe (q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION):
     hybrid_status=200 priv_leaks=0, lexical_total=0 (zero PRIV leakage!).
   * COLD GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @admin:
-    status=200 OK, latency=74.26ms, executed_mode="hybrid", total=32.
-  * WARM GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @admin:
-    status=200 OK, latency=76.82ms, executed_mode="hybrid", total=32.
-  * Provenance match_reason strings verified: "Semantic match", "Lexical match", "Linked via VERIFIED_BY_DOC to KAN-*", "Linked via BLOCKS to KAN-*".
-- MCP JSON-RPC surfaces (BOTH emit executed_mode alongside mode and match_reason):
+    status=200 OK, latency=30.44ms, executed_mode="hybrid", total=6 (and total=8 after adding KAN-4 and docs/deployment-proof-checklist).
+  * Provenance match_reason strings verified in exact backend RRF/synaptic rank order:
+    1. issue KAN-1 'Synaptic Vector Kernel' -> Semantic match
+    2. issue KAN-3 'Synaptic Vector Kernel Telemetry' -> Semantic match
+    3. doc docs/deployment-proof-checklist 'Deployment Proof Checklist' -> Linked via VERIFIED_BY_DOC to KAN-1
+    4. issue KAN-4 'Release Verification Gate' -> Linked via BLOCKS to KAN-1
+    5. issue KAN-2 'Release Gate Readiness Checklist' -> Semantic match
+    6. issue PRIV-1 'CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION' -> Semantic match
+    7. doc docs/classified-vault-runbook 'Classified Vault Runbook' -> Semantic match
+    8. doc docs/verification-architecture-spec 'Verification Architecture Spec' -> Semantic match
+- MCP JSON-RPC surfaces (BOTH emit executed_mode: hybrid alongside mode: hybrid and match_reason):
   * POST /mcp/agent tools/call search_tickets (mode="hybrid") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
-  * POST /mcp/docs tools/call search (mode="hybrid") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
+  * POST /mcp/docs tools/call search (query="Synaptic Vector Kernel", mode="hybrid", lod="standard") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
 - CommandPalette (Ctrl+K) Playwright UI on /w/kanban/p/KAN/issues across Desktop (1440x900 Light & Dark), Tablet (768x1024 Light), Mobile (390x844 Light):
-  * Desktop Light: searchMs=292ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * Desktop Dark: searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * Tablet Light: searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * Mobile Light: searchMs=286ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Rendered all 8 backend hybrid results in exact backend rank order including "Linked via VERIFIED_BY_DOC to KAN-1" and "Linked via BLOCKS to KAN-1" provenance pills!
+  * Desktop Light: searchMs=288ms, pillCount=8, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Desktop Dark: searchMs=287ms, pillCount=8, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Tablet Light: searchMs=285ms, pillCount=8, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Mobile Light (390x844): searchMs=286ms, pillCount=8, headerFlexWrap=wrap (option title wraps cleanly without crushing), docOverflow=false, dialogOverflow=false, outsideDialog=false
   * UI consoleErrors=0, pageErrors=0, serverErrors=0.
 
 2. VERBATIM API, INDEXER, RLS, AND MCP OUTPUT LOG
 --------------------------------------------------------------------------------
-[SEED] Created KAN-16, KAN-17, KAN-18, doc docs/verification-architecture-spec-5 (01a1fab1-2dd6-718e-8616-b006599c922f), PRIV PRIV-6, PRIV doc docs/classified-vault-runbook-5 (01a1fab1-2e18-7609-bc21-c6346226f606)
-[LINKS] KAN-16 VERIFIED_BY_DOC->docs/verification-architecture-spec-5 (201), BLOCKS->KAN-17 (201), BLOCKS->PRIV-6 (201)
-[INDEXER] indexed issue 01a1fab1-2d59-7838-8ad7-689599c716d6 writes=1
-[INDEXER] indexed issue 01a1fab1-2d87-7bdd-913f-d883f87894ac writes=1
-[INDEXER] indexed issue 01a1fab1-2db3-7df0-b51f-305373c903db writes=1
-[INDEXER] indexed doc 01a1fab1-2dd6-718e-8616-b006599c922f writes=1
-[INDEXER] indexed issue 01a1fab1-2df4-7823-9304-121aaca9cd95 writes=1
-[INDEXER] indexed doc 01a1fab1-2e18-7609-bc21-c6346226f606 writes=1
-[COLD @member HYBRID SEARCH] status=200 latency=168.83ms executed_mode=hybrid total=24
-  - kind=issue proj=KAN key=KAN-16 title=Synaptic Vector Kernel match_reason=Semantic match
-  - kind=issue proj=KAN key=KAN-13 title=Synaptic Vector Kernel match_reason=Semantic match
-  - kind=issue proj=KAN key=KAN-6 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-12 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-3 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-9 title=Synaptic Vector Kernel Telemetry match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-10 title=Synaptic Vector Kernel match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-4 title=Synaptic Vector Kernel match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-7 title=Synaptic Vector Kernel match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-1 title=Synaptic Vector Kernel match_reason=Lexical match
-  - kind=issue proj=KAN key=KAN-15 title=Synaptic Vector Kernel Telemetry match_reason=Semantic match
-  - kind=issue proj=KAN key=KAN-18 title=Synaptic Vector Kernel Telemetry match_reason=Semantic match
-  - kind=doc proj=KAN key=docs/verification-architecture-spec-3 title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-10
-  - kind=doc proj=KAN key=docs/verification-architecture-spec-1 title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-4
-  - kind=doc proj=KAN key=docs/verification-architecture-spec-2 title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-7
-  - kind=doc proj=KAN key=docs/verification-architecture-spec title=Verification Architecture Spec match_reason=Linked via VERIFIED_BY_DOC to KAN-1
-  - kind=issue proj=KAN key=KAN-11 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-10
-  - kind=issue proj=KAN key=KAN-5 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-4
-  - kind=issue proj=KAN key=KAN-8 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-7
-  - kind=issue proj=KAN key=KAN-2 title=Release Gate Readiness Checklist match_reason=Linked via BLOCKS to KAN-1
-[WARM @member HYBRID SEARCH] status=200 latency=157.07ms executed_mode=hybrid total=24
+[SEED & INDEXER]
+[SEED] Created KAN-1, KAN-2, KAN-3, doc docs/verification-architecture-spec (01a1fb00-7d57-7b77-ae1c-da0f154a203e), PRIV PRIV-1, PRIV doc docs/classified-vault-runbook (01a1fb00-7da4-71ef-8bc0-1f29b832ac44)
+[LINKS] KAN-1 VERIFIED_BY_DOC->docs/verification-architecture-spec (201), BLOCKS->KAN-2 (201), BLOCKS->PRIV-1 (201)
+[PRE-INDEX SEARCH] status=200 executed_mode=lexical total=3
+[INDEXER] indexed issue 01a1fb00-7c7e-7410-93b8-dd23417084be writes=1
+[INDEXER] indexed issue 01a1fb00-7ccb-7042-9398-79e78ec8174b writes=1
+[INDEXER] indexed issue 01a1fb00-7d18-7795-bd1a-6008de4fa6d8 writes=1
+[INDEXER] indexed doc 01a1fb00-7d57-7b77-ae1c-da0f154a203e writes=1
+[INDEXER] indexed issue 01a1fb00-7d78-7598-a9cb-34617c6d8572 writes=1
+[INDEXER] indexed doc 01a1fb00-7da4-71ef-8bc0-1f29b832ac44 writes=1
+[COLD @member HYBRID SEARCH] status=200 latency=30.35ms executed_mode=hybrid total=4
+[WARM @member HYBRID SEARCH] status=200 latency=30.10ms executed_mode=hybrid total=4
 [@member SECRET PROBE] hybrid_status=200 priv_leaks=0 lexical_total=0 executed_mode=hybrid (0 PRIV leaks)
-[COLD @admin HYBRID SEARCH] status=200 latency=74.26ms executed_mode=hybrid total=32
-[WARM @admin HYBRID SEARCH] status=200 latency=76.82ms executed_mode=hybrid total=32
+
+[SYNAPTIC NEIGHBOR RANKING CHECK]
+Search status: 200 executed_mode: hybrid total: 8
+  issue KAN-1 'Synaptic Vector Kernel' -> Semantic match
+  issue KAN-3 'Synaptic Vector Kernel Telemetry' -> Semantic match
+  doc docs/deployment-proof-checklist 'Deployment Proof Checklist' -> Linked via VERIFIED_BY_DOC to KAN-1
+  issue KAN-4 'Release Verification Gate' -> Linked via BLOCKS to KAN-1
+  issue KAN-2 'Release Gate Readiness Checklist' -> Semantic match
+  issue PRIV-1 'CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION' -> Semantic match
+  doc docs/classified-vault-runbook 'Classified Vault Runbook' -> Semantic match
+  doc docs/verification-architecture-spec 'Verification Architecture Spec' -> Semantic match
 
 [MCP /mcp/agent search_tickets YAML]
 mode: hybrid
 executed_mode: hybrid
-total: 24
+total: 4
 items:
-- key: KAN-16
-  issue_key: KAN-16
-  sequence_number: 16
+- key: KAN-1
+  issue_key: KAN-1
+  sequence_number: 1
   summary: Synaptic Vector Kernel
   state: Backlog
   priority: high
+  workspace: kanban
+  match_reason: Semantic match
+- key: KAN-3
+  issue_key: KAN-3
+  sequence_number: 3
+  summary: Synaptic Vector Kernel Telemetry
+  state: Backlog
+  priority: medium
   workspace: kanban
   match_reason: Semantic match
 - key: KAN-2
@@ -86,22 +91,37 @@ items:
   state: Backlog
   priority: medium
   workspace: kanban
-  match_reason: Linked via BLOCKS to KAN-1
+  match_reason: Semantic match
+- key: PRIV-1
+  issue_key: PRIV-1
+  sequence_number: 1
+  summary: CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION
+  state: Backlog
+  priority: urgent
+  workspace: kanban
+  match_reason: Semantic match
 
 [MCP /mcp/docs search YAML (mode="hybrid")]
 mode: hybrid
 executed_mode: hybrid
-total: 6
+total: 2
 items:
 - kind: doc
-  key: 01a1fab1-2dd6-718e-8616-b006599c922f
+  key: docs/classified-vault-runbook
+  title: Classified Vault Runbook
+  snippet: |-
+    # Classified Vault Runbook
+
+    CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION emergency procedure.
+  match_reason: Semantic match
+- kind: doc
+  key: docs/verification-architecture-spec
   title: Verification Architecture Spec
-  anchor: '#verification-architecture'
   snippet: |-
     # Verification Architecture
 
     Formal proof specification for release validation and hybrid search.
-  match_reason: Lexical match
+  match_reason: Semantic match
 
 3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
 --------------------------------------------------------------------------------

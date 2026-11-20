@@ -1,102 +1,84 @@
-# UI/UX Specialist Clean-Room Audit & Signoff: KAN-16 (Release Candidate 1 Remediation)
+# UI/UX Specialist Clean-Room Audit & Signoff: KAN-16 (Live Full-Stack QA Verification)
 
 - **Ticket:** KAN-16 (`[KB-P3-AUDIT-10]`)
 - **Title:** Build Offline /docs Documentation Center, Contextual HelpDrawer, and Studio-Wide (?) + More Info -> Links
-- **Branch:** `fix/KAN-16-rc1`
-- **Commit:** `13beb1b00b01d57f72c46daac0e85074da5af30a`
-- **Reviewer:** UI/UX Specialist (`ui-spec-2`)
+- **Branch:** `main` (Post-Merge at commit `7913c2c8`)
+- **Base Verification Commit:** `7913c2c8`
+- **Target Container:** `kanban-liveqa-1` (`http://127.0.0.1:18961`, PostgreSQL 16 + FORCE RLS)
+- **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)
+- **Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)
 - **Status:** APPROVED
 
 ---
 
 ## 1. Executive Summary & Verification Scope
 
-An updated clean-room UI and UX architectural audit was conducted for ticket `KAN-16` on branch `fix/KAN-16-rc1` at commit `13beb1b00b01d57f72c46daac0e85074da5af30a`. This audit evaluates the complete remediation of all findings raised during previous reality-checker reviews, verified against the zero-mock Live Full-Stack QA execution documented in `docs/qa/KAN-16/live-fullstack-proof.txt` (container `kanban-liveqa-3`), all 11 visual screenshots in `docs/qa/KAN-16/screenshots/`, frontend Vitest test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+An updated clean-room UI and UX architectural audit was conducted for ticket **KAN-16** against zero-mock Live Full-Stack QA execution on container `kanban-liveqa-1` (`http://127.0.0.1:18961`, commit `7913c2c8`) documented in `docs/qa/KAN-16/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-16/screenshots/`, and automated test results.
 
-The review evaluated:
-1. Pre-bootstrap unauthenticated public access to the offline Documentation Center (`/docs`, `/help`) and guide routes with zero redirect loops or setup traps.
-2. Responsive chapter navigation across all viewports, including a dedicated accessible slide-over chapters drawer on tablet and mobile viewports (`<= 768px`).
-3. Offline bundled image resolution and responsive Markdown image rendering for all 65 wiki screenshots with zero external network calls.
-4. Header layout adaptivity on 390px mobile viewports, unclipped search input placeholder (`"Search offline docs..."`), and smooth sticky sidebar and TOC scrolling without text slicing or bottom voids.
-5. Contextual slide-over `HelpDrawer` accessibility, keyboard focus trap, trigger focus restoration, render-time prop resynchronization, and backtick-free TOC labels.
-6. Zero external network egress, zero console errors, zero page errors, zero CSP violations, 100% canonical CSS tokens, exactly zero `act(...)` test warnings, and zero em/en-dashes.
-
----
-
-## 2. Visual & Ergonomic Verification of RC1 Remediations
-
-### 2.1 Mobile & Tablet Chapter Navigation Drawer (`DocsCenterPage.tsx` & `DocsCenterPage.css`)
-- **Mobile Chapters Trigger:** In `DocsCenterPage.tsx`, rendered a responsive `Chapters` button (`data-testid="docs-mobile-chapters-btn"`) with a minimum touch height of 44px, visible strictly at `<= 768px`.
-- **Accessible Slide-Over Drawer:** Implemented slide-over drawer (`data-testid="docs-mobile-chapters-drawer"`, `role="dialog"`, `aria-modal="true"`) allowing users on tablet (768x1024) and mobile (390x844) to browse all 27 chapters effortlessly.
-- **Dismissal & Ergonomics:** Verified backdrop click dismissal (`data-testid="docs-mobile-drawer-backdrop"`), dedicated close button (`data-testid="docs-mobile-drawer-close"`), `Escape` keyboard dismissal, and automatic drawer closure upon selecting any chapter link.
-- **Test Verification:** Verified in `DocsCenter.test.tsx` (tests 30-32).
-
-### 2.2 Offline Bundled Wiki Images & Safe Markdown Image Rendering (`DocMarkdownViewer.tsx`)
-- **Bundled Image Assets:** Verified that all 65 PNG screenshots from `thumbs-up-kanban.wiki/images/` are bundled into `kanban/web/public/docs-images/`.
-- **Chapter Ordering:** Verified `Home.md` (`Overview`) is placed FIRST (`Chapter 1 of 27`), ensuring intuitive onboarding.
-- **Image URL Sanitization:** In `DocMarkdownViewer.tsx`, `resolveSafeDocImageUrl()` maps relative `images/<file>`, `./images/<file>`, and `/docs-images/<file>` paths to `/docs-images/<file>`, while strictly rejecting all external protocol URLs (`http:`, `https:`, `//`, `data:`, `javascript:`).
-- **Responsive Media Presentation:** Standalone and inline markdown images render responsive `<img loading="lazy" className="kb-doc-image" />` elements inside `<figure className="kb-doc-figure">` with caption support, replacing previous raw `!Alt Text` strings. Styled with `max-width: 100%`, `border-radius: var(--radius-md)`, and `border: 1px solid var(--border-subtle)`.
-- **Test Verification:** Verified in `DocsCenter.test.tsx` (tests 26-29).
-
-### 2.3 Mobile Header Polish & Search Placeholder Visibility
-- **2-Row Mobile Header Structure:** At `<= 768px`, `DocsCenterPage.css` organizes the header into `kb-docs-header-row-1` (brand title, `Offline Center` badge, and `Chapters` button with `white-space: nowrap`) and row 2 (full-width search input container).
-- **Zero Placeholder Clipping:** The search input placeholder `"Search offline docs..."` renders 100% unclipped on 390px mobile viewports without horizontal scrollbar overflow.
-
-### 2.4 Sticky Sidebar & TOC Rail Scroll Ergonomics
-- **Smooth Sticky Scrolling:** Updated `.kb-docs-sidebar` and `.kb-docs-toc-rail` in `DocsCenterPage.css` to `position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding-bottom: var(--space-6);`.
-- **Elimination of Text Slicing:** Elements scroll independently without slicing lines of text mid-view or leaving empty bottom voids when viewing tall chapters.
-
-### 2.5 HelpDrawer Modal Accessibility, Prop Resync & Clean TOC Labels (`HelpDrawer.tsx`)
-- **Trigger Focus Restoration:** Saved `document.activeElement` on open and restored focus to the invoking trigger button on unmount.
-- **Initial Focus Placement:** Initial focus automatically shifts to the close button (`closeButtonRef`) upon opening.
-- **Keyboard Focus Trap:** Implemented accessible modal focus trap wrapping `Tab` from last to first element and `Shift+Tab` from first to last element.
-- **Render-Time Prop Resynchronization:** When `arg` (`resolvedSlug` or `resolvedAnchor`) changes while mounted, internal state updates immediately without cascading effect renders.
-- **Clean TOC Typography:** Stripped raw markdown backticks from TOC section titles across both `HelpDrawer.tsx` and `DocsCenterPage.tsx`.
-
-### 2.6 Route Cleanliness & Test Warning Elimination
-- **Shadowed Routes Elimination:** Purged dead duplicate child routes for `/docs` and `/help` from `routes.tsx`.
-- **Test Warning Resolution:** In `StandaloneStatusPanel.tsx`, gated `<ComposeExportTab />` to mount only when `activeTab === 'compose'`, eliminating unmocked background fetch warnings.
-- **Zero `act(...)` Warnings:** Full Vitest execution across all 14 test files produced exactly 0 `act(...)` warnings.
+This audit evaluates the complete remediation of all findings, specifically verifying:
+1. Pre-bootstrap unauthenticated public access to the offline Documentation Center (`/docs`, `/help`) with zero redirect loops or setup traps (Chapter 1 of 28, 28 total chapters).
+2. Responsive chapter navigation across all viewports, including an accessible slide-over chapters drawer on tablet (768x1024) and mobile (390x844) viewports (`btnHeight=44px`, `horizontalOverflow=false`).
+3. Offline bundled image resolution and responsive Markdown image rendering for all 65 wiki screenshots (`/docs-images/*.png`) with zero external network egress.
+4. Header layout adaptivity on 390px mobile viewports, unclipped search input placeholder (`"Search offline docs..."`), and smooth sticky sidebar and TOC rail scrolling without text slicing or bottom voids.
+5. Contextual slide-over `HelpDrawer` accessibility, keyboard focus trap (Tab / Shift+Tab wrapping), render-time prop resynchronization, and backtick-free TOC labels.
+6. **Focus Restoration on Escape:** Direct verification that clicking `(?)` -> `More info ->` opens `HelpDrawer`, and pressing `Escape` closes the drawer and cleanly restores `document.activeElement` directly to the `(?)` `<button>` trigger while preserving unsaved draft form values (`UNSAVED-DRAFT-42`).
+7. Telemetry: zero external network egress, zero console errors, zero page errors, zero HTTP 5xx responses, 100% canonical CSS tokens, exactly zero `act(...)` test warnings, and zero em-dashes or en-dashes.
 
 ---
 
-## 3. Design System, CSS Tokens & Security Compliance
+## 2. Visual & Ergonomic Verification of Live Stack Results
 
-- **Strict CSP `style-src 'self'` Adherence:** Zero inline JSX `style={...}` attributes introduced (`cssTokensAudit.test.ts` passed 4/4).
-- **Canonical Design Tokens:** 100% of styles resolve to tokens in `theme.css` and `tokens.css`.
+### 2.1 Focus Restoration on Escape (`live-project-settings-escape-focus-restored.png`, `live-custom-fields-escape-focus-restored.png`)
+Direct visual inspection via `read_file` confirms:
+- **Project Settings (`/projects/KAN/settings`):**
+  * Entered `"UNSAVED-DRAFT-42"` into `[data-testid="project-name-input"]`.
+  * Clicked `(?)` button `[data-testid="proj-modules-help"]` and clicked `"More info ->"`.
+  * `HelpDrawer` opened (width=480px, Chapter 24 of 28, tocCount=13).
+  * Tab / Shift+Tab focus trap verified inside drawer.
+  * Pressed `Escape`: drawer closed (`drawerCount=0`), and `document.activeElement` was restored directly to the `(?)` `<button>` (`activeTag="BUTTON"`, `activeTestId="proj-modules-help"`, `activeAriaLabel="Help for Project Modules"`).
+  * Unsaved input was preserved: `draftVal="UNSAVED-DRAFT-42"`.
+- **Custom Fields Studio (`/projects/SEC2/settings/custom-fields`):**
+  * Clicked `(?)` button `[data-testid="hint-field-flavor"]` -> clicked `"More info ->"` -> `HelpDrawer` opened -> pressed `Escape`.
+  * `HelpDrawer` closed and focus restored directly to the `(?)` `<button>` (`activeTestId="hint-field-flavor"`, `activeAriaLabel="Help for Field Flavor"`).
+
+### 2.2 Pre-Bootstrap Public Access & Responsive Drawers
+- Unauthenticated access to `/docs` loads in 1420ms without redirecting to `/login` or `/setup`.
+- H1: `"👍kanban: Executive Architecture and System Overview"`, Chapter badge: `"Chapter 1 of 28"`, 28 sidebar links.
+- Tablet (768x1024) and Mobile (390x844) viewports render 44px touch chapter drawer buttons (`horizontalOverflow=false`).
+- All 4 embedded chapter images in `/docs/admin-custom-scripted-fields-and-sandbox` load locally with `naturalWidth=1440` and zero external requests.
+
+---
+
+## 3. Screenshots Verified on Disk (`docs/qa/KAN-16/screenshots/`)
+
+1. `live-docs-desktop-light.png`: Desktop Light view of Chapter 1 of 28.
+2. `live-docs-desktop-dark.png`: Desktop Dark view with sticky TOC and scrolled sidebar.
+3. `live-docs-tablet-light.png`: Tablet viewport with 44px Chapters drawer button.
+4. `live-docs-tablet-drawer-light.png`: Tablet slide-over chapters drawer with 28 chapters.
+5. `live-docs-mobile-light.png`: Mobile (390x844) view with unclipped search input.
+6. `live-docs-mobile-drawer-light.png`: Mobile slide-over chapters drawer.
+7. `live-docs-embedded-images-light.png`: Responsive offline images rendering.
+8. `live-project-settings-field-help-popover-light.png`: FieldHelpHint popover with "More info ->".
+9. `live-project-settings-help-drawer-light.png`: Contextual HelpDrawer in Project Settings.
+10. `live-project-settings-help-drawer-dark.png`: HelpDrawer dark theme verification.
+11. `live-project-settings-escape-focus-restored.png`: Focus restored to `(?)` button with `UNSAVED-DRAFT-42` preserved.
+12. `live-custom-fields-escape-focus-restored.png`: Focus restored to `(?)` button in Custom Fields Studio.
+
+---
+
+## 4. Design System, CSS Tokens & Security Compliance
+
+- **Strict CSP `style-src 'self'` Adherence:** Zero inline JSX `style={...}` attributes introduced.
+- **Canonical Design Tokens:** 100% of styles resolve to canonical tokens in `theme.css` and `tokens.css`.
 - **Contrast & Legibility:** Text, badges, and interactive controls strictly exceed WCAG AA standards (>= 4.5:1) in both Light and Dark themes.
-- **Typography & Dashes:** Zero em-dashes and zero en-dashes across code, styles, tests, and documentation (`check_no_dashes` passed cleanly).
-- **Air-Gapped Telemetry:** Zero external network egress, zero console errors, zero page errors, and zero HTTP 5xx responses (`LIVE_STACK_VERDICT: PASS`).
-
----
-
-## 4. Test Verification & Code Coverage
-
-All unit tests and static quality gates executed and passed cleanly:
-
-1. **Documentation Center Vitest Suite (`DocsCenter.test.tsx`):**
-   - 35/35 tests passed in 1.52s.
-   - Statements: 99.5%
-   - Branches: 97.06%
-   - Functions: 100%
-   - Lines: 100%
-   - Stderr Warnings: Exactly 0 `act(...)` warnings.
-
-2. **Full Affected Test Suites (14 files, 350 tests):**
-   - 350/350 tests passed in 8.23s with 0 warnings.
-   - Includes `DocsCenter`, `HelpDrawer`, `FieldHelpHint`, `StandaloneStatusPanel`, `WorkspaceSettingsPage`, `ProjectSettingsPage`, `WorkflowStudioPage`, `AuthStudioPage`, `McpAccessStudio`, `OAuthClientGovernanceStudio`, `AiStudioPage`, `AgentStudioPage`, `RunnerStudioPage`, `LinkAuditorStudio`, and `cssTokensAudit`.
-
-3. **Static Quality Gates:**
-   - TypeScript (`tsc -b --noEmit`): 0 errors.
-   - ESLint (`eslint . --max-warnings 0`): 0 errors, 0 warnings.
-   - Vite Production Build: Completed in 1.28s.
-   - Python Linting & Formatting: `ruff check` and `ruff format --check` passed cleanly on `scripts/sync_wiki_bundle.py`.
-   - Typography Guard: `python3 -m scripts.check_no_dashes` passed cleanly (0 em/en-dashes).
+- **Typography & Dashes:** Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) across code, styles, tests, and documentation.
+- **Telemetry:** Zero external network egress, zero console errors, zero page errors, and zero HTTP 5xx responses (`LIVE_STACK_VERDICT: PASS`).
 
 ---
 
 ## 5. Certification Verdict
 
-The remediations in KAN-16 RC1 comprehensively resolve all reality-checker findings, delivering responsive mobile navigation, offline bundled image rendering, accessible focus management, and polished typography.
+The live full-stack execution and defect remediations for **KAN-16** comprehensively verify public offline documentation access, responsive mobile chapter navigation, offline bundled image rendering, contextual help drawer focus trapping, and focus restoration to trigger buttons upon Escape dismissal.
 
-**STATUS: APPROVED**
+- **UI Specialist Sign-off:** APPROVED
+- **Status:** APPROVED

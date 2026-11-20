@@ -251,95 +251,6 @@ index 13b2a6bf..3e28e1c1 100644
      updated_at: Mapped[datetime] = mapped_column(
          DateTime(timezone=True),
          nullable=False,
-diff --git a/database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py b/database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py
-new file mode 100644
-index 00000000..71b2adcd
---- /dev/null
-+++ b/database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py
-@@ -0,0 +1,83 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Migration lifecycle test for p4_24_agent_safe_sequences."""
-+
-+import pytest
-+
-+from database.tests.migration_harness import MigrationHarness
-+
-+
-+@pytest.mark.migration
-+async def test_p4_24_agent_safe_sequences_migration_lifecycle() -> None:
-+    """Verify p4_24_agent_safe_sequences upgrade and downgrade revert cleanly."""
-+    async with MigrationHarness() as harness:
-+        prev_rev = harness.previous_of("p4_24_agent_safe_sequences")
-+        assert prev_rev == "p4_23_oidc_link_intent_fk"
-+
-+        # 1. Upgrade to p4_24_agent_safe_sequences
-+        await harness.upgrade("p4_24_agent_safe_sequences")
-+
-+        cols_up = await harness.fetch(
-+            "SELECT table_name, column_name FROM information_schema.columns "
-+            "WHERE table_schema = 'public' AND ("
-+            "  (table_name = 'projects' AND column_name = 'skip_loaded_sequence_numbers') OR "
-+            "  (table_name = 'workspace_settings' AND "
-+            "   column_name = 'default_skip_loaded_sequence_numbers')"
-+            ")"
-+        )
-+        assert len(cols_up) == 2
-+
-+        funcs_up = await harness.fetch(
-+            "SELECT routine_name FROM information_schema.routines "
-+            "WHERE routine_schema = 'public' AND routine_name IN ("
-+            "  'compute_agent_safe_sequence_batch', "
-+            "  'allocate_issue_sequences', "
-+            "  'allocate_issue_sequence'"
-+            ")"
-+        )
-+        assert {r["routine_name"] for r in funcs_up} == {
-+            "compute_agent_safe_sequence_batch",
-+            "allocate_issue_sequences",
-+            "allocate_issue_sequence",
-+        }
-+
-+        # 2. Downgrade to previous revision
-+        await harness.downgrade(prev_rev)
-+
-+        cols_down = await harness.fetch(
-+            "SELECT table_name, column_name FROM information_schema.columns "
-+            "WHERE table_schema = 'public' AND ("
-+            "  (table_name = 'projects' AND column_name = 'skip_loaded_sequence_numbers') OR "
-+            "  (table_name = 'workspace_settings' AND "
-+            "   column_name = 'default_skip_loaded_sequence_numbers')"
-+            ")"
-+        )
-+        assert len(cols_down) == 0
-+
-+        funcs_down = await harness.fetch(
-+            "SELECT routine_name FROM information_schema.routines "
-+            "WHERE routine_schema = 'public' AND routine_name IN ("
-+            "  'compute_agent_safe_sequence_batch', 'allocate_issue_sequences'"
-+            ")"
-+        )
-+        assert len(funcs_down) == 0
-+
-+        # allocate_issue_sequence should still exist (restored)
-+        funcs_orig = await harness.fetch(
-+            "SELECT routine_name FROM information_schema.routines "
-+            "WHERE routine_schema = 'public' AND routine_name = 'allocate_issue_sequence'"
-+        )
-+        assert len(funcs_orig) == 1
-+
-+        # 3. Upgrade back to head
-+        await harness.upgrade("p4_24_agent_safe_sequences")
-+
-+        cols_reup = await harness.fetch(
-+            "SELECT table_name, column_name FROM information_schema.columns "
-+            "WHERE table_schema = 'public' AND ("
-+            "  (table_name = 'projects' AND column_name = 'skip_loaded_sequence_numbers') OR "
-+            "  (table_name = 'workspace_settings' AND "
-+            "   column_name = 'default_skip_loaded_sequence_numbers')"
-+            ")"
-+        )
-+        assert len(cols_reup) == 2
 diff --git a/database/tests/test_p1_05_sequence_concurrency.py b/database/tests/test_p1_05_sequence_concurrency.py
 index 5e55c143..30b9a7f2 100644
 --- a/database/tests/test_p1_05_sequence_concurrency.py
@@ -643,6 +554,46 @@ index 5e55c143..30b9a7f2 100644
 +            text("SELECT * FROM allocate_issue_sequences(:p, 1, TRUE)"),
 +            {"p": uuid.uuid4()},
 +        )
+diff --git a/kanban/api/v1/issue_copy.py b/kanban/api/v1/issue_copy.py
+index 1cdda12e..b721dc8e 100644
+--- a/kanban/api/v1/issue_copy.py
++++ b/kanban/api/v1/issue_copy.py
+@@ -35,4 +35,5 @@ async def copy_issue_endpoint(
+     async with timing_floor(floor_ms=25.0):
+         result, canonical_key = await copy_issue(session, caller, issue_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{canonical_key}"
++        await session.commit()
+         return result
+diff --git a/kanban/api/v1/issue_trees.py b/kanban/api/v1/issue_trees.py
+index 4bc8ccea..5f925433 100644
+--- a/kanban/api/v1/issue_trees.py
++++ b/kanban/api/v1/issue_trees.py
+@@ -40,4 +40,5 @@ async def create_issue_tree(  # noqa: PLR0913, PLR0917
+         await taint_guard.check_write(project_ref, tool_name="create_ticket")
+         result = await svc.create_issue_tree(session, caller, project_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{result.root.key}"
++        await session.commit()
+         return result
+diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
+index 3e82fe20..406d4e43 100644
+--- a/kanban/api/v1/issues.py
++++ b/kanban/api/v1/issues.py
+@@ -46,6 +46,7 @@ async def create_issue(
+         result, etag = await svc.create_issue(session, caller, project_ref, body)
+         response.headers["Location"] = f"/api/v1/issues/{result.key}"
+         response.headers["ETag"] = etag
++        await session.commit()
+         return result
+ 
+ 
+@@ -106,6 +107,7 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
+         issue = await svc.get_issue_or_404(session, caller, issue_key)
+         await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
+         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
++        await session.commit()
+         response.headers["ETag"] = new_etag
+         return result
+ 
 diff --git a/kanban/issues/tree_service.py b/kanban/issues/tree_service.py
 index 33958dc7..f213cfc7 100644
 --- a/kanban/issues/tree_service.py
@@ -779,7 +730,7 @@ index cf46de0b..0d89bbf6 100644
              sub_rank = initial_board_rank(sub_seq_id)
  
 diff --git a/kanban/services/issues.py b/kanban/services/issues.py
-index 5509d18a..e1750585 100644
+index a7d07a00..13140f56 100644
 --- a/kanban/services/issues.py
 +++ b/kanban/services/issues.py
 @@ -27,7 +27,7 @@ import base64
@@ -791,9 +742,12 @@ index 5509d18a..e1750585 100644
  from typing import TYPE_CHECKING, Any, Final
  
  from sqlalchemy import delete, select, text, update
-@@ -658,6 +658,9 @@ async def serialize_issue(
+@@ -656,8 +656,11 @@ async def serialize_issue(
  
-     obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
+     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+ 
+-    obj = await session.get(ObjectRecord, issue.id)
++    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
      archived_at = obj.archived_at if obj is not None else None
 +    now_utc = datetime.now(UTC)
 +    issue_created_at = obj.created_at if obj is not None else now_utc
@@ -801,7 +755,21 @@ index 5509d18a..e1750585 100644
      archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
  
      pending_gate = await resolve_pending_gate(session, issue)
-@@ -697,6 +700,8 @@ async def serialize_issue(
+@@ -674,7 +677,12 @@ async def serialize_issue(
+             else issue.description_markdown
+         ),
+         description_sha256=sha256_hex,
+-        state=StateSummary(id=state.id, name=state.name, group=state.state_group),
++        state=StateSummary(
++            id=state.id,
++            name=state.name,
++            group=state.state_group,
++            color_hex=state.color_hex,
++        ),
+         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
+         start_date=issue.start_date,
+         due_date=issue.due_date,
+@@ -692,6 +700,8 @@ async def serialize_issue(
          provenance=provenance,
          access_manifest=manifest,
          capabilities=capabilities_to_names(caps),
@@ -810,7 +778,7 @@ index 5509d18a..e1750585 100644
          archived_at=archived_at,
          archive_eligibility=archive_eligibility,
          pending_gate=pending_gate,
-@@ -745,15 +750,37 @@ async def create_issue(
+@@ -740,15 +750,37 @@ async def create_issue(
  
      try:
          async with session.begin_nested():
@@ -851,6 +819,139 @@ index 5509d18a..e1750585 100644
              issue_id = (
                  await session.execute(
                      text(
+@@ -846,7 +878,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+ ) -> tuple[IssueResponse, str]:
+     """Patch issue fields under description ETag concurrency check and emit activity."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+-    obj = await session.get(ObjectRecord, issue.id)
++    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
+     if obj is not None and obj.archived_at is not None:
+         raise _problem(
+             code="ISSUE_ARCHIVED",
+@@ -855,6 +887,14 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             detail="Archived issues are read-only and cannot be modified",
+         )
+ 
++    if issue.pending_transition_exec_id is not None:
++        raise _problem(
++            code="TRANSITION_HELD",
++            status=409,
++            title="Transition Held",
++            detail="Issue modification is blocked while an asynchronous transition gate is pending",
++        )
++
+     project = await session.get(Project, issue.project_id)
+     if project is None:  # pragma: no cover
+         not_found()
+@@ -1130,11 +1170,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             },
+         )
+ 
+-    updated_issue = (
+-        await session.execute(select(Issue).where(Issue.id == issue_id))
+-    ).scalar_one_or_none()
+-    if updated_issue is None:  # pragma: no cover
+-        not_found()
++    await session.flush()
++    await session.refresh(issue)
++    obj_rec = await session.get(ObjectRecord, issue_id, populate_existing=True)
++    if obj_rec is not None:
++        await session.refresh(obj_rec)
++    updated_issue = issue
+ 
+     serialized = await serialize_issue(session, caller, updated_issue)
+     new_etag = serialized.etag or (
+diff --git a/kanban/services/projects.py b/kanban/services/projects.py
+index 4903ca9f..22ce9ed5 100644
+--- a/kanban/services/projects.py
++++ b/kanban/services/projects.py
+@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Final
+ from sqlalchemy import delete, func, select, text
+ from sqlalchemy.exc import IntegrityError
+ 
+-from database.models import Module, Project, ProjectModuleDefault
++from database.models import Module, Project, ProjectModuleDefault, WorkspaceSettings
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.api.v1.schemas.projects import (
+     ProjectList,
+@@ -170,6 +170,7 @@ async def serialize_project(
+         name=project.name,
+         description_markdown=project.description_markdown,
+         modules_enabled=project.modules_enabled,
++        skip_loaded_sequence_numbers=project.skip_loaded_sequence_numbers,
+         default_module_ids=await _default_module_ids(session, project.id),
+         auto_archive_days=project.auto_archive_days,
+         access_manifest=manifest,
+@@ -203,6 +204,14 @@ async def create_project(
+     """Create a project, seeded defaults, creator ADMIN binding and PROJECT_CREATED activity."""
+     await _require_project_creator(session, caller)
+     description = _normalize_description(body.description_markdown)
++    skip_seq = body.skip_loaded_sequence_numbers
++    if skip_seq is None:
++        ws_settings_stmt = select(WorkspaceSettings.default_skip_loaded_sequence_numbers).where(
++            WorkspaceSettings.workspace_id == caller.workspace_id
++        )
++        ws_skip = (await session.execute(ws_settings_stmt)).scalar_one_or_none()
++        skip_seq = bool(ws_skip) if ws_skip is not None else False
++
+     project_id: uuid.UUID
+     try:
+         async with session.begin_nested():
+@@ -229,6 +238,7 @@ async def create_project(
+                     name=body.name,
+                     description_markdown=description,
+                     modules_enabled=body.modules_enabled,
++                    skip_loaded_sequence_numbers=skip_seq,
+                     auto_archive_days=body.auto_archive_days,
+                 )
+             )
+@@ -283,6 +293,17 @@ async def list_projects(
+     )
+ 
+ 
++async def _ensure_modules_can_disable(session: AsyncSession, project_id: uuid.UUID) -> None:
++    """Verify that no active modules belong to the project before disabling."""
++    module_count = (
++        await session.execute(
++            select(func.count()).select_from(Module).where(Module.project_id == project_id)
++        )
++    ).scalar_one()
++    if module_count > 0:
++        raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
++
++
+ async def update_project(
+     session: AsyncSession,
+     caller: PrincipalContext,
+@@ -317,16 +338,21 @@ async def update_project(
+         and body.modules_enabled != project.modules_enabled
+     ):
+         if not body.modules_enabled:
+-            module_count = (
+-                await session.execute(
+-                    select(func.count()).select_from(Module).where(Module.project_id == project.id)
+-                )
+-            ).scalar_one()
+-            if module_count > 0:
+-                raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
++            await _ensure_modules_can_disable(session, project.id)
+         changes["modules_enabled"] = {"old": project.modules_enabled, "new": body.modules_enabled}
+         project.modules_enabled = body.modules_enabled
+ 
++    if (
++        "skip_loaded_sequence_numbers" in fields
++        and body.skip_loaded_sequence_numbers is not None
++        and body.skip_loaded_sequence_numbers != project.skip_loaded_sequence_numbers
++    ):
++        changes["skip_loaded_sequence_numbers"] = {
++            "old": project.skip_loaded_sequence_numbers,
++            "new": body.skip_loaded_sequence_numbers,
++        }
++        project.skip_loaded_sequence_numbers = body.skip_loaded_sequence_numbers
++
+     if "auto_archive_days" in fields and body.auto_archive_days != project.auto_archive_days:
+         changes["auto_archive_days"] = {
+             "old": project.auto_archive_days,
 diff --git a/kanban/tests/services/test_agent_safe_sequences.py b/kanban/tests/services/test_agent_safe_sequences.py
 new file mode 100644
 index 00000000..4acd1c6f
