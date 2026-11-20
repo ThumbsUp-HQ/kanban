@@ -326,3 +326,31 @@ def test_unsupported_setup_calls_without_model_dir() -> None:
     with pytest.raises(EmbedderIntegrityError) as exc_sess:
         embedder._setup_session(None)  # noqa: SLF001
     assert "Inference session or model_dir required" in str(exc_sess.value)
+
+
+@pytest.mark.asyncio
+async def test_embed_batch_rich_on_direct_embedder() -> None:
+    """Test embed_batch_rich with non-fallback direct inference session."""
+    sess = _MockInferenceSession(include_token_type=True, rank_3=True)
+    tok = _MockTokenizer(token_count=16)
+    embedder = OnnxBgeSmallEmbedder(
+        model_dir=None,
+        inference_session=sess,
+        tokenizer=tok,
+    )
+
+    # Empty inputs
+    assert await embedder.embed_batch_rich([]) == []
+
+    # Non-empty inputs with markdown headings
+    markdown_text = "# Security Heading\nDetailed content for testing rich batch embedding."
+    results = await embedder.embed_batch_rich([markdown_text])
+    assert len(results) == 1
+    chunk = results[0]
+    assert len(chunk.embedding) == EMBED_DIMENSION
+    assert len(chunk.head_128) == 128
+    assert len(chunk.binary_sign) == 16
+    assert len(chunk.full_q8) == EMBED_DIMENSION
+    assert len(chunk.heading_anchors) == 1
+    assert chunk.heading_anchors[0]["title"] == "Security Heading"
+

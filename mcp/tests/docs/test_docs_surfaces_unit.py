@@ -1273,12 +1273,17 @@ async def test_search_v2_unit_coverage() -> None:
     assert "tree" in r_doc_full
     assert r_doc_full["links"] == []
 
-    # Hybrid search formatting (truncation, next_cursor, no key fallback)
+    # Hybrid search formatting (truncation, next_cursor, no key fallback, mode forwarding)
+    captured_payloads: list[dict[str, Any]] = []
+
     def search_h(req: httpx.Request) -> httpx.Response:
+        import json
+        captured_payloads.append(json.loads(req.content.decode()))
         return httpx.Response(
             200,
             json={
                 "total": 1,
+                "executed_mode": "hybrid",
                 "items": [
                     {
                         "kind": "doc",
@@ -1299,6 +1304,20 @@ async def test_search_v2_unit_coverage() -> None:
     assert res_srch["items"][0]["key"] == "hit-id-1"
     assert len(res_srch["items"][0]["snippet"]) <= 300
     assert res_srch["next_cursor"] == "cur-next"
+    assert res_srch["mode"] == "hybrid"
+    assert res_srch["executed_mode"] == "hybrid"
+    assert captured_payloads[-1]["mode"] == "hybrid"
+
+    # Explicit mode="lexical"
+    await search_v2_handler(
+        {"query": "q", "mode": "lexical"}, client=c_srch
+    )
+    assert captured_payloads[-1]["mode"] == "lexical"
+
+    # Invalid mode validation error
+    with pytest.raises(KbMcpError) as exc_mode:
+        await search_v2_handler({"query": "q", "mode": "invalid"}, client=c_srch)
+    assert exc_mode.value.code == McpErrorCode.VALIDATION_FAILED
 
     # Hybrid search non-dict response
     c_srch_nd = _build_mock_client(lambda r: httpx.Response(200, json="non-dict"))
@@ -1464,6 +1483,9 @@ async def test_search_v2_unit_coverage() -> None:
 
     # ToolSpec builder for search
     t_srch = create_docs_search_tool(client=c_list_nd)
+    assert "mode" in t_srch.input_schema["properties"]
+    assert t_srch.input_schema["properties"]["mode"]["enum"] == ["lexical", "hybrid"]
+    assert t_srch.input_schema["properties"]["mode"]["default"] == "hybrid"
     res_t_srch = await t_srch.handler({"id": "help"})
     assert res_t_srch["tool"] == "search"
 
@@ -1927,3 +1949,55 @@ async def test_update_v2_unit_coverage() -> None:
     c_nosha = _build_mock_client(prom_nosha_h)
     res_nosha = await update_v2_handler({"id": str(uuid.uuid4()), "type": "DOC"}, client=c_nosha)
     assert res_nosha["status"] == "promoted"
+
+    # MODE 4: List Project / Workspace Knowledge
+    def list_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if "/api/v1/docs" in p:
+            return httpx.Response(
+                200,
+                json=[{"id": str(uuid.uuid4()), "canonical_key": "docs/test", "title": "Test Doc"}],
+            )
+        if "/stickies" in p:
+            return httpx.Response(
+                200,
+                json=[{"id": str(uuid.uuid4()), "color_token": "blue", "body_markdown": "Note body"}],
+            )
+        if "/projects/" in p:
+            return httpx.Response(404, json={})
+        return httpx.Response(200, json=[])
+
+    c_list = _build_mock_client(list_h)
+    u_proj = str(uuid.uuid4())
+    res_list = await search_v2_handler(
+        {"project": u_proj, "target_type": "ALL", "include_tree": False}, client=c_list
+    )
+    assert "docs" in res_list
+    assert "stickies" in res_list
+
+    # Nonexistent named project raises NOT_FOUND
+    with pytest.raises(KbMcpError) as exc_pnotfound:
+        await search_v2_handler(
+            {"project": "MISSING_PROJ", "target_type": "DOC", "include_tree": False}, client=c_list
+        )
+    assert exc_pnotfound.value.code == McpErrorCode.NOT_FOUND
+
+    # Workspace-level list (no project)
+    res_ws = await search_v2_handler({"target_type": "ALL"}, client=c_list)
+    assert "docs" in res_ws
+
+    # Project response as dict without "id" triggers McpErrorCode.NOT_FOUND in MODE 4
+    def noid_proj_h(req: httpx.Request) -> httpx.Response:
+        p = req.url.path
+        if "/projects/noid-proj" in p:
+            return httpx.Response(200, json={"some_field": "no id key"})
+        return httpx.Response(404, json={})
+
+    c_noid = _build_mock_client(noid_proj_h)
+    with pytest.raises(KbMcpError) as exc_noid:
+        await search_v2_handler(
+            {"project": "noid-proj", "target_type": "DOC", "include_tree": False}, client=c_noid
+        )
+    assert exc_noid.value.code == McpErrorCode.NOT_FOUND
+
+

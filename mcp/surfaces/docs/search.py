@@ -56,6 +56,12 @@ _INPUT_SCHEMA: Final[dict[str, Any]] = {
             "type": "string",
             "description": "Project key or UUID scope filter",
         },
+        "mode": {
+            "type": "string",
+            "enum": ["lexical", "hybrid"],
+            "default": "hybrid",
+            "description": "Search execution mode ('lexical' or 'hybrid').",
+        },
         "lod": {
             "type": "string",
             "enum": ["summary", "standard", "full"],
@@ -395,6 +401,12 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     raw_lod = arguments.get("lod", "standard")
     lod = parse_lod(raw_lod)
+    raw_mode = arguments.get("mode", "hybrid")
+    mode = str(raw_mode).strip().lower() if raw_mode else "hybrid"
+    if mode not in ("lexical", "hybrid"):
+        msg = f"Invalid mode '{raw_mode}'. Must be one of: lexical, hybrid"
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
     include_tree = bool(arguments.get("include_tree", False))
     limit = int(arguments.get("limit", 20))
     cursor = arguments.get("cursor")
@@ -418,6 +430,7 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 "query": "Search query for lexical/semantic hybrid search",
                 "type": "ALL, DOC, or STICKY",
                 "project": "Project key or UUID scope filter",
+                "mode": "Search execution mode ('lexical' or 'hybrid', default 'hybrid')",
                 "lod": "Level of detail: summary, standard, full",
                 "include_tree": "Whether to include page hierarchy or heading outline",
                 "limit": "Max items to return (1..50)",
@@ -495,6 +508,7 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
             "query": clean_query,
             "kinds": kinds,
             "limit": limit,
+            "mode": mode,
         }
         project_arg = arguments.get("project")
         if project_arg:

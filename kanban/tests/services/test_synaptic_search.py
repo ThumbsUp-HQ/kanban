@@ -17,11 +17,14 @@ import pytest
 from sqlalchemy import text
 
 from kanban.api.deps import PrincipalContext
+from kanban.api.problems import ProblemException
 from kanban.api.v1.schemas.search import (
     IssueSearchRequest,
     KnowledgeSearchRequest,
 )
 from kanban.services.search import (
+    _get_query_embedding,
+    _parse_target_kinds,
     search_issues,
     search_knowledge,
     search_unified,
@@ -396,6 +399,35 @@ async def test_2hop_synaptic_activation_spreading(
     assert "Linked via VERIFIED_BY_DOC to" in doc_activation.match_reason
     assert doc_activation.activation_score > 0.0
 
+    # Seed embedding on seed_issue_id and verify unified search with spreading
+    test_vec = [0.0] * 384
+    test_vec[0] = 1.0
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": seed_issue_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"SYN-10").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await api_env.seed.commit()
+
+    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
+        unified_res = await search_unified(
+            session=api_env.seed,
+            caller=caller,
+            query="Origin Seed Issue",
+            mode="hybrid",
+        )
+        assert unified_res.total >= 1
+
+
 
 async def test_synaptic_zero_oracle_leakage(
     api_env: ApiEnv,
@@ -538,7 +570,7 @@ async def test_hybrid_search_issues_and_knowledge_endpoints(
         )
     ).scalar_one()
 
-    await _seed_issue(
+    iss_id = await _seed_issue(
         api_env.seed,
         ws_id,
         proj_id,
@@ -551,7 +583,7 @@ async def test_hybrid_search_issues_and_knowledge_endpoints(
         pri_id,
     )
 
-    await _seed_doc(
+    doc_id = await _seed_doc(
         api_env.seed,
         ws_id,
         proj_id,
@@ -561,15 +593,49 @@ async def test_hybrid_search_issues_and_knowledge_endpoints(
         admin.id,
     )
 
+    # Seed object_embeddings to trigger vector candidates
+    # and hydration in search_issues & search_knowledge
+    test_vec = [0.0] * 384
+    test_vec[0] = 1.0
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": iss_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"SUB-5").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'doc', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": doc_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"docs/sub/guide").digest(),
+            "emb": str(test_vec),
+        },
+    )
+
     await rebuild_era(api_env.seed, ws_id)
     await api_env.seed.commit()
 
     caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
 
-    # search_issues with hybrid mode
-    issue_req = IssueSearchRequest(query="SUB-5 Micro-Service", mode="hybrid")
+    # search_issues with hybrid mode and project filter
+    issue_req = IssueSearchRequest(query="SUB-5 Micro-Service", mode="hybrid", project="SUB")
     issue_resp = await search_issues(api_env.seed, caller, issue_req)
     assert issue_resp.total >= 1
+    assert issue_resp.executed_mode == "hybrid"
     assert issue_resp.items[0].key == "SUB-5"
     assert issue_resp.items[0].match_reason is not None
 
@@ -577,6 +643,7 @@ async def test_hybrid_search_issues_and_knowledge_endpoints(
     know_req = KnowledgeSearchRequest(query="Architecture Guide", mode="hybrid")
     know_resp = await search_knowledge(api_env.seed, caller, know_req)
     assert know_resp.total >= 1
+    assert know_resp.executed_mode == "hybrid"
     assert know_resp.items[0].title == "Micro-Service Architecture Guide"
     assert know_resp.items[0].match_reason is not None
 
@@ -820,3 +887,189 @@ def test_synaptic_quantizer_and_maxsim_units() -> None:
     assert len(anchors) == 2
     assert anchors[0]["anchor"] == "#heading-one"
     assert extract_heading_anchors("") == []
+
+    assert _parse_target_kinds(None) == ["issue", "doc", "page", "sticky"]
+    assert _parse_target_kinds(["", "  issue  ", "DOC"]) == ["issue", "doc"]
+    with pytest.raises(ProblemException):
+        _parse_target_kinds(["invalid_kind"])
+
+
+async def test_empty_query_embedding() -> None:
+    """Empty query returns None."""
+    assert await _get_query_embedding("") is None
+    assert await _get_query_embedding("   ") is None
+
+
+
+
+
+
+async def test_hybrid_search_vector_only_hydration_and_pagination(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """Test when vector candidates are not in lexical rows and need _hydrate_object_candidates."""
+    admin = await make_user("admin_hyd", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("HYD", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    ws_id = api_env.workspace_id
+
+    st_id = (
+        await api_env.seed.execute(
+            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"), {"p": proj_id}
+        )
+    ).scalar_one()
+    pri_id = (
+        await api_env.seed.execute(
+            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"), {"p": proj_id}
+        )
+    ).scalar_one()
+
+    # Seed an issue with completely different lexical words
+    iss_id = await _seed_issue(
+        api_env.seed,
+        ws_id,
+        proj_id,
+        "HYD",
+        1,
+        "Completely Unrelated Apples",
+        "Oranges and bananas fruit basket.",
+        admin.id,
+        st_id,
+        pri_id,
+    )
+    iss2_id = await _seed_issue(
+        api_env.seed,
+        ws_id,
+        proj_id,
+        "HYD",
+        2,
+        "Completely Unrelated Mangoes",
+        "Pineapples and papayas fruit basket.",
+        admin.id,
+        st_id,
+        pri_id,
+    )
+    doc_id = await _seed_doc(
+        api_env.seed,
+        ws_id,
+        proj_id,
+        "docs/hyd/zebra-doc",
+        "Completely Unrelated Pears",
+        "Peaches and plums fruit basket.",
+        admin.id,
+    )
+    doc2_id = await _seed_doc(
+        api_env.seed,
+        ws_id,
+        proj_id,
+        "docs/hyd/zebra-doc-2",
+        "Completely Unrelated Apricots",
+        "More fruit basket items.",
+        admin.id,
+    )
+
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO issue_assignees (issue_id, principal_id, free_text_assignee) "
+            "VALUES (:iss, NULL, 'free-agent')"
+        ),
+        {"iss": iss_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO issue_assignees (issue_id, principal_id, free_text_assignee) "
+            "VALUES (:iss, :p, NULL)"
+        ),
+        {"iss": iss2_id, "p": admin.id},
+    )
+
+    test_vec = [0.0] * 384
+    test_vec[0] = 1.0
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": iss_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"HYD-1").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": iss2_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"HYD-2").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'doc', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": doc_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"docs/hyd/zebra-doc").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'doc', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": doc2_id,
+            "ws": ws_id,
+            "proj": proj_id,
+            "sha": hashlib.sha256(b"docs/hyd/zebra-doc-2").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await rebuild_era(api_env.seed, ws_id)
+    await api_env.seed.commit()
+
+    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
+    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
+        res = await search_issues(
+            api_env.seed, caller, IssueSearchRequest(query="Zebra", mode="hybrid")
+        )
+        assert res.total >= 2
+        assert res.items[0].match_reason == "Semantic match"
+
+        # Test pagination with limit=1 to trigger next_cursor for issues
+        res_i_page = await search_issues(
+            api_env.seed, caller, IssueSearchRequest(query="Zebra", mode="hybrid", limit=1)
+        )
+        assert res_i_page.next_cursor is not None
+
+        # Test pagination with limit=1 to trigger next_cursor for knowledge
+        res_k_page = await search_knowledge(
+            api_env.seed, caller, KnowledgeSearchRequest(query="Zebra", mode="hybrid", limit=1)
+        )
+        assert res_k_page.next_cursor is not None
+
+        # Also search_knowledge
+        res_k = await search_knowledge(
+            api_env.seed, caller, KnowledgeSearchRequest(query="Zebra", mode="hybrid")
+        )
+        assert res_k.executed_mode == "hybrid"
+        assert res_k.total >= 1
+        assert res_k.items[0].title == "Completely Unrelated Pears"
+

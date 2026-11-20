@@ -22,7 +22,7 @@ Container: kanban-liveqa-3 (main commit 07d04cde, PostgreSQL 16 + FORCE RLS)
   * Provenance match_reason strings verified: "Semantic match", "Lexical match", "Linked via VERIFIED_BY_DOC to KAN-*", "Linked via BLOCKS to KAN-*".
 - MCP JSON-RPC surfaces (BOTH emit executed_mode alongside mode and match_reason):
   * POST /mcp/agent tools/call search_tickets (mode="hybrid") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
-  * POST /mcp/docs tools/call search -> mode: lexical, executed_mode: lexical, match_reason per item.
+  * POST /mcp/docs tools/call search (mode="hybrid") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
 - CommandPalette (Ctrl+K) Playwright UI on /w/kanban/p/KAN/issues across Desktop (1440x900 Light & Dark), Tablet (768x1024 Light), Mobile (390x844 Light):
   * Desktop Light: searchMs=292ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
   * Desktop Dark: searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
@@ -88,9 +88,9 @@ items:
   workspace: kanban
   match_reason: Linked via BLOCKS to KAN-1
 
-[MCP /mcp/docs search YAML]
-mode: lexical
-executed_mode: lexical
+[MCP /mcp/docs search YAML (mode="hybrid")]
+mode: hybrid
+executed_mode: hybrid
 total: 6
 items:
 - kind: doc
