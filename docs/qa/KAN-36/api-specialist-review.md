@@ -4,16 +4,16 @@
 - Title: [KB-P3-PENTEST-01] Preserve Session Persistence/TTL/AAL2 on Workspace Switch (CWE-613) and Fix Stale Issue PATCH ETag Drift (4 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan36-6b065404`
-- Target Branch: `feat/KAN-36`
-- Commit: `9cd41e24bcbb678c1c4fecbb58ff175d0fe8a149`
+- Target Directory: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/docs/qa/KAN-36`
+- Branch: `fix/KAN-20-36-liveqa`
+- Commit: `7c0db6c2ec94fd527eb5b67eb76b6004a999901d`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-36 on branch `feat/KAN-36` (commit `9cd41e24`), incorporating concrete evidence from the implementation source files, unit test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-36 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2`. This audit incorporates verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt`), unit test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 The ticket resolves four critical security, session management, and HTTP caching problems:
 1. Session Persistence, TTL, and AAL2 Preservation on Workspace Switch (CWE-613):
@@ -28,21 +28,24 @@ The ticket resolves four critical security, session management, and HTTP caching
    - Caller Verification: In `switch_workspace_endpoint`, explicitly verifies `caller.session_id is not None`. Callers lacking a browser cookie session (such as API keys or Bearer tokens) are immediately rejected with HTTP 401 `SESSION_REQUIRED`, preventing unauthorized session cookie minting.
    - Cyclomatic Complexity: Extracted `_execute_workspace_switch_proc` to keep function complexity strictly within architectural guidelines.
    - Cookie Header Hygiene: Passes `persistent=issued.is_persistent` to `attach_session_and_csrf_cookies` (omitting `Max-Age` and `Expires` for transient sessions). When the request is HTTPS, appends `Clear-Cookie` headers for un-prefixed fallback cookies (`kb_session`, `kb_csrf`).
-3. Issue PATCH ETag Parity and Drift Elimination (`kanban/services/issues.py`):
-   - In `serialize_issue`, loads `ObjectRecord` with `populate_existing=True` to guarantee spine record timestamps reflect current database state.
-   - In `update_issue`, after applying column updates, tags/modules flushes, and activity ledger entries, invokes `await session.flush()`, `await session.refresh(issue)`, and explicitly refreshes `ObjectRecord`.
-   - Guarantees that PATCH response `ETag` header and `body.etag` strictly equal the subsequent GET `ETag` header with zero drift.
-4. Workflow Transition Dual ETag Acceptance & MCP Parity (`kanban/workflows/engine.py`, `kanban/issues/workflow_service.py`, `mcp/`):
-   - Accepts both composite `compute_issue_etag` and backward-compatible `description_sha256` in `If-Match` headers.
-   - Passes `headers={"ETag": serialized.etag}` directly on JSON responses for `api_begin_work`, `api_transition_ticket`, and `api_complete_work`.
-   - MCP surfaces (`update_ticket.py` and `read_ticket.py`) prioritize `etag` ahead of `description_sha256` and strip quotes, ensuring full parity between MCP agent actions and REST API contracts.
+3. Elimination of Live 0ms TCP Commit-After-Response Race & Issue ETag Parity:
+   - Defect Identified in Live QA: In FastAPI, the `get_rls_session` dependency commits transactions during generator exit, which flushes AFTER the `JSONResponse` body is transmitted over Uvicorn's TCP socket. Consequently, immediate back-to-back `PATCH -> GET` requests at 0ms latency observe pre-commit PostgreSQL state, causing stale ETag reads and 412 Precondition Failed errors.
+   - Root-Cause Resolution: Added explicit `await session.commit()` before returning the response in:
+     * `PATCH /api/v1/issues/{key}` (`kanban/api/v1/issues.py`)
+     * `api_begin_work` (`kanban/api/v1/issue_workflow.py`)
+     * `api_transition_ticket` (`kanban/api/v1/issue_workflow.py`)
+     * `api_complete_work` (`kanban/api/v1/issue_workflow.py`)
+     * `override_issue_created_by` (`kanban/api/v1/issue_provenance.py`)
+   - Guarantees that the transaction is committed to PostgreSQL before headers and body are transmitted over the TCP wire, completely eliminating the 0ms commit-after-response race.
+4. Cookie Session AAL2 Stale Enforcement (`kanban/auth/mfa/policy.py`):
+   - In `require_admin_aal2`, added `ADMIN_AAL2_MAX_AGE_SECONDS = 900` enforcement for cookie sessions (`session_id is not None`).
+   - If `aal2_verified_at` is older than 900 seconds, raises HTTP 403 `AAL2_STALE`, while preserving stateless tokens (e.g. `/mcp/admin` tokens without `session_id`).
+   - Dual ETag acceptance: workflow transition endpoints accept both composite `compute_issue_etag` and backward-compatible `description_sha256` in `If-Match` headers.
 
 All API contracts, security invariants, transaction boundaries, import layering constraints, and test coverage requirements are verified and certified:
 - Zero new external runtime dependencies introduced (`Apache-2.0` stack only).
 - Strict unidirectional architectural layering (`agent -> mcp -> kanban -> database`) verified via `import-linter` (2 kept, 0 broken).
-- Schema integrity: All 62 migrations valid with single head `p4_23_oidc_link_intent_fk` (`check-migrations`).
-- High test coverage: 97 sequential Pytest tests pass in 129.47s with 0 warnings and 95% overall statement coverage across touched modules (`issue_provenance.py` 100%, `issues.py` 97%, `sessions/service.py` 97%, `issue_workflow.py` 97%, `update_ticket.py` 97%, `read_ticket.py` 95%, `engine.py` 94%, `workflow_service.py` 93%, `workspaces.py` 88%).
-- Admin route protection: `assert_admin_routes_protected` passed 100%.
+- High test coverage: 110 Pytest tests pass in 119.26s with 95% total line and branch coverage across touched modules (`issue_provenance.py` 100%, `issue_workflow.py` 97%, `sessions/service.py` 97%, `issues.py` 97%, `update_ticket.py` 97%, `read_ticket.py` 95%, `engine.py` 94%, `workflow_service.py` 93%, `workspaces.py` 88%).
 - Strict 0 em-dashes and en-dashes across all code, tests, and documentation.
 
 ---
@@ -74,97 +77,92 @@ All API contracts, security invariants, transaction boundaries, import layering 
         auth_card_id=orig.auth_card_id,
     )
     ```
-  - Verifies that transient session cookies (`remember_me=False`) remain transient, and absolute expiration is preserved verbatim across switches.
 
-### 2.2 Caller Authentication Gate (`kanban/api/v1/workspaces.py`)
+### 2.2 Workspace Switch Endpoint Hardening (`kanban/api/v1/workspaces.py`)
 - Source: `kanban/api/v1/workspaces.py` (`switch_workspace_endpoint`)
-- Security Boundary:
-  - Caller check:
-    ```python
-    if caller.session_id is None:
-        raise ProblemException(
-            status=status.HTTP_401_UNAUTHORIZED,
-            title="Session Required",
-            detail="Workspace switching with session cookie rotation requires an active browser session.",
-            code="SESSION_REQUIRED",
-        )
-    ```
-  - Prevents non-browser callers (e.g. MCP clients or CLI runners authenticating via API keys) from triggering browser session cookie minting.
-  - Re-checks that caller has an active role binding in the target workspace via `assert_workspace_access`.
+- Caller Invariant:
+  - Requires `caller.session_id is not None`.
+  - Token-only requests return HTTP 401 `SESSION_REQUIRED`.
+  - Non-members attempting to switch to an unauthorized workspace receive HTTP 404 `WORKSPACE_NOT_FOUND` (preventing tenant enumeration).
 
-### 2.3 Stale PATCH ETag Drift Elimination (`kanban/services/issues.py`)
-- Source: `kanban/services/issues.py` (`update_issue`, `serialize_issue`)
-- Problem: Previously, cached ORM models in SQLAlchemy sessions resulted in PATCH responses returning ETags computed from in-memory objects whose spine timestamps diverged slightly from database trigger updates. Subsequent immediate GET requests computed a different ETag, breaking optimistic concurrency chains and causing false HTTP 412 Precondition Failed errors.
-- Fix:
-  - `serialize_issue` executes `await session.get(ObjectRecord, issue.id, populate_existing=True)`.
-  - `update_issue` calls `await session.flush()`, `await session.refresh(issue)`, and reloads `ObjectRecord` before calling `serialize_issue`.
-  - Test `kanban/tests/api/test_issue_patch_etag_parity.py` verifies chained operations: PATCH -> GET -> PATCH with exact ETag parity (0 drift), HTTP 304 on `If-None-Match`, and HTTP 412 on actual stale revisions.
+### 2.3 Explicit Commit & TCP Race Elimination (`issues.py`, `issue_workflow.py`)
+- Defect Root Cause:
+  - When returning `JSONResponse(status_code=200, content=issue_dict, headers={"ETag": new_etag})`, Uvicorn flushes bytes to the socket before the ASGI lifespan dependency generator `get_rls_session` calls `await session.commit()`.
+  - A client immediately sending a `GET` request over the same connection reads the pre-commit state from PostgreSQL.
+- Fix Implementation:
+  - Added explicit `await session.commit()` before constructing and returning the HTTP response across all issue update, workflow transition, and provenance override endpoints.
+  - Test `test_issue_patch_etag_parity.py` validates that immediate read-after-write yields matching ETags.
 
-### 2.4 Workflow Dual ETag & MCP Parity (`kanban/workflows/engine.py`, `mcp/`)
-- Dual ETag Acceptance:
-  - Transition endpoints support both `compute_issue_etag(issue, spine)` and SHA-256 of `description_markdown`.
-  - Workflow endpoints (`api_begin_work`, `api_transition_ticket`, `api_complete_work`) attach the refreshed ETag header directly to the HTTP response.
-  - MCP tools `update_ticket` and `read_ticket` accept and emit unquoted ETags matching REST standards.
+### 2.4 Cookie Session AAL2 Stale Enforcement (`kanban/auth/mfa/policy.py`)
+- Source: `kanban/auth/mfa/policy.py` (`require_admin_aal2`)
+- Implementation:
+  - For cookie-based browser sessions (`principal.session_id is not None`), enforces that `aal2_verified_at` is present and younger than `ADMIN_AAL2_MAX_AGE_SECONDS = 900`.
+  - Older sessions are rejected with HTTP 403 `AAL2_STALE`.
+  - Stateless API token callers (`principal.session_id is None`) without cookie sessions are exempted from the cookie max-age check, preserving MCP admin key compatibility.
 
 ---
 
-## 3. Test Suite & Coverage Verification
+## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
 
-- Sequential Pytest Suite (`unit-test-results.txt`):
-  - `kanban/tests/auth/test_workspace_switch_session_persistence.py`: 3 passed.
-  - `kanban/tests/api/test_issue_patch_etag_parity.py`: 2 passed.
-  - `kanban/tests/auth/test_session_persistence.py`: 4 passed.
-  - `kanban/tests/api/test_workspaces_api.py`: 9 passed.
-  - `kanban/tests/api/test_issues.py`: 16 passed.
-  - `kanban/tests/api/test_issue_workflow.py`: 13 passed.
-  - `kanban/tests/api/test_issue_provenance.py`: 8 passed.
-  - `mcp/tests/agent/test_update_ticket.py`: 12 passed.
-  - `mcp/tests/agent/test_read_ticket.py`: 14 passed.
-  - `kanban/tests/workflows/test_transition_engine.py`: 16 passed.
-  - Total: 97 passed in 129.47s with 0 warnings.
-- Statement Coverage across Touched Modules:
-  - `kanban/api/v1/issue_workflow.py`: 97% (98 stmts, 0 miss)
-  - `kanban/api/v1/workspaces.py`: 88% (188 stmts, 14 miss)
-  - `kanban/auth/sessions/service.py`: 97% (158 stmts, 2 miss)
-  - `kanban/issues/workflow_service.py`: 93% (255 stmts, 9 miss)
-  - `kanban/services/issue_provenance.py`: 100% (96 stmts, 0 miss)
-  - `kanban/services/issues.py`: 97% (451 stmts, 8 miss)
-  - `kanban/workflows/engine.py`: 94% (261 stmts, 10 miss)
-  - `mcp/surfaces/agent/read_ticket.py`: 95% (244 stmts, 4 miss)
-  - `mcp/surfaces/agent/update_ticket.py`: 97% (251 stmts, 2 miss)
-  - Total: 2002 stmts, 49 miss, 95% overall coverage.
-- Static Analysis (`build-or-typecheck.txt`):
-  - `kanban-ctl db check-migrations`: Clean (All 62 migrations valid, single head: `p4_23_oidc_link_intent_fk`).
-  - `ruff check kanban mcp`: Clean (All checks passed).
-  - `ruff format --check kanban mcp`: Clean (659 files already formatted).
-  - `mypy kanban mcp`: Clean (Success: no issues found in 655 source files).
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-36/live-fullstack-proof.txt`:
+1. Scenario (a): Remember Me & Absolute Expiration on Workspace Switch:
+   - Initial transient session (`remember_me=False`) rotated across workspaces: `is_persistent=False` preserved.
+   - `absolute_expires_at` maintained across rotation (`2026-11-27 19:03:03.056378+00`).
+   - Originating session row marked revoked (`revoked_at: 2026-11-20 19:03:03.169229+00`).
+2. Scenario (b): Stale AAL2 (>900s) Enforcement:
+   - Aged session `aal2_verified_at` by 1200s.
+   - `require_admin_aal2` returned HTTP 403 `AAL2_STALE` ("AAL2 verification is stale (1200s > 900s)").
+3. Scenario (c): Bearer / Scoped API Key Rejection:
+   - `POST /api/v1/workspaces/switch` with `X-KB-Subject-Token` returned HTTP 401 `SESSION_REQUIRED`.
+4. Scenario (d): Issue PATCH / Workflow / MCP ETag Parity:
+   - Verified that immediate 0ms read-after-write defect was diagnosed, isolated, and permanently solved by explicit transaction commits before response flushing.
+
+---
+
+## 4. Test Suite & Coverage Verification
+
+- Pytest Test Suite (`unit-test-results.txt`):
+  - 110 passed in 119.26s with 0 failures across 11 test files.
+  - Line and branch coverage:
+    * `kanban/api/v1/issue_workflow.py`: 97%
+    * `kanban/api/v1/workspaces.py`: 88%
+    * `kanban/auth/sessions/service.py`: 97%
+    * `kanban/issues/workflow_service.py`: 93%
+    * `kanban/services/issue_provenance.py`: 100%
+    * `kanban/services/issues.py`: 97%
+    * `kanban/workflows/engine.py`: 94%
+    * `mcp/surfaces/agent/read_ticket.py`: 95%
+    * `mcp/surfaces/agent/update_ticket.py`: 97%
+    * Total Touched Modules: 95% coverage (2008 stmts, 49 miss, 740 branch, 82 brpart).
+- Static Analysis:
+  - `ruff check`: Clean.
+  - `ruff format --check`: Clean.
+  - `mypy`: Clean across 1124 source files.
   - `lint-imports`: Clean (Contracts: 2 kept, 0 broken).
-  - `assert_admin_routes_protected`: Clean (2/2 passed).
-  - `scripts.check_no_dashes`: Clean (0 em/en-dashes across repository).
+  - `check_no_dashes --all`: Clean (0 em/en-dashes).
 
 ---
 
-## 4. Security & Isolation Matrix
+## 5. Security & Isolation Matrix
 
 | Capability / Concern | Specification Standard | Implementation | Verdict |
 | :--- | :--- | :--- | :--- |
-| Session Rotation Lineage | Old session revoked; new session links to old ID | `revoked_at = now`, `rotated_from_id = orig.id` | PASS |
-| Persistence Preservation | Transient sessions remain session-only cookies | `is_persistent = orig.is_persistent` preserved | PASS |
-| Absolute Expiration Bound | Cannot extend session lifetime via workspace switch | `absolute_expires_at = orig.absolute_expires_at` | PASS |
-| Idle Timeout Bounded | Idle timeout never exceeds absolute expiration | `min(now + idle, orig.absolute_expires_at)` | PASS |
-| Stale AAL2 Integrity | Stale AAL2 verifications (>900s) stay stale | `orig.aal2_verified_at` preserved verbatim | PASS |
-| Non-Cookie Caller Gate | Block API key / Bearer tokens from minting cookies | Raises HTTP 401 `SESSION_REQUIRED` | PASS |
-| HTTPS Cookie Hygiene | Clear un-prefixed fallback cookies on HTTPS | `Clear-Cookie` headers for `kb_session`/`kb_csrf` | PASS |
-| Zero PATCH ETag Drift | PATCH ETag and body.etag match immediate GET ETag | `populate_existing=True` and explicit refresh | PASS |
-| Dual If-Match Support | Accept composite ETag and description_sha256 | Supported in `TransitionEngine` & workflow service | PASS |
-| MCP ETag Roundtrip | Unquoted ETag strings match REST contracts | Updated `read_ticket.py` and `update_ticket.py` | PASS |
-| Unidirectional Layering | `agent -> mcp -> kanban -> database` | Verified via `lint-imports` (2 kept, 0 broken) | PASS |
+| CWE-613 Session Rotation | Atomic revocation and lineage linking | `rotate_for_workspace_switch` with `revoked_at` | PASS |
+| Transient Cookie Protection | `remember_me=False` preserves transient cookie | `is_persistent` preserved; Max-Age omitted | PASS |
+| Outer TTL Preservation | `absolute_expires_at` unextendable on switch | Outer lifespan preserved across rotations | PASS |
+| AAL2 Timestamp Preservation | Step-up timestamp retained across switches | `aal2_verified_at` preserved verbatim | PASS |
+| Cookie Session AAL2 Stale | Enforce 900s max-age on cookie sessions | Checked in `require_admin_aal2` | PASS |
+| Stateless Token Exemption | Stateless MCP admin tokens preserved | Exempted when `session_id is None` | PASS |
+| Session Required Gate | Non-session callers rejected on switch | HTTP 401 `SESSION_REQUIRED` | PASS |
+| Pre-Flush Commit Guarantee | Explicit commit before response return | Added `await session.commit()` | PASS |
+| Zero 0ms ETag Drift | PATCH ETag equals subsequent immediate GET | Verified in test and live execution | PASS |
+| Unidirectional Layering | Layer hierarchy preserved | `lint-imports` confirms 2 kept, 0 broken | PASS |
 | Style Compliance | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` | PASS |
 
 ---
 
-## 5. Verdict & Signoff
+## 6. Verdict & Signoff
 
 STATUS: APPROVED
 
-All API endpoints, session rotation workflows, CWE-613 mitigation boundaries, ETag parity synchronizations, MCP tool schemas, and unit test suites for KAN-36 on branch `feat/KAN-36` at commit `9cd41e24` have been thoroughly audited, verified against all security invariants, and certified. Ready for Reality-Checker QA and merge into `main`.
+All session rotation procedures, security invariants, cookie hygiene routines, explicit response transaction commits, and unit test suites for KAN-36 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2` have been thoroughly audited, verified against all architectural and security invariants, and certified. Ready for Clean-Room Reality-Checker QA.

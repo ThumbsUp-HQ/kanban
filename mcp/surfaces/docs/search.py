@@ -510,7 +510,7 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
         )
 
         if not isinstance(resp, dict):
-            return {"total": 0, "items": []}
+            return {"mode": "lexical", "executed_mode": "lexical", "total": 0, "items": []}
 
         items_raw = resp.get("items", [])
         formatted_items: list[dict[str, Any]] = []
@@ -540,8 +540,10 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 hit["match_reason"] = it["match_reason"]
             formatted_items.append(hit)
 
+        executed_mode = resp.get("executed_mode", "lexical")
         out_search: dict[str, Any] = {
-            "mode": resp.get("executed_mode", "lexical"),
+            "mode": executed_mode,
+            "executed_mode": executed_mode,
             "total": resp.get("total", len(formatted_items)),
             "items": formatted_items,
         }

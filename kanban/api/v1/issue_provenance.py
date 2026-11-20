@@ -36,5 +36,6 @@ async def patch_issue_created_by(
     """Override created_by on an issue under administrative authorization (S7.2 8d)."""
     async with timing_floor(floor_ms=25.0):
         result, etag = await svc.override_issue_created_by(session, caller, issue_ref, body)
+        await session.commit()
         response.headers["ETag"] = etag
         return result

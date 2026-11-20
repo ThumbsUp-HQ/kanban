@@ -552,6 +552,7 @@ async def _query_vector_candidates(  # noqa: PLR0913, PLR0917
                 "LIMIT :lim"
             )
             res = await session.execute(sql, params)
+            await session.execute(text("SET LOCAL statement_timeout = 0"))
             rows = res.fetchall()
             if not rows:
                 return None

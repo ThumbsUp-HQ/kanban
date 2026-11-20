@@ -16,6 +16,7 @@ from kanban.api.deps import PrincipalContext, get_principal
 from kanban.api.problems import ProblemException
 
 AAL2_LEVEL: Final[int] = 2
+ADMIN_AAL2_MAX_AGE_SECONDS: Final[int] = 900
 
 __all__ = [
     "AAL2_LEVEL",
@@ -115,7 +116,7 @@ def require_aal2(max_age_seconds: int | None = None) -> _RequireAal2:
     return _RequireAal2(max_age_seconds=max_age_seconds)
 
 
-async def require_admin_aal2(
+async def require_admin_aal2(  # noqa: C901
     request: Request,
     principal: Annotated[PrincipalContext, Depends(get_principal)],
 ) -> PrincipalContext:
@@ -188,14 +189,15 @@ async def require_admin_aal2(
                 detail="Administrators must enroll and confirm a second authentication factor.",
             )
 
+    admin_methods: list[str] = []
+    if has_active_totp:
+        admin_methods.append("totp")
+    if has_webauthn:
+        admin_methods.append("webauthn")
+    if unused_codes > 0:
+        admin_methods.append("recovery")
+
     if principal.aal_level < AAL2_LEVEL:
-        admin_methods: list[str] = []
-        if has_active_totp:
-            admin_methods.append("totp")
-        if has_webauthn:
-            admin_methods.append("webauthn")
-        if unused_codes > 0:
-            admin_methods.append("recovery")
         raise ProblemException(
             code="AAL2_REQUIRED",
             status=403,
@@ -203,6 +205,32 @@ async def require_admin_aal2(
             detail="Administrative routes require multi-factor authentication (AAL2).",
             methods=admin_methods,
         )
+
+    if principal.session_id is not None:
+        verified_at = principal.aal2_verified_at
+        if verified_at is None:
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail="AAL2 verification timestamp is missing or stale.",
+                methods=admin_methods,
+            )
+        now = datetime.now(UTC)
+        if verified_at.tzinfo is None:
+            verified_at = verified_at.replace(tzinfo=UTC)
+        age = (now - verified_at).total_seconds()
+        if age > ADMIN_AAL2_MAX_AGE_SECONDS:
+            detail_msg = (
+                f"AAL2 verification is stale ({int(age)}s > {ADMIN_AAL2_MAX_AGE_SECONDS}s)."
+            )
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail=detail_msg,
+                methods=admin_methods,
+            )
 
     return principal
 
