@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
-import { WorkspaceSettingsPage, formatHandle } from '../WorkspaceSettingsPage';
+import { WorkspaceSettingsPage, formatHandle, parseTabFromHash } from '../WorkspaceSettingsPage';
 import * as clientModule from '../../../api/client';
 import * as sessionGuardModule from '../../auth/useSessionGuard';
 
@@ -14,6 +14,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    window.location.hash = '';
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1697,5 +1698,134 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to remove group member.')).toBeDefined();
     });
+  });
+
+  it('renders id="tab-*" attributes on all settings tab buttons', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return { name: 'WS', slug: 'ws', default_project_visibility: 'workspace' };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const generalTab = await screen.findByTestId('tab-general');
+    const membersTab = await screen.findByTestId('tab-members');
+    const groupsTab = await screen.findByTestId('tab-groups');
+
+    expect(generalTab.getAttribute('id')).toBe('tab-general');
+    expect(membersTab.getAttribute('id')).toBe('tab-members');
+    expect(groupsTab.getAttribute('id')).toBe('tab-groups');
+  });
+
+  it('synchronizes active tab with window.location.hash on initial mount, click, and hashchange', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return { name: 'WS', slug: 'ws', default_project_visibility: 'workspace' };
+      }
+      if (path.includes('/api/v1/admin/principals')) {
+        return [];
+      }
+      return [];
+    });
+
+    // 1. Initial mount with #tab-members in hash
+    window.location.hash = '#tab-members';
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/workspaces/settings#tab-members']}>
+          <WorkspaceSettingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-members').getAttribute('aria-selected')).toBe('true');
+    });
+
+    // 2. Click on #tab-groups updates window.location.hash
+    const groupsTab = screen.getByTestId('tab-groups');
+    fireEvent.click(groupsTab);
+
+    expect(window.location.hash).toBe('#tab-groups');
+    expect(groupsTab.getAttribute('aria-selected')).toBe('true');
+
+    // 3. hashchange event to #tab-general
+    window.location.hash = '#tab-general';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-general').getAttribute('aria-selected')).toBe('true');
+    });
+
+    // 4. Reset hash
+    window.location.hash = '';
+  });
+
+  it('parseTabFromHash handles hash variations and defaults to null', () => {
+    expect(parseTabFromHash('#tab-general')).toBe('general');
+    expect(parseTabFromHash('#general')).toBe('general');
+    expect(parseTabFromHash('tab-general')).toBe('general');
+    expect(parseTabFromHash('#tab-members')).toBe('members');
+    expect(parseTabFromHash('#members')).toBe('members');
+    expect(parseTabFromHash('#tab-groups')).toBe('groups');
+    expect(parseTabFromHash('#groups')).toBe('groups');
+    expect(parseTabFromHash('#unknown')).toBeNull();
+    expect(parseTabFromHash('')).toBeNull();
+    expect(parseTabFromHash(null)).toBeNull();
+    expect(parseTabFromHash(undefined)).toBeNull();
+  });
+
+  it('dispatches CustomEvent kb:system-status-changed on air gap mode update', async () => {
+    let patchedBody: Record<string, unknown> | null = null;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        if (method.toUpperCase() === 'PATCH') {
+          const bodyVal = options && 'body' in options ? options.body : undefined;
+          patchedBody = typeof bodyVal === 'string'
+            ? (JSON.parse(bodyVal) as Record<string, unknown>)
+            : ((bodyVal as Record<string, unknown> | undefined) ?? {});
+          return {
+            name: 'WS',
+            slug: 'ws',
+            air_gap_mode: true,
+          };
+        }
+        return { name: 'WS', slug: 'ws', air_gap_mode: false, default_project_visibility: 'workspace' };
+      }
+      return [];
+    });
+
+    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
+
+    renderComponent();
+
+    const airGapCheckbox = await screen.findByTestId('workspace-air-gap-toggle');
+    fireEvent.click(airGapCheckbox);
+
+    const submitBtn = screen.getByTestId('save-workspace-btn');
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(patchedBody?.air_gap_mode).toBe(true);
+    });
+
+    expect(dispatchEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'kb:system-status-changed' }),
+    );
   });
 });

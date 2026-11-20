@@ -14,6 +14,7 @@ import React, {
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '../api/queryKeys';
 import { Breadcrumb } from './Breadcrumb';
 import { HeaderPills, type AccessManifestData } from './HeaderPills';
 import { LayoutSwitcher } from './LayoutSwitcher';
@@ -123,6 +124,18 @@ export function Topbar({
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const themeContext = useTheme();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStatusChanged = (): void => {
+      void queryClient.invalidateQueries({ queryKey: qk.systemStatus() });
+      void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+    };
+    window.addEventListener('kb:system-status-changed', handleStatusChanged);
+    return () => {
+      window.removeEventListener('kb:system-status-changed', handleStatusChanged);
+    };
+  }, [queryClient]);
 
   // Close avatar menu on outside click
   useEffect(() => {

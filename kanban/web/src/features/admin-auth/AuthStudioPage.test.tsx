@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthStudioPage, formatHandle } from './AuthStudioPage';
 import * as client from '../../api/client';
 import * as adminAuthApi from './adminAuthApi';
@@ -1048,7 +1049,6 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockRejectedValue(
       new ApiProblem(409, {
         code: 'LOCKOUT_PREVENTED',
-        detail: 'Generic lockout prevention',
       }),
     );
 
@@ -1056,7 +1056,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     fireEvent.click(oktaSwitch);
 
     await waitFor(() => {
-      expect(screen.getByText('Generic lockout prevention')).toBeDefined();
+      expect(
+        screen.getByText('Lockout prevented: this change would block Server Administrator sign-in.'),
+      ).toBeDefined();
     });
   });
 
@@ -1112,6 +1114,29 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     await waitFor(() => {
       expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
     });
+
+    // 7. Move down on index 1 to cover nextNext === null
+    const reorderSpy = vi.spyOn(adminAuthApi, 'reorderAdminAuthCard').mockResolvedValue(mockCards[1]);
+    const ghDown = screen.getByRole('button', { name: /Move GitHub Enterprise down/i });
+    fireEvent.click(ghDown);
+    await waitFor(() => {
+      expect(reorderSpy).toHaveBeenCalledWith('c-github', expect.objectContaining({
+        after_card_id: 'c-ldap',
+        before_card_id: null,
+      }));
+    });
+
+    // 8. Test handshake returning empty status & summary
+    vi.spyOn(adminAuthApi, 'testAuthCardHandshake').mockResolvedValueOnce({
+      latency_ms: 15,
+      summary: null,
+      error_code: null,
+    } as never);
+    const testHandshakeBtns = screen.getAllByRole('button', { name: /^Test handshake/i });
+    if (testHandshakeBtns[0]) fireEvent.click(testHandshakeBtns[0]);
+    await waitFor(() => {
+      expect(screen.getByText('FAILED')).toBeDefined();
+    });
   });
 
   describe('Users & Permissions Tab (KANBA-176)', () => {
@@ -1138,6 +1163,17 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         role: 'WORKSPACE_MEMBER',
         provider: 'LDAP',
       },
+      {
+        id: 'u-3',
+        principal: 'bare.user',
+        handle: null,
+        display_name: '',
+        type: 'USER' as const,
+        status: 'active' as const,
+        email: null,
+        role: null,
+        provider: null,
+      },
     ];
 
     beforeEach(() => {
@@ -1151,7 +1187,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     });
 
     it('switches to Users & Permissions tab and renders principals table with badges', async () => {
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1167,7 +1211,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(screen.getByText('LDAP Engineer')).toBeDefined();
       });
 
-      expect(screen.getByText('LOCAL')).toBeDefined();
+      expect(screen.getAllByText('LOCAL').length).toBeGreaterThan(0);
       expect(screen.getByText('LDAP')).toBeDefined();
     });
 
@@ -1184,7 +1228,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         provider: 'LOCAL',
       });
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1227,7 +1279,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     it('updates user role grant via role select dropdown', async () => {
       const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockResolvedValue(undefined);
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1250,7 +1310,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     it('opens Reset Password modal and resets user password', async () => {
       const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword').mockResolvedValue(undefined);
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1279,6 +1347,27 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       await waitFor(() => {
         expect(resetSpy).toHaveBeenCalledWith('u-1', 'NewPass12345!');
+      });
+
+      // Also open reset modal for u-3 (bare user) to cover fallback display name and email branches
+      const u3Row = screen.getByTestId('auth-user-row-u-3');
+      const u3ResetBtn = within(u3Row).getByRole('button', { name: /^Reset Password$/i });
+      fireEvent.click(u3ResetBtn);
+
+      expect(screen.getByRole('heading', { name: /Reset Password: @bare\.user/i })).toBeDefined();
+      expect(screen.getByText(/Set a new password for/i)).toBeDefined();
+
+      fireEvent.change(screen.getByLabelText(/^New Password/i), {
+        target: { value: 'NewPass12345!' },
+      });
+      fireEvent.change(screen.getByLabelText(/Confirm New Password/i), {
+        target: { value: 'NewPass12345!' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^Update Password$/i }));
+
+      await waitFor(() => {
+        expect(resetSpy).toHaveBeenCalledWith('u-3', 'NewPass12345!');
+        expect(screen.getByText('Password reset successfully for @bare.user.')).toBeDefined();
       });
     });
 
@@ -1382,7 +1471,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         return {};
       });
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       // General error alert appears
       await waitFor(() => {
@@ -1426,7 +1523,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       const roleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockRejectedValueOnce(new Error('Permission denied for role change'));
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1465,7 +1570,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       const createSpy = vi.spyOn(adminAuthApi, 'createLocalUser');
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1554,7 +1667,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       const resetSpy = vi.spyOn(adminAuthApi, 'resetUserPassword');
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1616,7 +1737,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce('Raw string error');
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1628,10 +1757,18 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       });
 
       vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce(
-        new ApiProblem(403, { code: 'FORBIDDEN' }),
+        new Error('Network error loading users'),
       );
-      // Trigger loadUsers with filter change to 'USER'
-      fireEvent.click(screen.getByTestId('filter-user'));
+      fireEvent.click(screen.getByTestId('filter-agent'));
+      await waitFor(() => {
+        expect(screen.getByText('Network error loading users')).toBeDefined();
+      });
+
+      vi.spyOn(adminAuthApi, 'fetchAdminPrincipals').mockRejectedValueOnce(
+        new ApiProblem(404, { code: 'NOT_FOUND' }),
+      );
+      // Trigger loadUsers with filter change to 'ALL' to cover 404 and filter === 'ALL'
+      fireEvent.click(screen.getByTestId('filter-all'));
       await waitFor(() => {
         expect(screen.getByText('Not found or no access')).toBeDefined();
       });
@@ -1651,7 +1788,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         check_summary: 'Probe OK',
       });
 
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1675,7 +1820,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     });
 
     it('covers role change in add user modal and cancelling reset password modal', async () => {
-      render(<AuthStudioPage />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
 
       await waitFor(() => {
         expect(screen.getByText('Okta SSO')).toBeDefined();
@@ -1710,6 +1863,197 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Close/i }));
       expect(screen.queryByRole('heading', { name: /Reset Password: @local\.user/i })).toBeNull();
+    });
+
+    it('renders Reset Password action strictly for USER and hides it for GROUP and AGENT principals, and displays group @slug', async () => {
+      const mixedPrincipals = [
+        {
+          id: 'p-user',
+          principal: 'alice',
+          handle: '@alice',
+          display_name: 'Alice User',
+          type: 'USER',
+          status: 'active' as const,
+          email: 'alice@example.com',
+          role: 'WORKSPACE_MEMBER',
+          provider: 'LOCAL',
+        },
+        {
+          id: 'p-group',
+          principal: 'infra-team',
+          handle: '@infra-team',
+          display_name: 'Infra Team',
+          type: 'GROUP',
+          status: 'active' as const,
+          email: null,
+          role: 'WORKSPACE_MEMBER',
+          provider: 'LOCAL',
+        },
+        {
+          id: 'p-agent',
+          principal: 'code-bot',
+          handle: '@code-bot',
+          display_name: 'Code Bot',
+          type: 'AGENT',
+          status: 'active' as const,
+          email: null,
+          role: 'WORKSPACE_MEMBER',
+          provider: 'LOCAL',
+        },
+      ];
+
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return mixedPrincipals;
+        return {};
+      });
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      // Switch to Users & Permissions tab
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-user-row-p-user')).toBeDefined();
+      });
+
+      const userRow = screen.getByTestId('auth-user-row-p-user');
+      const groupRow = screen.getByTestId('auth-user-row-p-group');
+      const agentRow = screen.getByTestId('auth-user-row-p-agent');
+
+      // User row MUST have Reset Password button
+      expect(within(userRow).getByRole('button', { name: /Reset Password/i })).toBeDefined();
+
+      // Group and Agent rows MUST NEVER have Reset Password button
+      expect(within(groupRow).queryByRole('button', { name: /Reset Password/i })).toBeNull();
+      expect(within(agentRow).queryByRole('button', { name: /Reset Password/i })).toBeNull();
+
+      // Group handle must render @infra-team cleanly
+      expect(within(groupRow).getByText('@infra-team')).toBeDefined();
+    });
+
+    it('formatHandle unit tests: handles slugs, UUIDs without leaking, display name fallback, and nulls', () => {
+      expect(formatHandle('@infra-team')).toBe('@infra-team');
+      expect(formatHandle('infra-team')).toBe('@infra-team');
+      expect(formatHandle(null, 'Infra Team')).toBe('@infra-team');
+      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', 'Infra Team')).toBe('@infra-team');
+      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', null)).toBe('');
+      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', '801f9859-9944-42f0-9831-279c13dcbdb6')).toBe('');
+      expect(formatHandle(null, '---')).toBe('');
+      expect(formatHandle(null, '   ')).toBe('');
+      expect(formatHandle(null, null)).toBe('');
+      expect(formatHandle('')).toBe('');
+      expect(formatHandle('   ')).toBe('');
+      expect(formatHandle('@user')).toBe('@user');
+    });
+
+    it('dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close', async () => {
+      const draftSpy = vi.spyOn(adminAuthApi, 'testDraftAuthCardHandshake').mockResolvedValue({
+        status: 'HEALTHY',
+        latency_ms: 10,
+        check_summary: 'Draft Handshake Success',
+        error_code: null,
+      });
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AuthStudioPage />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Okta SSO')).toBeDefined();
+      });
+
+      // 1. Open drawer in create mode (no card id) and test handshake draft
+      fireEvent.click(screen.getByRole('button', { name: /\+ Add auth card/i }));
+      expect(screen.getByTestId('drawer-test-handshake-btn')).toBeDefined();
+
+      const testBtn = screen.getByTestId('drawer-test-handshake-btn');
+      fireEvent.click(testBtn);
+
+      await waitFor(() => {
+        expect(draftSpy).toHaveBeenCalled();
+      });
+
+      // Close drawer
+      fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+
+      // 2. Open Add Local User modal and close via X button
+      fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /\+ Add Local User/i })).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /\+ Add Local User/i }));
+      expect(screen.getByRole('heading', { name: /\+ Add Local User/i })).toBeDefined();
+
+      const closeXBtn = screen.getByRole('button', { name: 'Close' });
+      fireEvent.click(closeXBtn);
+      expect(screen.queryByRole('heading', { name: /\+ Add Local User/i })).toBeNull();
+
+      // 3. Trigger validation userActionError and dismiss it
+      fireEvent.click(screen.getByRole('button', { name: /\+ Add Local User/i }));
+      const form = screen.getByRole('button', { name: /^Create User$/i }).closest('form');
+      if (form) fireEvent.submit(form);
+      expect(screen.getByText('Handle, email, and password are required.')).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
+      expect(screen.queryByText('Handle, email, and password are required.')).toBeNull();
+
+      // 4. Trigger userActionSuccess and dismiss it
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Username \/ Handle/i), {
+        target: { value: 'dismiss-success' },
+      });
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+        target: { value: 'Dismiss Success' },
+      });
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Email Address/i), {
+        target: { value: 'dismiss@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Password/i), {
+        target: { value: 'Pass12345!' },
+      });
+      vi.spyOn(adminAuthApi, 'createLocalUser').mockResolvedValueOnce({
+        id: 'u-dismiss',
+        principal: 'dismiss-success',
+        handle: 'dismiss-success',
+        type: 'USER',
+        display_name: 'Dismiss Success',
+        email: 'dismiss@example.com',
+        status: 'active',
+        role: 'WORKSPACE_MEMBER',
+        provider: 'LOCAL',
+      });
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(screen.getByText(/created successfully/i)).toBeDefined();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }));
+      expect(screen.queryByText(/created successfully/i)).toBeNull();
+
+      // 5. Switch back to Auth Provider Cards tab
+      fireEvent.click(screen.getByRole('tab', { name: /Auth Provider Cards/i }));
+      expect(screen.getByText('Okta SSO')).toBeDefined();
     });
   });
 });

@@ -1,0 +1,56 @@
+=== RUFF CHECK ===
+All checks passed!
+
+=== MYPY CHECK ===
+Success: no issues found in 2 source files
+
+=== LINT-IMPORTS ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 964 files, 3388 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== TSC -B ===
+
+=== ESLINT ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
+> eslint . --max-warnings 0
+
+
+=== CHECK NO DASHES ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== CSS TOKENS AUDIT ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
+> vitest run src/styles/__tests__/cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  08:42:33
+   Duration  965ms (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
+

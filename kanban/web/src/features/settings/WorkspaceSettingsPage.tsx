@@ -12,7 +12,8 @@
  */
 
 import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import './ProjectSettingsPage.css';
@@ -50,8 +51,49 @@ export function formatHandle(handle?: string | null): string {
   return clean ? `@${clean}` : '';
 }
 
+export function parseTabFromHash(hash?: string | null): 'general' | 'members' | 'groups' | null {
+  if (!hash) return null;
+  const clean = hash.trim().replace(/^#+/, '');
+  if (clean === 'tab-general' || clean === 'general') return 'general';
+  if (clean === 'tab-members' || clean === 'members') return 'members';
+  if (clean === 'tab-groups' || clean === 'groups') return 'groups';
+  return null;
+}
+
 export function WorkspaceSettingsPage(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>('general');
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const locationHash = location.hash;
+
+  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'groups'>(() => {
+    const rawHash = window.location.hash || locationHash;
+    return parseTabFromHash(rawHash) ?? 'general';
+  });
+
+  useEffect(() => {
+    const syncFromHash = (): void => {
+      const currentHash = window.location.hash || locationHash;
+      const parsed = parseTabFromHash(currentHash);
+      if (parsed) {
+        setActiveTab(parsed);
+      }
+    };
+
+    syncFromHash();
+
+    window.addEventListener('hashchange', syncFromHash);
+    return () => {
+      window.removeEventListener('hashchange', syncFromHash);
+    };
+  }, [locationHash]);
+
+  const handleTabChange = (tab: 'general' | 'members' | 'groups'): void => {
+    setActiveTab(tab);
+    const targetHash = `#tab-${tab}`;
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash;
+    }
+  };
   const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
   const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -226,8 +268,10 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
         setSettings(updated);
         setSuccessMessage('Workspace settings updated successfully.');
+        // Invalidate system status queries
+        void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
         // Notify topbar header pills of air-gap status update
-        window.dispatchEvent(new Event('kb:system-status-changed'));
+        window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
       } catch (err: unknown) {
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update workspace settings.');
@@ -482,30 +526,33 @@ export function WorkspaceSettingsPage(): JSX.Element {
         <button
           type="button"
           role="tab"
+          id="tab-general"
           aria-selected={activeTab === 'general'}
           data-testid="tab-general"
           className={`kb-settings-tab ${activeTab === 'general' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('general'); }}
+          onClick={() => { handleTabChange('general'); }}
         >
           General & Policy
         </button>
         <button
           type="button"
           role="tab"
+          id="tab-members"
           aria-selected={activeTab === 'members'}
           data-testid="tab-members"
           className={`kb-settings-tab ${activeTab === 'members' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('members'); }}
+          onClick={() => { handleTabChange('members'); }}
         >
           Workspace Members
         </button>
         <button
           type="button"
           role="tab"
+          id="tab-groups"
           aria-selected={activeTab === 'groups'}
           data-testid="tab-groups"
           className={`kb-settings-tab ${activeTab === 'groups' ? 'kb-settings-tab-active' : ''}`}
-          onClick={() => { setActiveTab('groups'); }}
+          onClick={() => { handleTabChange('groups'); }}
         >
           Groups & Governance
         </button>
