@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef, type JSX } from 'react';
 import { ListRow } from './ListRow';
-import type { IssueItem } from '../views/viewsApi';
+import type { IssueItem, StateSummary } from '../views/viewsApi';
 import '../views/listTable.css';
 
 export interface ListViewProps {
   issues: IssueItem[];
   projectKey?: string | undefined;
+  projectStates?: StateSummary[] | undefined;
   modulesEnabled?: boolean | undefined;
   selectedIds?: string[] | undefined;
   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
@@ -29,6 +30,7 @@ interface GroupSection {
 export function ListView({
   issues,
   projectKey = 'KAN',
+  projectStates,
   modulesEnabled = true,
   selectedIds = [],
   onToggleSelect,
@@ -93,7 +95,14 @@ export function ListView({
       if (selectedState !== 'all') {
         const group = issue.state.group.toLowerCase();
         const name = issue.state.name.toLowerCase();
-        if (group !== selectedState && name !== selectedState && !name.includes(selectedState)) {
+        const stateId = issue.state.id.toLowerCase();
+        const target = selectedState.toLowerCase();
+        if (
+          group !== target &&
+          name !== target &&
+          stateId !== target &&
+          !name.includes(target)
+        ) {
           return false;
         }
       }
@@ -120,6 +129,21 @@ export function ListView({
     ],
     []
   );
+
+  const resolvedWorkflowStates = useMemo(() => {
+    if (projectStates && projectStates.length > 0) {
+      return projectStates.map((st, idx) => ({
+        id: st.id,
+        name: st.name,
+        sortOrder: st.sort_order ?? (idx + 1) * 10,
+      }));
+    }
+    return defaultStates.map((def) => ({
+      id: def.name.toLowerCase().replace(/\s+/g, '-'),
+      name: def.name,
+      sortOrder: def.sortOrder,
+    }));
+  }, [projectStates, defaultStates]);
 
   // Group issues by state, priority, or none
   const sections = useMemo(() => {
@@ -217,10 +241,10 @@ export function ListView({
     // Default: Group issues by state, preserving known states with 0 items
     const sectionMap = new Map<string, GroupSection>();
 
-    // Seed default sections
-    for (const def of defaultStates) {
+    // Seed sections
+    for (const def of resolvedWorkflowStates) {
       sectionMap.set(def.name, {
-        id: def.name.toLowerCase().replace(/\s+/g, '-'),
+        id: def.id,
         name: def.name,
         sortOrder: def.sortOrder,
         items: [],
@@ -235,7 +259,7 @@ export function ListView({
         existing.items.push(issue);
       } else {
         sectionMap.set(stateName, {
-          id: stateName.toLowerCase().replace(/\s+/g, '-'),
+          id: issue.state.id || stateName.toLowerCase().replace(/\s+/g, '-'),
           name: stateName,
           sortOrder: issue.state.sort_order ?? 999,
           items: [issue],
@@ -247,7 +271,7 @@ export function ListView({
     return Array.from(sectionMap.values()).sort(
       (a, b) => a.sortOrder - b.sortOrder
     );
-  }, [filteredIssues, defaultStates, groupByOption]);
+  }, [filteredIssues, resolvedWorkflowStates, groupByOption]);
 
   const toggleSection = (sectionName: string) => {
     setCollapsedSections((prev) => ({
@@ -355,11 +379,21 @@ export function ListView({
                   className="list-filter-select"
                 >
                   <option value="all">All States</option>
-                  <option value="backlog">Backlog</option>
-                  <option value="unstarted">Unstarted / Todo</option>
-                  <option value="started">Started / In Progress</option>
-                  <option value="completed">Completed / Done</option>
-                  <option value="cancelled">Cancelled</option>
+                  {projectStates && projectStates.length > 0 ? (
+                    projectStates.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="backlog">Backlog</option>
+                      <option value="unstarted">Unstarted / Todo</option>
+                      <option value="started">Started / In Progress</option>
+                      <option value="completed">Completed / Done</option>
+                      <option value="cancelled">Cancelled</option>
+                    </>
+                  )}
                 </select>
               </div>
 

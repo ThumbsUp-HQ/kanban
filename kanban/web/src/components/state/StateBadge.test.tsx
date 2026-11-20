@@ -125,5 +125,32 @@ describe('StateBadge (KB-UX-02)', () => {
     const { unmount: u6 } = render(<StateBadge state="started" testId="b6" />);
     expect(screen.getByTestId('b6').getAttribute('data-state-group')).toBe('started');
     u6();
+
+    // 7. completely empty props fallback
+    const { unmount: u7 } = render(<StateBadge testId="b7" />);
+    expect(screen.getByTestId('b7').getAttribute('data-state-group')).toBe('unstarted');
+    expect(screen.getByText('Unstarted')).toBeDefined();
+    u7();
+  });
+
+  it('renders custom color hex and sets CSS custom property (KAN-43 Problem 2)', () => {
+    const { rerender } = render(
+      <StateBadge
+        state={{ id: 'st-custom', name: 'Purple State', group: 'started', color_hex: '#7c3aed' }}
+        testId="custom-badge"
+      />
+    );
+    const badge = screen.getByTestId('custom-badge');
+    expect(badge.classList.contains('state-badge--custom')).toBe(true);
+    expect(badge.style.getPropertyValue('--state-custom-fg')).toBe('#7c3aed');
+
+    // Rerender with color removed to test cleanup
+    rerender(
+      <StateBadge
+        state={{ id: 'st-custom', name: 'Purple State', group: 'started' }}
+        testId="custom-badge"
+      />
+    );
+    expect(badge.classList.contains('state-badge--custom')).toBe(false);
   });
 });

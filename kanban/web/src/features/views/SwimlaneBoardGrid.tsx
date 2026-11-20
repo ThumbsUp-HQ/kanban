@@ -1,6 +1,11 @@
 import React, { useState, useMemo, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
-import { normalizeStateKey, type IssueItem, type GroupAxis } from './viewsApi';
+import {
+  normalizeStateKey,
+  type IssueItem,
+  type GroupAxis,
+  type StateSummary,
+} from './viewsApi';
 import './filterBulk.css';
 
 export interface SwimlaneBoardGridProps {
@@ -11,6 +16,7 @@ export interface SwimlaneBoardGridProps {
   modulesEnabled?: boolean | undefined;
   projectCycles?: { id: string; name: string }[] | undefined;
   projectModules?: { id: string; name: string }[] | undefined;
+  projectStates?: StateSummary[] | undefined;
   selectedIds?: string[] | undefined;
   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
   focusedKey?: string | null | undefined;
@@ -32,7 +38,11 @@ interface SwimlaneDef {
   sortOrder: number;
 }
 
-function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
+function getIssueColId(
+  issue: IssueItem,
+  groupBy: GroupAxis,
+  projectStates?: StateSummary[],
+): string {
   if (groupBy === 'priority') {
     return issue.priority.slug.toLowerCase();
   }
@@ -42,6 +52,15 @@ function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
   if (groupBy === 'module') {
     const firstMod = issue.modules?.[0]?.id ?? issue.module_ids?.[0];
     return firstMod ?? 'none';
+  }
+  if (projectStates && projectStates.length > 0) {
+    const matched =
+      projectStates.find((s) => s.id === issue.state.id) ??
+      projectStates.find(
+        (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name),
+      ) ??
+      projectStates.find((s) => s.group === issue.state.group);
+    if (matched) return matched.id;
   }
   const sName = normalizeStateKey(issue.state.name);
   if (sName.includes('backlog')) return 'backlog';
@@ -96,6 +115,7 @@ export function SwimlaneBoardGrid({
   modulesEnabled = true,
   projectCycles,
   projectModules,
+  projectStates,
   selectedIds = [],
   onToggleSelect,
   focusedKey = null,
@@ -169,6 +189,13 @@ export function SwimlaneBoardGrid({
       return modCols;
     }
     // Default: State columns
+    if (projectStates && projectStates.length > 0) {
+      return projectStates.map((st, idx) => ({
+        id: st.id,
+        name: st.name,
+        sortOrder: st.sort_order ?? (idx + 1) * 10,
+      }));
+    }
     return [
       { id: 'backlog', name: 'Backlog', sortOrder: 10 },
       { id: 'todo', name: 'Todo', sortOrder: 20 },
@@ -177,7 +204,7 @@ export function SwimlaneBoardGrid({
       { id: 'done', name: 'Done', sortOrder: 50 },
       { id: 'cancelled', name: 'Cancelled', sortOrder: 60 },
     ];
-  }, [groupBy, allCycles, allModules, modulesEnabled]);
+  }, [groupBy, allCycles, allModules, modulesEnabled, projectStates]);
 
   // 2. Determine Horizontal Swimlane Definitions based on subGroupBy axis
   const swimlanes: SwimlaneDef[] = useMemo(() => {
@@ -248,14 +275,14 @@ export function SwimlaneBoardGrid({
 
     for (const issue of issues) {
       const laneId = getIssueLaneId(issue, subGroupBy, modulesEnabled);
-      const colId = getIssueColId(issue, groupBy);
+      const colId = getIssueColId(issue, groupBy, projectStates);
       const laneMap = grid[laneId] ?? grid[defaultLaneId];
       const colList = laneMap?.[colId] ?? laneMap?.[defaultColId];
       colList?.push(issue);
     }
 
     return grid;
-  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled]);
+  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled, projectStates]);
 
   const toggleLane = (laneId: string) => {
     setCollapsedLanes((prev) => ({

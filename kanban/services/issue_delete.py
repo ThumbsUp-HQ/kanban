@@ -318,7 +318,12 @@ async def list_trash(
         if issue.state_id is not None:
             state = await session.get(WorkflowState, issue.state_id)
             if state is not None:
-                state_summary = StateSummary(id=state.id, name=state.name, group=state.state_group)
+                state_summary = StateSummary(
+                    id=state.id,
+                    name=state.name,
+                    group=state.state_group,
+                    color_hex=state.color_hex,
+                )
         priority_summary: PrioritySummary | None = None
         if issue.priority_id is not None:
             priority = await session.get(ProjectPriority, issue.priority_id)

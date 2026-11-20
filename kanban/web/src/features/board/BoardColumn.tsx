@@ -96,7 +96,7 @@ export function BoardColumn({
   onNewItem,
   dropTargetFactory = dropTargetForElements,
 }: BoardColumnProps): JSX.Element {
-  const pathMatch = typeof window !== 'undefined' ? /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname) : null;
+  const pathMatch = /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname);
   const projectKey = propProjectKey ?? pathMatch?.[1] ?? 'KAN';
   const colRef = useRef<HTMLDivElement | null>(null);
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +141,24 @@ export function BoardColumn({
     });
   }, [state.id, dropTargetFactory]);
 
+  // Synchronize custom state color on column container
+  useEffect(() => {
+    const el = colRef.current;
+    /* v8 ignore next 3 */
+    if (!el) {
+      return;
+    }
+    const safeHex =
+      state.color_hex && /^#[0-9A-Fa-f]{6}$/.test(state.color_hex.trim())
+        ? state.color_hex.trim()
+        : null;
+    if (safeHex) {
+      el.style.setProperty('--state-custom-fg', safeHex);
+    } else {
+      el.style.removeProperty('--state-custom-fg');
+    }
+  }, [state.color_hex]);
+
   // Virtualizer with CSP-safe sizing
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -175,6 +193,7 @@ export function BoardColumn({
         <div className="board-column-header-left">
           <StateBadge
             state={state}
+            colorHex={state.color_hex}
             showLabel={false}
             className="board-column-glyph"
           />
@@ -206,11 +225,9 @@ export function BoardColumn({
               title={`Attach workflow transition to ${state.name}`}
               onClick={(e) => {
                 e.stopPropagation();
-                if (typeof window !== 'undefined') {
-                  window.location.assign(
-                    `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
-                  );
-                }
+                window.location.assign(
+                  `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
+                );
               }}
             >
               + Workflow

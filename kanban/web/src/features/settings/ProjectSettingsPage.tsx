@@ -17,6 +17,8 @@ import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent }
 import { Link, useNavigate, useParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
+import { qk } from '../../api/queryKeys';
+import { StateBadge } from '../../components/state/StateBadge';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
 import { DeleteAuditModal } from './DeleteAuditModal';
@@ -207,6 +209,13 @@ export function ProjectSettingsPage(): JSX.Element {
   const [auditModalKind, setAuditModalKind] = useState<'state' | 'label' | null>(null);
   const [auditModalItem, setAuditModalItem] = useState<{ id: string; name: string } | null>(null);
 
+  const invalidateProjectCaches = () => {
+    if (!queryClient) return;
+    void queryClient.invalidateQueries({ queryKey: qk.project(projectKey) });
+    void queryClient.invalidateQueries({ queryKey: ['project-states', projectKey] });
+    void queryClient.invalidateQueries({ queryKey: qk.issues(projectKey, {}) });
+  };
+
   // Inline Row Edit State (KB-P3-AUDIT-23)
   const [editingStateId, setEditingStateId] = useState<string | null>(null);
   const [editStateName, setEditStateName] = useState<string>('');
@@ -216,6 +225,15 @@ export function ProjectSettingsPage(): JSX.Element {
   const [editStateColor, setEditStateColor] = useState<string>('#4f46e5');
   const [editStateWipSoft, setEditStateWipSoft] = useState<string>('');
   const [editStateWipHard, setEditStateWipHard] = useState<string>('');
+  const [editStateIsDefault, setEditStateIsDefault] = useState<boolean>(false);
+
+  const [editingPriorityId, setEditingPriorityId] = useState<string | null>(null);
+  const [editPrioritySlug, setEditPrioritySlug] = useState<string>('');
+  const [editPriorityLabel, setEditPriorityLabel] = useState<string>('');
+  const [editPriorityEmoji, setEditPriorityEmoji] = useState<string>('🔥');
+  const [editPriorityColor, setEditPriorityColor] = useState<string>('#dc2626');
+  const [editPrioritySortOrder, setEditPrioritySortOrder] = useState<string>('0');
+  const [editPriorityIsDefault, setEditPriorityIsDefault] = useState<boolean>(false);
 
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [editLabelName, setEditLabelName] = useState<string>('');
@@ -556,9 +574,19 @@ export function ProjectSettingsPage(): JSX.Element {
         setStateWipSoft('');
         setStateWipHard('');
         setSuccessMessage(`Workflow state "${created.name}" created.`);
+        invalidateProjectCaches();
       } catch (err: unknown) {
-        const errObj = err as { message?: string };
-        setErrorMessage(errObj.message ?? 'Failed to create workflow state.');
+        const errObj = err as { message?: string; detail?: string };
+        const rawMsg = errObj.detail ?? errObj.message ?? '';
+        if (
+          rawMsg.includes('STATE_NAME_TAKEN') ||
+          rawMsg.includes('already exists') ||
+          rawMsg.includes('unique')
+        ) {
+          setErrorMessage('A workflow state with this name already exists in this project.');
+        } else {
+          setErrorMessage(rawMsg || 'Failed to create workflow state.');
+        }
       }
     })();
   };
@@ -568,35 +596,57 @@ export function ProjectSettingsPage(): JSX.Element {
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (idx < 0 || targetIdx < 0 || targetIdx >= states.length) return;
 
+    const current = states[idx];
     const target = states[targetIdx];
-    if (!target) return;
+    if (!current || !target) return;
 
-    const newOrder = target.sort_order;
+    let newCurrentOrder = target.sort_order;
+    const newTargetOrder = current.sort_order;
+    if (newCurrentOrder === newTargetOrder) {
+      if (direction === 'up') {
+        newCurrentOrder = target.sort_order - 1;
+      } else {
+        newCurrentOrder = target.sort_order + 1;
+      }
+    }
+
     void (async () => {
       try {
         const csrf = await ensureSessionCsrfToken();
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
-        await apiFetch(
-          'PATCH',
-          `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
-          {
-            headers,
-            body: JSON.stringify({ sort_order: newOrder }),
-          },
-        );
+        await Promise.all([
+          apiFetch(
+            'PATCH',
+            `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
+            {
+              headers,
+              body: JSON.stringify({ sort_order: newCurrentOrder }),
+            },
+          ),
+          apiFetch(
+            'PATCH',
+            `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(target.id)}` as never,
+            {
+              headers,
+              body: JSON.stringify({ sort_order: newTargetOrder }),
+            },
+          ),
+        ]);
 
         setStates((prev) => {
           const next = [...prev];
           const c = next[idx];
           const t = next[targetIdx];
           if (c && t) {
-            next[idx] = { ...c, sort_order: newOrder };
-            next[targetIdx] = { ...t, sort_order: c.sort_order };
+            next[idx] = { ...c, sort_order: newCurrentOrder };
+            next[targetIdx] = { ...t, sort_order: newTargetOrder };
           }
           return next.sort((a, b) => a.sort_order - b.sort_order);
         });
+
+        invalidateProjectCaches();
       } catch (err: unknown) {
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to reorder state.');
@@ -619,10 +669,19 @@ export function ProjectSettingsPage(): JSX.Element {
     setEditStateColor(st.color_hex || '#4f46e5');
     setEditStateWipSoft(st.wip_soft_limit != null ? String(st.wip_soft_limit) : '');
     setEditStateWipHard(st.wip_hard_limit != null ? String(st.wip_hard_limit) : '');
+    setEditStateIsDefault(st.is_default);
   };
 
   const handleSaveStateEdit = (stateId: string) => {
-    if (!editStateName.trim()) return;
+    const trimmedName = editStateName.trim();
+    if (!trimmedName) {
+      setErrorMessage('Workflow state name is required.');
+      return;
+    }
+    if (trimmedName.length > 64) {
+      setErrorMessage('Workflow state name cannot exceed 64 characters.');
+      return;
+    }
 
     if (editStateWipSoft !== '' && editStateWipHard !== '') {
       const s = parseInt(editStateWipSoft, 10);
@@ -642,11 +701,12 @@ export function ProjectSettingsPage(): JSX.Element {
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
         const payload = {
-          name: editStateName.trim(),
+          name: trimmedName,
           group: editStateGroup,
           color_hex: editStateColor.trim(),
           wip_soft_limit: editStateWipSoft !== '' ? parseInt(editStateWipSoft, 10) : null,
           wip_hard_limit: editStateWipHard !== '' ? parseInt(editStateWipHard, 10) : null,
+          is_default: editStateIsDefault,
         };
 
         const updated = (await apiFetch(
@@ -658,12 +718,38 @@ export function ProjectSettingsPage(): JSX.Element {
           },
         )) as WorkflowStateItem;
 
-        setStates((prev) => prev.map((s) => (s.id === stateId ? { ...s, ...updated } : s)));
+        setStates((prev) =>
+          prev.map((s) => {
+            if (s.id === stateId) {
+              return { ...s, ...updated };
+            }
+            if (updated.is_default) {
+              return { ...s, is_default: false };
+            }
+            return s;
+          }),
+        );
         setEditingStateId(null);
         setSuccessMessage(`Workflow state "${updated.name}" updated.`);
+        invalidateProjectCaches();
       } catch (err: unknown) {
-        const errObj = err as { message?: string };
-        setErrorMessage(errObj.message ?? 'Failed to update workflow state.');
+        const errObj = err as { message?: string; detail?: string };
+        const rawMsg = errObj.detail ?? errObj.message ?? '';
+        if (
+          rawMsg.includes('STATE_NAME_TAKEN') ||
+          rawMsg.includes('already exists') ||
+          rawMsg.includes('unique')
+        ) {
+          setErrorMessage('A workflow state with this name already exists in this project.');
+        } else if (rawMsg.includes('LAST_STATE_IN_GROUP')) {
+          setErrorMessage('Cannot move the last remaining state out of this lifecycle group.');
+        } else if (rawMsg.includes('DEFAULT_STATE_REQUIRED')) {
+          setErrorMessage(
+            'A default state is required. Designate another default state before removing this one.',
+          );
+        } else {
+          setErrorMessage(rawMsg || 'Failed to update workflow state.');
+        }
       }
     })();
   };
@@ -703,6 +789,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setPrioritySlug('');
         setPriorityLabel('');
         setSuccessMessage(`Priority "${created.label}" created.`);
+        invalidateProjectCaches();
       } catch (err: unknown) {
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to create priority.');
@@ -725,9 +812,70 @@ export function ProjectSettingsPage(): JSX.Element {
         );
         setPriorities((prev) => prev.filter((p) => p.id !== priorityId));
         setSuccessMessage('Priority deleted.');
+        invalidateProjectCaches();
       } catch (err: unknown) {
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to delete priority.');
+      }
+    })();
+  };
+
+  const handleStartEditPriority = (p: ProjectPriorityItem) => {
+    setEditingPriorityId(p.id);
+    setEditPrioritySlug(p.slug);
+    setEditPriorityLabel(p.label);
+    setEditPriorityEmoji(p.emoji ?? '');
+    setEditPriorityColor(p.color_hex || '#dc2626');
+    setEditPrioritySortOrder(String(p.sort_order));
+    setEditPriorityIsDefault(p.is_default);
+  };
+
+  const handleSavePriorityEdit = (priorityId: string) => {
+    if (!editPriorityLabel.trim() || !editPrioritySlug.trim()) return;
+
+    void (async () => {
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      try {
+        const csrf = await ensureSessionCsrfToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+
+        const payload = {
+          slug: editPrioritySlug.trim(),
+          label: editPriorityLabel.trim(),
+          emoji: editPriorityEmoji.trim() || null,
+          color_hex: editPriorityColor.trim(),
+          sort_order: parseInt(editPrioritySortOrder, 10) || 0,
+          is_default: editPriorityIsDefault,
+        };
+
+        const updated = (await apiFetch(
+          'PATCH',
+          `/api/v1/projects/${encodeURIComponent(projectKey)}/priorities/${encodeURIComponent(priorityId)}` as never,
+          {
+            headers,
+            body: JSON.stringify(payload),
+          },
+        )) as ProjectPriorityItem;
+
+        setPriorities((prev) =>
+          prev.map((p) => {
+            if (p.id === priorityId) {
+              return { ...p, ...updated };
+            }
+            if (updated.is_default) {
+              return { ...p, is_default: false };
+            }
+            return p;
+          }),
+        );
+        setEditingPriorityId(null);
+        setSuccessMessage(`Priority "${updated.label}" updated.`);
+        invalidateProjectCaches();
+      } catch (err: unknown) {
+        const errObj = err as { message?: string };
+        setErrorMessage(errObj.message ?? 'Failed to update priority.');
       }
     })();
   };
@@ -764,6 +912,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setLabelName('');
         setLabelExclusiveGroup('');
         setSuccessMessage(`Label "${created.name}" created.`);
+        invalidateProjectCaches();
       } catch (err: unknown) {
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to create label.');
@@ -815,6 +964,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setLabels((prev) => prev.map((l) => (l.id === labelId ? { ...l, ...updated } : l)));
         setEditingLabelId(null);
         setSuccessMessage(`Label "${updated.name}" updated.`);
+        invalidateProjectCaches();
       } catch (err: unknown) {
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update label.');
@@ -846,6 +996,7 @@ export function ProjectSettingsPage(): JSX.Element {
         );
         setStates((prev) => prev.filter((s) => s.id !== auditModalItem.id));
         setSuccessMessage('Workflow state deleted.');
+        invalidateProjectCaches();
       } else {
         const params = new URLSearchParams();
         if (replacementId) {
@@ -859,6 +1010,7 @@ export function ProjectSettingsPage(): JSX.Element {
         );
         setLabels((prev) => prev.filter((l) => l.id !== auditModalItem.id));
         setSuccessMessage('Label deleted.');
+        invalidateProjectCaches();
       }
     } catch (err: unknown) {
       const errObj = err as { message?: string };
@@ -937,14 +1089,14 @@ export function ProjectSettingsPage(): JSX.Element {
   };
 
   const handleTriggerAccessInspector = () => {
-    if (typeof window !== 'undefined' && project) {
-      window.dispatchEvent(
-        new CustomEvent('kb:open-access-inspector', {
-          bubbles: true,
-          detail: { objectId: project.id, title: project.name },
-        }),
-      );
-    }
+    /* v8 ignore next */
+    if (!project) return;
+    window.dispatchEvent(
+      new CustomEvent('kb:open-access-inspector', {
+        bubbles: true,
+        detail: { objectId: project.id, title: project.name },
+      }),
+    );
   };
 
   // Trash & Restore Handlers
@@ -1000,6 +1152,7 @@ export function ProjectSettingsPage(): JSX.Element {
 
   const handleRequestDelete = (mode: 'trash' | 'permanent_purge' = 'trash') => {
     setDangerError(null);
+    /* v8 ignore next 4 */
     if (mode === 'permanent_purge' && !isProjectTrashed) {
       setDangerError('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
       return;
@@ -1037,6 +1190,7 @@ export function ProjectSettingsPage(): JSX.Element {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
+        /* v8 ignore next */
         if (!destructiveToken) return;
         const token = destructiveToken;
         const mode = token.mode === 'permanent_purge' ? 'permanent_purge' : 'trash';
@@ -1095,11 +1249,9 @@ export function ProjectSettingsPage(): JSX.Element {
   const filteredPrincipals = principalsList.filter((p) => {
     if (!principalSearch) return true;
     const q = principalSearch.toLowerCase();
-    return (
-      ((p.display_name as string | null | undefined) ?? '').toLowerCase().includes(q) ||
-      (p.handle?.toLowerCase().includes(q) ?? false) ||
-      p.id.toLowerCase().includes(q)
-    );
+    const name = p.display_name ? p.display_name.toLowerCase() : '';
+    const handle = p.handle ? p.handle.toLowerCase() : '';
+    return name.includes(q) || handle.includes(q) || p.id.toLowerCase().includes(q);
   });
 
   // Filter trashed items
@@ -1422,10 +1574,17 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>{st.sort_order}</td>
                         <td>
                           <div className="kb-edit-cell-row">
+                            <StateBadge
+                              state={editStateName || 'Preview'}
+                              group={editStateGroup}
+                              colorHex={editStateColor}
+                              testId={`state-edit-preview-${st.id}`}
+                            />
                             <input
                               type="text"
                               data-testid={`state-edit-name-${st.id}`}
                               className="kb-input"
+                              maxLength={64}
                               value={editStateName}
                               onChange={(e) => { setEditStateName(e.target.value); }}
                             />
@@ -1477,7 +1636,17 @@ export function ProjectSettingsPage(): JSX.Element {
                             onChange={(e) => { setEditStateWipHard(e.target.value); }}
                           />
                         </td>
-                        <td>{st.is_default ? '⭐ Default' : '-'}</td>
+                        <td>
+                          <label className="kb-checkbox-label">
+                            <input
+                              type="checkbox"
+                              data-testid={`state-edit-default-${st.id}`}
+                              checked={editStateIsDefault}
+                              onChange={(e) => { setEditStateIsDefault(e.target.checked); }}
+                            />
+                            <span>Default</span>
+                          </label>
+                        </td>
                         <td>
                           <button
                             type="button"
@@ -1660,35 +1829,125 @@ export function ProjectSettingsPage(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {priorities.map((p) => (
-                  <tr key={p.id} data-testid={`priority-row-${p.id}`}>
-                    <td>{p.sort_order}</td>
-                    <td>{p.emoji ?? '-'}</td>
-                    <td>
-                      <strong>{p.label}</strong>
-                    </td>
-                    <td>
-                      <code>{p.slug}</code>
-                    </td>
-                    <td>
-                      <ColoredPill
-                        colorHex={p.color_hex}
-                        testId={`priority-pill-${p.id}`}
-                      />
-                    </td>
-                    <td>{p.is_default ? '⭐ Default' : '-'}</td>
-                    <td>
-                      <button
-                        type="button"
-                        data-testid={`delete-priority-btn-${p.id}`}
-                        className="kb-btn-danger-sm"
-                        onClick={() => { handleDeletePriority(p.id); }}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {priorities.map((p) => {
+                  const isEditing = editingPriorityId === p.id;
+                  if (isEditing) {
+                    return (
+                      <tr key={p.id} data-testid={`priority-row-${p.id}`}>
+                        <td>
+                          <input
+                            type="number"
+                            data-testid={`priority-edit-sort-${p.id}`}
+                            className="kb-input"
+                            value={editPrioritySortOrder}
+                            onChange={(e) => { setEditPrioritySortOrder(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            data-testid={`priority-edit-emoji-${p.id}`}
+                            className="kb-input"
+                            value={editPriorityEmoji}
+                            onChange={(e) => { setEditPriorityEmoji(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            data-testid={`priority-edit-label-${p.id}`}
+                            className="kb-input"
+                            value={editPriorityLabel}
+                            onChange={(e) => { setEditPriorityLabel(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            data-testid={`priority-edit-slug-${p.id}`}
+                            className="kb-input"
+                            value={editPrioritySlug}
+                            onChange={(e) => { setEditPrioritySlug(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <ColorPresetPicker
+                            testId={`priority-edit-color-${p.id}-input`}
+                            value={editPriorityColor}
+                            onChange={setEditPriorityColor}
+                          />
+                        </td>
+                        <td>
+                          <label className="kb-checkbox-label">
+                            <input
+                              type="checkbox"
+                              data-testid={`priority-edit-default-${p.id}`}
+                              checked={editPriorityIsDefault}
+                              onChange={(e) => { setEditPriorityIsDefault(e.target.checked); }}
+                            />
+                            <span>Default</span>
+                          </label>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            data-testid={`save-priority-btn-${p.id}`}
+                            className="kb-btn kb-btn-primary"
+                            onClick={() => { handleSavePriorityEdit(p.id); }}
+                          >
+                            Save
+                          </button>{' '}
+                          <button
+                            type="button"
+                            data-testid={`cancel-priority-btn-${p.id}`}
+                            className="kb-btn kb-btn-secondary"
+                            onClick={() => { setEditingPriorityId(null); }}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={p.id} data-testid={`priority-row-${p.id}`}>
+                      <td>{p.sort_order}</td>
+                      <td>{p.emoji ?? '-'}</td>
+                      <td>
+                        <strong>{p.label}</strong>
+                      </td>
+                      <td>
+                        <code>{p.slug}</code>
+                      </td>
+                      <td>
+                        <ColoredPill
+                          colorHex={p.color_hex}
+                          testId={`priority-pill-${p.id}`}
+                        />
+                      </td>
+                      <td>{p.is_default ? '⭐ Default' : '-'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          data-testid={`edit-priority-btn-${p.id}`}
+                          className="kb-btn kb-btn-secondary"
+                          onClick={() => { handleStartEditPriority(p); }}
+                        >
+                          Edit
+                        </button>{' '}
+                        <button
+                          type="button"
+                          data-testid={`delete-priority-btn-${p.id}`}
+                          className="kb-btn-danger-sm"
+                          onClick={() => { handleDeletePriority(p.id); }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

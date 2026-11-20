@@ -23,7 +23,7 @@ from sqlalchemy import text
 
 from database.models import Project, ProjectLabel
 from kanban.api.problems import ProblemException
-from kanban.api.v1.schemas.issues import IssuePatch
+from kanban.api.v1.schemas.issues import IssueCreate, IssuePatch, IssueResponse
 from kanban.content import ContentNormalizeError
 from kanban.services.issues import (
     _default_priority_id,
@@ -1245,3 +1245,33 @@ async def test_issue_and_comment_free_text_secret_scrubbing(
     assert len(comments_items) == 1
     assert "[REDACTED:GITHUB_TOKEN]" in comments_items[0]["body_markdown"]
     assert "ghp_1234567890" not in comments_items[0]["body_markdown"]
+
+
+def test_issue_schema_dedupe_and_json_schema() -> None:
+    """Validate IssueCreate/IssuePatch label/module deduplication and OpenAPI schema generation."""
+    u1 = uuid.uuid4()
+    u2 = uuid.uuid4()
+
+    # None branch
+    ic_none = IssueCreate(summary="S", label_ids=None, module_ids=None)
+    assert ic_none.label_ids is None
+    assert ic_none.module_ids is None
+
+    # Dedupe branch
+    ic_dedupe = IssueCreate(summary="S", label_ids=[u1, u1, u2], module_ids=[u2, u2, u1])
+    assert ic_dedupe.label_ids == [u1, u2]
+    assert ic_dedupe.module_ids == [u2, u1]
+
+    # IssuePatch None branch
+    ip_none = IssuePatch(label_ids=None, module_ids=None)
+    assert ip_none.label_ids is None
+    assert ip_none.module_ids is None
+
+    # IssuePatch Dedupe branch
+    ip_dedupe = IssuePatch(label_ids=[u1, u1, u2], module_ids=[u2, u2, u1])
+    assert ip_dedupe.label_ids == [u1, u2]
+    assert ip_dedupe.module_ids == [u2, u1]
+
+    # OpenAPI schema branch
+    schema = IssueResponse.model_json_schema()
+    assert "description" in schema

@@ -9,8 +9,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from database.models import WorkflowTransitionExecution, WorkflowTransitionHook
+from kanban.services.project_config import (
+    _is_unique_violation,
+    _migrate_id_in_container_list,
+    _migrate_id_in_dict,
+)
 from kanban.tests.security.helpers import add_role_binding, rebuild_era
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 
@@ -1614,3 +1620,140 @@ async def test_saved_view_full_filters_migrated_on_state_and_label_deletion(
     assert del_lbl_detach.status_code == 204
     v_after_detach = (await client.get(f"/api/v1/views/{view_id}")).json()
     assert v_after_detach["filters"]["label_ids"] == []
+
+
+async def test_kan43_state_update_invariants_and_color_hex(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Validate KAN-43 invariants: LAST_STATE_IN_GROUP, DEFAULT_STATE_REQUIRED."""
+    _proj_id, pref, admin, _edt, _viw, _out, client = await _setup_project_with_roles(
+        api_env, make_user, as_principal, identifier="KAN43"
+    )
+
+    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
+    default_st = next(s for s in states if s["is_default"])
+    completed_st = next(s for s in states if s["group"] == "completed")
+
+    # 1. Reject setting is_default=False on active default state with 409 DEFAULT_STATE_REQUIRED
+    patch_def = await client.patch(
+        f"/api/v1/projects/{pref}/states/{default_st['id']}",
+        json={"is_default": False},
+    )
+    assert patch_def.status_code == 409
+    assert patch_def.json()["code"] == "DEFAULT_STATE_REQUIRED"
+
+    # 2. Reject moving sole remaining state out of completed group with 409 LAST_STATE_IN_GROUP
+    patch_grp = await client.patch(
+        f"/api/v1/projects/{pref}/states/{completed_st['id']}",
+        json={"group": "started"},
+    )
+    assert patch_grp.status_code == 409
+    assert patch_grp.json()["code"] == "LAST_STATE_IN_GROUP"
+
+    # 3. Create a new custom state with purple color
+    create_purple = await client.post(
+        f"/api/v1/projects/{pref}/states",
+        json={
+            "name": "Purple Ideas",
+            "group": "backlog",
+            "color_hex": "#7C3AED",
+        },
+    )
+    assert create_purple.status_code == 201
+    purple_data = create_purple.json()
+    assert purple_data["color_hex"].lower() == "#7c3aed"
+
+    # 4. Reject renaming another state to "Purple Ideas" with 409 STATE_NAME_TAKEN
+    other_st = next(
+        s for s in states if s["id"] != default_st["id"] and s["id"] != completed_st["id"]
+    )
+    patch_taken = await client.patch(
+        f"/api/v1/projects/{pref}/states/{other_st['id']}",
+        json={"name": "Purple Ideas"},
+    )
+    assert patch_taken.status_code == 409
+    assert patch_taken.json()["code"] == "STATE_NAME_TAKEN"
+
+    # 5. Reject creating a state with duplicate name with 409 STATE_NAME_TAKEN
+    dup_create = await client.post(
+        f"/api/v1/projects/{pref}/states",
+        json={
+            "name": "Purple Ideas",
+            "group": "backlog",
+            "color_hex": "#2563EB",
+        },
+    )
+    assert dup_create.status_code == 409
+    assert dup_create.json()["code"] == "STATE_NAME_TAKEN"
+
+    # 6. Verify issue serialization includes color_hex on StateSummary
+    priorities = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
+    prio_id = priorities[0]["id"]
+    await _seed_issue(
+        api_env,
+        _proj_id,
+        pref,
+        admin.id,
+        purple_data["id"],
+        prio_id,
+        summary="Issue with Purple State",
+    )
+    issue_resp = await client.get(f"/api/v1/issues/{pref}-1")
+    assert issue_resp.status_code == 200
+    issue_json = issue_resp.json()
+    assert issue_json["state"]["color_hex"].lower() == "#7c3aed"
+    assert issue_json["state"]["name"] == "Purple Ideas"
+
+    # 7. Update priority color_hex
+    patch_prio = await client.patch(
+        f"/api/v1/projects/{pref}/priorities/{prio_id}",
+        json={"color_hex": "#7C3AED"},
+    )
+    assert patch_prio.status_code == 200
+    assert patch_prio.json()["color_hex"].lower() == "#7c3aed"
+
+
+def test_kan43_is_unique_violation_helper() -> None:
+    """Validate _is_unique_violation correctly classifies SQLSTATE 23505."""
+
+    class FakeOrigError(Exception):
+        sqlstate = "23505"
+
+    class FakePgCodeError(Exception):
+        pgcode = "23505"
+
+    class FakeOtherError(Exception):
+        sqlstate = "23503"
+
+    e1 = IntegrityError("statement", {}, FakeOrigError())
+    assert _is_unique_violation(e1) is True
+
+    e2 = IntegrityError("statement", {}, FakePgCodeError())
+    assert _is_unique_violation(e2) is True
+
+    e3 = IntegrityError("unique constraint violation", {}, FakeOtherError())
+    assert _is_unique_violation(e3) is True
+
+    e4 = IntegrityError("contains 23505 in message", {}, Exception("23505"))
+    assert _is_unique_violation(e4) is True
+
+    e5 = IntegrityError("foreign key violation", {}, FakeOtherError())
+    assert _is_unique_violation(e5) is False
+
+
+def test_kan43_migrate_id_nested_containers() -> None:
+    """Validate recursive ID migration handles nested dictionaries and lists."""
+    nested = {"a": [{"state_ids": ["s1", "s2"]}, {"nested": {"state_ids": ["s1"]}}]}
+    migrated, mod = _migrate_id_in_dict(nested, "state_ids", "s1", "s_new")
+    assert mod is True
+    assert migrated["a"][0]["state_ids"] == ["s_new", "s2"]
+    assert migrated["a"][1]["nested"]["state_ids"] == ["s_new"]
+
+    # Test removing without replacement in nested container
+    migrated_del, mod_del = _migrate_id_in_container_list(
+        [{"state_ids": ["s2"]}], "state_ids", "s2", None
+    )
+    assert mod_del is True
+    assert migrated_del[0]["state_ids"] == []

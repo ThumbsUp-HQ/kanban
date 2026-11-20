@@ -8,7 +8,13 @@ import {
 } from './tableColumns';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { StateBadge } from '../../components/state/StateBadge';
-import { patchProjectIssue, type IssueItem, type SortDirection } from '../views/viewsApi';
+import {
+  patchProjectIssue,
+  type IssueItem,
+  type SortDirection,
+  type StateSummary,
+  normalizeStateKey,
+} from '../views/viewsApi';
 import '../views/listTable.css';
 
 export interface TableViewProps {
@@ -25,12 +31,14 @@ export interface TableViewProps {
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   capabilities?: string[] | undefined;
   currentUserCapabilities?: string[] | undefined;
+  projectStates?: StateSummary[] | undefined;
   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
 }
 
 export function TableView({
   issues,
   projectKey,
+  projectStates,
   modulesEnabled = true,
   selectedIds = [],
   onToggleSelect,
@@ -71,21 +79,53 @@ export function TableView({
     return true;
   };
 
-  const handleInlineStateChange = (issue: IssueItem, newStateName: string) => {
-    const isDone = newStateName === 'Done';
-    const isProgress = newStateName === 'In Progress' || newStateName === 'In Review';
+  const handleInlineStateChange = (issue: IssueItem, newStateIdOrName: string) => {
+    let resolvedState: StateSummary | undefined;
+    if (projectStates && projectStates.length > 0) {
+      resolvedState = projectStates.find(
+        (s) =>
+          s.id === newStateIdOrName ||
+          s.name === newStateIdOrName ||
+          normalizeStateKey(s.name) === normalizeStateKey(newStateIdOrName)
+      );
+    }
+
+    if (resolvedState) {
+      const patch: Partial<IssueItem> = {
+        state: {
+          id: resolvedState.id,
+          name: resolvedState.name,
+          group: resolvedState.group,
+          color_hex: resolvedState.color_hex ?? null,
+        },
+      };
+      setLocalIssues((prev) =>
+        prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
+      );
+      void onUpdateIssue?.(issue.key, patch);
+      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch(() => undefined);
+      window.dispatchEvent(
+        new CustomEvent('kb:issue-updated', {
+          detail: { issueKey: issue.key, patch },
+        }),
+      );
+      return;
+    }
+
+    const isDone = newStateIdOrName === 'Done';
+    const isProgress = newStateIdOrName === 'In Progress' || newStateIdOrName === 'In Review';
     const group = isDone
       ? 'completed'
-      : newStateName === 'Cancelled'
+      : newStateIdOrName === 'Cancelled'
         ? 'cancelled'
         : isProgress
           ? 'started'
           : 'unstarted';
-    const stateId = `state-${newStateName.toLowerCase().replace(/\s+/g, '-')}`;
+    const stateId = `state-${newStateIdOrName.toLowerCase().replace(/\s+/g, '-')}`;
     const patch: Partial<IssueItem> = {
       state: {
         id: stateId,
-        name: newStateName,
+        name: newStateIdOrName,
         group,
       },
     };
@@ -467,22 +507,42 @@ export function TableView({
                             </td>
                           );
                         }
+                        const activeStateVal =
+                          projectStates && projectStates.length > 0
+                            ? (projectStates.find((s) => s.id === issue.state.id)?.id ??
+                              projectStates.find(
+                                (s) =>
+                                  normalizeStateKey(s.name) ===
+                                  normalizeStateKey(issue.state.name),
+                              )?.id ??
+                              issue.state.id)
+                            : issue.state.name;
                         return (
                           <td key={colId} className="table-editable-cell" data-testid={`cell-state-${issue.id}`}>
                             <select
                               className="table-inline-select table-inline-select--state"
                               aria-label={`Edit state for ${issue.key}`}
-                              value={issue.state.name}
+                              value={activeStateVal}
                               onChange={(e) => {
                                 handleInlineStateChange(issue, e.target.value);
                               }}
                             >
-                              <option value="Backlog">Backlog</option>
-                              <option value="Todo">Todo</option>
-                              <option value="In Progress">In Progress</option>
-                              <option value="In Review">In Review</option>
-                              <option value="Done">Done</option>
-                              <option value="Cancelled">Cancelled</option>
+                              {projectStates && projectStates.length > 0 ? (
+                                projectStates.map((st) => (
+                                  <option key={st.id} value={st.id}>
+                                    {st.name}
+                                  </option>
+                                ))
+                              ) : (
+                                <>
+                                  <option value="Backlog">Backlog</option>
+                                  <option value="Todo">Todo</option>
+                                  <option value="In Progress">In Progress</option>
+                                  <option value="In Review">In Review</option>
+                                  <option value="Done">Done</option>
+                                  <option value="Cancelled">Cancelled</option>
+                                </>
+                              )}
                             </select>
                           </td>
                         );

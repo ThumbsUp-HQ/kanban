@@ -586,6 +586,7 @@ async def test_list_trash_pagination_and_filtering(
     d1 = p1.json()
     assert len(d1["items"]) == 2
     assert d1["next_cursor"] is not None
+    assert d1["items"][0]["state"]["color_hex"] is not None
 
     # 2. Page 2 with cursor
     p2 = await client.get(f"/api/v1/projects/TRSH/trash?limit=2&cursor={d1['next_cursor']}")
@@ -673,3 +674,14 @@ async def test_list_trash_items_endpoint(
     resp_other = await client.get("/api/v1/projects/TITM/trash-items?kind=cycle")
     assert resp_other.status_code == 200
     assert len(resp_other.json()["items"]) == 0
+
+    # 4. Query with unknown kind filter to test branch
+    resp_invalid = await client.get("/api/v1/projects/TITM/trash-items?kind=unknown_kind")
+    assert resp_invalid.status_code == 200
+
+    # 5. Query as viewer without delete capability filters items
+    viewer = await make_user("tr_items_viewer", workspace_role="WORKSPACE_MEMBER")
+    client_viewer = as_principal(viewer)
+    resp_viewer = await client_viewer.get("/api/v1/projects/TITM/trash-items")
+    assert resp_viewer.status_code == 200
+    assert len(resp_viewer.json()["items"]) == 0

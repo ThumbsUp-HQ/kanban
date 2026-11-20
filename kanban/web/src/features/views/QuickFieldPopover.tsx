@@ -18,7 +18,7 @@ export interface QuickFieldPopoverProps {
   onClose: () => void;
   onSelect: (field: QuickFieldType, value: unknown) => void;
   modulesEnabled?: boolean;
-  states?: { id: string; name: string }[];
+  states?: { id: string; name: string; group?: string; color_hex?: string | null }[];
 }
 
 interface OptionItem {

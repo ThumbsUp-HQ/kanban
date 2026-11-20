@@ -1,0 +1,50 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-ff9d8e26
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 40 items
+
+kanban/tests/api/test_project_config.py ................                 [ 40%]
+kanban/tests/api/test_issues.py ................                         [ 80%]
+kanban/tests/api/test_issue_delete.py ........                           [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/api/v1/schemas/issues.py       170      1     30      2    98%   325->329, 331
+kanban/services/issue_delete.py       159      3     42      7    95%   139, 237, 318->327, 320->327, 328->336, 330->336, 434
+kanban/services/issues.py             446     21    180     11    95%   320-324, 427, 533, 542-560, 570-573, 649->652, 812, 856, 957, 1004->1007, 1097, 1176, 1177->1180
+kanban/services/project_config.py     464     15    226     13    95%   124->120, 127-130, 166->171, 171->165, 294-302, 403->412, 465-473, 614->617, 706->715, 798->811, 851-852, 855->874, 1140, 1164->1196, 1523->1544
+-------------------------------------------------------------------------------
+TOTAL                                1239     40    478     33    95%
+============================= 40 passed in 44.01s ==============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-ff9d8e26/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
+ ✓ src/components/state/StateBadge.test.tsx (8 tests) 125ms
+ ✓ src/features/board/BoardColumn.test.tsx (9 tests) 235ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (37 tests) 3355ms
+
+ Test Files  4 passed (4)
+      Tests  58 passed (58)
+   Start at  10:43:31
+   Duration  5.00s (tests 45%, environment 42%, import 7%, transform 4%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.47 |     95.8 |     100 |     100 |                   
+ components/state  |   97.77 |     97.4 |     100 |     100 |                   
+  StateBadge.tsx   |   97.77 |     97.4 |     100 |     100 | 76,92             
+ features/board    |     100 |      100 |     100 |     100 |                   
+  BoardColumn.tsx  |     100 |      100 |     100 |     100 |                   
+ features/settings |   99.54 |    95.16 |     100 |     100 |                   
+  ...tingsPage.tsx |   99.54 |    95.16 |     100 |     100 | ...25,976,988-991 
+-------------------|---------|----------|---------|---------|-------------------

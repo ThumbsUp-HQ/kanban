@@ -69,6 +69,7 @@ export interface ProjectWorkflowState {
   group: 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
   wip_soft?: number | null;
   wip_hard?: number | null;
+  color_hex?: string | null;
 }
 
 export interface ProjectMetadata {

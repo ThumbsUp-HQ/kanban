@@ -85,6 +85,7 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
 export interface ViewComponentProps {
   issues: IssueItem[];
   projectKey: string;
+  projectStates?: StateSummary[] | undefined;
   modulesEnabled?: boolean | undefined;
   selectedIds?: string[] | undefined;
   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
@@ -150,7 +151,26 @@ export interface IssuesWorkspaceRouteProps {
  * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
  * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
  */
-function computeStateSummary(sId: string): StateSummary {
+function computeStateSummary(
+  sId: string,
+  projectStates?: StateSummary[],
+): StateSummary {
+  if (projectStates && projectStates.length > 0) {
+    const matched =
+      projectStates.find((s) => s.id === sId) ??
+      projectStates.find(
+        (s) => normalizeStateKey(s.name) === normalizeStateKey(sId),
+      ) ??
+      projectStates.find((s) => s.group === sId);
+    if (matched) {
+      return {
+        id: matched.id,
+        name: matched.name,
+        group: matched.group,
+        color_hex: matched.color_hex ?? null,
+      };
+    }
+  }
   if (sId.includes('progress')) return { id: sId, name: 'In Progress', group: 'started' };
   if (sId.includes('todo')) return { id: sId, name: 'Todo', group: 'unstarted' };
   if (sId.includes('done')) return { id: sId, name: 'Done', group: 'completed' };
@@ -505,6 +525,7 @@ export function IssuesWorkspaceRoute({
             ? s.group
             : 'unstarted') as BoardWorkflowState['group'],
           sort_order: s.sort_order ?? idx + 1,
+          color_hex: s.color_hex ?? null,
           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
         };
@@ -708,7 +729,7 @@ export function IssuesWorkspaceRoute({
         }
         if (field === 'state') {
           const sId = String(value);
-          const nextState = computeStateSummary(sId);
+          const nextState = computeStateSummary(sId, projectStates);
           return {
             ...i,
             state: nextState,
@@ -723,7 +744,7 @@ export function IssuesWorkspaceRoute({
         void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
       } else if (field === 'state') {
         const sId = String(value);
-        const desired = computeStateSummary(sId);
+        const desired = computeStateSummary(sId, projectStates);
         const resolvedUuid = resolveStateUuid(desired, projectStates);
         if (resolvedUuid) {
           const patchPayload: Record<string, unknown> = { state_id: resolvedUuid };
@@ -854,6 +875,7 @@ export function IssuesWorkspaceRoute({
           groupBy={groupBy}
           subGroupBy={subGroupBy}
           modulesEnabled={modulesEnabled}
+          projectStates={projectStates}
           selectedIds={selectedIds}
           onToggleSelect={canEdit ? handleToggleSelect : undefined}
           focusedKey={focusedKey}
@@ -874,6 +896,7 @@ export function IssuesWorkspaceRoute({
             <ListView
               issues={filteredIssues}
               projectKey={projectKey}
+              projectStates={projectStates}
               modulesEnabled={modulesEnabled}
               selectedIds={selectedIds}
               onToggleSelect={canEdit ? handleToggleSelect : undefined}
@@ -897,6 +920,7 @@ export function IssuesWorkspaceRoute({
           layout={layout}
           issues={filteredIssues}
           projectKey={projectKey}
+          projectStates={projectStates}
           modulesEnabled={modulesEnabled}
           selectedIds={selectedIds}
           onToggleSelect={canEdit ? handleToggleSelect : undefined}
