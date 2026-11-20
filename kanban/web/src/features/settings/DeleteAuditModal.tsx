@@ -15,7 +15,8 @@ export interface WorkflowHookSummary {
   name: string;
   from_state_id: string;
   to_state_id: string;
-  enabled: boolean;
+  is_enabled?: boolean;
+  enabled?: boolean;
 }
 
 export interface SavedViewSummary {
@@ -112,22 +113,18 @@ export function DeleteAuditModal({
           const res = (await apiFetch('GET', endpoint as never)) as StateAuditImpactResponse;
           if (isMounted) {
             setAuditState(res);
-            if (Array.isArray(res.valid_replacement_states) && res.valid_replacement_states.length > 0) {
-              const firstReplacement = res.valid_replacement_states[0];
-              if (firstReplacement) {
-                setSelectedReplacementId(firstReplacement.id);
-              }
+            const firstReplacement = res.valid_replacement_states[0];
+            if (firstReplacement) {
+              setSelectedReplacementId(firstReplacement.id);
             }
           }
         } else {
           const res = (await apiFetch('GET', endpoint as never)) as LabelAuditImpactResponse;
           if (isMounted) {
             setAuditLabel(res);
-            if (Array.isArray(res.valid_replacement_labels) && res.valid_replacement_labels.length > 0) {
-              const firstReplacement = res.valid_replacement_labels[0];
-              if (firstReplacement) {
-                setSelectedReplacementId(firstReplacement.id);
-              }
+            const firstReplacement = res.valid_replacement_labels[0];
+            if (firstReplacement) {
+              setSelectedReplacementId(firstReplacement.id);
             }
           }
         }
@@ -168,7 +165,9 @@ export function DeleteAuditModal({
 
   // Check if replacement is required
   const workflowHooks = Array.isArray(auditState?.workflow_hooks) ? auditState.workflow_hooks : [];
-  const enabledHooksCount = workflowHooks.filter((h) => h.enabled).length;
+  const isHookActive = (h: WorkflowHookSummary): boolean =>
+    h.is_enabled ?? Boolean(h.enabled);
+  const enabledHooksCount = workflowHooks.filter(isHookActive).length;
   const historicalExecCount = auditState?.historical_executions_count ?? 0;
   const requiresReplacement =
     issuesCount > 0 || enabledHooksCount > 0 || historicalExecCount > 0;
@@ -309,7 +308,7 @@ export function DeleteAuditModal({
                   <ul className="kb-audit-items-list">
                     {workflowHooks.map((h) => (
                       <li key={h.id}>
-                        {h.name} {h.enabled ? '(Enabled)' : '(Disabled)'}
+                        {h.name} {isHookActive(h) ? '(Enabled)' : '(Disabled)'}
                       </li>
                     ))}
                   </ul>

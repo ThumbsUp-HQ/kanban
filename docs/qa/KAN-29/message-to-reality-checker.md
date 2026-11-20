@@ -1,8 +1,8 @@
 # Verification Proof Packet: Wave P3-5 Ticket KAN-29
 
 **Ticket Summary:** `[KB-P3-AUDIT-23] Add 12-Color Palette + Advanced Color Picker and Pre-Delete Reverse-Audit & Safe Migration for Workflow States & Labels (4 Problems)`
-**Branch:** `feat/KAN-29`
-**Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-92d52807`
+**Branch:** `fix/KAN-29-rc1`
+**Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469`
 
 ---
 
@@ -135,3 +135,48 @@ Tests: 51 passed (51)
 - `docs/qa/KAN-29/changed-files-manifest.txt`: Exhaustive list of all created and modified files.
 - `docs/qa/KAN-29/git-diff.patch`: Full unified git diff.
 - `docs/qa/KAN-29/message-to-reality-checker.md`: This comprehensive verification report.
+
+
+---
+
+## 5. Live Full-Stack Verification (Zero-Mock Against Standalone Container, Commit 5998e9ab)
+
+- **Target:** `http://localhost:18951` (`kanban-liveqa-1`, PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`)
+- **Proof Log:** `docs/qa/KAN-29/live-fullstack-proof.txt`
+- **LIVE_STACK_VERDICT: FAIL**
+- **Summary of Live Checks:**
+  - **PASS:** `<ColorPresetPicker />` renders all 12 WCAG presets + `Advanced Color Picker...` (`<input type="color">` + `#RRGGBB`) with `0` inline `style` attributes across Desktop Light/Dark (`1440x900`) and Mobile Light (`390x844`, `scrollWidth=390`), plus live inline State/Label `PATCH` editing (`live-kan29-color-picker-*.png`, `live-kan29-inline-edit-desktop-light.png`).
+  - **PASS:** `GET .../states/{id}/audit-impact`, `GET .../labels/{id}/audit-impact`, `409 ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE` on unsafe state delete, `204` atomic migration of `KAN-1` and `WorkflowTransitionHook` (`qa-gate-proof-check`), and `0` browser console/page errors.
+  - **FAIL (Defect #1):** `kanban/web/src/features/settings/DeleteAuditModal.tsx` (lines 18, 171, 312) reads `h.enabled` instead of backend `h.is_enabled`, mislabeling the active enabled hook as `qa-gate-proof-check (Disabled)` in `live-kan29-delete-audit-modal-desktop-light.png` and `live-kan29-delete-audit-modal-desktop-dark.png` and breaking `enabledHooksCount` / `requiresReplacement`.
+  - **FAIL (Defect #2):** `kanban/services/project_config.py` (`delete_state` lines 696-710, `delete_label` lines 1397-1410) updates `views.filters_json` without updating `views.display_props_json["full_filters"]`. Because `kanban/services/views.py:136-143` prefers `display_props_json["full_filters"]`, `GET /api/v1/views/{id}` continues returning deleted `state_ids` and `label_ids` after deletion.
+  - **Additional Live Note:** Creating a `sync_validator` hook with a built-in SHA-256 returned `500` (`UniqueViolationError` on `approved_wasm_modules_workspace_id_sha256_key` after `GET /approved-wasm-modules`); `agent_interceptor` hook creation succeeded (`201`).
+
+---
+
+## 6. Targeted Live-QA Remediation (`fix/KAN-29-rc1`)
+
+### Defect 1 Resolution: Saved Views `display_props_json["full_filters"]` Synchronized on Deletion
+- **Root Cause:** `kanban/services/views.py:136-143` (`_reconstruct_filters`) reads `display_props_json["full_filters"]` in preference over `filters_json`. While `delete_state` and `delete_label` updated `filters_json`, they neglected `display_props_json["full_filters"]`.
+- **Fix:** In `kanban/services/project_config.py`:
+  - Added recursive migration helpers: `_migrate_id_in_list`, `_migrate_id_in_dict`, `_migrate_id_in_container_list`, and `_nested_references_id`.
+  - Implemented `_view_references_id` and `_update_views_for_deleted_id(views: Sequence[View], target_id: UUID, replacement_id: UUID | None, field_key: str)`.
+  - Updated `get_state_audit_impact` and `get_label_audit_impact` to audit both `filters_json` and `display_props_json["full_filters"]`.
+  - Updated `delete_state` and `delete_label` to rewrite deleted state/label IDs in both `filters_json` and `display_props_json["full_filters"]` with `replacement_id` (deduplicated) or remove them, marking both JSONB attributes modified with `flag_modified`.
+  - Added full end-to-end ASGI test in `kanban/tests/api/test_project_config.py`: `test_saved_view_full_filters_migrated_on_state_and_label_deletion`, verifying `GET /api/v1/views/{id}` returns the replacement ID and 0 occurrences of the deleted ID.
+
+### Defect 2 Resolution: `DeleteAuditModal.tsx` Hook Status Field Mismatch (`is_enabled`)
+- **Root Cause:** Backend `audit-impact` serializes `workflow_hooks[*].is_enabled`, while `DeleteAuditModal.tsx` checked `h.enabled`.
+- **Fix:** In `kanban/web/src/features/settings/DeleteAuditModal.tsx`:
+  - Declared `is_enabled?: boolean; enabled?: boolean;` on `WorkflowHookSummary`.
+  - Updated `isHookActive` helper to evaluate `h.is_enabled ?? Boolean(h.enabled)`.
+  - In `DeleteAuditModal.test.tsx` and `ProjectSettingsPage.test.tsx`, updated fixtures to use `{ is_enabled: true }` and added a dedicated test: `correctly reads is_enabled: true, renders (Enabled), and enforces replacement requirement`.
+
+### Additional Live QA Note: Idempotent Builtin Wasm Seeding
+- **Root Cause:** `seed_builtin_wasm` in `kanban/workflows/builtins.py` could encounter unique constraint violation races on `approved_wasm_modules_workspace_id_sha256_key`.
+- **Fix:** Hardened `seed_builtin_wasm` and `ensure_approved_wasm_modules` to check workspace-wide module existence and wrapped insertion in nested savepoint transactions (`session.begin_nested()`) catching `IntegrityError`.
+
+### Verification and Quality Status
+- **Backend Unit Tests:** 13/13 passed in `kanban/tests/api/test_project_config.py` with 95% coverage on `kanban/services/project_config.py`.
+- **Frontend Unit Tests:** 45/45 passed across `DeleteAuditModal.test.tsx` (11 tests) and `ProjectSettingsPage.test.tsx` (34 tests) with 98.88% Statements / 97.24% Branch / 100% Functions / 100% Lines on `DeleteAuditModal.tsx`.
+- **Static Quality & Gate Checks:** 0 errors across Ruff, Ruff Format, MyPy, Lint-Imports, TypeScript (`tsc -b --noEmit`), and ESLint (`--max-warnings 0`).
+- **Design System Invariants:** 0 inline styles (`style=...`), 0 em-dashes and 0 en-dashes across all modified files.

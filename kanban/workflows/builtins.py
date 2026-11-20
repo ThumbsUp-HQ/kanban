@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 
 from database.models.wasm_module import ApprovedWasmModule
 
@@ -128,13 +129,15 @@ async def seed_builtin_wasm(
     if formula is None:
         return None
 
-    # Check if already present under the canonical sha or requested sha
+    # Check if already present under canonical, requested, or actual sha
     target_sha = formula.sha256_bytes
+    actual_sha = sha256_bytes if sha256_bytes.hex() in _LEGACY_PRESETS else target_sha
     existing_stmt = select(ApprovedWasmModule).where(
         ApprovedWasmModule.workspace_id == workspace_id,
         or_(
             ApprovedWasmModule.sha256 == target_sha,
             ApprovedWasmModule.sha256 == sha256_bytes,
+            ApprovedWasmModule.sha256 == actual_sha,
         ),
     )
     existing = (await session.execute(existing_stmt)).scalar_one_or_none()
@@ -145,14 +148,19 @@ async def seed_builtin_wasm(
         id=uuid.uuid4(),
         workspace_id=workspace_id,
         project_id=project_id,
-        sha256=sha256_bytes if sha256_bytes.hex() in _LEGACY_PRESETS else target_sha,
+        sha256=actual_sha,
         name=formula.name,
         wasm_bytes=formula.wasm_bytes,
         approved_by_id=principal_id,
     )
-    session.add(mod)
-    await session.flush()
-    return mod
+    try:
+        async with session.begin_nested():
+            session.add(mod)
+            await session.flush()
+    except IntegrityError:
+        return (await session.execute(existing_stmt)).scalar_one_or_none()
+    else:
+        return mod
 
 
 async def ensure_approved_wasm_modules(
@@ -162,22 +170,17 @@ async def ensure_approved_wasm_modules(
     project_id: uuid.UUID | None = None,
 ) -> list[WasmModuleSummaryResponse]:
     """Ensure built-in verified Wasm formulas exist for workspace, returning public summaries."""
-    # 1. Fetch existing approved modules for workspace/project
+    # 1. Fetch existing approved modules for workspace (workspace-wide uniqueness on sha256)
     stmt = select(ApprovedWasmModule).where(
         ApprovedWasmModule.workspace_id == workspace_id,
-        or_(
-            ApprovedWasmModule.project_id.is_(None),
-            ApprovedWasmModule.project_id == project_id,
-        )
-        if project_id
-        else ApprovedWasmModule.project_id.is_(None),
     )
     existing_mods = list((await session.execute(stmt)).scalars().all())
     existing_names = {mod.name for mod in existing_mods}
+    existing_shas = {mod.sha256 for mod in existing_mods}
 
     # 2. Seed any missing built-in formulas
     for formula in BUILTIN_WASM_FORMULAS:
-        if formula.name not in existing_names:
+        if formula.name not in existing_names and formula.sha256_bytes not in existing_shas:
             new_mod = ApprovedWasmModule(
                 id=uuid.uuid4(),
                 workspace_id=workspace_id,
@@ -187,9 +190,16 @@ async def ensure_approved_wasm_modules(
                 wasm_bytes=formula.wasm_bytes,
                 approved_by_id=principal_id,
             )
-            session.add(new_mod)
-            existing_mods.append(new_mod)
-            existing_names.add(formula.name)
+            try:
+                async with session.begin_nested():
+                    session.add(new_mod)
+                    await session.flush()
+                existing_mods.append(new_mod)
+                existing_names.add(formula.name)
+                existing_shas.add(formula.sha256_bytes)
+            except IntegrityError:
+                # Concurrent auto-seed race; safely ignore
+                pass
 
     await session.flush()
 

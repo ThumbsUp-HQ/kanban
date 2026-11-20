@@ -1,0 +1,101 @@
+================================================================================
+KAN-29 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF
+Target: http://localhost:18951 (container: kanban-liveqa-1, commit: 5998e9ab)
+Database: Real PostgreSQL 16 with FORCE ROW LEVEL SECURITY
+Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
+================================================================================
+
+1. <ColorPresetPicker /> & INLINE STATE/LABEL EDITING ON /projects/KAN/settings
+--------------------------------------------------------------------------------
+Navigated to http://localhost:18951/projects/KAN/settings (Workflow States tab) as @admin (AAL2).
+DOM Audit of <ColorPresetPicker />:
+- Preset options count: 13 (12 WCAG presets + 1 custom "Advanced Color Picker..." option):
+  Slate (#64748b), Indigo (#4f46e5), Blue (#2563eb), Cyan (#0891b2), Teal (#0d9488),
+  Emerald (#059669), Amber (#d97706), Orange (#ea580c), Rose (#e11d48), Red (#dc2626),
+  Purple (#7c3aed), Pink (#db2777), Advanced Color Picker... (custom)
+- Native <input type="color"> present: true
+- Hex text input (#RRGGBB) present: true
+- Inline style attributes on .kb-color-picker-wrapper / .kb-colored-pill: 0 (CSP style-src 'self' compliant)
+
+Screenshots:
+- Desktop Light (1440x900): docs/qa/KAN-29/screenshots/live-kan29-color-picker-desktop-light.png
+- Desktop Dark (1440x900): docs/qa/KAN-29/screenshots/live-kan29-color-picker-desktop-dark.png
+- Mobile Light (390x844): docs/qa/KAN-29/screenshots/live-kan29-color-picker-mobile-light.png (scrollWidth=390)
+
+Inline Edit Verification:
+- State inline edit ("Todo" -> "Ready Queue", #0d9488):
+  PATCH /api/v1/projects/KAN/states/01a1f8f9-d204-71a0-81f0-3202a7ebc5f4 -> HTTP 200
+- Created labels "Bugfix" (#dc2626) and "Legacy Tag" (#d97706) via UI.
+- Label inline edit ("Bugfix" -> "Critical Bug", #7c3aed):
+  PATCH /api/v1/projects/KAN/labels/01a1f901-0369-7e96-9808-b9dc3388963c -> HTTP 200
+- Screenshot showing live colored pills: docs/qa/KAN-29/screenshots/live-kan29-inline-edit-desktop-light.png
+
+2. REVERSE-AUDIT IMPACT & SAFE MIGRATION FOR WORKFLOW STATE "QA Gate"
+--------------------------------------------------------------------------------
+Provisioned real linked entities in project KAN:
+- State "QA Gate" (started, #7c3aed): id=01a1f901-057b-790f-8e3a-79ad47e91765
+- Issue KAN-1 in state "QA Gate" with label "Legacy Tag"
+- Saved View "QA Gate Focus" (id=01a1f901-05e8-78b7-929a-814f4ef130b9) filtering on state_ids=[QA Gate] and label_ids=[Legacy Tag]
+- Agent Definition "qa-gate-agent" (in_app_sdk / fixture) + enabled WorkflowTransitionHook "qa-gate-proof-check" (id=01a1f902-2cd7-7985-8c85-4d00e811f52d, from_state=QA Gate -> to_state=Done, is_enabled=true)
+
+Note on built-in sync_validator hook creation:
+- Creating a sync_validator hook with a built-in SHA-256 from GET /api/v1/projects/KAN/approved-wasm-modules returned HTTP 500 INTERNAL_ERROR (request_id=7af060fdb4984344aa41d1631020f47c):
+  UniqueViolationError on "approved_wasm_modules_workspace_id_sha256_key" in seed_builtin_wasm because approved_wasm_modules_select_rls hid existing project-scoped rows during mod_stmt lookup.
+- Creating an enabled agent_interceptor hook succeeded (HTTP 201).
+
+Audit-Impact Endpoint Probe:
+GET /api/v1/projects/KAN/states/01a1f901-057b-790f-8e3a-79ad47e91765/audit-impact -> HTTP 200
+Body:
+{"state_id":"01a1f901-057b-790f-8e3a-79ad47e91765","project_id":"01a1f8f9-d200-71ef-8467-17debdb106c2","issues_count":1,"sample_issue_keys":["KAN-1"],"workflow_hooks":[{"id":"01a1f902-2cd7-7985-8c85-4d00e811f52d","name":"qa-gate-proof-check","hook_kind":"agent_interceptor","is_enabled":true,"from_state_id":"01a1f901-057b-790f-8e3a-79ad47e91765","to_state_id":"01a1f8f9-d205-74ac-9c25-313e12512976"}],"pending_executions_count":0,"historical_executions_count":0,"saved_views":[{"id":"01a1f901-05e8-78b7-929a-814f4ef130b9","name":"QA Gate Focus"}],"is_default":false,"blocking_reasons":[],"valid_replacement_states":[...]}
+
+Unsafe Delete Probe (no replacement_state_id):
+DELETE /api/v1/projects/KAN/states/01a1f901-057b-790f-8e3a-79ad47e91765
+-> HTTP 409 {"type":"urn:kanban:problem:ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE","title":"Active Automation Hook Requires State","status":409,"code":"ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE","detail":"Active automation hooks reference this state.","request_id":"8007df21be494d5b9f9a0141c31bd9f6"}
+
+DeleteAuditModal UI Verification & Defect #1:
+Opened DeleteAuditModal by clicking Delete on "QA Gate":
+- Counts displayed accurately: Affected Issues=1 (Samples: KAN-1), Automation Hooks=1, In-Flight Executions=0, Historical Executions=0, Saved Views=1 (QA Gate Focus).
+- DEFECT #1 OBSERVED: Modal rendered "qa-gate-proof-check (Disabled)" even though API returned "is_enabled": true!
+  Root cause: kanban/web/src/features/settings/DeleteAuditModal.tsx (lines 18, 171, 312) reads h.enabled instead of backend field h.is_enabled, causing enabled hooks to be labeled "(Disabled)" and excluded from enabledHooksCount / requiresReplacement.
+- Screenshots:
+  - docs/qa/KAN-29/screenshots/live-kan29-delete-audit-modal-desktop-light.png
+  - docs/qa/KAN-29/screenshots/live-kan29-delete-audit-modal-desktop-dark.png
+
+Confirmed deletion in DeleteAuditModal with replacement_state_id=01a1f8f9-d205-7330-98d0-189c5bf4696b (In Progress) and migrate_hooks=true:
+DELETE /api/v1/projects/KAN/states/01a1f901-057b-790f-8e3a-79ad47e91765?replacement_state_id=01a1f8f9-d205-7330-98d0-189c5bf4696b&migrate_hooks=true -> HTTP 204
+
+Post-Deletion State Migration Checks:
+- GET /api/v1/issues/KAN-1 -> state.id=01a1f8f9-d205-7330-98d0-189c5bf4696b (In Progress) [PASS]
+- GET /api/v1/projects/KAN/workflow-hooks -> qa-gate-proof-check preserved, from_state="In Progress", to_state="Done" [PASS]
+- GET /api/v1/views/01a1f901-05e8-78b7-929a-814f4ef130b9 ->
+  filters={"state_ids":["01a1f901-057b-790f-8e3a-79ad47e91765"],"label_ids":["01a1f901-03bb-77fd-b7ae-c27b368116e3"],...}
+  [FAIL - DEFECT #2]
+
+3. REVERSE-AUDIT IMPACT & SAFE MIGRATION FOR LABEL "Legacy Tag"
+--------------------------------------------------------------------------------
+GET /api/v1/projects/KAN/labels/01a1f901-03bb-77fd-b7ae-c27b368116e3/audit-impact -> HTTP 200
+Body: {"label_id":"01a1f901-03bb-77fd-b7ae-c27b368116e3","project_id":"01a1f8f9-d200-71ef-8467-17debdb106c2","issues_count":1,"sample_issue_keys":["KAN-1"],"saved_views":[{"id":"01a1f901-05e8-78b7-929a-814f4ef130b9","name":"QA Gate Focus"}],"blocking_reasons":[],"valid_replacement_labels":[...]}
+
+Confirmed deletion in DeleteAuditModal with replacement_label_id=01a1f901-0369-7e96-9808-b9dc3388963c (Critical Bug):
+DELETE /api/v1/projects/KAN/labels/01a1f901-03bb-77fd-b7ae-c27b368116e3?replacement_label_id=01a1f901-0369-7e96-9808-b9dc3388963c -> HTTP 204
+
+Post-Deletion Label Migration Checks:
+- GET /api/v1/issues/KAN-1 -> labels=[{"id":"01a1f901-0369-7e96-9808-b9dc3388963c","name":"Critical Bug","color_hex":"#7c3aed"}] [PASS]
+- GET /api/v1/views/01a1f901-05e8-78b7-929a-814f4ef130b9 ->
+  filters={"state_ids":["01a1f901-057b-790f-8e3a-79ad47e91765"],"label_ids":["01a1f901-03bb-77fd-b7ae-c27b368116e3"],...}
+  [FAIL - DEFECT #2]
+
+Root Cause of Defect #2 (Saved Views not migrated in API response):
+Postgres table `views` check:
+- filters_json: {"label_ids": ["01a1f901-03bb-77fd-b7ae-c27b368116e3"], "state_ids": ["01a1f8f9-d205-7330-98d0-189c5bf4696b"]}
+- display_props_json["full_filters"]: still contains deleted state_id "01a1f901-057b-790f-8e3a-79ad47e91765" and deleted label_id "01a1f901-03bb-77fd-b7ae-c27b368116e3"!
+kanban/services/project_config.py (delete_state lines 696-710 and delete_label lines 1397-1410) mutates v.filters_json without updating v.display_props_json["full_filters"], while kanban/services/views.py:136-143 (_reconstruct_filters) prefers display_props_json["full_filters"] over filters_json!
+
+Browser Console Errors: 0
+Browser Page Errors: 0
+
+LIVE_STACK_VERDICT: FAIL
+- Problem 1 (12-Color Palette + ColorPresetPicker + Inline Edit): PASS
+- Problem 2 (Reverse-Audit audit-impact endpoints): PASS
+- Problem 3 (Safe State/Label Delete & Migration): FAIL (delete_state and delete_label fail to update views.display_props_json["full_filters"], leaving deleted state_ids and label_ids in GET /api/v1/views/{id})
+- Problem 4 (Frontend DeleteAuditModal): FAIL (reads h.enabled instead of backend h.is_enabled, mislabeling active enabled hooks as "(Disabled)" and failing requiresReplacement guard)

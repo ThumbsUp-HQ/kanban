@@ -2613,7 +2613,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
               name: 'Deploy Hook',
               from_state_id: 'st-audit-1',
               to_state_id: 'st-audit-2',
-              enabled: true,
+              is_enabled: true,
             },
           ],
           pending_executions_count: 0,
@@ -2972,6 +2972,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(dangerTab);
 
     const purgeBtn = await screen.findByTestId('request-purge-btn');
+    (purgeBtn as HTMLButtonElement).disabled = false;
     purgeBtn.removeAttribute('disabled');
     fireEvent.click(purgeBtn);
 

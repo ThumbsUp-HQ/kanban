@@ -1,132 +1,94 @@
-# API Specialist Review: KAN-29 (KB-P3-AUDIT-23)
+# API Specialist Review: KAN-29-rc1 (KB-P3-AUDIT-23)
 
 - Ticket: KAN-29
-- Title: [KB-P3-AUDIT-23] Add 12-Color Palette + Advanced Color Picker and Pre-Delete Reverse-Audit & Safe Migration for Workflow States & Labels (4 Problems)
+- Title: [KB-P3-AUDIT-23] Add 12-Color WCAG Palette & Advanced Picker, Inline Row Edit, and Reverse-Audit Impact Deletion Flow with 409 Transition Guard to State & Label Admin (3 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-92d52807`
-- Branch: `feat/KAN-29`
-- Commit: `5d3d03eac38c2e1e0038148e3b424f8cc70ec2d8`
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469`
+- Target Branch: `fix/KAN-29-rc1`
+- Base Commit: `5998e9ab`
+- Head Commit: `ad33e96c`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-29 on branch `feat/KAN-29` (commit `5d3d03ea`). The ticket implements a 12-color WCAG-contrast preset palette and advanced color picker (`<ColorPresetPicker />`), live colored badge pills and row editing for workflow states and labels, backend reverse-audit impact endpoints (`audit-impact`) for blast-radius calculation, hardened deletion APIs for workflow states and labels with in-flight execution guards and atomic FK migrations, and an accessible pre-delete reverse-audit modal (`<DeleteAuditModal />`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-29 remediation on branch `fix/KAN-29-rc1` (commit `ad33e96c`). The ticket resolves live-QA validation feedback regarding saved view filter synchronization across `display_props_json["full_filters"]` on state and label deletions, and aligns hook status property (`is_enabled`) in `DeleteAuditModal.tsx`.
 
-All API contracts, security invariants, transaction boundaries, and test coverage requirements are verified and approved:
-1. Exact endpoint routing and Pydantic schema validation for `GET /api/v1/projects/{ref}/states/{id}/audit-impact` and `GET /api/v1/projects/{ref}/labels/{id}/audit-impact`, protected with `Capability.ADMIN` and constant-time `timing_floor(25.0)`.
-2. Hardened `DELETE /api/v1/projects/{ref}/states/{id}`:
-   - Fails closed with HTTP 409 `TRANSITION_IN_FLIGHT` when transitions are actively executing (`running_sync` / `pending_async`).
-   - Fails closed with HTTP 409 `ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE` when active workflow hooks reference the target state without a replacement.
-   - Prevents self-loop transition creation with HTTP 409 `HOOK_MIGRATION_SELF_LOOP` when reassigning transition hooks.
-   - Atomically updates `Issue.state_id`, `WorkflowTransitionHook` (`from_state_id`/`to_state_id`), `WorkflowTransitionExecution` historical FKs, and `View.filters_json['state_ids']` before deleting the state entity.
-   - Retains the legacy `migrate_to` query parameter alias alongside `replacement_state_id` for complete backward compatibility.
-3. Hardened `DELETE /api/v1/projects/{ref}/labels/{id}`:
-   - Supports `replacement_label_id` migration, reassigning `IssueLabel` join rows while respecting label `exclusive_group` rules and preventing PK duplicate collisions.
-   - Updates `View.filters_json['label_ids']` across all project saved views.
-4. Clean architectural layering: Zero direct `database` runtime imports from disallowed surfaces; all database queries enforce Row-Level Security tenant boundaries.
-5. Zero new external dependencies introduced.
-6. Test coverage and static gates:
-   - 12 Pytest tests passing in 9.38s with 97% overall coverage across touched backend files (`project_config.py` 100%, `schemas/project_config.py` 100%, `services/project_config.py` 96%).
-   - 51 Vitest unit tests passing across 3 test suites with 99.14% Statements and 95.27% Branch coverage.
-   - `cssTokensAudit.test.ts` passed 4/4 (100% canonical tokens, 0 inline React styles).
-   - Strict 0 em-dashes or en-dashes across all code, tests, and documentation.
+All API contracts, security invariants, transaction boundaries, filter migration routines, and test coverage requirements are verified and approved:
+1. Saved Views Filter Synchronization: In `kanban/services/project_config.py`, updated `get_state_audit_impact`, `get_label_audit_impact`, `delete_state`, and `delete_label` so that both `filters_json` and `display_props_json["full_filters"]` (including nested filter structures) replace deleted `state_ids` / `label_ids` with `replacement_state_id` / `replacement_label_id` (with deduplication) or remove them cleanly.
+2. ORM Dirty Tracking: Explicitly invoked `flag_modified(v, "filters_json")` and `flag_modified(v, "display_props_json")` to guarantee that JSONB mutations are persisted to PostgreSQL upon session commit.
+3. Hook Status Alignment (`DeleteAuditModal.tsx`): Aligned DeleteAuditModal on `const isEnabled = hook.is_enabled ?? Boolean(hook.enabled);`, eliminating mislabeling of active enabled hooks as (Disabled) and correctly counting `enabledHooksCount` for `requiresReplacement`.
+4. Concurrency Hardening in Wasm Auto-Seed (`kanban/workflows/builtins.py`): Hardened `seed_builtin_wasm` and `ensure_approved_wasm_modules` with workspace-wide uniqueness checks and nested savepoints (`session.begin_nested()`) catching `IntegrityError`, preventing race conditions during concurrent test runs.
+5. High Test Coverage: 13/13 backend Pytest tests pass with 95% coverage on `kanban/services/project_config.py`. 49/49 frontend Vitest tests pass across `DeleteAuditModal.test.tsx`, `ProjectSettingsPage.test.tsx`, and `cssTokensAudit.test.ts`.
+6. Zero Em/En-Dashes: Clean verification under `check_no_dashes` (0 em/en-dashes).
 
 ---
 
 ## 2. Detailed Contract & Security Verification
 
-### 2.1 Reverse-Audit Impact Endpoints (`audit-impact`)
-- Endpoints Audited:
-  - `GET /api/v1/projects/{project_ref}/states/{state_id}/audit-impact`
-  - `GET /api/v1/projects/{project_ref}/labels/{label_id}/audit-impact`
-- Security & Permission Verification:
-  - Scoped to project and caller via `get_project_or_404`.
-  - Enforces `require_capability(session, caller, project.id, Capability.ADMIN)`.
-  - Constant-time execution protected by `timing_floor(floor_ms=25.0)`.
-- Payload Schema Verification:
-  - `StateAuditImpactResponse`:
-    * `issues_count` and `sample_issue_keys` (up to 5 recent keys).
-    * `workflow_hooks`: list of `WorkflowHookSummary` (`id`, `name`, `hook_kind`, `is_enabled`, `from_state_id`, `to_state_id`).
-    * `pending_executions_count`: integer count of executions in `running_sync` or `pending_async`.
-    * `historical_executions_count`: integer count of completed/failed executions.
-    * `saved_views`: list of `SavedViewSummary` referencing this state in `filters_json['state_ids']`.
-    * `is_default`: boolean flag indicating if this is the project default state.
-    * `blocking_reasons`: list of human-readable blocking conditions.
-    * `valid_replacement_states`: list of other states in the project eligible for migration.
-  - `LabelAuditImpactResponse`:
-    * `tagged_issues_count` and `sample_issue_keys`.
-    * `saved_views`: list of views filtering on this label.
-    * `valid_replacement_labels`: list of other labels in the project eligible for reassignment.
+### 2.1 Saved Views Filter Synchronization (`kanban/services/project_config.py`)
+- Problem: Saved views read their active filters preferentially from `display_props_json["full_filters"]`. State or label deletion routines that only updated `filters_json` left deleted UUIDs in `display_props_json["full_filters"]`, causing orphaned filter references when loading saved views.
+- Solution:
+  - `_migrate_id_in_list`: replaces target ID with replacement ID or drops it if replacement is None, preserving uniqueness.
+  - `_migrate_id_in_dict` and `_migrate_id_in_container_list`: recursively traverse arbitrary nested filter trees.
+  - `_update_views_for_deleted_id`: migrates both `filters_json` and `display_props_json` on every affected view.
+  - Calls `flag_modified` on both columns to ensure SQLAlchemy triggers an `UPDATE views` statement.
+- Test Verification: `test_saved_view_full_filters_migrated_on_state_and_label_deletion` in `kanban/tests/api/test_project_config.py` verifies:
+  - State deletion with replacement updates both `filters_json["state_ids"]` and `display_props_json["full_filters"]["state_ids"]`.
+  - State deletion without replacement drops the state ID from both columns.
+  - Label deletion with replacement updates both `filters_json["label_ids"]` and `display_props_json["full_filters"]["label_ids"]`.
+  - Querying `GET /api/v1/views/{view_id}` returns the updated configuration with 0 deleted ID references.
 
-### 2.2 Hardened Workflow State Deletion (`delete_state`)
-- Service Source: `kanban/services/project_config.py`
-- Safety Invariants:
-  - Default State Guard: Attempting to delete the default workflow state raises HTTP 409 `DEFAULT_STATE_CANNOT_BE_DELETED`.
-  - In-Flight Execution Guard: If `pending_executions_count > 0`, raises HTTP 409 `TRANSITION_IN_FLIGHT`.
-  - Active Hook Guard: If enabled transition hooks reference the state and no replacement is provided (or `migrate_hooks=False`), raises HTTP 409 `ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE`.
-  - Self-Loop Prevention: Reassigning hooks where the replacement would cause `from_state_id == to_state_id` raises HTTP 409 `HOOK_MIGRATION_SELF_LOOP`.
-  - Target Validation: `replacement_state_id` is validated to belong to the same project and must not equal `state_id` (`MIGRATE_TARGET_INVALID` 422).
-  - Transactional Migration:
-    * Reassigns active issues via `UPDATE issues SET state_id = :repl WHERE state_id = :target`.
-    * Migrates `WorkflowTransitionHook` rows (`from_state_id` and `to_state_id`) and updates manifest SHA-256 hashes when `migrate_hooks=True`. If `migrate_hooks=False`, cleans up disabled hooks safely.
-    * Migrates `WorkflowTransitionExecution` historical records (`from_state_id` and `to_state_id`) to the replacement state, preventing foreign key violation errors on `ON DELETE NO ACTION`.
-    * Rewrites `View.filters_json['state_ids']` replacing the deleted state ID with the replacement state ID.
-  - Audit Trail: Emits partitioned SHA-256 chained activity record `ActivityEventType.STATE_DELETED` recording `state_id`, `name`, `migrated_to`, and `migrated_issue_count`.
+### 2.2 DeleteAuditModal Hook Status & Replacement Enforcement (`DeleteAuditModal.tsx`)
+- In `DeleteAuditModal.tsx`:
+  - Hook enabled check:
+    ```tsx
+    const isEnabled = hook.is_enabled ?? Boolean(hook.enabled);
+    ```
+  - Displays `(Enabled)` badge when active, or `(Disabled)` when inactive.
+  - `enabledHooksCount` accurately tallies active hooks.
+  - When `enabledHooksCount > 0` or issues exist in the state, `requiresReplacement` is set to `true`, disabling the confirmation button until a valid replacement state is selected.
 
-### 2.3 Hardened Project Label Deletion (`delete_label`)
-- Service Source: `kanban/services/project_config.py`
-- Reassignment & Deduplication Logic:
-  - If `replacement_label_id` is provided:
-    * If an issue is already tagged with `replacement_label_id`, deletes the old `IssueLabel` row to prevent duplicate primary key collision.
-    * If `replacement_label` has an `exclusive_group`, removes any conflicting labels in that group on the issue.
-    * Updates remaining `IssueLabel` rows to `replacement_label_id`.
-  - If no replacement is provided: Detaches the label from all issues via `DELETE FROM issue_labels WHERE label_id = :label_id`.
-  - Rewrites `View.filters_json['label_ids']` replacing or removing the deleted label ID across all saved views.
-  - Audit Trail: Emits activity record `ActivityEventType.LABEL_DELETED` recording `label_id`, `name`, `reassigned_to`, and `reassigned_issue_count`.
+### 2.3 Builtin Wasm Module Auto-Seed Concurrency (`kanban/workflows/builtins.py`)
+- In `seed_builtin_wasm` and `ensure_approved_wasm_modules`:
+  - Enforces workspace-wide uniqueness on `(workspace_id, sha256)`.
+  - Wraps insertions in `async with session.begin_nested():` and catches `IntegrityError`.
+  - On conflict, cleanly falls back to querying the existing row without failing the parent transaction.
+
+### 2.4 Test Suite & Coverage Verification
+- Backend Pytest Suite: `kanban/tests/api/test_project_config.py` PASSED (13/13).
+  - Coverage: `kanban.services.project_config` achieves 95% statement coverage.
+- Frontend Vitest Suites:
+  - `src/features/settings/__tests__/DeleteAuditModal.test.tsx`: 11/11 PASSED.
+  - `src/features/settings/__tests__/ProjectSettingsPage.test.tsx`: 34/34 PASSED.
+  - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 PASSED.
+  - All touched files maintain >= 95% statement and branch coverage.
+
+### 2.5 Security, Boundary, and Code Style Compliance
+- Dependency Invariant: Zero external packages added (`Apache-2.0` compliant).
+- Boundary Invariant: `lint-imports` confirms strict unidirectional layering (`agent -> mcp -> kanban -> database`).
+- Static Checks: `tsc -b` (0 errors), `eslint` (0 warnings), `mypy` (0 errors), `ruff check` (clean), `check_no_dashes` (0 em/en-dashes).
 
 ---
 
-## 3. Dependency, Layering & Static Quality Audit
+## 3. Specialist Checklist
 
-- External Dependencies: 0 new external dependencies added.
-- Layering Contracts: `uv run lint-imports` verified 2 kept, 0 broken (`agent -> mcp -> kanban -> database`).
-- Static Analysis:
-  - `uv run ruff check .`: 0 errors.
-  - `uv run mypy`: 0 errors across touched source files.
-  - `pnpm --dir kanban/web exec tsc -b --noEmit`: 0 errors.
-  - `pnpm --dir kanban/web lint`: 0 errors, 0 warnings (`eslint . --max-warnings 0`).
-  - `python3 -m scripts.check_no_dashes --all`: 0 errors (strict 0 em-dashes and en-dashes).
-- Clean Patch Artifact: `docs/qa/KAN-29/git-diff.patch` verified to contain zero `docs/qa/*` files.
-
----
-
-## 4. Test Coverage Audit
-
-- Pytest Suite:
-  - 12 passed in 9.38s across `kanban/tests/api/test_project_config.py`.
-  - Coverage Breakdown:
-    * `kanban/api/v1/project_config.py`: 100% Stmts / 100% Branch
-    * `kanban/api/v1/schemas/project_config.py`: 100% Stmts / 100% Branch
-    * `kanban/services/project_config.py`: 96% Stmts / 92% Branch
-    * Overall backend touched files: 97% coverage (exceeds >= 95% mandate).
-- Vitest Suite:
-  - 51 passed across 3 test suites.
-  - Coverage Breakdown:
-    * `ColorPresetPicker.tsx`: 100% Stmts / 100% Branch
-    * `DeleteAuditModal.tsx`: 98.90% Stmts / 95.65% Branch
-    * `ProjectSettingsPage.tsx`: 99.13% Stmts / 94.89% Branch
-    * Overall frontend touched files: 99.14% Stmts / 95.27% Branch.
-  - `cssTokensAudit.test.ts`: Passed 4/4 (100% canonical tokens, 0 inline React styles).
-- Verbatim raw test output is preserved in `docs/qa/KAN-29/unit-test-results.txt`.
+1. [x] Saved view `display_props_json["full_filters"]` synchronized alongside `filters_json` on state/label deletion
+2. [x] Nested filter structures updated with replacement ID or cleaned of deleted ID
+3. [x] `flag_modified` invoked on both `filters_json` and `display_props_json`
+4. [x] `DeleteAuditModal.tsx` evaluates `hook.is_enabled ?? Boolean(hook.enabled)`
+5. [x] Active hooks correctly labeled as `(Enabled)` and enforce replacement requirement
+6. [x] Wasm auto-seed concurrency protected via nested savepoints catching `IntegrityError`
+7. [x] 13/13 backend tests pass with 95% coverage on `project_config.py`
+8. [x] 49/49 frontend tests pass with >= 95% coverage on touched files
+9. [x] Zero em-dashes or en-dashes across all code and documentation
 
 ---
 
-## 5. Verification Verdict
-
-All reverse-audit endpoints, state and label safe deletion workflows, foreign key migration invariants, and test coverage standards are verified and approved.
+## 4. Verdict & Certification
 
 STATUS: APPROVED
-Reviewed by: api-spec-2
+
+The KAN-29 RC1 remediation on branch `fix/KAN-29-rc1` (commit `ad33e96c`) completely resolves the saved view filter desynchronization and hook status alignment, providing robust filter migration and accurate audit impact visualization. Ready for dual specialist signoff and merge into `main`.
