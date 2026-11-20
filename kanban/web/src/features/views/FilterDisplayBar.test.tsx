@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
 import * as railApi from '../drawer-rail/railApi';
+import * as client from '../../api/client';
 
 describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
   beforeEach(() => {
@@ -348,6 +349,28 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     await Promise.resolve();
 
     expect(modulesSpy).not.toHaveBeenCalled();
+  });
+
+  it('KB-P3-AUDIT-08: never calls /assignee-suggestions?q= with empty query string on mount', () => {
+    const apiFetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({ items: [] });
+
+    act(() => {
+      render(
+        <FilterDisplayBar
+          projectKey="KAN"
+          modulesEnabled={true}
+        />
+      );
+    });
+
+    const emptyQueryCalls = apiFetchSpy.mock.calls.filter((call) => {
+      const path = call[1];
+      const isAssignee = path.includes('assignee-suggestions');
+      const query = (call[2] as { query?: { q?: string } } | undefined)?.query;
+      return isAssignee && (!query?.q || query.q.trim().length === 0);
+    });
+
+    expect(emptyQueryCalls).toHaveLength(0);
   });
 
   it('covers dynamic facet edge cases: fallback labels, unmount in flight, and chip removal fallbacks', () => {

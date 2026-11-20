@@ -125,12 +125,12 @@ export async function fetchAssigneeSuggestions(
   query: string,
   limit = 10,
 ): Promise<AssigneeSuggestionItem[]> {
-  if (!projectKey || projectKey === 'undefined') {
+  if (!projectKey || projectKey === 'undefined' || !query.trim()) {
     return [];
   }
   const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/assignee-suggestions' as never, {
     params: { project_ref: projectKey },
-    query: { q: query, limit },
+    query: { q: query.trim(), limit },
   });
   return (res as { items?: AssigneeSuggestionItem[] }).items ?? [];
 }
