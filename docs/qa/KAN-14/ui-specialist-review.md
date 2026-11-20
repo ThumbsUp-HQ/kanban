@@ -4,31 +4,35 @@
 - Ticket ID: KAN-14 ([KB-P3-AUDIT-08])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan14-rc3-b0722c3e`
-- Target Branch: fix/KAN-14-rc3
-- Base Commit: 564b574
-- Head Commit: fffb27f
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan14-rc4-53592589`
+- Target Branch: fix/KAN-14-rc4
+- Base Commit: c43f946
+- Head Commit: 00147de
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review verifies the visual layout, responsiveness, interaction ergonomics, accessibility (WCAG AA), and frontend code quality for ticket KAN-14 and its Clean-Room Reality-Checker Round 3 surgical polish ([KB-P3-AUDIT-08]).
+This review verifies the visual layout, responsiveness, interaction ergonomics, accessibility (WCAG AA), and frontend code quality for ticket KAN-14 and its Clean-Room Reality-Checker Round 4 surgical polish ([KB-P3-AUDIT-08]).
 
-The Round 3 remediation resolves:
-1. Handle Formatting Normalization (`formatPrincipalHandle` in `ProjectSettingsPage.tsx`):
+The Round 4 remediation resolves:
+1. Empty-Query Assignee Suggestions Guard (`railApi.ts` & `FilterDisplayBar.tsx`):
+   - Guarded `fetchAssigneeSuggestions` in `railApi.ts` when `!query.trim()`, returning `[]` immediately and preventing invalid `GET /api/v1/projects/:key/assignee-suggestions?q=` network calls on `/projects/:key/issues` mount.
+   - Eliminates HTTP 422 INVALID_QUERY console errors in Chromium zero-mock QA while falling back cleanly to `derivedFacets.assignees`.
+   - Verified by dedicated Vitest unit tests in `railApi.test.ts` and `FilterDisplayBar.test.tsx`.
+2. Handle Formatting Normalization (`formatPrincipalHandle` in `ProjectSettingsPage.tsx`):
    - Created `formatPrincipalHandle(handle, principal)` which strips any leading `@` symbols before prepending a single `@`.
    - Normalizes principal handles rendered in both the principal picker dropdown and the project members table, guaranteeing single `@alice` rendering regardless of backend representation (`"alice"` vs `"@alice"`) and eliminating duplicate `@@` prefixes.
    - Verified by dedicated unit test in `ProjectSettingsPage.test.tsx`.
-2. Module Query Suppression (`FilterDisplayBar.tsx` & `viewRegistry.tsx`):
+3. Module Query Suppression (`FilterDisplayBar.tsx` & `viewRegistry.tsx`):
    - Gated `fetchProjectModules(projectKey)` in `FilterDisplayBar.tsx` behind `modulesEnabled === true` inside the hydration effect and added `modulesEnabled` to the dependency array.
    - Updated `IssuesWorkspaceRoute` in `viewRegistry.tsx` to subscribe to the query cache and default `modulesEnabled` to `false` in live mode until the project query confirms `project?.modules_enabled === true`.
    - Eliminates all HTTP 404 errors on `GET /api/v1/projects/:key/modules` when modules are disabled.
-3. Maintained Round 2 Invariants:
+4. Maintained Round 2 Invariants:
    - Guard in `useIssueKeyboardMap.ts` against synthetic autofill events with non-string `e.key`.
    - Principal service handle contract exposing `@handle` alongside `principal`.
    - Responsive horizontal table scrolling container (`.kb-table-scroll-container`) on mobile 390px viewports.
-4. Comprehensive test coverage: 198 Vitest tests passing across 9 suites with >95% branch coverage, and 16 Pytest tests passing with 96% coverage.
+5. Comprehensive test coverage: 199 Vitest tests passing across 9 suites with >95% branch coverage, and 16 Pytest tests passing with 96% coverage.
 
 All live Playwright PNG screenshots (Desktop 1440x900 and Mobile 390x844 across Light and Dark themes) were inspected and verified via binary image analysis.
 
@@ -88,18 +92,19 @@ All live Playwright PNG screenshots (Desktop 1440x900 and Mobile 390x844 across 
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-08 Round 3)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-08 Round 4)
 
-- Target Branch: `fix/KAN-14-rc3`
-- Remediation Head Commit: `fffb27f`
+- Target Branch: `fix/KAN-14-rc4`
+- Remediation Head Commit: `00147de`
 - Remediations Verified:
-  1. `formatPrincipalHandle` normalizes handles and eliminates duplicate `@@` prefixes in ProjectSettingsPage.
-  2. Gated module fetching in FilterDisplayBar and viewRegistry avoids 404 console errors.
-  3. Guard in `useIssueKeyboardMap.ts` against synthetic autofill events with non-string `e.key`.
-  4. Principal service handle contract exposes `@handle` consistently alongside `principal`.
-  5. All 198 Vitest unit tests passing across touched components with >= 95% line coverage.
-  6. 16 backend Pytest tests passing with 96% coverage.
-  7. 100% zero em-dashes and en-dashes.
+  1. Empty-query assignee suggestions guard in `railApi.ts` and `FilterDisplayBar.tsx` eliminates 422 INVALID_QUERY console errors on `/projects/:key/issues`.
+  2. `formatPrincipalHandle` normalizes handles and eliminates duplicate `@@` prefixes in ProjectSettingsPage.
+  3. Gated module fetching in FilterDisplayBar and viewRegistry avoids 404 console errors.
+  4. Guard in `useIssueKeyboardMap.ts` against synthetic autofill events with non-string `e.key`.
+  5. Principal service handle contract exposes `@handle` consistently alongside `principal`.
+  6. All 199 Vitest unit tests passing across touched components with >= 95% line coverage.
+  7. 16 backend Pytest tests passing with 96% coverage.
+  8. 100% zero em-dashes and en-dashes.
 
 ---
 
