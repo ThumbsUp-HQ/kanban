@@ -7,9 +7,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PersonalSettingsPage } from '../PersonalSettingsPage';
 import * as api from '../personalSettingsApi';
+import * as authApi from '../../auth/authApi';
 import { ApiProblem } from '../../../api/problem';
 
 vi.mock('../personalSettingsApi');
+vi.mock('../../auth/authApi');
 
 vi.mock('../../auth/SecondFactorStep', () => ({
   SecondFactorStep: ({
@@ -82,6 +84,7 @@ describe('PersonalSettingsPage', () => {
     vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
     vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
     vi.mocked(api.fetchExternalIdentities).mockResolvedValue([]);
+    vi.mocked(authApi.fetchAuthCards).mockResolvedValue({ cards: [] });
   });
 
   const renderComponent = () =>
@@ -2030,5 +2033,517 @@ describe('PersonalSettingsPage', () => {
     expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
 
     confirmSpy.mockRestore();
+  });
+
+  describe('External Identity Linking (KAN-27)', () => {
+    const mockAuthCards = {
+      cards: [
+        {
+          id: 'card-gh',
+          slug: 'github',
+          provider_kind: 'OIDC' as const,
+          display_name: 'GitHub OAuth',
+          button_subtext: null,
+          icon_preset: 'github',
+        },
+        {
+          id: 'card-ldap',
+          slug: 'corp-ldap',
+          provider_kind: 'LDAP' as const,
+          display_name: 'Corp LDAP',
+          button_subtext: null,
+          icon_preset: 'ldap',
+        },
+        {
+          id: 'card-local',
+          slug: 'local-admin',
+          provider_kind: 'LOCAL_ADMIN' as const,
+          display_name: 'Local Admin',
+          button_subtext: null,
+          icon_preset: 'local',
+        },
+      ],
+    };
+
+    it('renders + Connect buttons for enabled external cards and filters out LOCAL_ADMIN and already-linked cards', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      vi.mocked(api.fetchExternalIdentities).mockResolvedValue([
+        {
+          id: 'ident-gh',
+          card_slug: 'github',
+          provider_kind: 'OIDC',
+          immutable_subject_id: 'sub-gh',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      ]);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('personal-settings-page')).toBeDefined();
+      });
+
+      // github is already linked: button should not be present
+      expect(screen.queryByTestId('connect-provider-github')).toBeNull();
+
+      // local-admin is LOCAL_ADMIN: button should not be present
+      expect(screen.queryByTestId('connect-provider-local-admin')).toBeNull();
+
+      // corp-ldap is external and not linked: button should be present
+      const ldapBtn = screen.getByTestId('connect-provider-corp-ldap');
+      expect(ldapBtn).toBeDefined();
+      expect(ldapBtn.textContent).toContain('+ Connect Corp LDAP');
+    });
+
+    it('handles connecting OIDC/OAuth2 provider, navigating to authorize_url', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      vi.mocked(api.startLinkIdentity).mockResolvedValue({
+        mode: 'redirect',
+        authorize_url: 'https://idp.example.com/oauth/authorize?state=xyz',
+      });
+
+      const originalLocation = window.location;
+      const assignMock = vi.fn();
+      // @ts-expect-error mocking window.location
+      delete window.location;
+      // @ts-expect-error mocking window.location
+      window.location = {
+        href: '',
+        pathname: '/settings/profile',
+        search: '',
+        assign: assignMock,
+      } as unknown as Location;
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-github')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('connect-provider-github'));
+
+      await waitFor(() => {
+        expect(api.startLinkIdentity).toHaveBeenCalledWith('github');
+        expect(window.location.href).toBe('https://idp.example.com/oauth/authorize?state=xyz');
+      });
+
+      // @ts-expect-error test location restoring
+      window.location = originalLocation;
+    });
+
+    it('handles AAL2_REQUIRED when connecting OIDC provider and resumes after step-up', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      const aal2Problem = new ApiProblem(403, {
+        code: 'AAL2_REQUIRED',
+        challenge_id: 'ch-link-1',
+        methods: ['totp'],
+      });
+      vi.mocked(api.startLinkIdentity)
+        .mockRejectedValueOnce(aal2Problem)
+        .mockResolvedValueOnce({
+          mode: 'redirect',
+          authorize_url: 'https://idp.example.com/oauth/authorize?state=stepup',
+        });
+
+      const originalLocation = window.location;
+      // @ts-expect-error mocking window.location
+      delete window.location;
+      // @ts-expect-error mocking window.location
+      window.location = {
+        href: '',
+        pathname: '/settings/profile',
+        search: '',
+      } as unknown as Location;
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-github')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('connect-provider-github'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      });
+
+      // Complete 2FA
+      fireEvent.click(screen.getByTestId('mock-2fa-success'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+        expect(api.startLinkIdentity).toHaveBeenCalledTimes(2);
+        expect(window.location.href).toBe('https://idp.example.com/oauth/authorize?state=stepup');
+      });
+
+      // @ts-expect-error test location restoring
+      window.location = originalLocation;
+    });
+
+    it('handles connecting LDAP provider via modal and links successfully', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      vi.mocked(api.startLinkIdentity).mockResolvedValue({
+        mode: 'ldap_credentials',
+        link_intent_id: 'intent-ldap-1',
+      });
+      vi.mocked(api.linkLdapIdentity).mockResolvedValue({
+        linked: true,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-corp-ldap')).toBeDefined();
+      });
+
+      // Click Connect Corp LDAP to open modal
+      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+
+      fireEvent.change(screen.getByTestId('ldap-link-username-input'), {
+        target: { value: 'alice_ldap' },
+      });
+      fireEvent.change(screen.getByTestId('ldap-link-password-input'), {
+        target: { value: 'secret123' },
+      });
+
+      fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
+
+      await waitFor(() => {
+        expect(api.startLinkIdentity).toHaveBeenCalledWith('corp-ldap');
+        expect(api.linkLdapIdentity).toHaveBeenCalledWith(
+          'intent-ldap-1',
+          'alice_ldap',
+          'secret123',
+        );
+        expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+      });
+    });
+
+    it('handles AAL2_REQUIRED when linking LDAP provider and resumes after step-up', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      const aal2Problem = new ApiProblem(403, {
+        code: 'AAL2_REQUIRED',
+        challenge_id: 'ch-ldap-aal2',
+        methods: ['totp'],
+      });
+      vi.mocked(api.startLinkIdentity)
+        .mockRejectedValueOnce(aal2Problem)
+        .mockResolvedValueOnce({
+          mode: 'ldap_credentials',
+          link_intent_id: 'intent-ldap-2',
+        });
+      vi.mocked(api.linkLdapIdentity).mockResolvedValue({
+        linked: true,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-corp-ldap')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+
+      fireEvent.change(screen.getByTestId('ldap-link-username-input'), {
+        target: { value: 'alice_ldap' },
+      });
+      fireEvent.change(screen.getByTestId('ldap-link-password-input'), {
+        target: { value: 'secret123' },
+      });
+
+      fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('mock-2fa-success'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+        expect(api.linkLdapIdentity).toHaveBeenCalledWith(
+          'intent-ldap-2',
+          'alice_ldap',
+          'secret123',
+        );
+        expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+      });
+    });
+
+    it('renders empty providers notice and admin link for server admins when no external cards enabled', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue({
+        cards: [
+          {
+            id: 'c-loc',
+            slug: 'local-admin',
+            provider_kind: 'LOCAL_ADMIN',
+            display_name: 'Local Admin',
+            button_subtext: null,
+            icon_preset: 'local',
+          },
+        ],
+      });
+      vi.mocked(api.fetchMyProfile).mockResolvedValue({
+        ...mockProfile,
+        is_server_admin: true,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('no-external-providers-notice')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('configure-providers-link')).toBeDefined();
+      expect(screen.getByTestId('configure-providers-link').getAttribute('href')).toBe('/admin/auth');
+    });
+
+    it('renders empty providers notice without admin link for non-admin users', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue({ cards: [] });
+      vi.mocked(api.fetchMyProfile).mockResolvedValue({
+        ...mockProfile,
+        is_server_admin: false,
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('no-external-providers-notice')).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('configure-providers-link')).toBeNull();
+    });
+
+    it('handles ?linked and ?link_error search parameters on mount', async () => {
+      const originalLocation = window.location;
+      // @ts-expect-error mocking window.location
+      delete window.location;
+      // @ts-expect-error mocking window.location
+      window.location = {
+        href: '',
+        search: '?linked=github',
+        pathname: '/settings/profile',
+      } as unknown as Location;
+
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+
+      const { unmount: unmount1 } = renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-success')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('alert-success').textContent).toContain(
+        'Account successfully linked (github).',
+      );
+      expect(replaceStateSpy).toHaveBeenCalledWith({}, '', '/settings/profile');
+      unmount1();
+
+      // Test ?link_error=IDENTITY_ALREADY_LINKED
+      (window.location as unknown as { search: string }).search = '?link_error=IDENTITY_ALREADY_LINKED';
+
+      queryClient.clear();
+      const { unmount: unmount2 } = renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-error')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('alert-error').textContent).toContain(
+        'External identity is already linked to another account.',
+      );
+      unmount2();
+
+      // Test ?link_error=UNKNOWN_ERROR
+      (window.location as unknown as { search: string }).search = '?link_error=OIDC_CALLBACK_FAILED';
+
+      queryClient.clear();
+      const { unmount: unmount3 } = renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-error')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('alert-error').textContent).toContain(
+        'Failed to link external identity (OIDC_CALLBACK_FAILED).',
+      );
+      unmount3();
+
+      // @ts-expect-error test location restoring
+      window.location = originalLocation;
+      replaceStateSpy.mockRestore();
+    });
+
+    it('handles connecting OIDC provider error and non-redirect mode', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      vi.mocked(api.startLinkIdentity).mockRejectedValueOnce(new Error('Identity provider unreachable'));
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-github')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('connect-provider-github'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-error')).toBeDefined();
+      });
+      expect(screen.getByTestId('alert-error').textContent).toContain('Identity provider unreachable');
+
+      // Test string error rejection
+      vi.mocked(api.startLinkIdentity).mockRejectedValueOnce('Network failure');
+      fireEvent.click(screen.getByTestId('connect-provider-github'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-error').textContent).toContain('Failed to initiate account linking.');
+      });
+
+      // Test non-redirect response mode
+      vi.mocked(api.startLinkIdentity).mockResolvedValueOnce({ mode: 'form' });
+      fireEvent.click(screen.getByTestId('connect-provider-github'));
+    });
+
+    it('cancels LDAP linking modal and handles LDAP error conditions', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-corp-ldap')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+
+      fireEvent.change(screen.getByTestId('ldap-link-username-input'), { target: { value: 'testuser' } });
+      fireEvent.change(screen.getByTestId('ldap-link-password-input'), { target: { value: 'testpass' } });
+
+      // Click top Cancel button
+      const cancelBtns = screen.getAllByRole('button', { name: 'Cancel' });
+      const topCancel = cancelBtns[0];
+      if (topCancel) {
+        fireEvent.click(topCancel);
+      }
+      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+
+      // Open again and test bottom Cancel button
+      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+      const cancelBtns2 = screen.getAllByRole('button', { name: 'Cancel' });
+      const bottomCancel = cancelBtns2[1];
+      if (bottomCancel) {
+        fireEvent.click(bottomCancel);
+      }
+      expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
+
+      // Open again and test missing link_intent_id
+      fireEvent.click(screen.getByTestId('connect-provider-corp-ldap'));
+      await waitFor(() => {
+        expect(screen.getByTestId('ldap-credentials-modal')).toBeDefined();
+      });
+      fireEvent.change(screen.getByTestId('ldap-link-username-input'), { target: { value: 'testuser' } });
+      fireEvent.change(screen.getByTestId('ldap-link-password-input'), { target: { value: 'testpass' } });
+      vi.mocked(api.startLinkIdentity).mockResolvedValueOnce({ mode: 'redirect' });
+      fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-error')).toBeDefined();
+      });
+      expect(screen.getByTestId('alert-error').textContent).toContain('Missing link intent ID from server.');
+
+      // Test LDAP string error
+      vi.mocked(api.startLinkIdentity).mockResolvedValueOnce({ mode: 'redirect', link_intent_id: 'intent-ldap' });
+      vi.mocked(api.linkLdapIdentity).mockRejectedValueOnce('Directory unreachable');
+      fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-error').textContent).toContain('Failed to link LDAP account.');
+      });
+    });
+
+    it('renders provider card key with card.slug fallback when card.id is empty', async () => {
+      vi.mocked(authApi.fetchAuthCards).mockResolvedValue({
+        cards: [
+          {
+            id: '',
+            slug: 'no-id-provider',
+            provider_kind: 'OIDC' as const,
+            display_name: 'No ID Provider',
+            button_subtext: null,
+            icon_preset: 'oidc',
+          },
+        ],
+      });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connect-provider-no-id-provider')).toBeDefined();
+      });
+    });
+
+    it('handles Test Key with fallback cred name and error details', async () => {
+      vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([
+        {
+          id: 'pk-fallback',
+          credential_id: 'pk-fallback-cred',
+          nickname: '',
+          created_at: '2026-01-01T00:00:00Z',
+          last_used_at: null,
+          transports: ['usb'],
+          aaguid: '00000000-0000-0000-0000-000000000000',
+        },
+      ]);
+      const mockAuthOptions: api.PublicKeyCredentialRequestOptionsJSON = {
+        challenge: 'chall-auth',
+        rpId: 'localhost',
+        allowCredentials: [{ id: 'other-cred', type: 'public-key' }],
+      };
+      const mockAssertion = {
+        id: 'pk-fallback',
+        rawId: new Uint8Array([1, 2]).buffer,
+        type: 'public-key',
+        response: {
+          clientDataJSON: new TextEncoder().encode('{}').buffer,
+          authenticatorData: new Uint8Array([3]).buffer,
+          signature: new Uint8Array([4]).buffer,
+          userHandle: null,
+        },
+        getClientExtensionResults: () => ({}),
+      } as unknown as PublicKeyCredential;
+
+      vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockAuthOptions);
+      vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({ verified: true });
+
+      const mockGet = vi.fn().mockResolvedValue(mockAssertion);
+      Object.defineProperty(navigator, 'credentials', {
+        writable: true,
+        configurable: true,
+        value: { get: mockGet, create: vi.fn() },
+      });
+
+      renderComponent();
+      await waitFor(() => {
+        expect(screen.getByTestId('test-passkey-pk-fallback')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('test-passkey-pk-fallback'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified (Passkey)');
+      });
+    });
   });
 });

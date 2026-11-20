@@ -21,7 +21,16 @@ from starlette.requests import Request
 from database.session import RLSContext, RLSSessionFactory
 from kanban.api.deps import PrincipalContext, get_principal
 from kanban.api.problems import ProblemException, problem_exception_handler
-from kanban.api.v1.auth_identities import router as auth_identities_router
+from kanban.api.v1.auth_identities import (
+    IdentityLinkLdapRequest,
+    IdentityLinkStartRequest,
+    link_ldap_identity,
+    require_link_aal2,
+    start_identity_link,
+)
+from kanban.api.v1.auth_identities import (
+    router as auth_identities_router,
+)
 from kanban.auth.identity import ExternalIdentityAssertion
 from kanban.auth.identity_service import DatabaseIdentityResolver, IdentityLinkService
 from kanban.services.activity import ActivityEventType
@@ -310,20 +319,47 @@ async def test_case_5_positive_explicit_aal2_link_oidc_and_ldap(
 async def test_case_6_security_aal1_and_stale_aal2_link_blocked(
     pg_worker_db: AsyncEngine,
 ) -> None:
-    """Test Case 6: Calling /identities/link/start with AAL1 -> 403 AAL2_REQUIRED; with AAL2 > 900s -> 403 AAL2_STALE."""
+    """Test Case 6: Calling /identities/link/start enforces conditional AAL2."""
     session_factory = RLSSessionFactory(pg_worker_db)
     ws_id, users_and_sessions, card_oidc_id, _ = await _create_test_env(
-        session_factory, num_users=1
+        session_factory, num_users=2
     )
     u1_id, s1_id = users_and_sessions[0]
+    u2_id, s2_id = users_and_sessions[1]
 
     app = FastAPI()
     app.state.session_factory = session_factory
     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
     app.include_router(auth_identities_router, prefix="/api/v1")
 
-    # Fetch card slug
+    # Mock OIDC flow on app.state
+    mock_oidc = AsyncMock()
+    mock_oidc.start = AsyncMock(
+        return_value=type(
+            "StartResp",
+            (),
+            {
+                "authorize_url": "https://github.com/login/oauth/authorize?state=xyz",
+                "cookie_header": "__Host-kb_oidc=val; Secure; HttpOnly",
+            },
+        )()
+    )
+    app.state.oidc_flow = mock_oidc
+
+    # Bind admin role to u1_id so AAL2 is required for u1
     ctx = RLSContext(principal_id=u1_id, workspace_id=ws_id, aal_level=2)
+    async with session_factory.session(ctx) as session:
+        await session.execute(text("RESET SESSION AUTHORIZATION"))
+        await session.execute(
+            text(
+                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
+                "VALUES (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
+            ),
+            {"ws_id": ws_id, "p_id": u1_id},
+        )
+        await session.commit()
+
+    # Fetch card slug
     async with session_factory.session(ctx) as session:
         card_slug = await session.scalar(
             text("SELECT slug FROM auth_provider_cards WHERE id = :id"), {"id": card_oidc_id}
@@ -340,7 +376,7 @@ async def test_case_6_security_aal1_and_stale_aal2_link_blocked(
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        # A: AAL1 session -> 403 AAL2_REQUIRED
+        # A: Admin user with AAL1 session -> 403 AAL2_REQUIRED
         current_principal = PrincipalContext(
             principal_id=u1_id,
             workspace_id=ws_id,
@@ -357,7 +393,7 @@ async def test_case_6_security_aal1_and_stale_aal2_link_blocked(
         data1 = resp1.json()
         assert data1["code"] == "AAL2_REQUIRED"
 
-        # B: Stale AAL2 session (> 900s) -> 403 AAL2_STALE
+        # B: Admin user with Stale AAL2 session (> 900s) -> 403 AAL2_STALE
         stale_time = datetime.now(UTC) - timedelta(seconds=905)
         current_principal = PrincipalContext(
             principal_id=u1_id,
@@ -374,6 +410,24 @@ async def test_case_6_security_aal1_and_stale_aal2_link_blocked(
         assert resp2.status_code == 403
         data2 = resp2.json()
         assert data2["code"] == "AAL2_STALE"
+
+        # C: Zero-factor standard user with AAL1 session -> succeeds (200 OK)
+        current_principal = PrincipalContext(
+            principal_id=u2_id,
+            workspace_id=ws_id,
+            token_scopes=("session",),
+            aal_level=1,
+            session_id=s2_id,
+            aal2_verified_at=None,
+        )
+        resp3 = await client.post(
+            "/api/v1/auth/identities/link/start",
+            json={"card_slug": card_slug},
+        )
+        assert resp3.status_code == 200
+        data3 = resp3.json()
+        assert data3["mode"] == "redirect"
+        assert "authorize_url" in data3
 
 
 @pytest.mark.asyncio
@@ -671,6 +725,7 @@ async def test_case_10_unlink_and_privilege_boundary(
             await session.execute(text("SELECT * FROM user_identities LIMIT 1"))
         err_msg = str(exc_priv.value)
         assert "permission denied for table user_identities" in err_msg or "42501" in err_msg
+        await session.rollback()
 
     # Same for identity_link_intents
     async with session_factory.session(ctx) as session:
@@ -681,6 +736,7 @@ async def test_case_10_unlink_and_privilege_boundary(
         assert (
             "permission denied for table identity_link_intents" in err_msg2 or "42501" in err_msg2
         )
+        await session.rollback()
 
 
 @pytest.mark.asyncio
@@ -702,6 +758,17 @@ async def test_api_endpoints_and_contract_samples(
 
     # Get card slugs
     ctx = RLSContext(principal_id=u1_id, workspace_id=ws_id, aal_level=2)
+    async with session_factory.session(ctx) as session:
+        await session.execute(text("RESET SESSION AUTHORIZATION"))
+        await session.execute(
+            text(
+                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
+                "VALUES (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
+            ),
+            {"ws_id": ws_id, "p_id": u1_id},
+        )
+        await session.commit()
+
     async with session_factory.session(ctx) as session:
         await session.scalar(
             text("SELECT slug FROM auth_provider_cards WHERE id = :id"), {"id": card_oidc_id}
@@ -872,24 +939,31 @@ async def test_api_endpoints_full_coverage(
 
     app.dependency_overrides[get_principal] = get_test_principal
 
-    # Mock OIDC flow with cookie header
+    # Mock OIDC flow with Response headers containing Location and Set-Cookie
+    from starlette.datastructures import Headers
+
+    class MockOidcResp:
+        def __init__(self, location: str, cookie: str | None = None) -> None:
+            raw = [
+                (b"location", location.encode("latin-1")),
+            ]
+            if cookie:
+                raw.append((b"set-cookie", cookie.encode("latin-1")))
+            self.headers = Headers(raw=raw)
+
     mock_oidc = AsyncMock()
     mock_oidc.start = AsyncMock(
-        return_value=type(
-            "StartResp",
-            (),
-            {
-                "authorize_url": "https://auth.example.com/oauth/authorize?state=abc",
-                "cookie_header": "__Host-kb_oidc=secretstate; Path=/; Secure; HttpOnly; SameSite=Lax",
-            },
-        )()
+        return_value=MockOidcResp(
+            "https://auth.example.com/oauth/authorize?state=abc",
+            "__Host-kb_oidc=secretstate; Path=/; Secure; HttpOnly; SameSite=Lax",
+        )
     )
     app.state.oidc_flow = mock_oidc
 
-    # Mock LDAP service
-    mock_ldap = AsyncMock()
-    mock_ldap.authenticate_user = AsyncMock(return_value=None)
-    app.state.ldap_service = mock_ldap
+    # Mock LDAP auth service (ldap_auth_service.authenticate)
+    mock_ldap_auth = AsyncMock()
+    mock_ldap_auth.authenticate = AsyncMock(return_value=None)
+    app.state.ldap_auth_service = mock_ldap_auth
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -903,7 +977,10 @@ async def test_api_endpoints_full_coverage(
         assert "__Host-kb_oidc" in resp_oidc.headers.get("set-cookie", "")
 
         # 1b. POST /link/start for OIDC without cookie_header
-        mock_oidc.start.return_value.cookie_header = None
+        mock_oidc.start.return_value = MockOidcResp(
+            "https://auth.example.com/oauth/authorize?state=abc",
+            cookie=None,
+        )
         resp_oidc_nocookie = await client.post(
             "/api/v1/auth/identities/link/start",
             json={"card_slug": oidc_slug},
@@ -1359,3 +1436,91 @@ async def test_identity_service_error_handling_and_unexpected_exceptions() -> No
     resolver_prov_none._open_session = lambda *args, **kwargs: ProvNoneSessionContext()  # type: ignore[assignment]
     with pytest.raises(RuntimeError, match="Failed to provision new user identity"):
         await resolver_prov_none.resolve(assertion, req, link_intent_id=None)
+
+
+@pytest.mark.asyncio
+async def test_require_link_aal2_edge_cases(pg_worker_db: AsyncEngine) -> None:
+    """Test require_link_aal2 branches: missing session_id, missing session_factory, verified_at None or naive, and endpoint session_factory guards."""
+    session_factory = RLSSessionFactory(pg_worker_db)
+    ws_id, users_and_sessions, _, _ = await _create_test_env(session_factory, num_users=1)
+    u1_id, s1_id = users_and_sessions[0]
+
+    ctx = RLSContext(principal_id=u1_id, workspace_id=ws_id, aal_level=2)
+    async with session_factory.session(ctx) as session:
+        await session.execute(text("RESET SESSION AUTHORIZATION"))
+        await session.execute(
+            text(
+                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
+                "VALUES (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
+            ),
+            {"ws_id": ws_id, "p_id": u1_id},
+        )
+        await session.commit()
+
+    app = FastAPI()
+    app.state.session_factory = session_factory
+    req = _make_dummy_request(app)
+
+    # 1. principal without session_id -> LINK_INTENT_INVALID
+    p_no_session = PrincipalContext(
+        principal_id=u1_id,
+        workspace_id=ws_id,
+        token_scopes=("session",),
+        aal_level=1,
+        session_id=None,
+    )
+    with pytest.raises(ProblemException) as exc1:
+        await require_link_aal2(req, p_no_session)
+    assert exc1.value.code == "LINK_INTENT_INVALID"
+
+    # 2. missing session_factory on app.state -> RuntimeError
+    app_no_sf = FastAPI()
+    req_no_sf = _make_dummy_request(app_no_sf)
+    p_valid = PrincipalContext(
+        principal_id=u1_id,
+        workspace_id=ws_id,
+        token_scopes=("session",),
+        aal_level=1,
+        session_id=s1_id,
+    )
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await require_link_aal2(req_no_sf, p_valid)
+
+    # 3. aal_level=2 but aal2_verified_at is None -> AAL2_STALE
+    p_no_verified_at = PrincipalContext(
+        principal_id=u1_id,
+        workspace_id=ws_id,
+        token_scopes=("session",),
+        aal_level=2,
+        session_id=s1_id,
+        aal2_verified_at=None,
+    )
+    with pytest.raises(ProblemException) as exc3:
+        await require_link_aal2(req, p_no_verified_at)
+    assert exc3.value.code == "AAL2_STALE"
+
+    # 4. verified_at without tzinfo (naive datetime) -> parsed with UTC and accepted if fresh
+    fresh_naive = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=10)
+    p_naive_fresh = PrincipalContext(
+        principal_id=u1_id,
+        workspace_id=ws_id,
+        token_scopes=("session",),
+        aal_level=2,
+        session_id=s1_id,
+        aal2_verified_at=fresh_naive,
+    )
+    res_naive = await require_link_aal2(req, p_naive_fresh)
+    assert res_naive.principal_id == u1_id
+
+    # 5. missing session_factory on start_identity_link and link_ldap_identity
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await start_identity_link(
+            req_no_sf, IdentityLinkStartRequest(card_slug="some-card"), p_valid
+        )
+
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await link_ldap_identity(
+            req_no_sf,
+            IdentityLinkLdapRequest(link_intent_id=uuid.uuid4(), username="u", password="p"),
+            p_valid,
+        )

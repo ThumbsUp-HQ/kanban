@@ -96,7 +96,6 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
     session: AuthSession,
     flow: FlowDep,
     return_to: Annotated[str | None, Query(max_length=2048)] = None,
-    link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
     remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
 ) -> Response:
     """Initialize authorization-code flow with PKCE S256 for an OIDC or OAuth2 card."""
@@ -106,7 +105,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
             session,
             slug,
             return_to=return_to,
-            link_intent_id=link_intent_id,
+            link_intent_id=None,
             request=request,
             remember_me=remember_me,
         )
@@ -155,7 +154,6 @@ async def oidc_callback(  # noqa: PLR0913, PLR0917
     state: Annotated[str | None, Query()] = None,
     error: Annotated[str | None, Query()] = None,
     error_description: Annotated[str | None, Query()] = None,
-    link_intent_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Response:
     """Handle IdP callback redirect, validate state and token, and establish session."""
     bind_request_log_user(request, f"oidc:{slug}")
@@ -172,7 +170,7 @@ async def oidc_callback(  # noqa: PLR0913, PLR0917
             error_description=error_description,
             browser_binding_cookie=browser_binding,
             request=request,
-            link_intent_id=link_intent_id,
+            link_intent_id=None,
         )
     except OidcError as err:
         logger.warning(

@@ -1,0 +1,48 @@
+=== 1. Ruff Check ===
+All checks passed!
+
+=== 2. MyPy ===
+Success: no issues found in 1091 source files
+
+=== 3. Lint Imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 959 files, 3363 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== 4. Check No Dashes ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-47504391/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== 5. TypeScript Check (tsc -b) ===
+
+=== 6. ESLint ===
+
+=== 7. CSS Tokens Audit Gate ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-47504391/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 19ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  06:10:24
+   Duration  1.02s (environment 94%, tests 2%, import 2%, worker 1%, transform 1%)
+
