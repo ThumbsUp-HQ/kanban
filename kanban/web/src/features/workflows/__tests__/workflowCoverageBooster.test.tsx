@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { HookPipelineRow } from '../HookPipelineRow';
@@ -390,20 +390,26 @@ describe('Workflow Studio Coverage Booster', () => {
       );
 
       // Trigger drag start and drop
-      registeredDraggable.onDragStart?.();
-      registeredDraggable.onDrop?.();
+      act(() => {
+        registeredDraggable.onDragStart?.();
+        registeredDraggable.onDrop?.();
+      });
 
       // Trigger drop on target from another hook
-      registeredDropTarget.onDrop?.({
-        source: {
-          data: { type: 'hook-row', hookId: 'hook-2' },
-        },
+      act(() => {
+        registeredDropTarget.onDrop?.({
+          source: {
+            data: { type: 'hook-row', hookId: 'hook-2' },
+          },
+        });
       });
       expect(onDropReorder).toHaveBeenCalledWith('hook-2', 'hook-1');
 
       // Drop with invalid or same hookId
-      registeredDropTarget.onDrop?.({ source: { data: { type: 'unrelated' } } });
-      registeredDropTarget.onDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
+      act(() => {
+        registeredDropTarget.onDrop?.({ source: { data: { type: 'unrelated' } } });
+        registeredDropTarget.onDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
+      });
     });
 
     it('exercises cli_pipe fallback allowlist and is-dragging style class', () => {
@@ -441,7 +447,9 @@ describe('Workflow Studio Coverage Booster', () => {
       expect(screen.getByText(/(\${context} \| agy)/i)).toBeDefined();
 
       // Trigger drag start
-      registeredDraggable.onDragStart?.();
+      act(() => {
+        registeredDraggable.onDragStart?.();
+      });
     });
 
     it('exercises copy SHA success', async () => {
@@ -531,7 +539,9 @@ describe('Workflow Studio Coverage Booster', () => {
       );
 
       // Trigger drop from hook-2 to hook-1
-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
+      act(() => {
+        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
+      });
 
       await waitFor(() => {
         expect(onReorder).toHaveBeenCalledWith(
@@ -541,12 +551,12 @@ describe('Workflow Studio Coverage Booster', () => {
       });
 
       // Same hook drop does nothing
-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
-
-      // Invalid hook drop does nothing
-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'non-existent' } } });
-      capturedOnDrop?.({ source: { data: { type: 'other' } } });
-      capturedOnDrop?.({ source: { data: null } });
+      act(() => {
+        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
+        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'non-existent' } } });
+        capturedOnDrop?.({ source: { data: { type: 'other' } } });
+        capturedOnDrop?.({ source: { data: null } });
+      });
     });
 
     it('handles non-Error rejection and drop error catch in TransitionRuleCard', async () => {
@@ -583,14 +593,18 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // Drop reorder with Error rejection
       onReorder.mockRejectedValueOnce(new Error('Drop failed error'));
-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
+      act(() => {
+        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
+      });
       await waitFor(() => {
         expect(screen.getByText('Drop failed error')).toBeDefined();
       });
 
       // Drop reorder with string rejection
       onReorder.mockRejectedValueOnce('Drop failed string');
-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
+      act(() => {
+        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
+      });
       await waitFor(() => {
         expect(screen.getByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
       });
@@ -736,7 +750,7 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // 1. Open Add Transition Rule dialog
       fireEvent.click(screen.getByRole('button', { name: 'Add Transition Rule' }));
-      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
+      expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
 
       // Submit creating a new hook
       fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'new-rule-hook' } });
@@ -813,11 +827,14 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // 1. Click + Add Hook to Transition from the card
       fireEvent.click(screen.getByRole('button', { name: /Add hook to In Review to Done/i }));
-      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
+      expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
 
       // Submit and catch non-AAL2 error
       fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'fail-hook' } });
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+      await waitFor(() => {
+        expect(screen.getByText('Create failure')).toBeDefined();
+      });
 
       // Close dialog
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -827,6 +844,9 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // 3. Move hook down with non-AAL2 error
       fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
+      await waitFor(() => {
+        expect(screen.getByText('Reorder failure')).toBeDefined();
+      });
     });
 
     it('exercises AAL2 challenge TOTP verification and replay', async () => {
@@ -1152,8 +1172,8 @@ describe('Workflow Studio Coverage Booster', () => {
         />,
       );
 
-      // Switch to agent interceptor
-      fireEvent.click(screen.getByLabelText('Agent Interceptor'));
+      // Switch to agent transition helper
+      fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
       expect(screen.getByText('Remote Pool Agent')).toBeDefined();
 
       // Click Cancel
@@ -1161,7 +1181,7 @@ describe('Workflow Studio Coverage Booster', () => {
       expect(handleClose).toHaveBeenCalled();
     });
 
-    it('exercises mutator submission, mutable field toggle off, and select onChange handlers', () => {
+    it('exercises mutator submission, mutable field toggle off, and select onChange handlers', async () => {
       const onSave = vi.fn();
       const onClose = vi.fn();
 
@@ -1203,7 +1223,7 @@ describe('Workflow Studio Coverage Booster', () => {
       fireEvent.change(wasmSelect, { target: { value: api.DEFAULT_WASM_MODULES[1]?.sha256 ?? 'sha' } });
 
       // Change Failure Policy select
-      const failurePolicySelect = screen.getByLabelText(/Failure Policy/i);
+      const failurePolicySelect = screen.getByLabelText(/Failure Policy/i, { selector: 'select' });
       fireEvent.change(failurePolicySelect, { target: { value: 'fail_open_warn' } });
 
       // Toggle mutable field ON then OFF
@@ -1217,14 +1237,17 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // Submit
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
-      expect(onSave).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'mutator-hook',
-          hook_kind: 'sync_mutator',
-          failure_policy: 'fail_open_warn',
-          allowed_mutable_fields: ['assignees'],
-        }),
-      );
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'mutator-hook',
+            hook_kind: 'sync_mutator',
+            failure_policy: 'fail_open_warn',
+            allowed_mutable_fields: ['assignees'],
+          }),
+        );
+        expect(onClose).toHaveBeenCalled();
+      });
 
       // Rerender with empty states
       rerender(
@@ -1237,7 +1260,7 @@ describe('Workflow Studio Coverage Booster', () => {
           onClose={vi.fn()}
         />,
       );
-      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
+      expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
     });
 
     it('handles empty to_state and non-Error save failure', async () => {
@@ -1313,8 +1336,8 @@ describe('Workflow Studio Coverage Booster', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
       expect(screen.getByText('from_state and to_state cannot be identical.')).toBeDefined();
 
-      // Switch to Agent Interceptor to render fallback optgroups
-      fireEvent.click(screen.getByLabelText('Agent Interceptor'));
+      // Switch to Agent Transition Helper to render fallback optgroups
+      fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
       expect(screen.getByText(/CLI None \(cli\)/i)).toBeDefined();
       expect(screen.getByText(/SDK No Model \(ollama\)/i)).toBeDefined();
     });

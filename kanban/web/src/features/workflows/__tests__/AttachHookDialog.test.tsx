@@ -89,7 +89,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(labelsCheckbox.disabled).toBe(false);
 
     // Switch to agent_interceptor: Wasm module hidden, Agent definition visible
-    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
     expect(screen.queryByLabelText(/Approved Wasm Module/i)).toBeNull();
     expect(screen.getByLabelText(/Agent Definition/i)).toBeDefined();
     expect(screen.getByTestId('agent-details-summary')).toBeDefined();
@@ -149,7 +149,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
 
     // Switch to agent_interceptor
-    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
     fireEvent.change(screen.getByLabelText(/Agent Definition/i), { target: { value: 'forensic-code-check' } });
 
     // Check mutable fields

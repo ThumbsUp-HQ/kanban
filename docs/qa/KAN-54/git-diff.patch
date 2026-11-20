@@ -1,0 +1,432 @@
+diff --git a/kanban/web/e2e/workflow-studio.spec.ts b/kanban/web/e2e/workflow-studio.spec.ts
+index fdb0a675..261b3b03 100644
+--- a/kanban/web/e2e/workflow-studio.spec.ts
++++ b/kanban/web/e2e/workflow-studio.spec.ts
+@@ -8,7 +8,7 @@
+  * Verifies:
+  * 1. S14.4 wireframe fidelity (In Review -> Done card with 3 hooks, latency budget, ro mount, emoji hint popover).
+  * 2. Hook reordering (drag-and-drop & keyboard move), toggle enable/disable, and error recovery.
+- * 3. AttachHookDialog conditional Wasm vs Agent interceptor selectors, MUTABLE_FIELD_UNIVERSE chips.
++ * 3. AttachHookDialog conditional Wasm vs Agent transition helper selectors, MUTABLE_FIELD_UNIVERSE chips.
+  * 4. Sample-ticket / existing-issue DryRunDrawer with rejection reasons and copyable CLI validation snippet.
+  * 5. Security guards: non-admin 404 anti-enumeration view, AAL2 step-up elevation challenge.
+  * 6. Multi-device annotated screenshots across desktop, tablet, and mobile viewports.
+@@ -262,7 +262,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
+         },
+         {
+           selector: '[data-testid="hook-pipeline-row-hook-2"]',
+-          label: 'CLI Agent Interceptor (forensic-code-check, agy -p, :ro mount)',
++          label: 'CLI Agent Transition Helper (forensic-code-check, agy -p, :ro mount)',
+           note: 'Isolated subprocess execution with restricted mutable fields [labels]',
+         },
+         {
+@@ -294,9 +294,9 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
+ 
+     const dialog = page.locator('[role="dialog"]');
+     await expect(dialog).toBeVisible();
+-    await expect(page.locator('#attach-hook-title')).toHaveText('Attach Workflow Interceptor Hook');
++    await expect(page.locator('#attach-hook-title')).toHaveText('Attach Workflow Helper Hook');
+ 
+-    // Select Agent Interceptor
++    // Select Agent Transition Helper
+     const agentRadio = page.locator('input[type="radio"][value="agent_interceptor"]');
+     await agentRadio.check();
+ 
+@@ -330,7 +330,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
+         {
+           selector: '[role="radiogroup"][aria-label="Hook Kind"]',
+           label: 'Hook Kind RadioGroup',
+-          note: 'Switches between Sync Wasm Validator, Sync Wasm Mutator, and Agent Interceptor',
++          note: 'Switches between Sync Wasm Validator, Sync Wasm Mutator, and Agent Transition Helper',
+         },
+         {
+           selector: '[data-testid="agent-details-summary"]',
+@@ -406,7 +406,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
+         },
+         {
+           selector: '[data-testid="dry-run-step-2"]',
+-          label: 'Step 2 Interceptor: Skipped Async',
++          label: 'Step 2 Helper: Skipped Async',
+           note: 'Asynchronous agent hooks are skipped in interactive UI dry-runs',
+         },
+         {
+diff --git a/kanban/web/src/dev/IconStory.tsx b/kanban/web/src/dev/IconStory.tsx
+index 5a289fb4..9ebd3d1b 100644
+--- a/kanban/web/src/dev/IconStory.tsx
++++ b/kanban/web/src/dev/IconStory.tsx
+@@ -24,7 +24,7 @@ export function IconStory(): JSX.Element {
+     { id: 'mod-2', name: 'Kanban Board', emoji: '📋' },
+     { id: 'mod-3', name: 'Security Vault', emoji: '🛡️' },
+     { id: 'mod-4', name: 'Custom Scripts', emoji: '🧪' },
+-    { id: 'mod-5', name: 'AI Interceptors', emoji: '🤖' },
++    { id: 'mod-5', name: 'AI Transition Helpers', emoji: '🤖' },
+     { id: 'mod-6', name: 'No Emoji Module' },
+   ];
+ 
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index 379c281f..ccd52568 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -148,7 +148,7 @@ function AttachHookDialogInner({
+       >
+         <div className="workflow-dialog-header">
+           <h2 id="attach-hook-title" className="workflow-dialog-title">
+-            {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Interceptor Hook'}
++            {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Helper Hook'}
+           </h2>
+         </div>
+ 
+@@ -221,11 +221,11 @@ function AttachHookDialogInner({
+                 Hook Kind
+                 <FieldHelpHint
+                   title="Workflow Hook Kind"
+-                  summary="The execution tier for this transition interceptor rule."
++                  summary="The execution tier for this transition helper rule."
+                   validValues={[
+                     { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
+                     { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
+-                    { label: 'Agent Interceptor', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
++                    { label: 'Agent Transition Helper', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
+                   ]}
+                   docHref="/docs/scriptrunner-workflows-and-transition-interceptors#interceptor-architecture"
+                   testId="hook-kind-help"
+@@ -260,7 +260,7 @@ function AttachHookDialogInner({
+                     checked={hookKind === 'agent_interceptor'}
+                     onChange={() => { setHookKind('agent_interceptor'); }}
+                   />
+-                  Agent Interceptor
++                  Agent Transition Helper
+                 </label>
+               </div>
+             </div>
+@@ -286,13 +286,13 @@ function AttachHookDialogInner({
+               </div>
+             )}
+ 
+-            {/* Conditional: Agent Interceptor selector */}
++            {/* Conditional: Agent Transition Helper selector */}
+             {hookKind === 'agent_interceptor' && (
+               agentDefinitions.length === 0 ? (
+                 <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
+                   <strong>No Agent Definitions configured</strong>
+                   <p style={{ margin: '4px 0 8px' }}>
+-                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Interceptor hook.
++                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
+                   </p>
+                   <Link
+                     to="/workspaces/settings"
+@@ -367,7 +367,7 @@ function AttachHookDialogInner({
+                 Failure Policy
+                 <FieldHelpHint
+                   title="Failure Policy"
+-                  summary="Specifies behavior when interceptor times out, returns an error, or crashes."
++                  summary="Specifies behavior when helper times out, returns an error, or crashes."
+                   validValues={[
+                     { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
+                     { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+index 0e0b6044..c8f202f3 100644
+--- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -279,12 +279,12 @@ export function WorkflowStudioPage({
+         <h1 className="workflow-studio-title">
+           <span>⚙️ Project</span>
+           <span className="workflow-studio-title-badge">{projectKey}</span>
+-          <span>&gt; Workflow &amp; Transition Interceptors</span>
++          <span>&gt; Scripted Workflows &amp; Transition Helpers</span>
+         </h1>
+         <div className="workflow-studio-actions">
+           <StudioDocLink
+             href="/docs/scriptrunner-workflows-and-transition-interceptors"
+-            title="Workflow Interceptor Documentation"
++            title="Scripted Workflows &amp; Transition Helpers Documentation"
+             testId="workflow-studio-doc-link"
+           />
+           <button
+@@ -311,7 +311,7 @@ export function WorkflowStudioPage({
+ 
+       {/* Loading State */}
+       {isLoading ? (
+-        <div className="empty-hooks-cta">Loading workflow interceptor rules...</div>
++        <div className="empty-hooks-cta">Loading workflow helper rules...</div>
+       ) : rules.length === 0 ? (
+         <div className="empty-hooks-cta" data-testid="empty-studio-state">
+           No workflow transition rules configured for Project {projectKey}. Click &apos;+ Add Transition Rule&apos; to create one.
+diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+index 6fc155d8..1a47cf4e 100644
+--- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+@@ -89,7 +89,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     expect(labelsCheckbox.disabled).toBe(false);
+ 
+     // Switch to agent_interceptor: Wasm module hidden, Agent definition visible
+-    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+     expect(screen.queryByLabelText(/Approved Wasm Module/i)).toBeNull();
+     expect(screen.getByLabelText(/Agent Definition/i)).toBeDefined();
+     expect(screen.getByTestId('agent-details-summary')).toBeDefined();
+@@ -149,7 +149,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
+ 
+     // Switch to agent_interceptor
+-    fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+     fireEvent.change(screen.getByLabelText(/Agent Definition/i), { target: { value: 'forensic-code-check' } });
+ 
+     // Check mutable fields
+diff --git a/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx b/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
+index 4d9b8610..4efd965d 100644
+--- a/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/DryRunDrawer.test.tsx
+@@ -112,6 +112,9 @@ describe('DryRunDrawer (KB-P5-24)', () => {
+     expect(writeTextSpy).toHaveBeenCalledWith(
+       expect.stringContaining('uv run kanban-agent validate-transition'),
+     );
++    await waitFor(() => {
++      expect(screen.getByText('Copied!')).toBeDefined();
++    });
+   });
+ 
+   it('switches between sample ticket and existing issue modes', async () => {
+diff --git a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+index f21d2d74..2f04a4da 100644
+--- a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+@@ -48,7 +48,7 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
+ 
+     // Verify header
+     await waitFor(() => {
+-      expect(screen.getByText(/Workflow & Transition Interceptors/i)).toBeDefined();
++      expect(screen.getByText(/Scripted Workflows & Transition Helpers/i)).toBeDefined();
+       expect(screen.getByText('KAN')).toBeDefined();
+     });
+ 
+@@ -128,7 +128,7 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
+       expect(screen.getByText('Not found or no access')).toBeDefined();
+     });
+ 
+-    expect(screen.queryByText(/Workflow & Transition Interceptors/i)).toBeNull();
++    expect(screen.queryByText(/Scripted Workflows & Transition Helpers/i)).toBeNull();
+     expect(createSpy).not.toHaveBeenCalled();
+     expect(reorderSpy).not.toHaveBeenCalled();
+   });
+diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+index 5350d0f4..d704dc70 100644
+--- a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
+@@ -3,7 +3,7 @@
+ 
+ import React from 'react';
+ import { describe, expect, it, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import { HookPipelineRow } from '../HookPipelineRow';
+@@ -390,20 +390,26 @@ describe('Workflow Studio Coverage Booster', () => {
+       );
+ 
+       // Trigger drag start and drop
+-      registeredDraggable.onDragStart?.();
+-      registeredDraggable.onDrop?.();
++      act(() => {
++        registeredDraggable.onDragStart?.();
++        registeredDraggable.onDrop?.();
++      });
+ 
+       // Trigger drop on target from another hook
+-      registeredDropTarget.onDrop?.({
+-        source: {
+-          data: { type: 'hook-row', hookId: 'hook-2' },
+-        },
++      act(() => {
++        registeredDropTarget.onDrop?.({
++          source: {
++            data: { type: 'hook-row', hookId: 'hook-2' },
++          },
++        });
+       });
+       expect(onDropReorder).toHaveBeenCalledWith('hook-2', 'hook-1');
+ 
+       // Drop with invalid or same hookId
+-      registeredDropTarget.onDrop?.({ source: { data: { type: 'unrelated' } } });
+-      registeredDropTarget.onDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
++      act(() => {
++        registeredDropTarget.onDrop?.({ source: { data: { type: 'unrelated' } } });
++        registeredDropTarget.onDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
++      });
+     });
+ 
+     it('exercises cli_pipe fallback allowlist and is-dragging style class', () => {
+@@ -441,7 +447,9 @@ describe('Workflow Studio Coverage Booster', () => {
+       expect(screen.getByText(/(\${context} \| agy)/i)).toBeDefined();
+ 
+       // Trigger drag start
+-      registeredDraggable.onDragStart?.();
++      act(() => {
++        registeredDraggable.onDragStart?.();
++      });
+     });
+ 
+     it('exercises copy SHA success', async () => {
+@@ -531,7 +539,9 @@ describe('Workflow Studio Coverage Booster', () => {
+       );
+ 
+       // Trigger drop from hook-2 to hook-1
+-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      act(() => {
++        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      });
+ 
+       await waitFor(() => {
+         expect(onReorder).toHaveBeenCalledWith(
+@@ -541,12 +551,12 @@ describe('Workflow Studio Coverage Booster', () => {
+       });
+ 
+       // Same hook drop does nothing
+-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
+-
+-      // Invalid hook drop does nothing
+-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'non-existent' } } });
+-      capturedOnDrop?.({ source: { data: { type: 'other' } } });
+-      capturedOnDrop?.({ source: { data: null } });
++      act(() => {
++        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-1' } } });
++        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'non-existent' } } });
++        capturedOnDrop?.({ source: { data: { type: 'other' } } });
++        capturedOnDrop?.({ source: { data: null } });
++      });
+     });
+ 
+     it('handles non-Error rejection and drop error catch in TransitionRuleCard', async () => {
+@@ -583,14 +593,18 @@ describe('Workflow Studio Coverage Booster', () => {
+ 
+       // Drop reorder with Error rejection
+       onReorder.mockRejectedValueOnce(new Error('Drop failed error'));
+-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      act(() => {
++        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      });
+       await waitFor(() => {
+         expect(screen.getByText('Drop failed error')).toBeDefined();
+       });
+ 
+       // Drop reorder with string rejection
+       onReorder.mockRejectedValueOnce('Drop failed string');
+-      capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      act(() => {
++        capturedOnDrop?.({ source: { data: { type: 'hook-row', hookId: 'hook-2' } } });
++      });
+       await waitFor(() => {
+         expect(screen.getByText('Reorder failed: 422 REORDER_SET_MISMATCH')).toBeDefined();
+       });
+@@ -736,7 +750,7 @@ describe('Workflow Studio Coverage Booster', () => {
+ 
+       // 1. Open Add Transition Rule dialog
+       fireEvent.click(screen.getByRole('button', { name: 'Add Transition Rule' }));
+-      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
++      expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
+ 
+       // Submit creating a new hook
+       fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'new-rule-hook' } });
+@@ -813,11 +827,14 @@ describe('Workflow Studio Coverage Booster', () => {
+ 
+       // 1. Click + Add Hook to Transition from the card
+       fireEvent.click(screen.getByRole('button', { name: /Add hook to In Review to Done/i }));
+-      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
++      expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
+ 
+       // Submit and catch non-AAL2 error
+       fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'fail-hook' } });
+       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++      await waitFor(() => {
++        expect(screen.getByText('Create failure')).toBeDefined();
++      });
+ 
+       // Close dialog
+       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+@@ -827,6 +844,9 @@ describe('Workflow Studio Coverage Booster', () => {
+ 
+       // 3. Move hook down with non-AAL2 error
+       fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
++      await waitFor(() => {
++        expect(screen.getByText('Reorder failure')).toBeDefined();
++      });
+     });
+ 
+     it('exercises AAL2 challenge TOTP verification and replay', async () => {
+@@ -1152,8 +1172,8 @@ describe('Workflow Studio Coverage Booster', () => {
+         />,
+       );
+ 
+-      // Switch to agent interceptor
+-      fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++      // Switch to agent transition helper
++      fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+       expect(screen.getByText('Remote Pool Agent')).toBeDefined();
+ 
+       // Click Cancel
+@@ -1161,7 +1181,7 @@ describe('Workflow Studio Coverage Booster', () => {
+       expect(handleClose).toHaveBeenCalled();
+     });
+ 
+-    it('exercises mutator submission, mutable field toggle off, and select onChange handlers', () => {
++    it('exercises mutator submission, mutable field toggle off, and select onChange handlers', async () => {
+       const onSave = vi.fn();
+       const onClose = vi.fn();
+ 
+@@ -1203,7 +1223,7 @@ describe('Workflow Studio Coverage Booster', () => {
+       fireEvent.change(wasmSelect, { target: { value: api.DEFAULT_WASM_MODULES[1]?.sha256 ?? 'sha' } });
+ 
+       // Change Failure Policy select
+-      const failurePolicySelect = screen.getByLabelText(/Failure Policy/i);
++      const failurePolicySelect = screen.getByLabelText(/Failure Policy/i, { selector: 'select' });
+       fireEvent.change(failurePolicySelect, { target: { value: 'fail_open_warn' } });
+ 
+       // Toggle mutable field ON then OFF
+@@ -1217,14 +1237,17 @@ describe('Workflow Studio Coverage Booster', () => {
+ 
+       // Submit
+       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+-      expect(onSave).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          name: 'mutator-hook',
+-          hook_kind: 'sync_mutator',
+-          failure_policy: 'fail_open_warn',
+-          allowed_mutable_fields: ['assignees'],
+-        }),
+-      );
++      await waitFor(() => {
++        expect(onSave).toHaveBeenCalledWith(
++          expect.objectContaining({
++            name: 'mutator-hook',
++            hook_kind: 'sync_mutator',
++            failure_policy: 'fail_open_warn',
++            allowed_mutable_fields: ['assignees'],
++          }),
++        );
++        expect(onClose).toHaveBeenCalled();
++      });
+ 
+       // Rerender with empty states
+       rerender(
+@@ -1237,7 +1260,7 @@ describe('Workflow Studio Coverage Booster', () => {
+           onClose={vi.fn()}
+         />,
+       );
+-      expect(screen.getByText('Attach Workflow Interceptor Hook')).toBeDefined();
++      expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
+     });
+ 
+     it('handles empty to_state and non-Error save failure', async () => {
+@@ -1313,8 +1336,8 @@ describe('Workflow Studio Coverage Booster', () => {
+       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+       expect(screen.getByText('from_state and to_state cannot be identical.')).toBeDefined();
+ 
+-      // Switch to Agent Interceptor to render fallback optgroups
+-      fireEvent.click(screen.getByLabelText('Agent Interceptor'));
++      // Switch to Agent Transition Helper to render fallback optgroups
++      fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+       expect(screen.getByText(/CLI None \(cli\)/i)).toBeDefined();
+       expect(screen.getByText(/SDK No Model \(ollama\)/i)).toBeDefined();
+     });

@@ -24,7 +24,7 @@ export function IconStory(): JSX.Element {
     { id: 'mod-2', name: 'Kanban Board', emoji: '📋' },
     { id: 'mod-3', name: 'Security Vault', emoji: '🛡️' },
     { id: 'mod-4', name: 'Custom Scripts', emoji: '🧪' },
-    { id: 'mod-5', name: 'AI Interceptors', emoji: '🤖' },
+    { id: 'mod-5', name: 'AI Transition Helpers', emoji: '🤖' },
     { id: 'mod-6', name: 'No Emoji Module' },
   ];
 

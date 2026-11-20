@@ -48,7 +48,7 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
 
     // Verify header
     await waitFor(() => {
-      expect(screen.getByText(/Workflow & Transition Interceptors/i)).toBeDefined();
+      expect(screen.getByText(/Scripted Workflows & Transition Helpers/i)).toBeDefined();
       expect(screen.getByText('KAN')).toBeDefined();
     });
 
@@ -128,7 +128,7 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       expect(screen.getByText('Not found or no access')).toBeDefined();
     });
 
-    expect(screen.queryByText(/Workflow & Transition Interceptors/i)).toBeNull();
+    expect(screen.queryByText(/Scripted Workflows & Transition Helpers/i)).toBeNull();
     expect(createSpy).not.toHaveBeenCalled();
     expect(reorderSpy).not.toHaveBeenCalled();
   });

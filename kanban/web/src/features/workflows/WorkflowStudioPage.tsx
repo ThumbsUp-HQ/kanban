@@ -279,12 +279,12 @@ export function WorkflowStudioPage({
         <h1 className="workflow-studio-title">
           <span>⚙️ Project</span>
           <span className="workflow-studio-title-badge">{projectKey}</span>
-          <span>&gt; Workflow &amp; Transition Interceptors</span>
+          <span>&gt; Scripted Workflows &amp; Transition Helpers</span>
         </h1>
         <div className="workflow-studio-actions">
           <StudioDocLink
             href="/docs/scriptrunner-workflows-and-transition-interceptors"
-            title="Workflow Interceptor Documentation"
+            title="Scripted Workflows &amp; Transition Helpers Documentation"
             testId="workflow-studio-doc-link"
           />
           <button
@@ -311,7 +311,7 @@ export function WorkflowStudioPage({
 
       {/* Loading State */}
       {isLoading ? (
-        <div className="empty-hooks-cta">Loading workflow interceptor rules...</div>
+        <div className="empty-hooks-cta">Loading workflow helper rules...</div>
       ) : rules.length === 0 ? (
         <div className="empty-hooks-cta" data-testid="empty-studio-state">
           No workflow transition rules configured for Project {projectKey}. Click &apos;+ Add Transition Rule&apos; to create one.
