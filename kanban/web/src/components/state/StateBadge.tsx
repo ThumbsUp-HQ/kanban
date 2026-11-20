@@ -1,13 +1,14 @@
-import React, { type JSX } from 'react';
+import React, { useEffect, useRef, type JSX } from 'react';
 import { StateProgressRing } from '../icons/KanbanIcons';
 import './StateBadge.css';
 
 export type StateGroupKey = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
 
 export interface StateObject {
-  id?: string;
-  name?: string;
-  group?: StateGroupKey | (string & {});
+  id?: string | undefined;
+  name?: string | undefined;
+  group?: StateGroupKey | (string & {}) | undefined;
+  color_hex?: string | null | undefined;
 }
 
 export const STATE_EMOJI_MAP: Record<StateGroupKey, string> = {
@@ -29,14 +30,16 @@ export function normalizeStateGroup(groupOrName?: string): StateGroupKey {
 }
 
 export interface StateBadgeProps {
-  state?: StateObject | string;
-  name?: string;
-  group?: StateGroupKey | (string & {});
-  showEmoji?: boolean;
-  showRing?: boolean;
-  showLabel?: boolean;
-  className?: string;
-  testId?: string;
+  state?: StateObject | string | undefined;
+  name?: string | undefined;
+  group?: StateGroupKey | (string & {}) | undefined;
+  color_hex?: string | null | undefined;
+  colorHex?: string | null | undefined;
+  showEmoji?: boolean | undefined;
+  showRing?: boolean | undefined;
+  showLabel?: boolean | undefined;
+  className?: string | undefined;
+  testId?: string | undefined;
 }
 
 /**
@@ -49,12 +52,35 @@ export function StateBadge({
   state,
   name,
   group,
+  color_hex,
+  colorHex,
   showEmoji = true,
   showRing = true,
   showLabel = true,
   className = '',
   testId,
 }: StateBadgeProps): JSX.Element {
+  const badgeRef = useRef<HTMLSpanElement | null>(null);
+
+  const rawColorHex =
+    colorHex ??
+    color_hex ??
+    (typeof state === 'object' ? state.color_hex : null);
+  const safeHex =
+    rawColorHex && /^#[0-9A-Fa-f]{6}$/.test(rawColorHex.trim())
+      ? rawColorHex.trim()
+      : null;
+
+  useEffect(() => {
+    const el = badgeRef.current;
+    if (!el) return;
+    if (safeHex) {
+      el.style.setProperty('--state-custom-fg', safeHex);
+    } else {
+      el.style.removeProperty('--state-custom-fg');
+    }
+  }, [safeHex]);
+
   let resolvedGroup: StateGroupKey = 'unstarted';
   let resolvedName = name ?? '';
 
@@ -81,6 +107,7 @@ export function StateBadge({
   const classNames = [
     'state-badge',
     `state-badge--${resolvedGroup}`,
+    safeHex ? 'state-badge--custom' : '',
     isCompact ? 'state-badge--compact' : '',
     className,
   ]
@@ -89,6 +116,7 @@ export function StateBadge({
 
   return (
     <span
+      ref={badgeRef}
       className={classNames}
       data-state-group={resolvedGroup}
       data-testid={testId ?? `state-badge-${resolvedGroup}`}
@@ -104,6 +132,7 @@ export function StateBadge({
           state={ringState}
           size={14}
           className="state-badge__ring"
+          stroke={safeHex ?? undefined}
         />
       )}
       {showLabel && (

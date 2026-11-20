@@ -674,7 +674,12 @@ async def serialize_issue(
             else issue.description_markdown
         ),
         description_sha256=sha256_hex,
-        state=StateSummary(id=state.id, name=state.name, group=state.state_group),
+        state=StateSummary(
+            id=state.id,
+            name=state.name,
+            group=state.state_group,
+            color_hex=state.color_hex,
+        ),
         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
         start_date=issue.start_date,
         due_date=issue.due_date,

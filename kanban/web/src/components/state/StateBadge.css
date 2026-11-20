@@ -49,6 +49,14 @@
   border-color: var(--state-cancelled-border, rgba(239, 68, 68, 0.28));
 }
 
+.state-badge--custom {
+  color: var(--state-custom-fg);
+  border-color: var(--state-custom-border);
+  border-color: color-mix(in srgb, var(--state-custom-fg) 28%, transparent);
+  background-color: var(--state-custom-bg);
+  background-color: color-mix(in srgb, var(--state-custom-fg) 12%, transparent);
+}
+
 .state-badge__emoji {
   line-height: 1;
   font-size: 0.8125rem;

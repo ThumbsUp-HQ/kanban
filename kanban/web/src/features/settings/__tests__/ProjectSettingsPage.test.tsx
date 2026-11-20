@@ -1249,6 +1249,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     const input = screen.getByTestId('member-principal-id-input');
     fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'cibot' } });
+    expect(await screen.findByTestId('principal-option-agent-uuid-1')).toBeDefined();
+
     fireEvent.change(input, { target: { value: 'Security' } });
 
     // Dropdown should be open and filter to Security Ops
@@ -1353,7 +1356,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         id: 'tr-cycle-1',
         key: 'cycle-uuid-1',
         kind: 'cycle',
-        title: 'Sprint 42',
+        title: '',
         deleted_at: '2026-11-10T12:00:00Z',
         purge_after: '2026-11-12T12:00:00Z',
         remaining_days: 2,
@@ -1438,7 +1441,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     // Verify all items rendered
     expect(await screen.findByText('Broken Pipeline Bug')).toBeDefined();
-    expect(screen.getByText('Sprint 42')).toBeDefined();
+    expect(screen.getByText('cycle-uuid-1')).toBeDefined();
     expect(screen.getByText('Payment Gateway')).toBeDefined();
     expect(screen.getByText('Meeting Notes')).toBeDefined();
     expect(screen.getByText('Architecture Spec')).toBeDefined();
@@ -1452,7 +1455,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     const filterCycle = screen.getByTestId('trash-filter-cycle');
     fireEvent.click(filterCycle);
 
-    expect(screen.getByText('Sprint 42')).toBeDefined();
+    expect(screen.getByText('cycle-uuid-1')).toBeDefined();
     expect(screen.queryByText('Broken Pipeline Bug')).toBeNull();
 
     const filterAll = screen.getByTestId('trash-filter-all');
@@ -1474,7 +1477,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
     await waitFor(() => {
       expect(destructiveRestoreCalled).toBe(true);
-      expect(screen.getByText('Successfully restored Sprint 42.')).toBeDefined();
+      expect(screen.getByText('Successfully restored cycle-uuid-1.')).toBeDefined();
     });
   });
 
@@ -2994,5 +2997,413 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(confirmBtn);
 
     expect(await screen.findByText('Deletion rejected by server invariant')).toBeDefined();
+  });
+
+  it('supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1)', async () => {
+    const stateList: Record<string, unknown>[] = [
+      {
+        id: 'st-edit-1',
+        name: 'Backlog',
+        group: 'backlog',
+        sort_order: 1,
+        color_hex: '#64748b',
+        is_default: false,
+        wip_soft_limit: null,
+        wip_hard_limit: null,
+      },
+      {
+        id: 'st-edit-2',
+        name: 'In Progress',
+        group: 'started',
+        sort_order: 2,
+        color_hex: '#4f46e5',
+        is_default: true,
+        wip_soft_limit: 3,
+        wip_hard_limit: 5,
+      },
+    ];
+
+    let patchedStateBody: Record<string, unknown> | null = null;
+    let mockErrorType: 'TAKEN' | 'LAST_GROUP' | 'DEFAULT_REQ' | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true };
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+          status: 'active',
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
+        return stateList;
+      }
+      if (url.includes('/api/v1/projects/KAN/states/st-edit-1') && m === 'PATCH') {
+        if (mockErrorType === 'TAKEN') {
+          throw new Error('STATE_NAME_TAKEN: state name already exists');
+        }
+        if (mockErrorType === 'LAST_GROUP') {
+          throw new Error('LAST_STATE_IN_GROUP');
+        }
+        if (mockErrorType === 'DEFAULT_REQ') {
+          throw new Error('DEFAULT_STATE_REQUIRED');
+        }
+        patchedStateBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        return {
+          ...stateList[0],
+          ...patchedStateBody,
+        };
+      }
+      return {};
+    });
+
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderComponent('KAN');
+
+    const statesTab = await screen.findByTestId('tab-states');
+    fireEvent.click(statesTab);
+
+    // Click edit state button
+    const editBtn = await screen.findByTestId('edit-state-btn-st-edit-1');
+    fireEvent.click(editBtn);
+
+    // Live preview badge should be present
+    expect(await screen.findByTestId('state-edit-preview-st-edit-1')).toBeDefined();
+
+    // Verify empty name and Preview fallback
+    const nameInput = screen.getByTestId('state-edit-name-st-edit-1');
+    fireEvent.change(nameInput, { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    expect(await screen.findByText('Workflow state name is required.')).toBeDefined();
+
+    // Verify name length validation: > 64 chars
+    const longName = 'A'.repeat(65);
+    fireEvent.change(nameInput, { target: { value: longName } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    expect(await screen.findByText('Workflow state name cannot exceed 64 characters.')).toBeDefined();
+
+    // Set valid fields
+    fireEvent.change(nameInput, { target: { value: 'Purple Backlog' } });
+    const groupSelect = screen.getByTestId('state-edit-group-st-edit-1');
+    fireEvent.change(groupSelect, { target: { value: 'unstarted' } });
+    const colorInput = screen.getByTestId('state-edit-color-st-edit-1-input');
+    fireEvent.change(colorInput, { target: { value: '#7c3aed' } });
+    const defaultCheck = screen.getByTestId('state-edit-default-st-edit-1');
+    fireEvent.click(defaultCheck);
+    const softWip = screen.getByTestId('state-edit-wip-soft-st-edit-1');
+    fireEvent.change(softWip, { target: { value: '5' } });
+    const hardWip = screen.getByTestId('state-edit-wip-hard-st-edit-1');
+    fireEvent.change(hardWip, { target: { value: '10' } });
+
+    // Test STATE_NAME_TAKEN error mapping
+    mockErrorType = 'TAKEN';
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    expect(
+      await screen.findByText('A workflow state with this name already exists in this project.'),
+    ).toBeDefined();
+
+    // Test LAST_STATE_IN_GROUP error mapping
+    mockErrorType = 'LAST_GROUP';
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    expect(
+      await screen.findByText('Cannot move the last remaining state out of this lifecycle group.'),
+    ).toBeDefined();
+
+    // Test DEFAULT_STATE_REQUIRED error mapping
+    mockErrorType = 'DEFAULT_REQ';
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    expect(
+      await screen.findByText(
+        'A default state is required. Designate another default state before removing this one.',
+      ),
+    ).toBeDefined();
+
+    // Successful save without is_default: true to exercise return s
+    mockErrorType = null;
+    fireEvent.click(screen.getByTestId('state-edit-default-st-edit-1'));
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Workflow state "Purple Backlog" updated.')).toBeDefined();
+    });
+
+    // Reopen and save with is_default: true
+    fireEvent.click(screen.getByTestId('edit-state-btn-st-edit-1'));
+    fireEvent.click(screen.getByTestId('state-edit-default-st-edit-1'));
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Workflow state "Purple Backlog" updated.')).toBeDefined();
+    });
+
+    expect(patchedStateBody).toEqual({
+      name: 'Purple Backlog',
+      group: 'unstarted',
+      color_hex: '#7c3aed',
+      wip_soft_limit: 5,
+      wip_hard_limit: 10,
+      is_default: true,
+    });
+
+    // Invalidation assertions
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
+  });
+
+  it('persists both swapped sort orders on state reorder and invalidates caches (KAN-43 Problem 1)', async () => {
+    const stateList: Record<string, unknown>[] = [
+      {
+        id: 'st-re-1',
+        name: 'State One',
+        group: 'backlog',
+        sort_order: 10,
+        color_hex: '#64748b',
+        is_default: false,
+      },
+      {
+        id: 'st-re-2',
+        name: 'State Two',
+        group: 'started',
+        sort_order: 10,
+        color_hex: '#4f46e5',
+        is_default: true,
+      },
+      {
+        id: 'st-re-3',
+        name: 'State Three',
+        group: 'completed',
+        sort_order: 10,
+        color_hex: '#10b981',
+        is_default: false,
+      },
+    ];
+
+    const patchCalls: { url: string; body: Record<string, unknown> }[] = [];
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true };
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+          status: 'active',
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
+        return stateList;
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'POST') {
+        throw new Error('STATE_NAME_TAKEN: state name already exists');
+      }
+      if (url.includes('/api/v1/projects/KAN/states/') && m === 'PATCH') {
+        const bodyStr = typeof (options as { body?: unknown }).body === 'string'
+          ? (options as { body: string }).body
+          : '{}';
+        const body = JSON.parse(bodyStr) as Record<string, unknown>;
+        patchCalls.push({ url, body });
+        return { id: 'ok' };
+      }
+      return {};
+    });
+
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderComponent('KAN');
+
+    const statesTab = await screen.findByTestId('tab-states');
+    fireEvent.click(statesTab);
+
+    // Test STATE_NAME_TAKEN in handleCreateState
+    const nameInput = screen.getByTestId('state-name-input');
+    fireEvent.change(nameInput, { target: { value: 'State One' } });
+    fireEvent.click(screen.getByTestId('create-state-btn'));
+    expect(
+      await screen.findByText('A workflow state with this name already exists in this project.'),
+    ).toBeDefined();
+
+    // Reorder st-re-2 down first (current is st-re-2: 10, target is st-re-3: 10 -> down sets target.sort_order + 1 = 11)
+    const downBtn = await screen.findByTestId('state-down-st-re-2');
+    fireEvent.click(downBtn);
+
+    await waitFor(() => {
+      expect(patchCalls.length).toBe(2);
+    });
+
+    // Reorder st-re-3 up (target is st-re-1: 10 -> up sets target.sort_order - 1 = 9)
+    const upBtn = await screen.findByTestId('state-up-st-re-3');
+    fireEvent.click(upBtn);
+
+    await waitFor(() => {
+      expect(patchCalls.length).toBe(4);
+    });
+
+    // Check that PATCH calls occurred with updated sort orders
+    const call2 = patchCalls.find((c) => c.url.includes('st-re-2'));
+    expect(call2?.body).toEqual({ sort_order: 11 });
+
+    // Cache invalidation checks
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
+  });
+
+  it('supports inline priority editing, saving, and cache invalidation (KAN-43 Problem 1)', async () => {
+    const priorityList: Record<string, unknown>[] = [
+      {
+        id: 'prio-edit-1',
+        slug: 'urgent',
+        label: 'Urgent',
+        emoji: '🔥',
+        color_hex: '#dc2626',
+        sort_order: 1,
+        is_default: false,
+      },
+      {
+        id: 'prio-edit-2',
+        slug: 'normal',
+        label: 'Normal',
+        emoji: '⚡',
+        color_hex: '#2563eb',
+        sort_order: 2,
+        is_default: true,
+      },
+    ];
+
+    let patchedPriorityBody: Record<string, unknown> | null = null;
+    let failPriorityPatch = false;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true };
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+          status: 'active',
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/priorities') && m === 'GET') {
+        return priorityList;
+      }
+      if (url.includes('/api/v1/projects/KAN/priorities/prio-edit-1') && m === 'PATCH') {
+        if (failPriorityPatch) {
+          throw new Error('Failed to update priority.');
+        }
+        const bodyStr = typeof (options as { body?: unknown }).body === 'string'
+          ? (options as { body: string }).body
+          : '{}';
+        patchedPriorityBody = JSON.parse(bodyStr) as Record<string, unknown>;
+        return {
+          ...priorityList[0],
+          ...patchedPriorityBody,
+        };
+      }
+      return {};
+    });
+
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderComponent('KAN');
+
+    const prioritiesTab = await screen.findByTestId('tab-priorities');
+    fireEvent.click(prioritiesTab);
+
+    // Click edit priority
+    const editBtn = await screen.findByTestId('edit-priority-btn-prio-edit-1');
+    fireEvent.click(editBtn);
+
+    // Inputs appear
+    const slugInput = screen.getByTestId('priority-edit-slug-prio-edit-1');
+    const labelInput = screen.getByTestId('priority-edit-label-prio-edit-1');
+    const emojiInput = screen.getByTestId('priority-edit-emoji-prio-edit-1');
+    const colorInput = screen.getByTestId('priority-edit-color-prio-edit-1-input');
+    const sortInput = screen.getByTestId('priority-edit-sort-prio-edit-1');
+    const defaultCheck = screen.getByTestId('priority-edit-default-prio-edit-1');
+
+    fireEvent.change(slugInput, { target: { value: 'critical' } });
+    fireEvent.change(labelInput, { target: { value: 'Critical Issue' } });
+    fireEvent.change(emojiInput, { target: { value: '🚨' } });
+    fireEvent.change(colorInput, { target: { value: '#7c3aed' } });
+    fireEvent.change(sortInput, { target: { value: '0' } });
+    fireEvent.click(defaultCheck);
+
+    // Test cancel
+    const cancelBtn = screen.getByTestId('cancel-priority-btn-prio-edit-1');
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByTestId('save-priority-btn-prio-edit-1')).toBeNull();
+
+    // Reopen and test empty guard
+    fireEvent.click(screen.getByTestId('edit-priority-btn-prio-edit-1'));
+    fireEvent.change(screen.getByTestId('priority-edit-label-prio-edit-1'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
+
+    // Test error handling
+    fireEvent.change(screen.getByTestId('priority-edit-label-prio-edit-1'), { target: { value: 'Critical Issue' } });
+    fireEvent.change(screen.getByTestId('priority-edit-slug-prio-edit-1'), { target: { value: 'critical' } });
+    failPriorityPatch = true;
+    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
+    expect(await screen.findByText('Failed to update priority.')).toBeDefined();
+
+    // Fix and save without is_default: true to exercise return p
+    failPriorityPatch = false;
+    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Priority "Critical Issue" updated.')).toBeDefined();
+    });
+
+    // Now edit and save with is_default: true to exercise default de-duplication
+    fireEvent.click(screen.getByTestId('edit-priority-btn-prio-edit-1'));
+    fireEvent.click(screen.getByTestId('priority-edit-default-prio-edit-1'));
+    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Priority "Critical Issue" updated.')).toBeDefined();
+    });
+
+    expect(patchedPriorityBody).toEqual({
+      slug: 'critical',
+      label: 'Critical Issue',
+      emoji: '🔥',
+      color_hex: '#dc2626',
+      sort_order: 1,
+      is_default: true,
+    });
+
+    // Invalidation checks
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
   });
 });

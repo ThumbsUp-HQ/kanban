@@ -7,6 +7,7 @@ export interface StateSummary {
   name: string;
   group: string;
   sort_order?: number;
+  color_hex?: string | null;
 }
 
 export interface PrioritySummary {

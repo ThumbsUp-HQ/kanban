@@ -186,4 +186,60 @@ describe('BoardColumn Component', () => {
       `/projects/KAN/settings/workflows?to_state=${encodeURIComponent(baseState.name)}&attach=1`,
     );
   });
+
+  it('synchronizes custom state color and pending gate count (KAN-43 Problem 2)', () => {
+    const customColorState: BoardWorkflowState = {
+      ...baseState,
+      color_hex: '#7C3AED',
+    };
+    const gateIssues: BoardIssue[] = [
+      {
+        id: 'iss-gate',
+        key: 'KAN-99',
+        summary: 'Issue with Gate',
+        state_id: 'state-started',
+        board_rank: 'rank-000099',
+        gate_status: 'pending',
+      },
+    ];
+
+    const { rerender } = render(
+      <BoardColumn
+        state={customColorState}
+        issues={gateIssues}
+        canManageWorkflows={false}
+      />,
+    );
+
+    const colSection = screen.getByTestId(`board-column-${customColorState.id}`);
+    expect(colSection.style.getPropertyValue('--state-custom-fg')).toBe('#7C3AED');
+    expect(screen.getByTestId(`board-column-gate-count-${customColorState.id}`)).toBeDefined();
+    expect(screen.queryByTestId(`section-add-workflow-btn-${customColorState.name}`)).toBeNull();
+
+    // Rerender with null color to verify removal
+    rerender(
+      <BoardColumn
+        state={baseState}
+        issues={[]}
+      />,
+    );
+    expect(colSection.style.getPropertyValue('--state-custom-fg')).toBe('');
+    expect(screen.queryByTestId(`board-column-gate-count-${baseState.id}`)).toBeNull();
+  });
+
+  it('exercises drag state, drop edge, and explicit projectKey props', () => {
+    const issues = generateIssues(1);
+    const { unmount } = render(
+      <BoardColumn
+        state={baseState}
+        issues={issues}
+        projectKey="EXPLICIT_KEY"
+        draggingKey="KAN-1"
+        dropTargetKey="KAN-1"
+        dropEdge="top"
+      />,
+    );
+    expect(screen.getByText('KAN-1')).toBeDefined();
+    unmount();
+  });
 });

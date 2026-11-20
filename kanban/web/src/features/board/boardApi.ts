@@ -63,6 +63,7 @@ export interface BoardWorkflowState {
   sort_order: number;
   wip_soft_limit?: number | null;
   wip_hard_limit?: number | null;
+  color_hex?: string | null;
 }
 
 export interface IssueMoveParams {

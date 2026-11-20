@@ -586,6 +586,7 @@ async def test_list_trash_pagination_and_filtering(
     d1 = p1.json()
     assert len(d1["items"]) == 2
     assert d1["next_cursor"] is not None
+    assert d1["items"][0]["state"]["color_hex"] is not None
 
     # 2. Page 2 with cursor
     p2 = await client.get(f"/api/v1/projects/TRSH/trash?limit=2&cursor={d1['next_cursor']}")

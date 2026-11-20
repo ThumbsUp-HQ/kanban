@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 
 from database.models import (
@@ -229,6 +230,20 @@ async def list_states(
     ]
 
 
+def _is_unique_violation(exc: IntegrityError) -> bool:
+    """Return True when the wrapped driver error carries SQLSTATE 23505."""
+    orig = exc.orig
+    candidates = (orig, getattr(orig, "__cause__", None))
+    return (
+        any(
+            getattr(c, "sqlstate", None) == "23505" or getattr(c, "pgcode", None) == "23505"
+            for c in candidates
+        )
+        or "23505" in str(exc)
+        or "unique constraint" in str(exc).lower()
+    )
+
+
 async def create_state(
     session: AsyncSession,
     caller: PrincipalContext,
@@ -274,7 +289,17 @@ async def create_state(
         wip_hard_limit=data.wip_hard_limit,
     )
     session.add(new_state)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if _is_unique_violation(exc):
+            raise ProblemException(
+                status=409,
+                code="STATE_NAME_TAKEN",
+                title="State Name Taken",
+                detail=None,
+            ) from exc
+        raise
 
     await record_activity(
         session,
@@ -306,7 +331,7 @@ async def create_state(
     )
 
 
-async def update_state(  # noqa: C901, PLR0912
+async def update_state(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     project_ref: str,
@@ -363,7 +388,34 @@ async def update_state(  # noqa: C901, PLR0912
                 detail=None,
             )
 
+    # Group check: cannot move the sole remaining state out of required lifecycle groups
+    if (
+        data.group is not None
+        and data.group != state.state_group
+        and state.state_group in ("completed", "cancelled", "backlog", "started")
+    ):
+        grp_count_res = await session.execute(
+            select(func.count(WorkflowState.id)).where(
+                WorkflowState.project_id == project.id,
+                WorkflowState.state_group == state.state_group,
+            )
+        )
+        if grp_count_res.scalar_one() <= 1:
+            raise ProblemException(
+                status=409,
+                code="LAST_STATE_IN_GROUP",
+                title="Cannot Move Last State Out Of Group",
+                detail=None,
+            )
+
     # Exactly one default invariant
+    if data.is_default is False and state.is_default:
+        raise ProblemException(
+            status=409,
+            code="DEFAULT_STATE_REQUIRED",
+            title="Default State Required",
+            detail=None,
+        )
     if data.is_default is True:
         await session.execute(
             update(WorkflowState)
@@ -408,7 +460,17 @@ async def update_state(  # noqa: C901, PLR0912
         changes["wip_hard_limit"] = {"old": state.wip_hard_limit, "new": data.wip_hard_limit}
         state.wip_hard_limit = data.wip_hard_limit
 
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if _is_unique_violation(exc):
+            raise ProblemException(
+                status=409,
+                code="STATE_NAME_TAKEN",
+                title="State Name Taken",
+                detail=None,
+            ) from exc
+        raise
 
     if changes:
         await record_activity(

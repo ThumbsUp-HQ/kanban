@@ -65,6 +65,10 @@ class StateSummary(BaseModel):
     group: str = Field(
         description="Workflow state group: backlog, unstarted, started, completed, or cancelled",
     )
+    color_hex: str | None = Field(
+        default=None,
+        description="Workflow state display color hex (e.g. #7c3aed)",
+    )
 
 
 class PrioritySummary(BaseModel):

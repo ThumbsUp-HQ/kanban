@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, type JSX } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, type JSX } from 'react';
 import type { IssueItem } from './viewsApi';
 import { saveDraft } from '../drafts/draftsStore';
 import { useFocusTrap } from '../drawer/useFocusTrap';
@@ -13,7 +13,7 @@ export interface QuickCreateIssueModalProps {
   defaultStateId?: string;
   defaultPrioritySlug?: string;
   defaultModuleIds?: string[];
-  states?: { id: string; name: string; group?: string }[];
+  states?: { id: string; name: string; group?: string; color_hex?: string | null; is_default?: boolean }[];
   modules?: { id: string; name: string; emoji?: string }[];
   onOpenPeek?: (issueKey: string) => void;
 }
@@ -38,9 +38,23 @@ export function QuickCreateIssueModal({
   modules,
   onOpenPeek,
 }: QuickCreateIssueModalProps): JSX.Element | null {
+  const resolvedInitialStateId = useMemo(() => {
+    if (defaultStateId && defaultStateId !== 'state-todo') {
+      return defaultStateId;
+    }
+    if (states && states.length > 0) {
+      const def = states.find((s) => s.is_default);
+      if (def) return def.id;
+      const unstarted = states.find((s) => s.group === 'unstarted');
+      if (unstarted) return unstarted.id;
+      return states[0]?.id ?? defaultStateId;
+    }
+    return defaultStateId;
+  }, [defaultStateId, states]);
+
   const [summary, setSummary] = useState('');
   const [description, setDescription] = useState('');
-  const [stateId, setStateId] = useState(defaultStateId);
+  const [stateId, setStateId] = useState(resolvedInitialStateId);
   const [prioritySlug, setPrioritySlug] = useState(defaultPrioritySlug);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
     modulesEnabled ? defaultModuleIds : [],
@@ -196,32 +210,40 @@ export function QuickCreateIssueModal({
       return;
     }
 
+    const matchedState = states?.find((s) => s.id === stateId);
     const payload: Partial<IssueItem> = {
       summary: summary.trim(),
-      state: {
-        id: stateId,
-        name: stateId.includes('review')
-          ? 'In Review'
-          : stateId.includes('progress')
-            ? 'In Progress'
-            : stateId.includes('done')
-              ? 'Done'
-              : stateId.includes('cancel')
-                ? 'Cancelled'
-                : stateId.includes('todo')
-                  ? 'Todo'
-                  : 'Backlog',
-        group:
-          stateId.includes('review') || stateId.includes('progress')
-            ? 'started'
-            : stateId.includes('done')
-              ? 'completed'
-              : stateId.includes('cancel')
-                ? 'cancelled'
-                : stateId.includes('todo')
-                  ? 'unstarted'
-                  : 'backlog',
-      },
+      state: matchedState
+        ? {
+            id: matchedState.id,
+            name: matchedState.name,
+            group: matchedState.group ?? 'unstarted',
+            color_hex: (matchedState as { color_hex?: string | null }).color_hex ?? null,
+          }
+        : {
+            id: stateId,
+            name: stateId.includes('review')
+              ? 'In Review'
+              : stateId.includes('progress')
+                ? 'In Progress'
+                : stateId.includes('done')
+                  ? 'Done'
+                  : stateId.includes('cancel')
+                    ? 'Cancelled'
+                    : stateId.includes('todo')
+                      ? 'Todo'
+                      : 'Backlog',
+            group:
+              stateId.includes('review') || stateId.includes('progress')
+                ? 'started'
+                : stateId.includes('done')
+                  ? 'completed'
+                  : stateId.includes('cancel')
+                    ? 'cancelled'
+                    : stateId.includes('todo')
+                      ? 'unstarted'
+                      : 'backlog',
+          },
       priority: {
         slug: prioritySlug,
         label: prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1),

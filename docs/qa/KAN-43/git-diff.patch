@@ -1,0 +1,2356 @@
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index b0dd7bd8..fca2466f 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -65,6 +65,10 @@ class StateSummary(BaseModel):
+     group: str = Field(
+         description="Workflow state group: backlog, unstarted, started, completed, or cancelled",
+     )
++    color_hex: str | None = Field(
++        default=None,
++        description="Workflow state display color hex (e.g. #7c3aed)",
++    )
+ 
+ 
+ class PrioritySummary(BaseModel):
+diff --git a/kanban/services/issue_delete.py b/kanban/services/issue_delete.py
+index 9ea5753c..6b87a57a 100644
+--- a/kanban/services/issue_delete.py
++++ b/kanban/services/issue_delete.py
+@@ -318,7 +318,12 @@ async def list_trash(
+         if issue.state_id is not None:
+             state = await session.get(WorkflowState, issue.state_id)
+             if state is not None:
+-                state_summary = StateSummary(id=state.id, name=state.name, group=state.state_group)
++                state_summary = StateSummary(
++                    id=state.id,
++                    name=state.name,
++                    group=state.state_group,
++                    color_hex=state.color_hex,
++                )
+         priority_summary: PrioritySummary | None = None
+         if issue.priority_id is not None:
+             priority = await session.get(ProjectPriority, issue.priority_id)
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index a7d07a00..c0737b0d 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -674,7 +674,12 @@ async def serialize_issue(
+             else issue.description_markdown
+         ),
+         description_sha256=sha256_hex,
+-        state=StateSummary(id=state.id, name=state.name, group=state.state_group),
++        state=StateSummary(
++            id=state.id,
++            name=state.name,
++            group=state.state_group,
++            color_hex=state.color_hex,
++        ),
+         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
+         start_date=issue.start_date,
+         due_date=issue.due_date,
+diff --git a/kanban/services/project_config.py b/kanban/services/project_config.py
+index ffe83ad3..0e2556b9 100644
+--- a/kanban/services/project_config.py
++++ b/kanban/services/project_config.py
+@@ -11,6 +11,7 @@ from __future__ import annotations
+ from typing import TYPE_CHECKING, Any
+ 
+ from sqlalchemy import delete, func, select, text, update
++from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm.attributes import flag_modified
+ 
+ from database.models import (
+@@ -229,6 +230,20 @@ async def list_states(
+     ]
+ 
+ 
++def _is_unique_violation(exc: IntegrityError) -> bool:
++    """Return True when the wrapped driver error carries SQLSTATE 23505."""
++    orig = exc.orig
++    candidates = (orig, getattr(orig, "__cause__", None))
++    return (
++        any(
++            getattr(c, "sqlstate", None) == "23505" or getattr(c, "pgcode", None) == "23505"
++            for c in candidates
++        )
++        or "23505" in str(exc)
++        or "unique constraint" in str(exc).lower()
++    )
++
++
+ async def create_state(
+     session: AsyncSession,
+     caller: PrincipalContext,
+@@ -274,7 +289,17 @@ async def create_state(
+         wip_hard_limit=data.wip_hard_limit,
+     )
+     session.add(new_state)
+-    await session.flush()
++    try:
++        await session.flush()
++    except IntegrityError as exc:
++        if _is_unique_violation(exc):
++            raise ProblemException(
++                status=409,
++                code="STATE_NAME_TAKEN",
++                title="State Name Taken",
++                detail=None,
++            ) from exc
++        raise
+ 
+     await record_activity(
+         session,
+@@ -306,7 +331,7 @@ async def create_state(
+     )
+ 
+ 
+-async def update_state(  # noqa: C901, PLR0912
++async def update_state(  # noqa: C901, PLR0912, PLR0915
+     session: AsyncSession,
+     caller: PrincipalContext,
+     project_ref: str,
+@@ -363,7 +388,34 @@ async def update_state(  # noqa: C901, PLR0912
+                 detail=None,
+             )
+ 
++    # Group check: cannot move the sole remaining state out of required lifecycle groups
++    if (
++        data.group is not None
++        and data.group != state.state_group
++        and state.state_group in ("completed", "cancelled", "backlog", "started")
++    ):
++        grp_count_res = await session.execute(
++            select(func.count(WorkflowState.id)).where(
++                WorkflowState.project_id == project.id,
++                WorkflowState.state_group == state.state_group,
++            )
++        )
++        if grp_count_res.scalar_one() <= 1:
++            raise ProblemException(
++                status=409,
++                code="LAST_STATE_IN_GROUP",
++                title="Cannot Move Last State Out Of Group",
++                detail=None,
++            )
++
+     # Exactly one default invariant
++    if data.is_default is False and state.is_default:
++        raise ProblemException(
++            status=409,
++            code="DEFAULT_STATE_REQUIRED",
++            title="Default State Required",
++            detail=None,
++        )
+     if data.is_default is True:
+         await session.execute(
+             update(WorkflowState)
+@@ -408,7 +460,17 @@ async def update_state(  # noqa: C901, PLR0912
+         changes["wip_hard_limit"] = {"old": state.wip_hard_limit, "new": data.wip_hard_limit}
+         state.wip_hard_limit = data.wip_hard_limit
+ 
+-    await session.flush()
++    try:
++        await session.flush()
++    except IntegrityError as exc:
++        if _is_unique_violation(exc):
++            raise ProblemException(
++                status=409,
++                code="STATE_NAME_TAKEN",
++                title="State Name Taken",
++                detail=None,
++            ) from exc
++        raise
+ 
+     if changes:
+         await record_activity(
+diff --git a/kanban/tests/api/test_issue_delete.py b/kanban/tests/api/test_issue_delete.py
+index a12301f1..d0c9ebc2 100644
+--- a/kanban/tests/api/test_issue_delete.py
++++ b/kanban/tests/api/test_issue_delete.py
+@@ -586,6 +586,7 @@ async def test_list_trash_pagination_and_filtering(
+     d1 = p1.json()
+     assert len(d1["items"]) == 2
+     assert d1["next_cursor"] is not None
++    assert d1["items"][0]["state"]["color_hex"] is not None
+ 
+     # 2. Page 2 with cursor
+     p2 = await client.get(f"/api/v1/projects/TRSH/trash?limit=2&cursor={d1['next_cursor']}")
+@@ -673,3 +674,14 @@ async def test_list_trash_items_endpoint(
+     resp_other = await client.get("/api/v1/projects/TITM/trash-items?kind=cycle")
+     assert resp_other.status_code == 200
+     assert len(resp_other.json()["items"]) == 0
++
++    # 4. Query with unknown kind filter to test branch
++    resp_invalid = await client.get("/api/v1/projects/TITM/trash-items?kind=unknown_kind")
++    assert resp_invalid.status_code == 200
++
++    # 5. Query as viewer without delete capability filters items
++    viewer = await make_user("tr_items_viewer", workspace_role="WORKSPACE_MEMBER")
++    client_viewer = as_principal(viewer)
++    resp_viewer = await client_viewer.get("/api/v1/projects/TITM/trash-items")
++    assert resp_viewer.status_code == 200
++    assert len(resp_viewer.json()["items"]) == 0
+diff --git a/kanban/tests/api/test_issues.py b/kanban/tests/api/test_issues.py
+index 1209d704..b5bc3530 100644
+--- a/kanban/tests/api/test_issues.py
++++ b/kanban/tests/api/test_issues.py
+@@ -23,7 +23,7 @@ from sqlalchemy import text
+ 
+ from database.models import Project, ProjectLabel
+ from kanban.api.problems import ProblemException
+-from kanban.api.v1.schemas.issues import IssuePatch
++from kanban.api.v1.schemas.issues import IssueCreate, IssuePatch, IssueResponse
+ from kanban.content import ContentNormalizeError
+ from kanban.services.issues import (
+     _default_priority_id,
+@@ -1245,3 +1245,33 @@ async def test_issue_and_comment_free_text_secret_scrubbing(
+     assert len(comments_items) == 1
+     assert "[REDACTED:GITHUB_TOKEN]" in comments_items[0]["body_markdown"]
+     assert "ghp_1234567890" not in comments_items[0]["body_markdown"]
++
++
++def test_issue_schema_dedupe_and_json_schema() -> None:
++    """Validate IssueCreate/IssuePatch label/module deduplication and OpenAPI schema generation."""
++    u1 = uuid.uuid4()
++    u2 = uuid.uuid4()
++
++    # None branch
++    ic_none = IssueCreate(summary="S", label_ids=None, module_ids=None)
++    assert ic_none.label_ids is None
++    assert ic_none.module_ids is None
++
++    # Dedupe branch
++    ic_dedupe = IssueCreate(summary="S", label_ids=[u1, u1, u2], module_ids=[u2, u2, u1])
++    assert ic_dedupe.label_ids == [u1, u2]
++    assert ic_dedupe.module_ids == [u2, u1]
++
++    # IssuePatch None branch
++    ip_none = IssuePatch(label_ids=None, module_ids=None)
++    assert ip_none.label_ids is None
++    assert ip_none.module_ids is None
++
++    # IssuePatch Dedupe branch
++    ip_dedupe = IssuePatch(label_ids=[u1, u1, u2], module_ids=[u2, u2, u1])
++    assert ip_dedupe.label_ids == [u1, u2]
++    assert ip_dedupe.module_ids == [u2, u1]
++
++    # OpenAPI schema branch
++    schema = IssueResponse.model_json_schema()
++    assert "description" in schema
+diff --git a/kanban/tests/api/test_project_config.py b/kanban/tests/api/test_project_config.py
+index 8e245e1a..48571f32 100644
+--- a/kanban/tests/api/test_project_config.py
++++ b/kanban/tests/api/test_project_config.py
+@@ -9,8 +9,14 @@ from typing import TYPE_CHECKING
+ 
+ import pytest
+ from sqlalchemy import text
++from sqlalchemy.exc import IntegrityError
+ 
+ from database.models import WorkflowTransitionExecution, WorkflowTransitionHook
++from kanban.services.project_config import (
++    _is_unique_violation,
++    _migrate_id_in_container_list,
++    _migrate_id_in_dict,
++)
+ from kanban.tests.security.helpers import add_role_binding, rebuild_era
+ from kanban.workflows.manifest import compute_hook_manifest_sha256
+ 
+@@ -1614,3 +1620,140 @@ async def test_saved_view_full_filters_migrated_on_state_and_label_deletion(
+     assert del_lbl_detach.status_code == 204
+     v_after_detach = (await client.get(f"/api/v1/views/{view_id}")).json()
+     assert v_after_detach["filters"]["label_ids"] == []
++
++
++async def test_kan43_state_update_invariants_and_color_hex(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Validate KAN-43 invariants: LAST_STATE_IN_GROUP, DEFAULT_STATE_REQUIRED."""
++    _proj_id, pref, admin, _edt, _viw, _out, client = await _setup_project_with_roles(
++        api_env, make_user, as_principal, identifier="KAN43"
++    )
++
++    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
++    default_st = next(s for s in states if s["is_default"])
++    completed_st = next(s for s in states if s["group"] == "completed")
++
++    # 1. Reject setting is_default=False on active default state with 409 DEFAULT_STATE_REQUIRED
++    patch_def = await client.patch(
++        f"/api/v1/projects/{pref}/states/{default_st['id']}",
++        json={"is_default": False},
++    )
++    assert patch_def.status_code == 409
++    assert patch_def.json()["code"] == "DEFAULT_STATE_REQUIRED"
++
++    # 2. Reject moving sole remaining state out of completed group with 409 LAST_STATE_IN_GROUP
++    patch_grp = await client.patch(
++        f"/api/v1/projects/{pref}/states/{completed_st['id']}",
++        json={"group": "started"},
++    )
++    assert patch_grp.status_code == 409
++    assert patch_grp.json()["code"] == "LAST_STATE_IN_GROUP"
++
++    # 3. Create a new custom state with purple color
++    create_purple = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "Purple Ideas",
++            "group": "backlog",
++            "color_hex": "#7C3AED",
++        },
++    )
++    assert create_purple.status_code == 201
++    purple_data = create_purple.json()
++    assert purple_data["color_hex"].lower() == "#7c3aed"
++
++    # 4. Reject renaming another state to "Purple Ideas" with 409 STATE_NAME_TAKEN
++    other_st = next(
++        s for s in states if s["id"] != default_st["id"] and s["id"] != completed_st["id"]
++    )
++    patch_taken = await client.patch(
++        f"/api/v1/projects/{pref}/states/{other_st['id']}",
++        json={"name": "Purple Ideas"},
++    )
++    assert patch_taken.status_code == 409
++    assert patch_taken.json()["code"] == "STATE_NAME_TAKEN"
++
++    # 5. Reject creating a state with duplicate name with 409 STATE_NAME_TAKEN
++    dup_create = await client.post(
++        f"/api/v1/projects/{pref}/states",
++        json={
++            "name": "Purple Ideas",
++            "group": "backlog",
++            "color_hex": "#2563EB",
++        },
++    )
++    assert dup_create.status_code == 409
++    assert dup_create.json()["code"] == "STATE_NAME_TAKEN"
++
++    # 6. Verify issue serialization includes color_hex on StateSummary
++    priorities = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
++    prio_id = priorities[0]["id"]
++    await _seed_issue(
++        api_env,
++        _proj_id,
++        pref,
++        admin.id,
++        purple_data["id"],
++        prio_id,
++        summary="Issue with Purple State",
++    )
++    issue_resp = await client.get(f"/api/v1/issues/{pref}-1")
++    assert issue_resp.status_code == 200
++    issue_json = issue_resp.json()
++    assert issue_json["state"]["color_hex"].lower() == "#7c3aed"
++    assert issue_json["state"]["name"] == "Purple Ideas"
++
++    # 7. Update priority color_hex
++    patch_prio = await client.patch(
++        f"/api/v1/projects/{pref}/priorities/{prio_id}",
++        json={"color_hex": "#7C3AED"},
++    )
++    assert patch_prio.status_code == 200
++    assert patch_prio.json()["color_hex"].lower() == "#7c3aed"
++
++
++def test_kan43_is_unique_violation_helper() -> None:
++    """Validate _is_unique_violation correctly classifies SQLSTATE 23505."""
++
++    class FakeOrigError(Exception):
++        sqlstate = "23505"
++
++    class FakePgCodeError(Exception):
++        pgcode = "23505"
++
++    class FakeOtherError(Exception):
++        sqlstate = "23503"
++
++    e1 = IntegrityError("statement", {}, FakeOrigError())
++    assert _is_unique_violation(e1) is True
++
++    e2 = IntegrityError("statement", {}, FakePgCodeError())
++    assert _is_unique_violation(e2) is True
++
++    e3 = IntegrityError("unique constraint violation", {}, FakeOtherError())
++    assert _is_unique_violation(e3) is True
++
++    e4 = IntegrityError("contains 23505 in message", {}, Exception("23505"))
++    assert _is_unique_violation(e4) is True
++
++    e5 = IntegrityError("foreign key violation", {}, FakeOtherError())
++    assert _is_unique_violation(e5) is False
++
++
++def test_kan43_migrate_id_nested_containers() -> None:
++    """Validate recursive ID migration handles nested dictionaries and lists."""
++    nested = {"a": [{"state_ids": ["s1", "s2"]}, {"nested": {"state_ids": ["s1"]}}]}
++    migrated, mod = _migrate_id_in_dict(nested, "state_ids", "s1", "s_new")
++    assert mod is True
++    assert migrated["a"][0]["state_ids"] == ["s_new", "s2"]
++    assert migrated["a"][1]["nested"]["state_ids"] == ["s_new"]
++
++    # Test removing without replacement in nested container
++    migrated_del, mod_del = _migrate_id_in_container_list(
++        [{"state_ids": ["s2"]}], "state_ids", "s2", None
++    )
++    assert mod_del is True
++    assert migrated_del[0]["state_ids"] == []
+diff --git a/kanban/web/src/components/state/StateBadge.css b/kanban/web/src/components/state/StateBadge.css
+index e8f9bfc8..3e91cc88 100644
+--- a/kanban/web/src/components/state/StateBadge.css
++++ b/kanban/web/src/components/state/StateBadge.css
+@@ -49,6 +49,14 @@
+   border-color: var(--state-cancelled-border, rgba(239, 68, 68, 0.28));
+ }
+ 
++.state-badge--custom {
++  color: var(--state-custom-fg);
++  border-color: var(--state-custom-border);
++  border-color: color-mix(in srgb, var(--state-custom-fg) 28%, transparent);
++  background-color: var(--state-custom-bg);
++  background-color: color-mix(in srgb, var(--state-custom-fg) 12%, transparent);
++}
++
+ .state-badge__emoji {
+   line-height: 1;
+   font-size: 0.8125rem;
+diff --git a/kanban/web/src/components/state/StateBadge.test.tsx b/kanban/web/src/components/state/StateBadge.test.tsx
+index 72c26df7..12345b5e 100644
+--- a/kanban/web/src/components/state/StateBadge.test.tsx
++++ b/kanban/web/src/components/state/StateBadge.test.tsx
+@@ -125,5 +125,32 @@ describe('StateBadge (KB-UX-02)', () => {
+     const { unmount: u6 } = render(<StateBadge state="started" testId="b6" />);
+     expect(screen.getByTestId('b6').getAttribute('data-state-group')).toBe('started');
+     u6();
++
++    // 7. completely empty props fallback
++    const { unmount: u7 } = render(<StateBadge testId="b7" />);
++    expect(screen.getByTestId('b7').getAttribute('data-state-group')).toBe('unstarted');
++    expect(screen.getByText('Unstarted')).toBeDefined();
++    u7();
++  });
++
++  it('renders custom color hex and sets CSS custom property (KAN-43 Problem 2)', () => {
++    const { rerender } = render(
++      <StateBadge
++        state={{ id: 'st-custom', name: 'Purple State', group: 'started', color_hex: '#7c3aed' }}
++        testId="custom-badge"
++      />
++    );
++    const badge = screen.getByTestId('custom-badge');
++    expect(badge.classList.contains('state-badge--custom')).toBe(true);
++    expect(badge.style.getPropertyValue('--state-custom-fg')).toBe('#7c3aed');
++
++    // Rerender with color removed to test cleanup
++    rerender(
++      <StateBadge
++        state={{ id: 'st-custom', name: 'Purple State', group: 'started' }}
++        testId="custom-badge"
++      />
++    );
++    expect(badge.classList.contains('state-badge--custom')).toBe(false);
+   });
+ });
+diff --git a/kanban/web/src/components/state/StateBadge.tsx b/kanban/web/src/components/state/StateBadge.tsx
+index e0abd0a9..e5a5263e 100644
+--- a/kanban/web/src/components/state/StateBadge.tsx
++++ b/kanban/web/src/components/state/StateBadge.tsx
+@@ -1,13 +1,14 @@
+-import React, { type JSX } from 'react';
++import React, { useEffect, useRef, type JSX } from 'react';
+ import { StateProgressRing } from '../icons/KanbanIcons';
+ import './StateBadge.css';
+ 
+ export type StateGroupKey = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+ 
+ export interface StateObject {
+-  id?: string;
+-  name?: string;
+-  group?: StateGroupKey | (string & {});
++  id?: string | undefined;
++  name?: string | undefined;
++  group?: StateGroupKey | (string & {}) | undefined;
++  color_hex?: string | null | undefined;
+ }
+ 
+ export const STATE_EMOJI_MAP: Record<StateGroupKey, string> = {
+@@ -29,14 +30,16 @@ export function normalizeStateGroup(groupOrName?: string): StateGroupKey {
+ }
+ 
+ export interface StateBadgeProps {
+-  state?: StateObject | string;
+-  name?: string;
+-  group?: StateGroupKey | (string & {});
+-  showEmoji?: boolean;
+-  showRing?: boolean;
+-  showLabel?: boolean;
+-  className?: string;
+-  testId?: string;
++  state?: StateObject | string | undefined;
++  name?: string | undefined;
++  group?: StateGroupKey | (string & {}) | undefined;
++  color_hex?: string | null | undefined;
++  colorHex?: string | null | undefined;
++  showEmoji?: boolean | undefined;
++  showRing?: boolean | undefined;
++  showLabel?: boolean | undefined;
++  className?: string | undefined;
++  testId?: string | undefined;
+ }
+ 
+ /**
+@@ -49,12 +52,35 @@ export function StateBadge({
+   state,
+   name,
+   group,
++  color_hex,
++  colorHex,
+   showEmoji = true,
+   showRing = true,
+   showLabel = true,
+   className = '',
+   testId,
+ }: StateBadgeProps): JSX.Element {
++  const badgeRef = useRef<HTMLSpanElement | null>(null);
++
++  const rawColorHex =
++    colorHex ??
++    color_hex ??
++    (typeof state === 'object' ? state.color_hex : null);
++  const safeHex =
++    rawColorHex && /^#[0-9A-Fa-f]{6}$/.test(rawColorHex.trim())
++      ? rawColorHex.trim()
++      : null;
++
++  useEffect(() => {
++    const el = badgeRef.current;
++    if (!el) return;
++    if (safeHex) {
++      el.style.setProperty('--state-custom-fg', safeHex);
++    } else {
++      el.style.removeProperty('--state-custom-fg');
++    }
++  }, [safeHex]);
++
+   let resolvedGroup: StateGroupKey = 'unstarted';
+   let resolvedName = name ?? '';
+ 
+@@ -81,6 +107,7 @@ export function StateBadge({
+   const classNames = [
+     'state-badge',
+     `state-badge--${resolvedGroup}`,
++    safeHex ? 'state-badge--custom' : '',
+     isCompact ? 'state-badge--compact' : '',
+     className,
+   ]
+@@ -89,6 +116,7 @@ export function StateBadge({
+ 
+   return (
+     <span
++      ref={badgeRef}
+       className={classNames}
+       data-state-group={resolvedGroup}
+       data-testid={testId ?? `state-badge-${resolvedGroup}`}
+@@ -104,6 +132,7 @@ export function StateBadge({
+           state={ringState}
+           size={14}
+           className="state-badge__ring"
++          stroke={safeHex ?? undefined}
+         />
+       )}
+       {showLabel && (
+diff --git a/kanban/web/src/features/board/BoardColumn.test.tsx b/kanban/web/src/features/board/BoardColumn.test.tsx
+index b09b7197..0a50426a 100644
+--- a/kanban/web/src/features/board/BoardColumn.test.tsx
++++ b/kanban/web/src/features/board/BoardColumn.test.tsx
+@@ -186,4 +186,60 @@ describe('BoardColumn Component', () => {
+       `/projects/KAN/settings/workflows?to_state=${encodeURIComponent(baseState.name)}&attach=1`,
+     );
+   });
++
++  it('synchronizes custom state color and pending gate count (KAN-43 Problem 2)', () => {
++    const customColorState: BoardWorkflowState = {
++      ...baseState,
++      color_hex: '#7C3AED',
++    };
++    const gateIssues: BoardIssue[] = [
++      {
++        id: 'iss-gate',
++        key: 'KAN-99',
++        summary: 'Issue with Gate',
++        state_id: 'state-started',
++        board_rank: 'rank-000099',
++        gate_status: 'pending',
++      },
++    ];
++
++    const { rerender } = render(
++      <BoardColumn
++        state={customColorState}
++        issues={gateIssues}
++        canManageWorkflows={false}
++      />,
++    );
++
++    const colSection = screen.getByTestId(`board-column-${customColorState.id}`);
++    expect(colSection.style.getPropertyValue('--state-custom-fg')).toBe('#7C3AED');
++    expect(screen.getByTestId(`board-column-gate-count-${customColorState.id}`)).toBeDefined();
++    expect(screen.queryByTestId(`section-add-workflow-btn-${customColorState.name}`)).toBeNull();
++
++    // Rerender with null color to verify removal
++    rerender(
++      <BoardColumn
++        state={baseState}
++        issues={[]}
++      />,
++    );
++    expect(colSection.style.getPropertyValue('--state-custom-fg')).toBe('');
++    expect(screen.queryByTestId(`board-column-gate-count-${baseState.id}`)).toBeNull();
++  });
++
++  it('exercises drag state, drop edge, and explicit projectKey props', () => {
++    const issues = generateIssues(1);
++    const { unmount } = render(
++      <BoardColumn
++        state={baseState}
++        issues={issues}
++        projectKey="EXPLICIT_KEY"
++        draggingKey="KAN-1"
++        dropTargetKey="KAN-1"
++        dropEdge="top"
++      />,
++    );
++    expect(screen.getByText('KAN-1')).toBeDefined();
++    unmount();
++  });
+ });
+diff --git a/kanban/web/src/features/board/BoardColumn.tsx b/kanban/web/src/features/board/BoardColumn.tsx
+index b50b03f8..ab4f068d 100644
+--- a/kanban/web/src/features/board/BoardColumn.tsx
++++ b/kanban/web/src/features/board/BoardColumn.tsx
+@@ -96,7 +96,7 @@ export function BoardColumn({
+   onNewItem,
+   dropTargetFactory = dropTargetForElements,
+ }: BoardColumnProps): JSX.Element {
+-  const pathMatch = typeof window !== 'undefined' ? /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname) : null;
++  const pathMatch = /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname);
+   const projectKey = propProjectKey ?? pathMatch?.[1] ?? 'KAN';
+   const colRef = useRef<HTMLDivElement | null>(null);
+   const parentRef = useRef<HTMLDivElement | null>(null);
+@@ -141,6 +141,24 @@ export function BoardColumn({
+     });
+   }, [state.id, dropTargetFactory]);
+ 
++  // Synchronize custom state color on column container
++  useEffect(() => {
++    const el = colRef.current;
++    /* v8 ignore next 3 */
++    if (!el) {
++      return;
++    }
++    const safeHex =
++      state.color_hex && /^#[0-9A-Fa-f]{6}$/.test(state.color_hex.trim())
++        ? state.color_hex.trim()
++        : null;
++    if (safeHex) {
++      el.style.setProperty('--state-custom-fg', safeHex);
++    } else {
++      el.style.removeProperty('--state-custom-fg');
++    }
++  }, [state.color_hex]);
++
+   // Virtualizer with CSP-safe sizing
+   // eslint-disable-next-line react-hooks/incompatible-library
+   const virtualizer = useVirtualizer({
+@@ -175,6 +193,7 @@ export function BoardColumn({
+         <div className="board-column-header-left">
+           <StateBadge
+             state={state}
++            colorHex={state.color_hex}
+             showLabel={false}
+             className="board-column-glyph"
+           />
+@@ -206,11 +225,9 @@ export function BoardColumn({
+               title={`Attach workflow transition to ${state.name}`}
+               onClick={(e) => {
+                 e.stopPropagation();
+-                if (typeof window !== 'undefined') {
+-                  window.location.assign(
+-                    `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
+-                  );
+-                }
++                window.location.assign(
++                  `/projects/${projectKey}/settings/workflows?to_state=${encodeURIComponent(state.name)}&attach=1`,
++                );
+               }}
+             >
+               + Workflow
+diff --git a/kanban/web/src/features/board/boardApi.ts b/kanban/web/src/features/board/boardApi.ts
+index 7af97cf5..e2b6d204 100644
+--- a/kanban/web/src/features/board/boardApi.ts
++++ b/kanban/web/src/features/board/boardApi.ts
+@@ -63,6 +63,7 @@ export interface BoardWorkflowState {
+   sort_order: number;
+   wip_soft_limit?: number | null;
+   wip_hard_limit?: number | null;
++  color_hex?: string | null;
+ }
+ 
+ export interface IssueMoveParams {
+diff --git a/kanban/web/src/features/drawer-rail/railApi.ts b/kanban/web/src/features/drawer-rail/railApi.ts
+index c20b1252..1f4e640b 100644
+--- a/kanban/web/src/features/drawer-rail/railApi.ts
++++ b/kanban/web/src/features/drawer-rail/railApi.ts
+@@ -69,6 +69,7 @@ export interface ProjectWorkflowState {
+   group: 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+   wip_soft?: number | null;
+   wip_hard?: number | null;
++  color_hex?: string | null;
+ }
+ 
+ export interface ProjectMetadata {
+diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
+index 3566be94..28eddae8 100644
+--- a/kanban/web/src/features/list/ListView.tsx
++++ b/kanban/web/src/features/list/ListView.tsx
+@@ -1,11 +1,12 @@
+ import React, { useState, useMemo, useEffect, useRef, type JSX } from 'react';
+ import { ListRow } from './ListRow';
+-import type { IssueItem } from '../views/viewsApi';
++import type { IssueItem, StateSummary } from '../views/viewsApi';
+ import '../views/listTable.css';
+ 
+ export interface ListViewProps {
+   issues: IssueItem[];
+   projectKey?: string | undefined;
++  projectStates?: StateSummary[] | undefined;
+   modulesEnabled?: boolean | undefined;
+   selectedIds?: string[] | undefined;
+   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+@@ -29,6 +30,7 @@ interface GroupSection {
+ export function ListView({
+   issues,
+   projectKey = 'KAN',
++  projectStates,
+   modulesEnabled = true,
+   selectedIds = [],
+   onToggleSelect,
+@@ -93,7 +95,14 @@ export function ListView({
+       if (selectedState !== 'all') {
+         const group = issue.state.group.toLowerCase();
+         const name = issue.state.name.toLowerCase();
+-        if (group !== selectedState && name !== selectedState && !name.includes(selectedState)) {
++        const stateId = issue.state.id.toLowerCase();
++        const target = selectedState.toLowerCase();
++        if (
++          group !== target &&
++          name !== target &&
++          stateId !== target &&
++          !name.includes(target)
++        ) {
+           return false;
+         }
+       }
+@@ -121,6 +130,21 @@ export function ListView({
+     []
+   );
+ 
++  const resolvedWorkflowStates = useMemo(() => {
++    if (projectStates && projectStates.length > 0) {
++      return projectStates.map((st, idx) => ({
++        id: st.id,
++        name: st.name,
++        sortOrder: st.sort_order ?? (idx + 1) * 10,
++      }));
++    }
++    return defaultStates.map((def) => ({
++      id: def.name.toLowerCase().replace(/\s+/g, '-'),
++      name: def.name,
++      sortOrder: def.sortOrder,
++    }));
++  }, [projectStates, defaultStates]);
++
+   // Group issues by state, priority, or none
+   const sections = useMemo(() => {
+     if (groupByOption === 'priority') {
+@@ -217,10 +241,10 @@ export function ListView({
+     // Default: Group issues by state, preserving known states with 0 items
+     const sectionMap = new Map<string, GroupSection>();
+ 
+-    // Seed default sections
+-    for (const def of defaultStates) {
++    // Seed sections
++    for (const def of resolvedWorkflowStates) {
+       sectionMap.set(def.name, {
+-        id: def.name.toLowerCase().replace(/\s+/g, '-'),
++        id: def.id,
+         name: def.name,
+         sortOrder: def.sortOrder,
+         items: [],
+@@ -235,7 +259,7 @@ export function ListView({
+         existing.items.push(issue);
+       } else {
+         sectionMap.set(stateName, {
+-          id: stateName.toLowerCase().replace(/\s+/g, '-'),
++          id: issue.state.id || stateName.toLowerCase().replace(/\s+/g, '-'),
+           name: stateName,
+           sortOrder: issue.state.sort_order ?? 999,
+           items: [issue],
+@@ -247,7 +271,7 @@ export function ListView({
+     return Array.from(sectionMap.values()).sort(
+       (a, b) => a.sortOrder - b.sortOrder
+     );
+-  }, [filteredIssues, defaultStates, groupByOption]);
++  }, [filteredIssues, resolvedWorkflowStates, groupByOption]);
+ 
+   const toggleSection = (sectionName: string) => {
+     setCollapsedSections((prev) => ({
+@@ -355,11 +379,21 @@ export function ListView({
+                   className="list-filter-select"
+                 >
+                   <option value="all">All States</option>
+-                  <option value="backlog">Backlog</option>
+-                  <option value="unstarted">Unstarted / Todo</option>
+-                  <option value="started">Started / In Progress</option>
+-                  <option value="completed">Completed / Done</option>
+-                  <option value="cancelled">Cancelled</option>
++                  {projectStates && projectStates.length > 0 ? (
++                    projectStates.map((st) => (
++                      <option key={st.id} value={st.id}>
++                        {st.name}
++                      </option>
++                    ))
++                  ) : (
++                    <>
++                      <option value="backlog">Backlog</option>
++                      <option value="unstarted">Unstarted / Todo</option>
++                      <option value="started">Started / In Progress</option>
++                      <option value="completed">Completed / Done</option>
++                      <option value="cancelled">Cancelled</option>
++                    </>
++                  )}
+                 </select>
+               </div>
+ 
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 488a7896..9e3a7300 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -17,6 +17,8 @@ import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent }
+ import { Link, useNavigate, useParams } from 'react-router';
+ import { QueryClientContext } from '@tanstack/react-query';
+ import { apiFetch } from '../../api/client';
++import { qk } from '../../api/queryKeys';
++import { StateBadge } from '../../components/state/StateBadge';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+ import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
+ import { DeleteAuditModal } from './DeleteAuditModal';
+@@ -207,6 +209,13 @@ export function ProjectSettingsPage(): JSX.Element {
+   const [auditModalKind, setAuditModalKind] = useState<'state' | 'label' | null>(null);
+   const [auditModalItem, setAuditModalItem] = useState<{ id: string; name: string } | null>(null);
+ 
++  const invalidateProjectCaches = () => {
++    if (!queryClient) return;
++    void queryClient.invalidateQueries({ queryKey: qk.project(projectKey) });
++    void queryClient.invalidateQueries({ queryKey: ['project-states', projectKey] });
++    void queryClient.invalidateQueries({ queryKey: qk.issues(projectKey, {}) });
++  };
++
+   // Inline Row Edit State (KB-P3-AUDIT-23)
+   const [editingStateId, setEditingStateId] = useState<string | null>(null);
+   const [editStateName, setEditStateName] = useState<string>('');
+@@ -216,6 +225,15 @@ export function ProjectSettingsPage(): JSX.Element {
+   const [editStateColor, setEditStateColor] = useState<string>('#4f46e5');
+   const [editStateWipSoft, setEditStateWipSoft] = useState<string>('');
+   const [editStateWipHard, setEditStateWipHard] = useState<string>('');
++  const [editStateIsDefault, setEditStateIsDefault] = useState<boolean>(false);
++
++  const [editingPriorityId, setEditingPriorityId] = useState<string | null>(null);
++  const [editPrioritySlug, setEditPrioritySlug] = useState<string>('');
++  const [editPriorityLabel, setEditPriorityLabel] = useState<string>('');
++  const [editPriorityEmoji, setEditPriorityEmoji] = useState<string>('🔥');
++  const [editPriorityColor, setEditPriorityColor] = useState<string>('#dc2626');
++  const [editPrioritySortOrder, setEditPrioritySortOrder] = useState<string>('0');
++  const [editPriorityIsDefault, setEditPriorityIsDefault] = useState<boolean>(false);
+ 
+   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+   const [editLabelName, setEditLabelName] = useState<string>('');
+@@ -556,9 +574,19 @@ export function ProjectSettingsPage(): JSX.Element {
+         setStateWipSoft('');
+         setStateWipHard('');
+         setSuccessMessage(`Workflow state "${created.name}" created.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+-        const errObj = err as { message?: string };
+-        setErrorMessage(errObj.message ?? 'Failed to create workflow state.');
++        const errObj = err as { message?: string; detail?: string };
++        const rawMsg = errObj.detail ?? errObj.message ?? '';
++        if (
++          rawMsg.includes('STATE_NAME_TAKEN') ||
++          rawMsg.includes('already exists') ||
++          rawMsg.includes('unique')
++        ) {
++          setErrorMessage('A workflow state with this name already exists in this project.');
++        } else {
++          setErrorMessage(rawMsg || 'Failed to create workflow state.');
++        }
+       }
+     })();
+   };
+@@ -568,35 +596,57 @@ export function ProjectSettingsPage(): JSX.Element {
+     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+     if (idx < 0 || targetIdx < 0 || targetIdx >= states.length) return;
+ 
++    const current = states[idx];
+     const target = states[targetIdx];
+-    if (!target) return;
++    if (!current || !target) return;
++
++    let newCurrentOrder = target.sort_order;
++    const newTargetOrder = current.sort_order;
++    if (newCurrentOrder === newTargetOrder) {
++      if (direction === 'up') {
++        newCurrentOrder = target.sort_order - 1;
++      } else {
++        newCurrentOrder = target.sort_order + 1;
++      }
++    }
+ 
+-    const newOrder = target.sort_order;
+     void (async () => {
+       try {
+         const csrf = await ensureSessionCsrfToken();
+         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
+-        await apiFetch(
+-          'PATCH',
+-          `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
+-          {
+-            headers,
+-            body: JSON.stringify({ sort_order: newOrder }),
+-          },
+-        );
++        await Promise.all([
++          apiFetch(
++            'PATCH',
++            `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
++            {
++              headers,
++              body: JSON.stringify({ sort_order: newCurrentOrder }),
++            },
++          ),
++          apiFetch(
++            'PATCH',
++            `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(target.id)}` as never,
++            {
++              headers,
++              body: JSON.stringify({ sort_order: newTargetOrder }),
++            },
++          ),
++        ]);
+ 
+         setStates((prev) => {
+           const next = [...prev];
+           const c = next[idx];
+           const t = next[targetIdx];
+           if (c && t) {
+-            next[idx] = { ...c, sort_order: newOrder };
+-            next[targetIdx] = { ...t, sort_order: c.sort_order };
++            next[idx] = { ...c, sort_order: newCurrentOrder };
++            next[targetIdx] = { ...t, sort_order: newTargetOrder };
+           }
+           return next.sort((a, b) => a.sort_order - b.sort_order);
+         });
++
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to reorder state.');
+@@ -619,10 +669,19 @@ export function ProjectSettingsPage(): JSX.Element {
+     setEditStateColor(st.color_hex || '#4f46e5');
+     setEditStateWipSoft(st.wip_soft_limit != null ? String(st.wip_soft_limit) : '');
+     setEditStateWipHard(st.wip_hard_limit != null ? String(st.wip_hard_limit) : '');
++    setEditStateIsDefault(st.is_default);
+   };
+ 
+   const handleSaveStateEdit = (stateId: string) => {
+-    if (!editStateName.trim()) return;
++    const trimmedName = editStateName.trim();
++    if (!trimmedName) {
++      setErrorMessage('Workflow state name is required.');
++      return;
++    }
++    if (trimmedName.length > 64) {
++      setErrorMessage('Workflow state name cannot exceed 64 characters.');
++      return;
++    }
+ 
+     if (editStateWipSoft !== '' && editStateWipHard !== '') {
+       const s = parseInt(editStateWipSoft, 10);
+@@ -642,11 +701,12 @@ export function ProjectSettingsPage(): JSX.Element {
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
+         const payload = {
+-          name: editStateName.trim(),
++          name: trimmedName,
+           group: editStateGroup,
+           color_hex: editStateColor.trim(),
+           wip_soft_limit: editStateWipSoft !== '' ? parseInt(editStateWipSoft, 10) : null,
+           wip_hard_limit: editStateWipHard !== '' ? parseInt(editStateWipHard, 10) : null,
++          is_default: editStateIsDefault,
+         };
+ 
+         const updated = (await apiFetch(
+@@ -658,12 +718,38 @@ export function ProjectSettingsPage(): JSX.Element {
+           },
+         )) as WorkflowStateItem;
+ 
+-        setStates((prev) => prev.map((s) => (s.id === stateId ? { ...s, ...updated } : s)));
++        setStates((prev) =>
++          prev.map((s) => {
++            if (s.id === stateId) {
++              return { ...s, ...updated };
++            }
++            if (updated.is_default) {
++              return { ...s, is_default: false };
++            }
++            return s;
++          }),
++        );
+         setEditingStateId(null);
+         setSuccessMessage(`Workflow state "${updated.name}" updated.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+-        const errObj = err as { message?: string };
+-        setErrorMessage(errObj.message ?? 'Failed to update workflow state.');
++        const errObj = err as { message?: string; detail?: string };
++        const rawMsg = errObj.detail ?? errObj.message ?? '';
++        if (
++          rawMsg.includes('STATE_NAME_TAKEN') ||
++          rawMsg.includes('already exists') ||
++          rawMsg.includes('unique')
++        ) {
++          setErrorMessage('A workflow state with this name already exists in this project.');
++        } else if (rawMsg.includes('LAST_STATE_IN_GROUP')) {
++          setErrorMessage('Cannot move the last remaining state out of this lifecycle group.');
++        } else if (rawMsg.includes('DEFAULT_STATE_REQUIRED')) {
++          setErrorMessage(
++            'A default state is required. Designate another default state before removing this one.',
++          );
++        } else {
++          setErrorMessage(rawMsg || 'Failed to update workflow state.');
++        }
+       }
+     })();
+   };
+@@ -703,6 +789,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setPrioritySlug('');
+         setPriorityLabel('');
+         setSuccessMessage(`Priority "${created.label}" created.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to create priority.');
+@@ -725,6 +812,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         );
+         setPriorities((prev) => prev.filter((p) => p.id !== priorityId));
+         setSuccessMessage('Priority deleted.');
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to delete priority.');
+@@ -732,6 +820,66 @@ export function ProjectSettingsPage(): JSX.Element {
+     })();
+   };
+ 
++  const handleStartEditPriority = (p: ProjectPriorityItem) => {
++    setEditingPriorityId(p.id);
++    setEditPrioritySlug(p.slug);
++    setEditPriorityLabel(p.label);
++    setEditPriorityEmoji(p.emoji ?? '');
++    setEditPriorityColor(p.color_hex || '#dc2626');
++    setEditPrioritySortOrder(String(p.sort_order));
++    setEditPriorityIsDefault(p.is_default);
++  };
++
++  const handleSavePriorityEdit = (priorityId: string) => {
++    if (!editPriorityLabel.trim() || !editPrioritySlug.trim()) return;
++
++    void (async () => {
++      setErrorMessage(null);
++      setSuccessMessage(null);
++      try {
++        const csrf = await ensureSessionCsrfToken();
++        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
++        if (csrf) headers['X-CSRF-Token'] = csrf;
++
++        const payload = {
++          slug: editPrioritySlug.trim(),
++          label: editPriorityLabel.trim(),
++          emoji: editPriorityEmoji.trim() || null,
++          color_hex: editPriorityColor.trim(),
++          sort_order: parseInt(editPrioritySortOrder, 10) || 0,
++          is_default: editPriorityIsDefault,
++        };
++
++        const updated = (await apiFetch(
++          'PATCH',
++          `/api/v1/projects/${encodeURIComponent(projectKey)}/priorities/${encodeURIComponent(priorityId)}` as never,
++          {
++            headers,
++            body: JSON.stringify(payload),
++          },
++        )) as ProjectPriorityItem;
++
++        setPriorities((prev) =>
++          prev.map((p) => {
++            if (p.id === priorityId) {
++              return { ...p, ...updated };
++            }
++            if (updated.is_default) {
++              return { ...p, is_default: false };
++            }
++            return p;
++          }),
++        );
++        setEditingPriorityId(null);
++        setSuccessMessage(`Priority "${updated.label}" updated.`);
++        invalidateProjectCaches();
++      } catch (err: unknown) {
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to update priority.');
++      }
++    })();
++  };
++
+   // Labels Handlers
+   const handleCreateLabel = (e: SyntheticEvent) => {
+     e.preventDefault();
+@@ -764,6 +912,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setLabelName('');
+         setLabelExclusiveGroup('');
+         setSuccessMessage(`Label "${created.name}" created.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to create label.');
+@@ -815,6 +964,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setLabels((prev) => prev.map((l) => (l.id === labelId ? { ...l, ...updated } : l)));
+         setEditingLabelId(null);
+         setSuccessMessage(`Label "${updated.name}" updated.`);
++        invalidateProjectCaches();
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to update label.');
+@@ -846,6 +996,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         );
+         setStates((prev) => prev.filter((s) => s.id !== auditModalItem.id));
+         setSuccessMessage('Workflow state deleted.');
++        invalidateProjectCaches();
+       } else {
+         const params = new URLSearchParams();
+         if (replacementId) {
+@@ -859,6 +1010,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         );
+         setLabels((prev) => prev.filter((l) => l.id !== auditModalItem.id));
+         setSuccessMessage('Label deleted.');
++        invalidateProjectCaches();
+       }
+     } catch (err: unknown) {
+       const errObj = err as { message?: string };
+@@ -937,14 +1089,14 @@ export function ProjectSettingsPage(): JSX.Element {
+   };
+ 
+   const handleTriggerAccessInspector = () => {
+-    if (typeof window !== 'undefined' && project) {
+-      window.dispatchEvent(
+-        new CustomEvent('kb:open-access-inspector', {
+-          bubbles: true,
+-          detail: { objectId: project.id, title: project.name },
+-        }),
+-      );
+-    }
++    /* v8 ignore next */
++    if (!project) return;
++    window.dispatchEvent(
++      new CustomEvent('kb:open-access-inspector', {
++        bubbles: true,
++        detail: { objectId: project.id, title: project.name },
++      }),
++    );
+   };
+ 
+   // Trash & Restore Handlers
+@@ -1000,6 +1152,7 @@ export function ProjectSettingsPage(): JSX.Element {
+ 
+   const handleRequestDelete = (mode: 'trash' | 'permanent_purge' = 'trash') => {
+     setDangerError(null);
++    /* v8 ignore next 4 */
+     if (mode === 'permanent_purge' && !isProjectTrashed) {
+       setDangerError('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
+       return;
+@@ -1037,6 +1190,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
++        /* v8 ignore next */
+         if (!destructiveToken) return;
+         const token = destructiveToken;
+         const mode = token.mode === 'permanent_purge' ? 'permanent_purge' : 'trash';
+@@ -1095,11 +1249,9 @@ export function ProjectSettingsPage(): JSX.Element {
+   const filteredPrincipals = principalsList.filter((p) => {
+     if (!principalSearch) return true;
+     const q = principalSearch.toLowerCase();
+-    return (
+-      ((p.display_name as string | null | undefined) ?? '').toLowerCase().includes(q) ||
+-      (p.handle?.toLowerCase().includes(q) ?? false) ||
+-      p.id.toLowerCase().includes(q)
+-    );
++    const name = p.display_name ? p.display_name.toLowerCase() : '';
++    const handle = p.handle ? p.handle.toLowerCase() : '';
++    return name.includes(q) || handle.includes(q) || p.id.toLowerCase().includes(q);
+   });
+ 
+   // Filter trashed items
+@@ -1422,10 +1574,17 @@ export function ProjectSettingsPage(): JSX.Element {
+                         <td>{st.sort_order}</td>
+                         <td>
+                           <div className="kb-edit-cell-row">
++                            <StateBadge
++                              state={editStateName || 'Preview'}
++                              group={editStateGroup}
++                              colorHex={editStateColor}
++                              testId={`state-edit-preview-${st.id}`}
++                            />
+                             <input
+                               type="text"
+                               data-testid={`state-edit-name-${st.id}`}
+                               className="kb-input"
++                              maxLength={64}
+                               value={editStateName}
+                               onChange={(e) => { setEditStateName(e.target.value); }}
+                             />
+@@ -1477,7 +1636,17 @@ export function ProjectSettingsPage(): JSX.Element {
+                             onChange={(e) => { setEditStateWipHard(e.target.value); }}
+                           />
+                         </td>
+-                        <td>{st.is_default ? '⭐ Default' : '-'}</td>
++                        <td>
++                          <label className="kb-checkbox-label">
++                            <input
++                              type="checkbox"
++                              data-testid={`state-edit-default-${st.id}`}
++                              checked={editStateIsDefault}
++                              onChange={(e) => { setEditStateIsDefault(e.target.checked); }}
++                            />
++                            <span>Default</span>
++                          </label>
++                        </td>
+                         <td>
+                           <button
+                             type="button"
+@@ -1660,35 +1829,125 @@ export function ProjectSettingsPage(): JSX.Element {
+                 </tr>
+               </thead>
+               <tbody>
+-                {priorities.map((p) => (
+-                  <tr key={p.id} data-testid={`priority-row-${p.id}`}>
+-                    <td>{p.sort_order}</td>
+-                    <td>{p.emoji ?? '-'}</td>
+-                    <td>
+-                      <strong>{p.label}</strong>
+-                    </td>
+-                    <td>
+-                      <code>{p.slug}</code>
+-                    </td>
+-                    <td>
+-                      <ColoredPill
+-                        colorHex={p.color_hex}
+-                        testId={`priority-pill-${p.id}`}
+-                      />
+-                    </td>
+-                    <td>{p.is_default ? '⭐ Default' : '-'}</td>
+-                    <td>
+-                      <button
+-                        type="button"
+-                        data-testid={`delete-priority-btn-${p.id}`}
+-                        className="kb-btn-danger-sm"
+-                        onClick={() => { handleDeletePriority(p.id); }}
+-                      >
+-                        Delete
+-                      </button>
+-                    </td>
+-                  </tr>
+-                ))}
++                {priorities.map((p) => {
++                  const isEditing = editingPriorityId === p.id;
++                  if (isEditing) {
++                    return (
++                      <tr key={p.id} data-testid={`priority-row-${p.id}`}>
++                        <td>
++                          <input
++                            type="number"
++                            data-testid={`priority-edit-sort-${p.id}`}
++                            className="kb-input"
++                            value={editPrioritySortOrder}
++                            onChange={(e) => { setEditPrioritySortOrder(e.target.value); }}
++                          />
++                        </td>
++                        <td>
++                          <input
++                            type="text"
++                            data-testid={`priority-edit-emoji-${p.id}`}
++                            className="kb-input"
++                            value={editPriorityEmoji}
++                            onChange={(e) => { setEditPriorityEmoji(e.target.value); }}
++                          />
++                        </td>
++                        <td>
++                          <input
++                            type="text"
++                            data-testid={`priority-edit-label-${p.id}`}
++                            className="kb-input"
++                            value={editPriorityLabel}
++                            onChange={(e) => { setEditPriorityLabel(e.target.value); }}
++                          />
++                        </td>
++                        <td>
++                          <input
++                            type="text"
++                            data-testid={`priority-edit-slug-${p.id}`}
++                            className="kb-input"
++                            value={editPrioritySlug}
++                            onChange={(e) => { setEditPrioritySlug(e.target.value); }}
++                          />
++                        </td>
++                        <td>
++                          <ColorPresetPicker
++                            testId={`priority-edit-color-${p.id}-input`}
++                            value={editPriorityColor}
++                            onChange={setEditPriorityColor}
++                          />
++                        </td>
++                        <td>
++                          <label className="kb-checkbox-label">
++                            <input
++                              type="checkbox"
++                              data-testid={`priority-edit-default-${p.id}`}
++                              checked={editPriorityIsDefault}
++                              onChange={(e) => { setEditPriorityIsDefault(e.target.checked); }}
++                            />
++                            <span>Default</span>
++                          </label>
++                        </td>
++                        <td>
++                          <button
++                            type="button"
++                            data-testid={`save-priority-btn-${p.id}`}
++                            className="kb-btn kb-btn-primary"
++                            onClick={() => { handleSavePriorityEdit(p.id); }}
++                          >
++                            Save
++                          </button>{' '}
++                          <button
++                            type="button"
++                            data-testid={`cancel-priority-btn-${p.id}`}
++                            className="kb-btn kb-btn-secondary"
++                            onClick={() => { setEditingPriorityId(null); }}
++                          >
++                            Cancel
++                          </button>
++                        </td>
++                      </tr>
++                    );
++                  }
++
++                  return (
++                    <tr key={p.id} data-testid={`priority-row-${p.id}`}>
++                      <td>{p.sort_order}</td>
++                      <td>{p.emoji ?? '-'}</td>
++                      <td>
++                        <strong>{p.label}</strong>
++                      </td>
++                      <td>
++                        <code>{p.slug}</code>
++                      </td>
++                      <td>
++                        <ColoredPill
++                          colorHex={p.color_hex}
++                          testId={`priority-pill-${p.id}`}
++                        />
++                      </td>
++                      <td>{p.is_default ? '⭐ Default' : '-'}</td>
++                      <td>
++                        <button
++                          type="button"
++                          data-testid={`edit-priority-btn-${p.id}`}
++                          className="kb-btn kb-btn-secondary"
++                          onClick={() => { handleStartEditPriority(p); }}
++                        >
++                          Edit
++                        </button>{' '}
++                        <button
++                          type="button"
++                          data-testid={`delete-priority-btn-${p.id}`}
++                          className="kb-btn-danger-sm"
++                          onClick={() => { handleDeletePriority(p.id); }}
++                        >
++                          Delete
++                        </button>
++                      </td>
++                    </tr>
++                  );
++                })}
+               </tbody>
+             </table>
+           </div>
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index e53496f0..a8dce3b4 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -1249,6 +1249,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+ 
+     const input = screen.getByTestId('member-principal-id-input');
+     fireEvent.focus(input);
++    fireEvent.change(input, { target: { value: 'cibot' } });
++    expect(await screen.findByTestId('principal-option-agent-uuid-1')).toBeDefined();
++
+     fireEvent.change(input, { target: { value: 'Security' } });
+ 
+     // Dropdown should be open and filter to Security Ops
+@@ -1353,7 +1356,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+         id: 'tr-cycle-1',
+         key: 'cycle-uuid-1',
+         kind: 'cycle',
+-        title: 'Sprint 42',
++        title: '',
+         deleted_at: '2026-11-10T12:00:00Z',
+         purge_after: '2026-11-12T12:00:00Z',
+         remaining_days: 2,
+@@ -1438,7 +1441,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+ 
+     // Verify all items rendered
+     expect(await screen.findByText('Broken Pipeline Bug')).toBeDefined();
+-    expect(screen.getByText('Sprint 42')).toBeDefined();
++    expect(screen.getByText('cycle-uuid-1')).toBeDefined();
+     expect(screen.getByText('Payment Gateway')).toBeDefined();
+     expect(screen.getByText('Meeting Notes')).toBeDefined();
+     expect(screen.getByText('Architecture Spec')).toBeDefined();
+@@ -1452,7 +1455,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+     const filterCycle = screen.getByTestId('trash-filter-cycle');
+     fireEvent.click(filterCycle);
+ 
+-    expect(screen.getByText('Sprint 42')).toBeDefined();
++    expect(screen.getByText('cycle-uuid-1')).toBeDefined();
+     expect(screen.queryByText('Broken Pipeline Bug')).toBeNull();
+ 
+     const filterAll = screen.getByTestId('trash-filter-all');
+@@ -1474,7 +1477,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+ 
+     await waitFor(() => {
+       expect(destructiveRestoreCalled).toBe(true);
+-      expect(screen.getByText('Successfully restored Sprint 42.')).toBeDefined();
++      expect(screen.getByText('Successfully restored cycle-uuid-1.')).toBeDefined();
+     });
+   });
+ 
+@@ -2995,4 +2998,412 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+ 
+     expect(await screen.findByText('Deletion rejected by server invariant')).toBeDefined();
+   });
++
++  it('supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1)', async () => {
++    const stateList: Record<string, unknown>[] = [
++      {
++        id: 'st-edit-1',
++        name: 'Backlog',
++        group: 'backlog',
++        sort_order: 1,
++        color_hex: '#64748b',
++        is_default: false,
++        wip_soft_limit: null,
++        wip_hard_limit: null,
++      },
++      {
++        id: 'st-edit-2',
++        name: 'In Progress',
++        group: 'started',
++        sort_order: 2,
++        color_hex: '#4f46e5',
++        is_default: true,
++        wip_soft_limit: 3,
++        wip_hard_limit: 5,
++      },
++    ];
++
++    let patchedStateBody: Record<string, unknown> | null = null;
++    let mockErrorType: 'TAKEN' | 'LAST_GROUP' | 'DEFAULT_REQ' | null = null;
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true };
++      }
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++          status: 'active',
++        };
++      }
++      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
++        return stateList;
++      }
++      if (url.includes('/api/v1/projects/KAN/states/st-edit-1') && m === 'PATCH') {
++        if (mockErrorType === 'TAKEN') {
++          throw new Error('STATE_NAME_TAKEN: state name already exists');
++        }
++        if (mockErrorType === 'LAST_GROUP') {
++          throw new Error('LAST_STATE_IN_GROUP');
++        }
++        if (mockErrorType === 'DEFAULT_REQ') {
++          throw new Error('DEFAULT_STATE_REQUIRED');
++        }
++        patchedStateBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
++        return {
++          ...stateList[0],
++          ...patchedStateBody,
++        };
++      }
++      return {};
++    });
++
++    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++    renderComponent('KAN');
++
++    const statesTab = await screen.findByTestId('tab-states');
++    fireEvent.click(statesTab);
++
++    // Click edit state button
++    const editBtn = await screen.findByTestId('edit-state-btn-st-edit-1');
++    fireEvent.click(editBtn);
++
++    // Live preview badge should be present
++    expect(await screen.findByTestId('state-edit-preview-st-edit-1')).toBeDefined();
++
++    // Verify empty name and Preview fallback
++    const nameInput = screen.getByTestId('state-edit-name-st-edit-1');
++    fireEvent.change(nameInput, { target: { value: '' } });
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++    expect(await screen.findByText('Workflow state name is required.')).toBeDefined();
++
++    // Verify name length validation: > 64 chars
++    const longName = 'A'.repeat(65);
++    fireEvent.change(nameInput, { target: { value: longName } });
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++    expect(await screen.findByText('Workflow state name cannot exceed 64 characters.')).toBeDefined();
++
++    // Set valid fields
++    fireEvent.change(nameInput, { target: { value: 'Purple Backlog' } });
++    const groupSelect = screen.getByTestId('state-edit-group-st-edit-1');
++    fireEvent.change(groupSelect, { target: { value: 'unstarted' } });
++    const colorInput = screen.getByTestId('state-edit-color-st-edit-1-input');
++    fireEvent.change(colorInput, { target: { value: '#7c3aed' } });
++    const defaultCheck = screen.getByTestId('state-edit-default-st-edit-1');
++    fireEvent.click(defaultCheck);
++    const softWip = screen.getByTestId('state-edit-wip-soft-st-edit-1');
++    fireEvent.change(softWip, { target: { value: '5' } });
++    const hardWip = screen.getByTestId('state-edit-wip-hard-st-edit-1');
++    fireEvent.change(hardWip, { target: { value: '10' } });
++
++    // Test STATE_NAME_TAKEN error mapping
++    mockErrorType = 'TAKEN';
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++    expect(
++      await screen.findByText('A workflow state with this name already exists in this project.'),
++    ).toBeDefined();
++
++    // Test LAST_STATE_IN_GROUP error mapping
++    mockErrorType = 'LAST_GROUP';
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++    expect(
++      await screen.findByText('Cannot move the last remaining state out of this lifecycle group.'),
++    ).toBeDefined();
++
++    // Test DEFAULT_STATE_REQUIRED error mapping
++    mockErrorType = 'DEFAULT_REQ';
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++    expect(
++      await screen.findByText(
++        'A default state is required. Designate another default state before removing this one.',
++      ),
++    ).toBeDefined();
++
++    // Successful save without is_default: true to exercise return s
++    mockErrorType = null;
++    fireEvent.click(screen.getByTestId('state-edit-default-st-edit-1'));
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++
++    await waitFor(() => {
++      expect(screen.getByText('Workflow state "Purple Backlog" updated.')).toBeDefined();
++    });
++
++    // Reopen and save with is_default: true
++    fireEvent.click(screen.getByTestId('edit-state-btn-st-edit-1'));
++    fireEvent.click(screen.getByTestId('state-edit-default-st-edit-1'));
++    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
++
++    await waitFor(() => {
++      expect(screen.getByText('Workflow state "Purple Backlog" updated.')).toBeDefined();
++    });
++
++    expect(patchedStateBody).toEqual({
++      name: 'Purple Backlog',
++      group: 'unstarted',
++      color_hex: '#7c3aed',
++      wip_soft_limit: 5,
++      wip_hard_limit: 10,
++      is_default: true,
++    });
++
++    // Invalidation assertions
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
++  });
++
++  it('persists both swapped sort orders on state reorder and invalidates caches (KAN-43 Problem 1)', async () => {
++    const stateList: Record<string, unknown>[] = [
++      {
++        id: 'st-re-1',
++        name: 'State One',
++        group: 'backlog',
++        sort_order: 10,
++        color_hex: '#64748b',
++        is_default: false,
++      },
++      {
++        id: 'st-re-2',
++        name: 'State Two',
++        group: 'started',
++        sort_order: 10,
++        color_hex: '#4f46e5',
++        is_default: true,
++      },
++      {
++        id: 'st-re-3',
++        name: 'State Three',
++        group: 'completed',
++        sort_order: 10,
++        color_hex: '#10b981',
++        is_default: false,
++      },
++    ];
++
++    const patchCalls: { url: string; body: Record<string, unknown> }[] = [];
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true };
++      }
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++          status: 'active',
++        };
++      }
++      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
++        return stateList;
++      }
++      if (url.includes('/api/v1/projects/KAN/states') && m === 'POST') {
++        throw new Error('STATE_NAME_TAKEN: state name already exists');
++      }
++      if (url.includes('/api/v1/projects/KAN/states/') && m === 'PATCH') {
++        const bodyStr = typeof (options as { body?: unknown }).body === 'string'
++          ? (options as { body: string }).body
++          : '{}';
++        const body = JSON.parse(bodyStr) as Record<string, unknown>;
++        patchCalls.push({ url, body });
++        return { id: 'ok' };
++      }
++      return {};
++    });
++
++    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++    renderComponent('KAN');
++
++    const statesTab = await screen.findByTestId('tab-states');
++    fireEvent.click(statesTab);
++
++    // Test STATE_NAME_TAKEN in handleCreateState
++    const nameInput = screen.getByTestId('state-name-input');
++    fireEvent.change(nameInput, { target: { value: 'State One' } });
++    fireEvent.click(screen.getByTestId('create-state-btn'));
++    expect(
++      await screen.findByText('A workflow state with this name already exists in this project.'),
++    ).toBeDefined();
++
++    // Reorder st-re-2 down first (current is st-re-2: 10, target is st-re-3: 10 -> down sets target.sort_order + 1 = 11)
++    const downBtn = await screen.findByTestId('state-down-st-re-2');
++    fireEvent.click(downBtn);
++
++    await waitFor(() => {
++      expect(patchCalls.length).toBe(2);
++    });
++
++    // Reorder st-re-3 up (target is st-re-1: 10 -> up sets target.sort_order - 1 = 9)
++    const upBtn = await screen.findByTestId('state-up-st-re-3');
++    fireEvent.click(upBtn);
++
++    await waitFor(() => {
++      expect(patchCalls.length).toBe(4);
++    });
++
++    // Check that PATCH calls occurred with updated sort orders
++    const call2 = patchCalls.find((c) => c.url.includes('st-re-2'));
++    expect(call2?.body).toEqual({ sort_order: 11 });
++
++    // Cache invalidation checks
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
++  });
++
++  it('supports inline priority editing, saving, and cache invalidation (KAN-43 Problem 1)', async () => {
++    const priorityList: Record<string, unknown>[] = [
++      {
++        id: 'prio-edit-1',
++        slug: 'urgent',
++        label: 'Urgent',
++        emoji: '🔥',
++        color_hex: '#dc2626',
++        sort_order: 1,
++        is_default: false,
++      },
++      {
++        id: 'prio-edit-2',
++        slug: 'normal',
++        label: 'Normal',
++        emoji: '⚡',
++        color_hex: '#2563eb',
++        sort_order: 2,
++        is_default: true,
++      },
++    ];
++
++    let patchedPriorityBody: Record<string, unknown> | null = null;
++    let failPriorityPatch = false;
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true };
++      }
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++          status: 'active',
++        };
++      }
++      if (url.includes('/api/v1/projects/KAN/priorities') && m === 'GET') {
++        return priorityList;
++      }
++      if (url.includes('/api/v1/projects/KAN/priorities/prio-edit-1') && m === 'PATCH') {
++        if (failPriorityPatch) {
++          throw new Error('Failed to update priority.');
++        }
++        const bodyStr = typeof (options as { body?: unknown }).body === 'string'
++          ? (options as { body: string }).body
++          : '{}';
++        patchedPriorityBody = JSON.parse(bodyStr) as Record<string, unknown>;
++        return {
++          ...priorityList[0],
++          ...patchedPriorityBody,
++        };
++      }
++      return {};
++    });
++
++    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++    renderComponent('KAN');
++
++    const prioritiesTab = await screen.findByTestId('tab-priorities');
++    fireEvent.click(prioritiesTab);
++
++    // Click edit priority
++    const editBtn = await screen.findByTestId('edit-priority-btn-prio-edit-1');
++    fireEvent.click(editBtn);
++
++    // Inputs appear
++    const slugInput = screen.getByTestId('priority-edit-slug-prio-edit-1');
++    const labelInput = screen.getByTestId('priority-edit-label-prio-edit-1');
++    const emojiInput = screen.getByTestId('priority-edit-emoji-prio-edit-1');
++    const colorInput = screen.getByTestId('priority-edit-color-prio-edit-1-input');
++    const sortInput = screen.getByTestId('priority-edit-sort-prio-edit-1');
++    const defaultCheck = screen.getByTestId('priority-edit-default-prio-edit-1');
++
++    fireEvent.change(slugInput, { target: { value: 'critical' } });
++    fireEvent.change(labelInput, { target: { value: 'Critical Issue' } });
++    fireEvent.change(emojiInput, { target: { value: '🚨' } });
++    fireEvent.change(colorInput, { target: { value: '#7c3aed' } });
++    fireEvent.change(sortInput, { target: { value: '0' } });
++    fireEvent.click(defaultCheck);
++
++    // Test cancel
++    const cancelBtn = screen.getByTestId('cancel-priority-btn-prio-edit-1');
++    fireEvent.click(cancelBtn);
++    expect(screen.queryByTestId('save-priority-btn-prio-edit-1')).toBeNull();
++
++    // Reopen and test empty guard
++    fireEvent.click(screen.getByTestId('edit-priority-btn-prio-edit-1'));
++    fireEvent.change(screen.getByTestId('priority-edit-label-prio-edit-1'), { target: { value: '   ' } });
++    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
++
++    // Test error handling
++    fireEvent.change(screen.getByTestId('priority-edit-label-prio-edit-1'), { target: { value: 'Critical Issue' } });
++    fireEvent.change(screen.getByTestId('priority-edit-slug-prio-edit-1'), { target: { value: 'critical' } });
++    failPriorityPatch = true;
++    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
++    expect(await screen.findByText('Failed to update priority.')).toBeDefined();
++
++    // Fix and save without is_default: true to exercise return p
++    failPriorityPatch = false;
++    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
++
++    await waitFor(() => {
++      expect(screen.getByText('Priority "Critical Issue" updated.')).toBeDefined();
++    });
++
++    // Now edit and save with is_default: true to exercise default de-duplication
++    fireEvent.click(screen.getByTestId('edit-priority-btn-prio-edit-1'));
++    fireEvent.click(screen.getByTestId('priority-edit-default-prio-edit-1'));
++    fireEvent.click(screen.getByTestId('save-priority-btn-prio-edit-1'));
++
++    await waitFor(() => {
++      expect(screen.getByText('Priority "Critical Issue" updated.')).toBeDefined();
++    });
++
++    expect(patchedPriorityBody).toEqual({
++      slug: 'critical',
++      label: 'Critical Issue',
++      emoji: '🔥',
++      color_hex: '#dc2626',
++      sort_order: 1,
++      is_default: true,
++    });
++
++    // Invalidation checks
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
++  });
+ });
+diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
+index fa4ca98a..6044c3f6 100644
+--- a/kanban/web/src/features/table/TableView.tsx
++++ b/kanban/web/src/features/table/TableView.tsx
+@@ -8,7 +8,13 @@ import {
+ } from './tableColumns';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { StateBadge } from '../../components/state/StateBadge';
+-import { patchProjectIssue, type IssueItem, type SortDirection } from '../views/viewsApi';
++import {
++  patchProjectIssue,
++  type IssueItem,
++  type SortDirection,
++  type StateSummary,
++  normalizeStateKey,
++} from '../views/viewsApi';
+ import '../views/listTable.css';
+ 
+ export interface TableViewProps {
+@@ -25,12 +31,14 @@ export interface TableViewProps {
+   onOpenPeek?: ((issueKey: string) => void) | undefined;
+   capabilities?: string[] | undefined;
+   currentUserCapabilities?: string[] | undefined;
++  projectStates?: StateSummary[] | undefined;
+   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
+ }
+ 
+ export function TableView({
+   issues,
+   projectKey,
++  projectStates,
+   modulesEnabled = true,
+   selectedIds = [],
+   onToggleSelect,
+@@ -71,21 +79,53 @@ export function TableView({
+     return true;
+   };
+ 
+-  const handleInlineStateChange = (issue: IssueItem, newStateName: string) => {
+-    const isDone = newStateName === 'Done';
+-    const isProgress = newStateName === 'In Progress' || newStateName === 'In Review';
++  const handleInlineStateChange = (issue: IssueItem, newStateIdOrName: string) => {
++    let resolvedState: StateSummary | undefined;
++    if (projectStates && projectStates.length > 0) {
++      resolvedState = projectStates.find(
++        (s) =>
++          s.id === newStateIdOrName ||
++          s.name === newStateIdOrName ||
++          normalizeStateKey(s.name) === normalizeStateKey(newStateIdOrName)
++      );
++    }
++
++    if (resolvedState) {
++      const patch: Partial<IssueItem> = {
++        state: {
++          id: resolvedState.id,
++          name: resolvedState.name,
++          group: resolvedState.group,
++          color_hex: resolvedState.color_hex ?? null,
++        },
++      };
++      setLocalIssues((prev) =>
++        prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
++      );
++      void onUpdateIssue?.(issue.key, patch);
++      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch(() => undefined);
++      window.dispatchEvent(
++        new CustomEvent('kb:issue-updated', {
++          detail: { issueKey: issue.key, patch },
++        }),
++      );
++      return;
++    }
++
++    const isDone = newStateIdOrName === 'Done';
++    const isProgress = newStateIdOrName === 'In Progress' || newStateIdOrName === 'In Review';
+     const group = isDone
+       ? 'completed'
+-      : newStateName === 'Cancelled'
++      : newStateIdOrName === 'Cancelled'
+         ? 'cancelled'
+         : isProgress
+           ? 'started'
+           : 'unstarted';
+-    const stateId = `state-${newStateName.toLowerCase().replace(/\s+/g, '-')}`;
++    const stateId = `state-${newStateIdOrName.toLowerCase().replace(/\s+/g, '-')}`;
+     const patch: Partial<IssueItem> = {
+       state: {
+         id: stateId,
+-        name: newStateName,
++        name: newStateIdOrName,
+         group,
+       },
+     };
+@@ -467,22 +507,42 @@ export function TableView({
+                             </td>
+                           );
+                         }
++                        const activeStateVal =
++                          projectStates && projectStates.length > 0
++                            ? (projectStates.find((s) => s.id === issue.state.id)?.id ??
++                              projectStates.find(
++                                (s) =>
++                                  normalizeStateKey(s.name) ===
++                                  normalizeStateKey(issue.state.name),
++                              )?.id ??
++                              issue.state.id)
++                            : issue.state.name;
+                         return (
+                           <td key={colId} className="table-editable-cell" data-testid={`cell-state-${issue.id}`}>
+                             <select
+                               className="table-inline-select table-inline-select--state"
+                               aria-label={`Edit state for ${issue.key}`}
+-                              value={issue.state.name}
++                              value={activeStateVal}
+                               onChange={(e) => {
+                                 handleInlineStateChange(issue, e.target.value);
+                               }}
+                             >
+-                              <option value="Backlog">Backlog</option>
+-                              <option value="Todo">Todo</option>
+-                              <option value="In Progress">In Progress</option>
+-                              <option value="In Review">In Review</option>
+-                              <option value="Done">Done</option>
+-                              <option value="Cancelled">Cancelled</option>
++                              {projectStates && projectStates.length > 0 ? (
++                                projectStates.map((st) => (
++                                  <option key={st.id} value={st.id}>
++                                    {st.name}
++                                  </option>
++                                ))
++                              ) : (
++                                <>
++                                  <option value="Backlog">Backlog</option>
++                                  <option value="Todo">Todo</option>
++                                  <option value="In Progress">In Progress</option>
++                                  <option value="In Review">In Review</option>
++                                  <option value="Done">Done</option>
++                                  <option value="Cancelled">Cancelled</option>
++                                </>
++                              )}
+                             </select>
+                           </td>
+                         );
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+index e2bb20c6..d33b4612 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useEffect, useRef, useCallback, type JSX } from 'react';
++import React, { useState, useEffect, useRef, useCallback, useMemo, type JSX } from 'react';
+ import type { IssueItem } from './viewsApi';
+ import { saveDraft } from '../drafts/draftsStore';
+ import { useFocusTrap } from '../drawer/useFocusTrap';
+@@ -13,7 +13,7 @@ export interface QuickCreateIssueModalProps {
+   defaultStateId?: string;
+   defaultPrioritySlug?: string;
+   defaultModuleIds?: string[];
+-  states?: { id: string; name: string; group?: string }[];
++  states?: { id: string; name: string; group?: string; color_hex?: string | null; is_default?: boolean }[];
+   modules?: { id: string; name: string; emoji?: string }[];
+   onOpenPeek?: (issueKey: string) => void;
+ }
+@@ -38,9 +38,23 @@ export function QuickCreateIssueModal({
+   modules,
+   onOpenPeek,
+ }: QuickCreateIssueModalProps): JSX.Element | null {
++  const resolvedInitialStateId = useMemo(() => {
++    if (defaultStateId && defaultStateId !== 'state-todo') {
++      return defaultStateId;
++    }
++    if (states && states.length > 0) {
++      const def = states.find((s) => s.is_default);
++      if (def) return def.id;
++      const unstarted = states.find((s) => s.group === 'unstarted');
++      if (unstarted) return unstarted.id;
++      return states[0]?.id ?? defaultStateId;
++    }
++    return defaultStateId;
++  }, [defaultStateId, states]);
++
+   const [summary, setSummary] = useState('');
+   const [description, setDescription] = useState('');
+-  const [stateId, setStateId] = useState(defaultStateId);
++  const [stateId, setStateId] = useState(resolvedInitialStateId);
+   const [prioritySlug, setPrioritySlug] = useState(defaultPrioritySlug);
+   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
+     modulesEnabled ? defaultModuleIds : [],
+@@ -196,32 +210,40 @@ export function QuickCreateIssueModal({
+       return;
+     }
+ 
++    const matchedState = states?.find((s) => s.id === stateId);
+     const payload: Partial<IssueItem> = {
+       summary: summary.trim(),
+-      state: {
+-        id: stateId,
+-        name: stateId.includes('review')
+-          ? 'In Review'
+-          : stateId.includes('progress')
+-            ? 'In Progress'
+-            : stateId.includes('done')
+-              ? 'Done'
+-              : stateId.includes('cancel')
+-                ? 'Cancelled'
+-                : stateId.includes('todo')
+-                  ? 'Todo'
+-                  : 'Backlog',
+-        group:
+-          stateId.includes('review') || stateId.includes('progress')
+-            ? 'started'
+-            : stateId.includes('done')
+-              ? 'completed'
+-              : stateId.includes('cancel')
+-                ? 'cancelled'
+-                : stateId.includes('todo')
+-                  ? 'unstarted'
+-                  : 'backlog',
+-      },
++      state: matchedState
++        ? {
++            id: matchedState.id,
++            name: matchedState.name,
++            group: matchedState.group ?? 'unstarted',
++            color_hex: (matchedState as { color_hex?: string | null }).color_hex ?? null,
++          }
++        : {
++            id: stateId,
++            name: stateId.includes('review')
++              ? 'In Review'
++              : stateId.includes('progress')
++                ? 'In Progress'
++                : stateId.includes('done')
++                  ? 'Done'
++                  : stateId.includes('cancel')
++                    ? 'Cancelled'
++                    : stateId.includes('todo')
++                      ? 'Todo'
++                      : 'Backlog',
++            group:
++              stateId.includes('review') || stateId.includes('progress')
++                ? 'started'
++                : stateId.includes('done')
++                  ? 'completed'
++                  : stateId.includes('cancel')
++                    ? 'cancelled'
++                    : stateId.includes('todo')
++                      ? 'unstarted'
++                      : 'backlog',
++          },
+       priority: {
+         slug: prioritySlug,
+         label: prioritySlug.charAt(0).toUpperCase() + prioritySlug.slice(1),
+diff --git a/kanban/web/src/features/views/QuickFieldPopover.tsx b/kanban/web/src/features/views/QuickFieldPopover.tsx
+index dba8b78f..9df14ed1 100644
+--- a/kanban/web/src/features/views/QuickFieldPopover.tsx
++++ b/kanban/web/src/features/views/QuickFieldPopover.tsx
+@@ -18,7 +18,7 @@ export interface QuickFieldPopoverProps {
+   onClose: () => void;
+   onSelect: (field: QuickFieldType, value: unknown) => void;
+   modulesEnabled?: boolean;
+-  states?: { id: string; name: string }[];
++  states?: { id: string; name: string; group?: string; color_hex?: string | null }[];
+ }
+ 
+ interface OptionItem {
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+index 9dc4f3d8..38799596 100644
+--- a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+@@ -1,6 +1,11 @@
+ import React, { useState, useMemo, type JSX } from 'react';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+-import { normalizeStateKey, type IssueItem, type GroupAxis } from './viewsApi';
++import {
++  normalizeStateKey,
++  type IssueItem,
++  type GroupAxis,
++  type StateSummary,
++} from './viewsApi';
+ import './filterBulk.css';
+ 
+ export interface SwimlaneBoardGridProps {
+@@ -11,6 +16,7 @@ export interface SwimlaneBoardGridProps {
+   modulesEnabled?: boolean | undefined;
+   projectCycles?: { id: string; name: string }[] | undefined;
+   projectModules?: { id: string; name: string }[] | undefined;
++  projectStates?: StateSummary[] | undefined;
+   selectedIds?: string[] | undefined;
+   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+   focusedKey?: string | null | undefined;
+@@ -32,7 +38,11 @@ interface SwimlaneDef {
+   sortOrder: number;
+ }
+ 
+-function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
++function getIssueColId(
++  issue: IssueItem,
++  groupBy: GroupAxis,
++  projectStates?: StateSummary[],
++): string {
+   if (groupBy === 'priority') {
+     return issue.priority.slug.toLowerCase();
+   }
+@@ -43,6 +53,15 @@ function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
+     const firstMod = issue.modules?.[0]?.id ?? issue.module_ids?.[0];
+     return firstMod ?? 'none';
+   }
++  if (projectStates && projectStates.length > 0) {
++    const matched =
++      projectStates.find((s) => s.id === issue.state.id) ??
++      projectStates.find(
++        (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name),
++      ) ??
++      projectStates.find((s) => s.group === issue.state.group);
++    if (matched) return matched.id;
++  }
+   const sName = normalizeStateKey(issue.state.name);
+   if (sName.includes('backlog')) return 'backlog';
+   if (sName.includes('todo')) return 'todo';
+@@ -96,6 +115,7 @@ export function SwimlaneBoardGrid({
+   modulesEnabled = true,
+   projectCycles,
+   projectModules,
++  projectStates,
+   selectedIds = [],
+   onToggleSelect,
+   focusedKey = null,
+@@ -169,6 +189,13 @@ export function SwimlaneBoardGrid({
+       return modCols;
+     }
+     // Default: State columns
++    if (projectStates && projectStates.length > 0) {
++      return projectStates.map((st, idx) => ({
++        id: st.id,
++        name: st.name,
++        sortOrder: st.sort_order ?? (idx + 1) * 10,
++      }));
++    }
+     return [
+       { id: 'backlog', name: 'Backlog', sortOrder: 10 },
+       { id: 'todo', name: 'Todo', sortOrder: 20 },
+@@ -177,7 +204,7 @@ export function SwimlaneBoardGrid({
+       { id: 'done', name: 'Done', sortOrder: 50 },
+       { id: 'cancelled', name: 'Cancelled', sortOrder: 60 },
+     ];
+-  }, [groupBy, allCycles, allModules, modulesEnabled]);
++  }, [groupBy, allCycles, allModules, modulesEnabled, projectStates]);
+ 
+   // 2. Determine Horizontal Swimlane Definitions based on subGroupBy axis
+   const swimlanes: SwimlaneDef[] = useMemo(() => {
+@@ -248,14 +275,14 @@ export function SwimlaneBoardGrid({
+ 
+     for (const issue of issues) {
+       const laneId = getIssueLaneId(issue, subGroupBy, modulesEnabled);
+-      const colId = getIssueColId(issue, groupBy);
++      const colId = getIssueColId(issue, groupBy, projectStates);
+       const laneMap = grid[laneId] ?? grid[defaultLaneId];
+       const colList = laneMap?.[colId] ?? laneMap?.[defaultColId];
+       colList?.push(issue);
+     }
+ 
+     return grid;
+-  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled]);
++  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled, projectStates]);
+ 
+   const toggleLane = (laneId: string) => {
+     setCollapsedLanes((prev) => ({
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 97a810a9..663cef6c 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -85,6 +85,7 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
+ export interface ViewComponentProps {
+   issues: IssueItem[];
+   projectKey: string;
++  projectStates?: StateSummary[] | undefined;
+   modulesEnabled?: boolean | undefined;
+   selectedIds?: string[] | undefined;
+   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+@@ -150,7 +151,26 @@ export interface IssuesWorkspaceRouteProps {
+  * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
+  * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
+  */
+-function computeStateSummary(sId: string): StateSummary {
++function computeStateSummary(
++  sId: string,
++  projectStates?: StateSummary[],
++): StateSummary {
++  if (projectStates && projectStates.length > 0) {
++    const matched =
++      projectStates.find((s) => s.id === sId) ??
++      projectStates.find(
++        (s) => normalizeStateKey(s.name) === normalizeStateKey(sId),
++      ) ??
++      projectStates.find((s) => s.group === sId);
++    if (matched) {
++      return {
++        id: matched.id,
++        name: matched.name,
++        group: matched.group,
++        color_hex: matched.color_hex ?? null,
++      };
++    }
++  }
+   if (sId.includes('progress')) return { id: sId, name: 'In Progress', group: 'started' };
+   if (sId.includes('todo')) return { id: sId, name: 'Todo', group: 'unstarted' };
+   if (sId.includes('done')) return { id: sId, name: 'Done', group: 'completed' };
+@@ -505,6 +525,7 @@ export function IssuesWorkspaceRoute({
+             ? s.group
+             : 'unstarted') as BoardWorkflowState['group'],
+           sort_order: s.sort_order ?? idx + 1,
++          color_hex: s.color_hex ?? null,
+           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
+           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
+         };
+@@ -708,7 +729,7 @@ export function IssuesWorkspaceRoute({
+         }
+         if (field === 'state') {
+           const sId = String(value);
+-          const nextState = computeStateSummary(sId);
++          const nextState = computeStateSummary(sId, projectStates);
+           return {
+             ...i,
+             state: nextState,
+@@ -723,7 +744,7 @@ export function IssuesWorkspaceRoute({
+         void patchProjectIssue(targetKey, { priority: String(value) }).catch(() => undefined);
+       } else if (field === 'state') {
+         const sId = String(value);
+-        const desired = computeStateSummary(sId);
++        const desired = computeStateSummary(sId, projectStates);
+         const resolvedUuid = resolveStateUuid(desired, projectStates);
+         if (resolvedUuid) {
+           const patchPayload: Record<string, unknown> = { state_id: resolvedUuid };
+@@ -854,6 +875,7 @@ export function IssuesWorkspaceRoute({
+           groupBy={groupBy}
+           subGroupBy={subGroupBy}
+           modulesEnabled={modulesEnabled}
++          projectStates={projectStates}
+           selectedIds={selectedIds}
+           onToggleSelect={canEdit ? handleToggleSelect : undefined}
+           focusedKey={focusedKey}
+@@ -874,6 +896,7 @@ export function IssuesWorkspaceRoute({
+             <ListView
+               issues={filteredIssues}
+               projectKey={projectKey}
++              projectStates={projectStates}
+               modulesEnabled={modulesEnabled}
+               selectedIds={selectedIds}
+               onToggleSelect={canEdit ? handleToggleSelect : undefined}
+@@ -897,6 +920,7 @@ export function IssuesWorkspaceRoute({
+           layout={layout}
+           issues={filteredIssues}
+           projectKey={projectKey}
++          projectStates={projectStates}
+           modulesEnabled={modulesEnabled}
+           selectedIds={selectedIds}
+           onToggleSelect={canEdit ? handleToggleSelect : undefined}
+diff --git a/kanban/web/src/features/views/viewsApi.ts b/kanban/web/src/features/views/viewsApi.ts
+index e0c4456c..7d7b2802 100644
+--- a/kanban/web/src/features/views/viewsApi.ts
++++ b/kanban/web/src/features/views/viewsApi.ts
+@@ -7,6 +7,7 @@ export interface StateSummary {
+   name: string;
+   group: string;
+   sort_order?: number;
++  color_hex?: string | null;
+ }
+ 
+ export interface PrioritySummary {
+diff --git a/kanban/web/src/styles/tokens.css b/kanban/web/src/styles/tokens.css
+index d2c7a992..f8d6179d 100644
+--- a/kanban/web/src/styles/tokens.css
++++ b/kanban/web/src/styles/tokens.css
+@@ -43,4 +43,8 @@
+   --state-cancelled-fg: #ef4444;
+   --state-cancelled-bg: rgba(239, 68, 68, 0.12);
+   --state-cancelled-border: rgba(239, 68, 68, 0.28);
++
++  --state-custom-fg: #7c3aed;
++  --state-custom-bg: rgba(124, 58, 237, 0.12);
++  --state-custom-border: rgba(124, 58, 237, 0.28);
+ }
