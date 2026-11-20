@@ -35,4 +35,5 @@ async def copy_issue_endpoint(
     async with timing_floor(floor_ms=25.0):
         result, canonical_key = await copy_issue(session, caller, issue_ref, body)
         response.headers["Location"] = f"/api/v1/issues/{canonical_key}"
+        await session.commit()
         return result

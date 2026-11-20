@@ -49,6 +49,7 @@ import {
 import { pruneHiddenDom } from '../../editor/clipboard/hiddenDomPruner';
 import { SanitizedPastePill } from '../../editor/clipboard/SanitizedPastePill';
 import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
+import { copyToClipboard } from '../../utils/clipboard';
 import './IssueSurface.css';
 
 let moduleMountCounter = 0;
@@ -159,6 +160,18 @@ function IssueSurfaceContent({
     message: string;
   } | null>(null);
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copiedBranch, setCopiedBranch] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -1101,63 +1114,148 @@ function IssueSurfaceContent({
       return 'Assigned';
     })();
 
+    const safeCopyToClipboard = async (text: string): Promise<boolean> => {
+      try {
+        if (
+          typeof navigator !== 'undefined' &&
+          'clipboard' in navigator &&
+          typeof navigator.clipboard.writeText === 'function'
+        ) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {
+        // clipboard-write permission denied or unhandled rejection avoided -> fallback
+      }
+      try {
+        return await copyToClipboard(text);
+      } catch {
+        return false;
+      }
+    };
+
     const handleAssignToMe = async (): Promise<void> => {
       try {
-        let meUser: { id?: string; handle?: string; display_name?: string } | null = null;
+        let meUser: {
+          id?: string;
+          principal_id?: string;
+          handle?: string;
+          display_name?: string;
+        } | null = null;
         try {
-          meUser = (await apiClient.get('/api/v1/auth/me')) as { id?: string; handle?: string; display_name?: string };
+          meUser = (await apiClient.get('/api/v1/auth/me')) as {
+            id?: string;
+            principal_id?: string;
+            handle?: string;
+            display_name?: string;
+          };
         } catch {
           meUser = { id: 'u-me', handle: 'me', display_name: 'Current User' };
         }
         const myHandle = meUser.handle ?? 'me';
         const myName = meUser.display_name ?? myHandle;
-        const myId = meUser.id ?? 'u-me';
+        const myId = meUser.id ?? meUser.principal_id ?? meUser.handle ?? 'u-me';
         const rawAssignees = Array.isArray(currentIssue.assignees) ? currentIssue.assignees : [];
         const existingAssignees: railApi.AssigneeItem[] = rawAssignees.filter(
           (a): a is railApi.AssigneeItem => typeof a !== 'string',
         );
         const alreadyAssigned = rawAssignees.some((asg) => {
-          if (typeof asg === 'string') return asg === myHandle;
+          if (typeof asg === 'string') return asg === myHandle || asg === `@${myHandle}` || asg === myId;
           const asgObj = asg as unknown as Record<string, unknown>;
           const p = asgObj.principal as Record<string, unknown> | undefined;
-          return asgObj.handle === myHandle || p?.handle === myHandle || asgObj.id === myId;
+          return (
+            asgObj.handle === myHandle ||
+            p?.handle === myHandle ||
+            asgObj.id === myId ||
+            p?.id === myId ||
+            asgObj.principal_id === myId
+          );
         });
         if (!alreadyAssigned) {
-          const newAsg: railApi.AssigneeItem = {
-            id: `asg-${myId}`,
-            kind: 'principal',
-            principal: {
-              id: myId,
-              handle: myHandle,
-              display_name: myName,
-              type: 'USER',
-            },
-          };
+          const added = await railApi.addAssignee(currentIssue.key, { principal: myId });
+          const newAsg: railApi.AssigneeItem =
+            'id' in added
+              ? added
+              : {
+                  id: `asg-${myId}`,
+                  kind: 'principal',
+                  principal: {
+                    id: myId,
+                    handle: myHandle,
+                    display_name: myName,
+                    type: 'USER',
+                  },
+                };
           const updatedAssignees: railApi.AssigneeItem[] = [...existingAssignees, newAsg];
-          const optimistic: IssueDetail = {
+          const updatedIssue: IssueDetail = {
             ...currentIssue,
             assignees: updatedAssignees,
           };
-          handleIssueUpdate(optimistic);
-          try {
-            await railApi.patchIssue(
-              currentIssue.key,
-              { assignees: updatedAssignees },
-              currentIssue.etag,
-            );
-          } catch {
-            // Keep optimistic in unit tests / offline
-          }
+          setConflictError(null);
+          handleIssueUpdate(updatedIssue);
+          const targetProject = (currentIssue.project_key ? currentIssue.project_key : projectKey) ?? 'default';
+          queryClient.setQueriesData<IssueItem[]>(
+            { queryKey: ['issues', targetProject] },
+            (old) => {
+              if (!Array.isArray(old)) return old;
+              return old.map((iss) =>
+                iss.key === currentIssue.key
+                  ? {
+                      ...iss,
+                      assignees: updatedAssignees as unknown as NonNullable<IssueItem['assignees']>,
+                    }
+                  : iss,
+              );
+            },
+          );
         }
-      } catch {
-        // ignore
+      } catch (err: unknown) {
+        const errObj = typeof err === 'object' && err !== null ? (err as Record<string, unknown>) : null;
+        const errStatus =
+          err instanceof ApiProblem
+            ? err.status
+            : typeof errObj?.status === 'number'
+              ? errObj.status
+              : 400;
+        const errMsg =
+          err instanceof ApiProblem
+            ? err.detail ?? err.title ?? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Failed to assign issue';
+        setConflictError({
+          status: errStatus,
+          message: errMsg,
+        });
       }
     };
 
-    const handleShareExport = (): void => {
+    const handleShareExport = async (): Promise<void> => {
       if (typeof window === 'undefined') return;
       const shareUrl = `${window.location.origin}/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`;
-      void navigator.clipboard.writeText(shareUrl);
+      await safeCopyToClipboard(shareUrl);
+      setCopiedShare(true);
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedShare(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
+    };
+
+    const handleCopyBranch = async (): Promise<void> => {
+      const slug = currentIssue.summary.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+      const branch = `feat/${currentIssue.key}-${slug}`;
+      await safeCopyToClipboard(branch);
+      setCopiedBranch(true);
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedBranch(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
     };
 
     const handleAddCommentClick = (): void => {
@@ -1341,9 +1439,11 @@ function IssueSurfaceContent({
                 className="split-toolbar-btn"
                 data-testid="split-share-btn"
                 aria-label="Share or export issue"
-                onClick={handleShareExport}
+                onClick={() => {
+                  void handleShareExport();
+                }}
               >
-                🔗 Share / Export
+                {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
               </button>
             </div>
 
@@ -1692,12 +1792,10 @@ function IssueSurfaceContent({
                         className="split-git-branch-copy"
                         data-testid="split-git-branch-copy"
                         onClick={() => {
-                          const slug = currentIssue.summary.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
-                          const branch = `feat/${currentIssue.key}-${slug}`;
-                          void navigator.clipboard.writeText(branch);
+                          void handleCopyBranch();
                         }}
                       >
-                        📋 Copy git branch
+                        {copiedBranch ? '✓ Copied!' : '📋 Copy git branch'}
                       </button>
                     </div>
                   </details>

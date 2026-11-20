@@ -46,6 +46,7 @@ async def create_issue(
         result, etag = await svc.create_issue(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/issues/{result.key}"
         response.headers["ETag"] = etag
+        await session.commit()
         return result
 
 
