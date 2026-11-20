@@ -1,0 +1,1763 @@
+diff --git a/kanban/api/middleware/__init__.py b/kanban/api/middleware/__init__.py
+index 9b8db2d..0f97b5d 100644
+--- a/kanban/api/middleware/__init__.py
++++ b/kanban/api/middleware/__init__.py
+@@ -4,8 +4,10 @@
+ 
+ from __future__ import annotations
+ 
++from kanban.api.middleware.json_limits import JsonLimitsMiddleware
+ from kanban.api.middleware.script_depth import ScriptDepthGuardMiddleware
+ 
+ __all__ = [
++    "JsonLimitsMiddleware",
+     "ScriptDepthGuardMiddleware",
+ ]
+diff --git a/kanban/api/middleware/json_limits.py b/kanban/api/middleware/json_limits.py
+new file mode 100644
+index 0000000..c06e0c7
+--- /dev/null
++++ b/kanban/api/middleware/json_limits.py
+@@ -0,0 +1,360 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Pure ASGI middleware enforcing body size, JSON depth, keys, and surrogates (KB-P3-AUDIT-11)."""
++
++from __future__ import annotations
++
++import json
++from typing import TYPE_CHECKING, Any, Final
++
++from starlette.responses import Response
++
++if TYPE_CHECKING:
++    from starlette.types import ASGIApp, Message, Receive, Scope, Send
++
++DEFAULT_MAX_BODY_BYTES: Final[int] = 2 * 1024 * 1024  # 2 MiB
++LARGE_UPLOAD_MAX_BODY_BYTES: Final[int] = 25 * 1024 * 1024  # 25 MiB
++MAX_JSON_DEPTH: Final[int] = 32
++MAX_JSON_KEYS: Final[int] = 5000
++
++SURROGATE_MIN: Final[int] = 0xD800
++SURROGATE_MAX: Final[int] = 0xDFFF
++
++
++class JsonLimitError(Exception):
++    """Base class for JSON limits errors."""
++
++    def __init__(self, code: str, title: str, status: int, detail: str) -> None:
++        """Initialize error details."""
++        super().__init__(detail)
++        self.code = code
++        self.title = title
++        self.status = status
++        self.detail = detail
++
++
++class PayloadTooLargeLimitError(JsonLimitError):
++    """Request body exceeds byte size ceiling."""
++
++    def __init__(self, detail: str) -> None:
++        """Initialize 413 Payload Too Large error."""
++        super().__init__(
++            code="PAYLOAD_TOO_LARGE",
++            title="Payload Too Large",
++            status=413,
++            detail=detail,
++        )
++
++
++class JsonSurrogateLimitError(JsonLimitError):
++    """JSON payload contains forbidden UTF-16 lone surrogate character."""
++
++    def __init__(self, detail: str) -> None:
++        """Initialize 422 Invalid UTF-8 Surrogate error."""
++        super().__init__(
++            code="INVALID_UTF8_SURROGATE",
++            title="Invalid UTF-8 Surrogate",
++            status=422,
++            detail=detail,
++        )
++
++
++class JsonDepthLimitError(JsonLimitError):
++    """JSON nesting depth exceeds ceiling."""
++
++    def __init__(self, detail: str) -> None:
++        """Initialize 422 JSON Depth Exceeded error."""
++        super().__init__(
++            code="JSON_DEPTH_EXCEEDED",
++            title="JSON Depth Exceeded",
++            status=422,
++            detail=detail,
++        )
++
++
++class JsonKeysLimitError(JsonLimitError):
++    """JSON total object keys count exceeds ceiling."""
++
++    def __init__(self, detail: str) -> None:
++        """Initialize 422 JSON Keys Exceeded error."""
++        super().__init__(
++            code="JSON_KEYS_EXCEEDED",
++            title="JSON Keys Exceeded",
++            status=422,
++            detail=detail,
++        )
++
++
++class JsonSyntaxLimitError(JsonLimitError):
++    """JSON syntax decode error."""
++
++    def __init__(self, detail: str) -> None:
++        """Initialize 422 Invalid JSON syntax error."""
++        super().__init__(
++            code="INVALID_JSON",
++            title="Invalid JSON",
++            status=422,
++            detail=detail,
++        )
++
++
++def is_large_upload_path(path: str) -> bool:
++    """Check if request path matches large attachment or import upload routes."""
++    return (
++        "/attachments" in path
++        or "/imports" in path
++        or path.startswith(("/api/v1/attachments", "/api/v1/admin/imports"))
++    )
++
++
++def _scan_json_depth_iterative(text: str) -> bool:
++    """Scan JSON text iteratively to ensure bracket nesting depth does not exceed ceiling.
++
++    Runs in O(N) time and O(1) stack space before full AST deserialization.
++    """
++    in_string = False
++    escape = False
++    depth = 0
++
++    for char in text:
++        if in_string:
++            if escape:
++                escape = False
++            elif char == "\\":
++                escape = True
++            elif char == '"':
++                in_string = False
++        elif char == '"':
++            in_string = True
++        elif char in ("{", "["):
++            depth += 1
++            if depth > MAX_JSON_DEPTH:
++                return False
++        elif char in ("}", "]") and depth > 0:
++            depth -= 1
++
++    return True
++
++
++def _validate_json_structure_iterative(root: Any) -> None:  # noqa: C901, PLR0912, ANN401
++    """Validate parsed JSON structure depth, total keys, and lone surrogates using a heap stack."""
++    stack: list[tuple[Any, int]] = [(root, 1)]
++    total_keys = 0
++
++    while stack:
++        node, depth = stack.pop()
++        if depth > MAX_JSON_DEPTH:
++            depth_msg = f"JSON nesting depth exceeds maximum allowed depth of {MAX_JSON_DEPTH}"
++            raise JsonDepthLimitError(depth_msg)
++
++        if isinstance(node, dict):
++            total_keys += len(node)
++            if total_keys > MAX_JSON_KEYS:
++                keys_msg = (
++                    f"JSON object key count ({total_keys}) exceeds maximum ({MAX_JSON_KEYS})"
++                )
++                raise JsonKeysLimitError(keys_msg)
++
++            for k, v in node.items():
++                if isinstance(k, str):
++                    for ch in k:
++                        if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
++                            surr_k_msg = (
++                                "JSON key contains forbidden UTF-16 lone surrogate character"
++                            )
++                            raise JsonSurrogateLimitError(surr_k_msg)
++                if isinstance(v, str):
++                    for ch in v:
++                        if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
++                            surr_v_msg = (
++                                "JSON value contains forbidden UTF-16 lone surrogate character"
++                            )
++                            raise JsonSurrogateLimitError(surr_v_msg)
++                elif isinstance(v, (dict, list)):
++                    stack.append((v, depth + 1))
++
++        elif isinstance(node, list):
++            for item in node:
++                if isinstance(item, str):
++                    for ch in item:
++                        if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
++                            surr_item_msg = (
++                                "JSON array item contains forbidden UTF-16 lone surrogate character"
++                            )
++                            raise JsonSurrogateLimitError(surr_item_msg)
++                elif isinstance(item, (dict, list)):
++                    stack.append((item, depth + 1))
++
++        elif isinstance(node, str):
++            for ch in node:
++                if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
++                    surr_str_msg = (
++                        "JSON string contains forbidden UTF-16 lone surrogate character"
++                    )
++                    raise JsonSurrogateLimitError(surr_str_msg)
++
++
++def _make_problem_response(exc: JsonLimitError) -> Response:
++    """Construct canonical RFC 7807 problem response."""
++    payload = {
++        "type": f"urn:kanban:problem:{exc.code}",
++        "title": exc.title,
++        "status": exc.status,
++        "code": exc.code,
++        "detail": exc.detail,
++    }
++    return Response(
++        content=json.dumps(payload).encode("utf-8"),
++        status_code=exc.status,
++        media_type="application/problem+json",
++    )
++
++
++class JsonLimitsMiddleware:
++    """Pure ASGI middleware enforcing streaming body size caps and JSON structural bounds."""
++
++    def __init__(self, app: ASGIApp) -> None:
++        """Initialize middleware wrapping next ASGI application."""
++        self.app = app
++
++    async def __call__(  # noqa: C901, PLR0911, PLR0912, PLR0915
++        self, scope: Scope, receive: Receive, send: Send
++    ) -> None:
++        """Process ASGI HTTP request enforcing size, depth, keys, and surrogate limits."""
++        if scope["type"] != "http":
++            await self.app(scope, receive, send)
++            return
++
++        path = scope.get("path", "")
++        max_bytes = (
++            LARGE_UPLOAD_MAX_BODY_BYTES if is_large_upload_path(path) else DEFAULT_MAX_BODY_BYTES
++        )
++
++        content_type = ""
++        content_length: int | None = None
++        for raw_k, raw_v in scope.get("headers", []):
++            k_lower = raw_k.lower()
++            if k_lower == b"content-type":
++                content_type = raw_v.decode("latin1", errors="replace").strip().lower()
++            elif k_lower == b"content-length":
++                try:
++                    content_length = int(raw_v.decode("ascii").strip())
++                except ValueError:
++                    content_length = None
++
++        if content_length is not None and content_length > max_bytes:
++            cl_err_msg = (
++                f"Request content-length ({content_length} bytes) exceeds {max_bytes} bytes"
++            )
++            resp = _make_problem_response(PayloadTooLargeLimitError(cl_err_msg))
++            await resp(scope, receive, send)
++            return
++
++        media_type = content_type.split(";")[0].strip()
++        is_json = media_type == "application/json" or media_type.endswith("+json")
++
++        if not is_json:
++            bytes_received = 0
++
++            async def limited_streaming_receive() -> Message:
++                nonlocal bytes_received
++                msg = await receive()
++                if msg["type"] == "http.request":
++                    chunk = msg.get("body", b"")
++                    bytes_received += len(chunk)
++                    if bytes_received > max_bytes:
++                        stream_msg = (
++                            f"Streaming request body exceeded maximum limit of {max_bytes} bytes"
++                        )
++                        raise PayloadTooLargeLimitError(stream_msg)
++                return msg
++
++            try:
++                await self.app(scope, limited_streaming_receive, send)
++            except PayloadTooLargeLimitError as err:
++                resp = _make_problem_response(err)
++                await resp(scope, receive, send)
++            return
++
++        chunks: list[bytes] = []
++        total_bytes = 0
++        more_body = True
++
++        while more_body:
++            msg = await receive()
++            if msg["type"] != "http.request":
++                await self.app(scope, receive, send)
++                return
++
++            chunk = msg.get("body", b"")
++            total_bytes += len(chunk)
++            if total_bytes > max_bytes:
++                body_limit_msg = f"Request body size exceeded limit of {max_bytes} bytes"
++                resp = _make_problem_response(PayloadTooLargeLimitError(body_limit_msg))
++                await resp(scope, receive, send)
++                return
++
++            chunks.append(chunk)
++            more_body = msg.get("more_body", False)
++
++        raw_body = b"".join(chunks)
++
++        if not raw_body.strip():
++            body_sent = False
++
++            async def empty_receive() -> Message:
++                nonlocal body_sent
++                if not body_sent:
++                    body_sent = True
++                    return {"type": "http.request", "body": raw_body, "more_body": False}
++                return {"type": "http.request", "body": b"", "more_body": False}
++
++            await self.app(scope, empty_receive, send)
++            return
++
++        try:
++            decoded_text = raw_body.decode("utf-8", errors="surrogatepass")
++        except UnicodeDecodeError as err:
++            decode_msg = f"Request body is not valid UTF-8: {err}"
++            resp = _make_problem_response(JsonSyntaxLimitError(decode_msg))
++            await resp(scope, receive, send)
++            return
++
++        for ch in decoded_text:
++            if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
++                surr_msg = "JSON payload contains forbidden UTF-16 lone surrogate character"
++                resp = _make_problem_response(JsonSurrogateLimitError(surr_msg))
++                await resp(scope, receive, send)
++                return
++
++        if not _scan_json_depth_iterative(decoded_text):
++            depth_err_msg = f"JSON nesting depth exceeds maximum allowed depth of {MAX_JSON_DEPTH}"
++            resp = _make_problem_response(JsonDepthLimitError(depth_err_msg))
++            await resp(scope, receive, send)
++            return
++
++        try:
++            parsed_data = json.loads(decoded_text)
++        except (json.JSONDecodeError, ValueError) as err:
++            parse_msg = f"Failed to parse JSON request body: {err}"
++            resp = _make_problem_response(JsonSyntaxLimitError(parse_msg))
++            await resp(scope, receive, send)
++            return
++
++        try:
++            _validate_json_structure_iterative(parsed_data)
++        except JsonLimitError as err:
++            resp = _make_problem_response(err)
++            await resp(scope, receive, send)
++            return
++
++        body_sent = False
++
++        async def validated_receive() -> Message:
++            nonlocal body_sent
++            if not body_sent:
++                body_sent = True
++                return {"type": "http.request", "body": raw_body, "more_body": False}
++            return {"type": "http.request", "body": b"", "more_body": False}
++
++        await self.app(scope, validated_receive, send)
+diff --git a/kanban/api/middleware/script_depth.py b/kanban/api/middleware/script_depth.py
+index 7310d0e..89b01ae 100644
+--- a/kanban/api/middleware/script_depth.py
++++ b/kanban/api/middleware/script_depth.py
+@@ -16,6 +16,8 @@ if TYPE_CHECKING:
+ _BLOCKED_PATH_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+     re.compile(r"^/api/v1/issues/[^/]+/custom-fields/[^/]+/execute(?:/.*)?$"),
+     re.compile(r"^/api/v1/issues/[^/]+/transitions(?:/.*)?$"),
++    re.compile(r"^/api/v1/projects/[^/]+/custom-fields/test-execute(?:/.*)?$"),
++    re.compile(r"^/api/v1/projects/[^/]+/workflow-hooks/dry-run(?:/.*)?$"),
+     re.compile(r"^/mcp(?:/.*)?$"),
+ )
+ 
+diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
+index 827f041..97246ff 100644
+--- a/kanban/api/v1/custom_field_execution.py
++++ b/kanban/api/v1/custom_field_execution.py
+@@ -6,6 +6,7 @@ from __future__ import annotations
+ 
+ import base64
+ import hashlib
++import re
+ import uuid
+ from typing import Annotated
+ 
+@@ -27,7 +28,6 @@ from kanban.api.v1.schemas.custom_fields import (
+ from kanban.custom_fields.executor import CustomFieldExecutor
+ from kanban.custom_fields.service import CustomFieldDefinitionService
+ from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
+-from kanban.security.permissions import Capability, require_capability
+ from kanban.security.ratelimit.base import RateLimitPolicy
+ from kanban.security.ratelimit.pg import PgRateLimiter
+ from kanban.services.activity import ActivityEventType, record_activity
+@@ -214,7 +214,7 @@ async def upload_wasm_module(
+     response_model=CustomFieldTestExecuteResponse,
+     summary="Evaluate custom field definition draft against an issue without saving",
+ )
+-async def test_execute_custom_field(
++async def test_execute_custom_field(  # noqa: C901
+     project: str,
+     body: CustomFieldTestExecuteRequest,
+     caller: Caller,
+@@ -226,7 +226,67 @@ async def test_execute_custom_field(
+     """
+     async with timing_floor(floor_ms=25.0):
+         proj = await get_project_or_404(session, caller, project)
+-        await require_capability(session, caller, proj.id, Capability.VIEW)
++        await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
++
++        if str(body.tier) == "wasm":
++            source = (body.script_source or "").strip()
++            is_interpreted = (
++                source.startswith(("scalar:", "formula:", "return "))
++                or bool(re.search(r"return\s+([^;]+)", source))
++            )
++            if not is_interpreted:
++                raw_sha: bytes | None = None
++                if body.wasm_module_sha256:
++                    try:
++                        raw_sha = bytes.fromhex(body.wasm_module_sha256)
++                    except ValueError as ex:
++                        raise ProblemException(
++                            status=422,
++                            code="INVALID_WASM_SHA256",
++                            title="Invalid WASM SHA256",
++                            detail=f"WASM SHA256 must be valid hex: {ex}",
++                        ) from ex
++                elif source:
++                    clean_lines = [
++                        line
++                        for line in source.splitlines()
++                        if not line.strip().startswith("//") and not line.strip().startswith("#")
++                    ]
++                    clean_source = "\n".join(clean_lines).strip()
++                    try:
++                        wasm_bytes = bytes.fromhex(clean_source)
++                    except ValueError:
++                        try:
++                            wasm_bytes = base64.b64decode(clean_source)
++                        except Exception as err:
++                            raise ProblemException(
++                                status=422,
++                                code="WASM_BINARY_INVALID",
++                                title="Invalid WebAssembly Binary",
++                                detail=f"Cannot decode WebAssembly module bytes: {err}",
++                            ) from err
++                    raw_sha = hashlib.sha256(wasm_bytes).digest()
++
++                if raw_sha is None:
++                    raise ProblemException(
++                        status=404,
++                        code="WASM_MODULE_NOT_FOUND",
++                        title="WebAssembly Module Not Found",
++                        detail="Approved WebAssembly module was not found in workspace",
++                    )
++
++                mod_stmt = select(ApprovedWasmModule).where(
++                    ApprovedWasmModule.workspace_id == caller.workspace_id,
++                    ApprovedWasmModule.sha256 == raw_sha,
++                )
++                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++                if wasm_mod is None:
++                    raise ProblemException(
++                        status=404,
++                        code="WASM_MODULE_NOT_FOUND",
++                        title="WebAssembly Module Not Found",
++                        detail="Approved WebAssembly module was not found in workspace",
++                    )
+ 
+         rate_limiter = _execute_rate_limiter(session)
+         policy = RateLimitPolicy(name="custom_field_test_execute", limit=10, window_seconds=60)
+diff --git a/kanban/app.py b/kanban/app.py
+index 699c977..87f3e48 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -26,6 +26,7 @@ from database.session import RLSSessionFactory
+ from kanban.api.deps import DenyAllResolver
+ from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
+ from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
++from kanban.api.middleware.json_limits import JsonLimitsMiddleware
+ from kanban.api.middleware.script_depth import ScriptDepthGuardMiddleware
+ from kanban.api.problems import (
+     ProblemException,
+@@ -438,6 +439,9 @@ def create_app(
+     # Add script recursion depth guard middleware
+     app.add_middleware(ScriptDepthGuardMiddleware)
+ 
++    # Add global JSON size, depth, and surrogate guard middleware
++    app.add_middleware(JsonLimitsMiddleware)
++
+     # Add security headers and host protection middleware
+     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
+ 
+diff --git a/kanban/custom_fields/executor.py b/kanban/custom_fields/executor.py
+index f04ec22..75c0e87 100644
+--- a/kanban/custom_fields/executor.py
++++ b/kanban/custom_fields/executor.py
+@@ -49,9 +49,27 @@ if TYPE_CHECKING:
+ 
+ _HASH_BYTES_LEN: Final[int] = 32
+ _HEX_DIGEST_LEN: Final[int] = 64
++_MAX_FORMULA_NODES: Final[int] = 64
++_MAX_FORMULA_DEPTH: Final[int] = 8
++_MAX_POW_EXPONENT: Final[int] = 64
++_MAX_POW_BASE: Final[int] = 1_000_000
++_MAX_MULT_OUTPUT_LEN: Final[int] = 4096
+ 
+ 
+-def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, ANN401
++def _check_formula_ast_bounds(node: ast.AST) -> bool:
++    """Validate AST node count and tree depth against DoS limits."""
++    for count, _ in enumerate(ast.walk(node), start=1):
++        if count > _MAX_FORMULA_NODES:
++            return False
++
++    def _get_depth(cur: ast.AST) -> int:
++        child_depths = [_get_depth(child) for child in ast.iter_child_nodes(cur)]
++        return 1 + max(child_depths, default=0)
++
++    return _get_depth(node) <= _MAX_FORMULA_DEPTH
++
++
++def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, PLR0915, ANN401
+     """Safely evaluate a formula expression against issue payload without arbitrary execution."""
+     expr = expr.strip()
+     if not expr:
+@@ -69,6 +87,9 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901,
+     except (SyntaxError, ValueError):
+         return None
+ 
++    if not _check_formula_ast_bounds(parsed.body):
++        return None
++
+     def _eval_node(node: ast.AST, ctx: dict[str, Any]) -> Any:  # noqa: C901, PLR0911, PLR0912, ANN401
+         if isinstance(node, ast.Constant):
+             return node.value
+@@ -90,7 +111,7 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901,
+             val = _eval_node(node.value, ctx)
+             if isinstance(val, dict):
+                 return val.get(node.attr, "")
+-            return getattr(val, node.attr, "")
++            return ""
+         if isinstance(node, ast.Subscript):
+             val = _eval_node(node.value, ctx)
+             slice_val = _eval_node(node.slice, ctx)
+@@ -109,11 +130,34 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901,
+             if isinstance(node.op, ast.Sub):
+                 return left - right
+             if isinstance(node.op, ast.Mult):
+-                return left * right
++                if isinstance(left, (str, list, tuple)) and isinstance(right, int):
++                    if right < 0 or len(left) * right > _MAX_MULT_OUTPUT_LEN:
++                        return None
++                elif (
++                    isinstance(right, (str, list, tuple))
++                    and isinstance(left, int)
++                    and (left < 0 or len(right) * left > _MAX_MULT_OUTPUT_LEN)
++                ):
++                    return None
++                try:
++                    return left * right
++                except (OverflowError, MemoryError):
++                    return None
+             if isinstance(node.op, ast.Div):
+                 return left / right if right != 0 else 0
+             if isinstance(node.op, ast.Pow):
+-                return left**right
++                if not isinstance(left, (int, float)) or not isinstance(right, (int, float)):
++                    return None
++                if (
++                    abs(left) > _MAX_POW_BASE
++                    or right > _MAX_POW_EXPONENT
++                    or right < -_MAX_POW_EXPONENT
++                ):
++                    return None
++                try:
++                    return left**right
++                except (OverflowError, ValueError):
++                    return None
+         if isinstance(node, ast.Dict):
+             return {
+                 _eval_node(k, ctx): _eval_node(v, ctx)
+@@ -125,6 +169,15 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901,
+         if isinstance(node, ast.IfExp):
+             cond = _eval_node(node.test, ctx)
+             return _eval_node(node.body, ctx) if cond else _eval_node(node.orelse, ctx)
++        if isinstance(node, ast.UnaryOp):
++            operand = _eval_node(node.operand, ctx)
++            if isinstance(node.op, ast.USub):
++                return -operand if isinstance(operand, (int, float)) else None
++            if isinstance(node.op, ast.UAdd):
++                return +operand if isinstance(operand, (int, float)) else None
++            if isinstance(node.op, ast.Not):
++                return not operand
++            return None
+         if isinstance(node, ast.Compare):
+             left = _eval_node(node.left, ctx)
+             for op, comparator in zip(node.ops, node.comparators, strict=False):
+@@ -748,7 +801,20 @@ class CustomFieldExecutor:
+                                 title="Invalid WebAssembly Binary",
+                                 detail=f"Cannot decode WebAssembly module bytes: {err}",
+                             ) from err
+-                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
++                    wasm_sha = hashlib.sha256(wasm_bytes).digest()
++                    mod_stmt = select(ApprovedWasmModule).where(
++                        ApprovedWasmModule.workspace_id == caller.workspace_id,
++                        ApprovedWasmModule.sha256 == wasm_sha,
++                    )
++                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++                    if wasm_mod is None:
++                        raise ProblemException(  # noqa: TRY301
++                            status=404,
++                            code="WASM_MODULE_NOT_FOUND",
++                            title="WebAssembly Module Not Found",
++                            detail="Approved WebAssembly module was not found in workspace",
++                        )
++                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
+                     output_bytes = run_res.output_bytes
+                     latency_ms = max(1, int(run_res.duration_ms))
+                     logs += f"Executed Wasm bytecode: fuel={run_res.fuel_consumed}\n"
+diff --git a/kanban/custom_fields/manifest.py b/kanban/custom_fields/manifest.py
+index 6ce482b..a984b72 100644
+--- a/kanban/custom_fields/manifest.py
++++ b/kanban/custom_fields/manifest.py
+@@ -57,6 +57,7 @@ def compute_field_manifest_sha256(  # noqa: PLR0913
+     target_scope: str = "PROJECT",
+     credential_mode: str = "INVOKING_USER",
+     egress_allowlist: list[str] | None = None,
++    wasm_module_sha256: str | bytes | None = None,
+ ) -> bytes:
+     """Compute deterministic SHA-256 manifest hash over normalized field specification.
+ 
+@@ -68,10 +69,17 @@ def compute_field_manifest_sha256(  # noqa: PLR0913
+         "output_format_metadata": ...,
+         "script_source": ...,
+         "target_scope": ...,
+-        "tier": ...
++        "tier": ...,
++        "wasm_module_sha256": ...
+     }))
+     """
+     valid_egress = validate_egress_allowlist(egress_allowlist)
++    wasm_hex: str | None = None
++    if isinstance(wasm_module_sha256, bytes):
++        wasm_hex = wasm_module_sha256.hex()
++    elif isinstance(wasm_module_sha256, str) and wasm_module_sha256.strip():
++        wasm_hex = wasm_module_sha256.strip().lower()
++
+     payload = {
+         "credential_mode": credential_mode,
+         "egress_allowlist": valid_egress,
+@@ -80,6 +88,7 @@ def compute_field_manifest_sha256(  # noqa: PLR0913
+         "script_source": script_source,
+         "target_scope": target_scope,
+         "tier": tier,
++        "wasm_module_sha256": wasm_hex,
+     }
+     canonical_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+     return hashlib.sha256(canonical_bytes).digest()
+diff --git a/kanban/custom_fields/service.py b/kanban/custom_fields/service.py
+index 3f44308..e1e6986 100644
+--- a/kanban/custom_fields/service.py
++++ b/kanban/custom_fields/service.py
+@@ -222,6 +222,7 @@ class CustomFieldDefinitionService:
+             target_scope=payload.target_scope,
+             credential_mode=payload.credential_mode,
+             egress_allowlist=cleaned_egress,
++            wasm_module_sha256=wasm_bytes,
+         )
+ 
+         row = CustomFieldDefinition(
+@@ -306,7 +307,10 @@ class CustomFieldDefinitionService:
+                 spec_changed = True
+ 
+         if payload.wasm_module_sha256 is not None:
+-            row.wasm_module_sha256 = _parse_wasm_sha256(payload.wasm_module_sha256)
++            new_wasm = _parse_wasm_sha256(payload.wasm_module_sha256)
++            if new_wasm != row.wasm_module_sha256:
++                row.wasm_module_sha256 = new_wasm
++                spec_changed = True
+ 
+         return spec_changed
+ 
+@@ -356,6 +360,7 @@ class CustomFieldDefinitionService:
+                 target_scope=row.target_scope,
+                 credential_mode=row.credential_mode,
+                 egress_allowlist=row.egress_allowlist,
++                wasm_module_sha256=row.wasm_module_sha256,
+             )
+ 
+         await session.flush()
+diff --git a/kanban/tests/api/test_json_limits_middleware.py b/kanban/tests/api/test_json_limits_middleware.py
+new file mode 100644
+index 0000000..3cc976d
+--- /dev/null
++++ b/kanban/tests/api/test_json_limits_middleware.py
+@@ -0,0 +1,363 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for JsonLimitsMiddleware streaming byte caps and JSON bounds (KB-P3-AUDIT-11)."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from starlette.applications import Starlette
++from starlette.middleware import Middleware
++from starlette.responses import JSONResponse
++from starlette.routing import Route
++from starlette.testclient import TestClient
++
++from kanban.api.middleware.json_limits import (
++    DEFAULT_MAX_BODY_BYTES,
++    LARGE_UPLOAD_MAX_BODY_BYTES,
++    MAX_JSON_DEPTH,
++    MAX_JSON_KEYS,
++    JsonDepthLimitError,
++    JsonLimitsMiddleware,
++    JsonSurrogateLimitError,
++    _scan_json_depth_iterative,
++    _validate_json_structure_iterative,
++)
++
++if TYPE_CHECKING:
++    from starlette.requests import Request
++
++
++def _create_test_app() -> Starlette:
++    async def echo_json(request: Request) -> JSONResponse:
++        data = await request.json()
++        return JSONResponse({"status": "ok", "echo": data})
++
++    async def echo_raw(request: Request) -> JSONResponse:
++        body = await request.body()
++        _ = await request.body()  # read again to trigger second receive call
++        return JSONResponse({"status": "ok", "bytes_len": len(body)})
++
++    routes = [
++        Route("/api/v1/echo", echo_json, methods=["POST"]),
++        Route("/api/v1/attachments/upload", echo_raw, methods=["POST"]),
++        Route("/api/v1/admin/imports/plane", echo_raw, methods=["POST"]),
++        Route("/api/v1/text", echo_raw, methods=["POST"]),
++    ]
++
++    return Starlette(
++        routes=routes,
++        middleware=[Middleware(JsonLimitsMiddleware)],
++    )
++
++
++def test_json_limits_default_2mib_ceiling() -> None:
++    """Enforce 2 MiB ceiling on default routes and reject larger payloads with 413."""
++    client = TestClient(_create_test_app())
++
++    # 1. Normal payload below 2 MiB succeeds
++    small_data = {"key": "hello world"}
++    res_ok = client.post("/api/v1/echo", json=small_data)
++    assert res_ok.status_code == 200
++    assert res_ok.json()["echo"] == small_data
++
++    # 2. Content-Length exceeding 2 MiB rejected with 413
++    huge_len = DEFAULT_MAX_BODY_BYTES + 1024
++    res_too_large_header = client.post(
++        "/api/v1/echo",
++        content=b"{}",
++        headers={"Content-Type": "application/json", "Content-Length": str(huge_len)},
++    )
++    assert res_too_large_header.status_code == 413
++    assert res_too_large_header.json()["code"] == "PAYLOAD_TOO_LARGE"
++
++    # 3. Streaming body exceeding 2 MiB rejected with 413
++    huge_body = b'{"data": "' + (b"X" * (DEFAULT_MAX_BODY_BYTES + 100)) + b'"}'
++    res_too_large_body = client.post(
++        "/api/v1/echo",
++        content=huge_body,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_too_large_body.status_code == 413
++    assert res_too_large_body.json()["code"] == "PAYLOAD_TOO_LARGE"
++
++
++def test_json_limits_large_upload_routes_allow_up_to_25mib() -> None:
++    """Attachments and imports routes allow up to 25 MiB."""
++    client = TestClient(_create_test_app())
++
++    # 1. Payload > 2 MiB but < 25 MiB allowed on /attachments and /imports
++    mid_bytes = 3 * 1024 * 1024  # 3 MiB
++    chunk = b"A" * mid_bytes
++
++    res_att = client.post(
++        "/api/v1/attachments/upload",
++        content=chunk,
++        headers={"Content-Type": "application/octet-stream"},
++    )
++    assert res_att.status_code == 200
++    assert res_att.json()["bytes_len"] == mid_bytes
++
++    res_imp = client.post(
++        "/api/v1/admin/imports/plane",
++        content=chunk,
++        headers={"Content-Type": "application/octet-stream"},
++    )
++    assert res_imp.status_code == 200
++    assert res_imp.json()["bytes_len"] == mid_bytes
++
++    # 2. Content-Length exceeding 25 MiB rejected with 413
++    over_limit = LARGE_UPLOAD_MAX_BODY_BYTES + 1024
++    res_huge = client.post(
++        "/api/v1/attachments/upload",
++        content=b"X",
++        headers={"Content-Type": "application/octet-stream", "Content-Length": str(over_limit)},
++    )
++    assert res_huge.status_code == 413
++    assert res_huge.json()["code"] == "PAYLOAD_TOO_LARGE"
++
++
++def test_json_limits_non_json_content_types_skip_json_validation() -> None:
++    """Non-JSON content-types bypass JSON structural checks."""
++    client = TestClient(_create_test_app())
++
++    # Plain text containing deeply nested brackets is NOT checked as JSON
++    non_json_text = "[" * 100
++    res = client.post(
++        "/api/v1/text",
++        content=non_json_text.encode("utf-8"),
++        headers={"Content-Type": "text/plain"},
++    )
++    assert res.status_code == 200
++    assert res.json()["bytes_len"] == len(non_json_text)
++
++
++def test_json_limits_depth_ceiling_32() -> None:
++    """JSON requests with nesting depth exceeding 32 rejected with 422 JSON_DEPTH_EXCEEDED."""
++    client = TestClient(_create_test_app())
++
++    # 1. Depth <= 32 passes
++    safe_nested: Any = "leaf"
++    for _ in range(MAX_JSON_DEPTH - 2):
++        safe_nested = [safe_nested]
++    res_ok = client.post("/api/v1/echo", json=safe_nested)
++    assert res_ok.status_code == 200
++
++    # 2. Depth > 32 rejected
++    deep_nested: Any = "leaf"
++    for _ in range(MAX_JSON_DEPTH + 5):
++        deep_nested = [deep_nested]
++    res_deep = client.post("/api/v1/echo", json=deep_nested)
++    assert res_deep.status_code == 422
++    assert res_deep.json()["code"] == "JSON_DEPTH_EXCEEDED"
++
++    # 3. Massive nested brackets (e.g. 200 levels) rejected iteratively before parser recursion
++    massive_raw = ("[" * 200) + ("]" * 200)
++    res_massive = client.post(
++        "/api/v1/echo",
++        content=massive_raw.encode("utf-8"),
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_massive.status_code == 422
++    assert res_massive.json()["code"] == "JSON_DEPTH_EXCEEDED"
++
++    # 4. Bracket characters inside JSON string literal do NOT increment depth
++    brackets_in_string = {"message": ("[" * 100) + ("]" * 100)}
++    res_string = client.post("/api/v1/echo", json=brackets_in_string)
++    assert res_string.status_code == 200
++
++
++def test_json_limits_keys_ceiling_5000() -> None:
++    """JSON object key count exceeding 5000 rejected with 422 JSON_KEYS_EXCEEDED."""
++    client = TestClient(_create_test_app())
++
++    # Object with 5001 keys rejected
++    too_many_keys = {f"k_{i}": i for i in range(MAX_JSON_KEYS + 1)}
++    res = client.post("/api/v1/echo", json=too_many_keys)
++    assert res.status_code == 422
++    assert res.json()["code"] == "JSON_KEYS_EXCEEDED"
++
++
++def test_json_limits_utf16_lone_surrogate_rejection() -> None:
++    """UTF-16 lone surrogates (raw or escaped) rejected with 422 INVALID_UTF8_SURROGATE."""
++    client = TestClient(_create_test_app())
++
++    # 1. Escaped lone high surrogate in value (\ud800)
++    surrogate_val = b'{"name": "\\ud800"}'
++    res_val = client.post(
++        "/api/v1/echo",
++        content=surrogate_val,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_val.status_code == 422
++    assert res_val.json()["code"] == "INVALID_UTF8_SURROGATE"
++
++    # 2. Escaped lone surrogate in key (\udfff)
++    surrogate_key = b'{"\\udfff": "bad_key"}'
++    res_key = client.post(
++        "/api/v1/echo",
++        content=surrogate_key,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_key.status_code == 422
++    assert res_key.json()["code"] == "INVALID_UTF8_SURROGATE"
++
++    # 3. Escaped lone surrogate in array
++    surrogate_arr = b'["safe", "\\ud83d"]'
++    res_arr = client.post(
++        "/api/v1/echo",
++        content=surrogate_arr,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_arr.status_code == 422
++    assert res_arr.json()["code"] == "INVALID_UTF8_SURROGATE"
++
++    # 4. Valid surrogate pair (\ud83d\ude00 -> 😀) succeeds
++    valid_pair = b'{"emoji": "\\ud83d\\ude00"}'
++    res_ok = client.post(
++        "/api/v1/echo",
++        content=valid_pair,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_ok.status_code == 200
++    assert res_ok.json()["echo"]["emoji"] == "😀"
++
++    # 5. Raw UTF-8 bytes encoding lone surrogate (e.g. \xed\xa0\x80 for U+D800)
++    raw_surrogate_bytes = b'{"raw": "' + b"\xed\xa0\x80" + b'"}'
++    res_raw_surr = client.post(
++        "/api/v1/echo",
++        content=raw_surrogate_bytes,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_raw_surr.status_code == 422
++    assert res_raw_surr.json()["code"] == "INVALID_UTF8_SURROGATE"
++
++
++def test_json_limits_empty_and_syntax_error() -> None:
++    """Empty JSON body passes through; syntax errors return 422 INVALID_JSON."""
++    client = TestClient(_create_test_app())
++
++    # Malformed JSON
++    res_malformed = client.post(
++        "/api/v1/echo",
++        content=b"{invalid_json",
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_malformed.status_code == 422
++    assert res_malformed.json()["code"] == "INVALID_JSON"
++
++    # Empty body
++    res_empty = client.post(
++        "/api/v1/text",
++        content=b"",
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_empty.status_code == 200
++
++
++def test_json_scanner_helpers_coverage() -> None:
++    """Direct unit testing of helper functions to ensure 100% branch and statement coverage."""
++    # Depth scanner depth underflow check
++    assert _scan_json_depth_iterative("}}}}") is True
++    # Escaped quote inside string
++    assert _scan_json_depth_iterative('{"test": "hello \\" world"}') is True
++
++    # Validate structure helper on string root
++    _validate_json_structure_iterative("safe string")
++
++    # Validate structure helper lone surrogate in root string
++    with pytest.raises(JsonSurrogateLimitError):
++        _validate_json_structure_iterative("\ud800")
++
++    # Validate surrogate in dictionary value
++    with pytest.raises(JsonSurrogateLimitError):
++        _validate_json_structure_iterative({"key": "\ud800"})
++
++    # Validate surrogate in list item
++    with pytest.raises(JsonSurrogateLimitError):
++        _validate_json_structure_iterative(["safe", "\ud800"])
++
++    # Validate depth in parsed object
++    deep_obj: Any = "leaf"
++    for _ in range(MAX_JSON_DEPTH + 1):
++        deep_obj = {"nested": deep_obj}
++    with pytest.raises(JsonDepthLimitError):
++        _validate_json_structure_iterative(deep_obj)
++
++
++@pytest.mark.asyncio
++async def test_json_limits_asgi_edge_cases() -> None:
++    """Test ASGI non-http scopes, non-request messages, and non-utf8 decode errors."""
++    called = False
++
++    async def dummy_app(scope: Any, receive: Any, send: Any) -> None:  # noqa: ARG001, ANN401
++        nonlocal called
++        called = True
++
++    mw = JsonLimitsMiddleware(dummy_app)
++
++    # 1. Non-http scope passes through
++    await mw({"type": "lifespan"}, None, None)  # type: ignore[arg-type]
++    assert called is True
++
++    # 2. Non-digit Content-Length is ignored
++    client = TestClient(_create_test_app())
++    res_bad_cl = client.post(
++        "/api/v1/echo",
++        content=b'{"ok": true}',
++        headers={"Content-Type": "application/json", "Content-Length": "not-an-int"},
++    )
++    assert res_bad_cl.status_code == 200
++
++    # 3. Non-UTF-8 bytes return 422 INVALID_JSON
++    res_bad_utf8 = client.post(
++        "/api/v1/echo",
++        content=b"\xff\xfe\x00\x00",
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_bad_utf8.status_code == 422
++    assert res_bad_utf8.json()["code"] == "INVALID_JSON"
++
++    # 4. Non-request message during receive loop (e.g. disconnect)
++    sent_messages: list[dict[str, Any]] = []
++
++    async def mock_receive_disconnect() -> dict[str, Any]:
++        return {"type": "http.disconnect"}
++
++    async def recording_app(scope: Any, receive: Any, send: Any) -> None:  # noqa: ARG001, ANN401
++        msg = await receive()
++        sent_messages.append(msg)
++
++    mw2 = JsonLimitsMiddleware(recording_app)
++    scope_headers = [(b"content-type", b"application/json")]
++    await mw2(
++        {"type": "http", "path": "/api/v1/echo", "headers": scope_headers},
++        mock_receive_disconnect,
++        None,  # type: ignore[arg-type]
++    )
++    assert len(sent_messages) == 1
++    assert sent_messages[0]["type"] == "http.disconnect"
++
++    # 5. Non-JSON streaming chunk overflow
++    huge_bytes = b"X" * (DEFAULT_MAX_BODY_BYTES + 100)
++
++    async def mock_receive_huge_stream() -> dict[str, Any]:
++        return {"type": "http.request", "body": huge_bytes, "more_body": False}
++
++    response_starts: list[dict[str, Any]] = []
++
++    async def capture_send(msg: dict[str, Any]) -> None:
++        response_starts.append(msg)
++
++    async def reading_app(scope: Any, receive: Any, send: Any) -> None:  # noqa: ARG001, ANN401
++        await receive()
++
++    mw3 = JsonLimitsMiddleware(reading_app)
++    await mw3(
++        {"type": "http", "path": "/api/v1/text", "headers": [(b"content-type", b"text/plain")]},
++        mock_receive_huge_stream,
++        capture_send,  # type: ignore[arg-type]
++    )
++    assert any(m.get("status") == 413 for m in response_starts)
++
+diff --git a/kanban/tests/custom_fields/test_manifest_and_formula_security.py b/kanban/tests/custom_fields/test_manifest_and_formula_security.py
+new file mode 100644
+index 0000000..a33f28c
+--- /dev/null
++++ b/kanban/tests/custom_fields/test_manifest_and_formula_security.py
+@@ -0,0 +1,468 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security tests for custom field manifests, AST bounds, and test-execute (KB-P3-AUDIT-11)."""
++
++from __future__ import annotations
++
++import base64
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from starlette.applications import Starlette
++from starlette.middleware import Middleware
++from starlette.responses import JSONResponse
++from starlette.routing import Route
++from starlette.testclient import TestClient
++
++from kanban.api.deps import PrincipalContext
++from kanban.api.middleware.script_depth import ScriptDepthGuardMiddleware
++from kanban.custom_fields.executor import _eval_safe_formula
++from kanban.custom_fields.manifest import compute_field_manifest_sha256
++
++if TYPE_CHECKING:
++    import uuid
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from starlette.requests import Request
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++WASM_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "wasm"
++
++
++def _read_fixture(filename: str) -> bytes:
++    p = WASM_DIR / filename
++    return p.read_bytes()
++
++
++def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    return api_env.client
++
++
++def _as_user_aal1(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=1,
++    )
++    return api_env.client
++
++
++def test_manifest_sha256_binds_wasm_module_sha256() -> None:
++    """Verify that wasm_module_sha256 is bound into manifest_sha256."""
++    base_kwargs: dict[str, Any] = {
++        "script_source": "scalar: 42",
++        "output_format": "number",
++        "output_format_metadata": {},
++        "tier": "wasm",
++        "target_scope": "PROJECT",
++        "credential_mode": "INVOKING_USER",
++    }
++
++    hash_none = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=None)
++    hash_mod1 = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=b"\x01" * 32)
++    hash_mod2 = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=b"\x02" * 32)
++    hash_hex1 = compute_field_manifest_sha256(
++        **base_kwargs, wasm_module_sha256=("01" * 32).upper()
++    )
++
++    assert hash_none != hash_mod1
++    assert hash_mod1 != hash_mod2
++    assert hash_mod1 == hash_hex1
++
++
++def test_eval_safe_formula_ast_node_and_depth_limits() -> None:
++    """Verify AST node count (<= 64) and depth (<= 8) DoS ceilings."""
++    ctx = {"issue": {"summary": "Safe Formula Test"}}
++
++    # 1. Safe small formula passes
++    assert _eval_safe_formula("1 + 2 * 3", ctx) == 7
++
++    # 2. Formula exceeding max AST depth (> 8) returns None
++    deep_expr = "1 + (1 + (1 + (1 + (1 + (1 + (1 + (1 + 1)))))))"
++    assert _eval_safe_formula(deep_expr, ctx) is None
++
++    # 3. Formula exceeding max AST node count (> 64) returns None
++    many_nodes_expr = " + ".join(["1"] * 65)
++    assert _eval_safe_formula(many_nodes_expr, ctx) is None
++
++
++def test_eval_safe_formula_pow_and_mult_dos_bounds() -> None:
++    """Verify bounds on ast.Pow and ast.Mult preventing event loop DoS."""
++    ctx = {"issue": {"key": "KAN-1"}}
++
++    # ast.Pow bounds: exponent <= 64, abs(base) <= 1_000_000
++    assert _eval_safe_formula("2 ** 10", ctx) == 1024
++    assert _eval_safe_formula("2 ** 64", ctx) == 2**64
++    assert _eval_safe_formula("2 ** 65", ctx) is None
++    assert _eval_safe_formula("1000001 ** 2", ctx) is None
++
++    # ast.Mult bounds: sequence repetition <= 4096 chars/items
++    assert len(_eval_safe_formula("'A' * 4096", ctx)) == 4096
++    assert _eval_safe_formula("'A' * 4097", ctx) is None
++    assert _eval_safe_formula("['item'] * 4097", ctx) is None
++    assert len(_eval_safe_formula("['item'] * 10", ctx)) == 10
++    # Regular math multiplication is unaffected
++    assert _eval_safe_formula("5 * 20", ctx) == 100
++
++
++def test_eval_safe_formula_attribute_restricts_to_dict_only() -> None:
++    """Verify ast.Attribute restricts strictly to dict key lookups without getattr."""
++    ctx = {
++        "issue": {
++            "summary": "Valid Summary",
++            "number_val": 42,
++        }
++    }
++
++    # Dict lookup works
++    assert _eval_safe_formula("issue.summary", ctx) == "Valid Summary"
++
++    # Accessing attributes on non-dict types does NOT invoke getattr
++    assert _eval_safe_formula("(123).real", ctx) == ""
++    assert _eval_safe_formula("'string'.capitalize", ctx) == ""
++    assert _eval_safe_formula("issue.__class__.__name__", ctx) is None
++
++
++def test_script_depth_middleware_blocks_test_execute_and_dry_run() -> None:
++    """Verify ScriptDepthGuardMiddleware blocks test-execute and dry-run at depth >= 1."""
++
++    async def dummy_endpoint(request: Request) -> JSONResponse:
++        del request
++        return JSONResponse({"ok": True})
++
++    routes = [
++        Route(
++            "/api/v1/projects/{prj}/custom-fields/test-execute",
++            dummy_endpoint,
++            methods=["POST"],
++        ),
++        Route(
++            "/api/v1/projects/{prj}/workflow-hooks/dry-run",
++            dummy_endpoint,
++            methods=["POST"],
++        ),
++    ]
++    client = TestClient(
++        Starlette(routes=routes, middleware=[Middleware(ScriptDepthGuardMiddleware)])
++    )
++
++    # 1. Normal depth 0 or absent header is allowed
++    res_ok_cf = client.post("/api/v1/projects/PRJ/custom-fields/test-execute")
++    assert res_ok_cf.status_code == 200
++
++    res_ok_wf = client.post("/api/v1/projects/PRJ/workflow-hooks/dry-run")
++    assert res_ok_wf.status_code == 200
++
++    # 2. X-Kanban-Script-Depth >= 1 blocks test-execute with 409 SCRIPT_RECURSION_BLOCKED
++    res_blocked_cf = client.post(
++        "/api/v1/projects/PRJ/custom-fields/test-execute",
++        headers={"X-Kanban-Script-Depth": "1"},
++    )
++    assert res_blocked_cf.status_code == 409
++    assert res_blocked_cf.json()["code"] == "SCRIPT_RECURSION_BLOCKED"
++
++    # 3. X-Kanban-Script-Depth >= 1 blocks dry-run with 409 SCRIPT_RECURSION_BLOCKED
++    res_blocked_wf = client.post(
++        "/api/v1/projects/PRJ/workflow-hooks/dry-run",
++        headers={"X-Kanban-Script-Depth": "1"},
++    )
++    assert res_blocked_wf.status_code == 409
++    assert res_blocked_wf.json()["code"] == "SCRIPT_RECURSION_BLOCKED"
++
++
++async def test_test_execute_endpoint_security_and_wasm_verification(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Verify PROJECT_ADMIN + AAL2 gating and ApprovedWasmModule verification on test-execute."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("member")
++    _ = await make_project(
++        "SEC", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"}
++    )
++
++    # Create issue SEC-1 as admin with AAL2
++    resp_iss = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/issues",
++        json={"summary": "Security Test Work Item", "description_markdown": "Test Description"},
++    )
++    assert resp_iss.status_code == 201
++    issue_key = resp_iss.json()["key"]
++
++    test_payload = {
++        "issue_key": issue_key,
++        "tier": "wasm",
++        "output_format": "text",
++        "output_format_metadata": {},
++        "script_source": "formula: issue.summary",
++    }
++
++    # 1. Member user gets 403 INSUFFICIENT_CAPABILITY
++    resp_member = await _as_admin_aal2(api_env, member).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json=test_payload,
++    )
++    assert resp_member.status_code == 403
++    assert resp_member.json()["code"] in ("INSUFFICIENT_CAPABILITY", "PROJECT_ADMIN_REQUIRED")
++
++    # 2. Admin with AAL1 gets 403 AAL2_REQUIRED
++    resp_aal1 = await _as_user_aal1(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json=test_payload,
++    )
++    assert resp_aal1.status_code == 403
++    assert resp_aal1.json()["code"] == "AAL2_REQUIRED"
++
++    # 3. Admin with AAL2 succeeds for safe formula
++    resp_aal2 = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json=test_payload,
++    )
++    assert resp_aal2.status_code == 200
++    assert resp_aal2.json()["status"] == "SUCCESS"
++    assert resp_aal2.json()["value"] == "Security Test Work Item"
++
++    # 4. Wasm test-execution with unapproved module sha256 gets 404 WASM_MODULE_NOT_FOUND
++    resp_unapproved_sha = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "severity_pill",
++            "output_format_metadata": {},
++            "script_source": "wasm:fake_module",
++            "wasm_module_sha256": "ee" * 32,
++        },
++    )
++    assert resp_unapproved_sha.status_code == 404
++    assert resp_unapproved_sha.json()["code"] == "WASM_MODULE_NOT_FOUND"
++
++    # 5. Wasm test-execution with unapproved raw bytecode gets 404 WASM_MODULE_NOT_FOUND
++    echo_bytes = _read_fixture("echo_cvss.wasm")
++    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
++    resp_unapproved_bytes = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "severity_pill",
++            "output_format_metadata": {},
++            "script_source": echo_b64,
++        },
++    )
++    assert resp_unapproved_bytes.status_code == 404
++    assert resp_unapproved_bytes.json()["code"] == "WASM_MODULE_NOT_FOUND"
++
++    # 6. Upload approved wasm module
++    resp_wasm = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/wasm-modules",
++        json={"name": "echo_cvss", "wasm_base64": echo_b64},
++    )
++    assert resp_wasm.status_code == 201
++    wasm_sha = resp_wasm.json()["sha256"]
++
++    # 7. Wasm test-execution with approved module succeeds
++    resp_approved_run = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "severity_pill",
++            "output_format_metadata": {},
++            "script_source": "wasm:echo_cvss",
++            "wasm_module_sha256": wasm_sha,
++        },
++    )
++    assert resp_approved_run.status_code == 200
++    assert resp_approved_run.json()["status"] == "SUCCESS"
++    assert "Executed Wasm module" in resp_approved_run.json()["logs"]
++
++    # 7b. Wasm test-execution with approved raw bytecode in script_source succeeds
++    resp_approved_raw = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "severity_pill",
++            "output_format_metadata": {},
++            "script_source": echo_b64,
++            "wasm_module_sha256": None,
++        },
++    )
++    assert resp_approved_raw.status_code == 200
++    assert resp_approved_raw.json()["status"] == "SUCCESS"
++
++    # 8. Invalid hex in wasm_module_sha256 returns 422 INVALID_WASM_SHA256
++    resp_invalid_hex = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "test",
++            "wasm_module_sha256": "not-valid-hex-zzz",
++        },
++    )
++    assert resp_invalid_hex.status_code == 422
++    assert resp_invalid_hex.json()["code"] == "INVALID_WASM_SHA256"
++
++    # 9. Missing wasm source and no sha returns 404 WASM_MODULE_NOT_FOUND
++    resp_no_wasm = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "// just comments\n# no bytes",
++            "wasm_module_sha256": None,
++        },
++    )
++    assert resp_no_wasm.status_code == 404
++    assert resp_no_wasm.json()["code"] == "WASM_MODULE_NOT_FOUND"
++
++    # 10. Invalid wasm binary bytes returns 422 WASM_BINARY_INVALID
++    resp_invalid_wasm = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "???not_hex_or_base64!!!",
++        },
++    )
++    assert resp_invalid_wasm.status_code == 422
++    assert resp_invalid_wasm.json()["code"] == "WASM_BINARY_INVALID"
++
++    # 11. Scalar execution succeeds
++    resp_scalar = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "number",
++            "output_format_metadata": {},
++            "script_source": "scalar: 42",
++        },
++    )
++    assert resp_scalar.status_code == 200
++    assert resp_scalar.json()["value"] == 42
++
++    # 12. Legacy return execution succeeds
++    resp_return = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "return 'Hello from return';",
++        },
++    )
++    assert resp_return.status_code == 200
++    assert resp_return.json()["value"] == "Hello from return"
++
++    # 13. Invalid tier returns 422 from schema validation
++    resp_bad_tier = await _as_admin_aal2(api_env, admin).post(
++        "/api/v1/projects/SEC/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "invalid_tier",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "return 'abc';",
++        },
++    )
++    assert resp_bad_tier.status_code == 422
++    assert "tier" in str(resp_bad_tier.json())
++
++    # 14. List values with script depth header
++    resp_depth = await _as_admin_aal2(api_env, admin).get(
++        f"/api/v1/issues/{issue_key}/custom-fields",
++        headers={"x-kanban-script-depth": "1"},
++    )
++    assert resp_depth.status_code == 200
++
++    # 15. Rate limiting on test-execute
++    hit_429 = False
++    for _ in range(15):
++        resp_rl = await _as_admin_aal2(api_env, admin).post(
++            "/api/v1/projects/SEC/custom-fields/test-execute",
++            json=test_payload,
++        )
++        if resp_rl.status_code == 429:
++            hit_429 = True
++            assert resp_rl.json()["code"] == "RATE_LIMITED"
++            break
++    assert hit_429 is True
++
++
++def test_eval_safe_formula_comprehensive_coverage() -> None:
++    """Verify full coverage of formula evaluation paths."""
++    ctx = {
++        "issue": {
++            "summary": "Sample",
++            "count": 5,
++            "items": ["a", "b", "c"],
++            "meta": {"sub": "deep"},
++        }
++    }
++
++    # Empty expression
++    assert _eval_safe_formula("", ctx) == ""
++    assert _eval_safe_formula("   ", ctx) == ""
++
++    # Syntax error
++    assert _eval_safe_formula("1 ++", ctx) is None
++
++    # JS ternary
++    assert _eval_safe_formula("true ? 'yes' : 'no'", ctx) == "yes"
++    assert _eval_safe_formula("false ? 'yes' : 'no'", ctx) == "no"
++
++    # Literals
++    assert _eval_safe_formula("true", ctx) is True
++    assert _eval_safe_formula("False", ctx) is False
++    assert _eval_safe_formula("null", ctx) is None
++    assert _eval_safe_formula("None", ctx) is None
++    assert _eval_safe_formula("unknown_ident", ctx) == "unknown_ident"
++    assert _eval_safe_formula("__private", ctx) is None
++
++    # Dict subscript and list subscript
++    assert _eval_safe_formula("issue['summary']", ctx) == "Sample"
++    assert _eval_safe_formula("issue['missing']", ctx) == ""
++    assert _eval_safe_formula("issue.items[1]", ctx) == "b"
++    assert _eval_safe_formula("issue.items[10]", ctx) == ""
++    assert _eval_safe_formula("issue.meta.sub", ctx) == "deep"
++    assert _eval_safe_formula("issue.meta.missing", ctx) == ""
++    assert _eval_safe_formula("issue.meta.__subclasses__", ctx) is None
++
++    # Binary ops
++    assert _eval_safe_formula("issue.summary + ' suffix'", ctx) == "Sample suffix"
++    assert _eval_safe_formula("10 - 3", ctx) == 7
++    assert _eval_safe_formula("10 / 2", ctx) == 5.0
++    assert _eval_safe_formula("10 / 0", ctx) == 0
++    assert _eval_safe_formula("2 ** -2", ctx) == 0.25
++    assert _eval_safe_formula("2 ** -65", ctx) is None
++    assert _eval_safe_formula("'a' ** 2", ctx) is None
++    assert _eval_safe_formula("'a' * -1", ctx) is None
++    assert _eval_safe_formula("-1 * 'a'", ctx) is None
++    assert _eval_safe_formula("10 * 'a'", ctx) == "aaaaaaaaaa"
++
++    # Dict literal
++    assert _eval_safe_formula("{'key': 'val'}['key']", ctx) == "val"
++
+diff --git a/kanban/web/src/editor/clipboard/trustedTypes.ts b/kanban/web/src/editor/clipboard/trustedTypes.ts
+index a71c422..e9d589e 100644
+--- a/kanban/web/src/editor/clipboard/trustedTypes.ts
++++ b/kanban/web/src/editor/clipboard/trustedTypes.ts
+@@ -3,6 +3,8 @@
+  * Registers 'kanban-sanitizer' and 'dompurify' policies under strict CSP.
+  */
+ 
++import DOMPurify from 'dompurify';
++
+ export interface TrustedTypePolicyLike {
+   name: string;
+   createHTML: (input: string) => string;
+@@ -40,7 +42,8 @@ export function ensureTrustedTypesPolicies(): TrustedTypesPoliciesResult {
+   if (!kanbanSanitizerPolicy) {
+     try {
+       kanbanSanitizerPolicy = tt.createPolicy('kanban-sanitizer', {
+-        createHTML: (html: string) => html,
++        createHTML: (html: string) =>
++          DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false }),
+       });
+     } catch {
+       // Policy might already be registered in this browser context
+@@ -52,7 +55,8 @@ export function ensureTrustedTypesPolicies(): TrustedTypesPoliciesResult {
+       /* v8 ignore next */
+       if (import.meta.env.MODE === 'test') {
+         dompurifyPolicy = tt.createPolicy('dompurify', {
+-          createHTML: (html: string) => html,
++          createHTML: (html: string) =>
++            DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false }),
+         });
+       }
+     } catch {
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index 84bc267..eef7a90 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -24,6 +24,7 @@ import {
+ } from './api';
+ import { CustomFieldValue } from './CustomFieldValue';
+ import { EscalationApprovalPanel } from './EscalationApprovalPanel';
++import { safeJsonParse } from '../../utils/safeJson';
+ import './custom-fields.css';
+ 
+ export interface CustomFieldDefinitionEditorProps {
+@@ -387,7 +388,7 @@ export function CustomFieldDefinitionEditor({
+     let parsedMeta: Record<string, unknown> = {};
+     try {
+       if (metadataText.trim()) {
+-        parsedMeta = JSON.parse(metadataText) as Record<string, unknown>;
++        parsedMeta = safeJsonParse<Record<string, unknown>>(metadataText);
+       }
+     } catch {
+       setTestError('Invalid JSON in format metadata');
+@@ -422,7 +423,7 @@ export function CustomFieldDefinitionEditor({
+     let parsedMeta: Record<string, unknown> = {};
+     try {
+       if (metadataText.trim()) {
+-        parsedMeta = JSON.parse(metadataText) as Record<string, unknown>;
++        parsedMeta = safeJsonParse<Record<string, unknown>>(metadataText);
+       }
+     } catch {
+       setJsonError('Invalid JSON in format metadata');
+@@ -803,7 +804,7 @@ export function CustomFieldDefinitionEditor({
+                         value={testResult.value}
+                         metadata={(() => {
+                           try {
+-                            return JSON.parse(metadataText) as Record<string, unknown>;
++                            return safeJsonParse<Record<string, unknown>>(metadataText);
+                           } catch {
+                             return {};
+                           }
+diff --git a/kanban/web/src/features/drafts/draftsStore.ts b/kanban/web/src/features/drafts/draftsStore.ts
+index f755bb0..1d0c070 100644
+--- a/kanban/web/src/features/drafts/draftsStore.ts
++++ b/kanban/web/src/features/drafts/draftsStore.ts
+@@ -4,6 +4,7 @@
+  */
+ 
+ import { useState, useEffect } from 'react';
++import { safeJsonParse } from '../../utils/safeJson';
+ import { safeRandomUUID } from '../../utils/uuid';
+ 
+ export const DRAFTS_STORAGE_KEY = 'kb.drafts.v1';
+@@ -35,7 +36,7 @@ export function getDrafts(): IssueDraft[] {
+   try {
+     const raw = window.localStorage.getItem(DRAFTS_STORAGE_KEY);
+     if (!raw) return [];
+-    const parsed = JSON.parse(raw) as unknown;
++    const parsed: unknown = safeJsonParse(raw);
+     if (!Array.isArray(parsed)) return [];
+     return parsed as IssueDraft[];
+   } catch {
+diff --git a/kanban/web/src/utils/safeJson.test.ts b/kanban/web/src/utils/safeJson.test.ts
+new file mode 100644
+index 0000000..aff44c4
+--- /dev/null
++++ b/kanban/web/src/utils/safeJson.test.ts
+@@ -0,0 +1,82 @@
++/**
++ * Unit tests for safeJsonParse (KB-P3-AUDIT-11).
++ */
++
++import { describe, it, expect } from 'vitest';
++import { safeJsonParse } from './safeJson';
++
++describe('safeJsonParse', () => {
++  it('parses valid JSON primitives and arrays', () => {
++    expect(safeJsonParse('123')).toBe(123);
++    expect(safeJsonParse('"hello"')).toBe('hello');
++    expect(safeJsonParse('true')).toBe(true);
++    expect(safeJsonParse('false')).toBe(false);
++    expect(safeJsonParse('null')).toBeNull();
++    expect(safeJsonParse('[1, 2, 3]')).toEqual([1, 2, 3]);
++  });
++
++  it('parses normal JSON objects cleanly', () => {
++    const raw = '{"name": "test", "count": 42, "nested": {"active": true}}';
++    const result = safeJsonParse<Record<string, unknown>>(raw);
++    expect(result).toEqual({
++      name: 'test',
++      count: 42,
++      nested: { active: true },
++    });
++  });
++
++  it('strips __proto__ keys from JSON objects', () => {
++    const raw = '{"title": "safe", "__proto__": {"polluted": true}}';
++    const result = safeJsonParse<Record<string, unknown>>(raw);
++    expect(result.title).toBe('safe');
++    expect(Object.prototype.hasOwnProperty.call(result, '__proto__')).toBe(false);
++    expect((Object.prototype as unknown as Record<string, unknown>).polluted).toBeUndefined();
++  });
++
++  it('strips constructor and prototype keys from JSON objects', () => {
++    const raw = '{"valid": 1, "constructor": "bad", "prototype": {"hack": true}}';
++    const result = safeJsonParse<Record<string, unknown>>(raw);
++    expect(result.valid).toBe(1);
++    expect(Object.prototype.hasOwnProperty.call(result, 'constructor')).toBe(false);
++    expect(Object.prototype.hasOwnProperty.call(result, 'prototype')).toBe(false);
++    expect(result.constructor).toBe(Object);
++  });
++
++  it('recursively strips pollution keys from nested objects and arrays', () => {
++    const raw = JSON.stringify({
++      users: [
++        { id: 1, name: 'Alice', __proto__: { admin: true } },
++        { id: 2, name: 'Bob', constructor: 'evil', prototype: 'bad' },
++      ],
++      meta: {
++        deeper: {
++          __proto__: { backdoor: true },
++          ok: 'yes',
++        },
++      },
++    });
++
++    const result = safeJsonParse<{
++      users: Record<string, unknown>[];
++      meta: { deeper: Record<string, unknown> };
++    }>(raw);
++
++    const user0 = result.users[0];
++    const user1 = result.users[1];
++    expect(user0).toBeDefined();
++    expect(user1).toBeDefined();
++    if (user0 && user1) {
++      expect(user0.name).toBe('Alice');
++      expect(Object.prototype.hasOwnProperty.call(user0, '__proto__')).toBe(false);
++      expect(Object.prototype.hasOwnProperty.call(user1, 'constructor')).toBe(false);
++      expect(Object.prototype.hasOwnProperty.call(user1, 'prototype')).toBe(false);
++      expect(user1.constructor).toBe(Object);
++    }
++    expect(result.meta.deeper.ok).toBe('yes');
++    expect(Object.prototype.hasOwnProperty.call(result.meta.deeper, '__proto__')).toBe(false);
++  });
++
++  it('throws SyntaxError for malformed JSON text', () => {
++    expect(() => safeJsonParse('{invalid')).toThrow(SyntaxError);
++  });
++});
+diff --git a/kanban/web/src/utils/safeJson.ts b/kanban/web/src/utils/safeJson.ts
+new file mode 100644
+index 0000000..1f38a58
+--- /dev/null
++++ b/kanban/web/src/utils/safeJson.ts
+@@ -0,0 +1,21 @@
++/**
++ * Safe JSON parsing utilities preventing prototype pollution (KB-P3-AUDIT-11).
++ */
++
++/**
++ * Safely parses a JSON string, stripping forbidden prototype pollution keys
++ * ('__proto__', 'constructor', 'prototype') recursively.
++ *
++ * @param text The raw JSON string to parse.
++ * @returns The parsed data with prototype pollution keys stripped.
++ */
++// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
++export function safeJsonParse<T = unknown>(text: string): T {
++  const parsed: unknown = JSON.parse(text, (key, value: unknown) => {
++    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
++      return undefined;
++    }
++    return value;
++  });
++  return parsed as T;
++}

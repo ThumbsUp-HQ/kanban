@@ -222,6 +222,7 @@ class CustomFieldDefinitionService:
             target_scope=payload.target_scope,
             credential_mode=payload.credential_mode,
             egress_allowlist=cleaned_egress,
+            wasm_module_sha256=wasm_bytes,
         )
 
         row = CustomFieldDefinition(
@@ -306,7 +307,10 @@ class CustomFieldDefinitionService:
                 spec_changed = True
 
         if payload.wasm_module_sha256 is not None:
-            row.wasm_module_sha256 = _parse_wasm_sha256(payload.wasm_module_sha256)
+            new_wasm = _parse_wasm_sha256(payload.wasm_module_sha256)
+            if new_wasm != row.wasm_module_sha256:
+                row.wasm_module_sha256 = new_wasm
+                spec_changed = True
 
         return spec_changed
 
@@ -356,6 +360,7 @@ class CustomFieldDefinitionService:
                 target_scope=row.target_scope,
                 credential_mode=row.credential_mode,
                 egress_allowlist=row.egress_allowlist,
+                wasm_module_sha256=row.wasm_module_sha256,
             )
 
         await session.flush()

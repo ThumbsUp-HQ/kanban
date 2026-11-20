@@ -26,6 +26,7 @@ from database.session import RLSSessionFactory
 from kanban.api.deps import DenyAllResolver
 from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
 from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+from kanban.api.middleware.json_limits import JsonLimitsMiddleware
 from kanban.api.middleware.script_depth import ScriptDepthGuardMiddleware
 from kanban.api.problems import (
     ProblemException,
@@ -437,6 +438,9 @@ def create_app(
 
     # Add script recursion depth guard middleware
     app.add_middleware(ScriptDepthGuardMiddleware)
+
+    # Add global JSON size, depth, and surrogate guard middleware
+    app.add_middleware(JsonLimitsMiddleware)
 
     # Add security headers and host protection middleware
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)

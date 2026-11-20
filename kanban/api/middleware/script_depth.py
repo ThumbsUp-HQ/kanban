@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 _BLOCKED_PATH_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"^/api/v1/issues/[^/]+/custom-fields/[^/]+/execute(?:/.*)?$"),
     re.compile(r"^/api/v1/issues/[^/]+/transitions(?:/.*)?$"),
+    re.compile(r"^/api/v1/projects/[^/]+/custom-fields/test-execute(?:/.*)?$"),
+    re.compile(r"^/api/v1/projects/[^/]+/workflow-hooks/dry-run(?:/.*)?$"),
     re.compile(r"^/mcp(?:/.*)?$"),
 )
 

@@ -1,0 +1,37 @@
+# KAN-17 Changed Files Manifest
+
+## Main Repository (Branch: feat/KAN-17, Base: 887e7e0)
+### Core Backend Implementation:
+- kanban/api/middleware/__init__.py
+- kanban/api/middleware/json_limits.py
+- kanban/api/middleware/script_depth.py
+- kanban/api/v1/custom_field_execution.py
+- kanban/app.py
+- kanban/custom_fields/executor.py
+- kanban/custom_fields/manifest.py
+- kanban/custom_fields/service.py
+
+### Backend Unit & Integration Tests:
+- kanban/tests/api/test_json_limits_middleware.py
+- kanban/tests/custom_fields/test_manifest_and_formula_security.py
+
+### Frontend Web Implementation & Security Hardening:
+- kanban/web/src/editor/clipboard/trustedTypes.ts
+- kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+- kanban/web/src/features/drafts/draftsStore.ts
+- kanban/web/src/utils/safeJson.ts
+
+### Frontend Unit Tests:
+- kanban/web/src/utils/safeJson.test.ts
+
+## Wiki Standalone Repository (thumbs-up-kanban.wiki, Branch: feat/KAN-17, Base: main):
+- Custom-Scripts-and-JSON-Security-Architecture.md
+- _Sidebar.md
+
+## QA Audit Artifacts (docs/qa/KAN-17/):
+- docs/qa/KAN-17/changed-files-manifest.txt
+- docs/qa/KAN-17/git-diff.patch
+- docs/qa/KAN-17/wiki-diff.patch
+- docs/qa/KAN-17/unit-test-results.txt
+- docs/qa/KAN-17/build-or-typecheck.txt
+- docs/qa/KAN-17/message-to-reality-checker.md

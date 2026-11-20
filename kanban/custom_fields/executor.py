@@ -49,9 +49,27 @@ if TYPE_CHECKING:
 
 _HASH_BYTES_LEN: Final[int] = 32
 _HEX_DIGEST_LEN: Final[int] = 64
+_MAX_FORMULA_NODES: Final[int] = 64
+_MAX_FORMULA_DEPTH: Final[int] = 8
+_MAX_POW_EXPONENT: Final[int] = 64
+_MAX_POW_BASE: Final[int] = 1_000_000
+_MAX_MULT_OUTPUT_LEN: Final[int] = 4096
 
 
-def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, ANN401
+def _check_formula_ast_bounds(node: ast.AST) -> bool:
+    """Validate AST node count and tree depth against DoS limits."""
+    for count, _ in enumerate(ast.walk(node), start=1):
+        if count > _MAX_FORMULA_NODES:
+            return False
+
+    def _get_depth(cur: ast.AST) -> int:
+        child_depths = [_get_depth(child) for child in ast.iter_child_nodes(cur)]
+        return 1 + max(child_depths, default=0)
+
+    return _get_depth(node) <= _MAX_FORMULA_DEPTH
+
+
+def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, PLR0915, ANN401
     """Safely evaluate a formula expression against issue payload without arbitrary execution."""
     expr = expr.strip()
     if not expr:
@@ -67,6 +85,9 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
     try:
         parsed = ast.parse(expr, mode="eval")
     except (SyntaxError, ValueError):
+        return None
+
+    if not _check_formula_ast_bounds(parsed.body):
         return None
 
     def _eval_node(node: ast.AST, ctx: dict[str, Any]) -> Any:  # noqa: C901, PLR0911, PLR0912, ANN401
@@ -90,7 +111,7 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
             val = _eval_node(node.value, ctx)
             if isinstance(val, dict):
                 return val.get(node.attr, "")
-            return getattr(val, node.attr, "")
+            return ""
         if isinstance(node, ast.Subscript):
             val = _eval_node(node.value, ctx)
             slice_val = _eval_node(node.slice, ctx)
@@ -109,11 +130,34 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
             if isinstance(node.op, ast.Sub):
                 return left - right
             if isinstance(node.op, ast.Mult):
-                return left * right
+                if isinstance(left, (str, list, tuple)) and isinstance(right, int):
+                    if right < 0 or len(left) * right > _MAX_MULT_OUTPUT_LEN:
+                        return None
+                elif (
+                    isinstance(right, (str, list, tuple))
+                    and isinstance(left, int)
+                    and (left < 0 or len(right) * left > _MAX_MULT_OUTPUT_LEN)
+                ):
+                    return None
+                try:
+                    return left * right
+                except (OverflowError, MemoryError):
+                    return None
             if isinstance(node.op, ast.Div):
                 return left / right if right != 0 else 0
             if isinstance(node.op, ast.Pow):
-                return left**right
+                if not isinstance(left, (int, float)) or not isinstance(right, (int, float)):
+                    return None
+                if (
+                    abs(left) > _MAX_POW_BASE
+                    or right > _MAX_POW_EXPONENT
+                    or right < -_MAX_POW_EXPONENT
+                ):
+                    return None
+                try:
+                    return left**right
+                except (OverflowError, ValueError):
+                    return None
         if isinstance(node, ast.Dict):
             return {
                 _eval_node(k, ctx): _eval_node(v, ctx)
@@ -125,6 +169,15 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
         if isinstance(node, ast.IfExp):
             cond = _eval_node(node.test, ctx)
             return _eval_node(node.body, ctx) if cond else _eval_node(node.orelse, ctx)
+        if isinstance(node, ast.UnaryOp):
+            operand = _eval_node(node.operand, ctx)
+            if isinstance(node.op, ast.USub):
+                return -operand if isinstance(operand, (int, float)) else None
+            if isinstance(node.op, ast.UAdd):
+                return +operand if isinstance(operand, (int, float)) else None
+            if isinstance(node.op, ast.Not):
+                return not operand
+            return None
         if isinstance(node, ast.Compare):
             left = _eval_node(node.left, ctx)
             for op, comparator in zip(node.ops, node.comparators, strict=False):
@@ -748,7 +801,20 @@ class CustomFieldExecutor:
                                 title="Invalid WebAssembly Binary",
                                 detail=f"Cannot decode WebAssembly module bytes: {err}",
                             ) from err
-                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+                    wasm_sha = hashlib.sha256(wasm_bytes).digest()
+                    mod_stmt = select(ApprovedWasmModule).where(
+                        ApprovedWasmModule.workspace_id == caller.workspace_id,
+                        ApprovedWasmModule.sha256 == wasm_sha,
+                    )
+                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+                    if wasm_mod is None:
+                        raise ProblemException(  # noqa: TRY301
+                            status=404,
+                            code="WASM_MODULE_NOT_FOUND",
+                            title="WebAssembly Module Not Found",
+                            detail="Approved WebAssembly module was not found in workspace",
+                        )
+                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
                     output_bytes = run_res.output_bytes
                     latency_ms = max(1, int(run_res.duration_ms))
                     logs += f"Executed Wasm bytecode: fuel={run_res.fuel_consumed}\n"

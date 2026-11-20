@@ -3,6 +3,8 @@
  * Registers 'kanban-sanitizer' and 'dompurify' policies under strict CSP.
  */
 
+import DOMPurify from 'dompurify';
+
 export interface TrustedTypePolicyLike {
   name: string;
   createHTML: (input: string) => string;
@@ -40,7 +42,8 @@ export function ensureTrustedTypesPolicies(): TrustedTypesPoliciesResult {
   if (!kanbanSanitizerPolicy) {
     try {
       kanbanSanitizerPolicy = tt.createPolicy('kanban-sanitizer', {
-        createHTML: (html: string) => html,
+        createHTML: (html: string) =>
+          DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false }),
       });
     } catch {
       // Policy might already be registered in this browser context
@@ -52,7 +55,8 @@ export function ensureTrustedTypesPolicies(): TrustedTypesPoliciesResult {
       /* v8 ignore next */
       if (import.meta.env.MODE === 'test') {
         dompurifyPolicy = tt.createPolicy('dompurify', {
-          createHTML: (html: string) => html,
+          createHTML: (html: string) =>
+            DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false }),
         });
       }
     } catch {

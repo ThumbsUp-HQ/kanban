@@ -1,0 +1,210 @@
+diff --git a/Custom-Scripts-and-JSON-Security-Architecture.md b/Custom-Scripts-and-JSON-Security-Architecture.md
+new file mode 100644
+index 0000000..e787f5e
+--- /dev/null
++++ b/Custom-Scripts-and-JSON-Security-Architecture.md
+@@ -0,0 +1,192 @@
++# Custom Scripts and JSON Security Architecture
++
++## Overview
++
++Extensibility is central to 👍kanban: administrators can author custom fields, dynamic computed formulas, and WebAssembly (Wasm) logic to compute metadata in real time. However, allowing untrusted or semi-trusted script execution and arbitrary JSON payloads introduces critical attack vectors:
++1. **Supply-chain and Binary Tampering:** Substituting an approved Wasm module binary with a malicious payload after approval.
++2. **Re-entrant Elevation:** Calling privileged endpoints (such as `test-execute` or `dry-run`) from within custom field scripts or workflow hooks to bypass security boundaries.
++3. **Event-Loop CPU and Memory Denial-of-Service:** Exploiting Python abstract syntax tree (AST) evaluation through exponential operations, unbounded sequence allocations, or deep syntax tree exhaustion.
++4. **JSON Payload Bombs:** Crashing or freezing ASGI servers via nested JSON recursion (stack overflow), unbounded key allocation (memory exhaustion), or invalid UTF-16 lone surrogates.
++5. **Client-Side Prototype Pollution and DOM XSS:** Polluting JavaScript object prototypes via `__proto__` or `constructor` keys in parsed JSON, or injecting unvalidated HTML strings into the document object model.
++
++To eliminate these vulnerabilities, 👍kanban implements an end-to-end defense-in-depth architecture spanning ASGI middleware, database triggers, AST execution bounds, and browser sanitizers.
++
++---
++
++## Architectural Security Model
++
++```mermaid
++flowchart TD
++    Client["Client / External Agent"] -->|HTTP / JSON Payload| JsonMiddleware["JsonLimitsMiddleware (ASGI)"]
++
++    subgraph Inbound Guardrails
++        JsonMiddleware -->|1. Size Check| SizeCheck{"Body <= 2 MiB / 25 MiB?"}
++        SizeCheck -- No --> R413["413 Payload Too Large"]
++        SizeCheck -- Yes --> SurrogateCheck{"UTF-16 Lone Surrogates?"}
++        SurrogateCheck -- Yes --> R422S["422 INVALID_UTF8_SURROGATE"]
++        SurrogateCheck -- No --> IterativeParser{"Iterative JSON Scanner"}
++        IterativeParser -->|Depth > 32| R422D["422 JSON_DEPTH_EXCEEDED"]
++        IterativeParser -->|Keys > 5000| R422K["422 JSON_KEYS_EXCEEDED"]
++        IterativeParser -->|Valid| Router["FastAPI Router"]
++    end
++
++    subgraph Endpoint & Re-entrancy Guards
++        Router --> ScriptGuard["ScriptDepthGuardMiddleware"]
++        ScriptGuard -->|X-Kanban-Script-Depth on Blocked Path| R403R["403 RECURSIVE_SCRIPT_EXECUTION_BLOCKED"]
++        ScriptGuard --> AuthGate["PROJECT_ADMIN + AAL2 Gate"]
++        AuthGate -- Missing AAL2 --> R401["401 AAL2_REQUIRED"]
++        AuthGate -- Unauthorized --> R403A["403 INSUFFICIENT_CAPABILITY"]
++        AuthGate -- Authorized --> ExecutionService["CustomFieldDefinitionService"]
++    end
++
++    subgraph Sandboxed Execution & Manifest Integrity
++        ExecutionService --> ManifestCheck{"Manifest SHA-256 Valid?"}
++        ManifestCheck -- Tampered --> TamperRevoke["PostgreSQL Tamper Trigger Revokes Escalation"]
++        ManifestCheck -- Valid --> ExecutorType{"Engine Type"}
++        ExecutorType -->|Wasm| WasmRegistry{"ApprovedWasmModule Verified?"}
++        WasmRegistry -- No --> R400W["400 Wasm Module Unapproved"]
++        WasmRegistry -- Yes --> WasmSandbox["Wasmtime Isolated Engine"]
++        ExecutorType -->|Safe Formula| ASTBounds["AST Bounds Checker"]
++        ASTBounds -->|Nodes > 64 or Depth > 8| R400N["400 Formula Exceeds Complexity"]
++        ASTBounds -->|Pow / Mult Bounds Check| ASTEval["_eval_safe_formula (Dict-Only Lookup)"]
++    end
++```
++
++---
++
++## 1. Wasm Module SHA-256 Binding and Manifest Integrity
++
++### Cryptographic Manifest Digest
++Custom field definitions can declare escalated permissions (such as workspace-level or server-level API read/write scopes) requiring cryptographic signatures and administrative approvals. Previously, only the script text was included in the manifest hash calculation.
++
++Under the hardened architecture (`kanban/custom_fields/manifest.py`), `compute_field_manifest_sha256` explicitly binds the compiled binary digest `wasm_module_sha256`:
++
++```python
++canonical_manifest = {
++    "escalation_approved": escalation_approved,
++    "escalation_requested": escalation_requested,
++    "field_id": field_id,
++    "formula": formula,
++    "name": name,
++    "permissions": sorted(permissions),
++    "project_id": project_id,
++    "return_type": return_type,
++    "script": script,
++    "wasm_module_sha256": wasm_module_sha256,
++}
++```
++
++### PostgreSQL Tamper-Revocation Trigger
++When an existing definition is updated, changing `wasm_module_sha256` marks `spec_changed = True` (`kanban/custom_fields/service.py`). The database trigger `custom_field_manifest_tamper_revoke` executes immediately:
++- Escalation approvals (`escalation_approved = false`) are automatically revoked.
++- The manifest hash is regenerated against the new binary payload.
++- Any attempt to substitute an unapproved or modified WebAssembly binary invalidates existing approval records, preventing unauthorized privilege escalation.
++
++---
++
++## 2. Test-Execute Security and Re-entrancy Protection
++
++### Administrative Access Control
++The `POST /api/v1/projects/{project}/custom-fields/test-execute` endpoint allows testing custom field logic against draft ticket data before persisting to production. Because this endpoint executes script engines in real time, access is restricted:
++- **Requirement:** Callers must authenticate as `PROJECT_ADMIN` with Authenticator Assurance Level 2 (`AAL2`).
++- **Capability Check:** `CustomFieldDefinitionService.require_admin_and_aal2(project_id, principal)` verifies membership and enforces step-up authentication.
++- **Wasm Verification:** Wasm draft payloads are verified against the `ApprovedWasmModule` registry or approved hash store before execution.
++
++### Re-entrancy and Recursion Blocking
++To prevent custom scripts or webhook handlers from calling administrative execution endpoints recursively, `ScriptDepthGuardMiddleware` (`kanban/api/middleware/script_depth.py`) intercepts outbound internal calls carrying `X-Kanban-Script-Depth`.
++
++The following paths are explicitly blocked from scripted invocations:
++- `/api/v1/projects/[^/]+/custom-fields/test-execute`
++- `/api/v1/projects/[^/]+/workflow-hooks/dry-run`
++
++Any scripted call attempting to reach these paths returns HTTP 403 `RECURSIVE_SCRIPT_EXECUTION_BLOCKED`.
++
++---
++
++## 3. Formula AST Execution Bounds (Denial-of-Service Defense)
++
++Simple computed fields use Python AST formula evaluation (`kanban/custom_fields/executor.py`). While sandboxed, unconstrained AST operations could consume 100% of the asynchronous event loop CPU or allocate gigabytes of memory.
++
++The safe formula engine enforces static and dynamic limits:
++
++### Static AST Complexity Checks
++Before evaluation, `_check_formula_ast_bounds` traverses the AST tree:
++- **Node Count Limit:** The total number of AST nodes cannot exceed `64`.
++- **Depth Limit:** The maximum nesting depth of the AST tree cannot exceed `8`.
++- If either threshold is exceeded, evaluation halts with `ValueError("Formula exceeds maximum AST complexity bounds")`.
++
++### Arithmetic and Allocation Bounds
++- **Power Operator (`ast.Pow`):** Exponents are restricted to `<= 64`, and base values are restricted to `abs(base) <= 1_000_000`. This prevents operations like `999999 ** 999999` from freezing the process.
++- **Multiplication Operator (`ast.Mult`):** Sequence multiplication (e.g. `'A' * 1000000` or `[0] * 1000000`) is bounded to a maximum output length of `4096` elements or characters.
++- **Attribute Access (`ast.Attribute`):** Attribute access on Python objects via `getattr` is eliminated. Only dictionary key lookups are permitted (`obj.get(attr)` or `obj[attr]` when `obj` is an instance of `dict`). Introspection attributes (`__class__`, `__mro__`, `__subclasses__`) cannot be resolved.
++
++---
++
++## 4. Global ASGI JSON Limits Middleware
++
++JSON parsing in Python web frameworks typically buffers the entire request into memory before deserializing. Malicious clients can crash workers using deeply nested arrays (`[[[[...]]]]`) or gigabyte payloads.
++
++`JsonLimitsMiddleware` (`kanban/api/middleware/json_limits.py`) sits at the ASGI level:
++
++### Streaming Body Size Caps
++- **Default Limit:** `2 MiB` (2,097,152 bytes) for standard JSON API requests.
++- **Extended Limit:** `25 MiB` (26,214,400 bytes) for designated attachment and import routes:
++  - `/api/v1/attachments`
++  - `/api/v1/import`
++  - `/api/v1/projects/[^/]+/import`
++- Bodies exceeding the limit are rejected immediately with HTTP 413 `Payload Too Large` before reaching the application framework.
++
++### UTF-16 Lone-Surrogate Rejection
++Python strings and JSON encoders can be vulnerable to unpaired surrogate code points (`0xD800` through `0xDFFF`), which cause database serialization errors or security bypasses.
++- The middleware scans raw incoming bytes for invalid surrogate sequences before passing data to FastAPI.
++- Requests containing lone surrogates receive HTTP 422 `Unprocessable Entity` with error code `INVALID_UTF8_SURROGATE`.
++
++### Non-Recursive Iterative Structural Validation
++To protect against stack overflows without paying the performance cost of complete parsing twice, the middleware uses an iterative character scanner for `application/json` and `+json` content types:
++- **Maximum Depth:** `MAX_JSON_DEPTH = 32`. Nested objects or arrays deeper than 32 levels return HTTP 422 `JSON_DEPTH_EXCEEDED`.
++- **Maximum Keys:** `MAX_JSON_KEYS = 5000`. Payloads containing more than 5,000 keys return HTTP 422 `JSON_KEYS_EXCEEDED`.
++- **Passthrough:** Multipart form data, Server-Sent Events (SSE), and static asset requests bypass JSON scanning entirely.
++
++---
++
++## 5. Client-Side Safe JSON and Trusted Types
++
++Security invariants extend directly to the browser client (`kanban/web/`):
++
++### Safe JSON Parsing (`safeJsonParse`)
++Standard `JSON.parse` is vulnerable to Prototype Pollution when handling untrusted JSON payloads containing `__proto__`, `constructor`, or `prototype` keys.
++
++The utility `safeJsonParse` (`kanban/web/src/utils/safeJson.ts`) applies an iterative reviver function that removes these keys from the resulting object:
++- In `draftsStore.ts`, all draft restoration routines use `safeJsonParse`.
++- In `CustomFieldDefinitionEditor.tsx`, format metadata and formula test inputs are deserialized using `safeJsonParse`.
++
++```typescript
++export function safeJsonParse<T = unknown>(text: string): T {
++  return JSON.parse(text, (key, value) => {
++    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
++      return undefined;
++    }
++    return value;
++  });
++}
++```
++
++### Unified Trusted Types Policy
++In `kanban/web/src/editor/clipboard/trustedTypes.ts`, the `kanban-sanitizer` and `dompurify` Trusted Types policies ensure that any HTML passed to browser sinks is sanitized through `DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false })` before being wrapped as a `TrustedHTML` token.
++
++---
++
++## 6. Verification and Audit Matrix
++
++| Security Layer | Implementation File | Verification Test | Expected Defense Behavior |
++| :--- | :--- | :--- | :--- |
++| **Wasm Hash Binding** | `kanban/custom_fields/manifest.py` | `test_manifest_and_formula_security.py` | Modifying `wasm_module_sha256` alters `manifest_sha256` and revokes approval. |
++| **Admin test-execute Gate** | `kanban/api/v1/custom_field_execution.py` | `test_manifest_and_formula_security.py` | Non-admin returns 403; AAL1 returns 401; unapproved Wasm returns 400. |
++| **Script Depth Guard** | `kanban/api/middleware/script_depth.py` | `test_script_depth_middleware.py` | Re-entrant `test-execute` or `dry-run` returns 403 `RECURSIVE_SCRIPT_EXECUTION_BLOCKED`. |
++| **AST Node & Depth Bounds** | `kanban/custom_fields/executor.py` | `test_manifest_and_formula_security.py` | Nodes > 64 or depth > 8 raises `ValueError` before evaluation. |
++| **AST Math & Sequence Bounds**| `kanban/custom_fields/executor.py` | `test_safe_formula_unit.py` | `ast.Pow` bounded to 64; sequence mult bounded to 4096; dict-only attrs. |
++| **ASGI Size Caps** | `kanban/api/middleware/json_limits.py` | `test_json_limits_middleware.py` | Payloads > 2 MiB (or > 25 MiB import) return HTTP 413. |
++| **ASGI Surrogate Rejection**| `kanban/api/middleware/json_limits.py` | `test_json_limits_middleware.py` | Lone surrogates `0xD800..0xDFFF` return HTTP 422 `INVALID_UTF8_SURROGATE`. |
++| **ASGI JSON Depth / Keys** | `kanban/api/middleware/json_limits.py` | `test_json_limits_middleware.py` | Depth > 32 returns 422 `JSON_DEPTH_EXCEEDED`; keys > 5000 returns 422. |
++| **Client Safe JSON** | `kanban/web/src/utils/safeJson.ts` | `safeJson.test.ts` | Strips `__proto__`, `constructor`, `prototype` preventing prototype pollution. |
++| **Client Trusted Types** | `kanban/web/src/editor/clipboard/trustedTypes.ts` | `trustedTypes.test.ts` | Mandatory `DOMPurify.sanitize` execution on all `createHTML` calls. |
+diff --git a/_Sidebar.md b/_Sidebar.md
+index 9e64a60..b7671e3 100644
+--- a/_Sidebar.md
++++ b/_Sidebar.md
+@@ -24,6 +24,7 @@
+   - [15. Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook)
+   - [16. Migration and Cutover Runbook](Migration-and-Cutover-Runbook)
+   - [17. Real-Time WebSockets](Real-Time-Web-and-WebSocket-Architecture)
++  - [18. Custom Scripts and JSON Security](Custom-Scripts-and-JSON-Security-Architecture)
+ 
+ - **Reference Guides**
+   - [Feature Comparison Matrix (35 Features)](Feature-Comparison)

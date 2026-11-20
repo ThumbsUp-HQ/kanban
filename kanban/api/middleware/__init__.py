@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+from kanban.api.middleware.json_limits import JsonLimitsMiddleware
 from kanban.api.middleware.script_depth import ScriptDepthGuardMiddleware
 
 __all__ = [
+    "JsonLimitsMiddleware",
     "ScriptDepthGuardMiddleware",
 ]

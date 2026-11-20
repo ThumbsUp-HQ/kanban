@@ -57,6 +57,7 @@ def compute_field_manifest_sha256(  # noqa: PLR0913
     target_scope: str = "PROJECT",
     credential_mode: str = "INVOKING_USER",
     egress_allowlist: list[str] | None = None,
+    wasm_module_sha256: str | bytes | None = None,
 ) -> bytes:
     """Compute deterministic SHA-256 manifest hash over normalized field specification.
 
@@ -68,10 +69,17 @@ def compute_field_manifest_sha256(  # noqa: PLR0913
         "output_format_metadata": ...,
         "script_source": ...,
         "target_scope": ...,
-        "tier": ...
+        "tier": ...,
+        "wasm_module_sha256": ...
     }))
     """
     valid_egress = validate_egress_allowlist(egress_allowlist)
+    wasm_hex: str | None = None
+    if isinstance(wasm_module_sha256, bytes):
+        wasm_hex = wasm_module_sha256.hex()
+    elif isinstance(wasm_module_sha256, str) and wasm_module_sha256.strip():
+        wasm_hex = wasm_module_sha256.strip().lower()
+
     payload = {
         "credential_mode": credential_mode,
         "egress_allowlist": valid_egress,
@@ -80,6 +88,7 @@ def compute_field_manifest_sha256(  # noqa: PLR0913
         "script_source": script_source,
         "target_scope": target_scope,
         "tier": tier,
+        "wasm_module_sha256": wasm_hex,
     }
     canonical_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(canonical_bytes).digest()
