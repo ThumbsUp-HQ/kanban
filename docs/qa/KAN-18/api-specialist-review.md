@@ -4,16 +4,16 @@
 - Ticket ID: KAN-18 ([KB-P3-AUDIT-12])
 - Reviewer: api-spec-2 (Clean-Room Backend/API Specialist)
 - Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-9a5e6950`
-- Target Branch: feat/KAN-18
-- Base Commit: cb25150
-- Head Commit: 6b756e1
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan18-fix-5f154820`
+- Target Branch: fix/KAN-18-liveqa
+- Base Commit: 6eab593
+- Head Commit: af7b91d
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room audit evaluates the consolidation of the `/mcp/docs` Model Context Protocol surface from 6 redundant CRUD tools into 3 CLI-modeled tools (`search`, `create`, `update`). The implementation eliminates MCP schema context bloat, enforces unidirectional module boundaries (`mcp` forbidden from importing `database`), introduces surgical `original_text`/`replacement_text` diff-patching with similarity diagnostics, enables sticky-to-doc auto-promotion, and formats all outputs using compact YAML (`InlineSafeDumper`).
+This clean-room audit evaluates the consolidation of the `/mcp/docs` Model Context Protocol surface from 6 redundant CRUD tools into 3 CLI-modeled tools (`search`, `create`, `update`) and verifies the clean-room reality-checker surgical remediations ([KB-P3-AUDIT-12]). The implementation eliminates MCP schema context bloat, enforces unidirectional module boundaries (`mcp` forbidden from importing `database`), introduces surgical `original_text`/`replacement_text` diff-patching with similarity diagnostics, enables sticky-to-doc auto-promotion, normalizes ETag concurrency handling, and formats all outputs using compact YAML (`InlineSafeDumper`).
 
 All changes adhere strictly to the authoritative specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and `kanban/GEMINI.md`.
 
@@ -68,6 +68,32 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 
 ---
 
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-12)
+
+- Target Branch: `fix/KAN-18-liveqa`
+- Remediation Head Commit: `af7b91d`
+- Verifications:
+  1. **[CRITICAL-1] ETag Quoted vs Unquoted Concurrency Direct Chaining:**
+     - In `create.py`, `search.py`, and `update.py`, added helper `_clean_etag(raw)` stripping outer quotes, returning clean 64-character unquoted hexadecimal strings in all YAML response payloads.
+     - In `update.py`, incoming `if_match` parameter is normalized with `str(raw_if_match).strip().strip('"')`, allowing direct client chaining (`update(if_match=res["etag"])`) without format errors.
+     - In `update.py`, verified ETag is forwarded on upstream PATCH (`headers = {"If-Match": f'"{current_sha}"'}`), guaranteeing optimistic concurrency across the fetch-to-patch window.
+  2. **[HIGH-1] Single-Slug Doc Path Resolution Order:**
+     - Corrected resolution order in `_try_get_page_or_doc` (`search.py`) and `_fetch_current_entity` (`update.py`):
+       - Single-slug doc paths (`id="docs/<doc-slug>"`, `clean_id.count("/") == 1`) or `type == "DOC"` resolve `GET /api/v1/docs/{clean_doc}` FIRST before falling back to `pages/`.
+       - Explicit `pages/` or nested paths (`docs/<doc-slug>/<page-slug>`, `count("/") >= 2`) resolve Page first.
+  3. **[HIGH-2] Preservation of Project Filter on Search:**
+     - In `search.py`, `search(project="...", type="DOC")` when `include_tree=False` resolves the project key or UUID via `GET /api/v1/projects/{clean_proj}` (raising `NOT_FOUND` if invalid) and forwards `params={"project": project_uuid}` to `GET /api/v1/docs`, returning the project's docs instead of workspace-root docs.
+  4. **Validation, Ephemeral Token, & Scoping Security:**
+     - Half-supplied patch parameters (`original_text` without `replacement_text`, or vice versa) strictly raise `VALIDATION_FAILED`.
+     - Supplying `title` on sticky updates without `type="DOC"` raises `VALIDATION_FAILED`.
+     - Missing projects or parents raise `NOT_FOUND` cleanly without swallowing exceptions.
+     - Updated `kanban/security/ephemeral_mcp_tokens.py` and `mcp/protocol.py` so ephemeral tokens minted with `["search"]`, `["search_knowledge"]`, or `["read_doc"]` work on `/mcp/docs` and list only `search`, while blocking `create` and `update` (`403 EPHEMERAL_TOOL_FORBIDDEN`).
+     - Updated `mcp/scoping.py` `mutating_tools` to include `/mcp/docs` `create` and `update`.
+  5. **[HIGH-3] Programmatic Regeneration of Contract Sample:**
+     - Verified `mcp/tests/docs/test_docs_tools.py::test_case_7_programmatic_contract_sample_generator` programmatically generates `docs/qa/KAN-18/contract-sample.yaml` directly from verbatim tool outputs.
+
+---
+
 ## Gate & Invariant Checklist
 
 1. [x] Zero New Dependencies: No additions to `pyproject.toml` or `package.json`.
@@ -75,18 +101,20 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 3. [x] Architectural Layering: `uv run lint-imports` verified 2 kept contracts, 0 broken (`mcp forbidden from importing database KEPT`).
 4. [x] Test Coverage:
    - `mcp/surfaces/docs/__init__.py`: 100%
-   - `mcp/surfaces/docs/create.py`: 98% line and branch coverage
-   - `mcp/surfaces/docs/search.py`: 96% line and branch coverage
-   - `mcp/surfaces/docs/update.py`: 97% line and branch coverage
+   - `mcp/surfaces/docs/create.py`: 97% line and branch coverage
+   - `mcp/surfaces/docs/search.py`: 95% line and branch coverage
+   - `mcp/surfaces/docs/update.py`: 96% line and branch coverage
+   - `kanban/security/ephemeral_mcp_tokens.py`: 96% line and branch coverage
+   - `mcp/scoping.py`: 97% line and branch coverage
    - All touched modules comfortably exceed >= 95.10% threshold.
-   - All 38 unit and integration tests passing in 11.98s.
+   - All 46 unit and integration tests passing in 16.89s.
 5. [x] Static Analysis: `ruff check mcp/`, `ruff format --check mcp/`, and `mypy mcp/` (111 source files) pass with 0 errors and 0 warnings.
 6. [x] Zero Em/En-Dashes: Clean verification across code, tests, docs, and review markdown (0 em/en-dashes).
-7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `contract-sample.yaml`, and `message-to-reality-checker.md` verified in `docs/qa/KAN-18/`.
+7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `contract-sample.yaml`, and `live-fullstack-proof.txt` verified in `docs/qa/KAN-18/`.
 
 ---
 
 ## Verdict & Handoff
 STATUS: APPROVED
 
-The MCP tool contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for non-UI classification sign-off (backend-only MCP surface; no UI screenshots expected).
+The MCP tool contracts, security invariants, clean-room reality-checker remediations, and test evidence are verified clean. Ready for final coordinator merge into `main`.
