@@ -1173,9 +1173,7 @@ async def test_state_reverse_audit_impact_and_deletion_guards(  # noqa: PLR0915
     await api_env.seed.commit()
 
     # Temporarily move issues and disable hook so only historical executions remain on st_from
-    await api_env.seed.execute(
-        text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
-    )
+    await api_env.seed.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
     await api_env.seed.execute(
         text("UPDATE issues SET state_id = :st WHERE state_id = :old"),
         {"st": uuid.UUID(st_replacement["id"]), "old": uuid.UUID(st_from["id"])},
@@ -1191,9 +1189,7 @@ async def test_state_reverse_audit_impact_and_deletion_guards(  # noqa: PLR0915
     assert del_hist_block.json()["code"] == "HISTORICAL_EXECUTIONS_REQUIRE_STATE"
 
     # Restore issues back to st_from for atomic migration test
-    await api_env.seed.execute(
-        text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
-    )
+    await api_env.seed.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
     await api_env.seed.execute(
         text("UPDATE issues SET state_id = :old WHERE id IN (:i1, :i2)"),
         {"old": uuid.UUID(st_from["id"]), "i1": iss_1, "i2": iss_2},

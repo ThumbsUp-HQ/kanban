@@ -97,8 +97,8 @@ async def _recv_event(ws: AsyncWebSocketTestClient, expected_topic: str) -> dict
         msg = await ws.receive_json(timeout_seconds=3.0)
         if msg.get("type") == "event" and msg.get("topic") == expected_topic:
             return msg
-    msg = f"Timed out waiting for event topic: {expected_topic}"
-    raise AssertionError(msg)
+    err_msg = f"Timed out waiting for event topic: {expected_topic}"
+    raise AssertionError(err_msg)
 
 
 @pytest.mark.asyncio

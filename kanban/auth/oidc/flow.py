@@ -802,9 +802,7 @@ class OidcFlow:
         # Link flow: preserve caller session and redirect cleanly to /settings/profile
         if resolved_link_intent_id is not None:
             try:
-                await self._identity_resolver.resolve(
-                    assertion, dummy_req, resolved_link_intent_id
-                )
+                await self._identity_resolver.resolve(assertion, dummy_req, resolved_link_intent_id)
             except ProblemException as exc:
                 err_code = exc.code or "LINK_FAILED"
                 target_url = f"/settings/profile?link_error={err_code}"

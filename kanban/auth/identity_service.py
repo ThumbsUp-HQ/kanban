@@ -747,9 +747,7 @@ class IdentityLinkService:
                 )
             else:
                 authorize_url = (
-                    getattr(start_resp, "authorize_url", "")
-                    or getattr(start_resp, "url", "")
-                    or ""
+                    getattr(start_resp, "authorize_url", "") or getattr(start_resp, "url", "") or ""
                 )
                 cookie_header = getattr(start_resp, "cookie_header", "")
                 cookie_headers = [cookie_header] if cookie_header else []
@@ -818,9 +816,8 @@ class IdentityLinkService:
                 detail="Target LDAP authentication card not found or disabled",
             )
 
-        ldap_auth_service = (
-            getattr(request.app.state, "ldap_auth_service", None)
-            or getattr(request.app.state, "ldap_service", None)
+        ldap_auth_service = getattr(request.app.state, "ldap_auth_service", None) or getattr(
+            request.app.state, "ldap_service", None
         )
         if ldap_auth_service is None:
             try:

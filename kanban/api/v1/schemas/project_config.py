@@ -240,4 +240,3 @@ class LabelAuditImpactResponse(BaseModel):
     saved_views: list[SavedViewSummary] = Field(default_factory=list)
     blocking_reasons: list[str] = Field(default_factory=list)
     valid_replacement_labels: list[LabelResponse] = Field(default_factory=list)
-

@@ -406,9 +406,7 @@ async def get_state_audit_impact(
     historical_executions_count = hist_cnt_res.scalar_one()
 
     # 4. Saved views referencing this state
-    views_res = await session.execute(
-        select(View).where(View.project_id == project.id)
-    )
+    views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
     target_state_str = str(state_id)
     saved_views: list[SavedViewSummary] = []
@@ -690,9 +688,7 @@ async def delete_state(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         )
 
     # 4. Update saved views
-    views_res = await session.execute(
-        select(View).where(View.project_id == project.id)
-    )
+    views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
     target_str = str(state_id)
     repl_str = str(effective_replacement_id) if effective_replacement_id else None
@@ -1254,9 +1250,7 @@ async def get_label_audit_impact(
     sample_issue_keys = [f"{project.identifier}-{seq}" for seq in issue_seqs[:5]]
 
     # 2. Saved views referencing this label
-    views_res = await session.execute(
-        select(View).where(View.project_id == project.id)
-    )
+    views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
     target_label_str = str(label_id)
     saved_views: list[SavedViewSummary] = []
@@ -1395,9 +1389,7 @@ async def delete_label(  # noqa: C901, PLR0912
         await session.execute(delete(IssueLabel).where(IssueLabel.label_id == label_id))
 
     # Saved views update
-    views_res = await session.execute(
-        select(View).where(View.project_id == project.id)
-    )
+    views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
     target_str = str(label_id)
     repl_str = str(replacement_label_id) if replacement_label_id else None
