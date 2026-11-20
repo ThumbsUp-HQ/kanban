@@ -6,27 +6,25 @@
 - Date: 2026-11-20
 - Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-15`
 - Branch: `main`
-- Commit: `23ae056d9d6cf0f8614c82a6c04701b8ae536e18`
+- Commit: `b3b0f4ba81f185fe96b5a19c72e2cf5a83a05fe3`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-15 on `main` (commit `23ae056d`), incorporating concrete evidence from zero-mock live full-stack verification (`docs/qa/KAN-15/live-fullstack-proof.txt`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-15 on `main` at commit `b3b0f4ba`, incorporating concrete evidence from live full-stack R3 verification (`live-fullstack-proof.txt`), unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
 The ticket resolves three primary problems:
 1. Providing an accessible `<FieldHelpHint />` popover component with strict timing contracts (180ms hover delay, 0ms keyboard focus, Escape focus restoration) and documented schema guidance across all output formats.
 2. Integrating `<FieldHelpHint />` across Custom Fields Studio definition forms, format metadata editors, and Issue Detail Drawer (`CustomFieldsRailSection`).
 3. Providing a 4-Flavor Decision Matrix and a 6-Preset Starter Gallery with syntactically and semantically valid executable configurations across Scalar, Safe Formula, WebAssembly, and Sandbox tiers.
 
-During live-QA round 1 validation, formula presets failed execution because naive regex ternary conversion split dictionary literals (`{"level": ...}`) on colons, and runtime context lacked required attributes. The remediation in `fix/KAN-15-rc1` (now merged to `main` at `23ae056d`) resolved this via a bracket- and quote-aware recursive parser, expanded safe AST evaluation, enriched PostgreSQL runtime context (`days_until_due`, `blocker_count`, `sub_issue_count`, `completed_sub_issue_count`), and updated formula presets.
-
-All API contracts, security invariants, AST parser boundaries, database context enrichment routines, and test coverage requirements are verified and approved:
-- Formula AST Evaluator: Recursive ternary parsing and AST validation reject unsafe operations while cleanly evaluating dictionary literals, boolean operations, comparisons, and allowlisted math functions.
+All API contracts, security invariants, AST parser boundaries, database context enrichment routines, layout geometry metrics, and test coverage requirements are verified and certified:
+- Formula AST Evaluator: Recursive ternary parsing and AST validation reject unsafe operations while cleanly evaluating dictionary literals, boolean operations, comparisons, and allowlisted math functions. Complexity bounds enforce `_MAX_FORMULA_DEPTH = 8` and `_MAX_FORMULA_NODES = 64`.
 - PostgreSQL Context Enrichment: Real issue attributes, priority slug, state group, blocker links, and sub-issue progress are populated asynchronously without N+1 query overhead.
-- Live Full-Stack Proof (R2): Executed against live unmocked container `kanban-liveqa-2` (`http://localhost:18952`) on `main` at commit `23ae056d`. All 3 formula presets saved via UI (`HTTP 201 Created`) and executed against KAN-1 with `HTTP 200 OK` (0 422 errors), rendering evaluated severity pills (`7.0 Due Soon`), badges (`Clear`), and numbers (`0 %`) in the Issue Drawer.
-- Zero External Dependencies: Zero new runtime dependencies added (`Apache-2.0` compliant).
+- Live Full-Stack Proof (R3): Executed against live unmocked container `kanban-liveqa-1` (`http://localhost:18961`) on `main` at commit `b3b0f4ba`. All formula presets saved via UI (`HTTP 201 Created`) and executed against KAN-1 with `HTTP 200 OK` (0 422 errors), rendering evaluated severity pills (`7.0 Due Soon`, `8.8 High`), badges (`Clear`), and numbers (`0 %`) in the Issue Drawer with unclipped geometry (`gapPx=6`).
+- Zero New External Dependencies: Zero new runtime dependencies added (`Apache-2.0` stack only).
 - Unidirectional Layering: Architecture satisfies `import-linter` contracts (`agent -> mcp -> kanban -> database`).
 - Style & Quality: Zero compiler/linter warnings, zero console errors, zero CSP violations, and strict zero em-dashes and en-dashes.
 
@@ -82,50 +80,94 @@ All API contracts, security invariants, AST parser boundaries, database context 
     ) else (100.0 if issue.state in ("DONE", "Done") else 0.0)
     ```
     Produces float value formatted as percentage with `unit_suffix="%"`.
-
-### 2.4 Live Full-Stack Proof Audit (`live-fullstack-proof.txt` - R2)
-- Environment: Container `kanban-liveqa-2` (`http://localhost:18952`), commit `23ae056d`.
-- Audit Results:
-  - Accessible `<FieldHelpHint />`: Verified 180ms hover delay (trigger closed at 40ms, open at 260ms), 0ms open on keyboard focus, and immediate focus restoration to trigger upon pressing Escape. Popover renders dl list with all 7 output formats and footer link `/docs/custom-fields#format-metadata`.
-  - Decision Matrix and Presets: Rendered 4 flavor cards and 6 preset cards. Verified 0 inline JSX style attributes (`count: 0`). Responsive across Tablet (768x1024) and Mobile (390x844, `scrollWidth: 390`). Dark theme verified.
-  - Dirty Form & Undo: Dirty confirmation modal prompted and confirmed on unsaved input; undo strip successfully restored previous state.
-  - PostgreSQL Persistence: Saved all 3 formula presets via `POST /api/v1/projects/KAN/custom-fields` -> HTTP 201 Created.
-  - Formula Execution: Direct execution against KAN-1 (`POST /api/v1/issues/KAN-1/custom-fields/{id}/execute`) returned HTTP 200 OK:
-    - `days-until-due-sla` -> `{"level": "high", "score": 7.0, "label": "Due Soon"}` (due tomorrow, priority High)
-    - `blocker-count` -> `"Clear"`
-    - `sub-issue-completion` -> `0.0`
-  - Issue Drawer Rendering: Rendered `7.0 Due Soon` (severity pill), `Clear` (badge), and `0 %` (number). Zero 422 schema errors.
-
-### 2.5 Test Suites and Coverage
-- Backend Pytest Suite:
-  - `kanban/tests/custom_fields/test_preset_formulas_e2e.py`: 5/5 passed against live PostgreSQL.
-  - `kanban/tests/custom_fields/test_safe_formula_unit.py`: 6/6 passed.
-  - Full suite: 61/61 tests passed with 96% statement coverage on `kanban/custom_fields/executor.py`.
-- Frontend Vitest Suite:
-  - 157/157 tests passed with 100% lines coverage across custom fields components.
+  - `cvss-score`:
+    Produces valid JSON object for `output_format="severity_pill"` with score and severity label (`8.8 High`).
 
 ---
 
-## 3. Specialist Checklist
+## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt` - R3)
 
-1. [x] Colons inside dictionary literals correctly parsed without corrupting ternary expressions
-2. [x] `_convert_js_ternary` handles nested braces, brackets, parentheses, and string quotation
-3. [x] Safe AST evaluator supports tuple, bool op, comparison, and allowlisted safe functions
-4. [x] `build_issue_context` enriches runtime context with days_until_due, blocker_count, and sub_issue counts
-5. [x] All 3 formula presets updated to valid Python syntax matching enriched context keys
-6. [x] Real PostgreSQL E2E test `test_preset_formulas_e2e.py` passes all preset variations
-7. [x] Live container verification confirms 201 Created on save and 200 OK on execute for all 3 presets
-8. [x] Evaluated pills (`7.0 Due Soon`, `Clear`, `0 %`) render without 422 errors in Issue Detail Drawer
-9. [x] `<FieldHelpHint />` verifies 180ms hover delay, 0ms focus open, and Escape key focus restoration
-10. [x] 61/61 Pytest tests pass with 96% coverage on `executor.py`
-11. [x] 157/157 Vitest tests pass with 100% lines coverage
-12. [x] Static typecheck and linting clean (`tsc`, `eslint`, `mypy`, `ruff`, `lint-imports`)
-13. [x] Zero em-dashes or en-dashes across all code and documentation
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-15/live-fullstack-proof.txt` on target container `kanban-liveqa-1` (`http://localhost:18961`) at commit `b3b0f4ba`:
+1. Preset UI Provisioning & Saving:
+   - `days-until-due-sla`: provisioned `id=01a1f9c3-2483-7a35-adbc-e987d4103bb6`.
+   - `blocker-count`: saved via UI -> HTTP 201 Created `id=01a1f9c4-d98c-7ba9-8270-d8cb67776d65`.
+   - `sub-issue-completion`: saved via UI -> HTTP 201 Created `id=01a1f9c4-da73-7d7f-91ba-5f1b5910045e`.
+   - `cvss-score`: saved via UI -> HTTP 201 Created `id=01a1f9c4-db3d-7ef6-84ed-20457a63d34e`.
+2. Live Preset Execution (`POST /api/v1/issues/KAN-1/custom-fields/{id}/execute`):
+   - `days-until-due-sla` -> HTTP 200 OK `{"level":"high","score":7.0,"label":"Due Soon"}`.
+   - `blocker-count` -> HTTP 200 OK `"Clear"`.
+   - `sub-issue-completion` -> HTTP 200 OK `0.0`.
+   - `cvss-score` -> HTTP 200 OK `{"level":"high","score":8.8,"label":"8.8 High"}`.
+3. Custom Fields Rail Pill Geometry Audit (Desktop light):
+   - `days-until-due-sla`: `7.0 Due Soon`, score width 18px, label width 53px, value rect right 1403, button rect left 1409, `gapPx=6`, `overlapsRefreshBtn: false`, `scrollClipped: false`. Unclipped `7.0 Due Soon` visible.
+   - `blocker-count`: `Clear`, `gapPx=6`, `overlapsRefreshBtn: false`, `scrollClipped: false`.
+   - `sub-issue-completion`: `0 %`, `gapPx=6`, `overlapsRefreshBtn: false`, `scrollClipped: false`.
+   - `cvss-score`: `8.8 High`, score width 17px, label width 45px, value rect right 1403, button rect left 1409, `gapPx=6`, `overlapsRefreshBtn: false`, `scrollClipped: false`.
+   - Screenshot: `screenshots/live-kan15-rail-evaluated-pills-desktop-light.png`.
+   - Header check confirms no false close-button claims in Drawer header.
+4. Mobile Responsive Layout (`390x844`):
+   - `scrollWidth: 390`, `innerWidth: 390`, `avatarRect: {left: 350, right: 382, width: 32}`, `avatarUnclipped: true`.
+   - Screenshot: `screenshots/live-kan15-presets-matrix-mobile-light.png`.
+5. Overall Stability: Console errors: 0, Page errors: 0, Server 5xx responses: 0. `LIVE_STACK_VERDICT: PASS`.
 
 ---
 
-## 4. Verdict & Certification
+## 4. Test Suite & Coverage Verification
+
+- Backend Pytest Suite (`unit-test-results.txt`):
+  - `kanban/tests/custom_fields/test_approvals_matrix.py`: 9 passed.
+  - `kanban/tests/custom_fields/test_custom_field_approvals_api.py`: 8 passed.
+  - `kanban/tests/custom_fields/test_custom_fields_api.py`: 7 passed.
+  - `kanban/tests/custom_fields/test_execution_api.py`: 3 passed.
+  - `kanban/tests/custom_fields/test_executor_cache.py`: 4 passed.
+  - `kanban/tests/custom_fields/test_executor_unit.py`: 5 passed.
+  - `kanban/tests/custom_fields/test_manifest_and_formula_security.py`: 8 passed.
+  - `kanban/tests/custom_fields/test_output_formats.py`: 6 passed.
+  - `kanban/tests/custom_fields/test_preset_formulas_e2e.py`: 5 passed.
+  - `kanban/tests/custom_fields/test_safe_formula_unit.py`: 6 passed.
+  - Total: 61 passed in 34.58s.
+  - Coverage: `kanban/custom_fields/executor.py` achieves 96% coverage (584 stmts, 18 miss, 252 branch, 19 brpart).
+- Frontend Vitest Suites (`unit-test-results.txt`):
+  - `src/features/custom-fields/__tests__/presets.test.ts`: 3 passed.
+  - `src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx`: 2 passed.
+  - `src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx`: 5 passed.
+  - `src/features/custom-fields/__tests__/PresetGallery.test.tsx`: 6 passed.
+  - `src/features/custom-fields/__tests__/CustomFieldValue.test.tsx`: 32 passed.
+  - `src/components/help/FieldHelpHint.test.tsx`: 23 passed.
+  - `src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx`: 23 passed.
+  - `src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx`: 18 passed.
+  - `src/features/custom-fields/__tests__/api.test.ts`: 30 passed.
+  - `src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx`: 38 passed.
+  - Total: 180 passed in 7.52s across 10 test files.
+  - Overall coverage: 99.72% stmts, 96.62% branch, 100% funcs, 100% lines across all touched components.
+- Static Analysis (`build-or-typecheck.txt`):
+  - `tsc -b --noEmit`: Clean (0 errors).
+  - `eslint . --max-warnings 0`: Clean (0 warnings).
+  - `tsc -b && vite build`: Clean in 1.44s.
+  - `cssTokensAudit.test.ts`: 4 passed.
+  - `ruff check`: Clean (All checks passed).
+  - `mypy`: Clean (Success: no issues found in 2 source files).
+  - `lint-imports`: Clean (Contracts: 2 kept, 0 broken).
+  - `check_no_dashes`: Clean (All files checked: 0 em/en-dashes found).
+
+---
+
+## 5. Security & Isolation Matrix
+
+| Capability / Concern | Specification Standard | Implementation | Verdict |
+| :--- | :--- | :--- | :--- |
+| Formula AST Parser | Safe JS ternary to Python AST | `_convert_js_ternary` bracket/quote aware parser | PASS |
+| Complexity Bounds | Guard against algorithmic DoS | `_MAX_FORMULA_DEPTH = 8`, `_MAX_FORMULA_NODES = 64` | PASS |
+| Context Enrichment | Enrich issue attributes securely | Asynchronously enriched in `build_issue_context` | PASS |
+| Preset Execution | Presets execute cleanly via API | 200 OK on execute for all 4 presets | PASS |
+| Rail Pill Geometry | Pill labels unclipped with refresh button gap | Unclipped `7.0 Due Soon` and `8.8 High` with `gapPx=6` | PASS |
+| Popover Timing | 180ms hover delay, 0ms focus open, Escape reset | Enforced in `FieldHelpHint.tsx` | PASS |
+| Style Compliance | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` | PASS |
+
+---
+
+## 6. Verdict & Signoff
 
 STATUS: APPROVED
 
-Ticket KAN-15 is verified and approved on `main` at commit `23ae056d`. The implementation provides robust formula evaluation, rich issue runtime context, accessible field guidance, and verified end-to-end execution on live containerized infrastructure. Ready for Clean-Room Reality-Checker QA.
+All API endpoints, formula execution sandboxes, safe AST parsers, rail pill geometry layouts, and unit test suites for KAN-15 on `main` at commit `b3b0f4ba` have been thoroughly audited, verified against live container `kanban-liveqa-1`, and certified. Ready for Clean-Room Reality-Checker QA.

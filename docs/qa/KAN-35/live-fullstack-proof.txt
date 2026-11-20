@@ -1,17 +1,16 @@
-KAN-35 LIVE FULL-STACK VERIFICATION PROOF (ZERO MOCKS - R2)
-Target Container: kanban-liveqa-2 (http://localhost:18952)
-Commit Under Test: 23ae056d
+KAN-35 LIVE FULL-STACK VERIFICATION PROOF (ZERO MOCKS - R3 DELTA)
+Target Container: kanban-liveqa-2 (http://localhost:18962)
+Commit Under Test: b3b0f4ba
 Mode: standalone_embedded_pg (PostgreSQL 16 with FORCE ROW LEVEL SECURITY, UID 65532 uvicorn)
-Timestamp: 2026-11-20T14:35Z - 14:36Z
 
 ================================================================================
 1. PRINCIPALS, PRIVATE PROJECT & SCOPED MCP KEY SETUP
 ================================================================================
 - Provisioned non-admin WORKSPACE_MEMBER @member via POST /api/v1/admin/principals -> HTTP 201
-  id: a9c16ecd-6292-4167-9ff8-8e55c107c5a8, handle: @member, role: WORKSPACE_MEMBER
+  id: e059d0f4-1e5e-45c2-af14-07bf0768a13e, handle: @member, role: WORKSPACE_MEMBER
 - Added @member to project KAN as MEMBER via POST /api/v1/projects/KAN/members -> HTTP 201
 - Created private project PRIV via POST /api/v1/projects -> HTTP 201
-  id: 01a1f95a-21d2-78c6-ba17-7fd3e0134a7b, identifier: PRIV
+  id: 01a1f9ca-9a1e-7b61-b9cb-8feb89dcd2bc, identifier: PRIV
 - Denied @member all capabilities on PRIV via POST /api/v1/admin/acl-entries -> HTTP 200
   effective_capabilities: []
 - Verified @member access via REST:
@@ -20,90 +19,99 @@ Timestamp: 2026-11-20T14:35Z - 14:36Z
 - Logged in as @member via POST /api/v1/auth/local/login -> HTTP 200 (aal_level: 1, mfa_pending: false)
 - Minted scoped /mcp/agent API key as @member via POST /api/v1/mcp-keys -> HTTP 201
   prefix: kb_agt_, surface: agent, scope_tier: project, allowed_projects: ["KAN"], scopes: ["agent:read", "agent:write"]
-- Initialized Streamable HTTP MCP session at /mcp/agent/w/kanban/p/KAN (Mcp-Session-Id=EKlqsnKR3hiXWLIDigOAY8Ea4fUe0c6OnJFw0U5Txa8)
+- Initialized Streamable HTTP MCP session at /mcp/agent/w/kanban/p/KAN (Mcp-Session-Id=27hjtZ-U2DSVErrBiLYwfTiBmRsWJ3cEg5deheEjDnI)
 
 ================================================================================
-2. ZERO-RELOAD BROWSER REALTIME SYNC & OPTIMISTIC MOVE (PROBLEMS 1, 2, 4, 5)
+2. ZERO-RELOAD BROWSER REALTIME SYNC, OPTIMISTIC MOVE, TABLET TOPBAR & LIST VIEW (R3)
 ================================================================================
-- Browser logged in as @member and opened http://localhost:18952/projects/KAN/issues?layout=board
-- WebSocket connected to ws://localhost:18952/ws
-- Subscribed & acknowledged: project:KAN, project:01a1f956-e130-7723-8c3b-677c336cb16a, workspace:01a1f956-e121-7ced-b69b-09eed5396c74
-- Document boot ID baseline: bootId=dvp2puu9vz6, docLoads=2
-- Captured BEFORE screenshot: live-kan35-board-before-mutation-desktop-light.png (1440x900)
+- Browser logged in as @member and opened http://localhost:18962/projects/KAN/issues?layout=board
+- Document boot ID baseline: bootId=6si4x1aq33u, docLoads=3 (navigation requests)
+- Captured BEFORE screenshot: docs/qa/KAN-35/screenshots/live-kan35-board-before-mutation-desktop-light.png (1440x900)
 
-- MCP Call 1: POST /mcp/agent/w/kanban/p/KAN (tools/call create_ticket KAN-8 in Backlog):
+- MCP Call 1: POST /mcp/agent/w/kanban/p/KAN (tools/call create_ticket KAN-12 in Backlog):
   HTTP 200:
-  {"jsonrpc":"2.0","id":46721,"result":{"content":[{"type":"text","text":"created: 1\nroot: {key: KAN-8, summary: Realtime Agent Ticket, state: Backlog, priority: high}\n"}],"isError":false}}
-  Browser WS frame received:
-  {"channel":"project:KAN","created_at":"2026-11-20T14:35:52.668050+00:00","event_id":"20","object_id":"01a1f962-9fc9-7f43-a983-7a3bdcaf8541","payload":{"copied_from":null,"issue_key":"KAN-8","key":"KAN-8","project_key":"KAN"},"project_id":"01a1f956-e130-7723-8c3b-677c336cb16a","topic":"issue.created","type":"event","workspace_id":"01a1f956-e121-7ced-b69b-09eed5396c74"}
-  Result: [data-state-name="Backlog"] [data-testid="board-card-KAN-8"] rendered automatically with 0 page reloads.
+  {"jsonrpc":"2.0","id":5001,"result":{"content":[{"type":"text","text":"created: 1\nroot: {key: KAN-12, summary: Realtime Agent Ticket, state: Backlog, priority: high}\n"}],"isError":false}}
+  Result: [data-state-name="Backlog"] [data-testid="board-card-KAN-12"] rendered automatically with 0 page reloads.
 
-- CRITICAL R2 CHECK: Keyboard Alt+ArrowRight Optimistic Move on BoardView (KAN-8: Backlog -> Todo):
-  * Focused [data-testid="board-card-KAN-8"] in Backlog and pressed Alt+ArrowRight (applyOptimisticMove on shared qk.issues(projectKey, {})).
-  * POST /api/v1/issues/KAN-8/move -> HTTP 200
-  * Browser WS frames received: event_id="21" (issue.transitioned Backlog -> Todo) & event_id="22" (issue.moved).
-  * Result: [data-state-name="Todo"] [data-testid="board-card-KAN-8"] visible immediately.
-  * app-error-modal=0, pageErrors=0, consoleErrors=0 (ZERO TypeError: Cannot read properties of undefined (reading 'name') crash!).
+- Keyboard Alt+ArrowRight Optimistic Move on BoardView (KAN-12: Backlog -> Ready Queue):
+  * Focused [data-testid="board-card-KAN-12"] in Backlog and pressed Alt+ArrowRight.
+  * POST /api/v1/issues/KAN-12/move -> HTTP 200
+  * Result: [data-state-name="Ready Queue"] [data-testid="board-card-KAN-12"] visible immediately with 0 errors.
 
-- MCP Call 2: Out-of-band POST /mcp/agent/w/kanban/p/KAN (tools/call transition_ticket KAN-8 -> "In Progress"):
+- MCP Call 2: Out-of-band POST /mcp/agent/w/kanban/p/KAN (tools/call transition_ticket KAN-12 -> "In Progress"):
   HTTP 200:
-  {"jsonrpc":"2.0","id":79678,"result":{"content":[{"type":"text","text":"status: transitioned\nkey: KAN-8\nfrom_state: Todo\nto_state: In Progress\n"}],"isError":false}}
-  Browser WS frame received:
-  {"channel":"project:KAN","created_at":"2026-11-20T14:35:53.377700+00:00","event_id":"23","object_id":"01a1f962-9fc9-7f43-a983-7a3bdcaf8541","payload":{"from_state":"Todo","from_state_id":"01a1f956-e134-7846-b3f6-af365e91f879","issue_key":"KAN-8","key":"KAN-8","project_key":"KAN","to_state":"In Progress","to_state_id":"01a1f956-e134-7d78-adb5-a0d480c14c55"},"project_id":"01a1f956-e130-7723-8c3b-677c336cb16a","topic":"issue.transitioned","type":"event","workspace_id":"01a1f956-e121-7ced-b69b-09eed5396c74"}
-  Result: BoardView immediately moved KAN-8 to [data-state-name="In Progress"] with 0 freeze and 0 reloads.
-  Mobile 390x844 metrics: {"scrollWidth":390,"clientWidth":390,"innerWidth":390} -> PASS.
+  {"jsonrpc":"2.0","id":5002,"result":{"content":[{"type":"text","text":"status: transitioned\nkey: KAN-12\nfrom_state: Ready Queue\nto_state: In Progress\n"}],"isError":false}}
+  Result: BoardView immediately moved KAN-12 to [data-state-name="In Progress"] with 0 freeze and 0 reloads.
+  Screenshots:
+  - docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-desktop-light.png (1440x900 light)
+  - docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-desktop-dark.png (1440x900 dark)
 
-- List View Live Sync (?layout=list via SPA switch):
-  * Switched to List View (?layout=list) with 0 reloads.
-  * MCP Call 3: POST /mcp/agent/w/kanban/p/KAN (tools/call create_ticket KAN-9 "Realtime List Sync Ticket") -> HTTP 200.
-  * Browser WS frame received: event_id="24" (issue.created KAN-9).
-  * Result: [data-testid="list-row-KAN-9"] rendered live in ListView with 0 reloads.
+- Tablet 768x1024 Topbar Unclipped Check (R3):
+  * Metrics: {"innerWidth":768,"scrollWidth":768,"topbarRightWidth":756,"controlCount":5,"clippedCount":0}
+  * Right-side .kb-topbar controls (warning, [x], shield, bell, M avatar) are 100% unclipped inside 768px viewport.
+  * Screenshot: docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-tablet-light.png (768x1024 light)
 
-- Drawer Live Comment Sync (KAN-8):
-  * Clicked [data-testid="list-row-KAN-8"] -> opened IssueSurface Drawer (subscribed issue:KAN-8).
-  * MCP Call 4: POST /mcp/agent/w/kanban/p/KAN (tools/call add_comment on KAN-8) -> HTTP 200:
-    {"jsonrpc":"2.0","id":12119,"result":{"content":[{"type":"text","text":"status: commented\nkey: KAN-8\ncomment: KAN-8#c-01a1f962\n"}],"isError":false}}
-  * Browser WS frame received:
-    {"channel":"issue:KAN-8","created_at":"2026-11-20T14:35:56.485879+00:00","event_id":"25","object_id":"01a1f962-9fc9-7f43-a983-7a3bdcaf8541","payload":{"body_sha256":"265cb52d60ca9036d33bf2e83723e4bb9f260347409efae6884828ead9e1fd8f","comment_id":"01a1f962-aebc-7778-80e2-80f37c44e74a","issue_key":"KAN-8","key":"KAN-8","mentioned_principal_ids":[],"parent_comment_id":null,"project_key":"KAN"},"project_id":"01a1f956-e130-7723-8c3b-677c336cb16a","topic":"comment.created","type":"event","workspace_id":"01a1f956-e121-7ced-b69b-09eed5396c74"}
-  * Result: "Realtime comment from MCP agent (R2 verified)" rendered live inside IssueSurface with 0 reloads.
+- Mobile 390x844 Check:
+  * Metrics: {"scrollWidth":390,"innerWidth":390}
+  * Screenshot: docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-mobile-light.png (390x844 light)
+
+- Dedicated Standalone List View Live Sync (?layout=list via SPA sidebar click, 0 reloads):
+  * Clicked a[href="/projects/KAN/issues?layout=list"] in Sidebar (0 document reloads).
+  * MCP Call 3: POST /mcp/agent/w/kanban/p/KAN (tools/call create_ticket KAN-13 "Realtime List Sync Ticket", state="Ready Queue") -> HTTP 200:
+    {"jsonrpc":"2.0","id":5003,"result":{"content":[{"type":"text","text":"created: 1\nroot: {key: KAN-13, summary: Realtime List Sync Ticket, state: Ready Queue, priority: medium}\n"}],"isError":false}}
+  * Result: [data-testid="list-row-KAN-13"] rendered live in ListView with 0 reloads.
+  * Screenshot: docs/qa/KAN-35/screenshots/live-kan35-listview-realtime-desktop-light.png (1440x900 light)
+
+- Drawer Live Comment Sync (KAN-12):
+  * Clicked [data-testid="list-row-KAN-12"] -> opened IssueSurface Drawer.
+  * MCP Call 4: POST /mcp/agent/w/kanban/p/KAN (tools/call add_comment on KAN-12) -> HTTP 200:
+    {"jsonrpc":"2.0","id":5004,"result":{"content":[{"type":"text","text":"status: commented\nkey: KAN-12\ncomment: KAN-12#c-01a1f9cf\n"}],"isError":false}}
+  * Result: "Realtime comment from MCP agent (R3 verified)" rendered live inside IssueSurface with 0 reloads.
+  * Screenshot: docs/qa/KAN-35/screenshots/live-kan35-drawer-realtime-comment-desktop-light.png (1440x900 light)
 
 - Full-run document reload & error diagnostics:
-  docLoads=2 (unchanged from 2), bootId=dvp2puu9vz6 (0 reloads)
+  docLoads=3 (unchanged from baseline 3), bootId=6si4x1aq33u (0 reloads)
   consoleErrors=0, pageErrors=0, serverErrors=0
   Container logs outbox_events_select_rls error count: 0
 
 ================================================================================
-3. DELIVERY-TIME RLS & SSE REPLAY SECURITY VERIFICATION (PROBLEM 3)
+3. HUMAN-READABLE WS last_event_id REPLAY (hub.py FIX) & RLS ISOLATION (R3)
 ================================================================================
-1. WebSocket /ws Anti-Harvesting & Live RLS Isolation (as @member):
-   - Subscribe {"op":"subscribe","channels":["project:KAN"],"req_id":"sub-kan"} ->
-     {"channels":["project:KAN"],"req_id":"sub-kan","type":"subscribe_ack"}
+1. WebSocket /ws Human-Readable Channel Replay with last_event_id (as @member):
+   - Baseline latest_id before missed events = 4 (after KAN-3)
+   - While @member WS was disconnected, @admin created KAN-4 (KAN) and PRIV-2 (PRIV).
+   - @member connected /ws and sent ONLY human-readable channel ["project:KAN"] with last_event_id="4":
+     {"op":"subscribe","channels":["project:KAN"],"last_event_id":"4","req_id":"sub-human-replay"}
+   - Server ack: {"channels":["project:KAN"],"req_id":"sub-human-replay","type":"subscribe_ack"}
+   - Replayed WS frame received:
+     {"channel":"project:01a1f9c0-2dc5-705d-8abb-983c766bf998","created_at":"2026-11-20T16:30:08.951907+00:00","event_id":"5","object_id":"01a1f9cb-3e2f-72dc-ada0-e123ef2ecb88","payload":{"copied_from":null,"issue_key":"KAN-4","key":"KAN-4","project_key":"KAN"},"project_id":"01a1f9c0-2dc5-705d-8abb-983c766bf998","topic":"issue.created","type":"event","workspace_id":"01a1f9c0-2db3-7ffe-aeac-5fe2319e4d85"}
+   - Missed KAN-4 replayed over /ws using ONLY ["project:KAN"]; PRIV-2 withheld (PRIV leaked = 0).
+
+2. WebSocket /ws Anti-Harvesting & Live RLS Isolation (as @member):
    - Subscribe {"op":"subscribe","channels":["project:PRIV"],"req_id":"sub-priv-key"} ->
      {"channel":"project:PRIV","code":"NOT_FOUND","req_id":"sub-priv-key","type":"subscribe_error"}
-   - Subscribe {"op":"subscribe","channels":["project:01a1f95a-21d2-78c6-ba17-7fd3e0134a7b"],"req_id":"sub-priv-uuid"} ->
-     {"channel":"project:01a1f95a-21d2-78c6-ba17-7fd3e0134a7b","code":"NOT_FOUND","req_id":"sub-priv-uuid","type":"subscribe_error"}
+   - Subscribe {"op":"subscribe","channels":["project:01a1f9ca-9a1e-7b61-b9cb-8feb89dcd2bc"],"req_id":"sub-priv-uuid"} ->
+     {"channel":"project:01a1f9ca-9a1e-7b61-b9cb-8feb89dcd2bc","code":"NOT_FOUND","req_id":"sub-priv-uuid","type":"subscribe_error"}
    - Subscribe {"op":"subscribe","channels":["project:DOESNOTEXIST"],"req_id":"sub-nonexistent"} ->
      {"channel":"project:DOESNOTEXIST","code":"NOT_FOUND","req_id":"sub-nonexistent","type":"subscribe_error"}
-   - While @member connected on /ws, @admin created PRIV-1 (POST /api/v1/projects/PRIV/issues -> 201) and transitioned PRIV-1 (PATCH /api/v1/issues/PRIV-1 -> 200):
-     Frames leaked to @member: 0
-   - While @member still connected on /ws, @admin created KAN-10 (POST /api/v1/projects/KAN/issues -> 201):
-     Frame received by @member:
-     {"channel":"project:KAN","created_at":"2026-11-20T14:35:58.817654+00:00","event_id":"27","object_id":"01a1f962-b7d6-7c64-b3cb-0cde612b49b7","payload":{"copied_from":null,"issue_key":"KAN-10","key":"KAN-10","project_key":"KAN"},"project_id":"01a1f956-e130-7723-8c3b-677c336cb16a","topic":"issue.created","type":"event","workspace_id":"01a1f956-e121-7ced-b69b-09eed5396c74"}
+   - While @member connected on /ws, @admin created PRIV-3 and KAN-5:
+     PRIV-3 leaked=0, KAN-5 received=1.
 
-2. SSE Last-Event-ID Replay (OutboxReplayer via p4_22_outbox_replay_reader):
-   - GET /sse?channels=workspace:01a1f956-e121-7ced-b69b-09eed5396c74,project:KAN with Last-Event-ID: 1 (as @member) -> HTTP 200, content-type=text/event-stream; charset=utf-8
-   - Replayed authorized KAN events (event_ids 2..16, 19..25, 27)
-   - Event ID 26 (and prior PRIV events 17, 18) were completely withheld by delivery-time RLS: 0 PRIV events leaked!
+3. SSE Last-Event-ID=4 Replay (as @member):
+   - GET /sse?channels=workspace:01a1f9c0-2db3-7ffe-aeac-5fe2319e4d85,project:KAN with Last-Event-ID: 4 -> HTTP 200
+   - Replayed authorized KAN events: ['KAN-4', 'KAN-5']
+   - Unauthorized PRIV events withheld: PRIV leaked=0
 
 ================================================================================
 4. CAPTURED SCREENSHOTS (docs/qa/KAN-35/screenshots/)
 ================================================================================
 - live-kan35-board-before-mutation-desktop-light.png (1440x900 light)
-- live-kan35-board-after-realtime-desktop-light.png (1440x900 light, KAN-8 created + Alt+ArrowRight + MCP transition to In Progress)
+- live-kan35-board-after-realtime-desktop-light.png (1440x900 light, KAN-12 created + Alt+ArrowRight + MCP transition to In Progress)
 - live-kan35-board-after-realtime-desktop-dark.png (1440x900 dark)
-- live-kan35-board-after-realtime-tablet-light.png (768x1024 light)
+- live-kan35-board-after-realtime-tablet-light.png (768x1024 light, unclipped topbar controls)
 - live-kan35-board-after-realtime-mobile-light.png (390x844 light, scrollWidth=390)
-- live-kan35-drawer-realtime-comment-desktop-light.png (1440x900 light, live MCP comment in KAN-8 Drawer)
+- live-kan35-listview-realtime-desktop-light.png (1440x900 light, standalone List View live sync of KAN-13)
+- live-kan35-drawer-realtime-comment-desktop-light.png (1440x900 light, live MCP comment in KAN-12 Drawer)
 
 ================================================================================
 VERDICT PER SCOPED PROBLEM (KAN-35)
@@ -111,7 +119,7 @@ VERDICT PER SCOPED PROBLEM (KAN-35)
 - Problem 1 (Transactional Outbox & non-admin RLS insert): PASS
 - Problem 2 (RealtimeBroker, RealtimeHub & OutboxRelay lifespan): PASS
 - Problem 3 (Delivery-time RLS & non-admin replay): PASS
-- Problem 4 (Human-readable channel normalization & SSE listeners): PASS
-- Problem 5 (Reactive TanStack Query migration & BoardView optimistic settlement): PASS
+- Problem 4 (Human-readable channel normalization & WS/SSE replay): PASS
+- Problem 5 (Reactive TanStack Query migration, BoardView optimistic move, ListView & Tablet Topbar): PASS
 
 LIVE_STACK_VERDICT: PASS

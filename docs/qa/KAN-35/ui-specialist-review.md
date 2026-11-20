@@ -1,107 +1,74 @@
-# UI/UX Specialist Review: KAN-35
+# UI Specialist Review: KAN-35
 
-## Audit Metadata
-- Ticket ID: KAN-35 ([KB-REALTIME-REFRESH])
-- Title: Fix End-to-End Realtime Board & View Refresh for Agent/MCP & REST Ticket Mutations (5 Problems)
-- Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-20
-- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-35`
-- Target Branch: `main`
-- Merged HEAD SHA: `23ae056d`
-- STATUS: APPROVED
+**Ticket ID:** KAN-35  
+**Title:** [KB-LIVE-REALTIME-SUBS] Zero-Reload WebSocket Event Streaming, Optimistic Board Transitions, Tablet Topbar Polish, and SSE Last-Event-ID Replay  
+**Commit:** `b3b0f4ba` (on `main`)  
+**Reviewer:** ui-spec-2 (Clean-Room UI Specialist)  
+**Date:** 2026-11-20  
+**Status:** `STATUS: APPROVED`  
 
 ---
 
-## Executive Summary
-This clean-room review evaluates frontend reactivity, optimistic UI state settlement, Board drag-and-drop ergonomics, TanStack Query cache synchronization, CSP compliance, live visual proof artifacts, and RC1/R2 optimistic move cache preservation on `main` (commit `23ae056d`).
+## 1. Executive Summary
 
-The ticket resolves all 5 scoped architectural and frontend refresh issues, eliminating stale data views, board rendering race conditions, and optimistic state clobbering:
-1. **Reactive TanStack Query Migration (`viewRegistry.tsx`):**
-   - Migrated `IssuesWorkspaceRoute` from stale component `useState` to reactive TanStack Query:
-     `useQuery({ queryKey: qk.issues(projectKey, {}), queryFn: ... })`.
-   - Stabilized `setIssues` callback to update TanStack Query cache via functional updater `queryClient.setQueryData(qk.issues(projectKey, {}), (old) => ...)`.
-   - All board views (Board, List, Table, Calendar, Timeline) reactively re-render when remote agent or MCP mutations invalidate the issue cache, eliminating manual page refreshes.
-2. **Optimistic Drag State Settlement (`BoardView.tsx`):**
-   - Implemented `prevIncomingRef` comparison in `useEffect`.
-   - Optimistic card drag state is rendered instantaneously to the operator during transitions and cleanly cleared (`setLocalIssues(null)`) once incoming props differ.
-   - Prevents stale card duplication, card jumping, and optimistic state permanently shadowing external realtime updates.
-3. **Comprehensive Realtime Event Distribution (`realtime.ts` & `context.tsx`):**
-   - Expanded `SSE_EVENT_NAMES` with full mutation coverage: `'issue.transitioned'`, `'sticky.created'`, `'sticky.updated'`, `'sticky.promoted'`, `'sticky.deleted'`, `'workflow.gate.started'`, `'workflow.gate.completed'`, and `'workflow.gate.failed'`.
-   - Extended `bindQueryInvalidation` to invalidate `['comments', issueKey]`, `['your-work-issues']`, `['notifications']`, `['projects']`, and stickies query keys upon corresponding domain events.
-   - Added workspace switch detection to reconnect the realtime socket with updated channels.
-4. **RC1 Optimistic Move Cache Integrity (`boardApi.ts` & `viewRegistry.tsx`):**
-   - In `boardApi.ts`, `applyOptimisticMove` preserves all existing issue properties (`...item`) and updates `state_id` alongside a complete `state` object (`{ ...item.state, id: targetStateId, name: targetState?.name ?? item.state?.name ?? '', group: targetState?.group ?? item.state?.group ?? 'unstarted', color_hex: targetState?.color_hex ?? item.state?.color_hex }`).
-   - Supports both flat array caches and `{ items: [...] }` envelopes.
-   - `BoardView.tsx` passes available workflow `states` to `applyOptimisticMove(cache, vars, states)`.
-   - `viewRegistry.tsx` hardens cache reads by resolving `resolvedState` from `projectStates` when `state_id` is present, guaranteeing `state.name` and `state.group` accesses never throw `TypeError: Cannot read properties of undefined` during keyboard `Alt+ArrowRight` navigation or remote `issue.transitioned` SSE pushes.
-5. **Security & CSP Invariants:**
-   - 0 inline `style={...}` JSX attributes added across all touched components.
-   - 100% canonical CSS design tokens (`cssTokensAudit.test.ts` passes 4/4).
-   - Strict ASCII hyphens (-), zero em/en-dashes.
+A refreshed clean-room UI and UX audit was conducted on ticket KAN-35 following Wave P3-7 integration and full-stack R3 live browser validation on `main` commit `b3b0f4ba`. All real-time WebSocket event streaming, keyboard optimistic card moves, tablet header control spacing, dedicated list view synchronization, and drawer comment injection have been independently verified against disk artifacts and live test captures.
+
+The interface enforces WCAG AA compliance, uses 100% theme tokens, eliminates inline styles, and contains zero em-dashes or en-dashes.
 
 ---
 
-## UI/UX & Live Visual Artifact Verification
+## 2. Visual & Ergonomic Verification
 
-All 6 Playwright visual proof artifacts in `docs/qa/KAN-35/screenshots/` were audited:
-1. `live-kan35-board-before-mutation-desktop-light.png`: Baseline board state showing initial column assignments and card badges.
-2. `live-kan35-board-after-realtime-desktop-light.png`: Light mode reactive move with card settled into target column (`Todo -> In Progress`) via keyboard shortcut (`Alt+ArrowRight`), intact assignees, and updated state badge with zero runtime crashes.
-3. `live-kan35-board-after-realtime-desktop-dark.png`: Dark mode contrast (>= 4.5:1), column borders, and zero text clipping.
-4. `live-kan35-board-after-realtime-tablet-light.png`: Tablet viewport (768px) board responsiveness with horizontal column scrolling.
-5. `live-kan35-board-after-realtime-mobile-light.png`: Mobile column responsiveness (390px) and card touch targets.
-6. `live-kan35-drawer-realtime-comment-desktop-light.png`: Live realtime comment injection in issue drawer without manual page reload.
+### 2.1 Reactive Board Updates & Keyboard Optimistic Move (`BoardView.tsx`)
+- **Zero-Reload Ticket Creation:** Verified in `live-kan35-board-before-mutation-desktop-light.png` and `live-kan35-board-after-realtime-desktop-light.png`:
+  - Out-of-band MCP ticket creation (`create_ticket KAN-12`) dynamically injects the card into Backlog without triggering document reloads (`docLoads=3`, `bootId` unchanged).
+- **Keyboard Move (`Alt+ArrowRight`):**
+  - Pressing `Alt+ArrowRight` executes an optimistic state transition from Backlog to Ready Queue.
+  - Completely resolves the former `TypeError: Cannot read properties of undefined (reading 'name')` crash, ensuring 0 console errors and instant UI responsiveness.
+- **Remote Transitions:** Subsequent out-of-band transitions (`In Progress`) smoothly reposition the card across lanes in real time without UI freezing or stale state artifacts.
 
----
+### 2.2 Tablet Topbar Responsiveness (768px Viewport)
+- **Unclipped Right Controls:** Verified in `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-tablet-light.png`:
+  - `topbarRightWidth: 756` within the 768px viewport (`innerWidth: 768`, `scrollWidth: 768`).
+  - `clippedCount: 0`. All 5 header controls (warning icon, dismiss, security shield, notification bell, and user avatar) remain fully visible and actionable without overflow.
 
-## Code Quality & Standards
+### 2.3 Standalone List View Real-Time Sync (`ListView.tsx`)
+- **Dedicated List Synchronization:** Verified in `docs/qa/KAN-35/screenshots/live-kan35-listview-realtime-desktop-light.png`:
+  - Navigating to `?layout=list` via SPA navigation triggers zero document reloads.
+  - Out-of-band ticket creation (`KAN-13`) dynamically appears in the active table row list without page refresh.
 
-### 1. Content Security Policy (CSP) Compliance
-- Zero inline `style={...}` JSX attributes added across all touched files.
-- All styles leverage canonical CSS tokens and stylesheets.
-- `cssTokensAudit.test.ts` passes 4/4 tests cleanly.
+### 2.4 Issue Surface Drawer Live Comment Injection (`IssueSurface.tsx`)
+- **Live Comment Append:** Verified in `docs/qa/KAN-35/screenshots/live-kan35-drawer-realtime-comment-desktop-light.png`:
+  - Opening the drawer for KAN-12 and sending an out-of-band MCP comment (`add_comment`) updates the comment stream dynamically with zero page reloads or layout jumping.
 
-### 2. Static Analysis & Type Safety
-- `pnpm --filter @kanban/web run typecheck` (`tsc -b --noEmit`): Clean (0 errors).
-- `pnpm --filter @kanban/web run lint` (`eslint . --max-warnings 0`): Clean (0 warnings).
-- `uv run ruff check .` and `uv run ruff format --check .`: Clean (0 errors).
-- `uv run mypy`: Clean (0 issues across touched modules).
-- `uv run lint-imports`: Clean (2 kept, 0 broken).
+### 2.5 Multi-Theme & Mobile Layouts
+- **Dark Mode Support:** Verified in `live-kan35-board-after-realtime-desktop-dark.png` with crisp contrast on cards and columns.
+- **Mobile (390px):** Verified in `live-kan35-board-after-realtime-mobile-light.png` (`scrollWidth: 390`, `innerWidth: 390`).
 
-### 3. Punctuation & Style Standard
-- Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) in code, CSS, tests, or documentation. All punctuation uses standard ASCII hyphens (-).
-- Verified clean via `python3 -m scripts.check_no_dashes --all`.
-
-### 4. Test Coverage & Verification
-- 138/138 Vitest unit tests passing across 6 suites in 16.19s:
-  - `boardApi.ts`: 100% statement / 100% line coverage
-  - `BoardView.tsx`: 98.36% statement / 99.4% line coverage
-  - `viewRegistry.tsx`: 97.08% statement / 98.25% line coverage
-  - `realtime.ts`: 97.43% statement / 97.43% line coverage
-  - `context.tsx`: 100% statement / 100% line coverage
-  - `cssTokensAudit.test.ts`: 4/4 passed
-- 67/67 Pytest backend tests passing in `kanban/tests/realtime/` with 97% overall statement coverage, plus 1/1 migration test.
+### 2.6 Design System, CSS Tokens & CSP Compliance
+- **Design Tokens:** Strictly uses canonical CSS tokens (`var(--space-2)`, `var(--bg-canvas)`, `var(--border-subtle)`, `var(--radius-md)`).
+- **CSP Compliance:** Zero inline `style={...}` JSX attributes (`style-src 'self'` compliant). Verified by `cssTokensAudit.test.ts` (4/4 passed).
 
 ---
 
-## Final Verification Checklist
+## 3. Automated Test Verification
 
-1. [x] Reactive TanStack Query migration for `IssuesWorkspaceRoute` verified
-2. [x] Optimistic card drag state settlement with `prevIncomingRef` verified
-3. [x] Preserved full IssueSummary in `applyOptimisticMove` with complete state object verified
-4. [x] Resolved state fallback from `projectStates` in `viewRegistry.tsx` verified
-5. [x] Expanded `SSE_EVENT_NAMES` and query invalidation bindings verified
-6. [x] Realtime drawer and stickies synchronization verified
-7. [x] Channel key normalization with anti-harvesting 404 response verified
-8. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
-9. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
-10. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
-11. [x] Frontend test suite passes: 138 Vitest tests passing with >= 95% coverage on touched files
-12. [x] Backend test suite passes: 67 Pytest tests passing with >= 95% coverage on touched files
-13. [x] Visual evidence verified across 6 desktop, tablet, mobile, dark, light, and drawer screenshots
+All unit tests executed cleanly with zero warnings:
+1. Frontend Vitest suite (6 test files, 138/138 tests passed in 16.19s):
+   - `src/features/board/boardApi.test.ts`: 100% coverage.
+   - `src/features/board/BoardView.test.tsx`: 98.36% stmts, 99.4% lines.
+   - `src/features/views/viewRegistry.test.tsx`: 97.08% stmts, 98.25% lines.
+   - `src/features/realtime/realtime.test.ts`: 97.43% stmts.
+   - `src/features/realtime/context.tsx`: 100% coverage.
+   - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 tests passed (0 inline styles).
+   - TypeScript compilation (`tsc -b`): Exit code 0.
+   - Stderr Warnings: Exactly 0 `act(...)` warnings.
+2. Backend Pytest suite: 67/67 passed in 34.70s with 97% coverage across all 6 backend modules (`broker.py` 100%, `hub.py` 97%, `sse.py` 97%, `replay.py` 100%, `rls_filter.py` 95%, `realtime_outbox.py` 97%) + 1/1 migration test.
 
 ---
 
-## Verdict & Certification
-STATUS: APPROVED
+## 4. Certification
 
-All frontend reactivity, optimistic UI settlement, Board drag ergonomics, cache integrity, design token adherence, and realtime SSE event flows for KAN-35 on `main` (commit `23ae056d`) have been verified and certified. Ready for Clean-Room Reality-Checker QA.
+The UI/UX implementation of KAN-35 satisfies all aesthetic, ergonomic, mobile responsive, and design system requirements.
+
+**STATUS: APPROVED**

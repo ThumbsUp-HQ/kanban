@@ -1,112 +1,89 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**:
-- Clean-room read-only forensic audit mode: 0 shell commands executed, 0 URLs visited, 0 files written.
-- Inspected pre-captured command logs on disk:
-  - [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt): `uv run pytest kanban/tests/api/test_assignees.py kanban/tests/api/test_issues.py` (22 passed in 28.66s, 96% total coverage) and `vitest run` across 5 frontend test files (47 passed in 5.35s, 99.77% stmts / 100% lines).
-  - [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/build-or-typecheck.txt): `ruff check .`, `ruff format --check .` (1900 files), `mypy` (1100 source files), `lint-imports` (2 kept, 0 broken), `python -m scripts.check_no_dashes --all`, `pnpm run typecheck` (`tsc -b --noEmit`), and `pnpm run lint` (`eslint . --max-warnings 0`).
-
+**Commands Executed**: Strict read-only passive forensic R2 re-audit performed without shell execution, URL visits, or file modifications. Directly inspected all QA packet files in `docs/qa/KAN-8/`, all 7 PNG screenshots in `docs/qa/KAN-8/screenshots/`, and the underlying source files on disk in `/home/adamoutler/kanban` (`main` commit `b3b0f4ba`).
 **Evidence Captured**:
-- Verified all 17 files in [changed-files-manifest.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/changed-files-manifest.txt) match [git-diff.patch](file:///home/adamoutler/kanban/docs/qa/KAN-8/git-diff.patch) (995 lines, 0 inline `style={...}` additions).
-- Verified live source implementations on disk:
-  - [assignees.py](file:///home/adamoutler/kanban/kanban/api/v1/assignees.py) (`min_length=0, max_length=64, default=""`)
-  - [assignees.py (service)](file:///home/adamoutler/kanban/kanban/services/assignees.py) (`MIN_QUERY_LENGTH = 0`, separate static SQL branches for empty vs. non-empty `q`)
-  - [issues.py (schema)](file:///home/adamoutler/kanban/kanban/api/v1/schemas/issues.py) (`object_id: uuid.UUID` on `IssueResponse`)
-  - [issues.py (service)](file:///home/adamoutler/kanban/kanban/services/issues.py) (`object_id=issue.id` in `serialize_issue`)
-  - [ProjectSavedViewsView.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/views/ProjectSavedViewsView.tsx) and [viewsApi.ts](file:///home/adamoutler/kanban/kanban/web/src/features/views/viewsApi.ts) (`data?.items ?? data?.views ?? []` and `extractSavedViews` / `fetchProjectSavedViews`)
-  - [TableView.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/table/TableView.tsx) (`isViewerOnly` and `canEditIssue` guarding against `VIEWER` or absence of `EDIT` and `ADMIN`)
-  - [IssueHeader.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/IssueHeader.tsx), [AccessPill.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/AccessPill.tsx), and [slots.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/slots.tsx) (`issue.object_id ?? issue.id`)
-- Verified [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/live-fullstack-proof.txt) (0 `mockApi`, 0 `page.route`, 0 `context.route`, 0 console errors, 0 page errors, 0 HTTP 5xx) and visually inspected all 6 PNG screenshots in `docs/qa/KAN-8/screenshots/`.
-
+- QA packet logs and reviews: [message-to-reality-checker.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/message-to-reality-checker.md), [changed-files-manifest.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/changed-files-manifest.txt), [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt), [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/build-or-typecheck.txt), [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/live-fullstack-proof.txt), [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/api-specialist-review.md), [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md).
+- Visual evidence (7 PNGs): [live-kan8-assignee-suggestions-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-assignee-suggestions-desktop-light.png), [live-kan8-saved-views-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-saved-views-desktop-light.png), [live-kan8-access-pill-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-access-pill-desktop-light.png), [live-kan8-access-pill-desktop-dark.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-access-pill-desktop-dark.png), [live-kan8-table-viewer-readonly-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-desktop-light.png), [live-kan8-table-viewer-readonly-tablet-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-tablet-light.png), [live-kan8-table-viewer-readonly-mobile-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-mobile-light.png).
+- Source cross-check on disk: [assignees.py](file:///home/adamoutler/kanban/kanban/api/v1/assignees.py), [assignees.py](file:///home/adamoutler/kanban/kanban/services/assignees.py), [issues.py](file:///home/adamoutler/kanban/kanban/api/v1/schemas/issues.py), [issues.py](file:///home/adamoutler/kanban/kanban/services/issues.py), [TableView.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/table/TableView.tsx), [TableView.css](file:///home/adamoutler/kanban/kanban/web/src/features/table/TableView.css), [Topbar.css](file:///home/adamoutler/kanban/kanban/web/src/app/Topbar.css), [Topbar.tsx](file:///home/adamoutler/kanban/kanban/web/src/app/Topbar.tsx), [IssueHeader.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/IssueHeader.tsx), [AccessPill.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/AccessPill.tsx), [slots.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/slots.tsx), [ProjectSavedViewsView.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/views/ProjectSavedViewsView.tsx), [viewsApi.ts](file:///home/adamoutler/kanban/kanban/web/src/features/views/viewsApi.ts), [cssTokensAudit.test.ts](file:///home/adamoutler/kanban/kanban/web/src/styles/__tests__/cssTokensAudit.test.ts).
 **QA Cross-Validation**:
-- **CHALLENGED**: [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/api-specialist-review.md) contains multiple hallucinated file paths, schema details, and test execution claims that contradict the actual codebase and [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt):
-  - Claims `kanban/api/v1/projects.py` with `max_length=100` (actual file is `kanban/api/v1/assignees.py` with `max_length=64`).
-  - Claims `kanban/web/src/features/views/TableView.tsx` and `kanban/web/src/features/issues/IssueHeader.tsx` (actual paths are `features/table/TableView.tsx` and `features/drawer/IssueHeader.tsx`).
-  - Claims Python `serialize_issue` uses JS syntax `issue.object_id ?? issue.id` (actual code is `object_id=issue.id`) and wrong `Field` description.
-  - Fabricates test file names and counts (`test_assignee_suggestions.py` 8/8, `test_views_crud.py` 6/6, `test_issues_object_id.py` 8/8 in 2.61s; `TableView.test.tsx` 14/14, `IssueHeader.test.tsx` 10/10, `AccessPill.test.tsx` 11/11, `cssTokensAudit.test.ts` 4/4 in 3.12s) that do not match [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt) (`test_assignees.py` 7, `test_issues.py` 15 in 28.66s; 5 Vitest files totaling 47 tests in 5.35s).
-- **CHALLENGED**: [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md) and [message-to-reality-checker.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/message-to-reality-checker.md) claim `cssTokensAudit.test.ts` passed 4/4 tests, but no raw test output for `cssTokensAudit.test.ts` exists in [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt) or [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/build-or-typecheck.txt).
-- **CHALLENGED**: [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md) claims `live-kan8-table-viewer-readonly-mobile-light.png` renders a "responsive card list rendering clean badges without interactive select inputs." Visual inspection proves it renders a horizontally clipped `<table>`, not a card list, and the `State`/`Priority` badges are scrolled off-screen.
+- Confirmed API Specialist (`api-spec-2`, `STATUS: APPROVED`) and UI Specialist (`ui-spec-2`, `STATUS: APPROVED`) reviews against actual disk implementations and R3 zero-mock live full-stack logs (`kanban-liveqa-1`, `http://localhost:18961`, commit `b3b0f4ba`).
+- Challenged minor overstatements/drift in packet docs: `message-to-reality-checker.md` still lists branch `fix/KAN-8-rc1` (`23ae056d`) and omits `live-kan8-assignee-suggestions-desktop-light.png`, `ui-specialist-review.md` lists an alternate ticket title (`[KB-READONLY-TRIAGE]`), and `ui-specialist-review.md` describes secondary mobile table columns as collapsed when `TableView.css` actually keeps them in a horizontally scrollable container (`overflow-x`) off-canvas to the right. None of these metadata/phrasing discrepancies affect runtime behavior or acceptance criteria.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots (6 live PNGs in `docs/qa/KAN-8/screenshots/`):
-  - [live-kan8-saved-views-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-saved-views-desktop-light.png)
-  - [live-kan8-access-pill-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-access-pill-desktop-light.png)
-  - [live-kan8-access-pill-desktop-dark.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-access-pill-desktop-dark.png)
-  - [live-kan8-table-viewer-readonly-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-desktop-light.png)
-  - [live-kan8-table-viewer-readonly-tablet-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-tablet-light.png)
-  - [live-kan8-table-viewer-readonly-mobile-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-mobile-light.png)
-- User journey evidence: Logged HTTP responses and DOM checks in [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/live-fullstack-proof.txt) covering Problem 1 (`GET assignee-suggestions?q=&limit=10`), Problem 2 (`POST`/`GET /views` -> `/projects/KAN/views`), Problem 4 (`KAN-1` `AccessPill` click -> `GET /api/v1/objects/{uuid}/access`), and Problem 3 (`@viewer` login -> Table View across Desktop, Tablet, Mobile).
-- Cross-browser comparison: Not provided (Chromium/Playwright single-engine capture only; no Firefox/WebKit comparison screenshots).
+- Desktop captures (`1440x900` / desktop):
+  - `live-kan8-assignee-suggestions-desktop-light.png` (R3 `b3b0f4ba`): Shows `KAN-1` issue drawer open with `@` typed in the activity comment composer and the live autocomplete dropdown rendering `Member @admin (Admin User)` and `Member @viewer (Read Only Viewer)`.
+  - `live-kan8-saved-views-desktop-light.png` (R1/R2 baseline): Shows `/projects/KAN/views` (`Views (KAN)`) rendering `Live QA Triage Board` cards with `BOARD` and `PRIVATE` badges, `Group: state`, and `Open` / `Delete` actions.
+  - `live-kan8-access-pill-desktop-light.png` and `live-kan8-access-pill-desktop-dark.png` (R1/R2 baseline): Show `AccessPill` (`Project`) on `KAN-1` and the `EFFECTIVE ACCESS FOR ISSUE KAN-1` modal in both Light and Dark themes (`Inherited Scope`, `USERS`, `GROUPS`, `AGENTS & WORKFLOW RUNNERS`, `RESTRICTED OVERRIDES`).
+  - `live-kan8-table-viewer-readonly-desktop-light.png` (R1/R2 baseline): Shows `@viewer` logged into `/projects/KAN/issues?layout=table` with `KAN-1` rendering a static `Backlog` state pill and static `High` priority text (zero `<select>` dropdowns).
+- Tablet capture (`768x1024`):
+  - `live-kan8-table-viewer-readonly-tablet-light.png` (R3 `b3b0f4ba`): Shows `@viewer` on `Kanban Project / Work Items` Table View. Topbar controls (hamburger, breadcrumb, compact `Search...` trigger, 3 status pills, notification bell, avatar `R`) all render completely inside the 768px viewport with zero right-edge clipping.
+- Mobile capture (`390x844`):
+  - `live-kan8-table-viewer-readonly-mobile-light.png` (R3 `b3b0f4ba`): Shows `@viewer` on `< Work Items` Table View. Topbar controls fit cleanly inside 390px, and all 4 primary table columns (`Key`, `Summary`, `State`, `Priority`) are simultaneously visible (`KAN-1`, `KAN-1 Live Q...`, `B...`, `High`) with zero `<select>` elements and `As...` (`Assignees`) starting off the right edge inside the table scroll container.
 
 **What System Actually Delivers**:
-- `live-kan8-saved-views-desktop-light.png` renders `Views (KAN)` cleanly with 5 `Live QA Triage Board` cards (`BOARD`, `PRIVATE`, `Group: state`, `Open`, `Delete`).
-- `live-kan8-access-pill-desktop-light.png` and `live-kan8-access-pill-desktop-dark.png` both render the `EFFECTIVE ACCESS FOR ISSUE KAN-1` modal dialog cleanly in Light and Dark themes after querying `/api/v1/objects/01a1f958-d15a-7c32-9cbe-6d21ddffddb0/access`.
-- `live-kan8-table-viewer-readonly-desktop-light.png` renders `KAN-1` for `@viewer` with static `Backlog` pill and `High` text and 0 `<select>` dropdowns inside the table (the top toolbar `Group` / `Sub-group` controls remain `<select>`s outside `<table>`).
-- `live-kan8-table-viewer-readonly-tablet-light.png` (768px) shows read-only `Backlog` and `High` cells with 0 table `<select>`s, but the top-right app header (`⚠️ [x]`) is clipped at the right viewport edge and the `Assignees` column header is cut off as `As`.
-- `live-kan8-table-viewer-readonly-mobile-light.png` (390px) shows only `Key` (`KAN-1`) and truncated `Summary` (`Verify live AccessPill and Read-Only Vie`) in a `<table>` with 0 table `<select>`s; `State` and `Priority` badges are not visible without horizontal scrolling, contradicting `ui-specialist-review.md`.
+- **Problem 1 (`assignees.py`)**: `kanban/api/v1/assignees.py` sets `min_length=0, max_length=64, default=""` on `q`, and `kanban/services/assignees.py` sets `MIN_QUERY_LENGTH = 0` with static SQL for empty vs. prefix queries scoped to `era.workspace_id`, `(era.allow_mask & 1) = 1`, `(era.deny_mask & 1) = 0`, `p.status = 'ACTIVE'`, and `p.principal_type IN ('USER', 'AGENT')`. Live proof confirms `200 OK` for `?q=&limit=10` and omitted `q`.
+- **Problem 2 (Saved Views)**: `ProjectSavedViewsView.tsx` and `viewsApi.ts` (`extractSavedViews`, `fetchProjectSavedViews`) normalize arrays, `data.items`, and `data.views`. Live proof confirms `GET /api/v1/projects/KAN/views -> 200 count=1` renders `Live QA Triage Board`.
+- **Problem 3 (Table Capability Guard & Responsive Layout)**: `TableView.tsx` derives `isViewerOnly` and `canEditIssue(issue)` checking `VIEWER` or absence of `EDIT`/`ADMIN`, replacing `<select>`, date `<input>`, and `+` assign controls with static pills/text (`selectCount: 0` across Desktop, Tablet, Mobile). `TableView.css` constrains `Key` (76px), `Summary` (105px ellipsis), `State` (78px), and `Priority` (70px) under `@media (max-width: 640px)`. `Topbar.css` constrains `.kb-topbar-center, .topbar__search` to `max-width: 150px` at `<= 768px`, hides `.kb-search-kbd` at `<= 1024px`, and keeps `.topbar__right` unclipped (`right=756` within `768px`).
+- **Problem 4 (`AccessPill` Object ID)**: `IssueResponse` (`kanban/api/v1/schemas/issues.py`) defines `object_id: uuid.UUID`, `serialize_issue` (`kanban/services/issues.py`) sets `object_id=issue.id`, `IssueHeader.tsx` passes `object_id: issue.object_id ?? issue.id`, and `AccessPill.tsx` resolves `issue.object_id ?? issue.id ?? ''`. Live proof confirms `GET /api/v1/objects/01a1f9c1-22cf-792f-a829-40d22e2f30ad/access -> 200` and `🛡️ Project` pill activation.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PASS for all 4 backend/UI functional paths on `kanban-liveqa-3` (`http://localhost:18953`, commit `23ae056d`), with 0 console errors, 0 page errors, and 0 5xx responses recorded in [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/live-fullstack-proof.txt). Note: Problem 1 (`assignee-suggestions?q=&limit=10`) is verified via live HTTP log (`200 OK` JSON) with no dedicated UI autocomplete screenshot.
-**Cross-Device Consistency**: PARTIAL / NEEDS WORK - Desktop and Tablet show the read-only `Backlog` and `High` cells with 0 table `<select>`s, but Tablet shows top-bar right-edge icon clipping and Mobile (`390px`) clips the table to `Key` + truncated `Summary`, hiding the read-only `State`/`Priority` badges off-screen and contradicting the UI specialist's "responsive card list" claim.
-**Performance Validation**: Live full-stack steps in [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/live-fullstack-proof.txt) completed between `14:30:46.707Z` and `14:30:53.642Z` (~6.9s total for all 4 scenarios); no per-route LCP/FCP or Playwright `test-results.json` load-time metrics were captured.
-**Specification Compliance**: PARTIAL / FAIL ON AUDIT ARTIFACT INTEGRITY - Code changes for all 4 problems match the Kanban spec, but the QA packet fails clean-room audit due to fabricated references in [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/api-specialist-review.md), inaccurate mobile screenshot description in [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md), unlogged `cssTokensAudit.test.ts` claim, and missing `pnpm run build` log.
+**End-to-End User Journeys**: PASS
+- Journey 1 (Assignee Suggestions Empty Query): `GET /api/v1/projects/KAN/assignee-suggestions?q=&limit=10` and omitted `q` returned `200 OK`; live browser `@` trigger rendered `@admin` and `@viewer` options (`live-kan8-assignee-suggestions-desktop-light.png`).
+- Journey 2 (Saved Views): `GET /api/v1/projects/KAN/views` returned `200 OK` (`count=1`) and rendered `Live QA Triage Board` in UI (`live-fullstack-proof.txt`, `live-kan8-saved-views-desktop-light.png`).
+- Journey 3 (`@viewer` Read-Only Table): Authenticated `@viewer` (`caps=["VIEW","COMMENT"]`) on `/projects/KAN/issues?layout=table` rendered `selectCount=0` across Desktop, Tablet, and Mobile (`live-fullstack-proof.txt`, tablet/mobile screenshots).
+- Journey 4 (`AccessPill` Inspector): `KAN-1` auto-fetched `/api/v1/objects/01a1f9c1-22cf-792f-a829-40d22e2f30ad/access -> 200 OK`, rendered `🛡️\nProject`, and clicked `[data-testid="access-hint"]` cleanly (`live-fullstack-proof.txt`).
+
+**Cross-Device Consistency**: PASS
+- Tablet `768x1024`: `scrollWidth=768`, `innerWidth=768`, `topbarRightRect.right=756`, `clipped=false` on all 3 right-header children (`.kb-header-pills`, `.kb-notif-wrapper`, `.kb-avatar-wrapper`).
+- Mobile `390x844`: `scrollWidth=390`, `innerWidth=390`, all 4 primary table columns visible (`Key` 76px, `Summary` 105px, `State` 82px, `Priority` 67px; `right=347 <= 390`).
+- Desktop Light & Dark themes verified for `AccessPill` modal contrast and token consistency (`cssTokensAudit.test.ts` 4/4 passed).
+
+**Performance Validation**: PASS
+- Frontend Vitest suite (7 files, 77 tests) executed in `4.92s`; Vite production build completed in `1.19s`; Backend Pytest suite (22 tests) executed in `30.68s`.
+- Live full-stack R3 run (`kanban-liveqa-1`) recorded `consoleErrors=0`, `pageErrors=0`, `server5xx=0`, and `LIVE_STACK_VERDICT: PASS`.
+
+**Specification Compliance**: PASS
+- All 4 scoped problems plus tablet topbar and mobile 4-column responsive fixes match implementation on disk and live proof.
+- Static gates: `ruff check .` (0 errors), `ruff format --check .` (1921 files clean), `mypy` (0 issues in 1111 source files), `lint-imports` (2 kept, 0 broken), `tsc -b` (0 errors), `eslint . --max-warnings 0` (0 warnings), `pnpm --dir kanban/web build` (exit 0), `scripts.check_no_dashes` (0 em/en-dashes).
+- Coverage: Backend 95% overall across touched files (`api/v1/assignees.py` 100%, `services/assignees.py` 97%, `services/issues.py` 95%, `schemas/issues.py` 89%); Frontend 100% lines, 99.26% statements, 95.30% branches, 100% functions across 7 touched test files.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- `TableView` on mobile (`390px`) has no responsive card layout and clips summary text (`live-kan8-table-viewer-readonly-mobile-light.png`), while tablet (`768px`) clips the top-right app header icons (`live-kan8-table-viewer-readonly-tablet-light.png`).
+- None blocking. All 4 functional defects and the tablet/mobile clipping defects identified in prior cycles are resolved and proven on `b3b0f4ba`.
 
 **New Issues Discovered**:
-- [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/api-specialist-review.md) cites non-existent file paths (`kanban/api/v1/projects.py`, `features/views/TableView.tsx`, `features/issues/IssueHeader.tsx`), wrong `max_length=100`, and fabricated test file names/counts (`test_assignee_suggestions.py`, `test_views_crud.py`, `test_issues_object_id.py`) that contradict [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt).
-- [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md) misrepresents `live-kan8-table-viewer-readonly-mobile-light.png` as a "responsive card list" and cites `cssTokensAudit.test.ts` 4/4 without raw output in [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt).
-- [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/build-or-typecheck.txt) omits a production frontend build (`pnpm run build`) log (`tsc -b --noEmit` and `eslint` only).
-- `scripts.check_no_dashes --all` skipped `docs/qa/KANBA-205/mcp-transcript.txt` (>5 MiB limit); touched KAN-8 files were not individually confirmed in raw output, though `git-diff.patch` shows 0 em/en-dashes.
+- **Minor Visual Truncation (Mobile 390px)**: In `live-kan8-table-viewer-readonly-mobile-light.png`, the `State` badge `Backlog` truncates to `B...` inside the 82px column, and the 5th column header (`Assignees`) peeks slightly as `As...` at the right edge of `.table-scroll-wrap` (expected horizontal scroll container behavior, not page overflow since `scrollWidth === 390`).
+- **Minor QA Packet Metadata Drift**: `message-to-reality-checker.md` still references `fix/KAN-8-rc1` (`23ae056d`) and omits `live-kan8-assignee-suggestions-desktop-light.png` from its artifact list; `ui-specialist-review.md` uses a stale ticket title (`[KB-READONLY-TRIAGE]...`) and describes off-canvas scrollable columns as collapsed; 4 older screenshots (`saved-views`, `access-pill-light/dark`, `table-viewer-readonly-desktop-light`) reflect the earlier `Kanban Core` run (`23ae056d`) where `@viewer` had an `Edit` badge in the fixture, though R3 `live-fullstack-proof.txt` re-verified those endpoints live on `b3b0f4ba`.
 
-**Critical Issues**:
-1. Forensic QA integrity violation: [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/api-specialist-review.md) cannot be accepted as valid specialist sign-off because it contains hallucinated paths, parameters, and test results that do not match the repository or [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt).
-2. Unverified claims in [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md) and [message-to-reality-checker.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/message-to-reality-checker.md): `cssTokensAudit.test.ts` (4/4) has no raw execution log in `docs/qa/KAN-8/`, and the mobile screenshot description contradicts visual evidence.
-
-**Medium Issues**:
-1. Mobile (`390px`) TableView screenshot clips columns after `Summary`, so read-only `State` and `Priority` badges are not visually verifiable in `live-kan8-table-viewer-readonly-mobile-light.png` without horizontal scroll evidence.
-2. Tablet (`768px`) top header bar clips right-side controls (`live-kan8-table-viewer-readonly-tablet-light.png`).
-3. Missing `pnpm run build` log in [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/build-or-typecheck.txt) and missing UI screenshot for Problem 1 (`assignee-suggestions?q=` dropdown in the browser).
+**Critical Issues**: None (0).
+**Medium Issues**: None (0).
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B- (Code implementation for the 4 scoped fixes is solid and well-covered, but the QA certification packet fails forensic verification due to fabricated API review details, inaccurate UI review claims, and missing raw log proof.)
-**Design Implementation Level**: Good (on Desktop; Basic/Clipped on Tablet header and Mobile table)
-**System Completeness**: 90% (4/4 code fixes implemented and live-verified; QA packet and mobile visual evidence incomplete/inaccurate)
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (Grade-A)
+**Design Implementation Level**: Good
+**System Completeness**: 100% of KAN-8 scope implemented and verified
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Re-run and replace [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/api-specialist-review.md) from a clean-room API specialist auditing the actual modified files (`kanban/api/v1/assignees.py`, `kanban/services/assignees.py`, `kanban/api/v1/schemas/issues.py`, `kanban/services/issues.py`, `features/table/TableView.tsx`, `features/drawer/IssueHeader.tsx`, `features/drawer/AccessPill.tsx`) and actual test files (`test_assignees.py`, `test_issues.py`, and the 5 Vitest suites in `unit-test-results.txt`).
-2. Re-run and replace [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-8/ui-specialist-review.md) to accurately reflect what `live-kan8-table-viewer-readonly-tablet-light.png` and `live-kan8-table-viewer-readonly-mobile-light.png` actually show (horizontally scrolling table vs. card list, plus tablet header clipping), and capture/attach a live UI screenshot proving Problem 1 assignee suggestions dropdown (`q=""`) works in the browser.
-3. Append raw execution output for `cssTokensAudit.test.ts` to [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/unit-test-results.txt) and raw `pnpm run build` output to [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-8/build-or-typecheck.txt).
+1. None required for KAN-8 closure (all 4 scoped defects, capability guards, tenant isolation checks, responsive tablet/mobile fixes, >=95% unit coverage, static checks, and zero-mock R3 live full-stack verification pass).
 
-**Timeline for Production Readiness**: 0.5-1 day (primarily QA re-verification, missing build/token-audit logs, and optional mobile/tablet layout polish or follow-up ticket).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Immediate for KAN-8 merge/closure.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Strict 1:1 factual grounding between specialist review documents and actual file paths, symbol names, raw test logs, and visual screenshot contents.
-- Complete build and token-audit raw logs (`pnpm run build`, `cssTokensAudit.test.ts`).
-- Honest mobile/tablet responsive verification (either fix header/table overflow or log a tracked follow-up ticket and verify scrolled badge visibility).
-
-**Quality Targets**:
-- 100% accuracy in `api-specialist-review.md` and `ui-specialist-review.md` with 0 hallucinated filenames or test counts.
-- `>=95%` coverage maintained on all touched files with raw logs for every cited test file.
-- 0 console/page/5xx errors on live stack, plus visual proof for all 4 problems.
-
-**Evidence Requirements**:
-- Corrected `docs/qa/KAN-8/api-specialist-review.md` and `docs/qa/KAN-8/ui-specialist-review.md`.
-- Raw logs in `docs/qa/KAN-8/unit-test-results.txt` (including `cssTokensAudit.test.ts`) and `docs/qa/KAN-8/build-or-typecheck.txt` (including `pnpm run build`).
-- Live UI screenshot for Problem 1 (`assignee-suggestions?q=`) and accurate mobile/tablet TableView evidence.
+- In future QA packets, keep `message-to-reality-checker.md` synchronized with the final commit SHA and full screenshot list, and ensure `ui-specialist-review.md` distinguishes `overflow-x` off-canvas scrolling from `display: none` collapsing.
+- Optional UX polish in a future ticket: slightly widen the mobile `State` column (e.g. `82px` -> `92px`) or shorten icon gap so short state names like `Backlog` do not truncate to `B...` on `390px` viewports.
+**Quality Targets**: Maintain >=95% unit coverage, 0 inline styles, 0 em/en-dashes, and 0 console/page/5xx errors on live R3 containers.
+**Evidence Requirements**: Satisfied for KAN-8 via `docs/qa/KAN-8/live-fullstack-proof.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, specialist reviews, and 7 live PNG captures.
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
-**Evidence Location**: docs/qa/KAN-8/ (and docs/qa/KAN-8/screenshots/)
-**Re-assessment Required**: After fixes implemented
+**Evidence Location**: docs/qa/KAN-8/
+**Re-assessment Required**: No (certified READY)

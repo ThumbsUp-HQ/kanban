@@ -1,97 +1,71 @@
-# UI/UX Specialist Review: KAN-29
+# UI Specialist Review: KAN-29
 
-## Audit Metadata
-- Ticket ID: KAN-29 ([KB-P3-AUDIT-23])
-- Title: Safe Workflow Automation & Project State Deletion Guardrails with Reverse-Audit Impact, Replacement Migration, and 12-Color Palette Studio (4 Problems)
-- Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-20
-- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-29`
-- Target Branch: `main`
-- Merged HEAD SHA: `23ae056d`
-- STATUS: APPROVED
+**Ticket ID:** KAN-29  
+**Title:** [KB-SETTINGS-PRESET-PALETTE-REVERSE-AUDIT] 12-Color Preset Palette, Reverse-Audit Impact Endpoints, Safe Reassignment Deletion & DeleteAuditModal  
+**Commit:** `b3b0f4ba` (on `main`)  
+**Reviewer:** ui-spec-2 (Clean-Room UI Specialist)  
+**Date:** 2026-11-20  
+**Status:** `STATUS: APPROVED`  
 
 ---
 
-## Executive Summary
-This clean-room review evaluates UI layout, component design, interaction ergonomics, accessibility (WCAG AA), CSP compliance, design token adherence, live visual proof artifacts, and RC1/R2 saved view sync and hook status alignment on `main` (commit `23ae056d`).
+## 1. Executive Summary
 
-The ticket resolves all 4 scoped problems, introducing robust visual enhancements and critical data protection guardrails:
-1. **12-Color Palette Dropdown & Advanced Color Picker (`ColorPresetPicker.tsx` + `ColorPresetPicker.css`):**
-   - Curated 12 WCAG-contrast preset colors: Slate (`#64748b`), Indigo (`#4f46e5`), Blue (`#2563eb`), Cyan (`#0891b2`), Teal (`#0d9488`), Emerald (`#059669`), Amber (`#d97706`), Orange (`#ea580c`), Rose (`#e11d48`), Red (`#dc2626`), Purple (`#7c3aed`), and Pink (`#db2777`).
-   - Three synchronized color input modalities: Preset dropdown, native HTML5 color input (`<input type="color">`), and `#RRGGBB` hex text input.
-   - SVG circle swatches (`<svg className="kb-swatch-circle"><circle ... fill={safeHex} /></svg>`) and `<ColoredPill />` badges.
-   - Strict CSP compliance (`style-src 'self'`): 0 inline `style={...}` JSX attributes. Completely eliminated preexisting inline styles in `ProjectSettingsPage.tsx`.
-   - Added inline row **Edit** support for States and Labels in `ProjectSettingsPage.tsx` (`PATCH .../states/{id}` and `PATCH .../labels/{id}`).
-2. **Reverse-Audit Blast-Radius Impact Modal (`DeleteAuditModal.tsx` + `DeleteAuditModal.css`):**
-   - Replaced immediate unconfirmed deletion with a two-stage pre-delete impact audit modal.
-   - Queries `GET .../audit-impact` to display real-time blast-radius metrics: affected issue count and clickable sample keys, referencing workflow automation hooks, historical/pending executions, and filtered saved views.
-   - Enforces hard blocking reasons: prevents deletion of default states, the last state in a group, or states with active in-flight transitions (`TRANSITION_IN_FLIGHT`).
-   - Integrated Reassignment Selector: allows operators to select a valid replacement state or label from the same project before confirming deletion, preventing broken references and foreign-key crashes.
-3. **Hook Status Alignment & Saved Views Sync:**
-   - In `DeleteAuditModal.tsx`, aligned hook active check with `h.is_enabled ?? Boolean(h.enabled)`. Prevents mislabeling active enabled workflow hooks as `(Disabled)` and accurately counts `enabledHooksCount` to enforce mandatory replacement reassignment.
-   - In `kanban/services/project_config.py`, updated state and label deletion routines to migrate deleted IDs in both `filters_json` and `display_props_json["full_filters"]`, marking them modified via `flag_modified`.
-   - Hardened `kanban/workflows/builtins.py` against Wasm auto-seed concurrency races.
+A refreshed clean-room UI and UX audit was conducted on ticket KAN-29 following Wave P3-7 integration and full-stack R3 live browser validation on `main` commit `b3b0f4ba`. All ColorPresetPicker select dimensions, tablet tab wrapping, active inline state editing, DeleteAuditModal footer button geometry, and migration text wrapping have been independently verified against disk artifacts and live test captures.
+
+The interface enforces WCAG AA compliance, uses 100% theme tokens, eliminates inline styles, and contains zero em-dashes or en-dashes.
 
 ---
 
-## UI/UX & Live Visual Artifact Verification
+## 2. Visual & Ergonomic Verification
 
-All 7 Playwright visual proof artifacts in `docs/qa/KAN-29/screenshots/` were audited:
-1. `live-kan29-color-picker-desktop-light.png`: Light mode 12-color preset grid, hex text input, and native color swatch in `ProjectSettingsPage.tsx` with zero inline styles.
-2. `live-kan29-color-picker-desktop-dark.png`: Dark mode color picker showing WCAG AA contrast (>= 4.5:1) and clear selection rings.
-3. `live-kan29-color-picker-tablet-light.png`: Tablet viewport (768px) color picker layout responsiveness.
-4. `live-kan29-color-picker-mobile-light.png`: Mobile viewport (390x844, scrollWidth = 390) with responsive palette grid wrapping and accessible touch targets.
-5. `live-kan29-inline-edit-desktop-light.png`: Inline state row edit mode showing name input field and save/cancel actions.
-6. `live-kan29-delete-audit-modal-desktop-light.png`: Light mode blast-radius audit modal displaying affected issue count, enabled workflow hook badge `qa-gate-proof-check (Enabled)`, and mandatory replacement selector dropdown.
-7. `live-kan29-delete-audit-modal-desktop-dark.png`: Dark mode audit modal with high-contrast warning callouts.
+### 2.1 ColorPresetPicker Layout & Text Sizing (`ColorPresetPicker.tsx`)
+- **Select Trigger Bounding Width:** Verified in `live-kan29-color-picker-desktop-light.png` and `live-kan29-color-picker-desktop-dark.png`:
+  - When custom hex `#1e40af` is entered, the select element selects `"custom"`.
+  - The select bounding box measures 191px (>= 190px), ensuring the label `"Advanced Color Picker..."` renders completely without awkward ellipsis truncation (preventing `"Advanced Color P..."`).
+  - Swatch palette displays all 12 preset colors cleanly with clear hover states and accessible keyboard selection.
 
----
+### 2.2 Tablet (768px) & Mobile (390px) Responsiveness
+- **Tablet (768x1024):** Verified in `docs/qa/KAN-29/screenshots/live-kan29-color-picker-tablet-light.png`:
+  - `scrollWidth: 768`, `innerWidth: 768` (zero horizontal page overflow).
+  - Project Settings tabs wrap cleanly across 2 rows (`maxTabRight: 680 <= 768`).
+  - Custom hex text input does not overflow container (`hexRight: 416 <= 768`).
+  - States table is properly housed inside `.kb-table-scroll-container` (`hasScrollContainer: true`), ensuring Edit and Delete triggers remain reachable.
+- **Mobile (390x844):** Verified in `docs/qa/KAN-29/screenshots/live-kan29-color-picker-mobile-light.png`:
+  - `scrollWidth: 390`, `innerWidth: 390` with comfortable touch targets.
 
-## Code Quality & Standards
+### 2.3 Active Inline State Editing Mode
+- **Inline Editing Controls:** Verified in `docs/qa/KAN-29/screenshots/live-kan29-inline-edit-desktop-light.png`:
+  - Triggering `data-testid="edit-state-btn-*"` opens active inline edit row with name text input, ColorPresetPicker, Group select, and Save/Cancel buttons.
+  - **Honest Layout Note:** `.kb-settings-container` constrains width to 960px (912px inner container), so the wide horizontal inline edit row places Save and Cancel within the horizontal scroll track of `.kb-table-scroll-container`, while name editing is immediately accessible without scrolling.
 
-### 1. Content Security Policy (CSP) Compliance
-- Zero inline `style={...}` JSX attributes across all newly created and modified components.
-- In fact, preexisting inline styles in `ProjectSettingsPage.tsx` were eliminated.
-- All styling resides in canonical CSS files (`ColorPresetPicker.css`, `DeleteAuditModal.css`, `ProjectSettingsPage.css`).
-- `cssTokensAudit.test.ts` passes 4/4 tests cleanly.
+### 2.4 DeleteAuditModal Visual & Geometry Verification
+- **Unclipped Action Buttons:** Verified in `live-kan29-delete-audit-modal-desktop-light.png` and `live-kan29-delete-audit-modal-desktop-dark.png`:
+  - Modal footer buttons (`Cancel` and `Confirm Delete`) are 100% visible and unclipped inside the modal container and viewport (`cancelUnclipped: true`, `confirmUnclipped: true`).
+  - Migration notice text avoids `word-break: break-all`, preventing mid-word hyphens (`"migration"` renders intact).
+  - Associated Automation Hooks section displays status badges clearly, e.g. `qa-gate-proof-check (Enabled)`.
 
-### 2. Static Analysis & Type Safety
-- `pnpm --dir kanban/web exec tsc -b --noEmit`: Clean (0 errors).
-- `pnpm --dir kanban/web exec eslint . --max-warnings 0`: Clean (0 warnings).
-- `uv run ruff check .` and `uv run ruff format --check .`: Clean (0 errors).
-- `uv run mypy`: Clean (0 errors across touched modules).
-- `uv run lint-imports`: Clean (2 kept, 0 broken).
-
-### 3. Punctuation & Style Standard
-- Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) in code, CSS, tests, or documentation. All punctuation uses standard ASCII hyphens (-).
-- Verified clean via `python3 -m scripts.check_no_dashes --all`.
-
-### 4. Test Coverage & Verification
-- 45/45 Vitest unit tests passing on `DeleteAuditModal.tsx` (98.88% Statements, 97.24% Branch, 100% Lines).
-- 13/13 Pytest unit and ASGI integration tests passing in 11.36s with 95% coverage on `kanban/services/project_config.py`.
+### 2.5 Design System, CSS Tokens & CSP Compliance
+- **Design Tokens:** `ProjectSettingsPage.css` strictly uses theme tokens (`var(--space-2)`, `var(--bg-surface)`, `var(--border-subtle)`, `var(--radius-md)`).
+- **CSP Compliance:** Zero inline `style={...}` JSX attributes (`style-src 'self'` compliant). Verified by `cssTokensAudit.test.ts` (4/4 passed).
 
 ---
 
-## Final Verification Checklist
+## 3. Automated Test Verification
 
-1. [x] 12-color preset palette and advanced native/hex picker verified
-2. [x] Live SVG swatches and `<ColoredPill />` badges verified
-3. [x] Inline row Edit support for States and Labels in `ProjectSettingsPage.tsx` verified
-4. [x] Reverse-audit blast-radius impact modal (`<DeleteAuditModal />`) verified
-5. [x] Hard blocking reasons (Default State, Last State in Group, In-Flight Gate) verified
-6. [x] Replacement reassignment dropdown with project scoping verified
-7. [x] Hook `is_enabled ?? Boolean(enabled)` status alignment verified
-8. [x] Saved view `full_filters` migration on state/label deletion verified
-9. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
-10. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
-11. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
-12. [x] Frontend test suite passes: 45 Vitest tests passing with >= 95% coverage on touched files
-13. [x] Backend test suite passes: 13 Pytest tests passing with 95% coverage on `project_config.py`
-14. [x] Visual evidence verified across 7 desktop, tablet, mobile, dark, light, and modal screenshots
+All unit tests executed cleanly with zero warnings:
+1. Frontend Vitest suite (56/56 tests passed in 4.41s across 3 components):
+   - `src/features/settings/ColorPresetPicker.tsx`: 100% statements, 95.83% branch, 100% lines.
+   - `src/features/settings/DeleteAuditModal.tsx`: 98.88% statements, 95.83% branch, 100% lines.
+   - `src/features/settings/ProjectSettingsPage.tsx`: 99.13% statements, 95.27% branch, 100% lines.
+   - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 tests passed (0 inline styles).
+   - Stderr Warnings: Exactly 0 `act(...)` warnings.
+2. Backend Pytest suite: 15/15 passed with >=95% coverage across all 4 backend files (`project_config.py` 96%, `project_config_schemas.py` 100%, `views.py` 95%, `issues.py` 95%).
 
 ---
 
-## Verdict & Certification
-STATUS: APPROVED
+## 4. Certification
 
-All UI layout, component accessibility, interaction ergonomics, hook status alignment, saved view sync, design token adherence, and live visual artifacts for KAN-29 on `main` (commit `23ae056d`) have been verified and certified. Ready for Clean-Room Reality-Checker QA.
+The UI/UX implementation of KAN-29 satisfies all aesthetic, ergonomic, mobile responsive, and design system requirements.
+
+**STATUS: APPROVED**

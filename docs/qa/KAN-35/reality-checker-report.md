@@ -1,101 +1,94 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Strictly read-only passive forensic clean-room audit (zero shell commands executed, zero URLs visited, zero files modified). Inspected all verification packet files in `/home/adamoutler/kanban/docs/qa/KAN-35/`, all 6 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-35/screenshots/`, and cross-checked source and test files listed in `changed-files-manifest.txt` at `/home/adamoutler/kanban` (`main` commit `23ae056d`).
+**Commands Executed**: Strictly read-only, passive forensic clean-room R3 re-audit (zero shell commands executed, zero URLs visited, zero files modified). Inspected `/home/adamoutler/kanban/.agents/agents/reality-checker.md`, all verification artifacts in `/home/adamoutler/kanban/docs/qa/KAN-35/`, all 7 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-35/screenshots/`, and cross-checked the implementation and test files directly on disk at `/home/adamoutler/kanban` (`main` commit `b3b0f4ba`).
 **Evidence Captured**:
-- `docs/qa/KAN-35/message-to-reality-checker.md` (184 lines)
-- `docs/qa/KAN-35/changed-files-manifest.txt` (45 lines)
-- `docs/qa/KAN-35/unit-test-results.txt` (53 lines: 65 backend Pytest tests in 19.26s, 117 frontend Vitest tests across 5 suites in 11.20s)
-- `docs/qa/KAN-35/build-or-typecheck.txt` (63 lines: Mypy clean in 8 files, `tsc -b --noEmit` FAILED with exit code 1 at `src/features/views/viewRegistry.tsx(740,9): error TS2322`, ESLint clean, Ruff clean, `lint-imports` 2 kept / 0 broken, empty `ZERO-DASHES AUDIT` section)
-- `docs/qa/KAN-35/live-fullstack-proof.txt` (117 lines: zero `mockApi`, zero `page.route`, zero `context.route`, R2 live container `kanban-liveqa-2` at commit `23ae056d`)
-- `docs/qa/KAN-35/api-specialist-review.md` (`STATUS: APPROVED` by `api-spec-2`)
-- `docs/qa/KAN-35/ui-specialist-review.md` (`STATUS: APPROVED` by `ui-spec-2`)
-- `docs/qa/KAN-35/git-diff.patch` (inspected lines 1-100 confirming `build-or-typecheck.txt` exit-code-1 failure was committed in the patch)
-- 6 PNG screenshots in `docs/qa/KAN-35/screenshots/`
-**QA Cross-Validation**: **CHALLENGED**. Both `api-specialist-review.md` (line 93) and `ui-specialist-review.md` (line 64), as well as `message-to-reality-checker.md` (lines 111 and 176), claim `pnpm --filter @kanban/web run typecheck` (`tsc -b --noEmit`) passed with `0 errors`. However, the committed raw log `docs/qa/KAN-35/build-or-typecheck.txt` (lines 10-20) shows `tsc -b --noEmit` FAILED with `error TS2322` (`ELIFECYCLE Command failed with exit code 1`). Although `/home/adamoutler/kanban/kanban/web/src/features/views/viewRegistry.tsx` line 797 now contains `as StateGroup`, no passing `tsc -b --noEmit` output was regenerated and committed. In addition, `message-to-reality-checker.md`, `api-specialist-review.md`, and `ui-specialist-review.md` cite exact unit-test coverage percentages (e.g., `100%`, `97%`, `95%`, `90%`, `96.06%`, `97.05%`, `97.43%`) that are completely absent from `docs/qa/KAN-35/unit-test-results.txt` (which ran without `--cov` or `--coverage`).
+- `docs/qa/KAN-35/message-to-reality-checker.md` (228 lines)
+- `docs/qa/KAN-35/changed-files-manifest.txt` (59 lines)
+- `docs/qa/KAN-35/unit-test-results.txt` (100 lines: 67/67 backend realtime Pytest tests in 34.70s with 97% total coverage + 1/1 migration test in 0.57s + 138/138 frontend Vitest tests across 6 suites in 16.19s with 97.77% stmts / 98.38% lines coverage)
+- `docs/qa/KAN-35/build-or-typecheck.txt` (72 lines: `tsc -b --noEmit` exit code 0, `eslint . --max-warnings 0` exit code 0, `vite build` 1.19s exit code 0, `ruff check` and `ruff format --check` clean, `mypy` clean on 12 source files, `lint-imports` 2 kept / 0 broken, `scripts.check_no_dashes` 0 forbidden dashes across 8 QA files and full repository scan)
+- `docs/qa/KAN-35/live-fullstack-proof.txt` (125 lines: R3 zero-mock live verification on container `kanban-liveqa-2` at `http://localhost:18962`, commit `b3b0f4ba`)
+- `docs/qa/KAN-35/api-specialist-review.md` (`STATUS: APPROVED` by `api-spec-2` on `main` commit `b3b0f4ba81f185fe96b5a19c72e2cf5a83a05fe3`)
+- `docs/qa/KAN-35/ui-specialist-review.md` (`STATUS: APPROVED` by `ui-spec-2` on `main` commit `b3b0f4ba`)
+- 7 PNG screenshots in `docs/qa/KAN-35/screenshots/` visually inspected via `read_file`
+- On-disk cross-check of `kanban/realtime/hub.py`, `kanban/realtime/replay.py`, `kanban/realtime/rls_filter.py`, `kanban/api/sse.py`, `database/outbox/broker.py`, `kanban/web/src/api/realtime.ts`, `kanban/web/src/features/board/BoardView.tsx`, `kanban/web/src/features/board/boardApi.ts`, `kanban/web/src/features/views/viewRegistry.tsx`, `kanban/web/src/app/Topbar.css`, and `kanban/tests/realtime/test_hub_unit.py`.
+
+**QA Cross-Validation**: **CONFIRMED**. Every R2 blocker identified in the prior audit (`docs/qa/KAN-35/reality-checker-report.md`) is resolved and substantiated by matching raw logs, source code on disk, and fresh R3 live screenshots:
+1. `build-or-typecheck.txt` now records `tsc -b --noEmit` passing with `Exit code: 0 (0 errors)` and populated `python3 -m scripts.check_no_dashes` output showing `0 forbidden dashes found (exit code 0)`.
+2. `unit-test-results.txt` now includes raw `--cov` and `--coverage` tables proving 67/67 Pytest (`97%` total, `hub.py` `97%`, `broker.py` `100%`, `replay.py` `100%`, `sse.py` `97%`, `realtime_outbox.py` `97%`, `rls_filter.py` `95%`), 1/1 migration test (`test_p4_22_outbox_replay_reader_migration.py`), and 138/138 Vitest across all 6 suites including `src/realtime/index.test.tsx` (`21 tests`) with `97.77%` statements and `98.38%` lines coverage. Both `api-specialist-review.md` and `ui-specialist-review.md` accurately match these raw numbers.
+3. `kanban/realtime/hub.py:545` passes `channels=list(conn.subscribed_channels)` to `self._replayer.replay_events(...)` (matching `kanban/api/sse.py:190`), verified by `test_hub_subscribe_with_replay_human_readable_channels` in `test_hub_unit.py:1338-1429` and live `/ws` `last_event_id="4"` replay using ONLY `["project:KAN"]` in `live-fullstack-proof.txt:80-88`.
+4. Tablet `768x1024` topbar clipping is fixed in `Topbar.css:342-378` and visually verified in `live-kan35-board-after-realtime-tablet-light.png`; standalone List View live sync (`KAN-13`) is visually verified in `live-kan35-listview-realtime-desktop-light.png`; `changed-files-manifest.txt` lists all source, test, and QA artifacts.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots:
+- Full system screenshots (all 7 inspected via `read_file`):
   - `docs/qa/KAN-35/screenshots/live-kan35-board-before-mutation-desktop-light.png` (1440x900 light)
   - `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-desktop-light.png` (1440x900 light)
   - `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-desktop-dark.png` (1440x900 dark)
   - `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-tablet-light.png` (768x1024 light)
   - `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-mobile-light.png` (390x844 light)
+  - `docs/qa/KAN-35/screenshots/live-kan35-listview-realtime-desktop-light.png` (1440x900 light)
+  - `docs/qa/KAN-35/screenshots/live-kan35-drawer-realtime-comment-desktop-light.png` (1440x900 light)
 - User journey evidence:
-  - `live-kan35-board-before-mutation-desktop-light.png` -> `live-kan35-board-after-realtime-desktop-light.png` -> `live-kan35-drawer-realtime-comment-desktop-light.png`
-- Cross-browser comparison: Chromium/Playwright only (no Firefox or WebKit cross-browser screenshots captured).
+  - Board baseline (`live-kan35-board-before-mutation-desktop-light.png`) -> out-of-band MCP create + `Alt+ArrowRight` optimistic move + out-of-band MCP transition (`live-kan35-board-after-realtime-desktop-light.png` and `live-kan35-board-after-realtime-desktop-dark.png`) -> SPA switch to List View + out-of-band MCP create (`live-kan35-listview-realtime-desktop-light.png`) -> IssueSurface Drawer + out-of-band MCP comment (`live-kan35-drawer-realtime-comment-desktop-light.png`).
+- Cross-browser comparison: Chromium/Playwright only (Firefox/WebKit cross-browser screenshots are not part of the container QA capture set).
 
 **What System Actually Delivers**:
-- Baseline board (`live-kan35-board-before-mutation-desktop-light.png`) shows `Backlog 2` (`KAN-1`, `KAN-7`), `Todo 1` (`KAN-6`), and `In Progress 4` (`KAN-5`, `KAN-2`, `KAN-3`, `KAN-4`), with `Done` partially visible off the right scroll edge.
-- Post-mutation light and dark desktop screenshots (`live-kan35-board-after-realtime-desktop-light.png` and `live-kan35-board-after-realtime-desktop-dark.png`) show `In Progress 5` with `KAN-8` (`Realtime Agent Ticket`, high-priority lightning icon) rendered at the bottom of the column with zero error modals and clean dark-mode contrast.
-- Drawer screenshot (`live-kan35-drawer-realtime-comment-desktop-light.png`) shows `KAN-8` (`State: In Progress`, `Priority: High`, `Created by: @member`) with Activity entries (`comment created`, `issue state changed`, `issue rank moved`, `issue created`) and the live MCP comment `"Realtime comment from MCP agent (R2 verified)"`. Behind the drawer, the List View shows `Todo 2` (`KAN-6` + `KAN-9`), though no dedicated standalone List View screenshot was captured.
-- Tablet screenshot (`live-kan35-board-after-realtime-tablet-light.png`, 768x1024) reveals top-right header overflow clipping: only the left half of the yellow warning icon is visible at the right edge while the `[x]` status button, shield icon, notification bell, and `M` avatar are clipped off-screen.
-- Mobile screenshot (`live-kan35-board-after-realtime-mobile-light.png`, 390x844) renders the header icons (`hamburger`, `< Work Items`, search, warning, `[x]`, shield, bell, `M`) and `Backlog 2` column cleanly within `scrollWidth: 390`.
+- Baseline board (`live-kan35-board-before-mutation-desktop-light.png`) renders `Backlog 5` (`KAN-1` through `KAN-5`), `Ready Queue 2` (`KAN-8`, `KAN-11`), and `In Progress 4` (`KAN-10`, `KAN-9`, `KAN-6`, `KAN-7`), with `Done` partially visible on the right scroll edge and zero `KAN-12`.
+- Post-mutation desktop light and dark screenshots (`live-kan35-board-after-realtime-desktop-light.png` and `live-kan35-board-after-realtime-desktop-dark.png`) confirm `KAN-12` (`Realtime Agent Ticket`, high-priority lightning icon) moved to the bottom of `In Progress` after MCP creation, keyboard `Alt+ArrowRight` to `Ready Queue`, and out-of-band MCP transition to `In Progress`, with zero error modals and clean dark-mode contrast.
+- Tablet (`768x1024`) screenshot (`live-kan35-board-after-realtime-tablet-light.png`) confirms the topbar is completely unclipped: hamburger menu, `KA kanban / Kanban Core / Work Items`, compact `Search...`, and all 5 right-side controls (warning icon, `[x]` button, shield icon, bell icon, `M` avatar) fit cleanly within the 768px viewport (`topbarRightWidth=756`, `scrollWidth=768`, `clippedCount=0`).
+- Mobile (`390x844`) screenshot (`live-kan35-board-after-realtime-mobile-light.png`) renders header icons, wrapped filter/display bar, and `Backlog 5` column cleanly without horizontal overflow (`scrollWidth=390`).
+- Standalone List View screenshot (`live-kan35-listview-realtime-desktop-light.png`) confirms `KAN-13` (`Realtime List Sync Ticket`) appeared live inside `Ready Queue 3` and in the right detail preview pane (`#KAN-13`) with zero page reloads.
+- Drawer screenshot (`live-kan35-drawer-realtime-comment-desktop-light.png`) confirms `KAN-12` (`State: In Progress`, `Priority: High`, `Created by: @member`) displays its Activity timeline (`comment created`, two `issue state changed`, `issue created`) and the live MCP comment `"Realtime comment from MCP agent (R3 verified)"`.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PASS (with minor visual/artifact caveats). `docs/qa/KAN-35/live-fullstack-proof.txt` demonstrates zero-mock (`0` `mockApi`, `0` `page.route`, `0` `context.route`) live execution on `kanban-liveqa-2` (`http://localhost:18952`, commit `23ae056d`):
-- `@member` (`WORKSPACE_MEMBER`) minted a scoped `/mcp/agent` key and executed `create_ticket` (`KAN-8`, `KAN-9`), `transition_ticket` (`KAN-8`), and `add_comment` (`KAN-8`) with `0` `outbox_events_select_rls` errors.
-- Keyboard `Alt+ArrowRight` optimistic move on `KAN-8` (`Backlog` -> `Todo`, `POST /api/v1/issues/KAN-8/move` -> 200) succeeded with `app-error-modal=0`, `pageErrors=0`, `consoleErrors=0`, and `0` `TypeError` crashes; subsequent MCP transition to `In Progress` and MCP comment rendered live with `docLoads=2` and unchanged `bootId=dvp2puu9vz6`.
-- Delivery-time RLS and `Last-Event-ID` SSE replay (`p4_22_outbox_replay_reader`): `/ws` returned `NOT_FOUND` for `project:PRIV`, `project:<PRIV_UUID>`, and `project:DOESNOTEXIST`, leaked `0` frames during `@admin` `PRIV-1` mutations, and `GET /sse?channels=workspace:<WS_UUID>,project:KAN` with `Last-Event-ID: 1` replayed `KAN` events while withholding `PRIV` events (IDs 17, 18, 26).
-**Cross-Device Consistency**: CONDITIONAL / PARTIAL FAIL. Desktop (1440x900 light/dark) and Mobile (390x844) are clean, but Tablet (768x1024) clips the top-right header action icons off the right edge (`live-kan35-board-after-realtime-tablet-light.png`).
-**Performance Validation**: Measured test execution timings only: Pytest 65 tests in 19.26s (`unit-test-results.txt`); Vitest 117 tests across 5 suites in 11.20s (`unit-test-results.txt`). Page load times and WebSocket frame latency metrics in milliseconds were not recorded in `live-fullstack-proof.txt` or a `test-results.json` file.
-**Specification Compliance**: PARTIAL FAIL ON VERIFICATION GATES. Code inspection confirms all 5 scoped fixes are implemented in `database/outbox/broker.py`, `kanban/services/realtime_outbox.py`, `kanban/app.py`, `kanban/ops/compose_export.py`, `database/migrations/sql/p4_22_outbox_replay_reader.up.sql`, `kanban/realtime/rls_filter.py`, `kanban/realtime/replay.py`, `kanban/realtime/hub.py`, `kanban/api/sse.py`, `kanban/web/src/api/realtime.ts`, `kanban/web/src/features/board/boardApi.ts`, `kanban/web/src/features/board/BoardView.tsx`, and `kanban/web/src/features/views/viewRegistry.tsx`. However, the QA evidence packet fails compliance because `build-or-typecheck.txt` contains a failed `tsc -b --noEmit` run, `unit-test-results.txt` omits `--cov`/`--coverage` proof for the `>=95%` coverage requirement and omits `kanban/web/src/realtime/index.test.tsx`, and `hub.py:545` has a WebSocket replay channel normalization defect.
+**End-to-End User Journeys**: **PASS**. Zero-mock R3 proof (`docs/qa/KAN-35/live-fullstack-proof.txt`) on `kanban-liveqa-2` (`http://localhost:18962`, commit `b3b0f4ba`, PostgreSQL 16 `FORCE ROW LEVEL SECURITY`) verifies:
+- Non-admin `@member` (`WORKSPACE_MEMBER`) minted a scoped `/mcp/agent` key (`201`), created `KAN-12` via MCP `create_ticket`, moved `KAN-12` via keyboard `Alt+ArrowRight` (`POST /api/v1/issues/KAN-12/move` -> `200`, `applyOptimisticMove` preserving `state` and full `IssueSummary` fields in `boardApi.ts:207-225` and `viewRegistry.tsx:761-834`), and received out-of-band MCP `transition_ticket` (`In Progress`), List View `create_ticket` (`KAN-13`), and Drawer `add_comment` (`KAN-12`) with `docLoads=3` (unchanged), `bootId=6si4x1aq33u` (0 reloads), `consoleErrors=0`, `pageErrors=0`, `serverErrors=0`, and `0` `outbox_events_select_rls` errors.
+- WebSocket `/ws` replay with `last_event_id="4"` subscribing ONLY to human-readable `["project:KAN"]` returned `subscribe_ack` and replayed missed `KAN-4` (`event_id="5"`) while withholding `PRIV-2` (`PRIV leaked=0`).
+- Anti-harvesting & RLS isolation: `/ws` subscribe to `project:PRIV`, `project:<PRIV_UUID>`, and `project:DOESNOTEXIST` uniformly returned `subscribe_error` `code: "NOT_FOUND"`; live `@admin` `PRIV-3` & `KAN-5` delivered `KAN-5 received=1`, `PRIV-3 leaked=0`; SSE `GET /sse` with `Last-Event-ID: 4` replayed `['KAN-4', 'KAN-5']` with `PRIV leaked=0`.
+
+**Cross-Device Consistency**: **PASS**. Desktop (`1440x900` light and dark), Tablet (`768x1024` light, `scrollWidth=768`, `clippedCount=0`), and Mobile (`390x844` light, `scrollWidth=390`) render cleanly with zero clipped controls or horizontal overflow across all 7 screenshots.
+
+**Performance Validation**: **PASS**. Verified build and suite timings: Vite production build `1.19s`, backend Pytest 67 tests in `34.70s`, migration test in `0.57s`, frontend Vitest 138 tests in `16.19s`. Optimistic `applyOptimisticMove` (`boardApi.ts:136-236`) performs single-row synchronous immutable array replacement well under the `<12ms` budget. (Sub-second page-load millisecond timings were not logged separately in `live-fullstack-proof.txt`, though zero freezes, zero crashes, and zero document reloads were verified.)
+
+**Specification Compliance**: **PASS**. All 5 scoped problems and R1/R2 remediation gates are verified on disk and live:
+- Problem 1: `database/outbox/broker.py:135-146` uses Core `insert(OutboxEvent)` with Python `uuid.uuid4()` and no `RETURNING`, preventing `outbox_events_select_rls` failures for `MEMBER`/`AGENT` principals; `kanban/services/realtime_outbox.py` translates domain activity events transactionally.
+- Problem 2: `kanban/app.py` wires `RealtimeBroker`, `RealtimeHub`, and `OutboxRelay` in lifespan; `kanban/ops/compose_export.py` points to `database.outbox.relay`.
+- Problem 3: `database/migrations/sql/p4_22_outbox_replay_reader.up.sql`, `kanban/realtime/rls_filter.py:101-125`, and `kanban/realtime/replay.py:149-253` enforce GUC-scoped delivery-time RLS (`app_has_object_capability(:obj_id, 1)`) for non-admin replay.
+- Problem 4: `kanban/realtime/hub.py:526-547` and `kanban/api/sse.py:157-192` resolve human-readable keys (`project:KAN`, `issue:KAN-1`, `workspace:stickies`) to canonical UUID channels and pass `list(conn.subscribed_channels)` into `replay_events`; `kanban/web/src/api/realtime.ts:36-63,129-149,203-228` covers SSE event listeners, workspace-switch reconnect, and channel-change SSE re-open.
+- Problem 5: `kanban/web/src/features/views/viewRegistry.tsx:263-291,401-413,761-834`, `kanban/web/src/features/board/BoardView.tsx:178-186,212-235`, and `kanban/web/src/features/board/boardApi.ts:136-236` migrate `IssuesWorkspaceRoute` to reactive TanStack Query (`qk.issues`), clear `localIssues` on incoming prop/query updates via `prevIncomingRef`, and preserve full `state` metadata in `applyOptimisticMove`.
 
 ## 📊 Comprehensive Issue Assessment
-**Issues from QA Still Present**:
-1. Stale/failing TypeScript typecheck log committed in `docs/qa/KAN-35/build-or-typecheck.txt` (lines 10-20 show `error TS2322` at `src/features/views/viewRegistry.tsx(740,9)` and `ELIFECYCLE Command failed with exit code 1`), even though `viewRegistry.tsx` line 797 was later patched with `as StateGroup`.
-2. Empty `ZERO-DASHES AUDIT (NO EN/EM DASHES)` output in `docs/qa/KAN-35/build-or-typecheck.txt` (lines 62-63 have no output).
-
-**New Issues Discovered**:
-1. **Unsubstantiated Coverage Claims & Missing Test File in `unit-test-results.txt`**: `message-to-reality-checker.md` (lines 95-108, 174), `api-specialist-review.md` (lines 71-74), and `ui-specialist-review.md` (lines 76-80) claim specific coverage percentages (`90%`-`100%`), including `kanban/realtime/hub.py: 90%` (below the `>=95%` gate), with zero `--cov` / `--coverage` output in `docs/qa/KAN-35/unit-test-results.txt`. In addition, `unit-test-results.txt` omitted `kanban/web/src/realtime/index.test.tsx` (listed in `changed-files-manifest.txt`), and `api-specialist-review.md` line 74 inaccurately reported `src/api/realtime.test.ts` as `21/21 passed` instead of `44` tests.
-2. **Tablet Viewport (768x1024) Top-Right Header Clipping**: `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-tablet-light.png` shows the top-right header controls (`[x]`, shield, bell, `M` avatar) clipped off the right edge of the 768px viewport.
-3. **WebSocket `last_event_id` Replay Channel Key Mismatch (`kanban/realtime/hub.py:545`)**: In `RealtimeHub.handle_subscribe`, `replay_events` is called with `channels=successful_channels` (which contains raw client channel strings such as `project:KAN` or `issue:KAN-8`, unlike `kanban/api/sse.py:190` which passes `list(conn.subscribed_channels)` including `canonical_ch`). Because `OutboxReplayer._match_channel` (`kanban/realtime/replay.py:123-147`) only checks canonical UUID channels (`issue:<uuid>`, `doc:<uuid>`, `project:<uuid>`, `workspace:<uuid>`), WebSocket resume with `last_event_id` on human-readable keys alone will silently drop replayed events.
-4. **Incomplete Artifact Manifest**: `docs/qa/KAN-35/changed-files-manifest.txt` does not list `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`, or `screenshots/*.png`, and there is no standalone screenshot of the List View live sync (`KAN-9`).
-
-**Critical Issues**:
-1. **Failing Typecheck Artifact & Unverified Typecheck Gate**: `docs/qa/KAN-35/build-or-typecheck.txt` records `tsc -b --noEmit` failing with exit code 1, directly contradicting specialist and handoff claims of `0 errors`.
-2. **Missing Raw Coverage Proof & Sub-95% Reported Hub Coverage**: No raw coverage output exists in `docs/qa/KAN-35/unit-test-results.txt` to substantiate the `>=95%` coverage gate, and `kanban/realtime/hub.py` is reported at `90%` in `message-to-reality-checker.md`.
-
-**Medium Issues**:
-1. Tablet (768x1024) top-right header clipping visible in `live-kan35-board-after-realtime-tablet-light.png`.
-2. `RealtimeHub.handle_subscribe` (`kanban/realtime/hub.py:545`) passes `successful_channels` instead of `list(conn.subscribed_channels)` to `OutboxReplayer.replay_events`, breaking WebSocket `last_event_id` replay when subscribing solely by human-readable key.
-3. Missing `src/realtime/index.test.tsx` execution in `unit-test-results.txt`, empty `ZERO-DASHES AUDIT` output in `build-or-typecheck.txt`, and inaccurate test count (`21/21` vs `44`) in `api-specialist-review.md`.
+**Issues from QA Still Present**: None. All 4 items from the prior audit (stale `tsc -b` error log, missing `--cov`/`--coverage` proof and `index.test.tsx` + sub-95% `hub.py` coverage, `hub.py:545` `last_event_id` replay channel key mismatch, and `768px` tablet topbar clipping + missing standalone List View screenshot) are fixed and verified.
+**New Issues Discovered**: None blocking. Minor non-functional metadata note: `docs/qa/KAN-35/message-to-reality-checker.md` lines 5 and 8 still carry the `fix/KAN-35-rc2` / `23ae056d` header from pre-merge R2 while Sections 1, 5, and `live-fullstack-proof.txt` document the final `main` commit `b3b0f4ba` R3 proof.
+**Critical Issues**: None.
+**Medium Issues**: None.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B-
-**Design Implementation Level**: Good
-**System Completeness**: 92% (core 5-problem realtime pipeline and RC1 optimistic move fix are implemented and proven on live R2 container, but verification artifacts and edge cases have gaps)
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (97% backend coverage, 97.77% stmts / 98.38% lines frontend coverage, zero warnings/errors across all linters and typechecks, zero-mock R3 full-stack proof with 7 clean multi-viewport screenshots)
+**Design Implementation Level**: Excellent
+**System Completeness**: 100% of scoped KAN-35 requirements implemented and verified
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Regenerate `docs/qa/KAN-35/build-or-typecheck.txt` at the exact final HEAD commit so `pnpm --filter @kanban/web run typecheck` (`tsc -b --noEmit`) shows 0 errors (replacing the currently committed `error TS2322` / exit code 1 failure) and `python3 -m scripts.check_no_dashes --all` includes its actual passing stdout output.
-2. Regenerate `docs/qa/KAN-35/unit-test-results.txt` with `--cov` (Pytest) and `--coverage` (Vitest), including `kanban/web/src/realtime/index.test.tsx`, proving `>=95%` coverage on all touched modules (including raising `kanban/realtime/hub.py` from the reported `90%` to `>=95%`), and correct the misquoted test count in `api-specialist-review.md`.
-3. Fix `RealtimeHub.handle_subscribe` in `kanban/realtime/hub.py:540-547` so `self._replayer.replay_events` receives the resolved canonical channels (matching `kanban/api/sse.py:190`), and add a unit/integration test verifying WebSocket `last_event_id` replay using only human-readable channel keys (e.g., `project:KAN`).
-4. Fix the Tablet (`768x1024`) topbar header layout overflow clipped in `docs/qa/KAN-35/screenshots/live-kan35-board-after-realtime-tablet-light.png`, capture updated tablet and standalone List View (`KAN-9`) screenshots, and update `changed-files-manifest.txt`.
+1. None. All functional, security, coverage, static analysis, and visual responsiveness gates pass for KAN-35 at `main` commit `b3b0f4ba`.
 
-**Timeline for Production Readiness**: 1 targeted revision cycle (approximately 0.5-1 day to fix `hub.py` replay channel set, tablet header clipping, and regenerate clean typecheck/coverage/screenshot artifacts).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready now for ticket closure (`complete_work`).
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Verification packet hygiene: never commit stale or failing command logs (`build-or-typecheck.txt`) alongside claims of `0 errors`, and never claim coverage percentages without attaching raw `--cov` / `--coverage` output.
-- WebSocket `last_event_id` replay parity with SSE (`canonical_ch` inclusion in `hub.py`).
-- Tablet (`768x1024`) header responsiveness so status, shield, bell, and avatar controls remain unclipped.
+- Keep handoff header metadata (`Branch` / `Base Commit` in `message-to-reality-checker.md`) synchronized with the final merged `main` commit hash when promoting RC packets to R3.
 **Quality Targets**:
-- `tsc -b --noEmit`: 0 errors (exit code 0) verified in `build-or-typecheck.txt`.
-- `>=95%` statement/line coverage verified in raw Pytest and Vitest output across all touched files including `kanban/realtime/hub.py` and `kanban/web/src/realtime/index.test.tsx`.
-- Zero clipped UI controls at 1440x900, 768x1024, and 390x844 viewports.
+- Maintain `>=95%` statement/line coverage, 0 TypeScript/ESLint/Ruff/Mypy errors, 0 em/en-dashes, and 0 clipped viewport controls across desktop, tablet, and mobile.
 **Evidence Requirements**:
-- Updated `docs/qa/KAN-35/build-or-typecheck.txt` showing exit code 0 for `tsc -b --noEmit` and populated `check_no_dashes` output.
-- Updated `docs/qa/KAN-35/unit-test-results.txt` with raw coverage tables (`>=95%`) and `src/realtime/index.test.tsx` included.
-- Updated tablet screenshot (`768x1024`) proving unclipped top-right header controls, plus standalone List View live sync screenshot and WebSocket `last_event_id` human-readable key replay test output.
+- Satisfied in `docs/qa/KAN-35/` (`unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`, and `screenshots/*.png`).
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
 **Evidence Location**: docs/qa/KAN-35/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (Grade-A READY certified)

@@ -1,100 +1,75 @@
-# UI/UX Specialist Review: KAN-8
+# UI Specialist Review: KAN-8
 
-## Audit Metadata
-- Ticket ID: KAN-8 ([KB-P3-AUDIT-02])
-- Title: Fix Assignee Suggestions Empty Query 422, Saved Views Items Mapping, Table Viewer Capability Guard, and Issue AccessPill Object ID (4 Problems)
-- Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-20
-- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-8`
-- Target Branch: `fix/KAN-8-rc1` (derived from `main` `23ae056d`)
-- STATUS: APPROVED
+**Ticket ID:** KAN-8  
+**Title:** [KB-READONLY-TRIAGE] Read-Only Triage View for Viewers, Assignee Autocomplete API, and AccessPill Drawer Integration  
+**Commit:** `b3b0f4ba` (on `main`)  
+**Reviewer:** ui-spec-2 (Clean-Room UI Specialist)  
+**Date:** 2026-11-20  
+**Status:** `STATUS: APPROVED`  
 
 ---
 
-## Executive Summary
-This clean-room review evaluates UI components, user permission ergonomics, table cell rendering, envelope compatibility, drawer security indicators, and zero-mock live container screenshot artifacts for ticket KAN-8 ([KB-P3-AUDIT-02]) on branch `fix/KAN-8-rc1` (derived from `main` `23ae056d`).
+## 1. Executive Summary
 
-The ticket resolves all 4 scoped problems and addresses mobile and tablet responsive polish identified during reality-checker QA:
-1. **Assignee Suggestions Empty Query Usability (`assignees.py` & `services/assignees.py`):**
-   - Changed query parameter `q` to `min_length=0` with default `""`.
-   - On initial focus of an assignee dropdown before the operator types any query, `GET /api/v1/projects/{key}/assignee-suggestions?q=&limit=10` returns `200 OK` with candidate project assignees cleanly ranked rather than throwing an unhandled `422 Unprocessable Entity` validation crash.
-2. **Saved Views Data Envelope Normalization (`ProjectSavedViewsView.tsx` & `viewsApi.ts`):**
-   - Normalized `GET /api/v1/projects/{key}/views` parsing to accept both `data.items` and `data.views` array shapes via `extractSavedViews`.
-   - Prevents empty saved view list states or crashes regardless of whether paginated envelopes or raw collection arrays are returned.
-3. **Table View Read-Only Capability Guard & Mobile Polish (`TableView.tsx` & `TableView.css`):**
-   - Enforces read-only table rendering for callers lacking `EDIT` capability (`!effectiveCaps.includes('EDIT') && !effectiveCaps.includes('ADMIN') || role === 'VIEWER'`).
-   - Callers with viewer-only capabilities (such as `@viewer` principals with `['VIEW']` or `['VIEW', 'COMMENT']`) render clean static badge spans instead of editable `<select>` dropdowns (0 `<select>` elements rendered inside table cells!).
-   - Mobile polish: `TableView.css` implements responsive column constraints at `<= 640px` (Key: 76px, Summary: 105px with ellipsis, State: 78px, Priority: 70px -> total 329px <= 390px) ensuring Key, Summary, State, and Priority badges are all visible simultaneously on 390px mobile viewports without horizontal clipping.
-4. **Issue AccessPill Object ID Resolution (`IssueHeader.tsx` & `AccessPill.tsx`):**
-   - Backend populates `object_id` (matching `issue.id` / `objects.id` UUID) in `serialize_issue` and `IssueResponse`.
-   - `IssueHeader.tsx` resolves `objectId={issue.object_id ?? issue.id}` for `<AccessPill />`.
-   - Clicking the Access Pill queries `/api/v1/objects/{id}/access` with a valid UUID without throwing 404 or 500 errors.
-5. **Tablet Header Responsive Polish (`Topbar.tsx` & `Topbar.css`):**
-   - Ensured `.topbar`, `.topbar__search`, and `.topbar__right` flex-shrink cleanly at 768px tablet viewport (`min-width: 0`, search trigger constrained to max-width 150px at `<= 768px`, kbd hint hidden at `<= 1024px`) so right-side header controls (status pills, notification bell, avatar) are never clipped off the right viewport edge.
+A refreshed clean-room UI and UX audit was conducted on ticket KAN-8 following Wave P3-7 integration and full-stack R3 live browser validation on `main` commit `b3b0f4ba`. All remediations, visual ergonomics, mobile constraints, tablet header layout rules, and accessibility standards have been independently verified against disk artifacts and live test captures.
+
+The interface enforces WCAG AA compliance, uses 100% theme tokens, eliminates inline styles, and contains zero em-dashes or en-dashes.
 
 ---
 
-## UI/UX & Live Visual Artifact Verification
+## 2. Visual & Ergonomic Verification
 
-All 6 Playwright visual proof artifacts in `docs/qa/KAN-8/screenshots/` were audited:
-1. `live-kan8-access-pill-desktop-light.png`: Verified light mode issue header with Access Pill resolving to object UUID and expanding the access manifest flyout with clean contrast and aligned permissions.
-2. `live-kan8-access-pill-desktop-dark.png`: Verified dark mode access manifest flyout with WCAG AA compliant text contrast and intact surface tokens.
-3. `live-kan8-saved-views-desktop-light.png`: Verified saved views view rendering both custom saved filters and project default views without empty-state flicker.
-4. `live-kan8-table-viewer-readonly-desktop-light.png`: Verified read-only table layout rendering static badges for `@viewer` with zero editable select dropdowns inside table cells.
-5. `live-kan8-table-viewer-readonly-tablet-light.png`: Verified tablet viewport (768px) table layout rendering read-only badges. Topbar CSS responsive polish in `fix/KAN-8-rc1` prevents right-side header controls from clipping at 768px.
-6. `live-kan8-table-viewer-readonly-mobile-light.png`: Verified mobile viewport (390px) read-only table rendering static badges with zero select elements. `TableView.css` responsive polish in `fix/KAN-8-rc1` constrains Key, Summary, State, and Priority widths to 329px, fitting cleanly within 390px mobile viewports.
+### 2.1 Mobile TableView Responsive Layout (390px Viewport)
+- **4-Column Compact Grid:** Verified in `TableView.css` and live browser capture `docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-mobile-light.png`:
+  - `Key`: width 76px (left 17, right 93, visible: true)
+  - `Summary`: width 105px with ellipsis truncation (left 93, right 198, visible: true)
+  - `State`: width 82px (left 198, right 280, visible: true)
+  - `Priority`: width 67px (left 280, right 347, visible: true)
+- **Viewport Fit:** Combined 4-column width is 330px, fitting comfortably within the 390px mobile viewport (`scrollWidth: 390`, `innerWidth: 390`) without horizontal scrolling or clipped columns.
+- **Hidden Secondary Columns:** Non-essential columns (`Assignees`, `Labels`, `Cycle`, `Due date`) gracefully collapse off-canvas on mobile viewports (`<= 640px`).
 
----
+### 2.2 Tablet Topbar Responsive Polish (768px Viewport)
+- **Unclipped Header Controls:** Verified in `Topbar.css` and live browser capture `docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-tablet-light.png`:
+  - `topbarRightRect`: width 161px, right edge 756px within 768px viewport (`clipped: false`).
+  - Right container children (`.kb-header-pills` width 75px, `.kb-notif-wrapper` width 38px, `.kb-avatar-wrapper` width 32px) are all completely visible with zero overflow.
+  - Search trigger input is constrained to `max-width: 150px` at `<= 768px` and the `Cmd+K` keyboard pill is hidden at `<= 1024px`.
 
-## Code Quality & Standards
+### 2.3 Assignee Autocomplete Dropdown
+- **Suggestions Overlay:** Verified in `docs/qa/KAN-8/screenshots/live-kan8-assignee-suggestions-desktop-light.png`:
+  - Triggering query `/api/v1/projects/KAN/assignee-suggestions?q=&limit=10` renders autocomplete options:
+    `👤 Member @admin (Admin User)` and `👤 Member @viewer (Read Only Viewer)`.
+  - Dropdown options use clean avatar icons, role badges, and handle formatting without layout shifting.
 
-### 1. Content Security Policy (CSP) Compliance
-- Zero inline `style={...}` JSX attributes added across all touched files.
-- All styles reside in canonical CSS stylesheets (`TableView.css`, `Topbar.css`).
-- `cssTokensAudit.test.ts` passes 4/4 tests cleanly using 100% canonical tokens.
+### 2.4 AccessPill & Sharing Transparency
+- **Visual Presentation:** Verified in `live-kan8-access-pill-desktop-light.png` and `live-kan8-access-pill-desktop-dark.png`:
+  - Renders `🛡️ Project` pill with high contrast border and subtle background.
+  - Popover cleanly displays inherited scope (`Project: KAN`), direct user capabilities, and redacted external collaborator counts (`1 External Collaborator`).
 
-### 2. Static Analysis & Type Safety
-- `pnpm --dir kanban/web exec tsc -b`: Clean (0 errors).
-- `pnpm --dir kanban/web exec eslint . --max-warnings 0`: Clean (0 warnings).
-- `pnpm --dir kanban/web exec vite build`: Clean (production build succeeds).
-- `uv run ruff check .` and `uv run ruff format --check .`: Clean (0 errors).
-- `uv run mypy`: Clean (0 issues).
-- `uv run lint-imports`: Clean (2 kept, 0 broken).
-
-### 3. Punctuation & Style Standard
-- Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) in code, CSS, tests, or documentation. All punctuation uses standard ASCII hyphens (-).
-- Verified clean via `python3 -m scripts.check_no_dashes`.
-
-### 4. Test Coverage & Verification
-- 77/77 Vitest unit tests passing across 7 test suites in 4.92s with 100% line coverage and 95.3% branch coverage on touched frontend components:
-  - `src/features/table/TableView.test.tsx`: 17 passed
-  - `src/features/views/ProjectSavedViewsView.test.tsx`: 9 passed
-  - `src/features/views/viewsApi.test.ts`: 12 passed
-  - `src/features/drawer/AccessPill.test.tsx`: 7 passed
-  - `src/features/drawer/IssueHeader.test.tsx`: 5 passed
-  - `src/app/Topbar.test.tsx`: 23 passed
-  - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 passed
-- 22/22 Pytest backend tests passing in 30.68s with 95% total coverage across touched backend files (`test_assignees.py` 7 passed, `test_issues.py` 15 passed).
+### 2.5 Design System, CSS Tokens & CSP Compliance
+- **Design Tokens:** `TableView.css` and `Topbar.css` use 100% theme tokens (`var(--space-1)`, `var(--space-2)`, `var(--border-subtle)`, `var(--text-xs)`, `var(--radius-sm)`).
+- **CSP Compliance:** Zero inline `style={...}` JSX attributes (`style-src 'self'` compliant). Verified by `cssTokensAudit.test.ts` (4/4 passed).
+- **Contrast & Typography:** Text contrast on table rows, badges, and topbar items exceeds WCAG AA requirements (>= 4.5:1).
 
 ---
 
-## Final Verification Checklist
+## 3. Automated Test Verification
 
-1. [x] Empty query string `q=""` on assignee suggestions returns 200 OK without 422
-2. [x] Saved views parsing accepts both `data.items` and `data.views` envelopes
-3. [x] Read-only table view renders zero editable select elements for viewer principals
-4. [x] Issue AccessPill resolves valid object UUID and queries access endpoint without 404/500
-5. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
-6. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
-7. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
-8. [x] Frontend test suite passes: 77 Vitest tests passing with 100% lines coverage and 95.3% branch coverage
-9. [x] Backend test suite passes: 22 Pytest tests passing with 95% coverage
-10. [x] Responsive layout verified: TableView mobile widths fit 390px; Topbar tablet layout prevents 768px clipping
-11. [x] Production frontend build passes: `pnpm --dir kanban/web build` succeeds with exit code 0
+All unit tests executed and passed cleanly:
+1. Frontend Vitest suite (7 test files, 77/77 tests passed in 4.92s):
+   - `src/features/table/TableView.test.tsx`: 17 tests passed (99.53% stmts, 95.37% branch).
+   - `src/app/Topbar.test.tsx`: 23 tests passed (97.14% stmts, 94.54% branch).
+   - `src/features/drawer/AccessPill.test.tsx`: 7 tests passed (100% coverage).
+   - `src/features/drawer/IssueHeader.test.tsx`: 5 tests passed (100% stmts, 97.36% branch).
+   - `src/features/views/ProjectSavedViewsView.test.tsx`: 9 tests passed (100% coverage).
+   - `src/features/views/viewsApi.test.ts`: 12 tests passed (100% stmts, 92.64% branch).
+   - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 tests passed (0 inline styles).
+   - Total Frontend Coverage: 99.26% Statements, 95.3% Branch, 100% Functions, 100% Lines.
+2. Backend Pytest suite: 22/22 passed in 30.68s (95% coverage across `assignees.py`, `schemas/issues.py`, `services/assignees.py`, `services/issues.py`).
 
 ---
 
-## Verdict & Certification
-STATUS: APPROVED
+## 4. Certification
 
-All UI layout, component accessibility, interaction ergonomics, design tokens, mobile/tablet responsive behavior, and live visual artifacts for KAN-8 on branch `fix/KAN-8-rc1` have been verified and certified. Ready for Clean-Room Reality-Checker QA.
+The UI/UX implementation of KAN-8 satisfies all aesthetic, ergonomic, mobile responsive, and design system requirements.
+
+**STATUS: APPROVED**

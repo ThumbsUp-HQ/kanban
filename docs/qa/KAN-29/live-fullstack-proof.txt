@@ -1,47 +1,71 @@
 ================================================================================
-KAN-29 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (RC1 / commit 23ae056d)
-Target: http://localhost:18951 (container: kanban-liveqa-1)
+KAN-29 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF (R3 DELTA / commit b3b0f4ba)
+Target: http://localhost:18962 (container: kanban-liveqa-2)
 Database: Real PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
-1. <ColorPresetPicker /> & INLINE STATE/LABEL EDITING ON /projects/KAN/settings
+1. <ColorPresetPicker />, TABLET 768x1024 RESPONSIVENESS & ACTIVE INLINE EDIT (R3)
 --------------------------------------------------------------------------------
-ColorPresetPicker options (13): Slate (#64748b), Indigo (#4f46e5), Blue (#2563eb), Cyan (#0891b2), Teal (#0d9488), Emerald (#059669), Amber (#d97706), Orange (#ea580c), Rose (#e11d48), Red (#dc2626), Purple (#7c3aed), Pink (#db2777), Advanced Color Picker...
-selectedValue=custom, hasColorInput=true, hasHexInput=true, inlineStyles=0, pillInlineStyles=0
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-desktop-light.png
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-desktop-dark.png
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-tablet-light.png
-Mobile 390x844 scrollWidth = 390
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-mobile-light.png
-Inline edited state 01a1f959-2e20-70b7-b7f9-3db9cf570d2f -> "Ready Queue" (#0d9488)
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-inline-edit-desktop-light.png
+Navigated to http://localhost:18962/projects/KAN/settings -> Workflow States tab (tab-states):
+- Set custom hex #1e40af in [data-testid="state-color-input"] -> [data-testid="state-color-preset-select"] selectedValue="custom" ("Advanced Color Picker...")
+- Select bounding width = 191px (>= 190px; "Advanced Color Picker..." NOT truncated to "Advanced Color F")
+- Desktop 1440x900 Light screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-desktop-light.png
+- Desktop 1440x900 Dark screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-desktop-dark.png
+- Tablet 768x1024 Light verification:
+  scrollWidth=768, innerWidth=768 (0 horizontal overflow)
+  settings tabs wrap cleanly across 2 rows (maxTabRight=680 <= 768)
+  #1e40af hex input does NOT overflow (hexRight=416 <= 768)
+  states-table wrapped in .kb-table-scroll-container (hasScrollContainer=true); Edit and Delete buttons visible & reachable on right
+  Tablet 768x1024 Light screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-tablet-light.png
+- Mobile 390x844 Light verification:
+  scrollWidth=390, innerWidth=390
+  Mobile 390x844 Light screenshot: docs/qa/KAN-29/screenshots/live-kan29-color-picker-mobile-light.png
 
-2. REVERSE-AUDIT IMPACT, ENABLED HOOK BADGE & SAVED VIEW full_filters MIGRATION
+Inline Edit Active Mode Verification (Todo -> Ready Queue, #0d9488):
+- Clicked [data-testid="edit-state-btn-01a1f9c0-2dca-7602-b6a6-12ce2191dcaa"]
+- Verified active inline edit inputs: [data-testid="state-edit-name-01a1f9c0-2dca-7602-b6a6-12ce2191dcaa"], ColorPresetPicker ("Teal (#0d9488)" / #0d9488), Group select, save-state-btn-*, cancel-state-btn-* all present & interactive
+- Captured active inline edit screenshot: docs/qa/KAN-29/screenshots/live-kan29-inline-edit-desktop-light.png
+  Note: .kb-settings-container caps width at 960px (912px inner .kb-table-scroll-container), so the wide horizontal inline edit row places Save/Cancel at x=1824..1909 inside .kb-table-scroll-container's horizontal scroll track while state-edit-name-* is at x=508..774.
+- Clicked Save -> PATCH /api/v1/projects/KAN/states/01a1f9c0-2dca-7602-b6a6-12ce2191dcaa -> HTTP 200 ("Ready Queue" persisted)
+
+2. REVERSE-AUDIT IMPACT, MODAL CLIPPING FIX & SAVED VIEW full_filters MIGRATION (R3)
 --------------------------------------------------------------------------------
-State "QA Gate": id=01a1f966-95c5-727b-8c1f-a8db2f4fbe6d
-Labels: sec-review=01a1f966-9604-70e0-b4fd-e402e5863bae, verified-clean=01a1f964-fd96-746c-9465-91c3c97dad31
-Created issue KAN-4 in state "QA Gate" with label "sec-review"
-Created Saved View "QA Gate Security Focus": id=01a1f967-06b2-7ddb-8d01-d14f943f76ef
-DB views row before deletion: {"label_ids": ["01a1f966-9604-70e0-b4fd-e402e5863bae"], "state_ids": ["01a1f966-95c5-727b-8c1f-a8db2f4fbe6d"]}|{"full_filters": {"blocked": null, "cycle_ids": [], "label_ids": ["01a1f966-9604-70e0-b4fd-e402e5863bae"], "state_ids": ["01a1f966-95c5-727b-8c1f-a8db2f4fbe6d"], "module_ids": [], "due_date_to": null, "gate_status": null, "label_match": "any", "assignee_ids": [], "overdue_only": false, "priority_ids": [], "search_query": null, "state_groups": [], "due_date_from": null, "start_date_to": null, "parent_issue_id": null, "start_date_from": null, "include_archived": false, "has_free_text_assignee": null}}
-WorkflowTransitionHook "qa-gate-proof-check": id=01a1f966-9724-7433-87ff-2860a12e1090, is_enabled=true
-DELETE /api/v1/projects/KAN/states/01a1f966-95c5-727b-8c1f-a8db2f4fbe6d (no replacement) -> HTTP 409 {"type":"urn:kanban:problem:ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE","title":"Active Automation Hook Requires State","status":409,"code":"ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE","detail":"Active automation hooks reference this state.","request_id":"f7811766225549b283988ee986afb87f"}
-DeleteAuditModal hooks list text: "Associated Automation Hooks:\nqa-gate-proof-check (Enabled)"
-DeleteAuditModal replacement options has empty "None" option: false (options=5)
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-delete-audit-modal-desktop-light.png
-Screenshot: docs/qa/KAN-29/screenshots/live-kan29-delete-audit-modal-desktop-dark.png
-Confirmed UI deletion of "QA Gate" -> HTTP 204
-Confirmed UI deletion of "sec-review" -> HTTP 204
-GET /api/v1/issues/KAN-4 -> state=01a1f959-2e20-742d-84ab-0e0e96fbe057 (In Progress), labels=[{"id":"01a1f964-fd96-746c-9465-91c3c97dad31","name":"verified-clean","color_hex":"#059669"}]
-GET /api/v1/projects/KAN/workflow-hooks -> [{"from_state":"In Progress","to_state":"Done","active_hook_count":1,"hooks":[{"id":"01a1f966-9724-7433-87ff-2860a12e1090","name":"qa-gate-proof-check","from_state":"In Progress","to_state":"Done","hook_kind":"agent_interceptor","sort_rank":"0000000000000001","failure_policy":"fail_closed","manifest_sha256":"767f578bb795d4bf657bee380e69586578224e8e83cbbd082bcceeb30a6f3770","is_enabled":true,"allowed_mutable_fields":[],"description":null,"wasm_module_sha256":null,"wasm_module_name":null,"target_latency_budget":"< 180.0 s (Tier B)","agent_slug":"qa-gate-agent","agent_display_name":"QA Gate Agent","harness_kind":"in_app_sdk","provider_kind":"fixture","model_id":"fixture-v1","cli_binary_allowlist_id":null,"cli_args":[],"timeout_ms":null,"repo_binding_slug":null,"repo_access_mode":null,"mcp_access_summary":"4 tools"}]}]
-GET /api/v1/views/01a1f967-06b2-7ddb-8d01-d14f943f76ef -> HTTP 200 filters={"state_ids":["01a1f959-2e20-742d-84ab-0e0e96fbe057"],"state_groups":[],"priority_ids":[],"assignee_ids":[],"has_free_text_assignee":null,"label_ids":["01a1f964-fd96-746c-9465-91c3c97dad31"],"label_match":"any","cycle_ids":[],"module_ids":[],"parent_issue_id":null,"start_date_from":null,"start_date_to":null,"due_date_from":null,"due_date_to":null,"overdue_only":false,"blocked":null,"gate_status":null,"include_archived":false,"search_query":null}
-DB views row after deletion: {"label_ids": ["01a1f964-fd96-746c-9465-91c3c97dad31"], "state_ids": ["01a1f959-2e20-742d-84ab-0e0e96fbe057"]}|{"full_filters": {"blocked": null, "cycle_ids": [], "label_ids": ["01a1f964-fd96-746c-9465-91c3c97dad31"], "state_ids": ["01a1f959-2e20-742d-84ab-0e0e96fbe057"], "module_ids": [], "due_date_to": null, "gate_status": null, "label_match": "any", "assignee_ids": [], "overdue_only": false, "priority_ids": [], "search_query": null, "state_groups": [], "due_date_from": null, "start_date_to": null, "parent_issue_id": null, "start_date_from": null, "include_archived": false, "has_free_text_assignee": null}}
+Fixtures created via real REST API on KAN:
+- Agent definition "qa-gate-agent" (id=01a1f9cb-5302-7a80-b2eb-b29b8cb91c0d)
+- State "QA Gate": id=01a1f9cb-531c-7410-8941-294e0c8697da (color_hex=#7c3aed)
+- Labels: sec-review=01a1f9cb-5313-7afd-b8fe-917605db2f0e, verified-clean=01a1f9cb-5331-787e-8064-b00499e1c163
+- WorkflowTransitionHook "qa-gate-proof-check": from_state="QA Gate", to_state="Done", is_enabled=true
+- Issues KAN-6 & KAN-7 in state "QA Gate" with label "sec-review"
+- Saved View "QA Gate Security Focus": id=01a1f9cb-541a-7f3b-a70a-87f18c2cab5c
+
+Unsafe delete rejection:
+- DELETE /api/v1/projects/KAN/states/01a1f9cb-531c-7410-8941-294e0c8697da (no replacement) -> HTTP 409 {"type":"urn:kanban:problem:ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE","title":"Active Automation Hook Requires State","status":409,"code":"ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE","detail":"Active automation hooks reference this state.","request_id":"9088291bf19546ebbb952c1b8cf080ec"}
+
+DeleteAuditModal Visual & Geometry Check (Light & Dark at 1440x900):
+- Blast radius rendered: AFFECTED ISSUES: 2 (Samples: KAN-7, KAN-6), AUTOMATION HOOKS: 1 ("1 active hook(s) require migration"), SAVED VIEWS: 1 ("QA Gate Security Focus")
+- Associated Automation Hooks: "qa-gate-proof-check (Enabled)"
+- Migration notice wrapping: wordBreak != "break-all", renders cleanly on one line without mid-word "migrati / on" breaks
+- Footer buttons: Cancel and Confirm Delete are 100% unclipped inside modal dialog & viewport (cancelUnclipped=true, confirmUnclipped=true)
+- Screenshots:
+  docs/qa/KAN-29/screenshots/live-kan29-delete-audit-modal-desktop-light.png (1440x900 Light)
+  docs/qa/KAN-29/screenshots/live-kan29-delete-audit-modal-desktop-dark.png (1440x900 Dark)
+
+Safe Reassignment Deletion & PostgreSQL Verification:
+- Selected replacement state "In Progress" -> clicked Confirm Delete -> DELETE /api/v1/projects/KAN/states/... -> HTTP 204
+- Opened DeleteAuditModal on label "sec-review" -> selected replacement "verified-clean" -> clicked Confirm Delete -> DELETE /api/v1/projects/KAN/labels/... -> HTTP 204
+- GET /api/v1/issues/KAN-7 -> state="In Progress" (01a1f9c0-2dca-7cfe-b44b-7023c391dcaa), labels=[{"id":"01a1f9cb-5331-787e-8064-b00499e1c163","name":"verified-clean","color_hex":"#059669"}]
+- GET /api/v1/projects/KAN/workflow-hooks -> [{"from_state":"In Progress","to_state":"Done","active_hook_count":1,"hooks":[{"name":"qa-gate-proof-check","is_enabled":true,...}]}]
+- GET /api/v1/views/01a1f9cb-541a-7f3b-a70a-87f18c2cab5c -> HTTP 200 filters.state_ids=["01a1f9c0-2dca-7cfe-b44b-7023c391dcaa"], filters.label_ids=["01a1f9cb-5331-787e-8064-b00499e1c163"]
+- PostgreSQL views row after deletion:
+  QA Gate Security Focus|{"label_ids": ["01a1f9cb-5331-787e-8064-b00499e1c163"], "state_ids": ["01a1f9c0-2dca-7cfe-b44b-7023c391dcaa"]}|{"blocked": null, "cycle_ids": [], "label_ids": ["01a1f9cb-5331-787e-8064-b00499e1c163"], "state_ids": ["01a1f9c0-2dca-7cfe-b44b-7023c391dcaa"], "module_ids": [], "due_date_to": null, "gate_status": null, "label_match": "any", "assignee_ids": [], "overdue_only": false, "priority_ids": [], "search_query": null, "state_groups": [], "due_date_from": null, "start_date_to": null, "parent_issue_id": null, "start_date_from": null, "include_archived": false, "has_free_text_assignee": null}
 
 Browser Console Errors: 0
 Browser Page Errors: 0
+HTTP 5xx Server Errors: 0
 
 LIVE_STACK_VERDICT: PASS
-- Problem 1 (12-Color Palette + ColorPresetPicker + Inline Edit): PASS
+- Problem 1 (12-Color Palette + ColorPresetPicker min-width + Inline Edit + Tablet Responsive): PASS
 - Problem 2 (Reverse-Audit audit-impact endpoints): PASS
 - Problem 3 (Safe State/Label Delete & Migration including views.display_props_json["full_filters"]): PASS
-- Problem 4 (Frontend DeleteAuditModal is_enabled badge & requiresReplacement): PASS
+- Problem 4 (Frontend DeleteAuditModal footer unclipped, clean hook notice wrap, is_enabled alignment): PASS

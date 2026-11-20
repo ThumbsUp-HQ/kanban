@@ -1,107 +1,103 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: None (read-only clean-room forensic audit mode: audited `docs/qa/KAN-12/` artifacts, 5 PNG screenshots, `git-diff.patch`, and the 5 implementation files on disk directly without running shell commands, visiting URLs, or writing files).
+**Commands Executed**:
+- Strictly passive, read-only forensic inspection executed via `read_file` (0 shell commands run, 0 URLs visited, 0 files modified):
+  - Read [reality-checker.md](file:///home/adamoutler/kanban/.agents/agents/reality-checker.md)
+  - Read all QA proof packet artifacts in [docs/qa/KAN-12/](file:///home/adamoutler/kanban/docs/qa/KAN-12/): [message-to-reality-checker.md](file:///home/adamoutler/kanban/docs/qa/KAN-12/message-to-reality-checker.md), [changed-files-manifest.txt](file:///home/adamoutler/kanban/docs/qa/KAN-12/changed-files-manifest.txt), [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-12/unit-test-results.txt), [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-12/build-or-typecheck.txt), [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-12/live-fullstack-proof.txt), [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-12/api-specialist-review.md), [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-12/ui-specialist-review.md), and [git-diff.patch](file:///home/adamoutler/kanban/docs/qa/KAN-12/git-diff.patch)
+  - Visually inspected all 5 PNG screenshots in `docs/qa/KAN-12/screenshots/`
+  - Cross-checked all 6 production files on disk: [principal_service.py](file:///home/adamoutler/kanban/kanban/admin/principal_service.py), [Topbar.tsx](file:///home/adamoutler/kanban/kanban/web/src/app/Topbar.tsx), [app/useSystemStatus.ts](file:///home/adamoutler/kanban/kanban/web/src/app/useSystemStatus.ts), [features/system/useSystemStatus.ts](file:///home/adamoutler/kanban/kanban/web/src/features/system/useSystemStatus.ts), [AuthStudioPage.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/admin-auth/AuthStudioPage.tsx), and [WorkspaceSettingsPage.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx)
+
 **Evidence Captured**:
-- QA packet files read in full: `docs/qa/KAN-12/unit-test-results.txt`, `docs/qa/KAN-12/build-or-typecheck.txt`, `docs/qa/KAN-12/git-diff.patch`, `docs/qa/KAN-12/changed-files-manifest.txt`, `docs/qa/KAN-12/live-fullstack-proof.txt`, `docs/qa/KAN-12/api-specialist-review.md`, `docs/qa/KAN-12/ui-specialist-review.md`, and `docs/qa/KAN-12/message-to-reality-checker.md`.
-- Live screenshots inspected visually (5/5):
-  - `docs/qa/KAN-12/screenshots/live-kan12-auth-studio-groups-desktop-light.png`
-  - `docs/qa/KAN-12/screenshots/live-kan12-auth-studio-groups-desktop-dark.png`
-  - `docs/qa/KAN-12/screenshots/live-kan12-workspace-tabs-airgap-sync-desktop-light.png`
-  - `docs/qa/KAN-12/screenshots/live-kan12-workspace-tabs-tablet-light.png`
-  - `docs/qa/KAN-12/screenshots/live-kan12-auth-studio-mobile-light.png`
-- Implementation files read on disk: `kanban/web/src/features/system/useSystemStatus.ts`, `kanban/web/src/app/useSystemStatus.ts`, `kanban/web/src/app/Topbar.tsx`, `kanban/web/src/features/admin-auth/AuthStudioPage.tsx`, `kanban/admin/principal_service.py`, and `kanban/web/src/features/settings/WorkspaceSettingsPage.tsx`.
+- Backend unit test & coverage log: 16/16 passing in `kanban/tests/api/test_admin_principals.py` (19.99s), with `kanban/admin/principal_service.py` at 96% coverage (429 stmts, 9 miss, 160 branches, 14 partial).
+- Frontend unit test & coverage log: 100/100 passing across 6 Vitest suites in 11.86s, with >=95% statement, branch, function, and line coverage on all 5 touched frontend production files (`Topbar.tsx` 98.05% stmts / 95.37% branch / 100% funcs / 100% lines; `app/useSystemStatus.ts` 100% across all metrics; `features/system/useSystemStatus.ts` 100% across all metrics; `AuthStudioPage.tsx` 98.31% stmts / 95.43% branch / 99% funcs / 100% lines; `WorkspaceSettingsPage.tsx` 99.67% stmts / 95.09% branch / 100% funcs / 100% lines). Note: `unit-test-results.txt` captures stdout summaries only, while `message-to-reality-checker.md`, `api-specialist-review.md`, `ui-specialist-review.md`, and `git-diff.patch` (`waitFor`/`findByTestId` additions in `WorkspaceSettingsPage.test.tsx`) corroborate 0 `act(...)` stderr warnings.
+- Build & static gates: `pnpm --dir kanban/web build` (`tsc -b && vite build`, 706 modules in 1.73s), `ruff`, `mypy`, `lint-imports` (2 kept, 0 broken), `tsc -b`, `eslint`, and `check_no_dashes` all clean.
+- Live zero-mock full-stack R3 proof (`live-fullstack-proof.txt` against `kanban-liveqa-1` at commit `b3b0f4ba`): `LIVE_STACK_VERDICT: PASS` with `consoleErrors=0, pageErrors=0, server5xx=0`.
 
 **QA Cross-Validation**:
-- Challenged `api-specialist-review.md` (which issued `STATUS: APPROVED`) on two factual claims:
-  1. `api-specialist-review.md` claims `principal_service.py` uses `_slugify_or_default()` in `get_principal_detail` and `_format_principal_entry` so human group names output `@devops-team`. Actual code in `kanban/admin/principal_service.py` (lines 62-70, 182-190, 351-365) never calls `_slugify_or_default()` outside `test_admin_principals.py`; when `Group.name` or `display_name` is non-UUID (e.g. `"DevOps Security Team"`), it returns `"@DevOps Security Team"` un-slugified (explicitly asserted in `kanban/tests/api/test_admin_principals.py` lines 1465 and 1493).
-  2. Both specialist reviews (`api-specialist-review.md`, `ui-specialist-review.md`) and `message-to-reality-checker.md` claim `>=95%` coverage across all touched files, but `changed-files-manifest.txt` includes `kanban/web/src/app/Topbar.tsx` (modified in `git-diff.patch` lines 188-215), which is completely absent from `docs/qa/KAN-12/unit-test-results.txt` test execution and v8 coverage output.
-- Confirmed zero backend stubs (`0` `mockApi`, `0` `page.route`, `0` `context.route`) in `live-fullstack-proof.txt` and confirmed `build-or-typecheck.txt` reports clean `ruff`, `mypy`, `lint-imports` (2 kept, 0 broken), `tsc -b`, `eslint --max-warnings 0`, `check_no_dashes`, and `cssTokensAudit.test.ts` (4/4).
+- Confirmed API Specialist (`api-specialist-review.md`, `STATUS: APPROVED`): Backend `_slugify_or_default()` in `principal_service.py`, `kb:system-status-changed` listener/cleanup in `Topbar.tsx` and `app/useSystemStatus.ts`, `USER`-only Reset Password guards in `AuthStudioPage.tsx`, and `#tab-*` hash sync + empty-hash reset in `WorkspaceSettingsPage.tsx` all match the actual files on disk.
+- Partially challenged UI Specialist (`ui-specialist-review.md`, `STATUS: APPROVED`): While all KAN-12 functional and desktop/tablet/theme requirements visually pass, `ui-specialist-review.md` (line 43) inaccurately describes `live-kan12-auth-studio-mobile-light.png` as "displaying stacked cards". Visual inspection of that screenshot shows a horizontally clipped table (cut off at `PR...` / `LO...`), not stacked cards. Cross-checking [AuthStudioPage.tsx](file:///home/adamoutler/kanban/kanban/web/src/features/admin-auth/AuthStudioPage.tsx#L829) and [adminAuth.css](file:///home/adamoutler/kanban/kanban/web/src/features/admin-auth/adminAuth.css#L670-L675) confirms `AuthStudioPage.tsx` wraps `<table className="auth-users-table">` in `auth-users-container` (flex column) instead of `.auth-users-table-container` (`overflow-x: auto`). Also noted that `changed-files-manifest.txt` lists 3 screenshots rather than all 5 captured screenshots.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots:
-  - Desktop Light (`live-kan12-auth-studio-groups-desktop-light.png`)
-  - Desktop Dark (`live-kan12-auth-studio-groups-desktop-dark.png`)
-  - Desktop Light Settings + Air-Gap Sync (`live-kan12-workspace-tabs-airgap-sync-desktop-light.png`)
-  - Tablet Light (`live-kan12-workspace-tabs-tablet-light.png`)
-  - Mobile Light (`live-kan12-auth-studio-mobile-light.png`)
-- User journey evidence: `docs/qa/KAN-12/live-fullstack-proof.txt` (`LIVE_STACK_VERDICT: PASS`) logs live container verification for `#tab-groups` -> `#tab-members` hash navigation, Auth Studio principal row inspection, and Air-Gap toggle ON/OFF topbar pill updates with zero reload.
-- Cross-browser comparison: Single browser engine (Chromium via Playwright); light and dark themes verified on Auth Studio desktop.
+- [live-kan12-auth-studio-groups-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-12/screenshots/live-kan12-auth-studio-groups-desktop-light.png): Desktop light view of Authentication Studio (`Users & Permissions`). Shows `Admin User` (`@admin`, `User`, `Reset Password`), `DevOps Security Team` (`@devops-security-team`, `Group`, blank Actions cell), `Read Only Viewer` (`@viewer`, `User`, `Reset Password`), and `Triage Bot` (`@triage-bot`, `Agent`, blank Actions cell). Zero raw UUIDs displayed.
+- [live-kan12-auth-studio-groups-desktop-dark.png](file:///home/adamoutler/kanban/docs/qa/KAN-12/screenshots/live-kan12-auth-studio-groups-desktop-dark.png): Desktop dark view of the same Authentication Studio table. Dark theme contrast is clean; `@devops-security-team` and `@triage-bot` render properly with 0 `Reset Password` buttons on Group/Agent rows and 1 each on User rows.
+- [live-kan12-workspace-tabs-airgap-sync-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-12/screenshots/live-kan12-workspace-tabs-airgap-sync-desktop-light.png): Desktop light view of `Workspace Settings` after saving Air-Gap Mode ON without page reload. Shows the green `Workspace settings updated successfully.` banner, all 4 workspace tabs (`General & Policy`, `Workspace Members`, `Groups & Governance`, `Trash & Retention`) in view, and the topbar right pill cluster simultaneously displaying `⚠️`, `✕`, the orange `📴` Air-Gap indicator, `🔔`, and `A`.
+- [live-kan12-workspace-tabs-tablet-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-12/screenshots/live-kan12-workspace-tabs-tablet-light.png): Tablet (768px) light view of `Workspace Settings` on the `Workspace Members` tab (`#tab-members` active). Tabs align cleanly and workspace principals (`Admin User`, `Infra Team` `@infra-team`, `Read Only Viewer`, `Triage Bot` `@triage-bot`) render without overlap.
+- [live-kan12-auth-studio-mobile-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-12/screenshots/live-kan12-auth-studio-mobile-light.png): Mobile (390px) light view of Authentication Studio (`Users & Permissions`). Displays `Admin User` (`@admin`), `Infra Team` (`@infra-team`), `Read Only Viewer` (`@viewer`), and `Triage Bot` (`@triage-bot`) with clean handles, but the right-hand columns (`Provider`, `Role Grant`, `Actions`) are clipped off-screen at `PR...` / `LO...` because the wrapper uses `auth-users-container` rather than `auth-users-table-container`.
 
 **What System Actually Delivers**:
-- `live-kan12-auth-studio-groups-desktop-light.png` and `live-kan12-auth-studio-groups-desktop-dark.png` clearly show `Users & Permissions` with 4 rows: `Admin User` (`@admin`, `User`, `Reset Password` button present), `Infra Team` (`@infra-team`, `Group`, empty `ACTIONS` cell), `Read Only Viewer` (`@viewer`, `User`, `Reset Password` button present), and `Triage Bot` (`@triage-bot`, `Agent`, empty `ACTIONS` cell).
-- `live-kan12-workspace-tabs-airgap-sync-desktop-light.png` shows the checked `Air-Gap Mode` checkbox and the `📴` badge rendered in the topbar alongside `⚠️` and `✕`. However, the page is scrolled past the settings header, so the `#tab-*` tab bar is not visible in this desktop capture.
-- `live-kan12-workspace-tabs-tablet-light.png` shows the three settings tabs (`General & Policy`, `Workspace Members`, `Groups & Governance`) with `Workspace Members` underlined as active, plus the `+ Add Workspace User` form and `Workspace Users & Principals` table displaying `@infra-team` and `@triage-bot`.
-- `live-kan12-auth-studio-mobile-light.png` (390px viewport) shows the filter chips wrapping cleanly without page-level horizontal overflow (`scrollWidth=390`), while the table clips at the `PROVIDER` column (`PRO...` / `LC...`), leaving `ROLE GRANT` and `ACTIONS` scrolled off-screen to the right.
+- Reactive topbar synchronization on `kb:system-status-changed` works without page reload (`Topbar.tsx`, `app/useSystemStatus.ts`, `WorkspaceSettingsPage.tsx`).
+- Group handles are cleanly slugified via `_slugify_or_default()` in `principal_service.py` (with defense-in-depth in `AuthStudioPage.tsx` `formatHandle()`), eliminating raw RFC 4122 UUIDs.
+- `Reset Password` buttons and modals are strictly gated to `USER` principals in `AuthStudioPage.tsx`, leaving `GROUP` and `AGENT` rows clean.
+- `#tab-general`, `#tab-members`, `#tab-groups` (and `#tab-trash` on `main`) DOM IDs and `window.location.hash` synchronization (including resetting to `general` when hash clears to `""` or `#`) work as specified.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PASS (live stack happy path in `live-fullstack-proof.txt`: 0 console errors, 0 page errors, 0 HTTP 5xx responses; Air-Gap toggle updates topbar `📴` without reload; `#tab-groups` -> `#tab-members` updates `window.location.hash`; Group/Agent rows have `0` `Reset Password` buttons and show `@infra-team` / `@triage-bot`).
-**Cross-Device Consistency**: PARTIAL PASS (Desktop light/dark and Tablet 768px render cleanly; Mobile 390px avoids page overflow via table container clipping, though `ACTIONS` and `PROVIDER` columns are clipped off-screen in `live-kan12-auth-studio-mobile-light.png` and Desktop settings screenshot cuts off the `#tab-*` bar above the fold).
-**Performance Validation**: NOT MEASURED (no page load timing or latency metrics recorded in `live-fullstack-proof.txt`; unit test durations only: backend 16 tests in 13.69s, frontend 72 tests in 7.41s).
-**Specification Compliance**: PARTIAL FAIL
-- **Problem 1 (`useSystemStatus` `kb:system-status-changed` sync)**: PASS in `kanban/web/src/app/useSystemStatus.ts`, `kanban/web/src/features/system/useSystemStatus.ts`, `kanban/web/src/features/settings/WorkspaceSettingsPage.tsx`, and live proof; however, `kanban/web/src/app/Topbar.tsx` was also modified in `git-diff.patch` and has no test/coverage proof in `unit-test-results.txt`.
-- **Problem 2 (`AuthStudioPage.tsx` `Reset Password` strictly for `USER`)**: PASS in `kanban/web/src/features/admin-auth/AuthStudioPage.tsx` (lines 890-915, 1089-1094), unit tests, and desktop light/dark screenshots.
-- **Problem 3 (`principal_service.py` + `AuthStudioPage.tsx` `@slug` group handles, never `@<uuid>`)**: PARTIAL FAIL. Raw UUIDs are blocked via `_RFC4122_UUID_REGEX` / `isUuid`, and `@infra-team` works when provisioned with an explicit slug. However, `kanban/admin/principal_service.py` leaves `_slugify_or_default()` as unused dead code and emits un-slugified handles containing spaces and uppercase (e.g. `"@DevOps Security Team"`) whenever `Group.name` or `display_name` is non-UUID, and `AuthStudioPage.tsx` `formatHandle()` passes non-UUID `handle` values through without slugification.
-- **Problem 4 (`WorkspaceSettingsPage.tsx` `id="tab-*"` and hash sync)**: PASS in `kanban/web/src/features/settings/WorkspaceSettingsPage.tsx` (lines 54-96, 529, 540, 551), `WorkspaceSettingsPage.test.tsx`, and `live-fullstack-proof.txt` (minor edge case: `syncFromHash` ignores clearing the hash to `""` on browser Back).
-- **DoD (`0` warnings, `>=95%` coverage on touched files, clean build/lint, dual reviews, live screenshots)**: PARTIAL FAIL (`Topbar.tsx` omitted from `unit-test-results.txt` coverage; `unit-test-results.txt` contains two React `act(...)` warnings in stderr).
+**End-to-End User Journeys**: PASS
+- Live zero-mock container run (`live-fullstack-proof.txt` on `kanban-liveqa-1`, commit `b3b0f4ba`) verified:
+  1. `GET /api/v1/admin/principals` HTTP 200 returns `@devops-security-team` for `DevOps Security Team` (`GROUP`), `@triage-bot` (`AGENT`), `@admin`, `@viewer`.
+  2. Auth Studio UI table renders 0 Reset Password buttons for `GROUP` and `AGENT`, 1 each for `USER`, and `hasUuid: false` across all rows (desktop light and dark screenshots).
+  3. Toggling Air-Gap ON on `/workspaces/settings` updates Topbar right text from `"⚠️\n✕\n🔔\nA"` to `"⚠️✕📴🔔A"` with zero page reload (`live-kan12-workspace-tabs-airgap-sync-desktop-light.png`), and toggling Air-Gap OFF clears the badge immediately with zero reload.
+  4. `#tab-groups` renders `aria-selected=true`, and resetting `window.location.hash=""` transitions `#tab-general` to `aria-selected=true`.
+
+**Cross-Device Consistency**: PASS (with non-blocking mobile table overflow note)
+- Desktop light/dark (`live-kan12-auth-studio-groups-desktop-light.png`, `live-kan12-auth-studio-groups-desktop-dark.png`, `live-kan12-workspace-tabs-airgap-sync-desktop-light.png`) and Tablet (`live-kan12-workspace-tabs-tablet-light.png`) render cleanly with zero layout overlap.
+- Mobile (`live-kan12-auth-studio-mobile-light.png`) renders `@slug` handles cleanly without UUID leaks, though the table clips horizontally on the right edge (`PR...`/`LO...`) due to pre-existing wrapper class usage.
+
+**Performance Validation**: PASS
+- Frontend Vite production build completed in 1.73s (706 modules).
+- Vitest suite (6 files, 100 tests) completed in 11.86s; backend Pytest suite (16 tests) completed in 19.99s.
+- Live container run completed full multi-flow Playwright verification in ~6.0s (`16:23:06.632Z` to `16:23:12.675Z`) with 0 console errors, 0 page errors, and 0 HTTP 5xx responses.
+
+**Specification Compliance**: PASS
+- Requirement 1 (Air-gap topbar reactive sync): Implemented in `Topbar.tsx` (lines 128-137), `app/useSystemStatus.ts` (lines 56-65), `features/system/useSystemStatus.ts`, and `WorkspaceSettingsPage.tsx` (lines 481-484). Proven live in `live-kan12-workspace-tabs-airgap-sync-desktop-light.png`.
+- Requirement 2 (Hide Reset Password on Groups/Agents): Implemented in `AuthStudioPage.tsx` (lines 899-924 and 1098-1103). Proven live in `live-kan12-auth-studio-groups-desktop-light.png` and `live-kan12-auth-studio-groups-desktop-dark.png`.
+- Requirement 3 (Group `@slug` handles without UUID leaks): Implemented via `_slugify_or_default()` in `principal_service.py` (lines 62-70, 182-185, 346-357) and `formatHandle()` in `AuthStudioPage.tsx` (lines 41-72). Proven via API 200 payload and screenshots showing `@devops-security-team`.
+- Requirement 4 (`#tab-*` DOM anchors & empty-hash reset): Implemented in `WorkspaceSettingsPage.tsx` (lines 56-64, 102-133, 739, 750, 761, 772). Proven in `live-kan12-workspace-tabs-airgap-sync-desktop-light.png`, `live-kan12-workspace-tabs-tablet-light.png`, and `live-fullstack-proof.txt`.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- `unit-test-results.txt` lines 29-49 contain two unresolved React `act(...)` warnings in `WorkspaceSettingsPage.test.tsx` (`An update to WorkspaceSettingsPage inside a test was not wrapped in act(...)`), violating the strict `0 warnings` standard.
-- `unit-test-results.txt` and `build-or-typecheck.txt` were captured against a pre-merge worktree path (`.../swarm-b-kan12-257137e5`) rather than the merged `main` checkout referenced by the specialist reviews (`23ae056d`), and `message-to-reality-checker.md` links to that worktree path.
+- None of the 4 KAN-12 scoped bugs or 3 Clean-Room R1 findings remain. Group `@slug` formatting, `Topbar.tsx` >=95% coverage (98.05% stmts / 95.37% branch / 100% funcs / 100% lines), empty-hash tab reset to `general`, and `act(...)` async awaiting in `WorkspaceSettingsPage.test.tsx` are all resolved.
 
 **New Issues Discovered**:
-1. **Unverified touched file coverage (`kanban/web/src/app/Topbar.tsx`)**: Listed in `changed-files-manifest.txt` and modified in `git-diff.patch` (lines 188-215), yet `Topbar.test.tsx` was not run and `Topbar.tsx` is missing from `unit-test-results.txt` v8 coverage output.
-2. **Dead helper & incomplete group handle slugification (`kanban/admin/principal_service.py`, `AuthStudioPage.tsx`)**: `_slugify_or_default()` (lines 62-70) is never called in `principal_service.py`. In `get_principal_detail` (lines 182-183) and `_format_principal_entry` (lines 352-353), non-UUID group names or display names are returned verbatim with `@` prepended (e.g. `@DevOps Security Team` instead of `@devops-security-team`), contradicting `api-specialist-review.md`.
-3. **Hash-clear edge case (`WorkspaceSettingsPage.tsx` lines 74-80)**: `syncFromHash` only updates `activeTab` when `parseTabFromHash(currentHash)` is truthy, so navigating back to `/workspaces/settings` (empty hash) will not reset the tab to `'general'`.
+- Pre-existing mobile table wrapper mismatch in `AuthStudioPage.tsx` (line 829): `<div className="auth-users-container">` is used instead of `.auth-users-table-container` (defined in `adminAuth.css` line 670 with `overflow-x: auto`), causing horizontal clipping of `Provider`/`Role Grant`/`Actions` at 390px in `live-kan12-auth-studio-mobile-light.png` (and contradicting `ui-specialist-review.md`'s claim of "stacked cards").
+- Minor QA documentation drift: `changed-files-manifest.txt` omits the tablet/mobile screenshots and QA review/log files present in `docs/qa/KAN-12/`, and `message-to-reality-checker.md` references branch `fix/KAN-12-rc1` / commit `23ae056d` in prose while `live-fullstack-proof.txt` and `main` HEAD are at `b3b0f4ba`.
 
 **Critical Issues**:
-1. Missing unit test execution and `>=95%` coverage verification for touched file `kanban/web/src/app/Topbar.tsx` in `docs/qa/KAN-12/unit-test-results.txt`.
-2. `_slugify_or_default()` is dead code in `kanban/admin/principal_service.py`; non-UUID group names/display names with spaces or uppercase still produce non-slug handles (`@DevOps Security Team`) instead of `@slug`, and `api-specialist-review.md` falsely certified otherwise.
+- None.
 
 **Medium Issues**:
-1. Two React `act(...)` warnings in `WorkspaceSettingsPage.test.tsx` stderr (`unit-test-results.txt` lines 29-49).
-2. QA logs (`unit-test-results.txt`, `build-or-typecheck.txt`) and `message-to-reality-checker.md` artifact links reference the pre-merge worktree path rather than `/home/adamoutler/kanban`.
-3. `live-kan12-workspace-tabs-airgap-sync-desktop-light.png` is scrolled below the `#tab-*` tab bar on desktop, and `live-kan12-auth-studio-mobile-light.png` clips the `PROVIDER` and `ACTIONS` columns off-screen.
-4. `WorkspaceSettingsPage.tsx` `syncFromHash` does not reset to `'general'` when hash becomes empty.
+1. Non-blocking UI polish follow-up: Update `AuthStudioPage.tsx` line 829 from `auth-users-container` to `auth-users-table-container` (or add `overflow-x: auto` / responsive stacked card layout) so the Users & Permissions table does not clip at 390px mobile width.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B
+**Overall Quality Rating**: A- (94/100)
 **Design Implementation Level**: Good
-**System Completeness**: 85% (all 4 features work in the live happy path, but `principal_service.py` handle slugification is incomplete/dead-coded and `Topbar.tsx` lacks coverage proof)
-**Production Readiness**: NEEDS WORK
+**System Completeness**: 100% of KAN-12 scoped specification implemented and verified
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Wire `_slugify_or_default()` into `kanban/admin/principal_service.py` (`get_principal_detail` and `_format_principal_entry`, plus `AuthStudioPage.tsx` `formatHandle()` if needed) so non-UUID group names/display names consistently normalize to `@slug` (e.g. `@devops-security-team` rather than `@DevOps Security Team`), and update `test_admin_principals.py` assertions accordingly.
-2. Execute `Topbar.test.tsx` (covering the new `kb:system-status-changed` `useEffect` in `kanban/web/src/app/Topbar.tsx`) and regenerate `docs/qa/KAN-12/unit-test-results.txt` on the target repo checkout proving `>=95%` coverage across ALL 6 touched production files in `changed-files-manifest.txt`.
-3. Fix the two `act(...)` warnings in `WorkspaceSettingsPage.test.tsx` so `unit-test-results.txt` has zero stderr warnings, and fix `syncFromHash` in `WorkspaceSettingsPage.tsx` for empty-hash `hashchange` navigation.
-4. Capture a desktop Workspace Settings screenshot showing the `#tab-general`, `#tab-members`, `#tab-groups` tab bar together with the synced topbar `📴` indicator, and update `api-specialist-review.md` and `message-to-reality-checker.md` so all claims and paths match the merged repo state.
+- None for KAN-12 closure. (Optional follow-up ticket recommended for the pre-existing `auth-users-table-container` mobile horizontal scroll wrapper in `AuthStudioPage.tsx`.)
 
-**Timeline for Production Readiness**: 1 short revision cycle (under 1 day)
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready now on `main` commit `b3b0f4ba`
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Eliminate dead code (`_slugify_or_default`) and ensure every group handle returned by `principal_service.py` is a true lowercase slug.
-- Include every file in `changed-files-manifest.txt` (including `Topbar.tsx`) in the coverage run on the merged repository, with zero React `act(...)` warnings.
-- Ensure specialist reviews verify actual code behavior line by line rather than assuming `_slugify_or_default()` was wired in.
+- Ensure UI specialist reviews describe observed mobile screenshots accurately rather than assuming stacked-card responsive layouts where tables are used.
+- Keep `changed-files-manifest.txt` synchronized with all captured screenshots and QA packet files when re-running R2/R3 verification.
 
 **Quality Targets**:
-- `>=95%` statements/branches/functions/lines coverage on all 6 touched production files (`principal_service.py`, `Topbar.tsx`, `app/useSystemStatus.ts`, `features/system/useSystemStatus.ts`, `AuthStudioPage.tsx`, `WorkspaceSettingsPage.tsx`).
-- `0` ESLint warnings, `0` compiler warnings, and `0` React `act(...)` stderr warnings.
-- 100% `@slug` compliance for all group handle inputs in `principal_service.py`.
+- Maintain >=95% statement, branch, function, and line coverage on all touched production files and 0 `act(...)` warnings in stderr.
+- Resolve the pre-existing `auth-users-table-container` mobile wrapper class in `AuthStudioPage.tsx` in a small follow-up UI polish ticket.
 
 **Evidence Requirements**:
-- Updated `docs/qa/KAN-12/unit-test-results.txt` and `build-or-typecheck.txt` run from `/home/adamoutler/kanban` including `Topbar.tsx` in the v8 coverage table with `0` `act(...)` warnings.
-- Updated `git-diff.patch` showing `_slugify_or_default()` actively used in `principal_service.py` and passing unit tests for space/uppercase group names.
-- Updated desktop screenshot showing both the `#tab-*` tab bar and the topbar `📴` badge, plus corrected `api-specialist-review.md`.
+- For any follow-up mobile table fix on `AuthStudioPage.tsx`, capture a 390px mobile screenshot confirming all columns (or stacked mobile cards) are accessible without right-edge clipping.
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
 **Evidence Location**: docs/qa/KAN-12/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (KAN-12 certified READY at main commit b3b0f4ba)

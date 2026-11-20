@@ -1,96 +1,15 @@
-KAN-15 LIVE FULL-STACK VERIFICATION PROOF (ZERO MOCKS - R2)
-Target Container: kanban-liveqa-2 (http://localhost:18952)
-Commit Under Test: 23ae056d
-Mode: standalone_embedded_pg (PostgreSQL 16 with FORCE ROW LEVEL SECURITY, UID 65532 uvicorn)
-Timestamp: 2026-11-20T14:23Z - 14:25Z
-
-================================================================================
-1. SETUP & ISSUE PROVISIONING (/setup -> TOTP AAL2 -> KAN-1)
-================================================================================
-- Read claim token via: docker exec kanban-liveqa-2 cat /run/kanban/setup_token
-- Completed /setup UI wizard in headless Chromium:
-  * Workspace: Kanban Workspace (slug: kanban)
-  * Project: Kanban Project (key: KAN)
-  * User: admin (SERVER_ADMIN) + enrolled TOTP AAL2 + confirmed 10 recovery codes
-  * Landed on: http://localhost:18952/
-- Created issue KAN-1 via POST /api/v1/projects/KAN/issues -> HTTP 201 (due_date=2026-11-21, priority=high):
-  {"id":"01a1f956-e2e1-706c-b1de-064a66aceb16","object_id":"01a1f956-e2e1-706c-b1de-064a66aceb16","key":"KAN-1","summary":"KAN-1 SLA Security Baseline Verification","priority":{"slug":"high","label":"High","emoji":"⚡"},"state":{"id":"01a1f956-e134-7b9e-aac7-8dedf90280e7","name":"Backlog","group":"backlog"},"due_date":"2026-11-21"}
-
-================================================================================
-2. PROBLEM 1 & 3: 4-FLAVOR DECISION MATRIX, 6-PRESET GALLERY & CSP AUDIT
-================================================================================
-Route: http://localhost:18952/projects/KAN/settings/custom-fields
-- Expanded 4-Flavor Decision Matrix ([data-testid="toggle-flavor-matrix-btn"]):
-  * Flavor cards rendered: 4 (Scalar Value <1ms, Formula Expression <5ms, WebAssembly <25ms, Project Rollup / nsjail <=3,000ms)
-  * Preset cards rendered: 6 (CVSS 3.1 / 4.0 Score, Total Issues in Project, Days Until Due / SLA Breach, Blocker Count, Sub-Issue Completion %, Git PR Link Badge)
-- Inline JSX style="..." audit inside [data-testid="custom-fields-editor-layout"]:
-  {"present":true,"count":0,"styled":[]}
-- Viewport metrics:
-  * Tablet 768x1024: {"scrollWidth":768,"innerWidth":768} -> PASS
-  * Mobile 390x844: {"scrollWidth":390,"clientWidth":390,"innerWidth":390} -> PASS (scrollWidth === 390)
-- Dark theme check via Topbar theme selector:
-  document.documentElement.dataset.theme === "dark" -> PASS
-- Browser runtime error counts across full run:
-  consoleErrors=0, pageErrors=0, cspViolations=0, serverErrors=0
-
-================================================================================
-3. PROBLEM 1 & 2: <FieldHelpHint /> TIMING, ESCAPE FOCUS RESTORE & POPOVER CONTENT
-================================================================================
-Trigger tested: [data-testid="hint-format-metadata"] (Format Metadata JSON)
-- Hover delay test:
-  * At 40ms after hover: openAt40ms = 0
-  * At 260ms after hover: openAt260ms = 1 (180ms hover delay confirmed)
-- Keyboard focus test (0ms open) + Escape focus restore:
-  * Focus trigger -> openAtFocus0ms = 1 (0ms open confirmed)
-  * Press Escape -> openAfterEsc = 0, activeElement = "hint-format-metadata" (focus restored to trigger)
-- Popover content inspection ([data-testid="hint-format-metadata-popover"]):
-  * hasDl=true, dtCount=7, dts=["text","number","badge","markdown_snippet","url","json_table","severity_pill"]
-  * Footer link: docHref="/docs/custom-fields#format-metadata", docText="More info ->"
-
-================================================================================
-4. DIRTY FORM CONFIRM, UNDO STRIP, POSTGRES SAVE & ALL 3 FORMULA EXECUTIONS (R2)
-================================================================================
-- Typed "My Custom Dirty Field" into [data-testid="field-name-input"]
-- Clicked [data-testid="use-preset-btn-days-until-due-sla"]
-- Dirty confirmation modal [data-testid="preset-dirty-confirm-dialog"] appeared -> confirmed overwrite
-- Undo strip [data-testid="preset-undo-strip"] appeared -> clicked [data-testid="preset-undo-btn"] -> reverted to "My Custom Dirty Field"
-- Applied and saved ALL THREE formula presets via UI -> POST /api/v1/projects/KAN/custom-fields -> HTTP 201 Created:
-  1. days-until-due-sla (id=01a1f956-f32a-7c6c-8198-57f0aa46973f, output_format=severity_pill) -> HTTP 201
-  2. blocker-count (id=01a1f958-846a-785d-9d39-8076bde9d7d2, output_format=badge) -> HTTP 201
-  3. sub-issue-completion (id=01a1f958-8580-7510-b855-1e3c55c425e8, output_format=number) -> HTTP 201
-
-- Direct API execution against KAN-1 (POST /api/v1/issues/KAN-1/custom-fields/{id}/execute):
-  1. days-until-due-sla -> HTTP 200:
-     {"field_id":"01a1f956-f32a-7c6c-8198-57f0aa46973f","slug":"days-until-due-sla","name":"Days Until Due / SLA Breach","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":7.0,"label":"Due Soon"},"computed_at":"2026-11-20T14:25:18.379776+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
-  2. blocker-count -> HTTP 200:
-     {"field_id":"01a1f958-846a-785d-9d39-8076bde9d7d2","slug":"blocker-count","name":"Blocker Count","output_format":"badge","output_format_metadata":{"color_token":"danger","allowed_labels":["Blocked","Clear"]},"value":"Clear","computed_at":"2026-11-20T14:25:18.414638+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
-  3. sub-issue-completion -> HTTP 200:
-     {"field_id":"01a1f958-8580-7510-b855-1e3c55c425e8","slug":"sub-issue-completion","name":"Sub-Issue Completion %","output_format":"number","output_format_metadata":{"unit_suffix":"%","maximum_fraction_digits":1},"value":0.0,"computed_at":"2026-11-20T14:25:18.453657+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
-
-- Browser KAN-1 Drawer refresh via CustomFieldsRailSection (http://localhost:18952/projects/KAN/issues?peek=KAN-1):
-  1. [data-testid="refresh-field-days-until-due-sla"] -> HTTP 200 (status="computed") -> rendered class="custom-field-severity-pill custom-field-severity--high" text="7.0Due Soon"
-  2. [data-testid="refresh-field-blocker-count"] -> HTTP 200 (status="computed") -> rendered class="custom-field-badge custom-field-badge--danger" text="Clear"
-  3. [data-testid="refresh-field-sub-issue-completion"] -> HTTP 200 (status="computed") -> rendered class="custom-field-number" text="0 %"
-  * Zero 422 SCRIPT_OUTPUT_SCHEMA_INVALID responses!
-  * [data-testid="rail-field-hint-days-until-due-sla"] focused -> [data-testid="rail-field-hint-days-until-due-sla-popover"] opened cleanly alongside all 3 evaluated pills.
-
-================================================================================
-5. CAPTURED SCREENSHOTS (docs/qa/KAN-15/screenshots/)
-================================================================================
-- live-kan15-presets-matrix-desktop-light.png (1440x900 light)
-- live-kan15-presets-matrix-desktop-dark.png (1440x900 dark)
-- live-kan15-presets-matrix-tablet-light.png (768x1024 light)
-- live-kan15-presets-matrix-mobile-light.png (390x844 light, scrollWidth=390)
-- live-kan15-field-help-popover-desktop-light.png (1440x900 light)
-- live-kan15-field-help-popover-desktop-dark.png (1440x900 dark)
-- live-kan15-dirty-confirm-undo-desktop-light.png (1440x900 light)
-- live-kan15-rail-evaluated-pills-desktop-light.png (1440x900 light, KAN-1 Drawer with severity_pill + badge + number + (?) rail hint)
-
-================================================================================
-VERDICT PER SCOPED PROBLEM (KAN-15)
-================================================================================
-- Problem 1 (Accessible <FieldHelpHint /> component): PASS
-- Problem 2 (Attached <FieldHelpHint /> across Studio & Issue Rail): PASS
-- Problem 3 (4-Flavor Matrix & 6-Preset Starter Gallery - valid executable configs): PASS
-
-LIVE_STACK_VERDICT: PASS
+[2026-11-20T16:23:09.109Z] Target Container: kanban-liveqa-1 (http://localhost:18961), commit b3b0f4ba
+[2026-11-20T16:23:09.796Z] Preset days-until-due-sla already provisioned id=01a1f9c3-2483-7a35-adbc-e987d4103bb6
+[2026-11-20T16:23:09.990Z] Saved preset blocker-count via UI -> HTTP 201 id=01a1f9c4-d98c-7ba9-8270-d8cb67776d65
+[2026-11-20T16:23:10.220Z] Saved preset sub-issue-completion via UI -> HTTP 201 id=01a1f9c4-da73-7d7f-91ba-5f1b5910045e
+[2026-11-20T16:23:10.419Z] Saved preset cvss-score via UI -> HTTP 201 id=01a1f9c4-db3d-7ef6-84ed-20457a63d34e
+[2026-11-20T16:23:10.458Z] POST /api/v1/issues/KAN-1/custom-fields/01a1f9c3-2483-7a35-adbc-e987d4103bb6/execute (days-until-due-sla) -> 200 {"field_id":"01a1f9c3-2483-7a35-adbc-e987d4103bb6","slug":"days-until-due-sla","name":"Days Until Due / SLA Breach","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":7.0,"label":"Due Soon"},"computed_at":"2026-11-20T16:23:10.444155+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+[2026-11-20T16:23:10.492Z] POST /api/v1/issues/KAN-1/custom-fields/01a1f9c4-d98c-7ba9-8270-d8cb67776d65/execute (blocker-count) -> 200 {"field_id":"01a1f9c4-d98c-7ba9-8270-d8cb67776d65","slug":"blocker-count","name":"Blocker Count","output_format":"badge","output_format_metadata":{"color_token":"danger","allowed_labels":["Blocked","Clear"]},"value":"Clear","computed_at":"2026-11-20T16:23:10.485884+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+[2026-11-20T16:23:10.527Z] POST /api/v1/issues/KAN-1/custom-fields/01a1f9c4-da73-7d7f-91ba-5f1b5910045e/execute (sub-issue-completion) -> 200 {"field_id":"01a1f9c4-da73-7d7f-91ba-5f1b5910045e","slug":"sub-issue-completion","name":"Sub-Issue Completion %","output_format":"number","output_format_metadata":{"unit_suffix":"%","maximum_fraction_digits":1},"value":0.0,"computed_at":"2026-11-20T16:23:10.515896+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+[2026-11-20T16:23:10.562Z] POST /api/v1/issues/KAN-1/custom-fields/01a1f9c4-db3d-7ef6-84ed-20457a63d34e/execute (cvss-score) -> 200 {"field_id":"01a1f9c4-db3d-7ef6-84ed-20457a63d34e","slug":"cvss-score","name":"CVSS 3.1 / 4.0 Score","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":8.8,"label":"8.8 High"},"computed_at":"2026-11-20T16:23:10.549166+00:00","last_latency_ms":0,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+[2026-11-20T16:23:11.668Z] KAN-1 Custom Fields rail pill geometry audit: [{"slug":"custom-field-row-days-until-due-sla","text":"7.0Due Soon","pillChildren":[{"cls":"custom-field-severity-score","text":"7.0","rect":{"x":1321,"y":621.421875,"width":18,"height":19.015625,"top":621.421875,"right":1339,"bottom":640.4375,"left":1321}},{"cls":"custom-field-severity-label","text":"Due Soon","rect":{"x":1343,"y":621.421875,"width":53,"height":19.015625,"top":621.421875,"right":1396,"bottom":640.4375,"left":1343}}],"valRect":{"left":1314,"right":1403,"width":89},"btnRect":{"left":1409,"right":1427,"width":18},"gapPx":6,"overlapsRefreshBtn":false,"scrollClipped":false},{"slug":"custom-field-row-blocker-count","text":"Clear","pillChildren":[],"valRect":{"left":1360,"right":1403,"width":43},"btnRect":{"left":1409,"right":1427,"width":18},"gapPx":6,"overlapsRefreshBtn":false,"scrollClipped":false},{"slug":"custom-field-row-sub-issue-completion","text":"0 %","pillChildren":[],"valRect":{"left":1380,"right":1403,"width":23},"btnRect":{"left":1409,"right":1427,"width":18},"gapPx":6,"overlapsRefreshBtn":false,"scrollClipped":false},{"slug":"custom-field-row-cvss-score","text":"8.88.8 High","pillChildren":[{"cls":"custom-field-severity-score","text":"8.8","rect":{"x":1330,"y":753.421875,"width":17,"height":19.015625,"top":753.421875,"right":1347,"bottom":772.4375,"left":1330}},{"cls":"custom-field-severity-label","text":"8.8 High","rect":{"x":1351,"y":753.421875,"width":45,"height":19.015625,"top":753.421875,"right":1396,"bottom":772.4375,"left":1351}}],"valRect":{"left":1323,"right":1403,"width":80},"btnRect":{"left":1409,"right":1427,"width":18},"gapPx":6,"overlapsRefreshBtn":false,"scrollClipped":false}]
+[2026-11-20T16:23:11.724Z] Captured screenshots/live-kan15-rail-evaluated-pills-desktop-light.png
+[2026-11-20T16:23:12.657Z] Mobile 390x844 Custom Fields Studio metrics: {"scrollWidth":390,"innerWidth":390,"avatarRect":{"left":350,"right":382,"width":32},"avatarUnclipped":true}
+[2026-11-20T16:23:12.675Z] Captured screenshots/live-kan15-presets-matrix-mobile-light.png
+[2026-11-20T16:23:12.676Z] Errors summary: consoleErrors=0, pageErrors=0, server5xx=0
+[2026-11-20T16:23:12.676Z] LIVE_STACK_VERDICT: PASS
