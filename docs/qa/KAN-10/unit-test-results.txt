@@ -1,101 +1,106 @@
-=== PYTEST: SPARKLE & MIRROR UNIT TESTS ===
+=== PYTEST: SPARKLE, MIRROR & DOCKERFILE UNIT TESTS ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-bc77d2a0/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-bc77d2a0
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-fix-f582270e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 16 items
+collected 29 items
 
-kanban/tests/api/test_sparkle.py::test_kanban_sparkle_reexports PASSED   [  6%]
-kanban/tests/api/test_sparkle.py::test_sparkle_accepts_project_key_string PASSED [ 12%]
-kanban/tests/api/test_sparkle.py::test_sparkle_accepts_project_uuid_direct PASSED [ 18%]
-kanban/tests/api/test_sparkle.py::test_sparkle_unknown_project_key_returns_404 PASSED [ 25%]
-kanban/tests/api/test_sparkle.py::test_sparkle_cross_tenant_project_key_returns_404 PASSED [ 31%]
-kanban/tests/api/test_sparkle.py::test_sparkle_none_project_id_with_object_id PASSED [ 37%]
-kanban/tests/api/test_sparkle.py::test_sparkle_payload_oversize_413 PASSED [ 43%]
-kanban/tests/repos/test_mirror.py::test_is_dir_writable_success PASSED   [ 50%]
-kanban/tests/repos/test_mirror.py::test_is_dir_writable_failure PASSED   [ 56%]
-kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_override PASSED [ 62%]
-kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_kanban_repo_mirror_dir PASSED [ 68%]
-kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_kb_data_dir PASSED [ 75%]
-kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_unwritable_fallback PASSED [ 81%]
-kanban/tests/repos/test_mirror.py::test_mirror_manager_default_base_dir PASSED [ 87%]
-kanban/tests/repos/test_mirror.py::test_project_repo_binding_mirror_path_with_env PASSED [ 93%]
-kanban/tests/repos/test_mirror.py::test_clone_or_fetch_permission_fallback PASSED [100%]
+kanban/tests/api/test_sparkle.py::test_kanban_sparkle_reexports PASSED   [  3%]
+kanban/tests/api/test_sparkle.py::test_sparkle_accepts_project_key_string PASSED [  6%]
+kanban/tests/api/test_sparkle.py::test_sparkle_accepts_project_uuid_direct PASSED [ 10%]
+kanban/tests/api/test_sparkle.py::test_sparkle_unknown_project_key_returns_404 PASSED [ 13%]
+kanban/tests/api/test_sparkle.py::test_sparkle_cross_tenant_project_key_returns_404 PASSED [ 17%]
+kanban/tests/api/test_sparkle.py::test_sparkle_none_project_id_with_object_id PASSED [ 20%]
+kanban/tests/api/test_sparkle.py::test_sparkle_payload_oversize_413 PASSED [ 24%]
+kanban/tests/repos/test_mirror.py::test_is_dir_writable_success PASSED   [ 27%]
+kanban/tests/repos/test_mirror.py::test_is_dir_writable_failure PASSED   [ 31%]
+kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_override PASSED [ 34%]
+kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_kanban_repo_mirror_dir PASSED [ 37%]
+kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_kb_data_dir PASSED [ 41%]
+kanban/tests/repos/test_mirror.py::test_resolve_mirror_base_dir_unwritable_fallback PASSED [ 44%]
+kanban/tests/repos/test_mirror.py::test_mirror_manager_default_base_dir PASSED [ 48%]
+kanban/tests/repos/test_mirror.py::test_project_repo_binding_mirror_path_with_env PASSED [ 51%]
+kanban/tests/repos/test_mirror.py::test_clone_or_fetch_permission_fallback PASSED [ 55%]
+tests/deploy/test_dockerfile.py::test_dockerfile_stages_and_sha256_pinning PASSED [ 58%]
+tests/deploy/test_dockerfile.py::test_runtime_slim_and_standalone_directives PASSED [ 62%]
+tests/deploy/test_dockerfile.py::test_security_zero_secrets_and_no_remote_add PASSED [ 65%]
+tests/deploy/test_dockerfile.py::test_dockerignore_entries PASSED        [ 68%]
+tests/deploy/test_dockerfile.py::test_runtime_slim_apt_install_packages PASSED [ 72%]
+tests/deploy/test_dockerfile.py::test_get_logical_lines_continuations PASSED [ 75%]
+tests/deploy/test_dockerfile.py::test_extract_env_arg_names_variants PASSED [ 79%]
+tests/deploy/test_dockerfile.py::test_security_rules_on_synthetic_samples PASSED [ 82%]
+tests/deploy/test_dockerfile.py::test_parse_dockerfile_stages_structure PASSED [ 86%]
+tests/deploy/test_dockerfile.py::test_kanban_ctl_and_agent_in_container_path PASSED [ 89%]
+tests/deploy/test_dockerfile_agent_runner.py::test_dockerfile_agent_runner_stage PASSED [ 93%]
+tests/deploy/test_dockerfile_agent_runner.py::test_dockerfile_runtime_slim_git_and_ca_certificates PASSED [ 96%]
+tests/deploy/test_dockerfile_agent_runner.py::test_docker_compose_runner_reference_spec PASSED [100%]
 
-============================== 16 passed in 2.54s ==============================
+============================== 29 passed in 2.41s ==============================
 
 === PYTEST: REPOS & MIRROR COVERAGE ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-bc77d2a0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-fix-f582270e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 65 items
+collected 54 items
 
-kanban/tests/repos/test_mirror.py .........                              [ 13%]
-kanban/tests/repos/test_mirror_manager.py ........                       [ 26%]
-kanban/tests/repos/test_repo_bindings_api.py ...........                 [ 43%]
-kanban/tests/repos/test_url_policy.py .................................. [ 95%]
+kanban/tests/repos/test_mirror.py .........                              [ 16%]
+kanban/tests/repos/test_mirror_manager.py ........                       [ 31%]
+kanban/tests/repos/test_url_policy.py .................................. [ 94%]
 ...                                                                      [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                             Stmts   Miss Branch BrPart  Cover   Missing
-----------------------------------------------------------------------------
-kanban/api/v1/repo_bindings.py     184      7     38      7    94%   154, 294, 353, 365, 421, 439, 442
-kanban/repos/mirror.py             220      9     56      6    95%   83->86, 89->92, 94, 98, 161-164, 337-339, 441->446, 443->446
-----------------------------------------------------------------------------
-TOTAL                              404     16     94     13    94%
-============================= 65 passed in 11.69s ==============================
+Name                         Stmts   Miss Branch BrPart  Cover
+--------------------------------------------------------------
+kanban/repos/__init__.py         3      0      0      0   100%
+kanban/repos/mirror.py         220      9     56      6    95%
+kanban/repos/url_policy.py     168      3     64      3    97%
+--------------------------------------------------------------
+TOTAL                          391     12    120      9    96%
+============================== 54 passed in 0.50s ==============================
 
-=== VITEST: CUSTOM FIELDS DEFINITION EDITOR & ESCALATION COVERAGE ===
+=== PYTEST: DOCKERFILE AGENT RUNNER TEST COVERAGE ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-fix-f582270e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 3 items
 
-> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-bc77d2a0/kanban/web
-> vitest run --coverage src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx
+tests/deploy/test_dockerfile_agent_runner.py ...                         [100%]
 
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-bc77d2a0/kanban/web
-      Coverage enabled with v8
+Name                                           Stmts   Miss Branch BrPart  Cover
+--------------------------------------------------------------------------------
+tests/deploy/test_dockerfile_agent_runner.py      66      0     22      2    98%
+--------------------------------------------------------------------------------
+TOTAL                                             66      0     22      2    98%
+============================== 3 passed in 0.13s ===============================
 
-stderr | src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx > EscalationApprovalPanel > displays Submitting... while request approval mutation is in flight
-An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
+=== PYTEST: FULL DEPLOY & STRIDE MISCONFIG SUITE ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan10-fix-f582270e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 75 items / 1 deselected / 74 selected
 
-When testing, code that causes React state updates should be wrapped into act(...):
+tests/deploy/test_caddyfile.py .......                                   [  9%]
+tests/deploy/test_dockerfile.py ..........                               [ 22%]
+tests/deploy/test_dockerfile_agent_runner.py ...                         [ 27%]
+tests/deploy/test_keyring.py ................                            [ 48%]
+tests/deploy/test_standalone_entrypoint.py ......................        [ 78%]
+tests/deploy/test_storage_probe.py ...........                           [ 93%]
+tests/security/test_stride_standalone_misconfig.py .....                 [100%]
 
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (22 tests) 481ms
- ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (32 tests) 1263ms
-
- Test Files  2 passed (2)
-      Tests  54 passed (54)
-   Start at  14:30:50
-   Duration  3.31s (tests 40%, environment 33%, import 19%, transform 7%, worker 2%)
-
- % Coverage report from v8
--------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
--------------------|---------|----------|---------|---------|-------------------
-All files          |   99.62 |     96.8 |     100 |     100 |                   
- ...tionEditor.tsx |     100 |    97.95 |     100 |     100 | 410,443           
- ...rovalPanel.tsx |   98.79 |    95.55 |     100 |     100 | 101-113,129,143   
--------------------|---------|----------|---------|---------|-------------------
+======================= 74 passed, 1 deselected in 0.95s =======================
