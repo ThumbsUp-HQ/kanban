@@ -1,100 +1,100 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Read-only passive forensic clean-room R3 re-audit (0 shell commands executed, 0 URLs visited, 0 files modified per clean-room constraints). Inspected all files in `/home/adamoutler/kanban/docs/qa/KAN-27/` (`message-to-reality-checker.md`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`, `reality-checker-report.md`), visually inspected all 12 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-27/screenshots/`, and cross-checked the implementation and migration files on disk at `/home/adamoutler/kanban` (`main` commit `b3b0f4ba`).
+**Commands Executed**: Read-only passive forensic clean-room R4 verification using ONLY `read_file` (0 shell commands executed, 0 URLs visited, 0 files modified). Inspected all files in `/home/adamoutler/kanban/docs/qa/KAN-27/` (`message-to-reality-checker.md`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`, and R3 `reality-checker-report.md`), visually inspected all 13 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-27/screenshots/`, and cross-checked on-disk implementation and migration files (`kanban/web/src/features/settings/PersonalSettingsPage.tsx`, `kanban/web/src/features/settings/PersonalSettingsPage.css`, `kanban/api/v1/auth_identities.py`, `kanban/api/v1/auth_oidc.py`, `kanban/api/v1/auth_cards_public.py`, `kanban/auth/identity_service.py`, `kanban/auth/oidc/flow.py`, `database/models/auth.py`, `database/migrations/sql/p4_23_oidc_link_intent_fk.up.sql`). Note: `kanban/auth/oidc_service.py` and `kanban/auth/ldap_service.py` do not exist at those exact paths on disk; the actual linking and flow implementations live in `kanban/auth/identity_service.py` and `kanban/auth/oidc/flow.py`.
+
 **Evidence Captured**:
-- Static and build logs (`docs/qa/KAN-27/build-or-typecheck.txt`): `ruff check` (0 errors), `ruff format --check` (1926 files formatted), `mypy` (0 issues across 1107 source files), `kanban-ctl db check-migrations` (62 migrations valid, single head `p4_23_oidc_link_intent_fk`), `lint-imports` (2 contracts kept, 0 broken across 970 files / 3432 dependencies), `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 warnings/errors), `vite build` (706 modules built in 1.26s). Section `=== 9. Check No Dashes ===` at line 71 contains no captured output below the header.
-- Unit and E2E test logs (`docs/qa/KAN-27/unit-test-results.txt`): 1 migration lifecycle test (0.62s), 6 ORM parity and RLS catalog tests (0.50s), 1 real PostgreSQL OIDC linking E2E test (0.39s), 319/319 auth Pytest tests (76.71s, 36 pre-existing `httpx` cookie deprecation warnings) with 98% total coverage (`database/models/auth.py` 100%, `kanban/api/v1/auth_identities.py` 100%, `kanban/auth/identity_service.py` 98%, `kanban/auth/oidc/flow.py` 97%), and 72/72 Vitest tests (7.81s, `cssTokensAudit.test.ts` 4/4, `PersonalSettingsPage.test.tsx` 68/68 with 98.49% statements, 95.25% branches, 99.05% functions, 100% lines, and 0 `act(...)` warnings).
-- Live full-stack R3 proof (`docs/qa/KAN-27/live-fullstack-proof.txt`) against `http://localhost:18962` (`kanban-liveqa-2`, PostgreSQL 16 `FORCE ROW LEVEL SECURITY`, real HTTPS RS256 PKCE S256 OIDC provider at `https://172.17.0.1:40185`, real LDAPS RFC 4511 BER server at `ldaps://172.17.0.1:40636`, 0 mocks, 0 `page.route`, 0 `context.route`, 0 console/page/5xx errors) and 12 Playwright screenshots in `docs/qa/KAN-27/screenshots/`.
+- Static and build logs (`/home/adamoutler/kanban/docs/qa/KAN-27/build-or-typecheck.txt`, commit `d144fb8e`, `/home/adamoutler/kanban`): `ruff check` (All checks passed), `ruff format --check` (1963 files formatted after formatting unrelated `scripts/sync_wiki_bundle.py`), `mypy` (0 issues in 1165 source files), `kanban-ctl db check-migrations` (All 62 migrations valid, single head `p4_23_oidc_link_intent_fk`), `lint-imports` (2 contracts kept, 0 broken across 983 files / 3497 dependencies), `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 errors/warnings), `vite build` (720 modules built in 1.27s), and `python3 -m scripts.check_no_dashes --all` (`0 forbidden dashes found`, exit=0).
+- Unit and E2E test logs (`/home/adamoutler/kanban/docs/qa/KAN-27/unit-test-results.txt`, rootdir `/home/adamoutler/kanban`):
+  - Migration upgrade/downgrade lifecycle (`database/tests/migrations/test_p4_23_oidc_link_intent_fk_migration.py`): 1 passed in 0.69s.
+  - ORM schema parity & RLS catalog (`test_p1_17_models.py`, `test_p1_14_rls_catalog.py`): 6 passed in 0.65s.
+  - Real PostgreSQL E2E identity linking (`kanban/tests/auth/test_identity_linking_real_pg_e2e.py`): 1 passed in 0.39s.
+  - Full Auth Pytest suite: 319 passed (36 pre-existing `httpx` cookie deprecation warnings) in 87.14s with 98% total coverage across touched auth files (`database/models/auth.py` 100%, `kanban/api/v1/auth_identities.py` 100%, `kanban/auth/identity_service.py` 98%, `kanban/auth/oidc/flow.py` 97%).
+  - Frontend Vitest suite (`cssTokensAudit.test.ts` 4 tests + `PersonalSettingsPage.test.tsx` 68 tests): 72 passed in 8.45s, with `PersonalSettingsPage.tsx` at 98.49% statements, 95.25% branches, 99.05% functions, 100% lines.
+- Live full-stack R4 proof (`/home/adamoutler/kanban/docs/qa/KAN-27/live-fullstack-proof.txt`, `main` commit `837f657d`): Executed against `http://127.0.0.1:18961` (`kanban-liveqa-1`, PostgreSQL 16 `FORCE ROW LEVEL SECURITY`, real HTTPS RS256 JWKS + PKCE S256 OIDC server at `https://172.17.0.1:40185`, real TLS + BER RFC 4511 LDAPS server at `ldaps://172.17.0.1:40636`, 0 mocks, 0 `page.route`, 0 `context.route`, 0 unexpected console errors, 0 page errors, 0 HTTP 5xx errors).
+
 **QA Cross-Validation**:
-- **Confirmed**:
-  1. All R2 backend/coverage/modal-logic defects were genuinely remediated and verified on disk: `PersonalSettingsPage.tsx` renders `data-testid="ldap-modal-error"` (`role="alert"`) inside `data-testid="ldap-credentials-modal"` (lines 1447-1455), uses a single footer `Cancel` button plus header `✕` close button (`aria-label="Close LDAP modal"`), implements `Escape` dismissal when `!isSubmittingLdap` (lines 190-202), manages initial username focus and trigger focus restoration (`ldapUsernameInputRef`, `ldapTriggerRef`), and attaches `data-label` attributes (`Provider`, `Subject / Email`, `Linked`, `Actions`) to `identities-table` cells (lines 1118-1127).
-  2. Backend code on disk (`auth_identities.py`, `identity_service.py`, `oidc/flow.py`, `auth_oidc.py`, `auth_cards_public.py`, `database/models/auth.py`, `p4_23_oidc_link_intent_fk`) matches the R3 proof and coverage logs: 319/319 Pytest at 98% coverage and 72/72 Vitest at 98.49% stmts / 100% lines satisfy the `>=95%` invariant.
-  3. Real LDAPS BER bind (401 invalid credentials + 200 valid credentials), real HTTPS OIDC link (`@alice` session preserved with `aal_level=1`), `@projadmin` AAL1 `403 AAL2_REQUIRED`, unauthenticated `link_intent_id` ignoring, and `@admin` duplicate `(issuer, sub)` conflict UI (`IDENTITY_ALREADY_LINKED`) all passed live without mocks.
-- **Challenged**:
-  1. `ui-specialist-review.md` (`STATUS: APPROVED`) minimizes a real layout defect in `docs/qa/KAN-27/screenshots/live-kan27-linked-identities-mobile-light.png` as "clip slightly at the right edge... without breaking page layout." Visual inspection of `live-kan27-linked-identities-mobile-light.png` shows the entire domain portion of both email addresses is cut off at the right card border (`alice.sso.r3@` instead of `alice.sso.r3@corp.example.test`, and `alice.ldap.r3` instead of `alice.ldap.r3@corp.example.test`) with no text wrapping or ellipsis because `PersonalSettingsPage.css` lines 872-883 style mobile `td.kb-personal-settings-td` as a single-line `flex` row (`justify-content: space-between; align-items: center`) without `flex-wrap: wrap` or `overflow-wrap: anywhere` / `min-width: 0`.
-  2. `docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-light.png` and `live-kan27-ldap-modal-desktop-dark.png` remain stale R2 captures showing the old double-`Cancel` modal header (`Cancel` in header + `Cancel` in footer), contradicting the updated RC2 modal header (`✕` close button) shown in `live-kan27-ldap-modal-error-desktop-light.png`.
-  3. `docs/qa/KAN-27/unit-test-results.txt` and `build-or-typecheck.txt` record `rootdir` paths from worktree `swarm-b-kan27-rc2-a840d95f` rather than `/home/adamoutler/kanban` on `main` `b3b0f4ba`, and `build-or-typecheck.txt` line 71 (`=== 9. Check No Dashes ===`) has no captured output.
+- **Confirmed (`api-specialist-review.md` `STATUS: APPROVED` & `ui-specialist-review.md` `STATUS: APPROVED`)**:
+  1. **R3 Medium Defect Resolved (Mobile 390x844 Email Wrapping & Label Parity)**: On-disk `kanban/web/src/features/settings/PersonalSettingsPage.css` lines 881-885 add `flex-wrap: wrap; gap: var(--space-1, 4px) var(--space-2, 8px); min-width: 0; overflow-wrap: anywhere; word-break: break-word;` on `@media (max-width: 640px) .kb-personal-settings-td`, and `PersonalSettingsPage.tsx` line 1121 sets `data-label="Subject / Account"` matching desktop `<th>Subject / Account</th>` (line 1110). Visual inspection of `live-kan27-linked-identities-mobile-light.png` confirms both `alice.sso.r4@corp.example.test` and `alice.ldap.r4@corp.example.test` wrap cleanly onto two lines inside the mobile cards with zero right-edge clipping (`scrollWidth=186, clientWidth=186, docScrollWidth=390`).
+  2. **R3 Low Defect Resolved (Refreshed Modal Screenshots & Log Output)**: Visual inspection of `live-kan27-ldap-modal-desktop-light.png` and `live-kan27-ldap-modal-desktop-dark.png` confirms both now capture the updated modal with a single footer `Cancel` button, a single header `✕` close button (`aria-label="Close LDAP modal"`), and autofocused Username input. Both `unit-test-results.txt` and `build-or-typecheck.txt` now use canonical `/home/adamoutler/kanban` paths with full stdout under `=== 9. Check No Dashes ===`.
+  3. **R3 Live Coverage Gap Resolved (Live Unlink Journey)**: `live-fullstack-proof.txt` Section 7 and `live-kan27-unlink-desktop-light.png` prove live TOTP AAL2 elevation (`POST /api/v1/auth/mfa/totp/confirm -> 200`), confirm dialog acceptance, `DELETE /api/v1/auth/identities/{id} -> 200 {"unlinked":true}` (72ms), and immediate UI row removal from 2 rows to 1 row.
+  4. **Core Backend & Security Invariants Verified On Disk**: `p4_23_oidc_link_intent_fk.up.sql` fixes `oidc_auth_requests_link_intent_id_fkey` to reference `identity_link_intents(id) ON DELETE SET NULL`; `auth_oidc.py` and `auth_cards_public.py` hardcode `link_intent_id=None` on public start/callback endpoints; `auth_identities.py` enforces `require_link_aal2` (`MAX_AAL2_AGE_SECONDS = 900`) for MFA-enrolled/admin principals while permitting zero-factor standard users; `identity_service.py` forwards `Set-Cookie` headers and handles `oidc_flow` and `ldap_service`; `oidc/flow.py` preserves caller session without calling `create_after_login` and redirects to `/settings/profile?linked=<slug>` or `/settings/profile?link_error=<code>`.
 
 ## 📸 Complete System Evidence
-**Visual Documentation**:
-- `docs/qa/KAN-27/screenshots/live-kan27-empty-providers-desktop-light.png` (1440x900 Light): Empty external providers notice + Server Admin `Configure Providers in Admin Auth Studio ->` link.
-- `docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-desktop-light.png` (1440x900 Light): `+ Connect Corp LDAP` and `+ Connect Corp SSO` buttons above `No external identities linked.`.
-- `docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-desktop-dark.png` (1440x900 Dark): Dark theme button contrast and section alignment intact.
-- `docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-tablet-light.png` (768x1024 Light): Tablet responsive layout intact.
-- `docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-mobile-light.png` (390x844 Light): Mobile vertical stacking of `+ Connect` buttons with clean padding.
-- `docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-light.png` (1440x900 Light, stale R2): Empty `Connect Corp LDAP` modal still showing two `Cancel` buttons.
-- `docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-dark.png` (1440x900 Dark, stale R2): Dark mode empty `Connect Corp LDAP` modal still showing two `Cancel` buttons.
-- `docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-error-desktop-light.png` (1440x900 Light, R3): `Connect Corp LDAP` modal with header `✕` close button, single footer `Cancel` button, and visible inline red error alert `Invalid credentials` inside the modal above `Username` (`alice`) and `Password`, with `corp-sso (OIDC)` row visible behind the backdrop.
-- `docs/qa/KAN-27/screenshots/live-kan27-linked-banner-desktop-light.png` (1440x900 Light): Green top alert `Account successfully linked (corp-sso).` with `Dismiss` button.
-- `docs/qa/KAN-27/screenshots/live-kan27-linked-banner-desktop-dark.png` (1440x900 Dark): Linked `corp-sso (OIDC)` row (`alice.sso.33yuf@corp.example.test`, `11/20/2026`, `Unlink`) with `+ Connect Corp LDAP` remaining.
-- `docs/qa/KAN-27/screenshots/live-kan27-conflict-banner-desktop-light.png` (1440x900 Light, R3): Red top alert `External identity is already linked to another account.` with `Dismiss` button after duplicate `(issuer, sub)` OIDC callback as `@admin`.
-- `docs/qa/KAN-27/screenshots/live-kan27-linked-identities-mobile-light.png` (390x844 Light, R3): Mobile card layout using `data-label` labels (`PROVIDER`, `SUBJECT / EMAIL`, `LINKED`, `ACTIONS`) for `corp-sso (OIDC)` and `corp-ldap (LDAP)`, where `SUBJECT / EMAIL` is clipped at the right edge (`alice.sso.r3@` and `alice.ldap.r3`) and `corp-ldap` wraps across two lines.
+**Visual Documentation** (all 13 screenshots in `/home/adamoutler/kanban/docs/qa/KAN-27/screenshots/` inspected via `read_file`):
+- `live-kan27-empty-providers-desktop-light.png` (1440x900 Light): Empty external providers notice + Server Admin `Configure Providers in Admin Auth Studio ->` link (`/admin/auth`), TOTP Active.
+- `live-kan27-connect-buttons-desktop-light.png` (1440x900 Light): `+ Connect Corporate LDAP` and `+ Connect Corporate SSO` buttons above `No external identities linked.`.
+- `live-kan27-connect-buttons-desktop-dark.png` (1440x900 Dark): Dark mode surface contrast and button alignment intact.
+- `live-kan27-connect-buttons-tablet-light.png` (768x1024 Light): Tablet layout cleanly padded with zero overflow (`scrollWidth=768`).
+- `live-kan27-connect-buttons-mobile-light.png` (390x844 Light): Mobile vertical stacking of `+ Connect` buttons with clean spacing (`scrollWidth=390`).
+- `live-kan27-linked-banner-desktop-light.png` (1440x900 Light): Green top alert `Account successfully linked (corp-sso-r4).` with `Dismiss` button.
+- `live-kan27-linked-banner-desktop-dark.png` (1440x900 Dark): Dark mode green top alert `Account successfully linked (corp-sso-r4).` with `Dismiss` button.
+- `live-kan27-ldap-modal-desktop-light.png` (1440x900 Light): `Connect Corporate LDAP` modal with header `✕` close button and single footer `Cancel` + `Connect` buttons, over `corp-sso-r4 (OIDC)` row.
+- `live-kan27-ldap-modal-desktop-dark.png` (1440x900 Dark): Dark mode `Connect Corporate LDAP` modal with header `✕` close button, single footer `Cancel` + `Connect` buttons, and focused Username input.
+- `live-kan27-ldap-modal-error-desktop-light.png` (1440x900 Light): Open `Connect Corporate LDAP` modal showing inline red alert `Invalid credentials` inside the dialog above `Username` (`alice`) and `Password`.
+- `live-kan27-linked-identities-mobile-light.png` (390x844 Light): Mobile card layout for `corp-sso-r4 (OIDC)` and `corp-ldap (LDAP)` with `PROVIDER`, `SUBJECT / ACCOUNT`, `LINKED`, `ACTIONS` labels; `alice.sso.r4@corp.example.test` and `alice.ldap.r4@corp.example.test` wrap cleanly onto two lines without right-edge clipping.
+- `live-kan27-conflict-banner-desktop-light.png` (1440x900 Light): Red top alert `External identity is already linked to another account.` with `Dismiss` button after duplicate `(issuer, sub)` OIDC attempt by `@admin`.
+- `live-kan27-unlink-desktop-light.png` (1440x900 Light): Post-unlink state showing TOTP Active, `+ Connect Corporate LDAP` button restored, and only `corp-sso-r4 (OIDC)` remaining in the table.
+
 **User Journey Evidence**:
-- Journey 1 (Empty state -> Connect controls -> OIDC link -> Linked banner & row): Verified end-to-end across `empty-providers`, `connect-buttons-*`, and `linked-banner-*`.
-- Journey 2 (LDAP modal -> Invalid credentials error -> Escape focus restore -> Valid LDAPS link): Verified live in `live-fullstack-proof.txt` and `live-kan27-ldap-modal-error-desktop-light.png`.
-- Journey 3 (Duplicate `(issuer, sub)` conflict banner): Verified live as `@admin` in `live-fullstack-proof.txt` and `live-kan27-conflict-banner-desktop-light.png`.
-- Journey 4 (Mobile 390x844 linked identities view): Rendered in `live-kan27-linked-identities-mobile-light.png`, exposing right-edge text clipping on email addresses.
-**Cross-Browser Comparison**: Chromium/Playwright captures only; no Firefox or WebKit browser screenshots exist in the packet.
+- Journey 1 (Empty state -> Connect buttons -> OIDC self-service link -> Linked banner & row): Verified in `empty-providers`, `connect-buttons-*`, `linked-banner-desktop-light/dark`, and `live-fullstack-proof.txt` (`session_id=c8fdfc04-5fea-4094-a90a-d4d7c02c3840`, `aal_level=1` preserved, 477ms flow).
+- Journey 2 (LDAP modal -> 401 inline error -> Escape focus restore -> Valid LDAPS bind -> Mobile card wrapping): Verified in `ldap-modal-desktop-light/dark`, `ldap-modal-error-desktop-light`, `linked-identities-mobile-light`, and `live-fullstack-proof.txt` (resultCode=49 126ms -> Escape focus restore -> resultCode=0 145ms).
+- Journey 3 (Duplicate `(issuer, sub)` conflict banner & conditional AAL2): Verified in `conflict-banner-desktop-light` and `live-fullstack-proof.txt` (`@projadmin` AAL1 -> `403 AAL2_REQUIRED`, `@admin` duplicate subject -> `302 /settings/profile?link_error=IDENTITY_ALREADY_LINKED`).
+- Journey 4 (Live Unlink): Verified in `unlink-desktop-light` and `live-fullstack-proof.txt` (`DELETE /api/v1/auth/identities/{id}` -> `200 {"unlinked":true}` in 72ms).
+
+**Cross-Browser Comparison**: Chromium/Playwright captures only across Desktop (1440x900 Light/Dark), Tablet (768x1024 Light), and Mobile (390x844 Light); no Firefox or WebKit browser screenshots exist in the packet.
 
 **What System Actually Delivers**:
-- Solid, well-tested backend and security architecture for self-service OIDC, OAuth2, and LDAPS identity linking, conditional AAL2 enforcement, session preservation, and FK integrity (`p4_23_oidc_link_intent_fk`), plus clean desktop/tablet UI and in-modal LDAP error handling.
-- On 390px mobile viewports, however, the linked identities card row (`PersonalSettingsPage.css` lines 872-883) clips long email/subject values past the right edge of the card (`live-kan27-linked-identities-mobile-light.png`), and two stale R2 screenshots remain in the packet.
+- Complete, hardened self-service OIDC, OAuth2, and LDAPS identity linking on `/settings/profile` backed by valid FK schema (`p4_23_oidc_link_intent_fk`), conditional AAL2 enforcement (`require_link_aal2`), strict session preservation without unearned AAL2 elevation, clear conflict/error surfacing, accessible modal keyboard/focus ergonomics, and clean responsive mobile wrapping.
 
 ## 🧪 Integration Testing Results
 **End-to-End User Journeys**:
-- **OIDC Self-Service Linking Journey**: **PASS** - Proven end-to-end against live PostgreSQL 16 and HTTPS RS256 PKCE S256 IdP (`302 /settings/profile?linked=corp-sso`, `session_id` and `aal_level=1` preserved, `@projadmin` AAL1 blocked with `403 AAL2_REQUIRED`, unauthenticated `link_intent_id` ignored).
-- **LDAP Self-Service Linking & Error Journey**: **PASS** - Proven end-to-end against live LDAPS BER server (`resultCode=49` -> HTTP 401 -> visible inline `ldap-modal-error`, Escape key focus restore, `resultCode=0` -> HTTP 200 -> `corp-ldap (LDAP)` row persisted).
-- **Duplicate Subject Conflict UI Journey**: **PASS** - Proven live as `@admin` (`302 /settings/profile?link_error=IDENTITY_ALREADY_LINKED`, visible banner in `live-kan27-conflict-banner-desktop-light.png`).
-- **Unlink Identity Live Journey**: **NOT EXERCISED LIVE** - Covered by Pytest and Vitest unit tests, not executed in `live-fullstack-proof.txt`.
-**Cross-Device Consistency**: **PARTIAL PASS** - Desktop (1440x900 Light/Dark) and Tablet (768x1024 Light) are clean; Mobile (390x844 Light) renders `scrollWidth=390` without page overflow, but `live-kan27-linked-identities-mobile-light.png` clips long email addresses (`alice.sso.r3@`, `alice.ldap.r3`) inside the single-line flex row.
-**Performance Validation**: `vite build` completed in 1.26s, Pytest auth suite (319 tests) in 76.71s, and Vitest (72 tests) in 7.81s; live browser page-load timing metrics were not recorded in `live-fullstack-proof.txt`.
+- **OIDC Self-Service Linking Journey**: **PASS** - Proven live against PostgreSQL 16 + HTTPS RS256 PKCE S256 IdP (`302 /settings/profile?linked=corp-sso-r4`, `session_id` and `aal_level=1` preserved, `@projadmin` AAL1 blocked with `403 AAL2_REQUIRED`, unauthenticated `link_intent_id` ignored).
+- **LDAPS Self-Service Linking & Modal Error Journey**: **PASS** - Proven live against LDAPS RFC 4511 BER server (`resultCode=49` -> `401` -> inline `ldap-modal-error`, single `Cancel` + `✕` close button, `Escape` key focus restore, `resultCode=0` -> `200`, mobile 390x844 wrapping unclipped).
+- **Duplicate Subject Conflict UI Journey**: **PASS** - Proven live as `@admin` (`302 /settings/profile?link_error=IDENTITY_ALREADY_LINKED`, visible alert banner in `live-kan27-conflict-banner-desktop-light.png`).
+- **Live Unlink Identity Journey**: **PASS** - Proven live after TOTP AAL2 step-up (`DELETE /api/v1/auth/identities/{id}` -> `200 {"unlinked":true}`, row removed and `+ Connect Corporate LDAP` restored in `live-kan27-unlink-desktop-light.png`).
+
+**Cross-Device Consistency**: **PASS** - Desktop (1440x900 Light/Dark), Tablet (768x1024 Light, `scrollWidth=768`), and Mobile (390x844 Light, `scrollWidth=390`, `clipped=false`) all render cleanly with zero horizontal overflow and zero text clipping.
+**Performance Validation**: `/settings/profile` loaded in 653ms-731ms, OIDC E2E flow in 477ms, LDAPS 401/200 in 126ms/145ms, Unlink DELETE in 72ms, `vite build` in 1.27s, Vitest (72 tests) in 8.45s, and Auth Pytest (319 tests) in 87.14s.
 **Specification Compliance**:
-- **Required (`GEMINI.md` Invariant #6 - Coverage >= 95%)**: Verified 98% backend coverage across touched modules and 98.49% stmts / 100% lines on `PersonalSettingsPage.tsx`. **PASS**.
-- **Required (`ui-specialist-review.md` - Mobile Responsive Card View & Modal Controls)**: Modal controls (`ldap-modal-error`, single `Cancel`, `✕` close, Escape + focus restore) **PASS** in code and R3 screenshot, but mobile `identities-table` cards clip email text in `live-kan27-linked-identities-mobile-light.png`, and `live-kan27-ldap-modal-desktop-*.png` still depict R2 double-`Cancel` buttons. **PARTIAL FAIL**.
+- **Problem 1 (`IdentityLinkService.start_link` & `link_ldap`)**: **PASS** - Verified on disk (`identity_service.py`, `auth_identities.py`, `p4_23_oidc_link_intent_fk.up.sql`) and live.
+- **Problem 2 (Session Preservation, Unauthenticated `link_intent_id` Hardening, Conditional AAL2, Conflict Handling)**: **PASS** - Verified on disk (`oidc/flow.py`, `auth_oidc.py`, `auth_cards_public.py`, `auth_identities.py`) and live.
+- **Problem 3 (`+ Connect` Controls, LDAP Modal Ergonomics, Mobile Card Wrapping)**: **PASS** - Verified on disk (`PersonalSettingsPage.tsx`, `PersonalSettingsPage.css`) and across all 13 live screenshots.
+- **Coverage & Specialist Gates (`GEMINI.md`)**: **PASS** - 98% backend coverage (319/319), 98.49% stmts / 100% lines frontend coverage (72/72), both `api-specialist-review.md` and `ui-specialist-review.md` `APPROVED`, 0 forbidden dashes.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-1. None of the R2 critical blockers remain (FK migration, 95%+ coverage, live LDAPS flow, conflict screenshot, in-modal LDAP error, Escape/focus handling, and `data-label` attributes are all resolved).
+- None. All R2 and R3 findings (schema FK migration, 95%+ test coverage, live LDAPS flow, live unlink journey, inline modal error, single `Cancel` + `✕` modal header, `Escape` + focus restoration, mobile 390x844 email wrapping and `Subject / Account` label parity, refreshed screenshots, and canonical `/home/adamoutler/kanban` logs with `check_no_dashes` output) are resolved and verified.
 **New Issues Discovered**:
-1. **Medium - Mobile Linked Identities Card Text Clipping (`PersonalSettingsPage.css` lines 872-883)**: In `live-kan27-linked-identities-mobile-light.png`, `td.kb-personal-settings-td` uses `display: flex; justify-content: space-between; align-items: center` without `flex-wrap: wrap` or `min-width: 0; overflow-wrap: anywhere` on mobile (`<= 640px`), causing `alice.sso.r3@corp.example.test` to clip to `alice.sso.r3@` and `alice.ldap.r3@corp.example.test` to clip to `alice.ldap.r3` (cutting off the domain completely). Also note `data-label="Subject / Email"` on line 1121 of `PersonalSettingsPage.tsx` differs slightly from desktop header `Subject / Account` on line 1110.
-2. **Low - Stale R2 Modal Screenshots & Pre-Merge Log Hygiene**: `docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-light.png` and `-dark.png` still show the superseded R2 modal with two `Cancel` buttons; `build-or-typecheck.txt` line 71 has no stdout under `=== 9. Check No Dashes ===`; `unit-test-results.txt` and `build-or-typecheck.txt` were captured from worktree `swarm-b-kan27-rc2-a840d95f` rather than `/home/adamoutler/kanban` `main` `b3b0f4ba`.
-**Critical Issues**:
-- None.
-**Medium Issues**:
-1. Mobile 390x844 linked identities card clips long email/subject values at the right edge (`live-kan27-linked-identities-mobile-light.png`, `PersonalSettingsPage.css` lines 872-883).
+- **Informational (Non-blocking)**: `changed-files-manifest.txt` repeats lines 40-60 for `docs/qa/KAN-27/*` artifacts; `build-or-typecheck.txt` records `d144fb8e` (prior to `837f657d` live QA artifact commit); Playwright captures are Chromium-only (no Firefox/WebKit captures).
+**Critical Issues**: None.
+**Medium Issues**: None.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B+
-**Design Implementation Level**: Good
-**System Completeness**: 95%
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A
+**Design Implementation Level**: Excellent
+**System Completeness**: 100%
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. **Fix Mobile Linked Identities Card Text Wrapping/Overflow (`PersonalSettingsPage.css`)**: Update `@media (max-width: 640px)` rules for `.kb-personal-settings-td` (e.g., `flex-wrap: wrap` or `min-width: 0; overflow-wrap: anywhere; text-align: right`) so full email/subject identifiers render without right-edge clipping in `live-kan27-linked-identities-mobile-light.png`.
-2. **Refresh Stale Screenshots and Log Output in `docs/qa/KAN-27/`**: Re-capture `live-kan27-linked-identities-mobile-light.png` (proving unclipped email rendering) plus `live-kan27-ldap-modal-desktop-light.png` and `live-kan27-ldap-modal-desktop-dark.png` (replacing the stale R2 double-`Cancel` captures with the RC2 `✕` close-button modal), and re-run `build-or-typecheck.txt` / `unit-test-results.txt` on `main` with captured stdout under `=== 9. Check No Dashes ===`.
+- None. All 3 scoped problems, security boundaries, database migration reversibility, test coverage (`>=95%`), static checks, and live zero-mock E2E journeys are verified and passing.
 
-**Timeline for Production Readiness**: 0.25-0.5 day (one small CSS fix and screenshot/log refresh).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready for immediate merge/closure.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Eliminate mobile right-edge text clipping on `identities-table` cards at 390x844.
-- Ensure all screenshots and verbatim static/test logs in `docs/qa/KAN-27/` reflect the current `main` commit with zero stale R2 captures or empty log sections.
+- Optional future polish: add multi-browser (Firefox/WebKit) Playwright smoke runs and keep `changed-files-manifest.txt` deduplicated when regenerating artifact lists.
 **Quality Targets**:
-- 100% readable, unclipped email/subject values at 390x844 mobile width.
-- 0 stale screenshots and 0 empty command output sections in `docs/qa/KAN-27/`.
-- Maintain `>=95%` backend and frontend coverage and 0 console/page/5xx errors.
+- Maintain `>=95%` unit test coverage, zero inline styles (`style-src 'self'`), zero em/en-dashes, and zero console/5xx errors in future auth settings changes.
 **Evidence Requirements**:
-- Updated `live-kan27-linked-identities-mobile-light.png` showing full unclipped email addresses inside mobile cards.
-- Updated `live-kan27-ldap-modal-desktop-light.png` and `live-kan27-ldap-modal-desktop-dark.png` showing the single footer `Cancel` + header `✕` close button.
-- Updated `build-or-typecheck.txt` and `unit-test-results.txt` captured on `main` including `check_no_dashes` output.
+- None outstanding for KAN-27 closure; all R4 evidence is archived in `/home/adamoutler/kanban/docs/qa/KAN-27/`.
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
 **Evidence Location**: docs/qa/KAN-27/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (Grade-A READY certified)

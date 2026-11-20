@@ -1,104 +1,74 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: None (strict read-only, passive forensic Clean-Room Reality-Checker audit per instructions: zero shell commands executed, zero URLs visited, zero files modified). Audited all files in `docs/qa/KAN-34/` and cross-checked on-disk source/test files at commit `b3b0f4ba` (`main`).
+**Commands Executed**: None (strict read-only, passive forensic Clean-Room R2 Reality Check per instructions: zero shell commands executed, zero URLs visited, zero files modified). Inspected all verification artifacts in `/home/adamoutler/kanban/docs/qa/KAN-34/`, all 9 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-34/screenshots/`, and cross-checked on-disk source and test files in `/home/adamoutler/kanban`.
 **Evidence Captured**:
-- QA verification packet: `docs/qa/KAN-34/message-to-reality-checker.md`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`
-- Specialist reviews: `docs/qa/KAN-34/api-specialist-review.md` (`STATUS: APPROVED`), `docs/qa/KAN-34/ui-specialist-review.md` (`STATUS: APPROVED`)
-- Visual captures (4 viewport-only PNGs): `docs/qa/KAN-34/screenshots/live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, `live-mobile.png`
-- Cross-checked implementation files: `kanban/ops/sbom.py`, `kanban/api/v1/system.py`, `kanban/api/v1/__init__.py`, `kanban/app.py`, `Dockerfile`, `NOTICE`, `license-allowlist.toml`, `kanban/web/vite.config.ts`, `kanban/web/package.json`, `kanban/web/build/sbom.ts`, `kanban/web/src/features/about/aboutApi.ts`, `kanban/web/src/features/about/AboutPage.tsx`, `kanban/web/src/features/about/AboutPage.css`, `kanban/web/src/app/routes.tsx`, `kanban/web/src/app/AppShell.tsx`, `kanban/web/src/app/Topbar.tsx`, `kanban/web/src/app/Sidebar.tsx`, `kanban/web/src/app/Sidebar.css`, `kanban/web/src/app/CommandPalette.tsx`, `kanban/web/src/features/settings/PersonalSettingsPage.tsx`, `kanban/web/src/features/settings/PersonalSettingsPage.css`, `kanban/web/src/styles/theme.css`, `kanban/web/src/styles/tokens.css`, `kanban/web/src/styles/__tests__/cssTokensAudit.test.ts`, `kanban/tests/ops/test_sbom.py`, `kanban/tests/api/test_system_about.py`, `kanban/web/build/__tests__/sbom.test.ts`, `kanban/web/src/features/about/__tests__/aboutApi.test.ts`, `kanban/web/src/features/about/__tests__/AboutPage.test.tsx`, `kanban/web/src/app/__tests__/AboutNavigation.test.tsx`.
+- QA verification packet: `docs/qa/KAN-34/message-to-reality-checker.md`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, and prior R1 `reality-checker-report.md`
+- Specialist reviews: `docs/qa/KAN-34/api-specialist-review.md` (`STATUS: APPROVED` on `main` commit `837f657d`) and `docs/qa/KAN-34/ui-specialist-review.md` (`STATUS: APPROVED` on `main` commit `837f657d`)
+- Visual captures (9 PNGs in `docs/qa/KAN-34/screenshots/`): `live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, `live-mobile.png`, `live-nav-sidebar-footer.png`, `live-nav-topbar-menu.png`, `live-nav-command-palette.png`, `live-sbom-search-scope.png`, `live-notice-copy.png`
+- On-disk implementation and test files cross-checked: `kanban/web/src/features/about/AboutPage.tsx`, `kanban/web/src/features/about/AboutPage.css`, `kanban/web/src/features/about/__tests__/AboutPage.test.tsx`, `kanban/api/v1/system.py`, `kanban/api/v1/__init__.py`, `kanban/ops/sbom.py` (note: prompt path `kanban/services/sbom.py` does not exist on disk; `kanban/ops/sbom.py` is the actual SBOM module), `kanban/web/build/sbom.ts`, `kanban/web/src/app/Sidebar.tsx`, `kanban/web/src/app/Topbar.tsx`, `kanban/web/src/app/CommandPalette.tsx`, `kanban/web/src/app/routes.tsx`, `kanban/web/src/app/AppShell.tsx`, `kanban/web/src/features/settings/PersonalSettingsPage.tsx`, `kanban/web/src/styles/theme.css`.
 
 **QA Cross-Validation**:
-- **Backend API & Test Metrics (Confirmed)**: `unit-test-results.txt` shows 29/29 Pytest passed (97% combined coverage: `system.py` 100%, `sbom.py` 97%, 1 pre-existing FastAPI warning on `kanban/api/v1/agent_definitions.py`) and 25/25 Vitest passed (100% statements/functions/lines, 97.63% branch coverage, 0 warnings). `build-or-typecheck.txt` shows ruff, mypy, lint-imports (2 kept, 0 broken), `scripts.license_gate` (`python=116 node=1 violations=0`), `check_no_dashes` (with `KANBA-205/mcp-transcript.txt` skipped >5 MiB), `tsc -b`, `eslint`, and `vite build` (1.65s) passed.
-- **UI Specialist Claims (Challenged - Premature Approval)**: `ui-specialist-review.md` claimed "The interface enforces WCAG AA compliance" and "satisfies all aesthetic, ergonomic, mobile responsive, and design system requirements." Direct visual inspection of the 4 PNG screenshots disproves both claims:
-  1. `live-mobile.png` shows the `Apache-2.0` pill wrapping across two lines (`Apache-` / `2.0`) and **overflowing past the right edge of the hero card** because `.kb-about-branding` lacks `flex-wrap: wrap` and `.kb-about-badge` lacks `white-space: nowrap`.
-  2. `live-desktop-dark.png` shows the REST API card titles rendered in saturated dark blue (`--accent-primary: #1d4ed8` from `theme.css` line 72) against dark canvas `#0f1115` (`--bg-canvas`), creating visibly poor dark-mode contrast (~2.6:1, below WCAG AA 4.5:1).
-  3. All 4 screenshots are viewport-clipped top captures that omit the SBOM table body, the entire Apache-2.0 License / Third-Party NOTICE viewer, and all 4 buried navigation UI surfaces.
+- **R1 Blockers Cross-Checked and Confirmed Resolved**:
+  1. **Mobile hero overflow & badge wrapping (`AboutPage.css`, `live-mobile.png`)**: Confirmed `.kb-about-branding` has `flex-wrap: wrap` (line 54), `.kb-about-badge` has `white-space: nowrap` (line 86), and `.kb-about-table-filters` has `flex-wrap: wrap` (line 305). `live-mobile.png` shows `v2.0.0` and `Apache-2.0` intact on one line inside the hero card without overflow (`scrollWidth: 390 == innerWidth: 390` in `live-fullstack-proof.txt` line 40).
+  2. **Duplicate `👍` branding (`AboutPage.tsx`, all hero screenshots)**: Confirmed redundant `<span className="kb-about-logo">👍</span>` was removed; `AboutPage.tsx` line 127 renders `<h1 className="kb-about-title">{platform}</h1>`. All 4 viewport screenshots render a single `👍kanban` heading (`hasDuplicateThumbs: false`).
+  3. **Dark mode WCAG AA contrast on API card titles (`AboutPage.css`, `theme.css`, `live-desktop-dark.png`)**: Confirmed `AboutPage.css` lines 218-220 add `[data-theme="dark"] .kb-about-api-card-title { color: var(--focus-ring); }` (`#3b82f6` in `theme.css` line 77). `live-desktop-dark.png` visually confirms bright, legible blue card titles (`rgb(59, 130, 246)`) against dark `#0f1115` canvas (`live-fullstack-proof.txt` line 38).
+  4. **Dynamic ecosystem filter counts (`AboutPage.tsx`, `AboutPage.test.tsx`, `live-desktop-light.png`, `live-sbom-search-scope.png`)**: Confirmed `AboutPage.tsx` lines 32-52 compute `pythonCount` and `webCount` dynamically via `useMemo` based on `scopeFilter`. `live-desktop-light.png` (`Scope: Runtime Only`) shows `Python (78)` and `Web (24)`, while `live-sbom-search-scope.png` (`Scope: All (Inc. Dev)`) shows `Python (78)` and `Web (40)`.
+  5. **SBOM docstring alignment (`kanban/ops/sbom.py`)**: Confirmed stale `pnpm-lock.yaml` claim was removed and `_parse_web_package_json` (lines 472-503) documents `package.json` fallback with local `node_modules` and hoisted `../../node_modules` inspection matching `kanban/web/build/sbom.ts`.
+  6. **Test & Static Gate Logs (`unit-test-results.txt`, `build-or-typecheck.txt`)**: Confirmed 29/29 Pytest passed in 16.62s with 98% coverage (`system.py` 100%, `sbom.py` 97%, 1 pre-existing FastAPI duplicate operation ID warning in `agent_definitions.py`) and 25/25 Vitest passed in 4.36s with 100% lines / 97.2% branch coverage and 0 warnings. Ruff check/format, mypy, lint-imports (2 kept, 0 broken), `scripts.license_gate` (`python=116 node=1 violations=0`), `check_no_dashes`, `tsc -b`, `eslint`, and `vite build` (1.52s) all passed.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots: None are full-page captures; only 4 viewport-clipped captures exist: `docs/qa/KAN-34/screenshots/live-desktop-light.png`, `docs/qa/KAN-34/screenshots/live-desktop-dark.png`, `docs/qa/KAN-34/screenshots/live-tablet.png`, `docs/qa/KAN-34/screenshots/live-mobile.png`.
-- User journey evidence: Text-only transcript in `docs/qa/KAN-34/live-fullstack-proof.txt` (no before/after interaction screenshots for Topbar menu, Sidebar footer, CommandPalette, PersonalSettings footer, SBOM filters/search/scope toggle, or License/NOTICE tabs + copy button).
-- Cross-browser comparison: Single Chromium/Playwright run only; no cross-browser screenshots.
+- Full system / device screenshots: `live-desktop-light.png` (1440x900), `live-desktop-dark.png` (1440x900), `live-tablet.png` (768x1024), `live-mobile.png` (390x844).
+- User journey & interaction evidence: `live-nav-sidebar-footer.png`, `live-nav-topbar-menu.png`, `live-nav-command-palette.png`, `live-sbom-search-scope.png`, `live-notice-copy.png`.
+- Cross-browser comparison: Single Chromium/Playwright live verification run against `http://127.0.0.1:18962` at commit `837f657d`.
 
 **What System Actually Delivers**:
-- **Backend & SBOM Engine (Solid)**: `kanban/ops/sbom.py` collects Python runtime packages via `importlib.metadata.distributions()`, loads `dist/sbom-web.json` (emitted by `generateSbomWebPlugin` in `kanban/web/build/sbom.ts`), evaluates licenses against `ALLOW_SET` / `DENY_PREFIXES` / `license-allowlist.toml`, emits valid CycloneDX 1.5 JSON (`bomFormat="CycloneDX"`, `specVersion="1.5"`), and reads `LICENSE`/`NOTICE` (copied into `/opt/kanban/` by `Dockerfile` line 48). `kanban/api/v1/system.py` gates `/api/v1/system/about` and `/api/v1/system/sbom` behind `Depends(get_principal)` (401 unauthenticated) and sets `X-Content-Type-Options: nosniff` + attachment `Content-Disposition` on `?download=true`. `/api/docs`, `/api/redoc`, and `/api/openapi.json` resolve 200 in `kanban/app.py`.
-- **Visual Quality (Mixed - Desktop Light Good, Dark & Mobile Broken)**:
-  - `live-desktop-light.png` renders cleanly above the fold: breadcrumb `kanban / About`, hero card, tagline, SBOM download CTA, 3 REST API cards, 6 metric cards, filter bar, and the first SBOM row (`alembic`), though it shows a redundant double thumbs-up (`👍 👍kanban`) because `AboutPage.tsx` lines 103-106 render `<span className="kb-about-logo">👍</span>` alongside `<h1>{platform}</h1>` (`👍kanban`).
-  - `live-desktop-dark.png` suffers low contrast on the 3 API card titles (`#1d4ed8` on `#0f1115`).
-  - `live-tablet.png` wraps the API cards (2+1 grid) and metrics (3+3 grid) cleanly, though the bottom row of metrics is clipped at the viewport edge and the SBOM table is off-screen.
-  - `live-mobile.png` has a broken hero card layout: the `Apache-2.0` badge splits across lines and protrudes outside the card border, while `👍` and `kanban` wrap awkwardly beside the duplicate `👍` logo icon.
-- **Misleading Filter Count & Unproven Bottom Half**: In `live-desktop-light.png`, the filter button reads `Web (40)` (from `sbom_summary.web_components`) even though `Scope: Runtime Only` is active and only 24 runtime web rows are actually shown (`live-fullstack-proof.txt` line 24: `all=102, python=78, node=24` vs `toggledScope=118`). Additionally, neither the SBOM table body nor the License/NOTICE viewer appears in any screenshot.
+- **Buried Navigation Entry Points**: `live-nav-sidebar-footer.png` shows `📖 Docs` and muted `ℹ️ v2.0.0` in the bottom-left sidebar footer (`Sidebar.tsx` lines 1014-1024). `live-nav-topbar-menu.png` shows the user avatar menu open with `ℹ️ About 👍kanban` positioned directly above the divider and `🚪 Log out` (`Topbar.tsx` lines 593-608). `live-nav-command-palette.png` shows `Cmd+K` search for `About 👍kanban` matching `ℹ️ About 👍kanban (License, API Docs & SBOM)` (`CommandPalette.tsx` lines 363-371). `PersonalSettingsPage.tsx` (lines 1149-1157) and `routes.tsx` (`/about`, `/settings/about` redirect, lines 2033-2055) are verified on disk and in `live-fullstack-proof.txt`.
+- **Desktop Light & Dark (`live-desktop-light.png`, `live-desktop-dark.png`)**: Clean `kanban / About` breadcrumb, hero card with single `👍kanban` heading, `v2.0.0` and `Apache-2.0` badges, `Download CycloneDX 1.5 SBOM` primary button, italic tagline `"The difference between a swarm and an Agile team is a kanban."`, 3 REST API cards (`/api/docs`, `/api/redoc`, `/api/openapi.json`), 6 metric cards (`118` total, `78` Python, `40` Web, `117` permissive, `1` allowlisted, `0` denied), search/filter bar with `Web (24)`, and crisp dark-mode blue card titles (`#3b82f6` on `#0f1115`).
+- **Tablet & Mobile (`live-tablet.png`, `live-mobile.png`)**: Tablet cleanly wraps the 3 API cards into a 2+1 grid and 6 metrics into a 3+3 grid. Mobile (390x844) contains `👍kanban`, `v2.0.0`, `Apache-2.0`, the wrapped `Download CycloneDX 1.5 SBOM` button, tagline, and stacked API cards inside the card boundaries with zero horizontal overflow.
+- **SBOM Interactive Filtering & Verbatim License/NOTICE Viewer (`live-sbom-search-scope.png`, `live-notice-copy.png`)**: `live-sbom-search-scope.png` demonstrates `Scope: All (Inc. Dev)` updating the filter button to `Web (40)` and search `"fastapi"` filtering the table to 1 matching row (`fastapi 0.162.5 python MIT ALLOW required`). `live-notice-copy.png` shows the populated SBOM table rows (`annotated-types` through `cffi`) and the bottom tabbed viewer with `Third-Party NOTICE` active, verbatim NOTICE text rendered, and `Copied!` button confirmation state.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PARTIAL / INCOMPLETE VISUAL PROOF - `live-fullstack-proof.txt` reports passing text assertions against `http://localhost:18963` (401 unauth, 200 `/about` and `/sbom?download=true`, 200 `/api/docs`, `/api/redoc`, `/api/openapi.json`, navigation via `sidebar-about-link`, `topbar-about-link`, `personal-settings-about-link`, `Cmd+K`, `/settings/about` redirect, SBOM search/filters, License/NOTICE tabs, 0 console/page/5xx/CSP errors), and `routes.tsx`/`Topbar.tsx`/`Sidebar.tsx`/`CommandPalette.tsx`/`PersonalSettingsPage.tsx` confirm code wiring on disk. However, zero screenshots exist for any navigation entry point, filter interaction, scope toggle, or license tab/copy flow.
-**Cross-Device Consistency**: FAIL - `live-desktop-light.png` passes top-fold layout, `live-desktop-dark.png` fails dark-mode link contrast, `live-tablet.png` clips mid-metrics with no table screenshot verifying `.kb-about-table-wrapper` horizontal scroll, and `live-mobile.png` fails hero badge containment (overflows right border of `.kb-about-hero`) and does not reach the filter bar (`.kb-about-table-filters` in `AboutPage.css` line 296 also lacks `flex-wrap: wrap` for narrow viewports).
-**Performance Validation**: UNMEASURED - No `test-results.json` or page load timing metrics exist in `docs/qa/KAN-34/` (only unit test durations 15.38s Pytest / 4.19s Vitest and Vite build 1.65s).
-**Specification Compliance**: PARTIAL PASS / NEEDS WORK -
-- **Tagline, Swagger/ReDoc/OpenAPI links, Apache-2.0 License, CycloneDX 1.5 SBOM, Auth 401, Buried Nav Routes**: Verified in backend/frontend code (`kanban/ops/sbom.py`, `kanban/api/v1/system.py`, `routes.tsx`, `Topbar.tsx`, `Sidebar.tsx`, `CommandPalette.tsx`, `PersonalSettingsPage.tsx`) and live transcript.
-- **Note on `pnpm-lock.yaml` & Transitive Deps**: `message-to-reality-checker.md` (line 18) and `kanban/ops/sbom.py` (line 6) claim fallback to `pnpm-lock.yaml`, and `license-allowlist.toml` (lines 34-39) lists transitive dependency `elkjs`. On disk, `kanban/web/build/sbom.ts` and `kanban/ops/sbom.py` (`_parse_web_package_json`) only read direct `dependencies` and `devDependencies` from `package.json`, never `pnpm-lock.yaml`, and `_parse_web_package_json` does not check hoisted `../../node_modules` as `build/sbom.ts` does.
-- **Responsive UI & WCAG AA**: FAIL on mobile hero card overflow (`live-mobile.png`) and dark-mode card title contrast (`live-desktop-dark.png`).
+**End-to-End User Journeys**: PASS - `live-fullstack-proof.txt` plus the 9 live screenshots verify unauthenticated 401 gating on `/api/v1/system/about`, authenticated 200 responses, CycloneDX 1.5 SBOM download with `X-Content-Type-Options: nosniff` and `Content-Disposition: attachment; filename="thumbs-up-kanban-sbom-cdx-1.5.json"`, 200 resolution on `/api/docs`, `/api/redoc`, and `/api/openapi.json`, navigation via Sidebar footer, Topbar menu, CommandPalette, PersonalSettings link, and `/settings/about` redirect, SBOM search/scope filtering, and License/NOTICE tab switching with clipboard copy, with 0 console errors, 0 page errors, 0 5xx responses, and 0 CSP violations.
+**Cross-Device Consistency**: PASS - Desktop Light (1440x900), Desktop Dark (1440x900), Tablet (768x1024), and Mobile (390x844) all report `scrollWidth === innerWidth` in `live-fullstack-proof.txt` and show clean visual containment in the 4 device screenshots.
+**Performance Validation**: PASS - Measured live timings in `live-fullstack-proof.txt`: `GET /api/v1/system/about` 8ms, `GET /api/v1/system/sbom?download=true` 13ms, `/api/docs` 6ms, `/api/redoc` 5ms, `/api/openapi.json` 11ms, initial `/projects/KAN/issues?layout=board` load 999ms, and Sidebar navigation click to `/about` 117ms (all well under 3s).
+**Specification Compliance**: PASS - Tagline, Swagger/ReDoc/OpenAPI links, verbatim Apache-2.0 LICENSE and NOTICE viewer, CycloneDX 1.5 SBOM export, 401 auth boundary, zero new runtime dependencies (`license_gate` 0 violations), >=95% unit test coverage (98% Pytest, 100% lines / 97.2% branch Vitest), canonical CSS tokens with zero inline styles, and zero em/en-dashes are all verified on disk and in live telemetry.
 
 ## 📊 Comprehensive Issue Assessment
-**Issues from QA Still Present**:
-1. **Mobile hero badge overflow and wrapping** (`live-mobile.png`, `AboutPage.css` lines 51-85): QA missed that `Apache-2.0` wraps onto two lines and overflows past the right border of `.kb-about-hero`.
-2. **Dark mode contrast failure on API doc card titles** (`live-desktop-dark.png`, `AboutPage.css` line 210, `theme.css` line 72): QA claimed WCAG AA compliance despite `--accent-primary: #1d4ed8` on `#0f1115` (`--bg-canvas`).
-3. **Missing full-page and interaction screenshot evidence** (`docs/qa/KAN-34/screenshots/`): QA captured only top-of-page viewport slices, leaving the SBOM table body, License/NOTICE viewer, and buried navigation triggers visually unproven.
-
+**Issues from QA Still Present**: None. All 5 R1 visual, UX, and documentation blockers (`live-mobile.png` badge overflow, duplicate `👍` brand icon, dark-mode API card title contrast, static filter button counts, and `sbom.py` docstring drift) plus the missing interaction/below-the-fold screenshot proof are verified resolved.
 **New Issues Discovered**:
-1. **Duplicate `👍` logo rendering** (`AboutPage.tsx` lines 103-106, visible in all 4 PNGs): Renders `👍 👍kanban` on desktop/tablet and misaligns `👍` beside wrapped `👍\nkanban` on mobile.
-2. **Scope-mismatched filter button count** (`AboutPage.tsx` lines 263, 271, visible in `live-desktop-light.png`): Displays `Web (40)` while `Scope: Runtime Only` hides 16 `dev` dependencies (rendering 24 rows per `live-fullstack-proof.txt` line 24).
-3. **Missing `flex-wrap: wrap` on `.kb-about-table-filters`** (`AboutPage.css` lines 296-300): Filter pills (`All Ecosystems`, `Python (78)`, `Web (40)`, `Scope: Runtime Only`) cannot wrap on narrow mobile screens (~375px).
-4. **Inaccurate `pnpm-lock.yaml` fallback claim & redundant response aliases**: `sbom.py` `_parse_web_package_json` does not parse `pnpm-lock.yaml` nor inspect hoisted `../../node_modules`; `SystemAboutResponse` (`system.py` lines 278-279) duplicates full `LICENSE` and `NOTICE` strings in `license`/`notice` and `license_text`/`notice_text`.
-
-**Critical Issues** (Must-fix before production consideration):
-1. Fix mobile hero layout overflow in `AboutPage.css` / `AboutPage.tsx` (`flex-wrap: wrap` on `.kb-about-branding`, `white-space: nowrap` on `.kb-about-badge`, remove duplicate `👍` icon or strip duplicate prefix so `👍kanban` does not render as `👍 👍kanban`).
-2. Fix dark-mode contrast on `.kb-about-api-card-title` in `AboutPage.css` (use a WCAG AA high-contrast dark-mode link/accent token such as `var(--kb-color-accent)` / `var(--focus-ring)` `#3b82f6` or lighter blue/primary foreground rather than `#1d4ed8` on `#0f1115`).
-3. Capture full-page and interaction Playwright screenshots proving the SBOM table, License/NOTICE viewer, Copy License state, mobile filter bar wrapping, and buried navigation entry points.
-
-**Medium Issues** (Should-fix for better quality):
-1. Compute dynamic runtime/all counts for the `Python (...)` and `Web (...)` filter buttons in `AboutPage.tsx` so button labels match the active `scopeFilter` (e.g., `Web (24)` when `Scope: Runtime Only` is active, `Web (40)` when `Scope: All (Inc. Dev)` is active).
-2. Add `flex-wrap: wrap` to `.kb-about-table-filters` in `AboutPage.css` so filter buttons wrap cleanly on mobile viewports.
-3. Align `sbom.py` docstrings/verification docs with actual `package.json` fallback behavior (or implement `pnpm-lock.yaml` parsing if transitive web dependencies like `elkjs` are required in SBOM), and consider deprecating duplicate `license_text`/`notice_text` payload fields in `system.py`.
+- None blocking. Two minor non-blocking observations for record accuracy:
+  1. Note on path naming: the R2 audit prompt references `kanban/services/sbom.py`, which does not exist; the implemented module is `kanban/ops/sbom.py`.
+  2. `SystemAboutResponse` (`kanban/api/v1/system.py` lines 276-279) retains alias fields `license_text`/`notice_text` alongside `license`/`notice`, and `unit-test-results.txt` / `build-or-typecheck.txt` were captured in the RC1 worktree prior to the `main` (`837f657d`) live full-stack run (with source parity directly verified on disk in `/home/adamoutler/kanban`).
+**Critical Issues**: None.
+**Medium Issues**: None.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B- (Strong backend SBOM/API implementation and test coverage, undercut by visible mobile overflow, dark-mode contrast defect, and incomplete visual QA evidence)
-**Design Implementation Level**: Basic (clean light desktop above-the-fold layout, but unverified below the fold and broken on mobile/dark edge cases)
-**System Completeness**: 85% (Backend API, CycloneDX 1.5 generator, routing, buried links, and unit tests are solid; responsive polish, dark-mode contrast, and full-page/interaction visual proof are incomplete)
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A
+**Design Implementation Level**: Excellent
+**System Completeness**: 100%
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Fix `.kb-about-branding` wrapping, `.kb-about-badge` `white-space: nowrap`, `.kb-about-table-filters` `flex-wrap: wrap`, and duplicate `👍 👍kanban` branding in `kanban/web/src/features/about/AboutPage.tsx` and `AboutPage.css` (evidenced by `Apache-2.0` badge overflow and wrapped `👍kanban` in `docs/qa/KAN-34/screenshots/live-mobile.png`).
-2. Fix dark-mode WCAG AA contrast on `.kb-about-api-card-title` in `kanban/web/src/features/about/AboutPage.css` (evidenced by dark `#1d4ed8` text on `#0f1115` card background in `docs/qa/KAN-34/screenshots/live-desktop-dark.png`).
-3. Update `Python (...)` / `Web (...)` filter button counts in `kanban/web/src/features/about/AboutPage.tsx` to reflect `scopeFilter` accurately (evidenced by `Web (40)` label vs 24 runtime rows in `live-desktop-light.png` and `live-fullstack-proof.txt` line 24).
-4. Re-run live Playwright verification and save full-page screenshots plus interaction captures (Topbar menu, Sidebar footer, CommandPalette, SBOM filters/table, License/NOTICE tabs) in `docs/qa/KAN-34/screenshots/`.
+1. None. All R1 fixes and R2 evidence requirements are satisfied.
 
-**Timeline for Production Readiness**: 1 short revision cycle (estimated 1-2 hours for CSS/TSX fixes, unit test update, and full-page Playwright re-capture).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready now for ticket closure and deployment promotion.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Responsive containment on 375px mobile (`live-mobile.png`) for both hero badges and SBOM filter controls.
-- Dark-mode text contrast on API documentation card titles (`live-desktop-dark.png`).
-- Eliminating the duplicate `👍` icon before `👍kanban` and syncing ecosystem button counts with active scope.
-- Capturing full-page (`fullPage: true`) and interactive-state screenshots rather than top-fold viewport crops.
-
+- Optional future cleanup: deprecate redundant `license_text`/`notice_text` payload aliases in `kanban/api/v1/system.py` once all callers standardize on `license`/`notice`.
 **Quality Targets**:
-- Zero element overflow across 1920x1080, 768x1024, and 375x667 viewports.
-- WCAG AA contrast (>= 4.5:1) verified in both light and dark modes.
-- Maintain >=95% Pytest and Vitest coverage with 0 warnings/errors across static gates.
-- Page load and API response timing metrics recorded in `docs/qa/KAN-34/`.
-
+- Maintain >=95% backend and frontend unit test coverage, zero CSS token/CSP violations, and zero copyleft license gate violations.
 **Evidence Requirements**:
-- Updated full-page screenshots: `live-desktop-light.png`, `live-desktop-dark.png`, `live-tablet.png`, `live-mobile.png` showing the entire `/about` page down through the Apache-2.0 License / NOTICE viewer.
-- Interaction screenshots showing: (1) Topbar/Sidebar/CommandPalette buried entry points, (2) SBOM search/filter + `Scope: All (Inc. Dev)` state, and (3) Third-Party NOTICE tab + `Copied!` feedback.
-- Updated `live-fullstack-proof.txt` including measured page load timings.
+- Satisfied in `docs/qa/KAN-34/` (`unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`, and 9 PNG captures in `docs/qa/KAN-34/screenshots/`).
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
 **Evidence Location**: docs/qa/KAN-34/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (R2 PASS)

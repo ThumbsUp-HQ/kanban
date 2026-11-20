@@ -1,29 +1,48 @@
+=== KAN-34 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, commit 837f657d) ===
+Timestamp: 2026-11-20T18:37:23.294Z
 
-=== Problem 1 & 2: Unauthenticated 401 + Authenticated /api/v1/system/about, /sbom, Swagger/ReDoc/OpenAPI ===
-Unauthenticated GET /api/v1/system/about -> HTTP 401 body={"type":"urn:kanban:problem:AUTHENTICATION_REQUIRED","title":"Authentication Required","status":401,"code":"AUTHENTICATION_REQUIRED","request_id":"c5e880891916449785c7cda2c3bdc149"}
-Authenticated GET /api/v1/system/about -> HTTP 200
+--- API & OpenAPI Verification ---
+Unauthenticated GET /api/v1/system/about -> HTTP 401 (18ms) body={"type":"urn:kanban:problem:AUTHENTICATION_REQUIRED","title":"Authentication Required","status":401,"code":"AUTHENTICATION_REQUIRED","request_id":"09fc96b46974482b9ddcf1e2a800b52a"}
+
+--- Bootstrap & Auth ---
+GET /api/v1/setup/status -> HTTP 200 (6ms) {"initialized":true}
+POST /api/v1/auth/local/login -> HTTP 200 (140ms) status=mfa_required
+POST /api/v1/auth/mfa/verify -> HTTP 200 (26ms)
+GET /api/v1/projects/KAN/issues -> HTTP 200 (81ms) existingCount=5
+
+Authenticated GET /api/v1/system/about -> HTTP 200 (8ms)
   platform=👍kanban, slug=thumbs-up-kanban, version=2.0.0, license_spdx=Apache-2.0
   tagline=The difference between a swarm and an Agile team is a kanban.
   api_docs_urls={"swagger_ui":"/api/docs","redoc":"/api/redoc","openapi_json":"/api/openapi.json"}
   sbom_summary={"total_components":118,"python_components":78,"web_components":40,"permissive_count":117,"allowlisted_count":1,"unknown_count":0,"deny_count":0}
-GET /api/v1/system/sbom?download=true -> HTTP 200
-  X-Content-Type-Options: nosniff
-  Content-Disposition: attachment; filename="thumbs-up-kanban-sbom-cdx-1.5.json"
-  bomFormat=CycloneDX, specVersion=1.5, components=118
-GET /api/docs -> HTTP 200 (len=594663)
-GET /api/redoc -> HTTP 200 (len=615346)
-GET /api/openapi.json -> HTTP 200 (openapi=3.1.0, title=👍kanban API)
-LIVE_STACK_VERDICT [API_SBOM_AND_DOCS]: PASS - unauth401=true, about200=true, sbomCdx15=true, docs200=true
+GET /api/v1/system/sbom?download=true -> HTTP 200 (13ms)
+  X-Content-Type-Options=nosniff
+  Content-Disposition=attachment; filename="thumbs-up-kanban-sbom-cdx-1.5.json"
+  bomFormat=CycloneDX, specVersion=1.5, components=118, uniqueLicensesCount=18
+GET /api/docs -> HTTP 200 (6ms) len=594779
+GET /api/redoc -> HTTP 200 (5ms) len=615462
+GET /api/openapi.json -> HTTP 200 (11ms) openapi=3.1.0, title=👍kanban API
 
-=== Problem 3 & 4: Buried UI Links, Redirect, Filters/Search, License/NOTICE Tabs, Responsive Light/Dark Screenshots ===
-Navigated via sidebar-about-link -> http://localhost:18963/about | tagline=""The difference between a swarm and an Agile team is a kanban.""
-Navigated via topbar-about-link -> http://localhost:18963/about
-Navigated via personal-settings-about-link -> http://localhost:18963/about
-Navigated via Cmd+K command -> http://localhost:18963/about
-Redirect /settings/about -> http://localhost:18963/about
-SBOM table rows: all=102, python=78, node=24, search('fastapi')=1, toggledScope=118
-License tabs: Apache len=10173, Notice len=545
-Console errors: 0 | Page errors: 0 | 5xx responses: 0 | CSP violations: 0
-LIVE_STACK_VERDICT [BURIED_NAV_AND_ABOUT_UI]: PASS - allNavLinks+redirect+filters+tabs+0errors=true
+--- Buried Navigation Entry Points & Page Loads ---
+GET /projects/KAN/issues?layout=board loaded in 999ms
+Sidebar footer [data-testid="sidebar-about-link"] -> http://127.0.0.1:18962/about (117ms)
+Desktop Light (1440x900) check: {"h1Text":"👍kanban","hasDuplicateThumbs":false,"scrollWidth":1440,"innerWidth":1440,"theme":"light"}
+Topbar menu [data-testid="topbar-about-link"] -> http://127.0.0.1:18962/about
+Personal settings [data-testid="personal-settings-about-link"] -> http://127.0.0.1:18962/about
+CommandPalette "About 👍kanban" -> http://127.0.0.1:18962/about
+Redirect /settings/about -> http://127.0.0.1:18962/about
+SBOM Runtime Only counts: {"allBtn":"All Ecosystems","pyBtn":"Python (78)","webBtn":"Web (24)","scopeBtn":"Scope: Runtime Only","rowCount":102}
+SBOM All (Inc. Dev) counts: {"allBtn":"All Ecosystems","pyBtn":"Python (78)","webBtn":"Web (40)","scopeBtn":"Scope: All (Inc. Dev)","rowCount":118}
+SBOM search("fastapi") rowCount=1
+NOTICE tab & Copy button: {"copyBtnText":"Copied!","licenseLen":545}
+Desktop Dark (1440x900) check: {"theme":"dark","apiCardTitleColor":"rgb(59, 130, 246)","bodyBg":"rgb(15, 17, 21)","scrollWidth":1440,"innerWidth":1440}
+Tablet Light (768x1024) check: {"scrollWidth":768,"innerWidth":768}
+Mobile Light (390x844) check: {"scrollWidth":390,"innerWidth":390,"badgeWhiteSpace":"nowrap","badgeRight":138,"brandingFlexWrap":"wrap","filtersFlexWrap":"wrap"}
 
-OVERALL LIVE_STACK_VERDICT (KAN-34): PASS
+--- Runtime Error Telemetry ---
+Console errors: 0
+Page errors: 0
+5xx responses: 0
+CSP violations: 0
+
+LIVE_STACK_VERDICT (KAN-34): PASS

@@ -1,26 +1,32 @@
+=== KAN-43 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, commit 837f657d) ===
+Timestamp: 2026-11-20T18:39:33.441Z
 
-=== Problem 4: Backend State Update Invariants (409 LAST_STATE_IN_GROUP, DEFAULT_STATE_REQUIRED, STATE_NAME_TAKEN) ===
-GET /api/v1/projects/KAN/states -> HTTP 200, count=5
-  initial states=[{"id":"01a1f9c1-18c3-7167-8367-b46305a985cb","name":"Todo","group":"unstarted","color_hex":"#3B82F6","sort_order":0,"is_default":false},{"id":"01a1f9c1-18c2-7142-ac21-eb63ef4c2ea3","name":"Backlog","group":"backlog","color_hex":"#A3A3A3","sort_order":1,"is_default":true},{"id":"01a1f9c1-18c3-78b8-be22-483bf5d887ce","name":"Purple Review","group":"started","color_hex":"#7c3aed","sort_order":2,"is_default":false},{"id":"01a1f9c1-18c3-7697-afa9-1b7307eaef7a","name":"Done","group":"completed","color_hex":"#16A34A","sort_order":3,"is_default":false},{"id":"01a1f9c1-18c3-7af3-93d8-6ffff2647645","name":"Cancelled","group":"cancelled","color_hex":"#DC2626","sort_order":4,"is_default":false}]
-PATCH sole completed state to 'started' -> HTTP 409 body={"type":"urn:kanban:problem:LAST_STATE_IN_GROUP","title":"Cannot Move Last State Out Of Group","status":409,"code":"LAST_STATE_IN_GROUP","request_id":"ce1f10ea9bd0482898f579f5495e46a4"}
-PATCH default state is_default=false -> HTTP 409 body={"type":"urn:kanban:problem:DEFAULT_STATE_REQUIRED","title":"Default State Required","status":409,"code":"DEFAULT_STATE_REQUIRED","request_id":"0ec11dd94f3b471281261223734abda2"}
-PATCH state 'Todo' to duplicate name 'Backlog' -> HTTP 409 body={"type":"urn:kanban:problem:STATE_NAME_TAKEN","title":"State Name Taken","status":409,"code":"STATE_NAME_TAKEN","request_id":"573040d9f4f14b8a8f81e22e74987092"}
-LIVE_STACK_VERDICT [BACKEND_STATE_INVARIANTS_409]: PASS - LAST_STATE_IN_GROUP=true, DEFAULT_STATE_REQUIRED=true, STATE_NAME_TAKEN=true
-Created issue in state 'Purple Review' (01a1f9c1-18c3-78b8-be22-483bf5d887ce) -> HTTP 201 key=KAN-26
+--- Problem 1 & 4: /projects/KAN/settings States & Priorities Editor ---
+Loaded /projects/KAN/settings States tab in 1063ms
+Found/Created "Purple Review" id=01a1fa3f-dc79-741d-954d-e5d8078b0b59 color=#7c3aed group=started wip_soft_limit=2 wip_hard_limit=5
+Assigned 3 issues to Purple Review via PATCH /api/v1/issues/{key}: KAN-5->HTTP 200, KAN-4->HTTP 200, KAN-3->HTTP 200
+Active inline state edit row OPEN check: {"hasPreview":true,"previewCustomFg":"#7c3aed","hasColorPicker":true,"hasOrderInput":true,"orderValue":"0"}
+Triggered real 409 UI conflict -> HTTP 409 body={"type":"urn:kanban:problem:STATE_NAME_TAKEN","title":"State Name Taken","status":409,"code":"STATE_NAME_TAKEN","request_id":"ea527963082a4817b387a3d974db934d"}
+  Rendered UI 409 alert banner: "A workflow state with this name already exists in this project."
+Opened active inline priority edit row (order, emoji, label, slug, ColorPresetPicker, default checkbox)
+LIVE_STACK_VERDICT [P1_SETTINGS_EDITOR_AND_409_CONFLICT]: PASS (minor UX note: stale red alert banner remained visible after switching to Priorities tab)
 
-=== Problem 1: /projects/KAN/settings State Edit (#7c3aed & #db2777), WIP Limits, Priority Edit, Promise.all Reorder ===
-Live StateBadge preview CSS var: pink=#db2777, purple=#7c3aed
-Saved state edit -> HTTP 200 name="Purple Review" color_hex=#7c3aed wip=2/5
-Reorder state-down-01a1f9c1-18c3-7167-8367-b46305a985cb dispatched PATCH requests: 2 (http://localhost:18963/api/v1/projects/KAN/states/01a1f9c1-18c3-7167-8367-b46305a985cb, http://localhost:18963/api/v1/projects/KAN/states/01a1f9c1-18c2-7142-ac21-eb63ef4c2ea3)
-Saved priority edit (01a1f9c1-18c3-72a3-a813-1103ceb55f1e) -> HTTP 200
-LIVE_STACK_VERDICT [STATE_AND_PRIORITY_EDITOR_AND_REORDER]: PASS - stateColor=#7c3aed, wip=2/5, reorderPatches=2, prioEditOk=true
+--- Problem 2 & 3: Board, Table, List, QuickCreateIssueModal ---
+Board View Desktop Light (824ms):
+  {"colCount":6,"colTitleText":"Purple Review","titleScrollWidth":109,"titleClientWidth":57,"titleTruncated":true,"wipText":"(WIP 5)","wipWhiteSpace":"nowrap","wipHeight":21,"wipLineHeight":"20.76px","customFg":"#7c3aed","borderTopColor":"rgb(209, 213, 219)","badgeCount":1,"badgeCustomFg":"#7c3aed","titleHeight":26}
+  FAIL DETAIL 1 (Board Column Title Truncation): Visual inspection of live-board-desktop-light.png, live-board-desktop-dark.png, live-board-tablet.png, and live-board-mobile.png confirms "Purple Review" is visually truncated to "Purpl..." (with 3 issues & soft WIP warning icon) and "Purple R..." (even with 0 issues, titleClientWidth=85 vs titleScrollWidth=109). The .board-column-header places the icon StateBadge, .board-column-title, count, (WIP 5), + Workflow button, and warning icon inside a single non-wrapping flex row in a 324px lane, squeezing .board-column-title down to 57px.
+  FAIL DETAIL 2 (Board Column Warn Border Override): When 3 issues exceed wip_soft_limit=2, .board-column--warn sets border-color: var(--border-strong), overriding the custom #7c3aed border-top accent (borderTopColor=rgb(209, 213, 219) in light mode).
+  PASS DETAIL: "(WIP 5)" renders on a single line (white-space: nowrap, height=21px), and card StateBadge pills render with custom --state-custom-fg: #7c3aed.
+Table View (1048ms): {"hasPurpleReview":true,"matchingElements":5} (State select shows "Purple Review" across assigned issues)
+List View (1077ms): {"hasPurpleReviewSection":true} (Visual inspection of live-list-desktop-light.png confirms purple #7c3aed section border and purple StateBadge pills on KAN-5, KAN-4, KAN-3)
+QuickCreateIssueModal state selector: {"selectedText":"Purple Review","hasPurpleReviewOption":true,"options":["Backlog","Purple Review","Todo","In Progress","Done","Cancelled"]}
+LIVE_STACK_VERDICT [P2_P3_BOARD_AND_VIEWS]: FAIL - Board column header truncates "Purple Review" to "Purpl..." across all viewports (titleScrollWidth=109 > titleClientWidth=57) and .board-column--warn overrides the custom #7c3aed top accent border.
 
-=== Problem 2 & 3: Board View, List View, Table View, QuickCreateIssueModal with Custom Purple #7c3aed & 0 CSP Errors ===
-Board View check: {"colCount":5,"purpleText":true,"customFgVals":["#A3A3A3","#3B82F6","#7c3aed","#16A34A","#DC2626"]}
-List View check: {"hasPurpleReview":true,"customFgCount":3,"customBadgeClassCount":17}
-Table View check: {"hasPurpleReview":true,"dynamicSelectOptionsCount":85,"hasPurpleOptionInSelect":true}
-QuickCreateIssueModal contains dynamic 'Purple Review' state: true
-Console errors: 0 | Page errors: 0 | 5xx responses: 0 | CSP violations: 0
-LIVE_STACK_VERDICT [CUSTOM_PURPLE_STATE_ACROSS_VIEWS_ZERO_CSP]: PASS - board=true, list=true, table=true, quickCreate=true, cspViolations=0, 0errors=true
+--- Runtime Error Telemetry ---
+Console JS errors: 0
+Intentional 409 console resource logs during conflict test: 1
+Page errors: 0
+5xx responses: 0
+CSP violations: 0
 
-OVERALL LIVE_STACK_VERDICT (KAN-43): PASS
+OVERALL LIVE_STACK_VERDICT (KAN-43): FAIL

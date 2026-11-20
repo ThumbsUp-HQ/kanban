@@ -1,165 +1,128 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "ticket": "KAN-36",
-  "description": "Contract sample for KAN-36 (KB-P3-PENTEST-01 / CWE-613): Session persistence and TTL preservation across workspace switch, non-cookie session rejection, and issue PATCH/GET ETag parity",
-  "contracts": {
-    "workspace_switch_non_persistent": {
-      "name": "Workspace switch with is_persistent=false",
-      "description": "Ensures that switching active workspaces preserves is_persistent=false, omits Max-Age/Expires on session cookies, and clears fallback cookies over HTTPS",
-      "request": {
-        "method": "POST",
-        "url": "/api/v1/workspaces/ef3d354c-aa4c-4255-a4eb-2de60ce888da/switch",
-        "headers": {
-          "Cookie": "__Host-kb_session=kb_sess_tok_abc123; __Host-kb_csrf=csrf_secret_xyz789",
-          "X-CSRF-Token": "csrf_secret_xyz789"
-        }
+  "base_url": "http://127.0.0.1:18963",
+  "scenarios": {
+    "a_session_persistence_ttl": {
+      "login_status": 200,
+      "login_set_cookies": [
+        "__Host-kb_session=vEQnUyZw3-mX13xUDWwkQPjcUxKoPKp8qFGUGL4QA48.JCPkD_ldyL4V_R6PB9eQnHPpTGyvE63FdA2Y5l0MQcA; Path=/; HttpOnly; Secure; SameSite=Lax",
+        "__Host-kb_csrf=HoBH-CBl8c1MZwVuSRqFIQ.K59pF5z8nXAwV6hVoTzrvuBCZmjGsq8hYDVGaZ5ylbI; Path=/; Secure; SameSite=Strict",
+        "kb_session=vEQnUyZw3-mX13xUDWwkQPjcUxKoPKp8qFGUGL4QA48.JCPkD_ldyL4V_R6PB9eQnHPpTGyvE63FdA2Y5l0MQcA; Path=/; HttpOnly; SameSite=Lax",
+        "kb_csrf=HoBH-CBl8c1MZwVuSRqFIQ.K59pF5z8nXAwV6hVoTzrvuBCZmjGsq8hYDVGaZ5ylbI; Path=/; SameSite=Strict"
+      ],
+      "mfa_set_cookies": [
+        "__Host-kb_session=hZB3PKThRqGVZ0I21zI0ddEm-vMM6fsN4hFFCgLpE_4.w_Z4RXakt4xMogqc_M0J-yfr-m7Ng1g4AXH_ZNFIfRg; Path=/; HttpOnly; Secure; SameSite=Lax",
+        "__Host-kb_csrf=QNdr11m-EPPNe88aajA1Ow.hTkWtkBgOPZFsOYKENQ2gLIRqpdiMhj3vvsoAZXlvcs; Path=/; Secure; SameSite=Strict",
+        "kb_session=hZB3PKThRqGVZ0I21zI0ddEm-vMM6fsN4hFFCgLpE_4.w_Z4RXakt4xMogqc_M0J-yfr-m7Ng1g4AXH_ZNFIfRg; Path=/; HttpOnly; SameSite=Lax",
+        "kb_csrf=QNdr11m-EPPNe88aajA1Ow.hTkWtkBgOPZFsOYKENQ2gLIRqpdiMhj3vvsoAZXlvcs; Path=/; SameSite=Strict"
+      ],
+      "switch_status": 200,
+      "switch_body": {
+        "workspace_id": "01a1fa3f-2253-7ac9-99a2-3e6a710a8ff8",
+        "status": "switched",
+        "csrf_token": "gd-L4EbS4Wwr8IuqMZy7yg.MKnmtKvyUjGkJi44PjBbPPM12Oq8AUtn09RVxnOcbck"
       },
-      "response": {
-        "status": 200,
-        "headers": {
-          "Content-Type": "application/json",
-          "Set-Cookie": [
-            "__Host-kb_session=kb_sess_tok_new456; Path=/; Secure; HttpOnly; SameSite=Lax",
-            "__Host-kb_csrf=csrf_secret_new012; Path=/; Secure; SameSite=Lax",
-            "kb_session=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax",
-            "kb_csrf=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax"
-          ]
-        },
-        "body": {
-          "workspace_id": "ef3d354c-aa4c-4255-a4eb-2de60ce888da",
-          "status": "switched",
-          "session_persisted": false
-        },
-        "session_state": {
-          "is_persistent": false,
-          "rotated_from_id": "018d40a2-bf39-7164-9a8c-6878b273b189",
-          "absolute_expires_at": "2026-11-21T12:00:00.000000Z",
-          "idle_expires_at": "2026-11-20T12:30:00.000000Z",
-          "aal_level": 2,
-          "aal2_verified_at": "2026-11-20T11:40:00.000000Z",
-          "mfa_pending": false
-        }
-      }
+      "switch_set_cookies": [
+        "__Host-kb_session=dd7uWA9pNfSTfTQksgy8AjeWyoAYfz0kQARMMZTDkS8.HeIjvZx8N4hqRoAnQUcaLk6OmHx0-86V7a9J5_A_LHI; Path=/; HttpOnly; Secure; SameSite=Lax",
+        "__Host-kb_csrf=gd-L4EbS4Wwr8IuqMZy7yg.MKnmtKvyUjGkJi44PjBbPPM12Oq8AUtn09RVxnOcbck; Path=/; Secure; SameSite=Strict",
+        "kb_session=dd7uWA9pNfSTfTQksgy8AjeWyoAYfz0kQARMMZTDkS8.HeIjvZx8N4hqRoAnQUcaLk6OmHx0-86V7a9J5_A_LHI; Path=/; HttpOnly; SameSite=Lax",
+        "kb_csrf=gd-L4EbS4Wwr8IuqMZy7yg.MKnmtKvyUjGkJi44PjBbPPM12Oq8AUtn09RVxnOcbck; Path=/; SameSite=Strict"
+      ],
+      "db_orig_after": "01a1fa57-3aa7-725a-98a8-646629d8fe18|f|2026-11-27 19:03:03.056378+00|2026-11-20 19:03:03.169229+00",
+      "db_new_row": "314f317d-cd50-459a-92d8-821bf45f672b|f|2026-11-27 19:03:03.056378+00|2026-11-21 03:03:03.168966+00||01a1fa57-3aa7-725a-98a8-646629d8fe18|2|2026-11-20 19:03:03.079056+00",
+      "verdict": "PASS"
     },
-    "workspace_switch_non_cookie_caller_rejected": {
-      "name": "Workspace switch rejection for non-cookie caller",
-      "description": "Rejects callers lacking a valid browser cookie session with 401 SESSION_REQUIRED before any cookies are minted",
-      "request": {
-        "method": "POST",
-        "url": "/api/v1/workspaces/ef3d354c-aa4c-4255-a4eb-2de60ce888da/switch",
-        "headers": {
-          "Authorization": "Bearer kb_token_mcp_scoped_abc"
-        }
+    "b_aal2_staleness": {
+      "before_aging_status": 200,
+      "aged_aal2_verified_at": "2026-11-20 18:43:03.381738+00",
+      "switch_status": 200,
+      "rotated_db_row": "fc2e956d-b398-4a86-b292-312c04fd0ed6|2|2026-11-20 18:43:03.381738+00",
+      "require_aal2_900s_stale_status": 403,
+      "require_aal2_900s_stale_body": {
+        "type": "urn:kanban:problem:AAL2_STALE",
+        "title": "AAL2 Session Stale",
+        "status": 403,
+        "code": "AAL2_STALE",
+        "detail": "AAL2 verification is stale (1200s > 900s).",
+        "request_id": "60c59c5d42d343e586b7eb727d678a0e",
+        "methods": [
+          "totp",
+          "recovery"
+        ]
       },
-      "response": {
+      "admin_route_aged_aal2_status": 200,
+      "after_aal1_switch_admin_status": 403,
+      "after_aal1_switch_admin_body": {
+        "type": "urn:kanban:problem:AAL2_REQUIRED",
+        "title": "AAL2 Authentication Required",
+        "status": 403,
+        "code": "AAL2_REQUIRED",
+        "detail": "Administrative routes require multi-factor authentication (AAL2).",
+        "request_id": "05bdfd831e7845d0ac6906658d851505",
+        "methods": [
+          "totp",
+          "recovery"
+        ]
+      },
+      "verdict": "PASS"
+    },
+    "c_bearer_switch_rejected": {
+      "subject_token_status": 401,
+      "subject_token_body": {
+        "type": "urn:kanban:problem:SESSION_REQUIRED",
+        "title": "Session Required",
         "status": 401,
-        "headers": {
-          "Content-Type": "application/problem+json"
-        },
-        "body": {
-          "type": "https://errors.kanban.dev/session-required",
-          "title": "Session Required",
-          "status": 401,
-          "detail": "A valid browser session is required to switch workspaces via cookie",
-          "code": "SESSION_REQUIRED"
-        }
-      }
+        "code": "SESSION_REQUIRED",
+        "detail": "Workspace switching requires an active browser session.",
+        "request_id": "b9d984ac3a15491d8f68e0ee94b8d77f"
+      },
+      "bearer_with_csrf_status": 401,
+      "bearer_with_csrf_body": {
+        "type": "urn:kanban:problem:SESSION_REQUIRED",
+        "title": "Session Required",
+        "status": 401,
+        "code": "SESSION_REQUIRED",
+        "detail": "Workspace switching requires an active browser session.",
+        "request_id": "10c11ad355364a42945d51e975ab4d85"
+      },
+      "bearer_without_csrf_status": 403,
+      "bearer_without_csrf_body": {
+        "type": "https://kanban.hackedyour.info/problems/csrf-rejected",
+        "title": "CSRF validation failed",
+        "status": 403,
+        "code": "CSRF_REJECTED",
+        "detail": "Missing CSRF token header or cookie",
+        "request_id": "6db3b23726d64b27b7629e584f7b5554"
+      },
+      "set_cookie_count": 0,
+      "verdict": "PASS"
     },
-    "issue_patch_and_get_etag_parity": {
-      "name": "Issue PATCH and immediate GET ETag parity",
-      "description": "Guarantees that PATCH response ETag header and body.etag exactly match subsequent GET ETag header and body.etag with zero drift",
-      "patch_exchange": {
-        "request": {
-          "method": "PATCH",
-          "url": "/api/v1/issues/KANBA-10",
-          "headers": {
-            "Content-Type": "application/json",
-            "If-Match": "\"2026-11-20T11:00:00.000000Z:0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          },
-          "body": {
-            "summary": "Hardened Workspace Switch Session Persistence"
-          }
-        },
-        "response": {
-          "status": 200,
-          "headers": {
-            "Content-Type": "application/json",
-            "ETag": "\"2026-11-20T12:00:00.000000Z:1:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          },
-          "body": {
-            "key": "KANBA-10",
-            "summary": "Hardened Workspace Switch Session Persistence",
-            "etag": "\"2026-11-20T12:00:00.000000Z:1:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          }
-        }
-      },
-      "get_exchange": {
-        "request": {
-          "method": "GET",
-          "url": "/api/v1/issues/KANBA-10",
-          "headers": {}
-        },
-        "response": {
-          "status": 200,
-          "headers": {
-            "Content-Type": "application/json",
-            "ETag": "\"2026-11-20T12:00:00.000000Z:1:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          },
-          "body": {
-            "key": "KANBA-10",
-            "summary": "Hardened Workspace Switch Session Persistence",
-            "etag": "\"2026-11-20T12:00:00.000000Z:1:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          }
-        }
-      },
-      "parity_verified": true
-    },
-    "issue_workflow_transition_dual_etag_acceptance": {
-      "name": "Transition engine accepts both composite ETag and legacy SHA-256 in If-Match",
-      "composite_etag_request": {
-        "method": "POST",
-        "url": "/api/v1/issues/KANBA-10/transitions",
-        "headers": {
-          "Content-Type": "application/json",
-          "If-Match": "\"2026-11-20T12:00:00.000000Z:1:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-        },
-        "body": {
-          "to_state": "In Progress"
-        },
-        "response": {
-          "status": 200,
-          "headers": {
-            "ETag": "\"2026-11-20T12:05:00.000000Z:2:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          },
-          "body": {
-            "key": "KANBA-10",
-            "state": "In Progress",
-            "etag": "\"2026-11-20T12:05:00.000000Z:2:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          }
-        }
-      },
-      "legacy_sha256_request": {
-        "method": "POST",
-        "url": "/api/v1/issues/KANBA-10/transitions",
-        "headers": {
-          "Content-Type": "application/json",
-          "If-Match": "\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-        },
-        "body": {
-          "to_state": "Done"
-        },
-        "response": {
-          "status": 200,
-          "headers": {
-            "ETag": "\"2026-11-20T12:10:00.000000Z:3:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          },
-          "body": {
-            "key": "KANBA-10",
-            "state": "Done",
-            "etag": "\"2026-11-20T12:10:00.000000Z:3:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""
-          }
-        }
-      }
+    "d_issue_etag_parity": {
+      "issue_key": "KAN-6",
+      "patch1_hdr_etag": "\"2ce7de638fa03c268fcc84057aca2caf48048ebea3b71182f2164df68e88e742\"",
+      "patch1_body_etag": "\"2ce7de638fa03c268fcc84057aca2caf48048ebea3b71182f2164df68e88e742\"",
+      "get1_immediate_0ms_etag": "\"d1fed798580b5cf3bd657c40358e0092d580919bc8d8ba3b237636d8374a2eb7\"",
+      "get1_immediate_0ms_drift": true,
+      "patch2_immediate_0ms_status": 200,
+      "get1_delayed_250ms_etag": "\"8922830abb3ba11032633b638439f40161250a02a486e1304acd047b1a28ae5f\"",
+      "patch2_after_commit_status": 200,
+      "patch2_hdr_etag": "\"0e1af04274dedaa688d81025a88cd131dc8e2876ac5ad1c9904482e3289561d6\"",
+      "stale_patch_status": 412,
+      "begin_work_status": 200,
+      "begin_work_etag": "\"78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0\"",
+      "begin_work_immediate_0ms_get_etag": "\"00fade48d225f6fe7ee87a0acbaa98b03c61f8466acedd3e5f5e03aae06a483f\"",
+      "begin_work_immediate_0ms_drift": true,
+      "begin_work_delayed_250ms_get_etag": "\"78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0\"",
+      "begin_work_delayed_250ms_drift": false,
+      "transition_status": 200,
+      "transition_etag": "\"78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0\"",
+      "transition_immediate_0ms_get_etag": "\"78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0\"",
+      "transition_immediate_0ms_drift": false,
+      "transition_delayed_250ms_get_etag": "\"78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0\"",
+      "transition_delayed_250ms_drift": false,
+      "mcp_update_ticket_text": "key: KAN-6\nsummary: KAN-6 Updated via MCP update_ticket\nstate: In Progress\npriority: medium\nassignees: ['@admin']\netag: def17948b6d81fa980b06408b7056ff9abe210f67ba921fce08940c7c09bfa31\nchanged: [summary]\n",
+      "mcp_read_ticket_text": "key: KAN-6\nsummary: KAN-6 Updated via MCP update_ticket\nstate: In Progress\npriority: medium\nassignees: ['@admin']\ndescription_markdown: Baseline description for KAN-36 ETag parity.\netag: def17948b6d81fa980b06408b7056ff9abe210f67ba921fce08940c7c09bfa31\naccess: Project\n",
+      "rest_etag_after_mcp": "\"def17948b6d81fa980b06408b7056ff9abe210f67ba921fce08940c7c09bfa31\"",
+      "verdict": "FAIL"
     }
   }
 }

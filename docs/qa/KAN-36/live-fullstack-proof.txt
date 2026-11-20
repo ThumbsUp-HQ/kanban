@@ -1,0 +1,62 @@
+Target workspaces: kanban=01a1fa3f-21d0-7415-b81b-fa365939d6f9 ops=01a1fa3f-2253-7ac9-99a2-3e6a710a8ff8
+[ADMIN] Reused active AAL2 session from admin_cookies.json
+
+=== KAN-36 SCENARIO (a): remember_me=false & absolute_expires_at on workspace switch ===
+Initial login Set-Cookie headers: ['__Host-kb_session=vEQnUyZw3-mX13xUDWwkQPjcUxKoPKp8qFGUGL4QA48.JCPkD_ldyL4V_R6PB9eQnHPpTGyvE63FdA2Y5l0MQcA; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=HoBH-CBl8c1MZwVuSRqFIQ.K59pF5z8nXAwV6hVoTzrvuBCZmjGsq8hYDVGaZ5ylbI; Path=/; Secure; SameSite=Strict', 'kb_session=vEQnUyZw3-mX13xUDWwkQPjcUxKoPKp8qFGUGL4QA48.JCPkD_ldyL4V_R6PB9eQnHPpTGyvE63FdA2Y5l0MQcA; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=HoBH-CBl8c1MZwVuSRqFIQ.K59pF5z8nXAwV6hVoTzrvuBCZmjGsq8hYDVGaZ5ylbI; Path=/; SameSite=Strict']
+Post-MFA Set-Cookie headers: ['__Host-kb_session=hZB3PKThRqGVZ0I21zI0ddEm-vMM6fsN4hFFCgLpE_4.w_Z4RXakt4xMogqc_M0J-yfr-m7Ng1g4AXH_ZNFIfRg; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=QNdr11m-EPPNe88aajA1Ow.hTkWtkBgOPZFsOYKENQ2gLIRqpdiMhj3vvsoAZXlvcs; Path=/; Secure; SameSite=Strict', 'kb_session=hZB3PKThRqGVZ0I21zI0ddEm-vMM6fsN4hFFCgLpE_4.w_Z4RXakt4xMogqc_M0J-yfr-m7Ng1g4AXH_ZNFIfRg; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=QNdr11m-EPPNe88aajA1Ow.hTkWtkBgOPZFsOYKENQ2gLIRqpdiMhj3vvsoAZXlvcs; Path=/; SameSite=Strict']
+Originating DB row: 01a1fa57-3aa7-725a-98a8-646629d8fe18|f|2026-11-27 19:03:03.056378+00|2026-11-21 03:03:03.078803+00||2|2026-11-20 19:03:03.079056+00
+Admin check on kanban BEFORE aging aal2_verified_at: status=200
+Switch response status=200 body={'workspace_id': '01a1fa3f-2253-7ac9-99a2-3e6a710a8ff8', 'status': 'switched', 'csrf_token': 'gd-L4EbS4Wwr8IuqMZy7yg.MKnmtKvyUjGkJi44PjBbPPM12Oq8AUtn09RVxnOcbck'}
+Rotated Set-Cookie headers: ['__Host-kb_session=dd7uWA9pNfSTfTQksgy8AjeWyoAYfz0kQARMMZTDkS8.HeIjvZx8N4hqRoAnQUcaLk6OmHx0-86V7a9J5_A_LHI; Path=/; HttpOnly; Secure; SameSite=Lax', '__Host-kb_csrf=gd-L4EbS4Wwr8IuqMZy7yg.MKnmtKvyUjGkJi44PjBbPPM12Oq8AUtn09RVxnOcbck; Path=/; Secure; SameSite=Strict', 'kb_session=dd7uWA9pNfSTfTQksgy8AjeWyoAYfz0kQARMMZTDkS8.HeIjvZx8N4hqRoAnQUcaLk6OmHx0-86V7a9J5_A_LHI; Path=/; HttpOnly; SameSite=Lax', 'kb_csrf=gd-L4EbS4Wwr8IuqMZy7yg.MKnmtKvyUjGkJi44PjBbPPM12Oq8AUtn09RVxnOcbck; Path=/; SameSite=Strict']
+Originating DB row after switch: 01a1fa57-3aa7-725a-98a8-646629d8fe18|f|2026-11-27 19:03:03.056378+00|2026-11-20 19:03:03.169229+00
+New rotated DB row: 314f317d-cd50-459a-92d8-821bf45f672b|f|2026-11-27 19:03:03.056378+00|2026-11-21 03:03:03.168966+00||01a1fa57-3aa7-725a-98a8-646629d8fe18|2|2026-11-20 19:03:03.079056+00
+
+=== KAN-36 SCENARIO (b): Stale aal2_verified_at (>900s) preserved & /api/v1/admin/* returns 403 AAL2_REQUIRED ===
+Aged session 314f317d-cd50-459a-92d8-821bf45f672b aal2_verified_at -> 2026-11-20 18:43:03.381738+00
+Rotated session after switch_b: fc2e956d-b398-4a86-b292-312c04fd0ed6|2|2026-11-20 18:43:03.381738+00
+require_aal2(900s) DELETE /api/v1/auth/identities/... AFTER switch: status=403 body={"type":"urn:kanban:problem:AAL2_STALE","title":"AAL2 Session Stale","status":403,"code":"AAL2_STALE","detail":"AAL2 verification is stale (1200s > 900s).","request_id":"60c59c5d42d343e586b7eb727d678a0e","methods":["totp","recovery"]}
+Note: GET /api/v1/admin/auth-cards (require_admin_aal2 without max_age) on aged aal_level=2: status=200
+Admin check AFTER switch with AAL1 session: status=403 body={"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Authentication Required","status":403,"code":"AAL2_REQUIRED","detail":"Administrative routes require multi-factor authentication (AAL2).","request_id":"05bdfd831e7845d0ac6906658d851505","methods":["totp","recovery"]}
+
+=== KAN-36 SCENARIO (c): Bearer / scoped API key workspace switch returns 401 SESSION_REQUIRED ===
+Minted agent MCP key prefix=kb_agt_
+X-KB-Subject-Token switch status=401 set-cookie=[] body={"type":"urn:kanban:problem:SESSION_REQUIRED","title":"Session Required","status":401,"code":"SESSION_REQUIRED","detail":"Workspace switching requires an active browser session.","request_id":"b9d984ac3a15491d8f68e0ee94b8d77f"}
+Bearer+CSRF switch status=401 set-cookie=[] body={"type":"urn:kanban:problem:SESSION_REQUIRED","title":"Session Required","status":401,"code":"SESSION_REQUIRED","detail":"Workspace switching requires an active browser session.","request_id":"10c11ad355364a42945d51e975ab4d85"}
+Bearer without CSRF switch status=403 set-cookie=[] body={"type":"https://kanban.hackedyour.info/problems/csrf-rejected","title":"CSRF validation failed","status":403,"code":"CSRF_REJECTED","detail":"Missing CSRF token header or cookie","request_id":"6db3b23726d64b27b7629e584f7b5554"}
+
+=== KAN-36 SCENARIO (d): Issue PATCH/GET/Workflow/MCP ETag parity ===
+Created fresh issue KAN-6 for Scenario (d)
+PATCH_1 ETag header="2ce7de638fa03c268fcc84057aca2caf48048ebea3b71182f2164df68e88e742" body.etag="2ce7de638fa03c268fcc84057aca2caf48048ebea3b71182f2164df68e88e742" summary='KAN-6 Updated Summary Step 1'
+Immediate GET (0ms) ETag="d1fed798580b5cf3bd657c40358e0092d580919bc8d8ba3b237636d8374a2eb7" summary='KAN-36 Fresh Issue for ETag Parity' (drift=True)
+Immediate PATCH_2 (If-Match="2ce7de638fa03c268fcc84057aca2caf48048ebea3b71182f2164df68e88e742") status=200 body={"id":"01a1fa57-3d0f-7e3e-bf75-b5cb80929388","object_id":"01a1fa57-3d0f-7e3e-bf75-b5cb80929388","key":"KAN-6","summary":"KAN-6 Updated Summary Step 2 Immediate","description_markdown":"Baseline description for KAN-36 ETag parity.","description_sha256":"db60b15995929207a2f7d4a7b5645329d5ca6a815a346d8e79fa7664126c6ac1","etag":"\"8922830abb3ba11032633b638439f40161250a02a486e1304acd047b1a28ae5f\"","state":{"id":"01a1fa3f-21e4-76d7-9b37-b5b1cf35eb31","name":"Backlog","group":"backlog","color_hex":"#A3A3A3"},"priority":{"slug":"medium","label":"Medium","emoji":"🔹"},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000006","created_by_id":"01a1fa3f-21d1-7179-9ef0-c4ac1adfb516","provenance":{"created_by":{"id":"01a1fa3f-21d1-7179-9ef0-c4ac1adfb516","handle":"admin"},"original_created_by":{"id":"01a1fa3f-21d1-7179-9ef0-c4ac1adfb516","handle":"admin"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01a1fa3f-21d0-7415-b81b-fa365939d6f9","workspace_name":"Kanban Primary","project_id":"01a1fa3f-21e0-7e35-a663-c144af63f241","project_key":"KAN","project_name":"Kanban Core"},"users":[{"principal_id":"01a1fa3f-21d1-7179-9ef0-c4ac1adfb516","handle":"@admin","display_name":"LiveQA Admin","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"367cbdd1-0cf2-4fb6-8278-ec68e023b5e1","handle":"@member","display_name":"Workspace Member","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"project_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN-6","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"archived_at":null,"archive_eligibility":{"allowed":false,"reason":"Only completed or canceled work items can be archived"},"note":null,"pending_gate":null,"latest_gate_verdict":null}
+Delayed GET (250ms) ETag="8922830abb3ba11032633b638439f40161250a02a486e1304acd047b1a28ae5f" summary='KAN-6 Updated Summary Step 2 Immediate'
+PATCH_2 (after commit, If-Match="8922830abb3ba11032633b638439f40161250a02a486e1304acd047b1a28ae5f") status=200 new_etag="0e1af04274dedaa688d81025a88cd131dc8e2876ac5ad1c9904482e3289561d6" | Stale PATCH status=412
+begin-work ETag header="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0" body.etag="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0"
+begin-work immediate GET (0ms) ETag="00fade48d225f6fe7ee87a0acbaa98b03c61f8466acedd3e5f5e03aae06a483f" (drift=True)
+begin-work delayed GET (250ms) ETag="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0" (drift=False)
+transition ETag header="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0" body.etag="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0"
+transition immediate GET (0ms) ETag="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0" (drift=False)
+transition delayed GET (250ms) ETag="78bf8f0d8d15e71fef4a871a64046ee448aca6e9f82559f108a2690ab09a23d0" (drift=False)
+MCP update_ticket YAML:
+key: KAN-6
+summary: KAN-6 Updated via MCP update_ticket
+state: In Progress
+priority: medium
+assignees: ['@admin']
+etag: def17948b6d81fa980b06408b7056ff9abe210f67ba921fce08940c7c09bfa31
+changed: [summary]
+
+MCP read_ticket YAML:
+key: KAN-6
+summary: KAN-6 Updated via MCP update_ticket
+state: In Progress
+priority: medium
+assignees: ['@admin']
+description_markdown: Baseline description for KAN-36 ETag parity.
+etag: def17948b6d81fa980b06408b7056ff9abe210f67ba921fce08940c7c09bfa31
+access: Project
+
+REST GET ETag after MCP (stripped): def17948b6d81fa980b06408b7056ff9abe210f67ba921fce08940c7c09bfa31
+
+LIVE_STACK_VERDICT: FAIL
+FAIL_REASON: FastAPI get_rls_session yield dependency commits AFTER HTTP response body is sent over uvicorn TCP, causing immediate (0ms) GET and chained PATCH (If-Match: PATCH_1_ETag) on live stack to observe pre-commit state (412 Precondition Failed / stale ETag drift). Waiting 250ms allows commit to finish and ETags match.
