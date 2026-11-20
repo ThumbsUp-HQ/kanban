@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, type JSX } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
@@ -70,6 +71,7 @@ function getProviderBadgeClass(provider: string | undefined): string {
 }
 
 export function AuthStudioPage(): JSX.Element {
+  const queryClient = React.useContext(QueryClientContext);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -183,7 +185,7 @@ export function AuthStudioPage(): JSX.Element {
     try {
       const activeFilter = filter !== undefined ? (filter === 'ALL' ? undefined : filter) : (principalKindFilter === 'ALL' ? undefined : principalKindFilter);
       const principals = await fetchAdminPrincipals(activeFilter);
-      setUsers(principals);
+      setUsers(Array.isArray(principals) ? principals : []);
     } catch (err: unknown) {
       if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
         setAccessDenied(true);
@@ -525,12 +527,25 @@ export function AuthStudioPage(): JSX.Element {
       if (newPrincipalType !== 'USER') {
         payload.type = newPrincipalType;
       }
-      await createLocalUser(payload);
+      const createdUser = await createLocalUser(payload);
       const successMsg =
         newPrincipalType === 'USER'
           ? `Local user @${newUserHandle} created successfully.`
           : `Principal (${newPrincipalType}) @${newUserHandle} created successfully.`;
       setUserActionSuccess(successMsg);
+
+      await loadUsers();
+      if (createdUser.id) {
+        setUsers((prev) => {
+          if (prev.some((u) => u.id === createdUser.id)) return prev;
+          return [...prev, createdUser];
+        });
+      }
+      if (queryClient) {
+        await queryClient.invalidateQueries({ queryKey: ['admin-principals'] });
+        await queryClient.invalidateQueries({ queryKey: ['principals'] });
+      }
+
       setIsAddUserOpen(false);
       setNewPrincipalType('USER');
       setNewUserHandle('');
@@ -538,7 +553,6 @@ export function AuthStudioPage(): JSX.Element {
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserRole('WORKSPACE_MEMBER');
-      await loadUsers();
     } catch (err: unknown) {
       setUserActionError(err instanceof Error ? err.message : 'Failed to create principal.');
     } finally {
@@ -658,7 +672,7 @@ export function AuthStudioPage(): JSX.Element {
       </div>
 
       {activeTab === 'users' && (
-        <div className="auth-principal-filters" style={{ display: 'flex', gap: '8px', margin: '12px 0' }} data-testid="principal-filters">
+        <div className="auth-principal-filters" data-testid="principal-filters">
           {(['ALL', 'USER', 'GROUP', 'AGENT'] as const).map((kind) => (
             <button
               key={kind}

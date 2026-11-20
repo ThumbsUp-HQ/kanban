@@ -197,6 +197,31 @@ describe('railApi', () => {
     expect(items3).toEqual([]);
   });
 
+  it('fetchProjectModules returns empty array when empty projectKey or 404 MODULES_DISABLED, and rethrows other errors', async () => {
+    // Empty / undefined key
+    expect(await fetchProjectModules('')).toEqual([]);
+    expect(await fetchProjectModules('undefined')).toEqual([]);
+
+    // 404 with code MODULES_DISABLED
+    vi.mocked(client.apiFetch).mockRejectedValueOnce({
+      status: 404,
+      code: 'MODULES_DISABLED',
+    });
+    expect(await fetchProjectModules('KAN')).toEqual([]);
+
+    // 404 with data.code MODULES_DISABLED
+    vi.mocked(client.apiFetch).mockRejectedValueOnce({
+      status: 404,
+      data: { code: 'MODULES_DISABLED' },
+    });
+    expect(await fetchProjectModules('KAN')).toEqual([]);
+
+    // Non-404 or other error rethrown
+    const otherErr = { status: 500, message: 'Server error' };
+    vi.mocked(client.apiFetch).mockRejectedValueOnce(otherErr);
+    await expect(fetchProjectModules('KAN')).rejects.toEqual(otherErr);
+  });
+
   it('updateIssueModules calls PUT /api/v1/issues/{issue_ref}/modules', async () => {
     vi.mocked(client.apiFetch).mockResolvedValueOnce(undefined);
 

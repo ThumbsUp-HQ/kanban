@@ -667,7 +667,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
         {activeTab === 'members' && (
           <div className="kb-members-section" data-testid="workspace-members-section">
-            <form onSubmit={handleCreateUser} className="kb-add-member-form" data-testid="create-user-form">
+            <form onSubmit={handleCreateUser} className="kb-add-member-form" data-testid="create-user-form" noValidate>
               <h3>+ Add Workspace User</h3>
               <div className="kb-form-group">
                 <input
@@ -696,9 +696,10 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   type="email"
                   data-testid="new-user-email"
                   className="kb-input"
-                  placeholder="email@example.com (optional)"
+                  placeholder="email@example.com"
                   value={newEmail}
                   onChange={(e) => { setNewEmail(e.target.value); }}
+                  required
                 />
               </div>
               <div className="kb-form-group">
@@ -735,7 +736,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
             <div className="kb-members-table-wrapper">
               <h3>Workspace Users & Principals</h3>
-              <table className="kb-table" data-testid="workspace-users-table">
+              <div className="kb-table-scroll-container">
+                <table className="kb-table" data-testid="workspace-users-table">
                 <thead>
                   <tr>
                     <th>User</th>
@@ -814,6 +816,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -952,57 +955,59 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           No direct members or nested groups in this group.
                         </p>
                       ) : (
-                        <table className="kb-table" data-testid="group-members-table">
-                          <thead>
-                            <tr>
-                              <th>Principal</th>
-                              <th>Type</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {groupMembers.map((m) => {
-                              const mType = (m.principal_type ?? m.type ?? 'USER').toUpperCase();
-                              const isNestedGroup = mType === 'GROUP';
-                              return (
-                                <tr key={m.id} data-testid={`group-member-row-${m.id}`}>
-                                  <td>
-                                    <div className="kb-member-info">
-                                      <span className="kb-member-name">
-                                        {m.display_name ?? formatHandle(m.handle ?? m.principal ?? m.id)}
-                                      </span>
-                                      {m.display_name && (
-                                        <span className="kb-member-handle">
-                                          {formatHandle(m.handle ?? m.principal ?? m.id)}
+                        <div className="kb-table-scroll-container">
+                          <table className="kb-table" data-testid="group-members-table">
+                            <thead>
+                              <tr>
+                                <th>Principal</th>
+                                <th>Type</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {groupMembers.map((m) => {
+                                const mType = (m.principal_type ?? m.type ?? 'USER').toUpperCase();
+                                const isNestedGroup = mType === 'GROUP';
+                                return (
+                                  <tr key={m.id} data-testid={`group-member-row-${m.id}`}>
+                                    <td>
+                                      <div className="kb-member-info">
+                                        <span className="kb-member-name">
+                                          {m.display_name ?? formatHandle(m.handle ?? m.principal ?? m.id)}
                                         </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td>
-                                    <span
-                                      className={`kb-type-pill kb-type-pill--${mType.toLowerCase()}`}
-                                      data-testid={`group-member-type-${m.id}`}
-                                    >
-                                      {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <button
-                                      type="button"
-                                      data-testid={`remove-group-member-${m.id}`}
-                                      className="kb-btn kb-btn-danger-subtle"
-                                      onClick={() => {
-                                        void handleRemoveGroupMember(selectedGroup.id, m.id);
-                                      }}
-                                    >
-                                      Remove
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                                        {m.display_name && (
+                                          <span className="kb-member-handle">
+                                            {formatHandle(m.handle ?? m.principal ?? m.id)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span
+                                        className={`kb-type-pill kb-type-pill--${mType.toLowerCase()}`}
+                                        data-testid={`group-member-type-${m.id}`}
+                                      >
+                                        {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        data-testid={`remove-group-member-${m.id}`}
+                                        className="kb-btn kb-btn-danger-subtle"
+                                        onClick={() => {
+                                          void handleRemoveGroupMember(selectedGroup.id, m.id);
+                                        }}
+                                      >
+                                        Remove
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       )}
                     </div>
                   </>

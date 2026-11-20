@@ -284,16 +284,18 @@ export function ProjectSettingsPage(): JSX.Element {
         }
 
         // Load modules
-        try {
-          const modRes: unknown = await apiFetch(
-            'GET',
-            `/api/v1/projects/${encodeURIComponent(projectKey)}/modules` as never,
-          );
-          if (active && Array.isArray(modRes)) {
-            setAvailableModules(modRes as ProjectModuleItem[]);
+        if (projRes.modules_enabled !== false) {
+          try {
+            const modRes: unknown = await apiFetch(
+              'GET',
+              `/api/v1/projects/${encodeURIComponent(projectKey)}/modules` as never,
+            );
+            if (active && Array.isArray(modRes)) {
+              setAvailableModules(modRes as ProjectModuleItem[]);
+            }
+          } catch {
+            // Ignore
           }
-        } catch {
-          // Ignore
         }
 
         // Load principals for picker

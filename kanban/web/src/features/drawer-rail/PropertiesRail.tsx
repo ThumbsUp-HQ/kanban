@@ -62,7 +62,8 @@ export function PropertiesRail({
   const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');
   const isAdmin = capabilities.includes('ADMIN');
 
-  const modulesEnabled = metadata?.modules_enabled ?? (initialMetadata?.modules_enabled !== false);
+  const modulesEnabled =
+    metadata?.modules_enabled ?? initialMetadata?.modules_enabled ?? true;
 
   // Fetch project auxiliary configuration
   useEffect(() => {
@@ -71,10 +72,11 @@ export function PropertiesRail({
       if (!projectKey || projectKey === 'undefined') {
         return;
       }
+      let resolvedMeta = initialMetadata;
       try {
-        if (!initialMetadata) {
-          const meta = await fetchProjectMetadata(projectKey);
-          if (isMounted) setMetadata(meta);
+        if (!resolvedMeta) {
+          resolvedMeta = await fetchProjectMetadata(projectKey);
+          if (isMounted) setMetadata(resolvedMeta);
         }
       } catch {
         // Fallback gracefully
@@ -95,7 +97,8 @@ export function PropertiesRail({
         // Ignore in tests
       }
 
-      if (modulesEnabled) {
+      const shouldLoadModules = resolvedMeta?.modules_enabled ?? modulesEnabled;
+      if (shouldLoadModules) {
         try {
           const mods = await fetchProjectModules(projectKey);
           if (isMounted) setModules(mods);

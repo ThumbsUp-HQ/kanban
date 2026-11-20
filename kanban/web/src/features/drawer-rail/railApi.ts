@@ -167,14 +167,24 @@ export async function fetchProjectModules(projectKey: string): Promise<ProjectMo
   if (!projectKey || projectKey === 'undefined') {
     return [];
   }
-  const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/modules' as never, {
-    params: { project_ref: projectKey },
-  });
-  const data = res as { items?: ProjectModule[] } | ProjectModule[] | undefined;
-  if (Array.isArray(data)) {
-    return data;
+  try {
+    const res = await apiFetch('GET', '/api/v1/projects/{project_ref}/modules' as never, {
+      params: { project_ref: projectKey },
+    });
+    const data = res as { items?: ProjectModule[] } | ProjectModule[] | undefined;
+    if (Array.isArray(data)) {
+      return data;
+    }
+    return data?.items ?? [];
+  } catch (err: unknown) {
+    const errorObj = err as { status?: unknown; code?: unknown; data?: { code?: unknown } } | null | undefined;
+    if (errorObj?.status === 404) {
+      if (errorObj.code === 'MODULES_DISABLED' || errorObj.data?.code === 'MODULES_DISABLED') {
+        return [];
+      }
+    }
+    throw err;
   }
-  return data?.items ?? [];
 }
 
 export async function updateIssueModules(key: string, moduleIds: string[]): Promise<void> {
