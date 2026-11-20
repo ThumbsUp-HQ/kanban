@@ -1275,24 +1275,24 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     // 3. Role update error
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
       if (path.includes('/api/v1/admin/role-bindings')) {
-        return Promise.reject(new Error('Failed to update member role.'));
+        return Promise.reject(Object.assign(new Error(''), { detail: 'Custom detail role error' }));
       }
       return Promise.resolve({});
     });
     const charlieRoleSelect = screen.getByTestId('role-select-usr-charlie');
     fireEvent.change(charlieRoleSelect, { target: { value: 'WORKSPACE_ADMIN' } });
-    expect(await screen.findByText('Failed to update member role.')).toBeDefined();
+    expect(await screen.findByText('Custom detail role error')).toBeDefined();
 
     // 4. Member remove error
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
       if (path.includes('/api/v1/admin/role-bindings')) {
-        return Promise.reject(new Error('Failed to remove workspace member.'));
+        return Promise.reject(Object.assign(new Error(''), { detail: 'Custom detail remove error' }));
       }
       return Promise.resolve({});
     });
     const charlieRemoveBtn = screen.getByTestId('remove-member-btn-usr-charlie');
     fireEvent.click(charlieRemoveBtn);
-    expect(await screen.findByText('Failed to remove workspace member.')).toBeDefined();
+    expect(await screen.findByText('Custom detail remove error')).toBeDefined();
   });
 
   it('covers formatHandle edge cases', () => {
@@ -1988,6 +1988,16 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     });
 
     // Test filter pills
+    expect(screen.getByTestId('trash-filter-sticky').textContent).toBe('Stickies');
+    expect(screen.getByTestId('trash-filter-all').textContent).toBe('All Items');
+    expect(screen.getByTestId('trash-filter-issue').textContent).toBe('Issues');
+    expect(screen.getByTestId('trash-filter-doc').textContent).toBe('Docs');
+    expect(screen.getByTestId('trash-filter-page').textContent).toBe('Pages');
+    expect(screen.getByTestId('trash-filter-cycle').textContent).toBe('Cycles');
+    expect(screen.getByTestId('trash-filter-module').textContent).toBe('Modules');
+    expect(screen.getByTestId('trash-filter-view').textContent).toBe('Views');
+    expect(screen.getByTestId('trash-filter-project').textContent).toBe('Projects');
+
     const docFilter = screen.getByTestId('trash-filter-doc');
     fireEvent.click(docFilter);
     await waitFor(() => {
@@ -2119,9 +2129,25 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(screen.getByTestId('permanent-purge-confirm-phrase').textContent).toContain('PURGE PROJECT PROJ');
 
     // 3. Permanent Purge (Stage 2 Confirm)
-    const reasonInput = screen.getByTestId('permanent-purge-reason-input');
-    fireEvent.change(reasonInput, { target: { value: 'Compliance retention expired' } });
     const confirmPurgeBtn = screen.getByTestId('confirm-permanent-purge-btn');
+    expect(confirmPurgeBtn.hasAttribute('disabled')).toBe(true);
+
+    // Attempt premature click while empty (covers line 485 guard)
+    fireEvent.click(confirmPurgeBtn);
+
+    const phraseInput = screen.getByTestId('permanent-purge-confirm-phrase-input');
+    fireEvent.change(phraseInput, { target: { value: 'PURGE PROJECT PROJ' } });
+    expect(confirmPurgeBtn.hasAttribute('disabled')).toBe(true);
+
+    // Attempt click with short reason < 8 chars (covers line 485 second branch)
+    const reasonInput = screen.getByTestId('permanent-purge-reason-input');
+    fireEvent.change(reasonInput, { target: { value: 'short' } });
+    fireEvent.click(confirmPurgeBtn);
+    expect(confirmPurgeBtn.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(reasonInput, { target: { value: 'Compliance retention expired' } });
+    expect(confirmPurgeBtn.hasAttribute('disabled')).toBe(false);
+
     fireEvent.click(confirmPurgeBtn);
 
     await waitFor(() => {
@@ -2244,7 +2270,14 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     shouldFailPurgeExecute = true;
     fireEvent.click(purgeBtn);
     expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    fireEvent.change(screen.getByTestId('permanent-purge-confirm-phrase-input'), {
+      target: { value: 'PURGE ISSUE ERR-1' },
+    });
+    fireEvent.change(screen.getByTestId('permanent-purge-reason-input'), {
+      target: { value: 'Reason for error test execution' },
+    });
     const confirmPurgeBtn = screen.getByTestId('confirm-permanent-purge-btn');
+    expect(confirmPurgeBtn.hasAttribute('disabled')).toBe(false);
     fireEvent.click(confirmPurgeBtn);
     await waitFor(() => {
       expect(screen.getByText('Purge execute failed.')).toBeDefined();
@@ -2367,11 +2400,18 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Restored doc successfully.')).toBeDefined();
     });
 
-    // Purge item with key only (no title) without providing a custom reason
+    // Purge item with key only (no title)
     const purgeBtn1 = screen.getByTestId('permanent-purge-btn-trash-bare-1');
     fireEvent.click(purgeBtn1);
     expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    fireEvent.change(screen.getByTestId('permanent-purge-confirm-phrase-input'), {
+      target: { value: 'PURGE ISSUE BARE-1' },
+    });
+    fireEvent.change(screen.getByTestId('permanent-purge-reason-input'), {
+      target: { value: 'Permanent purge reason 1' },
+    });
     const confirmBtn = screen.getByTestId('confirm-permanent-purge-btn');
+    expect(confirmBtn.hasAttribute('disabled')).toBe(false);
     fireEvent.click(confirmBtn);
     await waitFor(() => {
       expect(screen.getByText('Permanently purged BARE-1.')).toBeDefined();
@@ -2381,9 +2421,157 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     const purgeBtn2 = screen.getByTestId('permanent-purge-btn-trash-bare-2');
     fireEvent.click(purgeBtn2);
     expect(await screen.findByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
+    fireEvent.change(screen.getByTestId('permanent-purge-confirm-phrase-input'), {
+      target: { value: 'PURGE DOC trash-bare-2' },
+    });
+    fireEvent.change(screen.getByTestId('permanent-purge-reason-input'), {
+      target: { value: 'Permanent purge reason 2' },
+    });
     fireEvent.click(screen.getByTestId('confirm-permanent-purge-btn'));
     await waitFor(() => {
       expect(screen.getByText('Permanently purged doc.')).toBeDefined();
     });
+  });
+
+  it('allows PROJECT_ADMIN users scoped access to Workspace Trash Studio (KAN-30)', async () => {
+    let restoredId: string | null = null;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const m = method.toUpperCase();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: false, is_workspace_admin: false, is_project_admin: true };
+      }
+      if (path.includes('/api/v1/admin/trash') && path.includes(':restore') && m === 'POST') {
+        restoredId = 'proj-item-1';
+        return { status: 'restored' };
+      }
+      if (path.includes('/api/v1/admin/trash') && m === 'GET') {
+        return {
+          items: [
+            {
+              id: 'proj-item-1',
+              kind: 'issue',
+              key: 'PROJ-1',
+              title: 'Project Admin Trashed Item',
+              deleted_at: '2026-11-19T10:00:00Z',
+              remaining_days: 15,
+            },
+          ],
+          retention_days: 30,
+          total: 1,
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    // Studio rendered without access denied
+    expect(await screen.findByTestId('workspace-trash-studio')).toBeDefined();
+    expect(screen.queryByTestId('access-denied-message')).toBeNull();
+
+    // Only trash tab rendered; general, members, groups are hidden
+    expect(screen.getByTestId('tab-trash')).toBeDefined();
+    expect(screen.queryByTestId('tab-general')).toBeNull();
+    expect(screen.queryByTestId('tab-members')).toBeNull();
+    expect(screen.queryByTestId('tab-groups')).toBeNull();
+
+    // Retention policy card is visible, but edit controls (input and save button) are hidden
+    expect(screen.getByTestId('workspace-trash-retention-card')).toBeDefined();
+    expect(screen.queryByTestId('workspace-trash-retention-input-trash-tab')).toBeNull();
+    expect(screen.queryByTestId('save-trash-retention-btn')).toBeNull();
+
+    // Trashed items table and restore button are available
+    expect(screen.getByTestId('trash-items-table')).toBeDefined();
+    expect(screen.getByText('Project Admin Trashed Item')).toBeDefined();
+    const restoreBtn = screen.getByTestId('restore-btn-proj-item-1');
+    expect(restoreBtn).toBeDefined();
+
+    // Permanent Purge button is strictly forbidden (SERVER_ADMIN only)
+    expect(screen.queryByTestId('permanent-purge-btn-proj-item-1')).toBeNull();
+
+    // Can restore item
+    fireEvent.click(restoreBtn);
+    await waitFor(() => {
+      expect(restoredId).toBe('proj-item-1');
+      expect(screen.getByText('Restored Project Admin Trashed Item successfully.')).toBeDefined();
+    });
+  });
+
+  it('denies access to standard non-project-admin members (KAN-30)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: false, is_workspace_admin: false, is_project_admin: false };
+      }
+      if (path.includes('/api/v1/admin/trash')) {
+        throw Object.assign(new Error('Forbidden'), { detail: 'Forbidden' });
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    expect(await screen.findByTestId('access-denied-message')).toBeDefined();
+    expect(screen.getByText('You do not have administrative privileges to manage this workspace.')).toBeDefined();
+    expect(screen.queryByTestId('workspace-trash-studio')).toBeNull();
+  });
+
+  it('covers probe GET /api/v1/admin/trash on #tab-trash for project admins and probe rejection (KAN-30)', async () => {
+    // 1. Probe succeeds
+    window.location.hash = '#tab-trash';
+    let probed = false;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: false, is_workspace_admin: false };
+      }
+      if (path.includes('/api/v1/admin/trash')) {
+        probed = true;
+        return { items: [], retention_days: 20 };
+      }
+      return [];
+    });
+
+    const { unmount } = renderComponent();
+    expect(await screen.findByTestId('workspace-trash-studio')).toBeDefined();
+    expect(probed).toBe(true);
+
+    // Click tab-trash while isProjectAdminOnly is true
+    fireEvent.click(screen.getByTestId('tab-trash'));
+    unmount();
+
+    // 2. Probe throws on #tab-trash
+    window.location.hash = '#tab-trash';
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: false, is_workspace_admin: false };
+      }
+      if (path.includes('/api/v1/admin/trash')) {
+        throw Object.assign(new Error('Forbidden'), { detail: 'Forbidden' });
+      }
+      return [];
+    });
+
+    const { unmount: unmount2 } = renderComponent();
+    expect(await screen.findByTestId('access-denied-message')).toBeDefined();
+    unmount2();
+
+    // 3. Probe returns empty object (neither items array nor retention_days)
+    window.location.hash = '#tab-trash';
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: false, is_workspace_admin: false };
+      }
+      if (path.includes('/api/v1/admin/trash')) {
+        return {};
+      }
+      return [];
+    });
+
+    renderComponent();
+    expect(await screen.findByTestId('access-denied-message')).toBeDefined();
   });
 });
