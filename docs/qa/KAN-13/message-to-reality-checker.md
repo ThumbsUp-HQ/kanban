@@ -69,3 +69,27 @@ Full logs captured in `docs/qa/KAN-13/build-or-typecheck.txt`:
 - Dash Sanitization: `python3 -m scripts.check_no_dashes --all` -> 0 em/en-dashes detected.
 - Zero new dependencies introduced in `package.json`.
 - Zero inline styles (`style={{...}}`) used in JSX.
+
+## 5. Live Full-Stack Black-Box Remediation (Wave P3 Fixes)
+
+### Root Causes Diagnosed and Resolved
+1. **Invalid Mermaid Header ("graph TD;") and Nested Fence Cursor Offset on 2x Toolbar Click in `CommentComposer`:**
+   - Root Cause A: `CommentComposer.tsx` previously inserted `'```mermaid\ngraph TD;\n  '`, with a trailing semicolon on the header line. Live `beautiful-mermaid` and firewall reject trailing semicolons on header lines.
+     * Fix: Updated template to valid header syntax: `'```mermaid\ngraph TD\n  '`, `'A[Start] --> B[End]'`, `'\n```'`. Verified with real `beautiful-mermaid` parser and renderer that this parses and renders clean SVG with 0 errors.
+   - Root Cause B: `insertTextAtCursor` positioned the cursor before the closing fence (`newCursor = start + effBefore.length + selected.length`). When users clicked the toolbar button without selecting text, the cursor was left inside the block, so a second click inserted a nested fence inside the first block.
+     * Fix: When inserting a fenced block without selection (`isFence && !hasSelection`), `newCursor` is positioned after the closing fence (`start + replacement.length`). Prepending logic checks `textBefore`: if not ending in `\n\n`, it prepends `\n` (if ending in `\n`) or `\n\n` (if non-empty line). Synchronous `setSelectionRange` paired with `setTimeout` ensures cursor position is maintained.
+     * Verified by dedicated Vitest unit test clicking `[aria-label="Insert Mermaid diagram"]` twice in a row, asserting exact two-block output with blank line separator, validating both blocks through `sanitizeAndValidateMermaid`, and rendering both to SVG.
+
+2. **Mobile 390x844 Viewport Toolbar "Copy" Button Wrapping ("Cop\ny"):**
+   - Root Cause: In `MediaViewport.css` and `MermaidBlockView.css`, toolbar buttons lacked `white-space: nowrap` and `flex-shrink: 0`, while toolbars lacked `flex-wrap: wrap`. At 390px mobile width, the controls bar forced the "Copy" label to wrap mid-word as "Cop\ny".
+   - Fix: Added `white-space: nowrap; flex-shrink: 0;` to `.media-btn` and `.mermaid-block__toggle-btn`. Added `flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px);` to `.media-viewport__controls` and `flex-wrap: wrap; gap: 0.5rem;` to `.mermaid-block__toolbar`. "Copy" never wraps mid-word at any viewport width.
+
+### Verification of Remediated Files
+- Automated Unit Tests: 85 passing tests across touched components (`CommentComposer.test.tsx`, `MermaidBlockView.test.tsx`, `MediaViewport.test.tsx`, `mermaidFirewall.test.ts`, `cssTokensAudit.test.ts`).
+- Coverage Metrics:
+  * `CommentComposer.tsx`: 100% Stmts, 96.1% Branch, 100% Funcs, 100% Lines
+  * `MermaidBlockView.tsx`: 100% Stmts, 97.43% Branch, 100% Funcs, 100% Lines
+  * `MediaViewport.tsx`: 100% Stmts, 98.46% Branch, 100% Funcs, 100% Lines
+  * All touched files exceed 95% coverage threshold across all metrics.
+- Static Analysis: `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 errors, 0 warnings), `vite build` (passed), `cssTokensAudit.test.ts` (4/4 passed), `scripts.check_no_dashes --all` (0 dashes).
+

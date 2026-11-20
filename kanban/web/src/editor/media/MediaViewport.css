@@ -110,6 +110,9 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 24px);
   gap: 6px;
   padding: 4px 8px;
   background-color: var(--bg-surface-raised, rgba(15, 23, 42, 0.85));
@@ -137,6 +140,8 @@
   font-weight: 500;
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: background-color 0.15s ease;
 }
 

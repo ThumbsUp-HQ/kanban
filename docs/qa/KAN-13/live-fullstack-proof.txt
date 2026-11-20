@@ -1,0 +1,82 @@
+LIVE FULL-STACK BLACK-BOX QA PROOF - KAN-13 ([KB-P3-AUDIT-07])
+Target Container: kanban-liveqa-2 (image: thumbs-up-kanban:local-qa)
+Base URL: http://localhost:18952
+Mocking Policy: 0 mockApi, 0 page.route, 0 context.route stubs
+Timestamp: 2026-11-20T02:56:00Z
+
+========================================================================
+COMMAND EXECUTED
+========================================================================
+node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-2/qa_kan13.mjs
+
+========================================================================
+RAW EXECUTION LOG & LIVE HTTP / DOM TRANSCRIPTS
+========================================================================
+1. Issue KAN-1 created via UI "+ New work item" modal (POST /api/v1/projects/KAN/issues -> HTTP 201):
+   description_markdown:
+   Architect flow overview:
+
+   ```mermaid
+   graph LR
+     A[Client] --> B[Gateway]
+   ```
+
+2. Opened http://localhost:18952/projects/KAN/issues/KAN-1 (.surface--full).
+3. Clicked [aria-label="Insert Mermaid diagram"] twice in CommentComposer:
+   Actual .comment-composer__textarea value after 2 clicks:
+   "```mermaid\ngraph TD;\n  A-->B;\n```mermaid\ngraph TD;\n  A-->B;\n```\n\n```\n"
+   POST /api/v1/issues/KAN-1/comments -> HTTP 201
+
+4. Live DOM & Rendered Output Inspection:
+   - Issue description MermaidBlockView: rendered live Mermaid SVG diagram (Client -> Gateway) as sanitized data-URI image inside .media-viewport__img; 0 duplicate <pre class="surface__mermaid-code"> dumps.
+   - Posted comment MermaidBlockView: FAILED TO RENDER DIAGRAM. Rendered fallback banner:
+     "Diagram rendered as source: Mermaid rendering failed: Error: Invalid mermaid header: \"graph TD;\". Expected \"graph TD\", \"flowchart LR\", \"stateDiagram-v2\", etc."
+     Root causes observed on live stack:
+       (a) CommentComposer.tsx line 474 template uses "graph TD;" with a trailing semicolon, which the live Mermaid parser rejects as an invalid header.
+       (b) CommentComposer.tsx insertTextAtCursor places selectionStart/selectionEnd BEFORE the closing "\n```" fence, so clicking the Mermaid toolbar button twice nests a second "```mermaid" block inside the first unclosed fence instead of placing two newline-separated sibling blocks.
+   - dupPreCount (pre.surface__mermaid-code): 0
+   - fontVariantLigatures on code/editor elements:
+     - TEXTAREA.comment-composer__textarea: "none"
+     - CODE.language-mermaid: "none"
+     - PRE.mermaid-block__source-pre: "none"
+   - Hide Nav button count in IssueSurface header: 0
+   - Sidebar collapse & expand on Desktop 1440x900:
+     - Before collapse: .surface--full cssLeft="256px", rectLeft=256, rectWidth=1184
+     - Click [aria-label="Collapse navigation sidebar"] in Sidebar Workspace header row
+     - After collapse: .surface--full cssLeft="0px", rectLeft=0, rectWidth=1440, Topbar [aria-label="Expand navigation sidebar"] visible=true
+     - Click [aria-label="Expand navigation sidebar"] -> .surface--full cssLeft="256px", rectLeft=256, rectWidth=1184
+   - WorkspaceBadge monogram & [👍] prefix check:
+     - Sidebar badge: text="KA", class="workspace-badge workspace-badge--md workspace-badge--tone-2"
+     - Breadcrumb badge: text="KA", class="workspace-badge workspace-badge--sm workspace-badge--tone-2"
+     - document.body.innerText.includes("[👍]"): false
+
+========================================================================
+CONSOLE / PAGEERROR & CONTAINER LOG FINDINGS
+========================================================================
+pageErrors: 0
+consoleErrors: 10
+  All 10 entries: "[console.error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+Container log correlation:
+  GET /api/v1/projects/KAN/modules HTTP/1.1 -> 404 (MODULES_DISABLED: Modules feature is disabled for this project)
+  Emitted repeatedly on /projects/KAN/issues/KAN-1 loads/reloads.
+
+Additional Visual Observation:
+- On mobile 390x844 (live-kan13-issue-mobile-light.png & live-kan13-issue-mobile-dark.png), the Mermaid viewport toolbar "Copy" button label wraps mid-word as "Cop\ny".
+
+========================================================================
+SCREENSHOT ARTIFACTS (UNMOCKED)
+========================================================================
+- docs/qa/KAN-13/screenshots/live-kan13-issue-expanded-desktop-light.png
+- docs/qa/KAN-13/screenshots/live-kan13-issue-collapsed-desktop-light.png
+- docs/qa/KAN-13/screenshots/live-kan13-issue-desktop-dark.png
+- docs/qa/KAN-13/screenshots/live-kan13-issue-mobile-light.png
+- docs/qa/KAN-13/screenshots/live-kan13-issue-mobile-dark.png
+
+========================================================================
+PER-PROBLEM VERDICTS
+========================================================================
+- Problem 1 (CommentComposer 2x Mermaid toolbar click produces valid newline-separated fences & renders): LIVE_STACK_VERDICT: FAIL (2nd click nests inside 1st unclosed fence: "```mermaid\ngraph TD;\n  A-->B;\n```mermaid\ngraph TD;\n  A-->B;\n```\n\n```\n"; template header "graph TD;" fails live Mermaid validation)
+- Problem 2 (Both description and comment render live Mermaid diagrams, 0 duplicate pre.surface__mermaid-code, fontVariantLigatures === "none"): LIVE_STACK_VERDICT: FAIL (Description diagram rendered and fontVariantLigatures === "none" + 0 duplicate pre.surface__mermaid-code passed, but posted comment failed with "Error: Invalid mermaid header: \"graph TD;\"" and nested fence)
+- Problem 3 (0 Hide Nav buttons in IssueSurface header, Sidebar collapse/expand to .surface--full left: 0px & Topbar expand button): LIVE_STACK_VERDICT: PASS
+- Problem 4 (WorkspaceBadge monogram KA in Sidebar & Breadcrumb, 0 "[👍]" prefixes): LIVE_STACK_VERDICT: PASS
+- Problem 5 (0 console/pageerror gate): LIVE_STACK_VERDICT: FAIL (10 console.error 404 entries from GET /api/v1/projects/KAN/modules on /projects/KAN/issues/KAN-1 when modules is disabled)

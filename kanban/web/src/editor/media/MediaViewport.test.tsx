@@ -496,4 +496,27 @@ describe('MediaViewport & Lightbox Components', () => {
     const readout = screen.getByTestId('test-lightbox-wheel-zoom-readout');
     expect(readout.textContent).toBe('125%');
   });
+
+  it('handles wheel zoom with metaKey modifier in non-lightbox mode', () => {
+    render(
+      <MediaViewport
+        src={SAMPLE_BLOB}
+        alt="MetaKey Wheel Test"
+        isLightbox={false}
+        testId="test-meta-wheel"
+      />,
+    );
+
+    const canvas = screen.getByTestId('test-meta-wheel-canvas');
+    fireEvent.wheel(canvas, {
+      deltaY: -100,
+      clientX: 50,
+      clientY: 50,
+      ctrlKey: false,
+      metaKey: true,
+    });
+
+    const readout = screen.getByTestId('test-meta-wheel-zoom-readout');
+    expect(readout.textContent).toBe('125%');
+  });
 });

@@ -608,12 +608,75 @@ describe('MermaidBlockView', () => {
 
           await act(async () => {
             (mermaidResult as MermaidNodeView).destroy();
+            // Call destroy second time when root is null
+            (mermaidResult as MermaidNodeView).destroy();
             await new Promise((r) => setTimeout(r, 10));
           });
         }
       }
 
       unregister();
+    });
+
+    it('covers MermaidNodeView update with identical textContent and stopEvent outside dom', () => {
+      const mockNode = {
+        type: { name: 'code_block' },
+        attrs: { lang: 'mermaid' },
+        textContent: 'graph TD\n  A --> B',
+      } as unknown as ProsemirrorNode;
+
+      const mockView = {
+        state: {
+          doc: {
+            nodeAt: vi.fn(),
+          },
+          tr: {
+            setNodeMarkup: vi.fn().mockReturnThis(),
+          },
+        },
+        dispatch: vi.fn(),
+      } as unknown as EditorView;
+
+      let nodeView!: MermaidNodeView;
+      act(() => {
+        nodeView = new MermaidNodeView(mockNode, mockView, () => 0);
+      });
+
+      // Update with identical textContent: returns true without re-rendering
+      const updateResult = nodeView.update(mockNode);
+      expect(updateResult).toBe(true);
+
+      // stopEvent with outside target: returns false
+      const outsideEl = document.createElement('div');
+      const fakeEvent = { target: outsideEl } as unknown as Event;
+      expect(nodeView.stopEvent(fakeEvent)).toBe(false);
+
+      nodeView.destroy();
+    });
+
+    it('handles non-Error thrown during executeRender and mutation with class attribute', async () => {
+      const throwingClient = {
+        render: vi.fn().mockRejectedValue('String error primitive'),
+      } as unknown as MermaidWorkerClient;
+
+      render(
+        <MermaidBlockView
+          source="graph TD\n  A --> B"
+          client={throwingClient}
+          testId="string-err-block"
+        />,
+      );
+
+      // Trigger mutation observer with class attribute
+      await act(async () => {
+        document.documentElement.className = 'theme-test-mutation';
+        await new Promise((r) => setTimeout(r, 10));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('string-err-block-fallback-banner')).toBeDefined();
+      });
+      document.documentElement.className = '';
     });
   });
 });

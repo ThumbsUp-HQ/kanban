@@ -132,15 +132,23 @@ export function CommentComposer({
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const current = textarea.value;
-    const selected = current.slice(start, end) || placeholderText;
+    const hasSelection = start !== end;
+    const selected = hasSelection ? current.slice(start, end) : placeholderText;
 
     let effBefore = beforeInsert;
     let effAfter = afterInsert;
     const isFence = effBefore.startsWith('```') || effAfter.includes('```');
 
     if (isFence) {
-      if (start > 0 && current[start - 1] !== '\n') {
-        effBefore = `\n${effBefore}`;
+      if (start > 0) {
+        const textBefore = current.slice(0, start);
+        if (textBefore.endsWith('\n\n')) {
+          // already preceded by blank line
+        } else if (textBefore.endsWith('\n')) {
+          effBefore = `\n${effBefore}`;
+        } else {
+          effBefore = `\n\n${effBefore}`;
+        }
       }
       if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
         effAfter = `${effAfter}\n`;
@@ -153,11 +161,25 @@ export function CommentComposer({
     setDraft(nextDraft);
     setErrorText(null);
 
+    const newCursor = isFence && !hasSelection
+      ? start + replacement.length
+      : start + effBefore.length + selected.length;
+
+    // Set selection immediately on the DOM element if available
+    try {
+      textarea.setSelectionRange(newCursor, newCursor);
+    } catch {
+      // ignore
+    }
+
     // Restore focus and selection
     setTimeout(() => {
       textarea.focus();
-      const newCursor = start + effBefore.length + selected.length;
-      textarea.setSelectionRange(newCursor, newCursor);
+      try {
+        textarea.setSelectionRange(newCursor, newCursor);
+      } catch {
+        // ignore
+      }
     }, 0);
   };
 
@@ -471,7 +493,7 @@ export function CommentComposer({
           type="button"
           className="composer-tool-btn"
           aria-label="Insert Mermaid diagram"
-          onClick={() => { insertTextAtCursor('```mermaid\ngraph TD;\n  ', '\n```', 'A-->B;'); }}
+          onClick={() => { insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
         >
           📊
         </button>
