@@ -1661,7 +1661,7 @@ async def test_oidc_callback_link_flow_preserves_session_and_redirects(
             "card_id": card_id,
         },
     )
-    await db_session.scalar(
+    intent_id = await db_session.scalar(
         text("SELECT kb_auth.identity_link_intent_create(:p_id, :s_id, :card_id, 300)"),
         {"p_id": admin_id, "s_id": s_id, "card_id": card_id},
     )
@@ -1679,7 +1679,7 @@ async def test_oidc_callback_link_flow_preserves_session_and_redirects(
             db_session,
             "link-test",
             return_to="/settings/profile",
-            link_intent_id=admin_id,
+            link_intent_id=intent_id,
         )
         params = dict(
             urllib.parse.parse_qsl(urllib.parse.urlsplit(start_resp.headers["Location"]).query)
@@ -1714,7 +1714,7 @@ async def test_oidc_callback_link_flow_preserves_session_and_redirects(
         assert mock_session_service.create_after_login.call_count == 0
 
         # 4. Resolver was invoked with link_intent_id
-        assert admin_id in recording_resolver.intents
+        assert intent_id in recording_resolver.intents
 
 
 @pytest.mark.asyncio
@@ -1758,7 +1758,7 @@ async def test_oidc_callback_link_flow_conflict_redirects_error(
             "card_id": card_id,
         },
     )
-    await db_session.scalar(
+    intent_id = await db_session.scalar(
         text("SELECT kb_auth.identity_link_intent_create(:p_id, :s_id, :card_id, 300)"),
         {"p_id": admin_id, "s_id": s_id, "card_id": card_id},
     )
@@ -1786,7 +1786,7 @@ async def test_oidc_callback_link_flow_conflict_redirects_error(
             db_session,
             "link-conflict-test",
             return_to="/settings/profile",
-            link_intent_id=admin_id,
+            link_intent_id=intent_id,
         )
         params = dict(
             urllib.parse.parse_qsl(urllib.parse.urlsplit(start_resp.headers["Location"]).query)

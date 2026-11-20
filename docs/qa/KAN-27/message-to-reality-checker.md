@@ -81,3 +81,56 @@
 - `changed-files-manifest.txt`: List of touched working tree files.
 - `git-diff.patch`: Complete git diff against HEAD commit 53f7b6eb.
 - `message-to-reality-checker.md`: This comprehensive verification report.
+
+
+---
+
+## Live Full-Stack Verification (Zero-Mock Against Standalone Container, Commit 5998e9ab)
+
+- **Target:** `http://localhost:18951` (`kanban-liveqa-1`, PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`)
+- **Proof Log:** `docs/qa/KAN-27/live-fullstack-proof.txt`
+- **LIVE_STACK_VERDICT: FAIL**
+- **Summary of Live Checks:**
+  - Empty external providers view (`/settings/profile` prior to external cards) renders explanation and Server Admin `Configure Providers in Admin Auth Studio ->` (`/admin/auth`) link (`live-kan27-empty-providers-desktop-light.png`).
+  - Unauthenticated `GET /api/v1/auth/oidc/corp-sso/start?link_intent_id=...` and `GET /api/v1/auth/cards/corp-sso/start?link_intent_id=...` ignore `link_intent_id` (login-only flow).
+  - `@projadmin` (`PROJECT_ADMIN`, `aal_level=1`) calling `POST /api/v1/auth/identities/link/start` receives `403 AAL2_REQUIRED`.
+  - `+ Connect Corp SSO` / `+ Connect Corp LDAP` buttons (Desktop Light/Dark + Mobile `390x844`, `scrollWidth=390`) and `ldap-credentials-modal` (Desktop Light/Dark) render cleanly.
+  - **CRITICAL BLOCKER (RESOLVED IN RC1):** `POST /api/v1/auth/identities/link/start` for OIDC (`corp-sso`) failed with **`HTTP 500 INTERNAL_ERROR`** both via API and via browser UI click (`live-kan27-link-start-500-failure-desktop-light.png`). PostgreSQL 16 raised `ForeignKeyViolationError` on `oidc_auth_requests_link_intent_id_fkey` because `database/migrations/sql/p2_06_oidc_auth_requests.up.sql:12` defined `oidc_auth_requests.link_intent_id REFERENCES principals(id)` instead of `REFERENCES identity_link_intents(id)`, while `IdentityLinkService.start_link` passes `identity_link_intents.id`.
+  - Downstream OIDC callback, session preservation, `?linked=` confirmation banner, and duplicate `(issuer, sub)` `IDENTITY_ALREADY_LINKED` conflict checks were blocked until this schema FK bug was fixed.
+
+---
+
+## 6. Live QA Remediation (fix/KAN-27-rc1)
+
+### Root Cause Analysis & Schema Migration
+- In `p2_06_oidc_auth_requests.up.sql:12`, column `link_intent_id` was defined with `REFERENCES principals(id) ON DELETE SET NULL` because `identity_link_intents` was introduced in a later migration (`p2_08_user_identities.up.sql:42`).
+- When `IdentityLinkService.start_link` generated an intent via `kb_auth.identity_link_intent_create(...)` and forwarded the resulting `intent_id` into `oidc_flow.start(...)`, PostgreSQL 16 rejected the insertion with `ForeignKeyViolationError` on `oidc_auth_requests_link_intent_id_fkey` (`Key is not present in table "principals"`).
+
+### Resolution Implemented
+1. **Linear Database Migration (`p4_23_oidc_link_intent_fk`):**
+   - Created single-head migration `database/migrations/versions/p4_23_oidc_link_intent_fk.py` following `database/GEMINI.md`.
+   - `p4_23_oidc_link_intent_fk.up.sql`: Drops `oidc_auth_requests_link_intent_id_fkey` and adds `CONSTRAINT oidc_auth_requests_link_intent_id_fkey FOREIGN KEY (link_intent_id) REFERENCES identity_link_intents(id) ON DELETE SET NULL`.
+   - `p4_23_oidc_link_intent_fk.down.sql`: Restores foreign key constraint referencing `principals(id)`.
+   - Validated: `uv run kanban-ctl db check-migrations` reports `OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk`.
+2. **SQLAlchemy ORM Parity (`database/models/auth.py`):**
+   - Updated `OidcAuthRequest.link_intent_id` annotation to `ForeignKey("identity_link_intents.id", ondelete="SET NULL")`.
+   - Verified schema parity test `database/tests/test_p1_17_models.py::test_orm_schema_parity` passes 100%.
+3. **Migration Lifecycle Validation (`database/tests/migrations/test_p4_23_oidc_link_intent_fk_migration.py`):**
+   - Executes real upgrade -> downgrade -> upgrade cycle on PostgreSQL 16.
+   - Verifies target table shifts from `identity_link_intents` to `principals` and back to `identity_link_intents`.
+4. **Real PostgreSQL E2E ASGI Lifecycle Test (`kanban/tests/auth/test_identity_linking_real_pg_e2e.py`):**
+   - Zero mocking of core auth services: uses real PostgreSQL tables, real `kb_auth.*` SQL routines, real `SessionService`, and real `RLSSessionFactory`. Outbound HTTP to IdP mocked solely via `FakeIdP` / `MockTransport`.
+   - Proves zero-factor `WORKSPACE_MEMBER` `@alice` (`aal_level=1`) calls `POST /api/v1/auth/identities/link/start` (HTTP 200, sets `kb_oidc` cookie, inserts real row into `oidc_auth_requests` and `identity_link_intents` with zero FK error).
+   - Proves IdP callback `GET /api/v1/auth/oidc/corp-sso/callback?code=...&state=...` redirects 302 to `/settings/profile?linked=corp-sso`, binds identity in `user_identities`, and preserves `@alice` exact `session_id` and `aal_level == 1`.
+   - Proves second user `@admin` attempting to link the same `(issuer, sub)` redirects to `/settings/profile?link_error=IDENTITY_ALREADY_LINKED` with zero duplicate rows in PostgreSQL.
+5. **Existing Suite Alignment (`kanban/tests/auth/test_oidc_flow.py`):**
+   - Corrected test cases `test_oidc_callback_link_flow_preserves_session_and_redirects` and `test_oidc_callback_link_flow_conflict_redirects_error` to use the generated `intent_id` rather than principal ID.
+
+### Verification Summary
+- `check-migrations`: OK (62 migrations valid, single head).
+- Migration lifecycle test: PASSED (1/1).
+- ORM parity and RLS tests: PASSED (6/6).
+- Real PG E2E test: PASSED (1/1).
+- Full Auth test suite: PASSED (292/292).
+- Frontend Vitest: PASSED (66/66).
+- Static quality checks (Ruff, MyPy, lint-imports, check_no_dashes, tsc, eslint): 100% clean, 0 errors, 0 em/en-dashes.

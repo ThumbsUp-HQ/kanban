@@ -1,4 +1,15 @@
-=== Backend Pytest Suite with Coverage ===
+=== 1. Migration Upgrade/Downgrade Lifecycle Test ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 1 item
+
+database/tests/migrations/test_p4_23_oidc_link_intent_fk_migration.py::test_p4_23_oidc_link_intent_fk_migration_lifecycle PASSED [100%]
+
+============================== 1 passed in 0.83s ===============================
 👍 INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
 👍 INFO  [alembic.runtime.migration] Will assume transactional DDL.
 👍 INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
@@ -61,51 +72,74 @@
 👍 INFO  [alembic.runtime.migration] Running upgrade p4_18_oauth_mcp_scoping -> p4_19_persistent_sessions, Persistent sessions and remember_me.
 👍 INFO  [alembic.runtime.migration] Running upgrade p4_19_persistent_sessions -> p4_20_user_personal_settings, User personal settings preferences.
 👍 INFO  [alembic.runtime.migration] Running upgrade p4_20_user_personal_settings -> p4_21_workspace_project_rbac_fix, workspace project rbac fix.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_21_workspace_project_rbac_fix -> p4_22_outbox_replay_reader, Add SECURITY DEFINER outbox replay read routines.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_22_outbox_replay_reader -> p4_23_oidc_link_intent_fk, Fix oidc_auth_requests link_intent_id foreign key to reference identity_link_intents.
+
+=== 2. ORM Schema Parity and RLS Catalog Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-47504391
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 43 items
+collecting ... collected 6 items
 
-kanban/tests/auth/test_identity_linking.py ..........                    [ 23%]
-kanban/tests/auth/test_oidc_flow.py .......................              [ 76%]
-kanban/tests/auth/test_auth_cards_public_api.py ....                     [ 86%]
-kanban/tests/auth/test_identity_resolution.py ......                     [100%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 16%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 33%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 50%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 66%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 83%]
+database/tests/test_p1_14_rls_catalog.py::test_06_rls_catalog_gate PASSED [100%]
+
+============================== 6 passed in 0.52s ===============================
+
+=== 3. Real PostgreSQL E2E Identity Linking Lifecycle Test (Zero Mocks of Auth DB Functions) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 1 item
+
+kanban/tests/auth/test_identity_linking_real_pg_e2e.py::test_oidc_identity_linking_real_pg_lifecycle PASSED [100%]
+
+============================== 1 passed in 0.54s ===============================
+
+=== 4. Full Auth Identity Linking and OIDC Flow Suite with Coverage ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 34 items
+
+kanban/tests/auth/test_oidc_flow.py .......................              [ 67%]
+kanban/tests/auth/test_identity_linking.py ..........                    [ 97%]
+kanban/tests/auth/test_identity_linking_real_pg_e2e.py .                 [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                                 Stmts   Miss Branch BrPart  Cover   Missing
---------------------------------------------------------------------------------
-kanban/api/v1/auth_cards_public.py      58     13     12      2    73%   47, 93, 120, 129-144
-kanban/api/v1/auth_identities.py       119      4     34      4    95%   73, 75, 77, 209
-kanban/api/v1/auth_oidc.py              85     33     18      4    54%   52-63, 70, 76-85, 113-121, 139-144, 176-184, 200-205
-kanban/auth/identity_service.py        339     64    130     20    78%   47, 51, 63, 65, 67, 77-94, 103-120, 165->171, 175->181, 185-188, 190->exit, 359-364, 371, 404-405, 478-479, 481-484, 486->492, 493->509, 505-506, 527-532, 540-541, 548-553, 599->601, 627-628, 644-651, 671-672, 859-860
-kanban/auth/oidc/flow.py               368     49    126     21    81%   85, 194, 200, 206-207, 421->424, 444, 457-458, 468, 479->494, 523, 532->547, 534, 558-559, 571-572, 611, 657, 677-678, 714, 729-773, 814-816, 826-828, 852->854, 864->866
---------------------------------------------------------------------------------
-TOTAL                                  969    163    320     51    79%
-============================== 43 passed in 4.25s ==============================
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+database/models/auth.py              193     24      0      0    88%   76, 84, 124, 133, 155, 162, 195, 202, 234, 241, 261, 268, 294, 301, 331, 339, 358, 366, 399, 406, 429, 437, 459, 466
+kanban/api/v1/auth_identities.py     119      4     34      4    95%   73, 75, 77, 209
+kanban/auth/identity_service.py      339     77    130     23    74%   47, 51, 63, 65, 67, 77-94, 103-120, 165->171, 175->181, 185-188, 190->exit, 325-330, 359-364, 371, 404-405, 428, 437-440, 478-479, 481-484, 486->492, 493-514, 527-532, 540-541, 548-553, 599->601, 627-628, 644-651, 671-672, 856-857
+kanban/auth/oidc/flow.py             368     45    126     21    83%   85, 194, 200, 206-207, 421->424, 444, 457-458, 468, 479->494, 523, 532->547, 534, 558-559, 571-572, 611, 657, 677-678, 714, 729-773, 814, 826, 850->852, 862->864
+------------------------------------------------------------------------------
+TOTAL                               1019    150    290     48    82%
+============================== 34 passed in 3.99s ==============================
 
-=== Frontend Vitest Suite with Coverage ===
+=== 5. Frontend Vitest (PersonalSettingsPage External Identity Linking) ===
+RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb/kanban/web
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-47504391/kanban/web
-      Coverage enabled with v8
-
- ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (66 tests) 5912ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (66 tests) 5481ms
    ✓ PersonalSettingsPage (66)
-     ✓ regenerates recovery codes and displays modal 2084ms
+     ✓ regenerates recovery codes and displays modal 2108ms
 
  Test Files  1 passed (1)
       Tests  66 passed (66)
-   Start at  06:11:04
-   Duration  7.28s (tests 85%, environment 10%, transform 3%, import 2%)
-
- % Coverage report from v8
--------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
--------------------|---------|----------|---------|---------|-------------------
-All files          |   98.39 |    95.43 |      99 |     100 |                   
- ...ttingsPage.tsx |   98.39 |    95.43 |      99 |     100 | ...11,402,429,495 
--------------------|---------|----------|---------|---------|-------------------
+   Start at  08:27:28
+   Duration  6.58s (tests 86%, environment 11%, import 2%, transform 1%)
