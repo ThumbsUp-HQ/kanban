@@ -529,32 +529,47 @@ export function CommandPalette({
 
   // Filtered and scored options
   const filteredOptions = useMemo<CommandOption[]>(() => {
-    const seen = new Set<string>();
-    const all: CommandOption[] = [];
-
-    for (const opt of [...liveSearchResults, ...baseCommands, ...issueCommands]) {
-      const key = `${opt.category}:${opt.title}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        all.push(opt);
-      }
-    }
-
     if (!query.trim()) {
       return baseCommands;
     }
-    const scored: { option: CommandOption; score: number }[] = [];
-    for (const opt of all) {
+
+    const seen = new Set<string>();
+    const result: CommandOption[] = [];
+
+    // Backend hybrid / synaptic search results preserve exact rank order and are never dropped
+    for (const opt of liveSearchResults) {
+      const key = `${opt.category}:${opt.title}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(opt);
+      }
+    }
+
+    // Local fallback commands scored and sorted by match score
+    const scoredLocal: { option: CommandOption; score: number }[] = [];
+    for (const opt of [...baseCommands, ...issueCommands]) {
+      const key = `${opt.category}:${opt.title}`;
+      if (seen.has(key)) {
+        continue;
+      }
       const s = Math.max(
         scoreMatch(query, opt.title),
         opt.meta ? scoreMatch(query, opt.meta) : 0,
       );
       if (s > 0) {
-        scored.push({ option: opt, score: s });
+        scoredLocal.push({ option: opt, score: s });
       }
     }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((item) => item.option);
+    scoredLocal.sort((a, b) => b.score - a.score);
+    for (const item of scoredLocal) {
+      const key = `${item.option.category}:${item.option.title}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(item.option);
+      }
+    }
+
+    return result;
   }, [baseCommands, issueCommands, liveSearchResults, query]);
 
   // Bound selectedIndex

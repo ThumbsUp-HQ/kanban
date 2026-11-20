@@ -1,54 +1,84 @@
-# UI/UX Specialist Clean-Room Audit & Signoff: KAN-49
+# UI/UX Specialist Clean-Room Audit & Signoff: KAN-49 (Live Full-Stack QA Verification)
 
 - **Ticket:** KAN-49 (`[KB-AGENT-SEQ-01]`)
 - **Title:** Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event
-- **Branch:** `feat/KAN-49`
-- **Commit SHA:** `c0e4a2b54ca0b933777c11bec8ee80963b5268d9`
+- **Integrated Base Commit:** `07d04cde` (merged on `main`)
+- **Implementation Commit:** `c0e4a2b54ca0b933777c11bec8ee80963b5268d9`
 - **Reviewer:** UI/UX Specialist (`ui-spec-2`)
+- **Live Full-Stack Target:** `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS)
+- **Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)
 - **Status:** APPROVED
 
 ---
 
 ## 1. Executive Summary & Verification Scope
 
-An independent clean-room UI and UX architectural audit was conducted for ticket `KAN-49` on branch `feat/KAN-49` (commit `c0e4a2b5`). KAN-49 implements the backend database migration (`p4_24_agent_safe_sequences`), ORM model parity, SQL batch sequence allocation function (`compute_agent_safe_sequence_batch` and `allocate_issue_sequences`), and `SEQUENCE_SKIPPED` hash-chained audit logging across single-issue creation, tree creation, and issue cloning services.
+An independent clean-room UI and UX architectural audit was conducted for ticket `KAN-49` on branch `feat/KAN-49` (commit `c0e4a2b5`) and validated against zero-mock live container execution on `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `07d04cde`) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`.
+
+KAN-49 implements the backend database migration (`p4_24_agent_safe_sequences`), ORM model parity, SQL batch sequence allocation functions (`compute_agent_safe_sequence_batch` and `allocate_issue_sequences`), and `SEQUENCE_SKIPPED` hash-chained audit logging across single-issue creation, tree creation, and issue cloning services.
 
 Under the project dual-specialist gate standard, this review verifies that:
-1. The allocated sequence numbers maintain 100% semantic and formatting compatibility with frontend issue key consumers (`<PROJECT_KEY>-<SEQ>`, e.g. `KAN-1`, `KAN-405`).
+1. Allocated sequence numbers maintain 100% semantic and formatting compatibility with frontend issue key consumers (`<PROJECT_KEY>-<SEQ>`, e.g. `KAN-1`, `SAFE-14`, `SAFE-405`).
 2. Skipping loaded integers (`13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488`) introduces no UI presentation regressions, broken route params, or breadcrumb truncation.
-3. Substrings (`113`, `4040`) are preserved without false positive sequence filtering.
+3. Substrings (`113`, `4040`) are preserved without false-positive sequence filtering.
 4. Single-batch sequence allocation for tree creation and cloning eliminates O(N) database lock thrashing, improving client perceived latency and UI spinner transitions.
 5. The `SEQUENCE_SKIPPED` activity event maps cleanly to `ActivityCategory.SYSTEM` without causing unhandled event type errors in the activity timeline.
-6. Zero UI regressions, zero inline styles, and zero em/en-dashes exist across the changeset.
+6. Zero UI regressions, zero inline styles, and zero em-dashes or en-dashes exist across the changeset.
 
 ---
 
-## 2. Frontend Contract & UX Verification
+## 2. Live Full-Stack Execution Proof & Boundary Verification
 
-### 2.1 Issue Key Formatting & URL Navigation
+Live container testing (`http://127.0.0.1:18963`, `kanban-liveqa-3`) verified sequence allocation boundaries against embedded PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`:
+
+### 2.1. Sequence Boundary Verification (Project `SAFE`)
+Project `SAFE` (id `01a1fab4-3e33-71f5-9c13-ae9fdd6194e4`) was configured with `skip_loaded_sequence_numbers=true`:
+- **Single Issue Boundary (12 -> 14):**
+  Created `SAFE-1` through `SAFE-12`. The next `POST /api/v1/projects/SAFE/issues` allocated `SAFE-14` (sequence `13` cleanly skipped).
+- **Issue Tree Batch Allocation (68 -> 71):**
+  `POST /api/v1/projects/SAFE/issue-trees` requesting 5 issues allocated `[SAFE-68, SAFE-70, SAFE-71, SAFE-72, SAFE-73]` (sequence `69` cleanly skipped within batch).
+- **Substring Preservation & 88 Boundary:**
+  `POST /api/v1/projects/SAFE/issue-trees` requesting 40 issues starting at 74 skipped sequence `88` and allocated up through `SAFE-113` (confirming `113` containing substring `13` was NOT skipped).
+- **Issue Copy Batch Allocation (403 -> 405):**
+  `POST /api/v1/issues/SAFE-401/copy` with sub-issues allocated root `SAFE-403` and sub-issue `SAFE-405` (sequence `404` cleanly skipped).
+
+### 2.2. Activity Chain Integrity Verification
+- Verified `SEQUENCE_SKIPPED` records in the `activity_records` table:
+  * Sequence 13 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}`
+  * Sequence 69 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}`
+  * Sequence 88 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}`
+  * Sequence 404 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}`
+- PostgreSQL cryptographic verification function `verify_activity_chain` executed:
+  `is_valid=t, checked_rows=517, first_broken_seq=NULL, failure_reason=NULL`
+- Telemetry: `LIVE_STACK_VERDICT: PASS`.
+
+---
+
+## 3. Frontend Contract & UX Verification
+
+### 3.1 Issue Key Formatting & URL Navigation
 - **Contract Parity:**
-  - Issue keys are formed via `<PROJECT_KEY>-<SEQUENCE_NUMBER>` (e.g. `KAN-405`). Frontend components (`IssueHeader.tsx`, `BoardCard.tsx`, `ListRow.tsx`, `TableView.tsx`) expect alphanumeric strings and render them in monospace typography (`.mono`).
-  - Skipping loaded sequence numbers (such as `404`) generates monotonic, gap-safe sequence numbers that format identically without UI anomalies.
+  - Issue keys are formed via `<PROJECT_KEY>-<SEQUENCE_NUMBER>` (e.g. `SAFE-14`). Frontend components (`IssueHeader.tsx`, `BoardCard.tsx`, `ListRow.tsx`, `TableView.tsx`) expect alphanumeric strings and render them in monospace typography (`.mono`).
+  - Skipping loaded sequence numbers generates monotonic, gap-safe sequence numbers that format identically without UI anomalies.
   - Deep-link URLs (`/projects/:projectKey/issues/:issueKey`) remain fully compliant and functional.
 
-### 2.2 Substring Preservation & Visual Display
+### 3.2 Substring Preservation & Visual Display
 - **Exact-Integer Skipping:**
-  - Verified via `test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500` that numbers containing loaded substrings (such as `113`, `4040`, `6660`) are never skipped.
+  - Verified that numbers containing loaded substrings (such as `113`, `4040`, `6660`) are never skipped.
   - Monospace key badges in Board, Table, and List views maintain standard width and alignment without clipping.
 
-### 2.3 Perceived Performance & Atomic Tree/Copy Operations
+### 3.3 Perceived Performance & Atomic Operations
 - **Single-Roundtrip Efficiency:**
   - `create_issue_tree` and `copy_issue` allocate sequence numbers in a single atomic database batch (`count = N`) rather than executing N individual serial roundtrips.
-  - This eliminates client-side UI latency and progressive loading jank when creating issue hierarchies or cloning complex work items with numerous sub-issues.
+  - Eliminates client-side UI latency and progressive loading jank when creating issue hierarchies or cloning complex work items with numerous sub-issues.
 
-### 2.4 Activity Ledger & Event Mapping
-- **System Event Mapping:**
-  - Added `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` mapped directly to `ActivityCategory.SYSTEM` in `kanban/services/activity.py`.
-  - Frontend activity timeline and audit ledger components render `SYSTEM` events cleanly with appropriate system badges and metadata without unhandled exception crashes.
+### 3.4 Activity Ledger & Event Mapping
+- Added `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` mapped directly to `ActivityCategory.SYSTEM` in `kanban/services/activity.py`.
+- Frontend activity timeline and audit ledger components render `SYSTEM` events cleanly with appropriate system badges and metadata without unhandled exception crashes.
 
 ---
 
-## 3. Design System & Static Quality Gates
+## 4. Design System & Static Quality Gates
 
 - **CSS & Inline Styles:** Zero frontend files or CSS rules modified. Passable under strict CSP `style-src 'self'`.
 - **Typography & Dashes:** Zero em-dashes (`\u2014`) or en-dashes (`\u2013`) introduced. Verified via `python3 -m scripts.check_no_dashes` (clean exit code 0).
@@ -56,7 +86,7 @@ Under the project dual-specialist gate standard, this review verifies that:
 
 ---
 
-## 4. Test Verification & Code Coverage
+## 5. Test Verification & Code Coverage
 
 - **Database & Concurrency Tests:**
   - `test_p4_24_agent_safe_sequences_migration_lifecycle`: PASSED (upgrade -> downgrade -> upgrade).
@@ -64,11 +94,12 @@ Under the project dual-specialist gate standard, this review verifies that:
 - **Service Suites:**
   - `test_agent_safe_sequences.py`: 5 passed in 0.88s.
   - Regression test suite (`test_issue_trees.py`, `test_issue_copy.py`, `test_issues.py`): 34 passed in 17.27s.
+  - Total backend tests: 44/44 passed.
 
 ---
 
-## 5. Certification Verdict
+## 6. Certification Verdict
 
-The backend sequence allocation improvements and audit logging in KAN-49 seamlessly preserve all frontend issue key contracts, enhance bulk operation performance, and introduce zero UI defects.
+The backend sequence allocation improvements, live container boundary verifications, cryptographic chain integrity checks, and audit logging in **KAN-49** seamlessly preserve all frontend issue key contracts, enhance bulk operation performance, and introduce zero UI defects.
 
 **STATUS: APPROVED**

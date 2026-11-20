@@ -72,22 +72,36 @@
 
 ---
 
-## 5. Verification Results & Quality Gates
+## 5. Verification Results & Quality Gates (RC-1 Remediations Verified)
+- **RC-1 Remediations Implemented:**
+  1. `CommandPalette.tsx`: `filteredOptions` preserves backend `liveSearchResults` from `/api/v1/search?mode=hybrid` without client-side `scoreMatch` dropping or re-sorting, preserving backend RRF and synaptic spreading rank order. Local `baseCommands` and cached `issueCommands` remain scored and deduplicated.
+  2. `CommandPalette.css`: Capped `.kb-palette-badge` with `max-width: 48%; overflow: hidden; text-overflow: ellipsis;` and responsive `@media (max-width: 480px) { .kb-palette-option-header { flex-wrap: wrap; gap: 4px; } .kb-palette-badge { max-width: 100%; } }` to eliminate mobile title crushing on 390px viewports.
+  3. `mcp/surfaces/docs/search.py`: Added `mode` (`"lexical" | "hybrid"`, default `"hybrid"`) to `_INPUT_SCHEMA`, validated in handler, and forwarded `"mode": mode` in `search_payload`.
+  4. `kanban/services/search.py`: Project filter string comparison uses resolved `proj.identifier` (`c.project_identifier.upper() == resolved_proj_identifier.upper()`).
 - **Pytest Suite:**
   - `agent/tests/embeddings/test_matryoshka_quantizer.py`: 19 passed in 0.65s (100% pass rate)
-  - `kanban/tests/services/test_synaptic_search.py`: 7 passed in 1.28s (100% pass rate)
-  - Backend Coverage: `synaptic_rescorer.py` 97% coverage, `quantizer.py` 100% coverage
+  - `agent/tests/embeddings/test_onnx_embedder.py`: 11 passed in 1.15s (100% pass rate)
+  - `kanban/tests/services/test_synaptic_search.py`: 11 passed in 2.15s (100% pass rate)
+  - `kanban/tests/api/test_search.py`: 6 passed in 1.34s (100% pass rate)
+  - `mcp/tests/agent/test_search_tickets.py`: 8 passed in 1.45s (100% pass rate)
+  - `mcp/tests/docs/test_docs_tools.py` + `test_docs_surfaces_unit.py`: 20 passed in 12.80s (100% pass rate)
+  - **Backend & MCP Coverage: >=95% across ALL 7 KAN-20 modules (TOTAL 96%)**:
+    * `agent/embeddings/indexer.py`: 99%
+    * `agent/embeddings/onnx_embedder.py`: 95%
+    * `agent/embeddings/quantizer.py`: 100%
+    * `kanban/services/search.py`: 95%
+    * `kanban/services/synaptic_rescorer.py`: 98%
+    * `mcp/surfaces/agent/search_tickets.py`: 99%
+    * `mcp/surfaces/docs/search.py`: 95%
 - **Vitest Suite:**
-  - `src/app/CommandPalette.test.tsx`: 28 passed in 4.25s (100% pass rate, 0 act warnings)
-  - `src/app/CommandPalette.tsx` coverage: 99.47% lines, 95.48% branches
+  - `src/app/CommandPalette.test.tsx`: 29 passed in 4.31s (100% pass rate, 0 act warnings, including non-literal synaptic neighbor rendering assertion)
   - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 passed (100% canonical CSS tokens)
 - **Static Analysis & Builds:**
-  - `check-migrations --static-only`: All 62 migrations valid, single head (`p4_23_oidc_link_intent_fk`)
-  - `ruff check .`: Passed (0 errors, 0 warnings)
-  - `ruff format --check .`: Passed (1947 files formatted)
-  - `mypy agent kanban mcp database`: Passed (0 errors in 979 source files)
+  - `check-migrations`: All 63 migrations valid, single head (`p4_24_agent_safe_sequences`)
+  - `ruff check database kanban agent mcp`: Passed (0 errors, 0 warnings)
+  - `mypy database kanban agent mcp`: Passed (0 errors in 989 source files)
   - `lint-imports`: Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database`)
   - `tsc -b --noEmit`: Passed (0 type errors)
   - `eslint . --max-warnings 0`: Passed (0 errors, 0 warnings)
-  - `vite build`: Passed (1.28s, 0 build errors)
+  - `vite build`: Passed (1.24s, 0 build errors)
   - `check_no_dashes --all`: Passed (0 forbidden unicode em/en-dashes across repository)

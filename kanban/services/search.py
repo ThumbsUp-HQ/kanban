@@ -985,7 +985,7 @@ async def _resolve_issue_search_scope(
     project_ref: str | None,
     filters: FilterSpec | None,
     workspace_ref: str | None = None,
-) -> tuple[uuid.UUID | None, list[Any]]:
+) -> tuple[uuid.UUID | None, list[Any], str | None]:
     """Resolve project ID and optional filter DSL predicates for issue search."""
     project_id: uuid.UUID | None = None
     proj: Project | None = None
@@ -1000,7 +1000,7 @@ async def _resolve_issue_search_scope(
         extra_predicates.extend(
             compile_issue_filter_predicates(session, proj, filters, caller.principal_id)
         )
-    return project_id, extra_predicates
+    return project_id, extra_predicates, proj.identifier if proj else None
 
 
 def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
@@ -1024,7 +1024,7 @@ async def search_issues(  # noqa: C901, PLR0912, PLR0915
         clean_query = validate_query(request.query)
     valid_limit = validate_limit(request.limit)
 
-    project_id, extra_predicates = await _resolve_issue_search_scope(
+    project_id, extra_predicates, resolved_proj_identifier = await _resolve_issue_search_scope(
         session, caller, request.project, request.filters, request.workspace
     )
 
@@ -1063,7 +1063,13 @@ async def search_issues(  # noqa: C901, PLR0912, PLR0915
                 c
                 for c in hybrid_candidates
                 if c.kind == "issue"
-                and (request.project is None or c.project_identifier == request.project)
+                and (
+                    resolved_proj_identifier is None
+                    or (
+                        c.project_identifier is not None
+                        and c.project_identifier.upper() == resolved_proj_identifier.upper()
+                    )
+                )
             ]
             if cursor_score is not None and cursor_id is not None:
                 filtered_cands = [

@@ -31,4 +31,7 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
 
-=== check_no_dashes ===
+=== check_no_dashes --all ===
+$ python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/kanban/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+[PASS] Zero forbidden unicode dashes detected across repository (exit code: 0).

@@ -703,6 +703,42 @@ index 00000000..87507639
 +        embedder = FixtureEmbedder()
 +        assert await embedder.embed_batch([]) == []
 +        assert await embedder.embed_batch_rich([]) == []
+diff --git a/agent/tests/embeddings/test_onnx_embedder.py b/agent/tests/embeddings/test_onnx_embedder.py
+index cd6e599d..65a6d519 100644
+--- a/agent/tests/embeddings/test_onnx_embedder.py
++++ b/agent/tests/embeddings/test_onnx_embedder.py
+@@ -326,3 +326,31 @@ def test_unsupported_setup_calls_without_model_dir() -> None:
+     with pytest.raises(EmbedderIntegrityError) as exc_sess:
+         embedder._setup_session(None)  # noqa: SLF001
+     assert "Inference session or model_dir required" in str(exc_sess.value)
++
++
++@pytest.mark.asyncio
++async def test_embed_batch_rich_on_direct_embedder() -> None:
++    """Test embed_batch_rich with non-fallback direct inference session."""
++    sess = _MockInferenceSession(include_token_type=True, rank_3=True)
++    tok = _MockTokenizer(token_count=16)
++    embedder = OnnxBgeSmallEmbedder(
++        model_dir=None,
++        inference_session=sess,
++        tokenizer=tok,
++    )
++
++    # Empty inputs
++    assert await embedder.embed_batch_rich([]) == []
++
++    # Non-empty inputs with markdown headings
++    markdown_text = "# Security Heading\nDetailed content for testing rich batch embedding."
++    results = await embedder.embed_batch_rich([markdown_text])
++    assert len(results) == 1
++    chunk = results[0]
++    assert len(chunk.embedding) == EMBED_DIMENSION
++    assert len(chunk.head_128) == 128
++    assert len(chunk.binary_sign) == 16
++    assert len(chunk.full_q8) == EMBED_DIMENSION
++    assert len(chunk.heading_anchors) == 1
++    assert chunk.heading_anchors[0]["title"] == "Security Heading"
++
 diff --git a/kanban/api/v1/schemas/search.py b/kanban/api/v1/schemas/search.py
 index 00398f02..da8205d6 100644
 --- a/kanban/api/v1/schemas/search.py
@@ -800,7 +836,7 @@ index 47ace3f9..d1dd9f20 100644
          pids = {item.project_identifier for item in res.items if item.project_identifier}
          if pids:
 diff --git a/kanban/services/search.py b/kanban/services/search.py
-index 09fda6f4..c8d7f9f0 100644
+index 09fda6f4..43564a79 100644
 --- a/kanban/services/search.py
 +++ b/kanban/services/search.py
 @@ -8,12 +8,15 @@ Implements S11.2, S11.3, S12.2, and KB-P3-17.
@@ -850,7 +886,7 @@ index 09fda6f4..c8d7f9f0 100644
  
  
  def _get_signing_key() -> str:
-@@ -431,29 +444,391 @@ def _build_sticky_query(
+@@ -431,29 +444,392 @@ def _build_sticky_query(
      return stmt
  
  
@@ -966,6 +1002,7 @@ index 09fda6f4..c8d7f9f0 100644
 +                "LIMIT :lim"
 +            )
 +            res = await session.execute(sql, params)
++            await session.execute(text("SET LOCAL statement_timeout = 0"))
 +            rows = res.fetchall()
 +            if not rows:
 +                return None
@@ -1246,7 +1283,7 @@ index 09fda6f4..c8d7f9f0 100644
  def _parse_target_kinds(kinds: list[str] | None) -> list[str]:
      """Validate and normalize requested entity kinds."""
      if not kinds:
-@@ -502,8 +877,9 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+@@ -502,8 +878,9 @@ async def search_unified(  # noqa: PLR0913, PLR0917
      project_ref: str | None = None,
      limit: int = 20,
      cursor: str | None = None,
@@ -1257,7 +1294,7 @@ index 09fda6f4..c8d7f9f0 100644
      clean_query = validate_query(query)
      valid_limit = validate_limit(limit)
      target_kinds = _parse_target_kinds(kinds)
-@@ -527,6 +903,45 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+@@ -527,6 +904,45 @@ async def search_unified(  # noqa: PLR0913, PLR0917
      queries = _collect_unified_queries(target_kinds, clean_query, project_id, key_match_tuple)
      union_stmt = union_all(*queries).subquery("search_results")
  
@@ -1303,7 +1340,7 @@ index 09fda6f4..c8d7f9f0 100644
      count_stmt = select(func.count()).select_from(union_stmt)
      total_count = (await session.execute(count_stmt)).scalar() or 0
  
-@@ -548,12 +963,12 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+@@ -548,12 +964,12 @@ async def search_unified(  # noqa: PLR0913, PLR0917
  
      has_more = len(rows) > valid_limit
      page_rows = rows[:valid_limit] if has_more else rows
@@ -1319,7 +1356,25 @@ index 09fda6f4..c8d7f9f0 100644
  
      return SearchResponse(
          total=total_count,
-@@ -597,7 +1012,7 @@ def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
+@@ -569,7 +985,7 @@ async def _resolve_issue_search_scope(
+     project_ref: str | None,
+     filters: FilterSpec | None,
+     workspace_ref: str | None = None,
+-) -> tuple[uuid.UUID | None, list[Any]]:
++) -> tuple[uuid.UUID | None, list[Any], str | None]:
+     """Resolve project ID and optional filter DSL predicates for issue search."""
+     project_id: uuid.UUID | None = None
+     proj: Project | None = None
+@@ -584,7 +1000,7 @@ async def _resolve_issue_search_scope(
+         extra_predicates.extend(
+             compile_issue_filter_predicates(session, proj, filters, caller.principal_id)
+         )
+-    return project_id, extra_predicates
++    return project_id, extra_predicates, proj.identifier if proj else None
+ 
+ 
+ def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
+@@ -597,7 +1013,7 @@ def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
      return None
  
  
@@ -1328,7 +1383,16 @@ index 09fda6f4..c8d7f9f0 100644
      session: AsyncSession,
      caller: PrincipalContext,
      request: IssueSearchRequest,
-@@ -628,6 +1043,96 @@ async def search_issues(
+@@ -608,7 +1024,7 @@ async def search_issues(
+         clean_query = validate_query(request.query)
+     valid_limit = validate_limit(request.limit)
+ 
+-    project_id, extra_predicates = await _resolve_issue_search_scope(
++    project_id, extra_predicates, resolved_proj_identifier = await _resolve_issue_search_scope(
+         session, caller, request.project, request.filters, request.workspace
+     )
+ 
+@@ -628,6 +1044,102 @@ async def search_issues(
          include_metadata=True,
      ).subquery("issue_search_results")
  
@@ -1351,7 +1415,13 @@ index 09fda6f4..c8d7f9f0 100644
 +                c
 +                for c in hybrid_candidates
 +                if c.kind == "issue"
-+                and (request.project is None or c.project_identifier == request.project)
++                and (
++                    resolved_proj_identifier is None
++                    or (
++                        c.project_identifier is not None
++                        and c.project_identifier.upper() == resolved_proj_identifier.upper()
++                    )
++                )
 +            ]
 +            if cursor_score is not None and cursor_id is not None:
 +                filtered_cands = [
@@ -1425,7 +1495,7 @@ index 09fda6f4..c8d7f9f0 100644
      count_stmt = select(func.count()).select_from(issue_query)
      total_count = (await session.execute(count_stmt)).scalar() or 0
  
-@@ -651,7 +1156,7 @@ async def search_issues(
+@@ -651,7 +1163,7 @@ async def search_issues(
      page_rows = rows[:valid_limit] if has_more else rows
  
      # Batch fetch assignees for page_rows
@@ -1434,7 +1504,7 @@ index 09fda6f4..c8d7f9f0 100644
      if page_rows:
          p_ids = [r.id for r in page_rows]
          a_stmt = (
-@@ -665,7 +1170,7 @@ async def search_issues(
+@@ -665,7 +1177,7 @@ async def search_issues(
              if val:
                  assignees_by_id.setdefault(iss_id, []).append(val)
  
@@ -1443,7 +1513,7 @@ index 09fda6f4..c8d7f9f0 100644
      for r in page_rows:
          body = r.body_markdown or ""
          snippet_result = (
-@@ -677,10 +1182,10 @@ async def search_issues(
+@@ -677,10 +1189,10 @@ async def search_issues(
              IssueSearchItem(
                  kind="issue",
                  id=r.id,
@@ -1456,7 +1526,7 @@ index 09fda6f4..c8d7f9f0 100644
                  workspace=getattr(r, "workspace_slug", None),
                  anchor=snippet_result.anchor,
                  snippet=snippet_result.snippet,
-@@ -690,13 +1195,14 @@ async def search_issues(
+@@ -690,13 +1202,14 @@ async def search_issues(
                  priority=getattr(r, "priority_slug", None),
                  assignees=assignees_by_id.get(r.id, []),
                  description_markdown=body,
@@ -1473,7 +1543,7 @@ index 09fda6f4..c8d7f9f0 100644
  
      return IssueSearchResponse(
          total=total_count,
-@@ -706,7 +1212,7 @@ async def search_issues(
+@@ -706,7 +1219,7 @@ async def search_issues(
      )
  
  
@@ -1482,7 +1552,7 @@ index 09fda6f4..c8d7f9f0 100644
      session: AsyncSession,
      caller: PrincipalContext,
      request: KnowledgeSearchRequest,
-@@ -746,6 +1252,63 @@ async def search_knowledge(
+@@ -746,6 +1259,63 @@ async def search_knowledge(
  
      union_stmt = union_all(*queries).subquery("knowledge_results")
  
@@ -1546,7 +1616,7 @@ index 09fda6f4..c8d7f9f0 100644
      count_stmt = select(func.count()).select_from(union_stmt)
      total_count = (await session.execute(count_stmt)).scalar() or 0
  
-@@ -768,7 +1331,7 @@ async def search_knowledge(
+@@ -768,7 +1338,7 @@ async def search_knowledge(
      has_more = len(rows) > valid_limit
      page_rows = rows[:valid_limit] if has_more else rows
  
@@ -1555,7 +1625,7 @@ index 09fda6f4..c8d7f9f0 100644
      for r in page_rows:
          body = r.body_markdown or ""
          snippet_result = build_anchored_snippet(body, clean_query)
-@@ -783,13 +1346,14 @@ async def search_knowledge(
+@@ -783,13 +1353,14 @@ async def search_knowledge(
                  snippet=snippet_result.snippet,
                  match_spans=snippet_result.match_spans,
                  score=float(r.score),
@@ -1574,10 +1644,10 @@ index 09fda6f4..c8d7f9f0 100644
          total=total_count,
 diff --git a/kanban/services/synaptic_rescorer.py b/kanban/services/synaptic_rescorer.py
 new file mode 100644
-index 00000000..b56f4fc9
+index 00000000..d74ef1bd
 --- /dev/null
 +++ b/kanban/services/synaptic_rescorer.py
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,474 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Synaptic object-graph rescoring, Matryoshka quantization, and activation spreading.
@@ -1888,7 +1958,7 @@ index 00000000..b56f4fc9
 +    return max(0.1, min(1.0, decay))
 +
 +
-+async def spread_synaptic_activation(  # noqa: C901
++async def spread_synaptic_activation(  # noqa: C901, PLR0912, PLR0915
 +    session: AsyncSession,
 +    caller: PrincipalContext,
 +    seeds: list[SynapticSeed],
@@ -1976,12 +2046,17 @@ index 00000000..b56f4fc9
 +            "  )"
 +        )
 +
-+        rows = (
-+            await session.execute(
-+                query,
-+                {"f_ids": frontier_ids, "ws_id": workspace_id},
-+            )
-+        ).all()
++        try:
++            async with session.begin_nested():
++                await session.execute(text("SET LOCAL statement_timeout = '100ms'"))
++                res = await session.execute(
++                    query,
++                    {"f_ids": frontier_ids, "ws_id": workspace_id},
++                )
++                await session.execute(text("SET LOCAL statement_timeout = 0"))
++                rows = res.all()
++        except Exception:  # noqa: BLE001
++            break
 +
 +        next_frontier: list[tuple[uuid.UUID, float, str | None, str | None]] = []
 +
@@ -2049,10 +2124,10 @@ index 00000000..b56f4fc9
 +    return results
 diff --git a/kanban/tests/services/test_synaptic_search.py b/kanban/tests/services/test_synaptic_search.py
 new file mode 100644
-index 00000000..8c69c1c1
+index 00000000..9c4ba888
 --- /dev/null
 +++ b/kanban/tests/services/test_synaptic_search.py
-@@ -0,0 +1,727 @@
+@@ -0,0 +1,1075 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Integration and unit tests for KAN-20 Synaptic Object-Graph Semantic Search."""
@@ -2063,25 +2138,32 @@ index 00000000..8c69c1c1
 +import hashlib
 +import math
 +import uuid
-+from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Any
 +from unittest.mock import patch
 +
++import asyncpg  # type: ignore[import-untyped]
++import numpy as np
 +import pytest
 +from sqlalchemy import text
 +
 +from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
 +from kanban.api.v1.schemas.search import (
 +    IssueSearchRequest,
 +    KnowledgeSearchRequest,
 +)
 +from kanban.services.search import (
++    _get_query_embedding,
++    _parse_target_kinds,
 +    search_issues,
 +    search_knowledge,
 +    search_unified,
 +)
 +from kanban.services.synaptic_rescorer import (
++    MatryoshkaQuantizer,
 +    SynapticSeed,
 +    _compute_recency_decay,
++    extract_heading_anchors,
 +    spread_synaptic_activation,
 +)
 +from kanban.tests.security.helpers import rebuild_era
@@ -2447,6 +2529,35 @@ index 00000000..8c69c1c1
 +    assert "Linked via VERIFIED_BY_DOC to" in doc_activation.match_reason
 +    assert doc_activation.activation_score > 0.0
 +
++    # Seed embedding on seed_issue_id and verify unified search with spreading
++    test_vec = [0.0] * 384
++    test_vec[0] = 1.0
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": seed_issue_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"SYN-10").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await api_env.seed.commit()
++
++    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
++        unified_res = await search_unified(
++            session=api_env.seed,
++            caller=caller,
++            query="Origin Seed Issue",
++            mode="hybrid",
++        )
++        assert unified_res.total >= 1
++
++
 +
 +async def test_synaptic_zero_oracle_leakage(
 +    api_env: ApiEnv,
@@ -2589,7 +2700,7 @@ index 00000000..8c69c1c1
 +        )
 +    ).scalar_one()
 +
-+    await _seed_issue(
++    iss_id = await _seed_issue(
 +        api_env.seed,
 +        ws_id,
 +        proj_id,
@@ -2602,7 +2713,7 @@ index 00000000..8c69c1c1
 +        pri_id,
 +    )
 +
-+    await _seed_doc(
++    doc_id = await _seed_doc(
 +        api_env.seed,
 +        ws_id,
 +        proj_id,
@@ -2612,15 +2723,49 @@ index 00000000..8c69c1c1
 +        admin.id,
 +    )
 +
++    # Seed object_embeddings to trigger vector candidates
++    # and hydration in search_issues & search_knowledge
++    test_vec = [0.0] * 384
++    test_vec[0] = 1.0
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": iss_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"SUB-5").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'doc', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": doc_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"docs/sub/guide").digest(),
++            "emb": str(test_vec),
++        },
++    )
++
 +    await rebuild_era(api_env.seed, ws_id)
 +    await api_env.seed.commit()
 +
 +    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
 +
-+    # search_issues with hybrid mode
-+    issue_req = IssueSearchRequest(query="SUB-5 Micro-Service", mode="hybrid")
++    # search_issues with hybrid mode and project filter
++    issue_req = IssueSearchRequest(query="SUB-5 Micro-Service", mode="hybrid", project="SUB")
 +    issue_resp = await search_issues(api_env.seed, caller, issue_req)
 +    assert issue_resp.total >= 1
++    assert issue_resp.executed_mode == "hybrid"
 +    assert issue_resp.items[0].key == "SUB-5"
 +    assert issue_resp.items[0].match_reason is not None
 +
@@ -2628,6 +2773,7 @@ index 00000000..8c69c1c1
 +    know_req = KnowledgeSearchRequest(query="Architecture Guide", mode="hybrid")
 +    know_resp = await search_knowledge(api_env.seed, caller, know_req)
 +    assert know_resp.total >= 1
++    assert know_resp.executed_mode == "hybrid"
 +    assert know_resp.items[0].title == "Micro-Service Architecture Guide"
 +    assert know_resp.items[0].match_reason is not None
 +
@@ -2780,11 +2926,288 @@ index 00000000..8c69c1c1
 +    )
 +    assert u_id in lex_res
 +    assert lex_res[u_id].match_reason == "Lexical match"
++
++
++async def test_synaptic_statement_timeout_graceful_degradation(api_env: ApiEnv) -> None:
++    """Verify statement_timeout or DB errors inside spreading degrade gracefully."""
++    ws_id = api_env.workspace_id
++    caller = PrincipalContext(principal_id=uuid.uuid4(), workspace_id=ws_id)
++    u_id = uuid.uuid4()
++    seed = SynapticSeed(
++        object_id=u_id,
++        object_type="issue",
++        score=7.5,
++        key="TO-1",
++        title="Timeout Test",
++        had_semantic_match=True,
++        had_lexical_match=True,
++    )
++
++    orig_execute = api_env.seed.execute
++
++    async def _failing_execute(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
++        if args and "FROM object_links ol" in str(args[0]):
++            msg = "canceling statement due to statement timeout"
++            raise asyncpg.exceptions.QueryCanceledError(msg)
++        return await orig_execute(*args, **kwargs)
++
++    with patch.object(api_env.seed, "execute", side_effect=_failing_execute):
++        res = await spread_synaptic_activation(
++            session=api_env.seed,
++            caller=caller,
++            seeds=[seed],
++            workspace_id=ws_id,
++            max_hops=2,
++        )
++
++    assert u_id in res
++    assert res[u_id].activation_score == 7.5
++
++
++def test_synaptic_quantizer_and_maxsim_units() -> None:
++    """Exercise MatryoshkaQuantizer and maxsim helpers in synaptic_rescorer."""
++    vec = [0.1 * i for i in range(128)]
++    head = MatryoshkaQuantizer.extract_head(vec, dim=64)
++    assert len(head) == 64
++    zero_head = MatryoshkaQuantizer.extract_head([0.0] * 64, dim=64)
++    assert zero_head == [0.0] * 64
++
++    sign = MatryoshkaQuantizer.binary_sign(vec, dim=64)
++    assert len(sign) == 8
++    short_sign = MatryoshkaQuantizer.binary_sign([0.5, -0.5], dim=16)
++    assert len(short_sign) == 2
++
++    q8, scale = MatryoshkaQuantizer.quantize(vec)
++    assert len(q8) == 128
++    assert scale > 0.0
++
++    empty_q8, empty_scale = MatryoshkaQuantizer.quantize([])
++    assert empty_q8 == b""
++    assert empty_scale == 1.0
++
++    deq = MatryoshkaQuantizer.dequantize(q8, scale)
++    assert len(deq) == 128
++
++    deq_np = MatryoshkaQuantizer.dequantize(np.array([1, 2, 3], dtype=np.int8), 1.0)
++    assert len(deq_np) == 3
++
++    dp = MatryoshkaQuantizer.dot_product(q8, scale, q8, scale)
++    assert dp > 0.0
++    assert MatryoshkaQuantizer.dot_product(b"", 1.0, q8, scale) == 0.0
++
++    boost1 = MatryoshkaQuantizer.maxsim_boost("KEY-1", "Some title", identifier="KEY-1")
++    assert boost1 >= 10.0
++    boost_empty = MatryoshkaQuantizer.maxsim_boost("", "title")
++    assert boost_empty == 0.0
++    assert MatryoshkaQuantizer.maxsim_boost("x", "title") == 0.0
++    assert MatryoshkaQuantizer.maxsim_boost("hello", "x", headings=["y"]) == 0.0
++    boost_nomatch = MatryoshkaQuantizer.maxsim_boost("alpha", "beta")
++    assert boost_nomatch == 0.0
++    boost_heading = MatryoshkaQuantizer.maxsim_boost(
++        "search query", "My Title", headings=["search query"]
++    )
++    assert boost_heading > 0.0
++
++    u1, u2 = uuid.uuid4(), uuid.uuid4()
++    rrf = MatryoshkaQuantizer.rrf([[u1, u2], [u2, u1]])
++    assert u1 in rrf
++    assert u2 in rrf
++
++    anchors = extract_heading_anchors("# Heading One\nText\n## Sub heading\n")
++    assert len(anchors) == 2
++    assert anchors[0]["anchor"] == "#heading-one"
++    assert extract_heading_anchors("") == []
++
++    assert _parse_target_kinds(None) == ["issue", "doc", "page", "sticky"]
++    assert _parse_target_kinds(["", "  issue  ", "DOC"]) == ["issue", "doc"]
++    with pytest.raises(ProblemException):
++        _parse_target_kinds(["invalid_kind"])
++
++
++async def test_empty_query_embedding() -> None:
++    """Empty query returns None."""
++    assert await _get_query_embedding("") is None
++    assert await _get_query_embedding("   ") is None
++
++
++
++
++
++
++async def test_hybrid_search_vector_only_hydration_and_pagination(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Test when vector candidates are not in lexical rows and need _hydrate_object_candidates."""
++    admin = await make_user("admin_hyd", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("HYD", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    ws_id = api_env.workspace_id
++
++    st_id = (
++        await api_env.seed.execute(
++            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"), {"p": proj_id}
++        )
++    ).scalar_one()
++    pri_id = (
++        await api_env.seed.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"), {"p": proj_id}
++        )
++    ).scalar_one()
++
++    # Seed an issue with completely different lexical words
++    iss_id = await _seed_issue(
++        api_env.seed,
++        ws_id,
++        proj_id,
++        "HYD",
++        1,
++        "Completely Unrelated Apples",
++        "Oranges and bananas fruit basket.",
++        admin.id,
++        st_id,
++        pri_id,
++    )
++    iss2_id = await _seed_issue(
++        api_env.seed,
++        ws_id,
++        proj_id,
++        "HYD",
++        2,
++        "Completely Unrelated Mangoes",
++        "Pineapples and papayas fruit basket.",
++        admin.id,
++        st_id,
++        pri_id,
++    )
++    doc_id = await _seed_doc(
++        api_env.seed,
++        ws_id,
++        proj_id,
++        "docs/hyd/zebra-doc",
++        "Completely Unrelated Pears",
++        "Peaches and plums fruit basket.",
++        admin.id,
++    )
++    doc2_id = await _seed_doc(
++        api_env.seed,
++        ws_id,
++        proj_id,
++        "docs/hyd/zebra-doc-2",
++        "Completely Unrelated Apricots",
++        "More fruit basket items.",
++        admin.id,
++    )
++
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO issue_assignees (issue_id, principal_id, free_text_assignee) "
++            "VALUES (:iss, NULL, 'free-agent')"
++        ),
++        {"iss": iss_id},
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO issue_assignees (issue_id, principal_id, free_text_assignee) "
++            "VALUES (:iss, :p, NULL)"
++        ),
++        {"iss": iss2_id, "p": admin.id},
++    )
++
++    test_vec = [0.0] * 384
++    test_vec[0] = 1.0
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": iss_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"HYD-1").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": iss2_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"HYD-2").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'doc', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": doc_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"docs/hyd/zebra-doc").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'doc', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": doc2_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "sha": hashlib.sha256(b"docs/hyd/zebra-doc-2").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await rebuild_era(api_env.seed, ws_id)
++    await api_env.seed.commit()
++
++    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
++    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
++        res = await search_issues(
++            api_env.seed, caller, IssueSearchRequest(query="Zebra", mode="hybrid")
++        )
++        assert res.total >= 2
++        assert res.items[0].match_reason == "Semantic match"
++
++        # Test pagination with limit=1 to trigger next_cursor for issues
++        res_i_page = await search_issues(
++            api_env.seed, caller, IssueSearchRequest(query="Zebra", mode="hybrid", limit=1)
++        )
++        assert res_i_page.next_cursor is not None
++
++        # Test pagination with limit=1 to trigger next_cursor for knowledge
++        res_k_page = await search_knowledge(
++            api_env.seed, caller, KnowledgeSearchRequest(query="Zebra", mode="hybrid", limit=1)
++        )
++        assert res_k_page.next_cursor is not None
++
++        # Also search_knowledge
++        res_k = await search_knowledge(
++            api_env.seed, caller, KnowledgeSearchRequest(query="Zebra", mode="hybrid")
++        )
++        assert res_k.executed_mode == "hybrid"
++        assert res_k.total >= 1
++        assert res_k.items[0].title == "Completely Unrelated Pears"
++
 diff --git a/kanban/web/src/app/CommandPalette.css b/kanban/web/src/app/CommandPalette.css
-index 107981cf..01777280 100644
+index 107981cf..b858385e 100644
 --- a/kanban/web/src/app/CommandPalette.css
 +++ b/kanban/web/src/app/CommandPalette.css
-@@ -100,6 +100,28 @@
+@@ -100,6 +100,31 @@
    white-space: nowrap;
  }
  
@@ -2808,16 +3231,34 @@ index 107981cf..01777280 100644
 +  border: 1px solid var(--state-unstarted-border, rgba(96, 165, 250, 0.28));
 +  white-space: nowrap;
 +  flex-shrink: 0;
++  max-width: 48%;
++  overflow: hidden;
++  text-overflow: ellipsis;
 +}
 +
  .kb-palette-option-meta {
    font-size: 12px;
    color: var(--fg-muted, #94a3b8);
+@@ -111,3 +136,14 @@
+   color: var(--fg-muted, #94a3b8);
+   font-size: 14px;
+ }
++
++@media (max-width: 480px) {
++  .kb-palette-option-header {
++    flex-wrap: wrap;
++    gap: 4px;
++  }
++
++  .kb-palette-badge {
++    max-width: 100%;
++  }
++}
 diff --git a/kanban/web/src/app/CommandPalette.test.tsx b/kanban/web/src/app/CommandPalette.test.tsx
-index 111d5e1c..2904c77a 100644
+index 111d5e1c..172dfdf8 100644
 --- a/kanban/web/src/app/CommandPalette.test.tsx
 +++ b/kanban/web/src/app/CommandPalette.test.tsx
-@@ -889,4 +889,44 @@ describe('CommandPalette', () => {
+@@ -889,4 +889,98 @@ describe('CommandPalette', () => {
        await new Promise((r) => setTimeout(r, 250));
      });
    });
@@ -2861,9 +3302,63 @@ index 111d5e1c..2904c77a 100644
 +    const callOpts = lastCall?.[2] as { query?: { mode?: string } } | undefined;
 +    expect(callOpts?.query?.mode).toBe('hybrid');
 +  });
++
++  it('preserves non-literal synaptic neighbor results and backend rank order without dropping them via scoreMatch', async () => {
++    mockApiFetch.mockReset();
++    mockApiFetch.mockResolvedValueOnce({
++      items: [
++        {
++          id: 'doc-spec-1',
++          kind: 'doc',
++          title: 'Verification Architecture Spec',
++          project_identifier: 'KAN',
++          match_reason: 'Linked via VERIFIED_BY_DOC to KAN-10',
++        },
++        {
++          id: 'iss-block-2',
++          kind: 'issue',
++          key: 'KAN-11',
++          title: 'Dependent Execution Queue',
++          project_identifier: 'KAN',
++          match_reason: 'Linked via BLOCKS to KAN-10',
++        },
++      ],
++    });
++
++    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
++
++    await act(async () => {
++      await new Promise((r) => setTimeout(r, 20));
++    });
++
++    const input = screen.getByRole('combobox');
++    fireEvent.change(input, { target: { value: 'Synaptic Vector Kernel' } });
++
++    await waitFor(() => {
++      expect(screen.getByText('Verification Architecture Spec')).toBeDefined();
++    });
++
++    // Assert that Verification Architecture Spec and its match reason render
++    expect(screen.getByText('Verification Architecture Spec')).toBeDefined();
++    const docBadge = screen.getByTestId('match-reason-search-doc-doc-spec-1');
++    expect(docBadge.textContent).toBe('Linked via VERIFIED_BY_DOC to KAN-10');
++
++    // Assert that KAN-11 and its match reason also render
++    expect(screen.getByText('KAN-11 - Dependent Execution Queue')).toBeDefined();
++    const issueBadge = screen.getByTestId('match-reason-search-issue-iss-block-2');
++    expect(issueBadge.textContent).toBe('Linked via BLOCKS to KAN-10');
++
++    // Assert backend rank order: Verification Architecture Spec appears before KAN-11 in the options list
++    const options = screen.getAllByRole('option');
++    expect(options.length).toBeGreaterThanOrEqual(2);
++    expect(options[0]?.textContent).toContain('Verification Architecture Spec');
++    expect(options[0]?.textContent).toContain('Linked via VERIFIED_BY_DOC to KAN-10');
++    expect(options[1]?.textContent).toContain('Dependent Execution Queue');
++    expect(options[1]?.textContent).toContain('Linked via BLOCKS to KAN-10');
++  });
  });
 diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
-index a791e3c1..5b74633b 100644
+index a791e3c1..9e9780d4 100644
 --- a/kanban/web/src/app/CommandPalette.tsx
 +++ b/kanban/web/src/app/CommandPalette.tsx
 @@ -32,6 +32,7 @@ export interface CommandOption {
@@ -2931,7 +3426,66 @@ index a791e3c1..5b74633b 100644
                onSelect: () => {
                  void navigate(item.project_identifier ? `/projects/${pKey}/overview` : '/stickies');
                },
-@@ -663,9 +670,19 @@ export function CommandPalette({
+@@ -522,32 +529,47 @@ export function CommandPalette({
+ 
+   // Filtered and scored options
+   const filteredOptions = useMemo<CommandOption[]>(() => {
++    if (!query.trim()) {
++      return baseCommands;
++    }
++
+     const seen = new Set<string>();
+-    const all: CommandOption[] = [];
++    const result: CommandOption[] = [];
+ 
+-    for (const opt of [...liveSearchResults, ...baseCommands, ...issueCommands]) {
++    // Backend hybrid / synaptic search results preserve exact rank order and are never dropped
++    for (const opt of liveSearchResults) {
+       const key = `${opt.category}:${opt.title}`;
+       if (!seen.has(key)) {
+         seen.add(key);
+-        all.push(opt);
++        result.push(opt);
+       }
+     }
+ 
+-    if (!query.trim()) {
+-      return baseCommands;
+-    }
+-    const scored: { option: CommandOption; score: number }[] = [];
+-    for (const opt of all) {
++    // Local fallback commands scored and sorted by match score
++    const scoredLocal: { option: CommandOption; score: number }[] = [];
++    for (const opt of [...baseCommands, ...issueCommands]) {
++      const key = `${opt.category}:${opt.title}`;
++      if (seen.has(key)) {
++        continue;
++      }
+       const s = Math.max(
+         scoreMatch(query, opt.title),
+         opt.meta ? scoreMatch(query, opt.meta) : 0,
+       );
+       if (s > 0) {
+-        scored.push({ option: opt, score: s });
++        scoredLocal.push({ option: opt, score: s });
+       }
+     }
+-    scored.sort((a, b) => b.score - a.score);
+-    return scored.map((item) => item.option);
++    scoredLocal.sort((a, b) => b.score - a.score);
++    for (const item of scoredLocal) {
++      const key = `${item.option.category}:${item.option.title}`;
++      if (!seen.has(key)) {
++        seen.add(key);
++        result.push(item.option);
++      }
++    }
++
++    return result;
+   }, [baseCommands, issueCommands, liveSearchResults, query]);
+ 
+   // Bound selectedIndex
+@@ -663,9 +685,19 @@ export function CommandPalette({
                      {opt.icon}
                    </span>
                    <div className="kb-palette-option-content">
@@ -2955,10 +3509,10 @@ index a791e3c1..5b74633b 100644
                  </li>
                );
 diff --git a/mcp/surfaces/agent/search_tickets.py b/mcp/surfaces/agent/search_tickets.py
-index 6cf2c613..22d51e8b 100644
+index 6cf2c613..6038f13f 100644
 --- a/mcp/surfaces/agent/search_tickets.py
 +++ b/mcp/surfaces/agent/search_tickets.py
-@@ -297,12 +297,16 @@ async def _execute_search_request(
+@@ -297,12 +297,17 @@ async def _execute_search_request(
      total = int(res.get("total", 0))
      next_cursor = res.get("next_cursor")
  
@@ -2977,14 +3531,82 @@ index 6cf2c613..22d51e8b 100644
      out: dict[str, Any] = {
 -        "mode": "lexical",
 +        "mode": executed_mode,
++        "executed_mode": executed_mode,
          "total": total,
          "items": projected_items,
      }
+@@ -319,6 +324,7 @@ async def search_tickets(arguments: dict[str, Any]) -> dict[str, Any]:
+     if gate_status in ("approved", "rejected"):
+         return {
+             "mode": "lexical",
++            "executed_mode": "lexical",
+             "total": 0,
+             "items": [],
+             "note": "gate history available in Phase 5",
+@@ -339,6 +345,7 @@ async def search_tickets(arguments: dict[str, Any]) -> dict[str, Any]:
+     if not proj_found:
+         return {
+             "mode": "lexical",
++            "executed_mode": "lexical",
+             "total": 0,
+             "items": [],
+         }
 diff --git a/mcp/surfaces/docs/search.py b/mcp/surfaces/docs/search.py
-index 5aa75676..9a8e4d6d 100644
+index 5aa75676..0ed0d987 100644
 --- a/mcp/surfaces/docs/search.py
 +++ b/mcp/surfaces/docs/search.py
-@@ -536,9 +536,12 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
+@@ -56,6 +56,12 @@ _INPUT_SCHEMA: Final[dict[str, Any]] = {
+             "type": "string",
+             "description": "Project key or UUID scope filter",
+         },
++        "mode": {
++            "type": "string",
++            "enum": ["lexical", "hybrid"],
++            "default": "hybrid",
++            "description": "Search execution mode ('lexical' or 'hybrid').",
++        },
+         "lod": {
+             "type": "string",
+             "enum": ["summary", "standard", "full"],
+@@ -395,6 +401,12 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
+ 
+     raw_lod = arguments.get("lod", "standard")
+     lod = parse_lod(raw_lod)
++    raw_mode = arguments.get("mode", "hybrid")
++    mode = str(raw_mode).strip().lower() if raw_mode else "hybrid"
++    if mode not in ("lexical", "hybrid"):
++        msg = f"Invalid mode '{raw_mode}'. Must be one of: lexical, hybrid"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++
+     include_tree = bool(arguments.get("include_tree", False))
+     limit = int(arguments.get("limit", 20))
+     cursor = arguments.get("cursor")
+@@ -418,6 +430,7 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
+                 "query": "Search query for lexical/semantic hybrid search",
+                 "type": "ALL, DOC, or STICKY",
+                 "project": "Project key or UUID scope filter",
++                "mode": "Search execution mode ('lexical' or 'hybrid', default 'hybrid')",
+                 "lod": "Level of detail: summary, standard, full",
+                 "include_tree": "Whether to include page hierarchy or heading outline",
+                 "limit": "Max items to return (1..50)",
+@@ -495,6 +508,7 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
+             "query": clean_query,
+             "kinds": kinds,
+             "limit": limit,
++            "mode": mode,
+         }
+         project_arg = arguments.get("project")
+         if project_arg:
+@@ -510,7 +524,7 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
+         )
+ 
+         if not isinstance(resp, dict):
+-            return {"total": 0, "items": []}
++            return {"mode": "lexical", "executed_mode": "lexical", "total": 0, "items": []}
+ 
+         items_raw = resp.get("items", [])
+         formatted_items: list[dict[str, Any]] = []
+@@ -536,9 +550,14 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
              if anchor:
                  hit["anchor"] = anchor
              hit["snippet"] = snippet
@@ -2992,8 +3614,120 @@ index 5aa75676..9a8e4d6d 100644
 +                hit["match_reason"] = it["match_reason"]
              formatted_items.append(hit)
  
++        executed_mode = resp.get("executed_mode", "lexical")
          out_search: dict[str, Any] = {
-+            "mode": resp.get("executed_mode", "lexical"),
++            "mode": executed_mode,
++            "executed_mode": executed_mode,
              "total": resp.get("total", len(formatted_items)),
              "items": formatted_items,
          }
+diff --git a/mcp/tests/docs/test_docs_surfaces_unit.py b/mcp/tests/docs/test_docs_surfaces_unit.py
+index 07652efe..8bfd45d1 100644
+--- a/mcp/tests/docs/test_docs_surfaces_unit.py
++++ b/mcp/tests/docs/test_docs_surfaces_unit.py
+@@ -1273,12 +1273,17 @@ async def test_search_v2_unit_coverage() -> None:
+     assert "tree" in r_doc_full
+     assert r_doc_full["links"] == []
+ 
+-    # Hybrid search formatting (truncation, next_cursor, no key fallback)
++    # Hybrid search formatting (truncation, next_cursor, no key fallback, mode forwarding)
++    captured_payloads: list[dict[str, Any]] = []
++
+     def search_h(req: httpx.Request) -> httpx.Response:
++        import json
++        captured_payloads.append(json.loads(req.content.decode()))
+         return httpx.Response(
+             200,
+             json={
+                 "total": 1,
++                "executed_mode": "hybrid",
+                 "items": [
+                     {
+                         "kind": "doc",
+@@ -1299,6 +1304,20 @@ async def test_search_v2_unit_coverage() -> None:
+     assert res_srch["items"][0]["key"] == "hit-id-1"
+     assert len(res_srch["items"][0]["snippet"]) <= 300
+     assert res_srch["next_cursor"] == "cur-next"
++    assert res_srch["mode"] == "hybrid"
++    assert res_srch["executed_mode"] == "hybrid"
++    assert captured_payloads[-1]["mode"] == "hybrid"
++
++    # Explicit mode="lexical"
++    await search_v2_handler(
++        {"query": "q", "mode": "lexical"}, client=c_srch
++    )
++    assert captured_payloads[-1]["mode"] == "lexical"
++
++    # Invalid mode validation error
++    with pytest.raises(KbMcpError) as exc_mode:
++        await search_v2_handler({"query": "q", "mode": "invalid"}, client=c_srch)
++    assert exc_mode.value.code == McpErrorCode.VALIDATION_FAILED
+ 
+     # Hybrid search non-dict response
+     c_srch_nd = _build_mock_client(lambda r: httpx.Response(200, json="non-dict"))
+@@ -1464,6 +1483,9 @@ async def test_search_v2_unit_coverage() -> None:
+ 
+     # ToolSpec builder for search
+     t_srch = create_docs_search_tool(client=c_list_nd)
++    assert "mode" in t_srch.input_schema["properties"]
++    assert t_srch.input_schema["properties"]["mode"]["enum"] == ["lexical", "hybrid"]
++    assert t_srch.input_schema["properties"]["mode"]["default"] == "hybrid"
+     res_t_srch = await t_srch.handler({"id": "help"})
+     assert res_t_srch["tool"] == "search"
+ 
+@@ -1927,3 +1949,55 @@ async def test_update_v2_unit_coverage() -> None:
+     c_nosha = _build_mock_client(prom_nosha_h)
+     res_nosha = await update_v2_handler({"id": str(uuid.uuid4()), "type": "DOC"}, client=c_nosha)
+     assert res_nosha["status"] == "promoted"
++
++    # MODE 4: List Project / Workspace Knowledge
++    def list_h(req: httpx.Request) -> httpx.Response:
++        p = req.url.path
++        if "/api/v1/docs" in p:
++            return httpx.Response(
++                200,
++                json=[{"id": str(uuid.uuid4()), "canonical_key": "docs/test", "title": "Test Doc"}],
++            )
++        if "/stickies" in p:
++            return httpx.Response(
++                200,
++                json=[{"id": str(uuid.uuid4()), "color_token": "blue", "body_markdown": "Note body"}],
++            )
++        if "/projects/" in p:
++            return httpx.Response(404, json={})
++        return httpx.Response(200, json=[])
++
++    c_list = _build_mock_client(list_h)
++    u_proj = str(uuid.uuid4())
++    res_list = await search_v2_handler(
++        {"project": u_proj, "target_type": "ALL", "include_tree": False}, client=c_list
++    )
++    assert "docs" in res_list
++    assert "stickies" in res_list
++
++    # Nonexistent named project raises NOT_FOUND
++    with pytest.raises(KbMcpError) as exc_pnotfound:
++        await search_v2_handler(
++            {"project": "MISSING_PROJ", "target_type": "DOC", "include_tree": False}, client=c_list
++        )
++    assert exc_pnotfound.value.code == McpErrorCode.NOT_FOUND
++
++    # Workspace-level list (no project)
++    res_ws = await search_v2_handler({"target_type": "ALL"}, client=c_list)
++    assert "docs" in res_ws
++
++    # Project response as dict without "id" triggers McpErrorCode.NOT_FOUND in MODE 4
++    def noid_proj_h(req: httpx.Request) -> httpx.Response:
++        p = req.url.path
++        if "/projects/noid-proj" in p:
++            return httpx.Response(200, json={"some_field": "no id key"})
++        return httpx.Response(404, json={})
++
++    c_noid = _build_mock_client(noid_proj_h)
++    with pytest.raises(KbMcpError) as exc_noid:
++        await search_v2_handler(
++            {"project": "noid-proj", "target_type": "DOC", "include_tree": False}, client=c_noid
++        )
++    assert exc_noid.value.code == McpErrorCode.NOT_FOUND
++
++

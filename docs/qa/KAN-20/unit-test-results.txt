@@ -2,39 +2,40 @@
 1. VITEST: src/app/CommandPalette.test.tsx
 ================================================================================
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
+> @kanban/web@0.1.0 test:unit
 > vitest run src/app/CommandPalette.test.tsx
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
 
- ✓ src/app/CommandPalette.test.tsx (28 tests) 3160ms
-   ✓ CommandPalette (28)
-     ✓ handles live search with empty title, snippet, summary fallbacks and items null 371ms
-     ✓ covers clicking navigation and action commands and backdrop click 588ms
+ ✓ src/app/CommandPalette.test.tsx (29 tests) 3328ms
+   ✓ CommandPalette (29)
+     ✓ handles live search with empty title, snippet, summary fallbacks and items null 375ms
+     ✓ covers clicking navigation and action commands and backdrop click 627ms
+     ✓ preserves non-literal synaptic neighbor results and backend rank order without dropping them via scoreMatch 210ms
 
  Test Files  1 passed (1)
-      Tests  28 passed (28)
-   Start at  12:16:24
-   Duration  4.25s (tests 78%, environment 17%, import 4%)
+      Tests  29 passed (29)
+   Start at  16:39:51
+   Duration  4.31s
 
 
 ================================================================================
 2. VITEST: src/styles/__tests__/cssTokensAudit.test.ts
 ================================================================================
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
+> @kanban/web@0.1.0 test:unit
 > vitest run src/styles/__tests__/cssTokensAudit.test.ts
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 12ms
 
  Test Files  1 passed (1)
       Tests  4 passed (4)
-   Start at  12:16:29
-   Duration  1.07s (environment 94%, import 2%, tests 2%, transform 1%, worker 1%)
+   Start at  16:39:51
+   Duration  0.80s
 
 
 ================================================================================
@@ -42,7 +43,7 @@
 ================================================================================
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -52,27 +53,99 @@ agent/tests/embeddings/test_matryoshka_quantizer.py ...................  [100%]
 
 ============================== 19 passed in 0.65s ==============================
 
+
 ================================================================================
-4. PYTEST: kanban/tests/services/test_synaptic_search.py
+4. PYTEST: agent/tests/embeddings/test_onnx_embedder.py
 ================================================================================
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 9 items
+collected 11 items
 
-kanban/tests/services/test_synaptic_search.py .........                  [100%]
+agent/tests/embeddings/test_onnx_embedder.py ...........                 [100%]
 
-============================== 9 passed in 1.76s ===============================
+============================== 11 passed in 1.15s ==============================
+
 
 ================================================================================
-5. BACKEND COVERAGE REPORT
+5. PYTEST: kanban/tests/services/test_synaptic_search.py
 ================================================================================
-Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------------------------------
-agent/embeddings/quantizer.py                             3      0      0      0   100%
-kanban/services/synaptic_rescorer.py                    225      4     58      3    98%   428, 433, 459-460
--------------------------------------------------------------------------------------------------
-TOTAL                                                   228      4     58      3    98%
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 11 items
+
+kanban/tests/services/test_synaptic_search.py ...........                [100%]
+
+============================== 11 passed in 2.15s ==============================
+
+
+================================================================================
+6. PYTEST: kanban/tests/api/test_search.py
+================================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 6 items
+
+kanban/tests/api/test_search.py ......                                   [100%]
+
+============================== 6 passed in 1.34s ===============================
+
+
+================================================================================
+7. PYTEST: mcp/tests/agent/test_search_tickets.py
+================================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 8 items
+
+mcp/tests/agent/test_search_tickets.py ........                          [100%]
+
+============================== 8 passed in 1.45s ===============================
+
+
+================================================================================
+8. PYTEST: mcp/tests/docs/test_docs_tools.py, test_docs_surfaces_unit.py
+================================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 20 items
+
+mcp/tests/docs/test_docs_tools.py .......                                [ 35%]
+mcp/tests/docs/test_docs_surfaces_unit.py .............                  [100%]
+
+============================= 20 passed in 12.80s ==============================
+
+
+================================================================================
+9. BACKEND & MCP COVERAGE REPORT (>=95% ON ALL 7 KAN-20 MODULES)
+================================================================================
+Name                                   Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------------
+agent/embeddings/indexer.py              162      2     48      1    99%   267-268
+agent/embeddings/onnx_embedder.py        181      8     56      3    95%   92->94, 163-164, 170-174, 241
+agent/embeddings/quantizer.py              3      0      0      0   100%
+kanban/services/search.py                531     16    192     19    95%   438->441, 501->504, 505, 510-512, 569-570, 581, 675, 700->698, 750, 820->827, 922, 936-937, 998, 1075, 1085->1104, 1101->1096, 1177->1174, 1234, 1277
+kanban/services/synaptic_rescorer.py     225      4     58      3    98%   428, 433, 459-460
+mcp/surfaces/agent/search_tickets.py     172      1     84      2    99%   303->305, 367
+mcp/surfaces/docs/search.py              354     10    154     12    95%   173->179, 175-176, 184->191, 197->201, 205-206, 214->219, 221->226, 280, 345->349, 376, 393-394, 466->482, 625->637, 664-665, 676->688
+----------------------------------------------------------------------------------
+TOTAL                                   1628     41    592     40    96%

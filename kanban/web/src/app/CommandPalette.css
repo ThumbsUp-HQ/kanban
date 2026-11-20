@@ -120,6 +120,9 @@
   border: 1px solid var(--state-unstarted-border, rgba(96, 165, 250, 0.28));
   white-space: nowrap;
   flex-shrink: 0;
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kb-palette-option-meta {
@@ -132,4 +135,15 @@
   text-align: center;
   color: var(--fg-muted, #94a3b8);
   font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .kb-palette-option-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .kb-palette-badge {
+    max-width: 100%;
+  }
 }

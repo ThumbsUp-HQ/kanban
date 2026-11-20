@@ -4,16 +4,18 @@
 - Title: [KB-P3-AUDIT-14] Built-In Zero-Egress "Synaptic Object-Graph" Semantic Search (4 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Directory: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/docs/qa/KAN-20`
-- Branch: `fix/KAN-20-36-liveqa`
-- Commit: `7c0db6c2ec94fd527eb5b67eb76b6004a999901d`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-20`
+- Branch: `main`
+- Commit: `07d04cde`
+- Container Environment: `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
+- Live Stack Status: `LIVE_STACK_VERDICT: PASS`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-20 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2`. This audit incorporates verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt` on container `kanban-liveqa-3`, `http://127.0.0.1:18963`), all 4 live visual screenshots in `docs/qa/KAN-20/screenshots/`, unit test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-20 on `main` at commit `07d04cde`, incorporating concrete verification evidence from live zero-mock full-stack testing against container `kanban-liveqa-3` (`http://127.0.0.1:18963`), all 4 live visual screenshots in `docs/qa/KAN-20/screenshots/`, unit test execution logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
 The ticket resolves four primary problems across semantic embedding, hybrid candidate fusion, security-governed graph activation spreading, and explainable search discovery:
 1. Zero-Egress Embedder, Matryoshka Head & Int8 Quantization:
@@ -114,21 +116,35 @@ All API contracts, security invariants, transaction boundaries, import layering 
 
 ## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
 
-Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-20/live-fullstack-proof.txt` on target container `kanban-liveqa-3` (`http://127.0.0.1:18963`):
-1. Setup & Pre-Index Search:
-   - Unindexed fallback search: `GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid` returns `executed_mode="lexical"`, latency 41.14ms.
-2. Indexing & Hybrid Search:
-   - Indexed issues and docs via `EmbeddingIndexer`.
-   - Admin hybrid search returns 31 items with provenance: "Semantic match", "Lexical match", "Linked via VERIFIED_BY_DOC to KAN-7", "Linked via BLOCKS to KAN-7". Latency 48.66ms (warm) / 76.95ms.
-3. Security Boundary & RLS:
-   - Probed `@member` search for secret keyword `CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION`: 0 secret hits, 0 synaptic private hits, 20 visible hits. Zero oracle leakage.
-   - Statement timeout defect identified and resolved with `SET LOCAL statement_timeout = 0` and resilient try/except fallback.
-4. MCP Surfaces:
-   - `/mcp/agent/` `search_tickets`: returns `mode: hybrid`, `executed_mode: hybrid`, and match reasons.
-   - `/mcp/docs/` `search`: returns `mode: lexical`, `executed_mode: lexical`, and match reasons.
-5. CommandPalette UI & Screenshots:
-   - Desktop 1440x900 Light & Dark, Tablet 768x1024, Mobile 390x844: zero horizontal overflow, 0 console errors, 0 page errors, 0 server errors.
-   - Screenshots: `live-command-palette-desktop-light.png`, `live-command-palette-desktop-dark.png`, `live-command-palette-tablet-light.png`, `live-command-palette-mobile-light.png`.
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-20/live-fullstack-proof.txt` executed against target container `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `07d04cde`):
+1. Setup & Invariant Seeding:
+   - Seeded issues and docs in KAN linked via `VERIFIED_BY_DOC` and `BLOCKS`.
+   - Seeded secret issue and doc in `PRIV` with explicit `@member` ACL `DENY` on `PRIV` (and cross-project `BLOCKS` link from `KAN-16` to `PRIV-6`).
+   - Indexed embeddings using `EmbeddingIndexer` + `OnnxBgeSmallEmbedder(fallback_to_fixture=True)` under `FORCE ROW LEVEL SECURITY`.
+2. Cold & Warm Hybrid Search + Synaptic Activation (0 HTTP 500s):
+   - Cold GET `/api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid` as `@member`: status=200 OK, latency=168.83ms, `executed_mode="hybrid"`, total=24, 0 PRIV leaks.
+     - Confirms `SET LOCAL statement_timeout = 0` reset in `_query_vector_candidates` and nested savepoint resilience in `spread_synaptic_activation`.
+   - Warm GET `/api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid` as `@member`: status=200 OK, latency=157.07ms, `executed_mode="hybrid"`, total=24, 0 PRIV leaks.
+   - `@member` secret query probe (`q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION`): `hybrid_status=200`, `priv_leaks=0`, `lexical_total=0` (0 PRIV leaks).
+   - Cold GET `/api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid` as `@admin`: status=200 OK, latency=74.26ms, `executed_mode="hybrid"`, total=32.
+   - Warm GET `/api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid` as `@admin`: status=200 OK, latency=76.82ms, `executed_mode="hybrid"`, total=32.
+   - Provenance match_reason strings verified: "Semantic match", "Lexical match", "Linked via VERIFIED_BY_DOC to KAN-*", "Linked via BLOCKS to KAN-*".
+3. MCP JSON-RPC Surfaces:
+   - POST `/mcp/agent` tools/call `search_tickets` (`mode="hybrid"`): `mode: hybrid`, `executed_mode: hybrid`, `total: 24`, `match_reason` per item.
+   - POST `/mcp/docs` tools/call `search`: `mode: lexical`, `executed_mode: lexical`, `total: 6`, `match_reason` per item.
+4. CommandPalette (Ctrl+K) Playwright UI Verification across Form Factors:
+   - Evaluated on `/w/kanban/p/KAN/issues` across 4 responsive configurations:
+     * Desktop Light (1440x900): searchMs=292ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+     * Desktop Dark (1440x900): searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+     * Tablet Light (768x1024): searchMs=287ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+     * Mobile Light (390x844): searchMs=286ms, pillCount=11, docOverflow=false, dialogOverflow=false, outsideDialog=false
+   - UI metrics: consoleErrors=0, pageErrors=0, serverErrors=0.
+5. Live Visual Artifacts:
+   - `docs/qa/KAN-20/screenshots/live-command-palette-desktop-light.png`
+   - `docs/qa/KAN-20/screenshots/live-command-palette-desktop-dark.png`
+   - `docs/qa/KAN-20/screenshots/live-command-palette-tablet-light.png`
+   - `docs/qa/KAN-20/screenshots/live-command-palette-mobile-light.png`
+   - `LIVE_STACK_VERDICT: PASS`
 
 ---
 
@@ -146,12 +162,16 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-20/live-fullstack-pr
   - `src/app/CommandPalette.test.tsx`: 28 passed in 3160ms.
   - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 passed in 13ms.
   - Total: 32 passed.
-- Static Analysis:
-  - `ruff check`: Clean.
-  - `ruff format --check`: Clean.
-  - `mypy`: Clean across 1124 source files.
-  - `lint-imports`: Clean (Contracts: 2 kept, 0 broken).
-  - `check_no_dashes --all`: Clean (0 em/en-dashes across repository).
+- Static Analysis Gates (`build-or-typecheck.txt`):
+  - Check Migrations: OK (All 62 migrations valid. Single head: `p4_23_oidc_link_intent_fk`).
+  - Ruff Lint: All checks passed.
+  - Ruff Format: 1947 files already formatted.
+  - Mypy: Success: no issues found in 979 source files.
+  - Import Linter: Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database` KEPT; `mcp` forbidden from importing `database` KEPT).
+  - Frontend Typecheck (`tsc -b --noEmit`): Clean.
+  - Frontend Eslint (`eslint . --max-warnings 0`): Clean.
+  - Frontend Build (`vite build`): Built in 2.92s.
+  - Dash Character Policy: Clean (0 em/en-dashes).
 
 ---
 
@@ -181,4 +201,4 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-20/live-fullstack-pr
 
 STATUS: APPROVED
 
-All API endpoints, MCP tool surfaces, safe embedding quantizers, HNSW vector fusion query handlers, timeout resets, resilient synaptic spreading algorithms, and unit test suites for KAN-20 on branch `fix/KAN-20-36-liveqa` at commit `7c0db6c2` have been thoroughly audited, verified against all architectural and security invariants, and certified. Ready for Clean-Room Reality-Checker QA.
+All API endpoints, MCP tool surfaces, safe embedding quantizers, HNSW vector fusion query handlers, timeout resets, resilient synaptic spreading algorithms, and unit test suites for KAN-20 on `main` at commit `07d04cde` have been thoroughly audited, verified against all architectural and security invariants, and certified. Verified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Ready for Reality-Checker QA.

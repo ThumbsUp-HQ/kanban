@@ -929,4 +929,58 @@ describe('CommandPalette', () => {
     const callOpts = lastCall?.[2] as { query?: { mode?: string } } | undefined;
     expect(callOpts?.query?.mode).toBe('hybrid');
   });
+
+  it('preserves non-literal synaptic neighbor results and backend rank order without dropping them via scoreMatch', async () => {
+    mockApiFetch.mockReset();
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'doc-spec-1',
+          kind: 'doc',
+          title: 'Verification Architecture Spec',
+          project_identifier: 'KAN',
+          match_reason: 'Linked via VERIFIED_BY_DOC to KAN-10',
+        },
+        {
+          id: 'iss-block-2',
+          kind: 'issue',
+          key: 'KAN-11',
+          title: 'Dependent Execution Queue',
+          project_identifier: 'KAN',
+          match_reason: 'Linked via BLOCKS to KAN-10',
+        },
+      ],
+    });
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Synaptic Vector Kernel' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Verification Architecture Spec')).toBeDefined();
+    });
+
+    // Assert that Verification Architecture Spec and its match reason render
+    expect(screen.getByText('Verification Architecture Spec')).toBeDefined();
+    const docBadge = screen.getByTestId('match-reason-search-doc-doc-spec-1');
+    expect(docBadge.textContent).toBe('Linked via VERIFIED_BY_DOC to KAN-10');
+
+    // Assert that KAN-11 and its match reason also render
+    expect(screen.getByText('KAN-11 - Dependent Execution Queue')).toBeDefined();
+    const issueBadge = screen.getByTestId('match-reason-search-issue-iss-block-2');
+    expect(issueBadge.textContent).toBe('Linked via BLOCKS to KAN-10');
+
+    // Assert backend rank order: Verification Architecture Spec appears before KAN-11 in the options list
+    const options = screen.getAllByRole('option');
+    expect(options.length).toBeGreaterThanOrEqual(2);
+    expect(options[0]?.textContent).toContain('Verification Architecture Spec');
+    expect(options[0]?.textContent).toContain('Linked via VERIFIED_BY_DOC to KAN-10');
+    expect(options[1]?.textContent).toContain('Dependent Execution Queue');
+    expect(options[1]?.textContent).toContain('Linked via BLOCKS to KAN-10');
+  });
 });
