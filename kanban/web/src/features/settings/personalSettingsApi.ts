@@ -49,6 +49,7 @@ export interface ChangePasswordRequest {
 
 export interface WebauthnCredentialItem {
   id: string;
+  credential_id?: string | null;
   nickname?: string | null;
   created_at: string;
   last_used_at: string | null;

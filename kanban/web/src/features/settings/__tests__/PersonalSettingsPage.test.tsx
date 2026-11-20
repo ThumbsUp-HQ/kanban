@@ -1802,7 +1802,115 @@ describe('PersonalSettingsPage', () => {
       expect(mockGet).toHaveBeenCalled();
       expect(api.verifyWebauthnAuthentication).toHaveBeenCalled();
       expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified');
+      expect(screen.getByTestId('passkey-verified-banner').textContent).toContain('👍 Key verified (MacBook TouchID)');
     });
+
+    // Dismiss the inline section-level banner
+    const bannerDismissBtn = screen.getByTestId('passkey-verified-banner').querySelector('button');
+    expect(bannerDismissBtn).not.toBeNull();
+    if (bannerDismissBtn) {
+      fireEvent.click(bannerDismissBtn);
+    }
+    expect(screen.queryByTestId('passkey-verified-banner')).toBeNull();
+  });
+
+  it('scopes allowCredentials to the clicked credential and handles credential mismatch', async () => {
+    const mockMultiAuthOptions: api.PublicKeyCredentialRequestOptionsJSON = {
+      challenge: 'Y2hhbGxlbmdlMQ',
+      timeout: 60000,
+      rpId: 'localhost',
+      allowCredentials: [
+        { id: 'pk-1', type: 'public-key' },
+        { id: 'other-pk', type: 'public-key' },
+      ],
+    };
+
+    const mockAssertion = {
+      id: 'mock-key-id',
+      type: 'public-key',
+      response: {
+        clientDataJSON: new TextEncoder().encode('{}').buffer,
+        authenticatorData: new Uint8Array([3]).buffer,
+        signature: new Uint8Array([4]).buffer,
+        userHandle: null,
+      },
+      getClientExtensionResults: () => ({}),
+    } as unknown as PublicKeyCredential;
+
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockMultiAuthOptions);
+    vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({
+      verified: true,
+      credential_id: 'pk-1',
+      aal_level: 2,
+    });
+
+    const mockGet = vi.fn().mockResolvedValue(mockAssertion);
+    Object.defineProperty(navigator, 'credentials', {
+      writable: true,
+      configurable: true,
+      value: { get: mockGet, create: vi.fn() },
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('test-passkey-pk-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalled();
+      const calls = mockGet.mock.calls as unknown[][];
+      const requestArg = calls[0]?.[0] as CredentialRequestOptions | undefined;
+      // Verify allowCredentials was filtered to only pk-1
+      expect(requestArg?.publicKey?.allowCredentials).toHaveLength(1);
+      expect(screen.getByTestId('passkey-verified-banner').textContent).toContain('👍 Key verified');
+    });
+
+    // When verification returns a different credential than the one tested
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockMultiAuthOptions);
+    vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({
+      verified: true,
+      credential_id: 'different-pk-uuid',
+      aal_level: 2,
+    });
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain(
+        'A different credential responded than the one tested.',
+      );
+    });
+  });
+
+  it('renders clone warning with aria-label and responsive cell labels', async () => {
+    const clonePasskey: api.WebauthnCredentialItem = {
+      id: 'pk-clone',
+      nickname: 'Cloned Key',
+      created_at: '2026-01-01T00:00:00Z',
+      last_used_at: null,
+      aaguid: null,
+      transports: ['usb'],
+      suspect_clone_at: '2026-03-01T12:00:00Z',
+    };
+
+    vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([clonePasskey]);
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('passkey-row-pk-clone')).toBeDefined();
+    });
+
+    const cloneWarning = screen.getByTestId('passkey-clone-warning-pk-clone');
+    expect(cloneWarning.getAttribute('aria-label')).toBe('Suspected cloned credential');
+    expect(cloneWarning.textContent).toContain('⚠️ Suspected Clone');
+
+    const row = screen.getByTestId('passkey-row-pk-clone');
+    const createdCell = row.querySelector('[data-label="Created"]');
+    expect(createdCell).not.toBeNull();
+    const lastUsedCell = row.querySelector('[data-label="Last Used"]');
+    expect(lastUsedCell).not.toBeNull();
+    expect(lastUsedCell?.textContent).toContain('Never');
   });
 
   it('handles Test Key cancellation and error conditions', async () => {

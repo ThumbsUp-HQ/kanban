@@ -66,6 +66,7 @@ export function PersonalSettingsPage(): JSX.Element {
   // Notification state
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [passkeyVerifiedBanner, setPasskeyVerifiedBanner] = useState<string | null>(null);
 
   // Form states (controlled with fallback to profile)
   const [displayNameInput, setDisplayNameInput] = useState<string | null>(null);
@@ -153,6 +154,18 @@ export function PersonalSettingsPage(): JSX.Element {
     setErrorMsg(null);
     try {
       const optionsJson = await fetchWebauthnAuthenticationOptions();
+
+      // Scope allowCredentials to the clicked credential if returned
+      if (optionsJson.allowCredentials && optionsJson.allowCredentials.length > 0) {
+        const targetId = cred.credential_id ?? cred.id;
+        const scoped = optionsJson.allowCredentials.filter(
+          (c) => c.id === targetId || c.id === cred.id,
+        );
+        if (scoped.length > 0) {
+          optionsJson.allowCredentials = scoped;
+        }
+      }
+
       const requestOptions = prepareRequestOptions(optionsJson);
 
       const assertion = (await navigator.credentials.get({
@@ -164,9 +177,20 @@ export function PersonalSettingsPage(): JSX.Element {
       }
 
       const serialized = serializeAssertionCredential(assertion);
-      await verifyWebauthnAuthentication({ credential: serialized });
+      const verifyRes = await verifyWebauthnAuthentication({ credential: serialized });
 
-      setSuccessMsg('👍 Key verified');
+      if (
+        verifyRes.credential_id &&
+        verifyRes.credential_id !== cred.id &&
+        (!cred.credential_id || verifyRes.credential_id !== cred.credential_id)
+      ) {
+        throw new Error('A different credential responded than the one tested.');
+      }
+
+      const credName = cred.nickname && cred.nickname.length > 0 ? cred.nickname : 'Passkey';
+      const successText = `👍 Key verified (${credName})`;
+      setPasskeyVerifiedBanner(successText);
+      setSuccessMsg(successText);
       setErrorMsg(null);
       void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
     } catch (err: unknown) {
@@ -703,6 +727,23 @@ export function PersonalSettingsPage(): JSX.Element {
           </div>
         )}
 
+        {passkeyVerifiedBanner && (
+          <div
+            className="kb-personal-settings-alert kb-personal-settings-alert-success"
+            role="status"
+            data-testid="passkey-verified-banner"
+          >
+            <span>{passkeyVerifiedBanner}</span>
+            <button
+              type="button"
+              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+              onClick={() => { setPasskeyVerifiedBanner(null); }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {passkeys && passkeys.length > 0 ? (
           <div className="kb-table-scroll-container">
             <table className="kb-personal-settings-table" data-testid="passkeys-table">
@@ -725,7 +766,7 @@ export function PersonalSettingsPage(): JSX.Element {
 
                   return (
                     <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
-                      <td className="kb-personal-settings-td">
+                      <td className="kb-personal-settings-td kb-personal-settings-td--title">
                         <div className="kb-passkey-cell-title">
                           <strong>
                             {pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}
@@ -740,6 +781,7 @@ export function PersonalSettingsPage(): JSX.Element {
                             <span
                               className="kb-passkey-clone-warning"
                               data-testid={`passkey-clone-warning-${pk.id}`}
+                              aria-label="Suspected cloned credential"
                               title={`Suspected clone recorded at ${pk.suspect_clone_at}`}
                             >
                               ⚠️ Suspected Clone
@@ -747,41 +789,43 @@ export function PersonalSettingsPage(): JSX.Element {
                           )}
                         </div>
                       </td>
-                      <td className="kb-personal-settings-td">
+                      <td className="kb-personal-settings-td" data-label="Created">
                         {new Date(pk.created_at).toLocaleDateString()}
                       </td>
-                      <td className="kb-personal-settings-td">
+                      <td className="kb-personal-settings-td" data-label="Last Used">
                         {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
                       </td>
                       <td className="kb-personal-settings-td kb-personal-settings-td-right">
-                        <button
-                          type="button"
-                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
-                          data-testid={`test-passkey-${pk.id}`}
-                          disabled={testingPasskeyId === pk.id}
-                          onClick={() => { void handleTestKey(pk); }}
-                        >
-                          {testingPasskeyId === pk.id ? 'Testing...' : 'Test Key'}
-                        </button>
-                        <button
-                          type="button"
-                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
-                          data-testid={`rename-passkey-${pk.id}`}
-                          onClick={() => {
-                            setEditingPasskey(pk);
-                            setPasskeyNickname(pk.nickname ?? '');
-                          }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          className="kb-personal-settings-btn kb-personal-settings-btn-danger"
-                          data-testid={`delete-passkey-${pk.id}`}
-                          onClick={() => { void handleDeletePasskey(pk.id); }}
-                        >
-                          Remove
-                        </button>
+                        <div className="kb-passkey-actions">
+                          <button
+                            type="button"
+                            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                            data-testid={`test-passkey-${pk.id}`}
+                            disabled={testingPasskeyId === pk.id}
+                            onClick={() => { void handleTestKey(pk); }}
+                          >
+                            {testingPasskeyId === pk.id ? 'Testing...' : 'Test Key'}
+                          </button>
+                          <button
+                            type="button"
+                            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                            data-testid={`rename-passkey-${pk.id}`}
+                            onClick={() => {
+                              setEditingPasskey(pk);
+                              setPasskeyNickname(pk.nickname ?? '');
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+                            data-testid={`delete-passkey-${pk.id}`}
+                            onClick={() => { void handleDeletePasskey(pk.id); }}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

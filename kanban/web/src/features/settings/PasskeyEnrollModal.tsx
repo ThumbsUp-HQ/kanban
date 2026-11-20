@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, type JSX, type SyntheticEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
 import { ApiProblem } from '../../api/problem';
@@ -44,17 +44,75 @@ export function PasskeyEnrollModal({
   const [nickname, setNickname] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  if (!isOpen) {
-    return null;
-  }
-
-  const handleClose = (): void => {
+  const handleClose = useCallback((): void => {
     setNickname('');
     setErrorMsg(null);
     setIsSubmitting(false);
     onClose();
-  };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        if (!isSubmitting) {
+          e.preventDefault();
+          handleClose();
+        }
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const modal = modalRef.current;
+        if (!modal) {
+          return;
+        }
+
+        const focusables = Array.from(
+          modal.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter(
+          (el) =>
+            !el.hasAttribute('disabled') &&
+            el.getAttribute('aria-hidden') !== 'true' &&
+            (el.offsetParent !== null || el.getClientRects().length > 0 || el.tabIndex >= 0),
+        );
+
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (!first || !last) {
+          e.preventDefault();
+          return;
+        }
+
+        if (e.shiftKey) {
+          if (document.activeElement === first || !modal.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (document.activeElement === last || !modal.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, isSubmitting, handleClose]);
+
+  if (!isOpen) {
+    return null;
+  }
 
   const executeRegistration = async (): Promise<void> => {
     setIsSubmitting(true);
@@ -121,6 +179,7 @@ export function PasskeyEnrollModal({
   return (
     <div className="kb-passkey-enroll-backdrop" role="presentation">
       <div
+        ref={modalRef}
         className="kb-passkey-enroll-modal"
         role="dialog"
         aria-modal="true"
@@ -137,12 +196,13 @@ export function PasskeyEnrollModal({
           </h3>
           <button
             type="button"
-            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+            className="kb-passkey-enroll-close-btn"
+            aria-label="Close"
             data-testid="passkey-enroll-close-btn"
             disabled={isSubmitting}
             onClick={handleClose}
           >
-            Cancel
+            ✕
           </button>
         </div>
 

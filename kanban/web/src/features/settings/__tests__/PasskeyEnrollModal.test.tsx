@@ -103,11 +103,137 @@ describe('PasskeyEnrollModal (KAN-25)', () => {
     const onClose = vi.fn();
     renderModal({ onClose });
 
-    fireEvent.click(screen.getByTestId('passkey-enroll-close-btn'));
+    const closeBtn = screen.getByTestId('passkey-enroll-close-btn');
+    expect(closeBtn.getAttribute('aria-label')).toBe('Close');
+    expect(closeBtn.textContent).toBe('✕');
+
+    fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('passkey-enroll-cancel-btn'));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('dismisses modal on Escape key press when not submitting', () => {
+    const onClose = vi.fn();
+    renderModal({ onClose });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not dismiss modal on Escape when mid-submitting', async () => {
+    let resolveRegistration: ((val: unknown) => void) | undefined;
+    const pendingPromise = new Promise((resolve) => {
+      resolveRegistration = resolve;
+    });
+    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockReturnValueOnce(
+      pendingPromise as never,
+    );
+
+    const onClose = vi.fn();
+    renderModal({ onClose });
+
+    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
+      target: { value: 'Submitting Key' },
+    });
+    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
+
+    // While submitting, press Escape
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Keydown other keys (e.g. Enter) should not trigger close
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Clean up pending promise and wait for submission to finish
+    resolveRegistration?.({ ...mockOptions });
+    await waitFor(() => {
+      expect(screen.queryByTestId('passkey-enroll-submit-btn')).not.toBeNull();
+    });
+  });
+
+  it('traps focus inside the modal on Tab and Shift+Tab', () => {
+    renderModal();
+
+    const input = screen.getByTestId('passkey-enroll-nickname-input');
+    fireEvent.change(input, { target: { value: 'My Key' } });
+
+    const closeBtn = screen.getByTestId('passkey-enroll-close-btn');
+    const submitBtn = screen.getByTestId('passkey-enroll-submit-btn');
+
+    // Focus last element (submit button) and press Tab -> cycles to first element (closeBtn)
+    submitBtn.focus();
+    expect(document.activeElement).toBe(submitBtn);
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+    expect(document.activeElement).toBe(closeBtn);
+
+    // Focus first element (close button) and press Shift+Tab -> cycles to last element (submitBtn)
+    closeBtn.focus();
+    expect(document.activeElement).toBe(closeBtn);
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(submitBtn);
+
+    // If activeElement is outside modal, Tab focuses first element
+    document.body.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+    expect(document.activeElement).toBe(closeBtn);
+
+    // If activeElement is outside modal, Shift+Tab focuses last element
+    document.body.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(submitBtn);
+  });
+
+  it('updates attachment choice when initialAttachment prop changes', () => {
+    const { rerender } = renderModal({ initialAttachment: 'platform' });
+    expect(screen.getByTestId<HTMLInputElement>('attachment-platform-radio').checked).toBe(true);
+
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PasskeyEnrollModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          initialAttachment="cross-platform"
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId<HTMLInputElement>('attachment-cross-platform-radio').checked).toBe(true);
+  });
+
+  it('prevents default on Tab when modal has no focusable elements', () => {
+    renderModal();
+    const modal = screen.getByTestId('passkey-enroll-modal');
+    const focusables = modal.querySelectorAll('button, input');
+    focusables.forEach((el) => {
+      el.setAttribute('disabled', 'true');
+    });
+
+    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    const spy = vi.spyOn(tabEvent, 'preventDefault');
+    document.dispatchEvent(tabEvent);
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('allows normal Tab and Shift+Tab navigation for elements in the middle', () => {
+    renderModal();
+    const input = screen.getByTestId('passkey-enroll-nickname-input');
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: false, bubbles: true, cancelable: true });
+    const tabSpy = vi.spyOn(tabEvent, 'preventDefault');
+    document.dispatchEvent(tabEvent);
+    expect(tabSpy).not.toHaveBeenCalled();
+
+    const shiftTabEvent = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    const shiftTabSpy = vi.spyOn(shiftTabEvent, 'preventDefault');
+    document.dispatchEvent(shiftTabEvent);
+    expect(shiftTabSpy).not.toHaveBeenCalled();
   });
 
   it('prevents submission when nickname is empty or whitespace', () => {

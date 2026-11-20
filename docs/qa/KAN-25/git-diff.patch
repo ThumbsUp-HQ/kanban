@@ -1,3 +1,37 @@
+diff --git a/kanban/api/v1/auth_webauthn.py b/kanban/api/v1/auth_webauthn.py
+index 57fe2ed..3378ef6 100644
+--- a/kanban/api/v1/auth_webauthn.py
++++ b/kanban/api/v1/auth_webauthn.py
+@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
+ from sqlalchemy import text
+ from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
+ from starlette.responses import JSONResponse
++from webauthn.helpers import bytes_to_base64url
+ 
+ from database.session import RLSContext
+ from kanban.api.deps import PrincipalContext, get_principal  # Required at runtime
+@@ -577,6 +578,7 @@ async def list_credentials(
+         content=[
+             {
+                 "id": str(r.id),
++                "credential_id": bytes_to_base64url(bytes(r.credential_id)),
+                 "nickname": r.nickname,
+                 "sign_count": r.sign_count,
+                 "aaguid": str(r.aaguid) if r.aaguid else None,
+diff --git a/kanban/tests/auth/test_webauthn.py b/kanban/tests/auth/test_webauthn.py
+index 4deb570..da93b8c 100644
+--- a/kanban/tests/auth/test_webauthn.py
++++ b/kanban/tests/auth/test_webauthn.py
+@@ -263,6 +263,9 @@ async def test_case_1_positive_lifecycle(
+         creds = list_res.json()
+         assert len(creds) == 1
+         assert creds[0]["nickname"] == "MacBook Touch ID"
++        assert "credential_id" in creds[0]
++        assert isinstance(creds[0]["credential_id"], str)
++        assert len(creds[0]["credential_id"]) > 0
+ 
+         # 6. Re-login with password -> new session with mfa_pending=True
+         login_res_2 = await client.post(
 diff --git a/kanban/web/src/features/auth/webauthn.test.ts b/kanban/web/src/features/auth/webauthn.test.ts
 index 1ce28d4..fb2dd2d 100644
 --- a/kanban/web/src/features/auth/webauthn.test.ts
@@ -293,10 +327,10 @@ index a6de9c1..32d3e0f 100644
  }
 diff --git a/kanban/web/src/features/settings/PasskeyEnrollModal.css b/kanban/web/src/features/settings/PasskeyEnrollModal.css
 new file mode 100644
-index 0000000..66ffd9b
+index 0000000..44b12a8
 --- /dev/null
 +++ b/kanban/web/src/features/settings/PasskeyEnrollModal.css
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,197 @@
 +/* Copyright 2026 Kanban Platform Contributors */
 +/* Apache-2.0 License. See LICENSE for details. */
 +
@@ -339,6 +373,37 @@ index 0000000..66ffd9b
 +  font-size: var(--text-lg);
 +  font-weight: 600;
 +  color: var(--fg-primary);
++}
++
++.kb-passkey-enroll-close-btn {
++  background: transparent;
++  border: none;
++  font-size: var(--text-base);
++  color: var(--fg-secondary);
++  cursor: pointer;
++  min-width: 44px;
++  min-height: 44px;
++  padding: 0;
++  border-radius: var(--radius-sm);
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  transition: color 0.15s ease, background-color 0.15s ease;
++}
++
++.kb-passkey-enroll-close-btn:hover:not(:disabled) {
++  color: var(--fg-primary);
++  background-color: var(--bg-hover);
++}
++
++.kb-passkey-enroll-close-btn:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++.kb-passkey-enroll-close-btn:focus-visible {
++  outline: 2px solid var(--focus-ring);
++  outline-offset: 2px;
 +}
 +
 +.kb-passkey-enroll-body {
@@ -465,14 +530,14 @@ index 0000000..66ffd9b
 +}
 diff --git a/kanban/web/src/features/settings/PasskeyEnrollModal.tsx b/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
 new file mode 100644
-index 0000000..feba233
+index 0000000..48215be
 --- /dev/null
 +++ b/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
-@@ -0,0 +1,294 @@
+@@ -0,0 +1,354 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
-+import React, { useState, type JSX, type SyntheticEvent } from 'react';
++import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
 +import { useQueryClient } from '@tanstack/react-query';
 +import { qk } from '../../api/queryKeys';
 +import { ApiProblem } from '../../api/problem';
@@ -515,17 +580,75 @@ index 0000000..feba233
 +  const [nickname, setNickname] = useState('');
 +  const [isSubmitting, setIsSubmitting] = useState(false);
 +  const [errorMsg, setErrorMsg] = useState<string | null>(null);
++  const modalRef = useRef<HTMLDivElement>(null);
 +
-+  if (!isOpen) {
-+    return null;
-+  }
-+
-+  const handleClose = (): void => {
++  const handleClose = useCallback((): void => {
 +    setNickname('');
 +    setErrorMsg(null);
 +    setIsSubmitting(false);
 +    onClose();
-+  };
++  }, [onClose]);
++
++  useEffect(() => {
++    if (!isOpen) {
++      return;
++    }
++
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        if (!isSubmitting) {
++          e.preventDefault();
++          handleClose();
++        }
++        return;
++      }
++
++      if (e.key === 'Tab') {
++        const modal = modalRef.current;
++        if (!modal) {
++          return;
++        }
++
++        const focusables = Array.from(
++          modal.querySelectorAll<HTMLElement>(
++            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
++          ),
++        ).filter(
++          (el) =>
++            !el.hasAttribute('disabled') &&
++            el.getAttribute('aria-hidden') !== 'true' &&
++            (el.offsetParent !== null || el.getClientRects().length > 0 || el.tabIndex >= 0),
++        );
++
++        const first = focusables[0];
++        const last = focusables[focusables.length - 1];
++
++        if (!first || !last) {
++          e.preventDefault();
++          return;
++        }
++
++        if (e.shiftKey) {
++          if (document.activeElement === first || !modal.contains(document.activeElement)) {
++            e.preventDefault();
++            last.focus();
++          }
++        } else if (document.activeElement === last || !modal.contains(document.activeElement)) {
++          e.preventDefault();
++          first.focus();
++        }
++      }
++    };
++
++    document.addEventListener('keydown', handleKeyDown);
++    return () => {
++      document.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [isOpen, isSubmitting, handleClose]);
++
++  if (!isOpen) {
++    return null;
++  }
 +
 +  const executeRegistration = async (): Promise<void> => {
 +    setIsSubmitting(true);
@@ -592,6 +715,7 @@ index 0000000..feba233
 +  return (
 +    <div className="kb-passkey-enroll-backdrop" role="presentation">
 +      <div
++        ref={modalRef}
 +        className="kb-passkey-enroll-modal"
 +        role="dialog"
 +        aria-modal="true"
@@ -608,12 +732,13 @@ index 0000000..feba233
 +          </h3>
 +          <button
 +            type="button"
-+            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            className="kb-passkey-enroll-close-btn"
++            aria-label="Close"
 +            data-testid="passkey-enroll-close-btn"
 +            disabled={isSubmitting}
 +            onClick={handleClose}
 +          >
-+            Cancel
++            ✕
 +          </button>
 +        </div>
 +
@@ -764,7 +889,7 @@ index 0000000..feba233
 +  );
 +}
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
-index c125dad..2888f78 100644
+index c125dad..c69b058 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.css
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
 @@ -4,6 +4,9 @@
@@ -777,7 +902,20 @@ index c125dad..2888f78 100644
    margin: 0 auto;
    color: var(--fg-primary);
    font-family: var(--font-sans);
-@@ -377,6 +380,69 @@
+@@ -49,6 +52,12 @@
+   color: var(--danger-fg);
+ }
+ 
++.kb-personal-settings-alert-warning {
++  background-color: var(--warn-bg);
++  border: 1px solid var(--warn-fg);
++  color: var(--warn-fg);
++}
++
+ .kb-personal-settings-section {
+   margin-bottom: var(--section-gap);
+   background-color: var(--bg-surface);
+@@ -377,6 +386,82 @@
    display: flex;
    justify-content: space-between;
    align-items: center;
@@ -815,6 +953,8 @@ index c125dad..2888f78 100644
 +  font-weight: 500;
 +  padding: 2px 8px;
 +  border-radius: var(--radius-full);
++  white-space: nowrap;
++  flex-shrink: 0;
 +}
 +
 +.kb-passkey-badge--passkey {
@@ -840,6 +980,17 @@ index c125dad..2888f78 100644
 +  background-color: var(--bg-danger-subtle);
 +  color: var(--text-danger);
 +  border: 1px solid var(--border-danger);
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
++.kb-passkey-actions {
++  display: inline-flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: var(--space-2);
++  flex-wrap: nowrap;
++  white-space: nowrap;
 +}
 +
 +.kb-personal-settings-modal-backdrop--stepup {
@@ -847,8 +998,93 @@ index c125dad..2888f78 100644
  }
  
  .kb-personal-settings-mfa-actions {
+@@ -719,3 +804,84 @@
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+ }
++
++@media (max-width: 640px) {
++  .kb-personal-settings-table,
++  .kb-personal-settings-table tbody,
++  .kb-personal-settings-table tr,
++  .kb-personal-settings-table td {
++    display: block;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .kb-personal-settings-table thead {
++    display: none;
++  }
++
++  .kb-personal-settings-table tr {
++    border: 1px solid var(--border-subtle);
++    border-radius: var(--radius-md);
++    padding: var(--space-3);
++    margin-bottom: var(--space-3);
++    background-color: var(--bg-surface);
++  }
++
++  .kb-personal-settings-td {
++    padding: var(--space-1) 0;
++    border-bottom: none;
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    gap: var(--space-2);
++    font-size: var(--text-sm);
++  }
++
++  .kb-personal-settings-td::before {
++    content: attr(data-label);
++    font-size: var(--text-xs);
++    font-weight: 600;
++    color: var(--fg-secondary);
++    text-transform: uppercase;
++    letter-spacing: 0.05em;
++    flex-shrink: 0;
++  }
++
++  .kb-personal-settings-td.kb-personal-settings-td--title {
++    display: block;
++    padding-bottom: var(--space-2);
++    margin-bottom: var(--space-1);
++    border-bottom: 1px solid var(--border-subtle);
++  }
++
++  .kb-personal-settings-td.kb-personal-settings-td--title::before {
++    display: none;
++  }
++
++  .kb-personal-settings-td-right {
++    text-align: left;
++    margin-top: var(--space-2);
++    padding-top: var(--space-2);
++    border-top: 1px solid var(--border-subtle);
++    justify-content: flex-start;
++  }
++
++  .kb-personal-settings-td-right::before {
++    display: none;
++  }
++
++  .kb-passkey-actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: var(--space-2);
++    width: 100%;
++    justify-content: flex-start;
++  }
++
++  .kb-passkey-actions > .kb-personal-settings-btn {
++    flex: 1 1 auto;
++    text-align: center;
++    justify-content: center;
++    margin-right: 0;
++  }
++}
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
-index 1890b77..f6bfd0c 100644
+index 1890b77..f738061 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 @@ -13,6 +13,8 @@ import {
@@ -873,7 +1109,15 @@ index 1890b77..f6bfd0c 100644
  import { ApiProblem } from '../../api/problem';
  import type { MfaMethod } from '../auth/authApi';
  import { copyToClipboard } from '../../utils/clipboard';
-@@ -80,6 +88,14 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -58,6 +66,7 @@ export function PersonalSettingsPage(): JSX.Element {
+   // Notification state
+   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+   const [errorMsg, setErrorMsg] = useState<string | null>(null);
++  const [passkeyVerifiedBanner, setPasskeyVerifiedBanner] = useState<string | null>(null);
+ 
+   // Form states (controlled with fallback to profile)
+   const [displayNameInput, setDisplayNameInput] = useState<string | null>(null);
+@@ -80,6 +89,14 @@ export function PersonalSettingsPage(): JSX.Element {
    const [totpVerificationCode, setTotpVerificationCode] = useState('');
    const [editingPasskey, setEditingPasskey] = useState<WebauthnCredentialItem | null>(null);
    const [passkeyNickname, setPasskeyNickname] = useState('');
@@ -888,7 +1132,7 @@ index 1890b77..f6bfd0c 100644
  
    // AAL2 Step-Up state
    const [aal2Challenge, setAal2Challenge] = useState<{
-@@ -119,10 +135,12 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -119,10 +136,12 @@ export function PersonalSettingsPage(): JSX.Element {
    const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
  
    const handleInterceptAal2 = (err: unknown, retryAction: () => Promise<void>): boolean => {
@@ -903,7 +1147,7 @@ index 1890b77..f6bfd0c 100644
        setAal2Challenge({ challengeId, methods });
        setPendingAction(() => retryAction);
        return true;
-@@ -130,6 +148,45 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -130,6 +149,68 @@ export function PersonalSettingsPage(): JSX.Element {
      return false;
    };
  
@@ -912,6 +1156,18 @@ index 1890b77..f6bfd0c 100644
 +    setErrorMsg(null);
 +    try {
 +      const optionsJson = await fetchWebauthnAuthenticationOptions();
++
++      // Scope allowCredentials to the clicked credential if returned
++      if (optionsJson.allowCredentials && optionsJson.allowCredentials.length > 0) {
++        const targetId = cred.credential_id ?? cred.id;
++        const scoped = optionsJson.allowCredentials.filter(
++          (c) => c.id === targetId || c.id === cred.id,
++        );
++        if (scoped.length > 0) {
++          optionsJson.allowCredentials = scoped;
++        }
++      }
++
 +      const requestOptions = prepareRequestOptions(optionsJson);
 +
 +      const assertion = (await navigator.credentials.get({
@@ -923,9 +1179,20 @@ index 1890b77..f6bfd0c 100644
 +      }
 +
 +      const serialized = serializeAssertionCredential(assertion);
-+      await verifyWebauthnAuthentication({ credential: serialized });
++      const verifyRes = await verifyWebauthnAuthentication({ credential: serialized });
 +
-+      setSuccessMsg('👍 Key verified');
++      if (
++        verifyRes.credential_id &&
++        verifyRes.credential_id !== cred.id &&
++        (!cred.credential_id || verifyRes.credential_id !== cred.credential_id)
++      ) {
++        throw new Error('A different credential responded than the one tested.');
++      }
++
++      const credName = cred.nickname && cred.nickname.length > 0 ? cred.nickname : 'Passkey';
++      const successText = `👍 Key verified (${credName})`;
++      setPasskeyVerifiedBanner(successText);
++      setSuccessMsg(successText);
 +      setErrorMsg(null);
 +      void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
 +    } catch (err: unknown) {
@@ -949,7 +1216,7 @@ index 1890b77..f6bfd0c 100644
    // Mutations
    const updateProfileMutation = useMutation({
      mutationFn: updateMyProfile,
-@@ -610,55 +667,128 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -610,55 +691,148 @@ export function PersonalSettingsPage(): JSX.Element {
                Fast, phishing-resistant authentication with WebAuthn / FIDO2 security keys or biometrics.
              </p>
            </div>
@@ -986,6 +1253,23 @@ index 1890b77..f6bfd0c 100644
 +            data-testid="webauthn-insecure-context-notice"
 +          >
 +            Browser WebAuthn requires HTTPS or localhost to register and use passkeys or security keys.
++          </div>
++        )}
++
++        {passkeyVerifiedBanner && (
++          <div
++            className="kb-personal-settings-alert kb-personal-settings-alert-success"
++            role="status"
++            data-testid="passkey-verified-banner"
++          >
++            <span>{passkeyVerifiedBanner}</span>
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++              onClick={() => { setPasskeyVerifiedBanner(null); }}
++            >
++              Dismiss
++            </button>
 +          </div>
 +        )}
 +
@@ -1056,7 +1340,7 @@ index 1890b77..f6bfd0c 100644
 +
 +                  return (
 +                    <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
-+                      <td className="kb-personal-settings-td">
++                      <td className="kb-personal-settings-td kb-personal-settings-td--title">
 +                        <div className="kb-passkey-cell-title">
 +                          <strong>
 +                            {pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}
@@ -1071,6 +1355,7 @@ index 1890b77..f6bfd0c 100644
 +                            <span
 +                              className="kb-passkey-clone-warning"
 +                              data-testid={`passkey-clone-warning-${pk.id}`}
++                              aria-label="Suspected cloned credential"
 +                              title={`Suspected clone recorded at ${pk.suspect_clone_at}`}
 +                            >
 +                              ⚠️ Suspected Clone
@@ -1078,41 +1363,43 @@ index 1890b77..f6bfd0c 100644
 +                          )}
 +                        </div>
 +                      </td>
-+                      <td className="kb-personal-settings-td">
++                      <td className="kb-personal-settings-td" data-label="Created">
 +                        {new Date(pk.created_at).toLocaleDateString()}
 +                      </td>
-+                      <td className="kb-personal-settings-td">
++                      <td className="kb-personal-settings-td" data-label="Last Used">
 +                        {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
 +                      </td>
 +                      <td className="kb-personal-settings-td kb-personal-settings-td-right">
-+                        <button
-+                          type="button"
-+                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
-+                          data-testid={`test-passkey-${pk.id}`}
-+                          disabled={testingPasskeyId === pk.id}
-+                          onClick={() => { void handleTestKey(pk); }}
-+                        >
-+                          {testingPasskeyId === pk.id ? 'Testing...' : 'Test Key'}
-+                        </button>
-+                        <button
-+                          type="button"
-+                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
-+                          data-testid={`rename-passkey-${pk.id}`}
-+                          onClick={() => {
-+                            setEditingPasskey(pk);
-+                            setPasskeyNickname(pk.nickname ?? '');
-+                          }}
-+                        >
-+                          Rename
-+                        </button>
-+                        <button
-+                          type="button"
-+                          className="kb-personal-settings-btn kb-personal-settings-btn-danger"
-+                          data-testid={`delete-passkey-${pk.id}`}
-+                          onClick={() => { void handleDeletePasskey(pk.id); }}
-+                        >
-+                          Remove
-+                        </button>
++                        <div className="kb-passkey-actions">
++                          <button
++                            type="button"
++                            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                            data-testid={`test-passkey-${pk.id}`}
++                            disabled={testingPasskeyId === pk.id}
++                            onClick={() => { void handleTestKey(pk); }}
++                          >
++                            {testingPasskeyId === pk.id ? 'Testing...' : 'Test Key'}
++                          </button>
++                          <button
++                            type="button"
++                            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++                            data-testid={`rename-passkey-${pk.id}`}
++                            onClick={() => {
++                              setEditingPasskey(pk);
++                              setPasskeyNickname(pk.nickname ?? '');
++                            }}
++                          >
++                            Rename
++                          </button>
++                          <button
++                            type="button"
++                            className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++                            data-testid={`delete-passkey-${pk.id}`}
++                            onClick={() => { void handleDeletePasskey(pk.id); }}
++                          >
++                            Remove
++                          </button>
++                        </div>
 +                      </td>
 +                    </tr>
 +                  );
@@ -1123,7 +1410,7 @@ index 1890b77..f6bfd0c 100644
          ) : (
            <p className="kb-personal-settings-empty">
              No passkeys registered yet.
-@@ -983,7 +1113,7 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -983,7 +1157,7 @@ export function PersonalSettingsPage(): JSX.Element {
  
        {/* AAL2 Step-Up Dialog */}
        {aal2Challenge && (
@@ -1132,7 +1419,7 @@ index 1890b77..f6bfd0c 100644
            <div
              className="kb-personal-settings-modal"
              role="dialog"
-@@ -1036,6 +1166,21 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -1036,6 +1210,21 @@ export function PersonalSettingsPage(): JSX.Element {
          </div>
        )}
  
@@ -1156,10 +1443,10 @@ index 1890b77..f6bfd0c 100644
            file={cropFile}
 diff --git a/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx b/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx
 new file mode 100644
-index 0000000..bf3795b
+index 0000000..db0b3dd
 --- /dev/null
 +++ b/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,460 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -1265,11 +1552,137 @@ index 0000000..bf3795b
 +    const onClose = vi.fn();
 +    renderModal({ onClose });
 +
-+    fireEvent.click(screen.getByTestId('passkey-enroll-close-btn'));
++    const closeBtn = screen.getByTestId('passkey-enroll-close-btn');
++    expect(closeBtn.getAttribute('aria-label')).toBe('Close');
++    expect(closeBtn.textContent).toBe('✕');
++
++    fireEvent.click(closeBtn);
 +    expect(onClose).toHaveBeenCalledTimes(1);
 +
 +    fireEvent.click(screen.getByTestId('passkey-enroll-cancel-btn'));
 +    expect(onClose).toHaveBeenCalledTimes(2);
++  });
++
++  it('dismisses modal on Escape key press when not submitting', () => {
++    const onClose = vi.fn();
++    renderModal({ onClose });
++
++    fireEvent.keyDown(document, { key: 'Escape' });
++    expect(onClose).toHaveBeenCalledTimes(1);
++  });
++
++  it('does not dismiss modal on Escape when mid-submitting', async () => {
++    let resolveRegistration: ((val: unknown) => void) | undefined;
++    const pendingPromise = new Promise((resolve) => {
++      resolveRegistration = resolve;
++    });
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockReturnValueOnce(
++      pendingPromise as never,
++    );
++
++    const onClose = vi.fn();
++    renderModal({ onClose });
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'Submitting Key' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    // While submitting, press Escape
++    fireEvent.keyDown(document, { key: 'Escape' });
++    expect(onClose).not.toHaveBeenCalled();
++
++    // Keydown other keys (e.g. Enter) should not trigger close
++    fireEvent.keyDown(document, { key: 'Enter' });
++    expect(onClose).not.toHaveBeenCalled();
++
++    // Clean up pending promise and wait for submission to finish
++    resolveRegistration?.({ ...mockOptions });
++    await waitFor(() => {
++      expect(screen.queryByTestId('passkey-enroll-submit-btn')).not.toBeNull();
++    });
++  });
++
++  it('traps focus inside the modal on Tab and Shift+Tab', () => {
++    renderModal();
++
++    const input = screen.getByTestId('passkey-enroll-nickname-input');
++    fireEvent.change(input, { target: { value: 'My Key' } });
++
++    const closeBtn = screen.getByTestId('passkey-enroll-close-btn');
++    const submitBtn = screen.getByTestId('passkey-enroll-submit-btn');
++
++    // Focus last element (submit button) and press Tab -> cycles to first element (closeBtn)
++    submitBtn.focus();
++    expect(document.activeElement).toBe(submitBtn);
++
++    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
++    expect(document.activeElement).toBe(closeBtn);
++
++    // Focus first element (close button) and press Shift+Tab -> cycles to last element (submitBtn)
++    closeBtn.focus();
++    expect(document.activeElement).toBe(closeBtn);
++
++    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
++    expect(document.activeElement).toBe(submitBtn);
++
++    // If activeElement is outside modal, Tab focuses first element
++    document.body.focus();
++    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
++    expect(document.activeElement).toBe(closeBtn);
++
++    // If activeElement is outside modal, Shift+Tab focuses last element
++    document.body.focus();
++    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
++    expect(document.activeElement).toBe(submitBtn);
++  });
++
++  it('updates attachment choice when initialAttachment prop changes', () => {
++    const { rerender } = renderModal({ initialAttachment: 'platform' });
++    expect(screen.getByTestId<HTMLInputElement>('attachment-platform-radio').checked).toBe(true);
++
++    rerender(
++      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
++        <PasskeyEnrollModal
++          isOpen={true}
++          onClose={vi.fn()}
++          onSuccess={vi.fn()}
++          initialAttachment="cross-platform"
++        />
++      </QueryClientProvider>,
++    );
++    expect(screen.getByTestId<HTMLInputElement>('attachment-cross-platform-radio').checked).toBe(true);
++  });
++
++  it('prevents default on Tab when modal has no focusable elements', () => {
++    renderModal();
++    const modal = screen.getByTestId('passkey-enroll-modal');
++    const focusables = modal.querySelectorAll('button, input');
++    focusables.forEach((el) => {
++      el.setAttribute('disabled', 'true');
++    });
++
++    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
++    const spy = vi.spyOn(tabEvent, 'preventDefault');
++    document.dispatchEvent(tabEvent);
++    expect(spy).toHaveBeenCalled();
++  });
++
++  it('allows normal Tab and Shift+Tab navigation for elements in the middle', () => {
++    renderModal();
++    const input = screen.getByTestId('passkey-enroll-nickname-input');
++    input.focus();
++    expect(document.activeElement).toBe(input);
++
++    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: false, bubbles: true, cancelable: true });
++    const tabSpy = vi.spyOn(tabEvent, 'preventDefault');
++    document.dispatchEvent(tabEvent);
++    expect(tabSpy).not.toHaveBeenCalled();
++
++    const shiftTabEvent = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
++    const shiftTabSpy = vi.spyOn(shiftTabEvent, 'preventDefault');
++    document.dispatchEvent(shiftTabEvent);
++    expect(shiftTabSpy).not.toHaveBeenCalled();
 +  });
 +
 +  it('prevents submission when nickname is empty or whitespace', () => {
@@ -1495,10 +1908,10 @@ index 0000000..bf3795b
 +  });
 +});
 diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
-index 37461b3..af16738 100644
+index 37461b3..acd1d6e 100644
 --- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
-@@ -1619,4 +1619,308 @@ describe('PersonalSettingsPage', () => {
+@@ -1619,4 +1619,416 @@ describe('PersonalSettingsPage', () => {
      fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile2] } });
      expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
    });
@@ -1685,7 +2098,115 @@ index 37461b3..af16738 100644
 +      expect(mockGet).toHaveBeenCalled();
 +      expect(api.verifyWebauthnAuthentication).toHaveBeenCalled();
 +      expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified');
++      expect(screen.getByTestId('passkey-verified-banner').textContent).toContain('👍 Key verified (MacBook TouchID)');
 +    });
++
++    // Dismiss the inline section-level banner
++    const bannerDismissBtn = screen.getByTestId('passkey-verified-banner').querySelector('button');
++    expect(bannerDismissBtn).not.toBeNull();
++    if (bannerDismissBtn) {
++      fireEvent.click(bannerDismissBtn);
++    }
++    expect(screen.queryByTestId('passkey-verified-banner')).toBeNull();
++  });
++
++  it('scopes allowCredentials to the clicked credential and handles credential mismatch', async () => {
++    const mockMultiAuthOptions: api.PublicKeyCredentialRequestOptionsJSON = {
++      challenge: 'Y2hhbGxlbmdlMQ',
++      timeout: 60000,
++      rpId: 'localhost',
++      allowCredentials: [
++        { id: 'pk-1', type: 'public-key' },
++        { id: 'other-pk', type: 'public-key' },
++      ],
++    };
++
++    const mockAssertion = {
++      id: 'mock-key-id',
++      type: 'public-key',
++      response: {
++        clientDataJSON: new TextEncoder().encode('{}').buffer,
++        authenticatorData: new Uint8Array([3]).buffer,
++        signature: new Uint8Array([4]).buffer,
++        userHandle: null,
++      },
++      getClientExtensionResults: () => ({}),
++    } as unknown as PublicKeyCredential;
++
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockMultiAuthOptions);
++    vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({
++      verified: true,
++      credential_id: 'pk-1',
++      aal_level: 2,
++    });
++
++    const mockGet = vi.fn().mockResolvedValue(mockAssertion);
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: { get: mockGet, create: vi.fn() },
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('test-passkey-pk-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++
++    await waitFor(() => {
++      expect(mockGet).toHaveBeenCalled();
++      const calls = mockGet.mock.calls as unknown[][];
++      const requestArg = calls[0]?.[0] as CredentialRequestOptions | undefined;
++      // Verify allowCredentials was filtered to only pk-1
++      expect(requestArg?.publicKey?.allowCredentials).toHaveLength(1);
++      expect(screen.getByTestId('passkey-verified-banner').textContent).toContain('👍 Key verified');
++    });
++
++    // When verification returns a different credential than the one tested
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockMultiAuthOptions);
++    vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({
++      verified: true,
++      credential_id: 'different-pk-uuid',
++      aal_level: 2,
++    });
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain(
++        'A different credential responded than the one tested.',
++      );
++    });
++  });
++
++  it('renders clone warning with aria-label and responsive cell labels', async () => {
++    const clonePasskey: api.WebauthnCredentialItem = {
++      id: 'pk-clone',
++      nickname: 'Cloned Key',
++      created_at: '2026-01-01T00:00:00Z',
++      last_used_at: null,
++      aaguid: null,
++      transports: ['usb'],
++      suspect_clone_at: '2026-03-01T12:00:00Z',
++    };
++
++    vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([clonePasskey]);
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-row-pk-clone')).toBeDefined();
++    });
++
++    const cloneWarning = screen.getByTestId('passkey-clone-warning-pk-clone');
++    expect(cloneWarning.getAttribute('aria-label')).toBe('Suspected cloned credential');
++    expect(cloneWarning.textContent).toContain('⚠️ Suspected Clone');
++
++    const row = screen.getByTestId('passkey-row-pk-clone');
++    const createdCell = row.querySelector('[data-label="Created"]');
++    expect(createdCell).not.toBeNull();
++    const lastUsedCell = row.querySelector('[data-label="Last Used"]');
++    expect(lastUsedCell).not.toBeNull();
++    expect(lastUsedCell?.textContent).toContain('Never');
 +  });
 +
 +  it('handles Test Key cancellation and error conditions', async () => {
@@ -1922,7 +2443,7 @@ index 2fc5462..8daef26 100644
      const mockEnroll = { secret: 'SECRET123', provisioning_uri: 'otpauth://...' };
      const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockEnroll);
 diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
-index dae89a9..910a572 100644
+index dae89a9..633ad46 100644
 --- a/kanban/web/src/features/settings/personalSettingsApi.ts
 +++ b/kanban/web/src/features/settings/personalSettingsApi.ts
 @@ -2,6 +2,19 @@
@@ -1945,7 +2466,12 @@ index dae89a9..910a572 100644
  
  export interface UserProfileResponse {
    id?: string;
-@@ -40,6 +53,9 @@ export interface WebauthnCredentialItem {
+@@ -36,10 +49,14 @@ export interface ChangePasswordRequest {
+ 
+ export interface WebauthnCredentialItem {
+   id: string;
++  credential_id?: string | null;
+   nickname?: string | null;
    created_at: string;
    last_used_at: string | null;
    aaguid: string | null;
@@ -1955,7 +2481,7 @@ index dae89a9..910a572 100644
  }
  
  export interface MfaStatusResponse {
-@@ -126,6 +142,42 @@ export async function deletePasskey(credentialId: string): Promise<void> {
+@@ -126,6 +143,42 @@ export async function deletePasskey(credentialId: string): Promise<void> {
    });
  }
  
