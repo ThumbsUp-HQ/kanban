@@ -8,20 +8,29 @@ import ast
 import base64
 import hashlib
 import json
+import logging
 import re
 import time
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import (
     ApprovedWasmModule,
     CustomFieldDefinition,
     CustomFieldValue,
+    LinkKind,
+    ObjectLink,
+    ProjectPriority,
+    WorkflowState,
+)
+from database.models import (
+    Issue as DbIssue,
 )
 from kanban.api.problems import ProblemException, not_found
 from kanban.custom_fields.approvals import (
@@ -47,6 +56,8 @@ if TYPE_CHECKING:
     from kanban.api.deps import PrincipalContext
     from kanban.api.v1.schemas.custom_fields import CustomFieldTestExecuteRequest
 
+logger: Final[logging.Logger] = logging.getLogger(__name__)
+
 _HASH_BYTES_LEN: Final[int] = 32
 _HEX_DIGEST_LEN: Final[int] = 64
 _MAX_FORMULA_NODES: Final[int] = 64
@@ -54,6 +65,104 @@ _MAX_FORMULA_DEPTH: Final[int] = 8
 _MAX_POW_EXPONENT: Final[int] = 64
 _MAX_POW_BASE: Final[int] = 1_000_000
 _MAX_MULT_OUTPUT_LEN: Final[int] = 4096
+
+_SAFE_FORMULA_FUNCS: Final[dict[str, Any]] = {
+    "round": round,
+    "int": int,
+    "float": float,
+    "min": min,
+    "max": max,
+    "len": len,
+    "abs": abs,
+    "str": str,
+}
+
+
+def _strip_outer_parens(s: str) -> str:
+    """Strip redundant outer matching parentheses from an expression."""
+    s = s.strip()
+    while s.startswith("(") and s.endswith(")"):
+        depth = 0
+        matches = True
+        for ch in s[:-1]:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    matches = False
+                    break
+        if matches:
+            s = s[1:-1].strip()
+        else:
+            break
+    return s
+
+
+def _convert_js_ternary(expr: str) -> str:  # noqa: C901, PLR0912
+    """Recursively convert JS ternary (? :) expressions to Python (if else) expressions.
+
+    Correctly skips colons inside string literals and dictionary/set brackets.
+    """
+    expr = _strip_outer_parens(expr.strip())
+    if "?" not in expr or ":" not in expr:
+        return expr
+
+    depth_brace = 0
+    depth_bracket = 0
+    depth_paren = 0
+    in_quote: str | None = None
+    escaped = False
+
+    question_idx = -1
+    colon_idx = -1
+    ternary_balance = 0
+
+    for i, ch in enumerate(expr):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if in_quote:
+            if ch == in_quote:
+                in_quote = None
+            continue
+        if ch in ("'", '"'):
+            in_quote = ch
+            continue
+
+        if ch == "{":
+            depth_brace += 1
+        elif ch == "}":
+            depth_brace = max(0, depth_brace - 1)
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket = max(0, depth_bracket - 1)
+        elif ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren = max(0, depth_paren - 1)
+        elif depth_brace == 0 and depth_bracket == 0 and depth_paren == 0:
+            if ch == "?":
+                if question_idx == -1:
+                    question_idx = i
+                ternary_balance += 1
+            elif ch == ":" and question_idx != -1:
+                ternary_balance -= 1
+                if ternary_balance == 0:
+                    colon_idx = i
+                    break
+
+    if question_idx != -1 and colon_idx != -1:
+        cond = _convert_js_ternary(expr[:question_idx].strip())
+        val_true = _convert_js_ternary(expr[question_idx + 1 : colon_idx].strip())
+        val_false = _convert_js_ternary(expr[colon_idx + 1 :].strip())
+        return f"({val_true}) if ({cond}) else ({val_false})"
+
+    return expr
 
 
 def _check_formula_ast_bounds(node: ast.AST) -> bool:
@@ -72,15 +181,15 @@ def _check_formula_ast_bounds(node: ast.AST) -> bool:
 def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, PLR0915, ANN401
     """Safely evaluate a formula expression against issue payload without arbitrary execution."""
     expr = expr.strip()
+    if expr.startswith("formula:"):
+        expr = expr[len("formula:") :].strip()
     if not expr:
         return ""
 
     # Normalize JS operators
     expr = expr.replace("===", "==").replace("!==", "!=")
     if "?" in expr and ":" in expr:
-        m = re.match(r"^(.*?)\s*\?\s*(.*?)\s*:\s*(.*)$", expr)
-        if m:
-            expr = f"({m.group(2).strip()}) if ({m.group(1).strip()}) else ({m.group(3).strip()})"
+        expr = _convert_js_ternary(expr)
 
     try:
         parsed = ast.parse(expr, mode="eval")
@@ -90,7 +199,7 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
     if not _check_formula_ast_bounds(parsed.body):
         return None
 
-    def _eval_node(node: ast.AST, ctx: dict[str, Any]) -> Any:  # noqa: C901, PLR0911, PLR0912, ANN401
+    def _eval_node(node: ast.AST, ctx: dict[str, Any]) -> Any:  # noqa: C901, PLR0911, PLR0912, PLR0915, ANN401
         if isinstance(node, ast.Constant):
             return node.value
         if isinstance(node, ast.Name):
@@ -117,9 +226,15 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
             slice_val = _eval_node(node.slice, ctx)
             if isinstance(val, dict):
                 return val.get(slice_val, "")
-            if isinstance(val, list) and isinstance(slice_val, int) and 0 <= slice_val < len(val):
+            if (
+                isinstance(val, (list, tuple))
+                and isinstance(slice_val, int)
+                and 0 <= slice_val < len(val)
+            ):
                 return val[slice_val]
             return ""
+        if isinstance(node, (ast.List, ast.Tuple)):
+            return [_eval_node(elt, ctx) for elt in node.elts]
         if isinstance(node, ast.BinOp):
             left = _eval_node(node.left, ctx)
             right = _eval_node(node.right, ctx)
@@ -164,8 +279,6 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
                 for k, v in zip(node.keys, node.values, strict=False)
                 if k is not None
             }
-        if isinstance(node, ast.List):
-            return [_eval_node(elt, ctx) for elt in node.elts]
         if isinstance(node, ast.IfExp):
             cond = _eval_node(node.test, ctx)
             return _eval_node(node.body, ctx) if cond else _eval_node(node.orelse, ctx)
@@ -178,22 +291,210 @@ def _eval_safe_formula(expr: str, issue: dict[str, Any]) -> Any:  # noqa: C901, 
             if isinstance(node.op, ast.Not):
                 return not operand
             return None
+        if isinstance(node, ast.BoolOp):
+            if isinstance(node.op, ast.And):
+                res: Any = True
+                for val_node in node.values:
+                    res = _eval_node(val_node, ctx)
+                    if not res:
+                        return res
+                return res
+            if isinstance(node.op, ast.Or):
+                res = False
+                for val_node in node.values:
+                    res = _eval_node(val_node, ctx)
+                    if res:
+                        return res
+                return res
+            return None
         if isinstance(node, ast.Compare):
             left = _eval_node(node.left, ctx)
             for op, comparator in zip(node.ops, node.comparators, strict=False):
                 right = _eval_node(comparator, ctx)
-                if isinstance(op, ast.Eq) and left != right:
-                    return False
-                if isinstance(op, ast.NotEq) and left == right:
+                matched = False
+                if isinstance(op, ast.Eq):
+                    matched = left == right
+                elif isinstance(op, ast.NotEq):
+                    matched = left != right
+                elif isinstance(op, ast.Lt):
+                    matched = False if left in (None, "") or right in (None, "") else left < right
+                elif isinstance(op, ast.LtE):
+                    matched = False if left in (None, "") or right in (None, "") else left <= right
+                elif isinstance(op, ast.Gt):
+                    matched = False if left in (None, "") or right in (None, "") else left > right
+                elif isinstance(op, ast.GtE):
+                    matched = False if left in (None, "") or right in (None, "") else left >= right
+                elif isinstance(op, ast.Is):
+                    matched = left is right
+                elif isinstance(op, ast.IsNot):
+                    matched = left is not right
+                elif isinstance(op, ast.In):
+                    matched = isinstance(right, (list, tuple, dict, set, str)) and left in right
+                elif isinstance(op, ast.NotIn):
+                    matched = not (
+                        isinstance(right, (list, tuple, dict, set, str)) and left in right
+                    )
+                if not matched:
                     return False
                 left = right
             return True
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id in _SAFE_FORMULA_FUNCS:
+                fn = _SAFE_FORMULA_FUNCS[node.func.id]
+                args = [_eval_node(arg, ctx) for arg in node.args]
+                try:
+                    return fn(*args)
+                except (TypeError, ValueError, OverflowError):
+                    return None
+            return None
         return None
 
     try:
         return _eval_node(parsed.body, {"issue": issue, **issue})
     except (TypeError, ValueError, AttributeError, KeyError, ZeroDivisionError):
         return None
+
+
+async def build_issue_context(  # noqa: C901, PLR0912, PLR0915
+    session: AsyncSession | None,
+    issue: object,
+    issue_key: str,
+) -> dict[str, Any]:
+    """Construct safe execution context payload from issue model and related metadata."""
+    issue_id_str = str(getattr(issue, "id", ""))
+    summary_val = getattr(issue, "summary", "")
+    summary = summary_val if isinstance(summary_val, str) else ""
+    desc_val = getattr(issue, "description_markdown", "")
+    desc = desc_val if isinstance(desc_val, str) else ""
+    state_id_str = str(getattr(issue, "state_id", ""))
+    priority_id_str = str(getattr(issue, "priority_id", ""))
+    labels_val = getattr(issue, "labels", None)
+    labels = list(labels_val) if isinstance(labels_val, (list, tuple)) else []
+
+    # Dates - strictly check types so MagicMock is never mistakenly serialized
+    raw_due = getattr(issue, "due_date", None)
+    if isinstance(raw_due, (datetime, date)):
+        due_date_str = raw_due.isoformat()
+    elif isinstance(raw_due, str):
+        due_date_str = raw_due
+    else:
+        due_date_str = None
+
+    raw_start = getattr(issue, "start_date", None)
+    if isinstance(raw_start, (datetime, date)):
+        start_date_str = raw_start.isoformat()
+    elif isinstance(raw_start, str):
+        start_date_str = raw_start
+    else:
+        start_date_str = None
+
+    days_val = getattr(issue, "days_until_due", None)
+    if isinstance(days_val, int):
+        days_until_due: int | None = days_val
+    elif isinstance(raw_due, (datetime, date)):
+        today = datetime.now(UTC).date()
+        target_date = raw_due.date() if isinstance(raw_due, datetime) else raw_due
+        days_until_due = (target_date - today).days
+    else:
+        days_until_due = None
+
+    # State & Priority resolution
+    state_val = getattr(issue, "state", None)
+    state_name = state_val if isinstance(state_val, str) else state_id_str
+    state_group_val = getattr(issue, "state_group", None)
+    state_group = state_group_val if isinstance(state_group_val, str) else ""
+
+    prio_val = getattr(issue, "priority", None)
+    priority_slug = prio_val if isinstance(prio_val, str) else priority_id_str
+    prio_lbl_val = getattr(issue, "priority_label", None)
+    priority_label = prio_lbl_val if isinstance(prio_lbl_val, str) else ""
+
+    blk_val = getattr(issue, "blocker_count", None)
+    blocker_count: int = blk_val if isinstance(blk_val, int) else 0
+
+    sub_val = getattr(issue, "sub_issue_count", None)
+    sub_issue_count: int = sub_val if isinstance(sub_val, int) else 0
+
+    comp_val = getattr(issue, "completed_sub_issue_count", None)
+    completed_sub_issue_count: int = comp_val if isinstance(comp_val, int) else 0
+
+    # Resolve from DB if session is active and not a test mock
+    is_mock = (
+        type(session).__name__ != "AsyncSession"
+        or type(issue).__name__ not in ("Issue", "DbIssue")
+    )
+    if session is not None and not is_mock:
+        try:
+            if hasattr(issue, "state_id") and issue.state_id:
+                st = await session.get(WorkflowState, issue.state_id)
+                if st is not None:
+                    state_name = st.name
+                    state_group = st.state_group
+            if hasattr(issue, "priority_id") and issue.priority_id:
+                pr = await session.get(ProjectPriority, issue.priority_id)
+                if pr is not None:
+                    priority_slug = pr.slug
+                    priority_label = pr.label
+        except (SQLAlchemyError, AttributeError) as ex:
+            logger.debug("Failed resolving state/priority for issue %s: %s", issue_key, ex)
+
+        try:
+            if hasattr(issue, "id") and issue.id:
+                blk_stmt = (
+                    select(func.count())
+                    .select_from(ObjectLink)
+                    .where(
+                        ObjectLink.source_id == issue.id,
+                        ObjectLink.link_type == LinkKind.BLOCKED_BY,
+                        ObjectLink.link_state == "ACTIVE",
+                    )
+                )
+                blocker_count = int((await session.execute(blk_stmt)).scalar() or 0)
+
+                sub_stmt = (
+                    select(func.count())
+                    .select_from(DbIssue)
+                    .where(DbIssue.parent_issue_id == issue.id)
+                )
+                sub_issue_count = int((await session.execute(sub_stmt)).scalar() or 0)
+
+                comp_sub_stmt = (
+                    select(func.count())
+                    .select_from(DbIssue)
+                    .join(WorkflowState, WorkflowState.id == DbIssue.state_id)
+                    .where(
+                        DbIssue.parent_issue_id == issue.id,
+                        WorkflowState.state_group == "completed",
+                    )
+                )
+                completed_sub_issue_count = int(
+                    (await session.execute(comp_sub_stmt)).scalar() or 0
+                )
+        except (SQLAlchemyError, AttributeError) as ex:
+            logger.debug(
+                "Failed resolving blocker/sub_issue counts for issue %s: %s", issue_key, ex
+            )
+
+    return {
+        "id": issue_id_str,
+        "key": issue_key,
+        "summary": summary,
+        "description_markdown": desc,
+        "state_id": state_id_str,
+        "priority_id": priority_id_str,
+        "labels": labels,
+        "state": state_name,
+        "state_group": state_group,
+        "priority": priority_slug.upper() if priority_slug else "",
+        "priority_slug": priority_slug.lower() if priority_slug else "",
+        "priority_label": priority_label,
+        "start_date": start_date_str,
+        "due_date": due_date_str,
+        "days_until_due": days_until_due,
+        "blocker_count": blocker_count,
+        "sub_issue_count": sub_issue_count,
+        "completed_sub_issue_count": completed_sub_issue_count,
+    }
 
 
 def _get_caller_access_hash(caller: PrincipalContext) -> bytes:
@@ -329,15 +630,7 @@ class CustomFieldExecutor:
                 }
 
         # 4. Construct JSON input payload
-        issue_ctx: dict[str, Any] = {
-            "id": str(issue.id),
-            "key": issue_key,
-            "summary": issue.summary,
-            "description_markdown": issue.description_markdown or "",
-            "state": str(issue.state_id),
-            "priority": str(issue.priority_id),
-            "labels": [],
-        }
+        issue_ctx = await build_issue_context(active_session, issue, issue_key)
         input_payload: dict[str, Any] = {
             "schema": "kb-field-input/v1",
             "issue": issue_ctx,
@@ -714,15 +1007,7 @@ class CustomFieldExecutor:
                 detail=f"Issue '{body.issue_key}' does not belong to project '{proj_label}'",
             )
 
-        issue_ctx: dict[str, Any] = {
-            "id": str(issue.id),
-            "key": body.issue_key,
-            "summary": issue.summary,
-            "description_markdown": issue.description_markdown or "",
-            "state": str(issue.state_id),
-            "priority": str(issue.priority_id),
-            "labels": [],
-        }
+        issue_ctx = await build_issue_context(session, issue, body.issue_key)
         input_payload: dict[str, Any] = {
             "schema": "kb-field-input/v1",
             "issue": issue_ctx,

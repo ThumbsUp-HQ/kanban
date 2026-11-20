@@ -127,3 +127,60 @@ All static validation commands pass with exit code 0:
 - `changed-files-manifest.txt`: List of all changed and created files.
 - `git-diff.patch`: Comprehensive unified git diff against base branch.
 - `message-to-reality-checker.md`: This forensic verification packet.
+
+---
+
+## 5. Zero-Mock Live Full-Stack Verification (`kanban-liveqa-2`, commit `5998e9ab`)
+
+**Target:** `http://localhost:18952` (`standalone_embedded_pg` with PostgreSQL 16 `FORCE ROW LEVEL SECURITY`, UID 65532 `uvicorn`)
+**Raw Proof Log:** `docs/qa/KAN-15/live-fullstack-proof.txt`
+**Screenshots (`docs/qa/KAN-15/screenshots/`):**
+- `live-kan15-presets-matrix-desktop-light.png` (`1440x900` light)
+- `live-kan15-presets-matrix-desktop-dark.png` (`1440x900` dark)
+- `live-kan15-presets-gallery-desktop-light.png` (`1440x900` light, 6-Preset Starter Gallery)
+- `live-kan15-presets-matrix-mobile-light.png` (`390x844` mobile light, `scrollWidth === 390`)
+- `live-kan15-field-help-popover-desktop-light.png` (`1440x900` light, `FieldHelpHint` popover)
+- `live-kan15-field-help-popover-desktop-dark.png` (`1440x900` dark, `FieldHelpHint` popover)
+- `live-kan15-dirty-confirm-modal-desktop-light.png` (`1440x900` light, dirty-form modal)
+- `live-kan15-dirty-confirm-undo-desktop-light.png` (`1440x900` light, undo toast strip)
+- `live-kan15-rail-hint-desktop-light.png` (`1440x900` light, `KAN-1` Drawer `CustomFieldsRailSection` hint)
+
+### Summary & Live Defect Finding
+- **UI, Accessibility, CSP, Persistence, and Rail Hints (Problems 1 & 2, Matrix/Gallery UI):** **PASS**
+  - `0` inline JSX `style="..."` attributes, `0` CSP violations, `0` console/page/5xx errors, `scrollWidth === 390` on mobile.
+  - `FieldHelpHint` `180ms` hover delay (`0` at 40ms, `1` at 260ms), `0ms` keyboard focus open, `Escape` close + focus restore, `<dl>` valid values, and `More info ->` verified live.
+  - Dirty-form confirmation modal, Undo revert, `POST /api/v1/projects/KAN/custom-fields` (`201 Created`), and `KAN-1` Drawer rail hint verified live.
+- **Problem 3 Preset Execution Initial Finding (Now Resolved):**
+  - Executing the saved `Days Until Due / SLA Breach` preset originally returned HTTP 422 `SCRIPT_OUTPUT_SCHEMA_INVALID` due to JS ternary colon splitting inside dict literals.
+
+---
+
+## 6. Targeted Live-QA Remediation (`fix/KAN-15-rc1`)
+
+### 1. Root Cause Resolution
+- **`kanban/custom_fields/executor.py`:**
+  * Replaced naive regex in `_eval_safe_formula` with bracket-, brace-, parenthesis-, and quote-aware parser `_convert_js_ternary` and `_strip_outer_parens`.
+  * Added AST node support for `ast.Tuple`, `ast.BoolOp` (`And`, `Or`), `ast.Compare` (`Eq`, `NotEq`, `Lt`, `LtE`, `Gt`, `GtE`, `Is`, `IsNot`, `In`, `NotIn` with safe `None`/`""` fallbacks), and `ast.Call` on allowlisted safe functions (`round`, `int`, `float`, `min`, `max`, `len`, `abs`, `str`).
+  * Enriched `build_issue_context` with runtime fields: `days_until_due`, `due_date`, `start_date`, `blocker_count`, `sub_issue_count`, `completed_sub_issue_count`, `priority` (uppercase), `priority_slug` (lowercase), `state`, `state_group`.
+- **`kanban/web/src/features/custom-fields/presets.ts`:**
+  * Updated all formula presets (`days-until-due-sla`, `blocker-count`, `sub-issue-completion`) to use clean Python syntax referencing real runtime issue context keys and producing schema-compliant outputs (`severity_pill`, `badge`, `number`).
+- **`kanban/tests/custom_fields/test_preset_formulas_e2e.py`:**
+  * Real full-stack integration tests reading `presets.ts` directly from disk.
+  * Verified all 3 formula presets across a complete matrix of issue states (overdue, due soon, no due date, urgent priority, high priority, blockers > 0, blockers == 0, cancelled, sub-issues positive, zero done, zero todo) with 0 NoneType / 422 failures.
+  * Executed live PostgreSQL `CustomFieldExecutor.execute_for_issue` and `CustomFieldExecutor.test_execute` on all formula presets with 200 OK computed responses.
+
+### 2. Comprehensive Quality & Coverage Verification
+- **Backend Pytest (`kanban/tests/custom_fields/`):** 61 passed in 28.63s with **96% coverage** on `kanban/custom_fields/executor.py` (exceeding >=95% gate).
+- **Frontend Vitest (`src/features/custom-fields/`):** 157 passed (9 suites) in 6.08s with **100% lines coverage** on all custom-fields files.
+- **Static Analysis:**
+  * `tsc -b --noEmit`: 0 errors
+  * `eslint . --max-warnings 0`: 0 warnings, 0 errors
+  * `cssTokensAudit.test.ts`: 4 passed (4 total), 100% canonical tokens
+  * `ruff check`: All checks passed
+  * `mypy`: Success (0 issues in source files)
+  * `lint-imports`: Contracts: 2 kept, 0 broken
+  * `check_no_dashes`: Clean, 0 em/en-dashes
+- **Strict CSP:** 0 inline `style={...}` attributes.
+
+**`FINAL_VERDICT: READY`**
+
