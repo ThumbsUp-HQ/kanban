@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { IssueSurfaceRoot } from './IssueSurface';
 import { apiClient } from '../../api/client';
+import * as railApi from '../drawer-rail/railApi';
+import { ApiProblem } from '../../api/problem';
 import type { IssueDetail } from './slots';
 import type { IssueItem } from '../views/viewsApi';
 
@@ -172,7 +174,10 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     // 6. Share / Export button
     const shareBtn = screen.getByTestId('split-share-btn');
     expect(shareBtn).toBeDefined();
-    fireEvent.click(shareBtn);
+    await act(async () => {
+      fireEvent.click(shareBtn);
+      await Promise.resolve();
+    });
     expect(clipboardSpy).toHaveBeenCalled();
   });
 
@@ -208,8 +213,9 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     // 1-Click Assign to me
     const assignToMeBtn = screen.getByTestId('split-assign-to-me-btn');
     expect(assignToMeBtn).toBeDefined();
-    act(() => {
+    await act(async () => {
       fireEvent.click(assignToMeBtn);
+      await Promise.resolve();
     });
 
     // Dates check
@@ -219,7 +225,100 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     // Git branch copy helper
     const gitBranchBtn = screen.getByTestId('split-git-branch-copy');
     expect(gitBranchBtn).toBeDefined();
-    fireEvent.click(gitBranchBtn);
+    await act(async () => {
+      fireEvent.click(gitBranchBtn);
+      await Promise.resolve();
+    });
     expect(clipboardSpy).toHaveBeenCalled();
+  });
+
+  it('split-assign-to-me-btn hits POST /api/v1/issues/{issue_ref}/assignees with exact schema and updates UI, and surfaces 422 error cleanly', async () => {
+    const addAssigneeSpy = vi.spyOn(railApi, 'addAssignee').mockResolvedValueOnce({
+      id: 'asg-adam',
+      kind: 'principal',
+      principal: {
+        id: 'u-123',
+        handle: 'adam',
+        display_name: 'Adam Outler',
+        type: 'USER',
+      },
+    });
+
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-assign-to-me-btn')).toBeDefined();
+    });
+
+    expect(screen.getAllByText('Unassigned').length).toBeGreaterThanOrEqual(1);
+
+    const assignToMeBtn = screen.getByTestId('split-assign-to-me-btn');
+    await act(async () => {
+      fireEvent.click(assignToMeBtn);
+      await Promise.resolve();
+    });
+
+    expect(addAssigneeSpy).toHaveBeenCalledWith('KAN-52', { principal: 'u-123' });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Adam Outler').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('split-assign-to-me-btn surfaces 422 validation error cleanly via conflict banner without silent swallow', async () => {
+    vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce(
+      new ApiProblem(422, {
+        code: 'VALIDATION_FAILED',
+        detail: 'Request validation failed: Extra inputs are not permitted',
+      }),
+    );
+
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-assign-to-me-btn')).toBeDefined();
+    });
+
+    const assignToMeBtn = screen.getByTestId('split-assign-to-me-btn');
+    await act(async () => {
+      fireEvent.click(assignToMeBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('conflict-banner')).toBeDefined();
+      expect(
+        screen.getByText('Request validation failed: Extra inputs are not permitted'),
+      ).toBeDefined();
+    });
+  });
+
+  it('split-git-branch-copy and split-share-btn handle navigator.clipboard.writeText rejecting with NotAllowedError gracefully', async () => {
+    const notAllowedError = new Error('NotAllowedError: Write permission denied.');
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockRejectedValue(notAllowedError),
+      },
+    });
+
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-git-branch-copy')).toBeDefined();
+    });
+
+    const gitBranchBtn = screen.getByTestId('split-git-branch-copy');
+    await act(async () => {
+      fireEvent.click(gitBranchBtn);
+      await Promise.resolve();
+    });
+    expect(gitBranchBtn.textContent).toContain('✓ Copied!');
+
+    const shareBtn = screen.getByTestId('split-share-btn');
+    await act(async () => {
+      fireEvent.click(shareBtn);
+      await Promise.resolve();
+    });
+    expect(shareBtn.textContent).toContain('✓ Copied link!');
   });
 });

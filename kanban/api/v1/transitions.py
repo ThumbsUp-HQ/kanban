@@ -111,6 +111,8 @@ async def post_issue_transition(
         raise RuntimeError(msg)
 
     if outcome.status_code == status.HTTP_202_ACCEPTED or outcome.status == "pending_agent_gate":
+        if session.is_active:
+            await session.commit()
         content: dict[str, Any] = {
             "status": "pending_agent_gate",
             "execution_id": str(outcome.execution_id),
@@ -121,13 +123,30 @@ async def post_issue_transition(
         }
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=content)
 
+    headers: dict[str, str] = {}
+    try:
+        from kanban.services.issues import get_issue_or_404  # noqa: PLC0415
+
+        fresh_issue = await get_issue_or_404(session, caller, issue_key)
+        if fresh_issue.etag:
+            headers["ETag"] = fresh_issue.etag
+    except Exception:  # noqa: BLE001
+        pass
+
+    if session.is_active:
+        await session.commit()
+
     resp_data = TransitionResponse(
         execution_id=outcome.execution_id,
         status=outcome.status,
         state=outcome.state,
         sync_duration_ms=outcome.sync_duration_ms,
     )
-    return JSONResponse(status_code=200, content=resp_data.model_dump(mode="json"))
+    return JSONResponse(
+        status_code=200,
+        content=resp_data.model_dump(mode="json"),
+        headers=headers or None,
+    )
 
 
 @router.delete(

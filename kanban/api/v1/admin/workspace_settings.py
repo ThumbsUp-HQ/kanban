@@ -401,6 +401,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
                 },
             )
 
+    await session.commit()
+
     return WorkspaceSettingsResponse(
         workspace_id=settings.workspace_id,
         name=ws.name if ws else settings.display_name,

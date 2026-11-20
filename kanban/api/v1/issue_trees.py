@@ -40,4 +40,5 @@ async def create_issue_tree(  # noqa: PLR0913, PLR0917
         await taint_guard.check_write(project_ref, tool_name="create_ticket")
         result = await svc.create_issue_tree(session, caller, project_ref, body)
         response.headers["Location"] = f"/api/v1/issues/{result.root.key}"
+        await session.commit()
         return result
