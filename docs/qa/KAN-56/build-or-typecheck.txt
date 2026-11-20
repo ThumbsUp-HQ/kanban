@@ -1,24 +1,77 @@
-=== ruff check ===
+=== 1. Web TypeScript Typecheck ===
+$ pnpm --dir kanban/web exec tsc -b --noEmit
+Exit code: 0
+
+=== 2. Web ESLint Zero Warnings Gate ===
+$ pnpm --dir kanban/web exec eslint . --max-warnings 0
+Exit code: 0
+
+=== 3. Web Production Vite Build ===
+$ pnpm --dir kanban/web run build
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 723 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-7g0Vjg1y.css            476.87 kB │ gzip:  66.86 kB
+dist/assets/index-Da8yRltF.js           2,405.23 kB │ gzip: 665.86 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.18s
+Exit code: 0
+
+=== 4. Ruff Check ===
+$ uv run ruff check
 All checks passed!
-
 Exit code: 0
 
-=== ruff format --check ===
-1984 files already formatted
-
+=== 5. Ruff Format Check ===
+$ uv run ruff format --check
+1992 files already formatted
 Exit code: 0
 
-=== mypy ===
-Success: no issues found in 1130 source files
-
+=== 6. Mypy Typecheck ===
+$ uv run mypy
+Success: no issues found in 1135 source files
 Exit code: 0
 
-=== check_no_dashes --all ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-aa8b69bf/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== 7. Import Linter Layer Contracts ===
+$ uv run lint-imports
 
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 989 files, 3522 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
 Exit code: 0
 
-=== check_no_dashes wiki ===
-
+=== 8. Zero Em/En-Dashes Security Check ===
+$ python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 Exit code: 0
-
