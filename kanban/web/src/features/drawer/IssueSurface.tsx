@@ -1158,9 +1158,21 @@ export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
 export function IssueSurface(): JSX.Element | null {
   const { mode, issueKey, projectKey } = useIssueSurfaceRoute();
   useRealtimeSubscription(issueKey ? `issue:${issueKey}` : null);
+  const location = useLocation();
 
   if (mode === null || issueKey === null) {
     return null;
+  }
+
+  // When on the project issues route in list layout, the split pane handles ?peek= inline.
+  // Suppress duplicate global drawer overlay from mounting in #kb-surface-host on top of mode="split".
+  if (mode === 'drawer') {
+    const searchParams = new URLSearchParams(location.search);
+    const layout = searchParams.get('layout');
+    const isProjectIssues = /^(?:\/projects|\/w\/[^/]+\/p)\/[^/]+\/issues(?:\/)?$/.test(location.pathname);
+    if (isProjectIssues && layout === 'list') {
+      return null;
+    }
   }
 
   return (

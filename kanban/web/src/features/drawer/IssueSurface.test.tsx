@@ -1789,5 +1789,32 @@ describe('IssueSurface', () => {
         expect(screen.getByText('No description')).toBeDefined();
       });
     });
+
+    it('suppresses duplicate drawer when on project issues route in list layout', () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { container } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list&peek=KAN-142']}>
+            <IssueSurface />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('renders drawer when on project issues route with peek but without list layout', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=board&peek=KAN-142']}>
+            <IssueSurface />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('header-state-select')).toBeDefined();
+      });
+    });
   });
 });
