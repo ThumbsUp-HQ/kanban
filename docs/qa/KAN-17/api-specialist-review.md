@@ -4,15 +4,16 @@
 - Title: Harden Script Sandbox (Wasm Manifest Hash, Admin test-execute, AST DoS Bounds), Add Global JSON Depth/Size Guard, and Publish Wiki Security Chapter
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan17-95a5fbf6`
-- Branch: `feat/KAN-17`
+- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan17-rc1-025a7435`
+- Branch: `fix/KAN-17-rc1`
+- Commit: `e8bcce1`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API and Security audit inspects the complete implementation for KAN-17 on branch `feat/KAN-17` (`72b4a82` off `887e7e0`). The ticket hardens the custom fields sandbox, enforces strict AST execution limits, implements pure ASGI JSON depth and size security guards, and unifies prototype-pollution protection across frontend JSON parsers.
+This clean-room API and Security audit inspects the complete implementation for KAN-17 on remediation branch `fix/KAN-17-rc1` (commit `e8bcce1`). The ticket hardens the custom fields sandbox, enforces strict AST execution limits, implements pure ASGI JSON depth and size security guards, unifies prototype-pollution protection across frontend JSON parsers, and resolves all unit test coverage gaps across both Python and TypeScript files to `>= 95%`.
 
 All four architectural problems have been resolved with zero regressions, flawless static analysis, and zero em/en-dashes.
 
@@ -65,10 +66,10 @@ All four architectural problems have been resolved with zero regressions, flawle
 - Zero New External Dependencies: Inspected `pyproject.toml` and `package.json` (0 new packages).
 - Unidirectional Layering: `uv run lint-imports` passed cleanly (2 kept, 0 broken).
 - Static Analysis:
-  - `uv run ruff check .`: 0 errors.
-  - `uv run mypy`: 0 errors across 1095 source files.
+  - `uv run ruff check .`: 0 errors across 1879 files.
+  - `uv run mypy`: 0 errors across 1097 source files.
   - `pnpm --dir kanban/web exec tsc -b --noEmit`: 0 errors.
-  - `pnpm --dir kanban/web lint`: 0 errors, 0 warnings.
+  - `pnpm --dir kanban/web lint`: 0 errors, 0 warnings (`eslint . --max-warnings 0`).
   - `python3 -m scripts.check_no_dashes --all`: 0 errors.
 - Clean Patch Artifact: `docs/qa/KAN-17/git-diff.patch` contains zero `docs/qa/*` files.
 
@@ -77,22 +78,30 @@ All four architectural problems have been resolved with zero regressions, flawle
 ## 4. Test Coverage Audit
 
 - Pytest Suite:
-  - 68 tests passing across custom fields, AST bounds, and JSON limits middleware.
-  - `json_limits.py`: 96% coverage.
-  - `script_depth.py`: 100% coverage.
-  - `custom_field_execution.py`: 96% coverage.
-  - `manifest.py`: 100% coverage.
-  - `service.py`: 99% coverage.
+  - 73 passed in 25.66s (0 failed).
+  - Every touched backend file meets the `>= 95%` coverage mandate:
+    - `kanban/api/middleware/json_limits.py`: 96%
+    - `kanban/api/middleware/script_depth.py`: 100%
+    - `kanban/api/v1/custom_field_execution.py`: 96%
+    - `kanban/custom_fields/executor.py`: 98% (raised from 84%)
+    - `kanban/custom_fields/manifest.py`: 100%
+    - `kanban/custom_fields/service.py`: 99%
+    - Overall backend touched coverage: 97%.
 - Vitest Suite:
-  - 9 tests passing.
-  - `safeJson.ts`: 100% coverage.
-  - `trustedTypes.ts`: 100% coverage.
+  - 48 passed in 3.51s (0 failed).
+  - Every touched frontend file meets the `>= 95%` coverage mandate:
+    - `safeJson.ts`: 100% Stmts / 100% Branch
+    - `trustedTypes.ts`: 100% Stmts / 100% Branch
+    - `draftsStore.ts`: 100% Stmts / 100% Branch (raised from 75%)
+    - `CustomFieldDefinitionEditor.tsx`: 100% Stmts / 97.95% Branch
+    - Overall frontend touched coverage: 100% Stmts / 98.48% Branch.
+- Verbatim raw test output is preserved in `docs/qa/KAN-17/unit-test-results.txt`.
 
 ---
 
 ## 5. Verification Verdict
 
-All API endpoints, security gates, AST DoS bounds, and ASGI limits are verified and approved.
+All API endpoints, security gates, AST DoS bounds, ASGI limits, and unit test coverage thresholds are verified and approved.
 
 STATUS: APPROVED
 Reviewed by: api-spec-2
