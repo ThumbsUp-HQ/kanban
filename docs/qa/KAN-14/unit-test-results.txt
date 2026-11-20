@@ -1,30 +1,34 @@
 ========================================================================
-UNIT TEST & COVERAGE RESULTS - KAN-14 LIVE-QA REMEDIATION
+UNIT TEST & COVERAGE RESULTS - KAN-14 CLEAN-ROOM REMEDIATION
 ========================================================================
 
 --- Backend Tests (Pytest) ---
-Command: uv run pytest --cov=kanban.api.v1.admin.principals --cov-report=term-missing kanban/tests/api/test_admin_principals.py
-Status: PASSED (13 passed in 13.80s)
+Command: KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-kan14 KB_TEST_PGHOST=/tmp/kb-pgsock-kan14 pytest --cov=kanban.admin.principal_service --cov=kanban.api.v1.admin.principals --cov-report=term-missing kanban/tests/api/test_admin_principals.py
+Status: PASSED (16 passed in 16.49s)
 
 Coverage Summary:
 Name                                Stmts   Miss Branch BrPart  Cover   Missing
 -------------------------------------------------------------------------------
-kanban/api/v1/admin/principals.py     104      2     20      2    97%   370, 400
+kanban/admin/principal_service.py     409      7    148     14    96%   141, 167->174, 325->333, 327->333, 330->333, 502, 636, 715, 785->863, 844->863, 933-936, 1104->1112, 1112->1121, 1217->1223
+kanban/api/v1/admin/principals.py     104      2     20      2    97%   368, 398
 -------------------------------------------------------------------------------
-TOTAL                                 104      2     20      2    97%
+TOTAL                                 513      9    168     16    96%
 
 --- Frontend Tests (Vitest) ---
-Command: cd kanban/web && npx vitest run src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/drawer-rail/railApi.test.ts src/features/drawer-rail/PropertiesRail.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx
-Status: PASSED (5 passed test files, 116 passed tests in 4.07s)
+Command: cd kanban/web && npx vitest run src/app/shortcuts.test.ts src/features/views/useIssueKeyboardMap.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/drawer-rail/PropertiesRail.test.tsx src/features/drawer-rail/railApi.test.ts
+Status: PASSED (7 passed test files, 137 passed tests in 6.02s)
 
 Files Tested:
-- src/features/drawer-rail/railApi.test.ts (16 passed)
-- src/features/drawer-rail/PropertiesRail.test.tsx (15 passed)
+- src/app/shortcuts.test.ts (10 passed)
+- src/features/views/useIssueKeyboardMap.test.tsx (11 passed)
 - src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (21 passed)
 - src/features/settings/__tests__/ProjectSettingsPage.test.tsx (25 passed)
 - src/features/admin-auth/AuthStudioPage.test.tsx (39 passed)
+- src/features/drawer-rail/PropertiesRail.test.tsx (15 passed)
+- src/features/drawer-rail/railApi.test.ts (16 passed)
 
 Coverage Highlights:
+- useIssueKeyboardMap.ts: 98.03% Lines, 94.89% Branches, 100% Functions, 97.88% Statements
 - PropertiesRail.tsx: 100% Statements, 100% Functions, 100% Lines
 - railApi.ts: 100% Statements, 98.46% Branches, 100% Functions, 100% Lines
 - ProjectSettingsPage.tsx: 99.56% Statements, 95.68% Branches, 100% Functions, 100% Lines

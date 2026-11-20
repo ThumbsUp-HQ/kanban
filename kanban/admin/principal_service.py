@@ -140,6 +140,7 @@ async def get_principal_detail(
     if principal is None or principal.principal_type == "SCRIPT_EPHEMERAL":
         not_found()
 
+    raw_principal: str | None = None
     handle: str | None = None
     email: str | None = None
 
@@ -151,6 +152,7 @@ async def get_principal_detail(
         )
         ck = (await session.execute(obj_stmt)).scalar_one_or_none()
         handle = ck or f"@{principal.display_name.lower().replace(' ', '')}"
+        raw_principal = handle
 
         # Get email
         u_stmt = select(User.email).where(User.id == p_id)
@@ -160,11 +162,13 @@ async def get_principal_detail(
         a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p_id)
         slug = (await session.execute(a_stmt)).scalar_one_or_none()
         handle = f"@{slug}" if slug else f"@{principal.display_name.lower().replace(' ', '')}"
+        raw_principal = handle
 
     elif principal.principal_type == "GROUP":
         g_stmt = select(Group.name).where(Group.id == p_id)
         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
-        handle = g_name or principal.display_name
+        raw_principal = g_name or principal.display_name
+        handle = f"@{raw_principal.lstrip('@')}" if raw_principal else None
 
     # Retrieve groups via closure
     closure_stmt = (
@@ -203,7 +207,7 @@ async def get_principal_detail(
     status_str = "active" if principal.status == "ACTIVE" else "deactivated"
     return {
         "id": str(principal.id),
-        "principal": handle or principal.display_name,
+        "principal": raw_principal or handle or principal.display_name,
         "handle": handle,
         "display_name": principal.display_name,
         "type": principal.principal_type,
@@ -303,27 +307,35 @@ async def _format_principal_entry(
     workspace_id: uuid.UUID,
     p: Principal,
 ) -> dict[str, Any]:
-    handle = p.display_name
+    raw_principal = p.display_name
     email: str | None = None
     role: str = "WORKSPACE_MEMBER"
     provider: str = "LOCAL"
 
     if p.principal_type == "USER":
-        handle, email, role, provider = await _enrich_user_principal(session, workspace_id, p)
+        (
+            raw_principal,
+            email,
+            role,
+            provider,
+        ) = await _enrich_user_principal(session, workspace_id, p)
     elif p.principal_type == "AGENT":
         a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
         slug = (await session.execute(a_stmt)).scalar_one_or_none()
         if slug:
-            handle = f"@{slug}"
+            raw_principal = f"@{slug.lstrip('@')}"
     elif p.principal_type == "GROUP":
         g_stmt = select(Group.name).where(Group.id == p.id)
         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
         if g_name:
-            handle = g_name
+            raw_principal = g_name
+
+    handle = f"@{raw_principal.lstrip('@')}" if raw_principal else f"@{p.display_name.lstrip('@')}"
 
     return {
         "id": str(p.id),
-        "principal": handle,
+        "principal": raw_principal,
+        "handle": handle,
         "display_name": p.display_name,
         "type": p.principal_type,
         "status": "active" if p.status == "ACTIVE" else "deactivated",
@@ -631,13 +643,18 @@ async def provision_group(
         payload={"id": str(group_id), "type": "GROUP", "name": grp_name, "display_name": dn},
     )
 
+    handle = f"@{grp_name.lstrip('@')}"
     return {
         "id": str(group_id),
         "principal": grp_name,
+        "handle": handle,
         "type": "GROUP",
         "display_name": dn,
         "status": "active",
         "member_count": 0,
+        "email": None,
+        "role": "WORKSPACE_MEMBER",
+        "provider": "LOCAL",
     }
 
 
@@ -708,10 +725,14 @@ async def provision_agent(
     return {
         "id": str(agent_pid),
         "principal": f"@{norm_slug}",
+        "handle": f"@{norm_slug}",
         "type": "AGENT",
         "slug": norm_slug,
         "display_name": dn,
         "status": "active",
+        "email": None,
+        "role": "WORKSPACE_MEMBER",
+        "provider": "LOCAL",
     }
 
 
@@ -977,34 +998,7 @@ async def list_group_members(
         .order_by(Principal.display_name)
     )
     members = list((await session.execute(stmt)).scalars().all())
-    result: list[dict[str, Any]] = []
-    for p in members:
-        handle = p.display_name
-        email: str | None = None
-        if p.principal_type == "USER":
-            handle, email, _, _ = await _enrich_user_principal(session, workspace_id, p)
-        elif p.principal_type == "AGENT":
-            a_stmt = select(AgentDefinition.slug).where(AgentDefinition.principal_id == p.id)
-            slug = (await session.execute(a_stmt)).scalar_one_or_none()
-            if slug:
-                handle = f"@{slug}"
-        elif p.principal_type == "GROUP":
-            g_stmt = select(Group.name).where(Group.id == p.id)
-            g_name = (await session.execute(g_stmt)).scalar_one_or_none()
-            if g_name:
-                handle = g_name
-
-        result.append(
-            {
-                "id": str(p.id),
-                "principal": handle,
-                "display_name": p.display_name,
-                "type": p.principal_type,
-                "status": "active" if p.status == "ACTIVE" else "deactivated",
-                "email": email,
-            }
-        )
-    return result
+    return [await _format_principal_entry(session, workspace_id, p) for p in members]
 
 
 async def bind_role(  # noqa: C901, PLR0912, PLR0913, PLR0917

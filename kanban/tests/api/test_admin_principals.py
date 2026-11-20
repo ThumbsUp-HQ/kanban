@@ -15,15 +15,20 @@ from database.models import Principal as DBPrincipal
 from database.models.auth import UserSession
 from database.models.mcp_api_key import McpApiKey
 from kanban.admin.principal_service import (
+    _highest_role,
+    _resolve_provider_label,
+    _validate_principal_filter,
     add_group_member,
     bind_role,
     get_principal_detail,
+    list_group_members,
     list_principals,
     normalize_handle,
     provision_agent,
     provision_group,
     provision_user,
     remove_group_member,
+    reset_password,
     resolve_principal_id,
     unbind_role,
     update_principal,
@@ -96,7 +101,7 @@ async def test_admin_routes_protected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_principals_lifecycle_and_group_membership(
+async def test_principals_lifecycle_and_group_membership(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
 ) -> None:
@@ -154,10 +159,39 @@ async def test_principals_lifecycle_and_group_membership(
     assert "Core Backend" in handles
     assert "@forensic-code-check" in handles
 
+    maya_p = next(p for p in p_list if p["principal"] == "@maya")
+    assert maya_p["handle"] == "@maya"
+    assert maya_p["email"] == "maya@example.com"
+    assert maya_p["role"] == "WORKSPACE_MEMBER"
+    assert maya_p["provider"] == "LOCAL"
+
+    backend_p = next(p for p in p_list if p["principal"] == "Core Backend")
+    assert backend_p["handle"] == "@Core Backend"
+    assert backend_p["email"] is None
+    assert backend_p["role"] == "WORKSPACE_MEMBER"
+    assert backend_p["provider"] == "LOCAL"
+
+    agent_p = next(p for p in p_list if p["principal"] == "@forensic-code-check")
+    assert agent_p["handle"] == "@forensic-code-check"
+    assert agent_p["email"] is None
+    assert agent_p["role"] == "WORKSPACE_MEMBER"
+    assert agent_p["provider"] == "LOCAL"
+
     # 5. Add maya to Core Backend
     resp_member = await api_env.client.post(f"/api/v1/admin/groups/{group_id}/members/{maya_id}")
     assert resp_member.status_code == 200
     assert resp_member.json()["status"] == "member_added"
+
+    # 5b. GET group members verifying handle, email, role, provider
+    resp_members = await api_env.client.get(f"/api/v1/admin/groups/{group_id}/members")
+    assert resp_members.status_code == 200
+    m_list = resp_members.json()
+    assert len(m_list) == 1
+    assert m_list[0]["principal"] == "@maya"
+    assert m_list[0]["handle"] == "@maya"
+    assert m_list[0]["email"] == "maya@example.com"
+    assert m_list[0]["role"] == "WORKSPACE_MEMBER"
+    assert m_list[0]["provider"] == "LOCAL"
 
     # 6. Verify maya detail shows group Core Backend
     resp_maya = await api_env.client.get(f"/api/v1/admin/principals/{maya_id}")
@@ -1081,3 +1115,328 @@ async def test_admin_principals_endpoints_additional_coverage(
         json={"principal_id": str(target_user.id), "scope_type": "workspace"},
     )
     assert role_invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_principals_and_group_members_handle_contract(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Verify GET /api/v1/admin/principals and GET /api/v1/admin/groups/{id}/members return handle.
+
+    Asserts handle (@alice, @infra-team), email, role, and provider are populated.
+    """
+    admin = await make_user("admin_handle_test", workspace_role="WORKSPACE_ADMIN")
+    await _as_admin_aal2(api_env, admin)
+
+    # 1. Provision user alice
+    r_user = await api_env.client.post(
+        "/api/v1/admin/principals",
+        json={
+            "type": "USER",
+            "handle": "alice",
+            "display_name": "Alice QA",
+            "email": "alice@example.com",
+        },
+    )
+    assert r_user.status_code == 201
+    user_payload = r_user.json()
+    assert user_payload["handle"] == "@alice"
+    assert user_payload["principal"] == "@alice"
+    assert user_payload["email"] == "alice@example.com"
+    assert user_payload["role"] == "WORKSPACE_MEMBER"
+    assert user_payload["provider"] == "LOCAL"
+    alice_id = user_payload["id"]
+
+    # 2. Provision group infra-team
+    r_group = await api_env.client.post(
+        "/api/v1/admin/principals",
+        json={
+            "type": "GROUP",
+            "handle": "infra-team",
+            "display_name": "Infra Team",
+        },
+    )
+    assert r_group.status_code == 201
+    grp_payload = r_group.json()
+    assert grp_payload["handle"] == "@infra-team"
+    assert grp_payload["principal"] == "infra-team"
+    assert grp_payload["email"] is None
+    assert grp_payload["role"] == "WORKSPACE_MEMBER"
+    assert grp_payload["provider"] == "LOCAL"
+    grp_id = grp_payload["id"]
+
+    # 3. Add alice to infra-team
+    r_add = await api_env.client.post(f"/api/v1/admin/groups/{grp_id}/members/{alice_id}")
+    assert r_add.status_code == 200
+
+    # 4. Verify GET /api/v1/admin/principals returns handle, email, role, provider
+    r_list = await api_env.client.get("/api/v1/admin/principals")
+    assert r_list.status_code == 200
+    principals = r_list.json()
+
+    alice_entry = next(p for p in principals if p["id"] == alice_id)
+    assert alice_entry["handle"] == "@alice"
+    assert alice_entry["principal"] == "@alice"
+    assert alice_entry["email"] == "alice@example.com"
+    assert alice_entry["role"] == "WORKSPACE_MEMBER"
+    assert alice_entry["provider"] == "LOCAL"
+
+    infra_entry = next(p for p in principals if p["id"] == grp_id)
+    assert infra_entry["handle"] == "@infra-team"
+    assert infra_entry["principal"] == "infra-team"
+    assert infra_entry["email"] is None
+    assert infra_entry["role"] == "WORKSPACE_MEMBER"
+    assert infra_entry["provider"] == "LOCAL"
+
+    # 5. Verify GET /api/v1/admin/groups/{grp_id}/members returns handle, email, role, provider
+    r_members = await api_env.client.get(f"/api/v1/admin/groups/{grp_id}/members")
+    assert r_members.status_code == 200
+    members = r_members.json()
+    assert len(members) == 1
+    alice_member = members[0]
+    assert alice_member["id"] == alice_id
+    assert alice_member["handle"] == "@alice"
+    assert alice_member["principal"] == "@alice"
+    assert alice_member["email"] == "alice@example.com"
+    assert alice_member["role"] == "WORKSPACE_MEMBER"
+    assert alice_member["provider"] == "LOCAL"
+
+
+@pytest.mark.asyncio
+async def test_principal_service_unit_handle_contract(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Direct unit tests for principal_service ensuring handle, email, role, provider."""
+    admin = await make_user("admin_unit_test", workspace_role="WORKSPACE_ADMIN")
+    session = api_env.seed
+
+    # 1. provision_group direct unit call
+    grp = await provision_group(
+        session,
+        admin.workspace_id,
+        admin.id,
+        name="infra-team",
+        display_name="Infra Team",
+    )
+    assert grp["handle"] == "@infra-team"
+    assert grp["principal"] == "infra-team"
+    assert grp["email"] is None
+    assert grp["role"] == "WORKSPACE_MEMBER"
+    assert grp["provider"] == "LOCAL"
+
+    # 2. provision_agent direct unit call
+    agent = await provision_agent(
+        session,
+        admin.workspace_id,
+        admin.id,
+        handle="code-checker",
+        display_name="Code Checker",
+    )
+    assert agent["handle"] == "@code-checker"
+    assert agent["principal"] == "@code-checker"
+    assert agent["email"] is None
+    assert agent["role"] == "WORKSPACE_MEMBER"
+    assert agent["provider"] == "LOCAL"
+
+    # 3. provision_user direct unit call
+    user = await provision_user(
+        session,
+        admin.workspace_id,
+        admin.id,
+        handle="bob",
+        display_name="Bob Test",
+        email="bob@example.com",
+    )
+    assert user["handle"] == "@bob"
+    assert user["principal"] == "@bob"
+    assert user["email"] == "bob@example.com"
+    assert user["role"] == "WORKSPACE_MEMBER"
+    assert user["provider"] == "LOCAL"
+
+    # Add bob to infra-team and call list_group_members
+    await add_group_member(
+        session,
+        admin.workspace_id,
+        admin.id,
+        uuid.UUID(grp["id"]),
+        uuid.UUID(user["id"]),
+    )
+    members = await list_group_members(session, admin.workspace_id, uuid.UUID(grp["id"]))
+    assert len(members) == 1
+    assert members[0]["handle"] == "@bob"
+    assert members[0]["principal"] == "@bob"
+    assert members[0]["email"] == "bob@example.com"
+    assert members[0]["role"] == "WORKSPACE_MEMBER"
+    assert members[0]["provider"] == "LOCAL"
+
+    # 4. resolve_principal_id by group name, agent slug, and display name
+    resolved_grp = await resolve_principal_id(session, admin.workspace_id, "infra-team")
+    assert resolved_grp == uuid.UUID(grp["id"])
+
+    resolved_agent = await resolve_principal_id(session, admin.workspace_id, "code-checker")
+    assert resolved_agent == uuid.UUID(agent["id"])
+
+    resolved_user = await resolve_principal_id(session, admin.workspace_id, "Bob Test")
+    assert resolved_user == uuid.UUID(user["id"])
+
+    # 5. get_principal_detail for GROUP and AGENT
+    grp_det = await get_principal_detail(session, admin.workspace_id, "infra-team")
+    assert grp_det["type"] == "GROUP"
+    assert grp_det["handle"] == "@infra-team"
+
+    agent_det = await get_principal_detail(session, admin.workspace_id, "code-checker")
+    assert agent_det["type"] == "AGENT"
+    assert agent_det["handle"] == "@code-checker"
+
+    # 6. list_principals verifying all types formatted with handle, email, role, provider
+    all_p = await list_principals(session, admin.workspace_id)
+    assert any(p["handle"] == "@infra-team" and p["type"] == "GROUP" for p in all_p)
+    assert any(p["handle"] == "@code-checker" and p["type"] == "AGENT" for p in all_p)
+    assert any(p["handle"] == "@bob" and p["type"] == "USER" for p in all_p)
+
+    # 7. update_principal invalid status
+    with pytest.raises(ProblemException) as exc_st:
+        await update_principal(
+            session,
+            admin.workspace_id,
+            admin.id,
+            uuid.UUID(grp["id"]),
+            status="invalid_status",
+        )
+    assert exc_st.value.code == "VALIDATION_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Exercise helpers and not_found error paths in principal_service."""
+    admin = await make_user("admin_helpers", workspace_role="WORKSPACE_ADMIN")
+    session = api_env.seed
+
+    # 1. resolve_principal_id not found
+    with pytest.raises(ProblemException) as exc_info1:
+        await resolve_principal_id(session, admin.workspace_id, "nonexistent-entity-12345")
+    assert exc_info1.value.code == "NOT_FOUND"
+
+    # 2. get_principal_detail not found
+    with pytest.raises(ProblemException) as exc_info2:
+        await get_principal_detail(session, admin.workspace_id, "nonexistent-ref-12345")
+    assert exc_info2.value.code == "NOT_FOUND"
+
+    # 3. list_group_members not found
+    with pytest.raises(ProblemException) as exc_info3:
+        await list_group_members(session, admin.workspace_id, uuid.uuid4())
+    assert exc_info3.value.code == "NOT_FOUND"
+
+    # 4. reset_password not found
+    with pytest.raises(ProblemException) as exc_info4:
+        await reset_password(session, admin.workspace_id, admin.id, uuid.uuid4(), "Secret123!")
+    assert exc_info4.value.code == "NOT_FOUND"
+
+    # 5. _validate_principal_filter
+    assert _validate_principal_filter(None) is None
+    assert _validate_principal_filter("ALL") is None
+    assert _validate_principal_filter("   ") is None
+    assert _validate_principal_filter("USER") == "USER"
+    assert _validate_principal_filter("GROUP") == "GROUP"
+    with pytest.raises(ProblemException) as exc_info5:
+        _validate_principal_filter("INVALID_TYPE")
+    assert exc_info5.value.code == "VALIDATION_FAILED"
+
+    # 6. _highest_role
+    assert _highest_role([]) == "WORKSPACE_MEMBER"
+    assert _highest_role(["CUSTOM_ROLE"]) == "CUSTOM_ROLE"
+    assert _highest_role(["WORKSPACE_MEMBER", "SERVER_ADMIN"]) == "SERVER_ADMIN"
+
+    # 7. _resolve_provider_label
+    assert _resolve_provider_label("LOCAL_ADMIN", "local") == "LOCAL"
+    assert _resolve_provider_label("OIDC", "google-workspace") == "GOOGLE"
+    assert _resolve_provider_label("OAUTH2", "github-enterprise") == "GITHUB"
+    assert _resolve_provider_label("LDAP", "ad-primary") == "ACTIVE_DIRECTORY"
+    assert _resolve_provider_label("LDAP", "openldap") == "LDAP"
+    assert _resolve_provider_label("OAUTH2", "custom-oauth") == "OAUTH2"
+    assert _resolve_provider_label("SAML", "okta") == "SAML"
+
+    # 8. provision_user with password and then reset_password
+    user_pw = await provision_user(
+        session,
+        admin.workspace_id,
+        admin.id,
+        handle="userpw",
+        display_name="User With Password",
+        email="userpw@example.com",
+        password="InitialPassword123!",  # noqa: S106
+    )
+    user_pw_id = uuid.UUID(user_pw["id"])
+    reset_res = await reset_password(
+        session,
+        admin.workspace_id,
+        admin.id,
+        user_pw_id,
+        "UpdatedPassword456!",
+    )
+    assert reset_res["status"] == "ok"
+
+    # 9. bind_role validation errors
+    with pytest.raises(ProblemException) as exc_b1:
+        await bind_role(
+            session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_ADMIN", "server"
+        )
+    assert exc_b1.value.code == "VALIDATION_FAILED"
+
+    with pytest.raises(ProblemException) as exc_b2:
+        await bind_role(
+            session, admin.workspace_id, admin.id, user_pw_id, "SERVER_ADMIN", "workspace"
+        )
+    assert exc_b2.value.code == "VALIDATION_FAILED"
+
+    with pytest.raises(ProblemException) as exc_b3:
+        await bind_role(
+            session,
+            admin.workspace_id,
+            admin.id,
+            user_pw_id,
+            "PROJECT_ADMIN",
+            "project",
+            project_id=None,
+        )
+    assert exc_b3.value.code == "VALIDATION_FAILED"
+
+    with pytest.raises(ProblemException) as exc_b4:
+        await bind_role(
+            session,
+            admin.workspace_id,
+            admin.id,
+            user_pw_id,
+            "PROJECT_ADMIN",
+            "project",
+            project_id=uuid.uuid4(),
+        )
+    assert exc_b4.value.code == "NOT_FOUND"
+
+    # 10. bind_role with SERVER_ADMIN from non-server-admin triggers INSUFFICIENT_CAPABILITY
+    with pytest.raises(ProblemException) as exc_sa:
+        await bind_role(session, admin.workspace_id, admin.id, user_pw_id, "SERVER_ADMIN", "server")
+    assert exc_sa.value.code == "INSUFFICIENT_CAPABILITY"
+
+    # 11. bind_role with valid WORKSPACE_GUEST
+    bg_res = await bind_role(
+        session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
+    )
+    assert bg_res["role"] == "WORKSPACE_GUEST"
+
+    # 12. unbind_role successful
+    ub_res = await unbind_role(
+        session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
+    )
+    assert ub_res["status"] == "role_unbound"
+
+    # unbind again when already unbound
+    ub_res2 = await unbind_role(
+        session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
+    )
+    assert ub_res2["status"] == "role_unbound"

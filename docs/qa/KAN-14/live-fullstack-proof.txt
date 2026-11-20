@@ -2,103 +2,126 @@ LIVE FULL-STACK BLACK-BOX QA PROOF - KAN-14 ([KB-P3-AUDIT-08])
 Target Container: kanban-liveqa-2 (image: thumbs-up-kanban:local-qa)
 Base URL: http://localhost:18952
 Mocking Policy: 0 mockApi, 0 page.route, 0 context.route stubs
-Timestamp: 2026-11-20T02:56:00Z
+Run Window: 2026-11-20T04:11:21.056Z -> 2026-11-20T04:11:40.302Z
 
 ========================================================================
 BOOTSTRAP TRANSCRIPT (REAL SETUP + TOTP ENROLLMENT)
 ========================================================================
-1. Read setup token: docker exec kanban-liveqa-2 cat /run/kanban/setup_token
-2. POST /api/v1/setup/claim -> HTTP 200 (workspace: kanban, project: KAN, user: admin, display_name: Admin Architect)
-3. POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 (AAL2 session verified)
-4. GET /api/v1/auth/me -> HTTP 200
-   {"id":"01a1f6da-e582-75c5-b366-fe2d53afc781","handle":"admin","display_name":"Admin Architect","workspace_role":"SERVER_ADMIN","aal_level":2,"mfa_pending":false}
+1. Read setup token: docker exec kanban-liveqa-2 cat /run/kanban/setup_token (kb_setup_8N-pWx5...)
+2. GET /api/v1/setup/status -> HTTP 200 {"initialized": false}
+3. POST /api/v1/setup/claim -> HTTP 200 (workspace: kanban, project: KAN, user: admin, display_name: Admin Architect)
+4. POST /api/v1/auth/mfa/totp/enroll -> HTTP 200 (has_secret=True)
+5. POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 (aal_level=2, status=enrolled)
+6. GET /api/v1/auth/me -> HTTP 200
+   {"id": "01a1f726-db8c-721e-822d-30f22c101883", "principal_id": "01a1f726-db8c-721e-822d-30f22c101883", "workspace_id": "01a1f726-db8a-785c-b8d8-78ec68f66b50", "handle": "admin", "username": "admin", "display_name": "Admin Architect", "email": "admin@local.kanban", "is_server_admin": true, "is_workspace_admin": true, "is_project_admin": true, "workspace_role": "SERVER_ADMIN", "workspace_capabilities": ["CREATE_PROJECT", "MANAGE_WORKSPACE_SETTINGS", "MANAGE_WORKSPACE_MCP_KEYS", "MANAGE_SERVER_ADMIN", "ADMIN_AUTH_STUDIO", "ADMIN_MCP_KEYS", "SYSTEM_STORAGE"], "timezone": "UTC", "avatar_url": null, "has_local_password": true, "aal_level": 2, "mfa_pending": false}
 
 ========================================================================
 COMMAND EXECUTED
 ========================================================================
-node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-2/qa_kan14.mjs
+node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-r2/run_liveqa.mjs
 
 ========================================================================
-RAW EXECUTION LOG & LIVE HTTP TRANSCRIPTS
+RAW EXECUTION LOG & LIVE DOM / API VERIFICATION
 ========================================================================
-[2026-11-20T02:49:48.152Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (Auth Provider Cards)
-[2026-11-20T02:49:48.184Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (Users & Permissions)
-[2026-11-20T02:49:48.231Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (+ Add Local User modal)
-[2026-11-20T02:49:48.257Z] /admin/auth modal empty email validity: {"required":true,"valid":false,"validationMessage":"Please fill out this field."}
-[2026-11-20T02:49:48.394Z] Created @alice via /admin/auth: HTTP 201 body={"id":"84e103b0-9dae-4133-80d5-1ad7f3140911","principal":"@alice","type":"USER","handle":"@alice","display_name":"Alice QA","email":"alice@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
-[2026-11-20T02:49:50.214Z] Dispatched synthetic keydown (event.key === undefined) on /workspaces/settings#tab-members
-[2026-11-20T02:49:50.217Z] #tab-members table contains @alice: true, alice@example.com: true
-[2026-11-20T02:49:50.678Z] /workspaces/settings empty email inline validation alerts: ["Email is required for user provisioning."]
-[2026-11-20T02:49:50.805Z] Created @bob on #tab-members: principal HTTP 201, role-binding HTTP 200
-[2026-11-20T02:49:51.465Z] GET /api/v1/admin/principals HTTP 200
-[2026-11-20T02:49:51.492Z] Dispatched synthetic keydown (event.key === undefined) on /workspaces/settings#tab-groups
-[2026-11-20T02:49:51.553Z] Created group infra-team: HTTP 201 body={"id":"df07d183-f3f6-41cc-be6f-e91f7d248608","principal":"Infra Team","type":"GROUP","display_name":"Infra Team","status":"active","member_count":0}
-[2026-11-20T02:49:52.357Z] Found @alice option value in group select: 84e103b0-9dae-4133-80d5-1ad7f3140911
-[2026-11-20T02:49:52.422Z] POST group member (@alice -> infra-team): HTTP 200 body={"status":"member_added","group_id":"df07d183-f3f6-41cc-be6f-e91f7d248608","member_id":"84e103b0-9dae-4133-80d5-1ad7f3140911"}
-[2026-11-20T02:49:53.025Z] #tab-groups group-members-table renders @alice: true
-[2026-11-20T02:49:53.639Z] DELETE /api/v1/admin/role-bindings for @bob: reqBody={"principal_id":"2c36c5d4-a056-4c4c-8c31-8306ce96054b","role":"WORKSPACE_MEMBER","scope_type":"workspace"} status=200 respBody={"status":"role_unbound","principal_id":"2c36c5d4-a056-4c4c-8c31-8306ce96054b","role":"WORKSPACE_MEMBER","scope":"workspace"}
-[2026-11-20T02:49:57.004Z] Dispatched synthetic keydown (event.key === undefined) on /projects/KAN/settings
+[2026-11-20T04:11:23.401Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (Auth Provider Cards): ok=true
+[2026-11-20T04:11:23.772Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (Users & Permissions): ok=true
+[2026-11-20T04:11:23.821Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (+ Add Local User modal): ok=true
+[2026-11-20T04:11:26.217Z] Dispatched synthetic keydown (event.key === undefined) on /workspaces/settings#tab-members: ok=true
+[2026-11-20T04:11:28.793Z] Dispatched synthetic keydown (event.key === undefined) on /workspaces/settings#tab-groups: ok=true
+[2026-11-20T04:11:31.697Z] Dispatched synthetic keydown (event.key === undefined) on /projects/KAN/settings: ok=true
 
-Selected Live API Request/Response Transcripts:
-- POST http://localhost:18952/api/v1/admin/principals
+Structured Live Checks:
+- /admin/auth modal email validity: {"required": true, "valid": false, "placeholder": "jdoe@example.com"}
+- Created @alice via /admin/auth: HTTP 201 {"id": "4aa40a9b-3876-4e2d-8bea-4df37981730e", "principal": "@alice", "type": "USER", "handle": "@alice", "display_name": "Alice QA", "email": "alice@example.com", "status": "active", "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
+- @alice immediate visibility on first paint in /admin/auth Users & Permissions: {"alice_visible": true, "has_at_alice": true, "has_alice_email": true}
+- /workspaces/settings #tab-members email input attrs: {"placeholder": "email@example.com", "required": true, "hasRequiredAttr": true}
+- /workspaces/settings #tab-members empty email alert: ["Email is required for user provisioning."]
+- Created @bob via #tab-members: HTTP 201 {"id": "8491abda-12ae-4120-927b-40602bc9ee6d", "principal": "@bob", "type": "USER", "handle": "@bob", "display_name": "Bob QA", "email": "bob@example.com", "status": "active", "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
+- #tab-members Workspace Users & Principals rows: [{"testId": "principal-row-01a1f726-db8c-721e-822d-30f22c101883", "text": "Admin Architect @admin admin@local.kanban User WORKSPACE_ADMIN WORKSPACE_MEMBER WORKSPACE_GUEST Remove", "handles": ["@admin"], "emails": ["admin@local.kanban"]}, {"testId": "principal-row-4aa40a9b-3876-4e2d-8bea-4df37981730e", "text": "Alice QA @alice alice@example.com User WORKSPACE_ADMIN WORKSPACE_MEMBER WORKSPACE_GUEST Remove", "handles": ["@alice"], "emails": ["alice@example.com"]}, {"testId": "principal-row-8491abda-12ae-4120-927b-40602bc9ee6d", "text": "Bob QA @bob bob@example.com User WORKSPACE_ADMIN WORKSPACE_MEMBER WORKSPACE_GUEST Remove", "handles": ["@bob"], "emails": ["bob@example.com"]}]
+- #tab-members Mobile 390x844 layout check: {"innerWidth": 390, "scrollWidth": 390, "overflowFree": true, "createUserBtnRect": {"left": 49, "right": 341, "width": 292, "height": 38, "withinViewport": true, "text": "Create User"}}
+- DELETE /api/v1/admin/role-bindings for @bob: HTTP 200 {"status": "role_unbound", "principal_id": "8491abda-12ae-4120-927b-40602bc9ee6d", "role": "WORKSPACE_MEMBER", "scope": "workspace"}
+- Created group @infra-team via #tab-groups: HTTP 201 {"id": "688c8412-5c42-436d-8ed0-e5e1b08b93e4", "principal": "infra-team", "type": "GROUP", "display_name": "Infra Team", "status": "active", "member_count": 0, "handle": "@infra-team"}
+- #tab-groups rendered group handles: {"selectedGroupHandle": "@infra-team", "listHandles": ["@infra-team"]}
+- Added @alice to @infra-team: HTTP 200 {"status": "member_added", "group_id": "688c8412-5c42-436d-8ed0-e5e1b08b93e4", "member_id": "4aa40a9b-3876-4e2d-8bea-4df37981730e"}
+- #tab-groups Group Members table renders @alice: {"contains_at_alice": true, "contains_alice_qa": true}
+Note: Navigating directly to /workspaces/settings#tab-members or #tab-groups did not auto-open the tab on mount (scheduled separately in KAN-12); tabs were clicked via [data-testid="tab-members"] and [data-testid="tab-groups"].
+
+Live HTTP Transcripts (/api/v1/admin/*):
+- GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200
+  Response: {"cards":[{"id":"01a1f726-db8b-70da-9950-4cc2a7118377","workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T04:11:21.355821Z","updated_at":"2026-11-20T04:11:21.355821Z","has_secret":false}]}
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
+- GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200
+  Response: {"cards":[{"id":"01a1f726-db8b-70da-9950-4cc2a7118377","workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T04:11:21.355821Z","updated_at":"2026-11-20T04:11:21.355821Z","has_secret":false}]}
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
+- POST http://localhost:18952/api/v1/admin/principals -> HTTP 201
   Request: {"type":"USER","handle":"alice","display_name":"Alice QA","email":"alice@example.com","password":"Alice-Strong-Pass-2026!","role":"WORKSPACE_MEMBER"}
-  Status: 201
-  Response: {"id":"84e103b0-9dae-4133-80d5-1ad7f3140911","principal":"@alice","type":"USER","handle":"@alice","display_name":"Alice QA","email":"alice@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 (immediately 12ms post-create on /admin/auth)
-  Status: 200
-  Response: [{"id":"01a1f6da-e582-75c5-b366-fe2d53afc781","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 (on /workspaces/settings)
-  Status: 200
-  Response includes @admin and @alice (and later @bob)
-- POST http://localhost:18952/api/v1/admin/principals
+  Response: {"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","type":"USER","handle":"@alice","display_name":"Alice QA","email":"alice@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+- GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200
+  Response: {"cards":[{"id":"01a1f726-db8b-70da-9950-4cc2a7118377","workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T04:11:21.355821Z","updated_at":"2026-11-20T04:11:21.355821Z","has_secret":false}]}
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+- GET http://localhost:18952/api/v1/admin/workspace-settings -> HTTP 200
+  Response: {"workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","name":"Kanban","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"updated_at":"2026-11-20T04:11:21.355336Z"}
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+- POST http://localhost:18952/api/v1/admin/principals -> HTTP 201
+  Request: {"type":"USER","handle":"@bob","display_name":"Bob QA","email":"bob@example.com","password":"Bob-Strong-Pass-2026!"}
+  Response: {"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","type":"USER","handle":"@bob","display_name":"Bob QA","email":"bob@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+- POST http://localhost:18952/api/v1/admin/role-bindings -> HTTP 200
+  Request: {"principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","role_name":"WORKSPACE_MEMBER","scope_type":"workspace"}
+  Response: {"status":"already_bound","principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","scope":"workspace"}
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+- DELETE http://localhost:18952/api/v1/admin/role-bindings -> HTTP 200
+  Request: {"principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","scope_type":"workspace"}
+  Response: {"status":"role_unbound","principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","scope":"workspace"}
+- POST http://localhost:18952/api/v1/admin/principals -> HTTP 201
   Request: {"type":"GROUP","handle":"@infra-team","display_name":"Infra Team"}
-  Status: 201
-  Response: {"id":"df07d183-f3f6-41cc-be6f-e91f7d248608","principal":"Infra Team","type":"GROUP","display_name":"Infra Team","status":"active","member_count":0}
-- POST http://localhost:18952/api/v1/admin/groups/df07d183-f3f6-41cc-be6f-e91f7d248608/members/84e103b0-9dae-4133-80d5-1ad7f3140911
-  Status: 200
-  Response: {"status":"member_added","group_id":"df07d183-f3f6-41cc-be6f-e91f7d248608","member_id":"84e103b0-9dae-4133-80d5-1ad7f3140911"}
-- GET http://localhost:18952/api/v1/admin/groups/df07d183-f3f6-41cc-be6f-e91f7d248608/members
-  Status: 200
-  Response: [{"id":"84e103b0-9dae-4133-80d5-1ad7f3140911","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com"}]
-- DELETE http://localhost:18952/api/v1/admin/role-bindings
-  Request: {"principal_id":"2c36c5d4-a056-4c4c-8c31-8306ce96054b","role":"WORKSPACE_MEMBER","scope_type":"workspace"}
-  Status: 200
-  Response: {"status":"role_unbound","principal_id":"2c36c5d4-a056-4c4c-8c31-8306ce96054b","role":"WORKSPACE_MEMBER","scope":"workspace"}
+  Response: {"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","type":"GROUP","display_name":"Infra Team","status":"active","member_count":0,"handle":"@infra-team"}
+- GET http://localhost:18952/api/v1/admin/groups/688c8412-5c42-436d-8ed0-e5e1b08b93e4/members -> HTTP 200
+  Response: []
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+- POST http://localhost:18952/api/v1/admin/groups/688c8412-5c42-436d-8ed0-e5e1b08b93e4/members/4aa40a9b-3876-4e2d-8bea-4df37981730e -> HTTP 200
+  Response: {"status":"member_added","group_id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","member_id":"4aa40a9b-3876-4e2d-8bea-4df37981730e"}
+- GET http://localhost:18952/api/v1/admin/groups/688c8412-5c42-436d-8ed0-e5e1b08b93e4/members -> HTTP 200
+  Response: [{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com"}]
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
+  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
 
 ========================================================================
-CONSOLE / PAGEERROR & CONTAINER LOG FINDINGS
+CONSOLE / PAGEERROR & 404 TELEMETRY (KAN-14)
 ========================================================================
 pageErrors: 0
-consoleErrors: 2
-  1. [console.error] Failed to load resource: the server responded with a status of 404 (Not Found)
-  2. [console.error] Failed to load resource: the server responded with a status of 404 (Not Found)
-Container log correlation:
-  GET /api/v1/projects/KAN/modules HTTP/1.1 -> 404 (MODULES_DISABLED: Modules feature is disabled for this project)
-  Triggered twice when loading /projects/KAN/settings (Light and Dark loads).
-
-Additional Live Observations (Visual + Functional):
-1. Mobile 390x844 horizontal overflow on /workspaces/settings #tab-members (screenshots live-kan14-members-mobile-light.png & live-kan14-members-mobile-dark.png): the "+ Add Workspace User" form and "Workspace Users & Principals" table overflow the right edge of the 390px viewport ("Create U..." button and Role Grant / Actions columns clipped).
-2. Email input placeholder on /workspaces/settings #tab-members still displays "email@example.com (optional)" while empty submit triggers inline validation error "Email is required for user provisioning."
-3. On /admin/auth immediately after creating @alice, GET /api/v1/admin/principals?limit=100 (12ms later) returned only @admin in the table on first paint (live-kan14-admin-auth-desktop-light.png), whereas /workspaces/settings #tab-members listed @alice.
-4. POST /api/v1/admin/principals for type "GROUP" ignored handle "@infra-team" and persisted/rendered principal "@Infra Team".
+consoleErrors: 0
+http404s (including /api/v1/projects/KAN/modules): 0
 
 ========================================================================
 SCREENSHOT ARTIFACTS (UNMOCKED)
 ========================================================================
 - docs/qa/KAN-14/screenshots/live-kan14-admin-auth-desktop-light.png
+- docs/qa/KAN-14/screenshots/live-kan14-admin-auth-desktop-dark.png
 - docs/qa/KAN-14/screenshots/live-kan14-members-desktop-light.png
 - docs/qa/KAN-14/screenshots/live-kan14-members-desktop-dark.png
+- docs/qa/KAN-14/screenshots/live-kan14-members-mobile-light.png
+- docs/qa/KAN-14/screenshots/live-kan14-members-mobile-dark.png
 - docs/qa/KAN-14/screenshots/live-kan14-groups-desktop-light.png
 - docs/qa/KAN-14/screenshots/live-kan14-groups-desktop-dark.png
 - docs/qa/KAN-14/screenshots/live-kan14-project-settings-desktop-light.png
 - docs/qa/KAN-14/screenshots/live-kan14-project-settings-desktop-dark.png
-- docs/qa/KAN-14/screenshots/live-kan14-members-mobile-light.png
-- docs/qa/KAN-14/screenshots/live-kan14-members-mobile-dark.png
 
 ========================================================================
-PER-PROBLEM VERDICTS
+PER-PROBLEM VERDICTS (KAN-14)
 ========================================================================
-- Problem 1 (Open /admin/auth + Add Local User modal, /workspaces/settings #tab-members & #tab-groups, /projects/KAN/settings): LIVE_STACK_VERDICT: PASS (desktop screens render cleanly; mobile 390x844 #tab-members has horizontal clipping noted above)
-- Problem 2 (Synthetic autofill keydown event.key === undefined -> 0 pageerror exceptions): LIVE_STACK_VERDICT: PASS (0 pageerror across all 4 screens/modals)
-- Problem 3 (Provision @alice & infra-team, real handles on #tab-members & #tab-groups, DELETE /api/v1/admin/role-bindings sends role & returns 200, empty email validation): LIVE_STACK_VERDICT: PASS (all API/UI flows succeeded; see observations 2-4 above)
-- Problem 4 (0 console/pageerror gate & 390x844 mobile viewport integrity): LIVE_STACK_VERDICT: FAIL (2 browser console.error 404 entries from GET /api/v1/projects/KAN/modules when modules is disabled on /projects/KAN/settings; mobile 390x844 #tab-members horizontal overflow)
+- Problem 1 (/admin/auth synthetic keydown with key: undefined -> 0 pageerror; + Add Local User creates @alice and @alice renders IMMEDIATELY on first paint): LIVE_STACK_VERDICT: PASS
+- Problem 2 (/workspaces/settings Workspace Members tab: email placeholder 'email@example.com' + required=true; Mobile 390x844 scrollWidth=390 <= 390 and Create User button unclipped; @alice/@bob real handles; DELETE /api/v1/admin/role-bindings for @bob returns 200): LIVE_STACK_VERDICT: PASS
+- Problem 3 (/workspaces/settings Groups & Governance tab: create group handle @infra-team / display_name 'Infra Team' persists & renders @infra-team; add @alice renders in Group Members table): LIVE_STACK_VERDICT: PASS
+- Problem 4 (/projects/KAN/settings with modules_enabled=false: synthetic keydown key: undefined -> 0 pageerror, 0 /api/v1/projects/KAN/modules 404s, 0 console.error entries): LIVE_STACK_VERDICT: PASS
+
+OVERALL_TICKET_VERDICT (KAN-14): LIVE_STACK_VERDICT: PASS
