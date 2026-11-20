@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, type JSX } from 'react';
+import React, { useEffect, useRef, useState, type JSX } from 'react';
 import {
   dryRunWorkflowHooks,
   type DryRunPayload,
@@ -43,6 +43,15 @@ function DryRunDrawerInner({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DryRunResponse | null>(null);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleRun = async (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -92,7 +101,14 @@ function DryRunDrawerInner({
     try {
       await navigator.clipboard.writeText(cmd);
       setCopiedCmd(cmd);
-      setTimeout(() => { setCopiedCmd(null); }, 2000);
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          setCopiedCmd(null);
+        }
+      }, 2000);
     } catch {
       // Ignore clipboard fallback
     }

@@ -37,8 +37,17 @@ export function HookPipelineRow({
   dropTargetFactory = dropTargetForElements,
 }: HookPipelineRowProps): JSX.Element {
   const rowRef = useRef<HTMLDivElement | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [copiedSha, setCopiedSha] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const el = rowRef.current;
@@ -73,7 +82,14 @@ export function HookPipelineRow({
     try {
       await navigator.clipboard.writeText(hook.manifest_sha256);
       setCopiedSha(true);
-      setTimeout(() => { setCopiedSha(false); }, 2000);
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          setCopiedSha(false);
+        }
+      }, 2000);
     } catch {
       // Fallback ignore in test env
     }
