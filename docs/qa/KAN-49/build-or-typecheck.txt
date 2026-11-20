@@ -1,0 +1,34 @@
+=== kanban-ctl db check-migrations ===
+OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
+
+=== ruff check database kanban ===
+All checks passed!
+
+=== mypy database kanban ===
+Success: no issues found in 748 source files
+
+=== lint-imports ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 986 files, 3512 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+=== check_no_dashes ===

@@ -771,16 +771,41 @@ async def create_issue_tree(  # noqa: C901, PLR0912, PLR0915
                 (tree, initial_parent_id, initial_parent_key, True)
             ]
 
+            total_nodes = len(resolved_nodes_data)
+            seq_row = (
+                await session.execute(
+                    text(
+                        "SELECT allocated_sequences, skipped_sequences "
+                        "FROM allocate_issue_sequences(:proj, :count, false)"
+                    ),
+                    {"proj": project.id, "count": total_nodes},
+                )
+            ).one()
+            allocated_seqs: list[int] = list(seq_row[0])
+            skipped_seqs: list[int] = list(seq_row[1])
+
+            if skipped_seqs:
+                await record_activity(
+                    session,
+                    workspace_id=caller.workspace_id,
+                    object_id=project.id,
+                    actor_principal_id=caller.principal_id,
+                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
+                    payload={
+                        "project_key": project.identifier,
+                        "skipped_sequences": skipped_seqs,
+                        "allocated_sequence": allocated_seqs[0],
+                        "reason": "agent_safe_sequence_numbering",
+                    },
+                )
+
+            seq_idx = 0
             while queue:
                 curr_node, curr_parent_id, curr_parent_key, is_root = queue.pop(0)
                 data = node_to_data[id(curr_node)]
 
-                seq_id = (
-                    await session.execute(
-                        text("SELECT allocate_issue_sequence(:proj)"),
-                        {"proj": project.id},
-                    )
-                ).scalar_one()
+                seq_id = allocated_seqs[seq_idx]
+                seq_idx += 1
 
                 canonical_key = f"{project.identifier}-{seq_id}"
                 board_rank = allocate_initial_board_rank(seq_id)

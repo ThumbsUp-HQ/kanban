@@ -167,12 +167,35 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
         top_summary = f"[Copy] {source_issue.summary}"[:500]
         top_desc = _normalize_description(source_issue.description_markdown)
 
-        # Sequence and key allocation
-        top_seq_id = (
+        total_count = 1 + len(readable_rows)
+        seq_row = (
             await session.execute(
-                text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
+                text(
+                    "SELECT allocated_sequences, skipped_sequences "
+                    "FROM allocate_issue_sequences(:proj, :count, false)"
+                ),
+                {"proj": project.id, "count": total_count},
             )
-        ).scalar_one()
+        ).one()
+        allocated_seqs: list[int] = list(seq_row[0])
+        skipped_seqs: list[int] = list(seq_row[1])
+
+        if skipped_seqs:
+            await record_activity(
+                session,
+                workspace_id=caller.workspace_id,
+                object_id=project.id,
+                actor_principal_id=caller.principal_id,
+                event_type=ActivityEventType.SEQUENCE_SKIPPED,
+                payload={
+                    "project_key": project.identifier,
+                    "skipped_sequences": skipped_seqs,
+                    "allocated_sequence": allocated_seqs[0],
+                    "reason": "agent_safe_sequence_numbering",
+                },
+            )
+
+        top_seq_id = allocated_seqs[0]
         top_canonical_key = f"{project.identifier}-{top_seq_id}"
         top_rank = initial_board_rank(top_seq_id)
 
@@ -265,16 +288,12 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
         id_map: dict[uuid.UUID, uuid.UUID] = {source_issue.id: top_copy.id}
         copied_sub_issues: list[CopiedSubIssueSummary] = []
 
-        for r in readable_rows:
+        for idx, r in enumerate(readable_rows):
             sub_parent_id = id_map.get(r.parent_issue_id, top_copy.id)
             sub_summary = f"[Copy] {r.summary}"[:500]
             sub_desc = _normalize_description(r.description_markdown)
 
-            sub_seq_id = (
-                await session.execute(
-                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
-                )
-            ).scalar_one()
+            sub_seq_id = allocated_seqs[idx + 1]
             sub_canonical_key = f"{project.identifier}-{sub_seq_id}"
             sub_rank = initial_board_rank(sub_seq_id)
 

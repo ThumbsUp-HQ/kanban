@@ -1,0 +1,1278 @@
+diff --git a/database/migrations/sql/p4_24_agent_safe_sequences.down.sql b/database/migrations/sql/p4_24_agent_safe_sequences.down.sql
+new file mode 100644
+index 00000000..9bc99ffb
+--- /dev/null
++++ b/database/migrations/sql/p4_24_agent_safe_sequences.down.sql
+@@ -0,0 +1,28 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Restore original allocate_issue_sequence
++CREATE OR REPLACE FUNCTION allocate_issue_sequence(p_project_id uuid)
++RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
++DECLARE
++    v_seq bigint;
++BEGIN
++    UPDATE projects SET issue_seq_counter = issue_seq_counter + 1
++     WHERE id = p_project_id RETURNING issue_seq_counter INTO v_seq;
++    IF v_seq IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++    RETURN v_seq;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION allocate_issue_sequence(uuid) TO kanban_app;
++ALTER FUNCTION allocate_issue_sequence(uuid) OWNER TO kanban_migrator;
++
++-- 2. Drop batch functions
++DROP FUNCTION IF EXISTS allocate_issue_sequences(uuid, integer, boolean);
++DROP FUNCTION IF EXISTS compute_agent_safe_sequence_batch(bigint, integer, boolean);
++
++-- 3. Drop columns
++ALTER TABLE workspace_settings DROP COLUMN IF EXISTS default_skip_loaded_sequence_numbers;
++ALTER TABLE projects DROP COLUMN IF EXISTS skip_loaded_sequence_numbers;
+diff --git a/database/migrations/sql/p4_24_agent_safe_sequences.up.sql b/database/migrations/sql/p4_24_agent_safe_sequences.up.sql
+new file mode 100644
+index 00000000..939c415d
+--- /dev/null
++++ b/database/migrations/sql/p4_24_agent_safe_sequences.up.sql
+@@ -0,0 +1,149 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Add skip_loaded_sequence_numbers columns
++ALTER TABLE projects
++    ADD COLUMN IF NOT EXISTS skip_loaded_sequence_numbers BOOLEAN NOT NULL DEFAULT FALSE;
++
++ALTER TABLE workspace_settings
++    ADD COLUMN IF NOT EXISTS default_skip_loaded_sequence_numbers BOOLEAN NOT NULL DEFAULT FALSE;
++
++-- 2. Pure sequence computation function (IMMUTABLE PARALLEL SAFE)
++CREATE OR REPLACE FUNCTION compute_agent_safe_sequence_batch(
++    p_current_seq BIGINT,
++    p_count INTEGER,
++    p_skip_loaded BOOLEAN
++)
++RETURNS TABLE (
++    allocated_sequences BIGINT[],
++    skipped_sequences BIGINT[]
++)
++LANGUAGE plpgsql
++IMMUTABLE
++PARALLEL SAFE
++AS $$
++DECLARE
++    c_max_skip_iterations CONSTANT INTEGER := 16;
++    c_loaded_numbers CONSTANT BIGINT[] := ARRAY[13, 69, 88, 404, 420, 666, 1337, 1488];
++    v_allocated BIGINT[] := '{}';
++    v_skipped BIGINT[] := '{}';
++    v_skip_count INTEGER := 0;
++    v_seq BIGINT;
++    v_skip BOOLEAN := COALESCE(p_skip_loaded, FALSE);
++BEGIN
++    IF p_count IS NULL OR p_count < 1 OR p_count > 1000 THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'INVALID_SEQUENCE_COUNT';
++    END IF;
++
++    v_seq := COALESCE(p_current_seq, 0);
++
++    WHILE cardinality(v_allocated) < p_count LOOP
++        v_seq := v_seq + 1;
++        IF v_skip AND (v_seq = ANY(c_loaded_numbers)) THEN
++            v_skip_count := v_skip_count + 1;
++            IF v_skip_count > c_max_skip_iterations THEN
++                RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SEQUENCE_SKIP_CEILING_EXCEEDED';
++            END IF;
++            v_skipped := array_append(v_skipped, v_seq);
++        ELSE
++            v_allocated := array_append(v_allocated, v_seq);
++        END IF;
++    END LOOP;
++
++    allocated_sequences := v_allocated;
++    skipped_sequences := v_skipped;
++    RETURN NEXT;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION compute_agent_safe_sequence_batch(BIGINT, INTEGER, BOOLEAN) TO kanban_app, app_rls_reader;
++ALTER FUNCTION compute_agent_safe_sequence_batch(BIGINT, INTEGER, BOOLEAN) OWNER TO kanban_migrator;
++
++-- 3. Batch sequence allocator acquiring FOR UPDATE on projects
++CREATE OR REPLACE FUNCTION allocate_issue_sequences(
++    p_project_id UUID,
++    p_count INTEGER DEFAULT 1,
++    p_emit_activity BOOLEAN DEFAULT TRUE
++)
++RETURNS TABLE (
++    allocated_sequences BIGINT[],
++    skipped_sequences BIGINT[]
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_ws_id UUID;
++    v_identifier TEXT;
++    v_curr_seq BIGINT;
++    v_skip_loaded BOOLEAN;
++    v_allocated BIGINT[];
++    v_skipped BIGINT[];
++    v_new_counter BIGINT;
++BEGIN
++    SELECT workspace_id, identifier, issue_seq_counter, skip_loaded_sequence_numbers
++      INTO v_ws_id, v_identifier, v_curr_seq, v_skip_loaded
++      FROM public.projects
++     WHERE id = p_project_id
++       FOR UPDATE;
++
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PROJECT_NOT_FOUND';
++    END IF;
++
++    SELECT b.allocated_sequences, b.skipped_sequences
++      INTO v_allocated, v_skipped
++      FROM public.compute_agent_safe_sequence_batch(v_curr_seq, p_count, v_skip_loaded) b;
++
++    v_new_counter := v_allocated[cardinality(v_allocated)];
++
++    UPDATE public.projects
++       SET issue_seq_counter = v_new_counter
++     WHERE id = p_project_id;
++
++    IF COALESCE(p_emit_activity, TRUE) AND cardinality(v_skipped) > 0 THEN
++        PERFORM public.append_activity(
++            v_ws_id,
++            p_project_id,
++            'project'::public.object_kind,
++            NULL,
++            'SEQUENCE_SKIPPED',
++            jsonb_build_object(
++                'project_key', v_identifier,
++                'skipped_sequences', to_jsonb(v_skipped),
++                'allocated_sequence', v_allocated[1],
++                'reason', 'agent_safe_sequence_numbering'
++            )
++        );
++    END IF;
++
++    allocated_sequences := v_allocated;
++    skipped_sequences := v_skipped;
++    RETURN NEXT;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION allocate_issue_sequences(UUID, INTEGER, BOOLEAN) TO kanban_app;
++ALTER FUNCTION allocate_issue_sequences(UUID, INTEGER, BOOLEAN) OWNER TO kanban_migrator;
++
++-- 4. Backward-compatible delegate
++CREATE OR REPLACE FUNCTION allocate_issue_sequence(p_project_id UUID)
++RETURNS BIGINT
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_allocated BIGINT[];
++BEGIN
++    SELECT a.allocated_sequences
++      INTO v_allocated
++      FROM public.allocate_issue_sequences(p_project_id, 1, TRUE) a;
++
++    RETURN v_allocated[1];
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION allocate_issue_sequence(UUID) TO kanban_app;
++ALTER FUNCTION allocate_issue_sequence(UUID) OWNER TO kanban_migrator;
+diff --git a/database/migrations/versions/p4_24_agent_safe_sequences.py b/database/migrations/versions/p4_24_agent_safe_sequences.py
+new file mode 100644
+index 00000000..120b9d01
+--- /dev/null
++++ b/database/migrations/versions/p4_24_agent_safe_sequences.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Add swarm batch sequence allocator, skip loaded sequences and SEQUENCE_SKIPPED event.
++
++Revision ID: p4_24_agent_safe_sequences
++Revises: p4_23_oidc_link_intent_fk
++Create Date: 2026-11-20 18:35:08.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p4_24_agent_safe_sequences"
++down_revision: str | None = "p4_23_oidc_link_intent_fk"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p4_24_agent_safe_sequences migration."""
++    execute_sql_file("p4_24_agent_safe_sequences.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p4_24_agent_safe_sequences migration."""
++    execute_sql_file("p4_24_agent_safe_sequences.down.sql")
+diff --git a/database/models/projects.py b/database/models/projects.py
+index 8a68ace4..bd79ed76 100644
+--- a/database/models/projects.py
++++ b/database/models/projects.py
+@@ -60,6 +60,9 @@ class Project(Base):
+     issue_seq_counter: Mapped[int] = mapped_column(
+         BigInteger, nullable=False, server_default=text("0")
+     )
++    skip_loaded_sequence_numbers: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, server_default=text("false")
++    )
+     auto_archive_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+ 
+     @property
+diff --git a/database/models/workspace_settings.py b/database/models/workspace_settings.py
+index 13b2a6bf..3e28e1c1 100644
+--- a/database/models/workspace_settings.py
++++ b/database/models/workspace_settings.py
+@@ -62,6 +62,11 @@ class WorkspaceSettings(Base):
+         nullable=False,
+         server_default="false",
+     )
++    default_skip_loaded_sequence_numbers: Mapped[bool] = mapped_column(
++        Boolean,
++        nullable=False,
++        server_default="false",
++    )
+     updated_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True),
+         nullable=False,
+diff --git a/database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py b/database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py
+new file mode 100644
+index 00000000..71b2adcd
+--- /dev/null
++++ b/database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py
+@@ -0,0 +1,83 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p4_24_agent_safe_sequences."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p4_24_agent_safe_sequences_migration_lifecycle() -> None:
++    """Verify p4_24_agent_safe_sequences upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p4_24_agent_safe_sequences")
++        assert prev_rev == "p4_23_oidc_link_intent_fk"
++
++        # 1. Upgrade to p4_24_agent_safe_sequences
++        await harness.upgrade("p4_24_agent_safe_sequences")
++
++        cols_up = await harness.fetch(
++            "SELECT table_name, column_name FROM information_schema.columns "
++            "WHERE table_schema = 'public' AND ("
++            "  (table_name = 'projects' AND column_name = 'skip_loaded_sequence_numbers') OR "
++            "  (table_name = 'workspace_settings' AND "
++            "   column_name = 'default_skip_loaded_sequence_numbers')"
++            ")"
++        )
++        assert len(cols_up) == 2
++
++        funcs_up = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN ("
++            "  'compute_agent_safe_sequence_batch', "
++            "  'allocate_issue_sequences', "
++            "  'allocate_issue_sequence'"
++            ")"
++        )
++        assert {r["routine_name"] for r in funcs_up} == {
++            "compute_agent_safe_sequence_batch",
++            "allocate_issue_sequences",
++            "allocate_issue_sequence",
++        }
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        cols_down = await harness.fetch(
++            "SELECT table_name, column_name FROM information_schema.columns "
++            "WHERE table_schema = 'public' AND ("
++            "  (table_name = 'projects' AND column_name = 'skip_loaded_sequence_numbers') OR "
++            "  (table_name = 'workspace_settings' AND "
++            "   column_name = 'default_skip_loaded_sequence_numbers')"
++            ")"
++        )
++        assert len(cols_down) == 0
++
++        funcs_down = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name IN ("
++            "  'compute_agent_safe_sequence_batch', 'allocate_issue_sequences'"
++            ")"
++        )
++        assert len(funcs_down) == 0
++
++        # allocate_issue_sequence should still exist (restored)
++        funcs_orig = await harness.fetch(
++            "SELECT routine_name FROM information_schema.routines "
++            "WHERE routine_schema = 'public' AND routine_name = 'allocate_issue_sequence'"
++        )
++        assert len(funcs_orig) == 1
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p4_24_agent_safe_sequences")
++
++        cols_reup = await harness.fetch(
++            "SELECT table_name, column_name FROM information_schema.columns "
++            "WHERE table_schema = 'public' AND ("
++            "  (table_name = 'projects' AND column_name = 'skip_loaded_sequence_numbers') OR "
++            "  (table_name = 'workspace_settings' AND "
++            "   column_name = 'default_skip_loaded_sequence_numbers')"
++            ")"
++        )
++        assert len(cols_reup) == 2
+diff --git a/database/tests/test_p1_05_sequence_concurrency.py b/database/tests/test_p1_05_sequence_concurrency.py
+index 5e55c143..30b9a7f2 100644
+--- a/database/tests/test_p1_05_sequence_concurrency.py
++++ b/database/tests/test_p1_05_sequence_concurrency.py
+@@ -1,4 +1,4 @@
+-"""Concurrency tests for allocate_issue_sequence."""
++"""Concurrency and batch tests for allocate_issue_sequences allocator."""
+ 
+ import asyncio
+ import os
+@@ -7,6 +7,7 @@ import uuid
+ import asyncpg  # type: ignore[import-untyped]
+ import pytest
+ from sqlalchemy import text
++from sqlalchemy.exc import DBAPIError
+ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+ 
+ 
+@@ -45,7 +46,9 @@ async def test_06_sequence_concurrency_20_connections(
+     await committed_db_session.commit()
+ 
+     # 20 concurrent callers using independent asyncpg connections
+-    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    socket_dir = os.environ.get(
++        "KB_TEST_PGSOCKET_DIR", os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    )
+     user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
+     db_name = str(pg_worker_db.url.database)
+ 
+@@ -73,3 +76,273 @@ async def test_06_sequence_concurrency_20_connections(
+         {"id": proj_id},
+     )
+     assert res.scalar_one() == 20
++
++
++@pytest.mark.committed_db
++async def test_07_sequence_concurrency_150_connections_batches(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify 150+ concurrent connections allocate batches without duplicates."""
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    creator_id = uuid.uuid4()
++
++    await committed_db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Conc150 WS')"),
++        {"id": ws_id, "slug": f"ws-conc150-{uuid.uuid4().hex[:8]}"},
++    )
++    await committed_db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, 'C150', 'Conc150 Project', :creator, :id"
++            ")"
++        ),
++        {"ws": ws_id, "creator": creator_id, "id": proj_id},
++    )
++    await committed_db_session.execute(
++        text(
++            "INSERT INTO projects ("
++            "  id, workspace_id, identifier, name, skip_loaded_sequence_numbers"
++            ") VALUES (:id, :ws, 'C150', 'Conc150 Project', FALSE)"
++        ),
++        {"id": proj_id, "ws": ws_id},
++    )
++    await committed_db_session.commit()
++
++    socket_dir = os.environ.get(
++        "KB_TEST_PGSOCKET_DIR", os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    )
++    user = os.environ.get("KB_TEST_PGUSER", "kanban_test")
++    db_name = str(pg_worker_db.url.database)
++
++    # 150 concurrent workers allocating batch of 2 sequences each = 300 total sequences
++    num_workers = 150
++    batch_size = 2
++
++    # Semaphore to ensure we stay under max connection limits while exercising extreme concurrency
++    sem = asyncio.Semaphore(50)
++
++    async def _allocate_batch() -> list[int]:
++        async with sem:
++            conn = await asyncpg.connect(user=user, database=db_name, host=socket_dir)
++            try:
++                row = await conn.fetchrow(
++                    "SELECT allocated_sequences, skipped_sequences "
++                    "FROM allocate_issue_sequences($1, $2, FALSE)",
++                    proj_id,
++                    batch_size,
++                )
++                assert row is not None
++                return list(row["allocated_sequences"])
++            finally:
++                await conn.close()
++
++    batches = await asyncio.gather(*[_allocate_batch() for _ in range(num_workers)])
++
++    all_allocated: list[int] = []
++    for b in batches:
++        assert len(b) == batch_size
++        all_allocated.extend(b)
++
++    total_expected = num_workers * batch_size
++    assert len(all_allocated) == total_expected
++    assert len(set(all_allocated)) == total_expected
++    assert set(all_allocated) == set(range(1, total_expected + 1))
++
++    res = await committed_db_session.execute(
++        text("SELECT issue_seq_counter FROM projects WHERE id = :id"),
++        {"id": proj_id},
++    )
++    assert res.scalar_one() == total_expected
++
++
++@pytest.mark.asyncio
++async def test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500(
++    db_session: AsyncSession,
++) -> None:
++    """Verify exact-match skipping across 1..1500 and substring preservation."""
++    # 1. skip_loaded = TRUE with batches covering 1..1500
++    res = await db_session.execute(
++        text(
++            "SELECT allocated_sequences, skipped_sequences "
++            "FROM compute_agent_safe_sequence_batch(0, 1000, TRUE)"
++        )
++    )
++    row1 = res.one()
++    allocated1 = list(row1[0])
++    skipped1 = list(row1[1])
++
++    # Exactly 13, 69, 88, 404, 420, 666 must be skipped in 1..1000
++    expected_first_1000_skips = [13, 69, 88, 404, 420, 666]
++    assert skipped1 == expected_first_1000_skips
++    assert len(allocated1) == 1000
++    for s in expected_first_1000_skips:
++        assert s not in allocated1
++
++    # Substrings must NEVER be skipped (substring preservation)
++    assert 113 in allocated1
++
++    # Second batch covering 1000..1500
++    res2 = await db_session.execute(
++        text(
++            "SELECT allocated_sequences, skipped_sequences "
++            "FROM compute_agent_safe_sequence_batch(:curr, 500, TRUE)"
++        ),
++        {"curr": allocated1[-1]},
++    )
++    row2 = res2.one()
++    allocated2 = list(row2[0])
++    skipped2 = list(row2[1])
++
++    # In 1000..1500: 1337 and 1488 are skipped
++    assert skipped2 == [1337, 1488]
++    assert len(allocated2) == 500
++    assert 1337 not in allocated2
++    assert 1488 not in allocated2
++
++    # Verify all 8 exact integers across 1..1500
++    all_skipped = skipped1 + skipped2
++    assert all_skipped == [13, 69, 88, 404, 420, 666, 1337, 1488]
++
++    # Verify substring preservation in a specific batch near 4040
++    res_sub = await db_session.execute(
++        text(
++            "SELECT allocated_sequences, skipped_sequences "
++            "FROM compute_agent_safe_sequence_batch(4035, 10, TRUE)"
++        )
++    )
++    row_sub = res_sub.one()
++    alloc_sub = list(row_sub[0])
++    assert 4040 in alloc_sub
++    assert list(row_sub[1]) == []
++
++    # Verify skip_loaded = FALSE does NOT skip anything
++    res_noskip = await db_session.execute(
++        text(
++            "SELECT allocated_sequences, skipped_sequences "
++            "FROM compute_agent_safe_sequence_batch(0, 100, FALSE)"
++        )
++    )
++    row_noskip = res_noskip.one()
++    assert list(row_noskip[0]) == list(range(1, 101))
++    assert list(row_noskip[1]) == []
++
++
++@pytest.mark.asyncio
++async def test_09_invalid_sequence_count_bounds(
++    db_session: AsyncSession,
++) -> None:
++    """Enforce 1 <= p_count <= 1000 (INVALID_SEQUENCE_COUNT)."""
++    for bad_count in [0, -1, 1001, None]:
++        sp = await db_session.begin_nested()
++        try:
++            with pytest.raises(DBAPIError, match="INVALID_SEQUENCE_COUNT"):
++                await db_session.execute(
++                    text("SELECT * FROM compute_agent_safe_sequence_batch(0, :cnt, TRUE)"),
++                    {"cnt": bad_count},
++                )
++        finally:
++            await sp.rollback()
++
++    # Valid boundary checks: 1 and 1000 succeed
++    res1 = await db_session.execute(
++        text(
++            "SELECT cardinality(allocated_sequences) "
++            "FROM compute_agent_safe_sequence_batch(0, 1, TRUE)"
++        )
++    )
++    assert res1.scalar_one() == 1
++
++    res1000 = await db_session.execute(
++        text(
++            "SELECT cardinality(allocated_sequences) "
++            "FROM compute_agent_safe_sequence_batch(0, 1000, TRUE)"
++        )
++    )
++    assert res1000.scalar_one() == 1000
++
++
++@pytest.mark.committed_db
++async def test_10_allocate_issue_sequences_and_verify_activity_chain(
++    committed_db_session: AsyncSession,
++) -> None:
++    """Verify allocate_issue_sequences activity emission and cryptographic chain validity."""
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    creator_id = uuid.uuid4()
++
++    await committed_db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Act WS')"),
++        {"id": ws_id, "slug": f"ws-act-{uuid.uuid4().hex[:8]}"},
++    )
++    await committed_db_session.execute(
++        text(
++            "SELECT register_object("
++            "  'project'::object_kind, :ws, NULL::uuid, 'ACTP', 'Act Project', :creator, :id"
++            ")"
++        ),
++        {"ws": ws_id, "creator": creator_id, "id": proj_id},
++    )
++    # Start counter at 12 with skip_loaded_sequence_numbers = TRUE
++    await committed_db_session.execute(
++        text(
++            "INSERT INTO projects ("
++            "  id, workspace_id, identifier, name, issue_seq_counter, skip_loaded_sequence_numbers"
++            ") VALUES (:id, :ws, 'ACTP', 'Act Project', 12, TRUE)"
++        ),
++        {"id": proj_id, "ws": ws_id},
++    )
++    await committed_db_session.commit()
++
++    # 1. Allocate 1 sequence with p_emit_activity = TRUE (default)
++    # From counter 12 -> 13 is loaded, so it skips 13 and allocates 14
++    res = await committed_db_session.execute(
++        text(
++            "SELECT allocated_sequences, skipped_sequences "
++            "FROM allocate_issue_sequences(:p, 1, TRUE)"
++        ),
++        {"p": proj_id},
++    )
++    row = res.one()
++    assert list(row[0]) == [14]
++    assert list(row[1]) == [13]
++
++    # Verify SEQUENCE_SKIPPED event written to activity_records
++    act_res = await committed_db_session.execute(
++        text(
++            "SELECT event_type, payload FROM activity_records "
++            "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
++        ),
++        {"ws": ws_id},
++    )
++    act_row = act_res.one()
++    assert act_row[0] == "SEQUENCE_SKIPPED"
++    payload = act_row[1]
++    assert payload["project_key"] == "ACTP"
++    assert payload["skipped_sequences"] == [13]
++    assert payload["allocated_sequence"] == 14
++    assert payload["reason"] == "agent_safe_sequence_numbering"
++
++    # Verify cryptographic hash chain remains intact
++    chain_check = await committed_db_session.execute(
++        text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
++        {"ws": ws_id},
++    )
++    chain_row = chain_check.one()
++    assert chain_row[0] is True
++    assert chain_row[1] >= 1
++
++    # 2. Backward compatibility: delegate allocate_issue_sequence(UUID) -> returns 15
++    seq_val = await committed_db_session.execute(
++        text("SELECT allocate_issue_sequence(:p)"),
++        {"p": proj_id},
++    )
++    assert seq_val.scalar_one() == 15
++
++    # 3. Non-existent project raises PROJECT_NOT_FOUND
++    with pytest.raises(DBAPIError, match="PROJECT_NOT_FOUND"):
++        await committed_db_session.execute(
++            text("SELECT * FROM allocate_issue_sequences(:p, 1, TRUE)"),
++            {"p": uuid.uuid4()},
++        )
+diff --git a/kanban/issues/tree_service.py b/kanban/issues/tree_service.py
+index 33958dc7..f213cfc7 100644
+--- a/kanban/issues/tree_service.py
++++ b/kanban/issues/tree_service.py
+@@ -771,16 +771,41 @@ async def create_issue_tree(  # noqa: C901, PLR0912, PLR0915
+                 (tree, initial_parent_id, initial_parent_key, True)
+             ]
+ 
++            total_nodes = len(resolved_nodes_data)
++            seq_row = (
++                await session.execute(
++                    text(
++                        "SELECT allocated_sequences, skipped_sequences "
++                        "FROM allocate_issue_sequences(:proj, :count, false)"
++                    ),
++                    {"proj": project.id, "count": total_nodes},
++                )
++            ).one()
++            allocated_seqs: list[int] = list(seq_row[0])
++            skipped_seqs: list[int] = list(seq_row[1])
++
++            if skipped_seqs:
++                await record_activity(
++                    session,
++                    workspace_id=caller.workspace_id,
++                    object_id=project.id,
++                    actor_principal_id=caller.principal_id,
++                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
++                    payload={
++                        "project_key": project.identifier,
++                        "skipped_sequences": skipped_seqs,
++                        "allocated_sequence": allocated_seqs[0],
++                        "reason": "agent_safe_sequence_numbering",
++                    },
++                )
++
++            seq_idx = 0
+             while queue:
+                 curr_node, curr_parent_id, curr_parent_key, is_root = queue.pop(0)
+                 data = node_to_data[id(curr_node)]
+ 
+-                seq_id = (
+-                    await session.execute(
+-                        text("SELECT allocate_issue_sequence(:proj)"),
+-                        {"proj": project.id},
+-                    )
+-                ).scalar_one()
++                seq_id = allocated_seqs[seq_idx]
++                seq_idx += 1
+ 
+                 canonical_key = f"{project.identifier}-{seq_id}"
+                 board_rank = allocate_initial_board_rank(seq_id)
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 2cbae97b..0d8f2b07 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -209,6 +209,7 @@ class ActivityEventType(StrEnum):
+     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
+     DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
+     MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
++    SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
+ 
+ 
+ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
+@@ -364,6 +365,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
+         ActivityEventType.ACL_ENTRY_GRANTED: ActivityCategory.SYSTEM,
+         ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
+         ActivityEventType.MCP_TAINT_BLOCKED: ActivityCategory.SYSTEM,
++        ActivityEventType.SEQUENCE_SKIPPED: ActivityCategory.SYSTEM,
+     }
+ )
+ 
+diff --git a/kanban/services/issue_copy.py b/kanban/services/issue_copy.py
+index cf46de0b..0d89bbf6 100644
+--- a/kanban/services/issue_copy.py
++++ b/kanban/services/issue_copy.py
+@@ -167,12 +167,35 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
+         top_summary = f"[Copy] {source_issue.summary}"[:500]
+         top_desc = _normalize_description(source_issue.description_markdown)
+ 
+-        # Sequence and key allocation
+-        top_seq_id = (
++        total_count = 1 + len(readable_rows)
++        seq_row = (
+             await session.execute(
+-                text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
++                text(
++                    "SELECT allocated_sequences, skipped_sequences "
++                    "FROM allocate_issue_sequences(:proj, :count, false)"
++                ),
++                {"proj": project.id, "count": total_count},
+             )
+-        ).scalar_one()
++        ).one()
++        allocated_seqs: list[int] = list(seq_row[0])
++        skipped_seqs: list[int] = list(seq_row[1])
++
++        if skipped_seqs:
++            await record_activity(
++                session,
++                workspace_id=caller.workspace_id,
++                object_id=project.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.SEQUENCE_SKIPPED,
++                payload={
++                    "project_key": project.identifier,
++                    "skipped_sequences": skipped_seqs,
++                    "allocated_sequence": allocated_seqs[0],
++                    "reason": "agent_safe_sequence_numbering",
++                },
++            )
++
++        top_seq_id = allocated_seqs[0]
+         top_canonical_key = f"{project.identifier}-{top_seq_id}"
+         top_rank = initial_board_rank(top_seq_id)
+ 
+@@ -265,16 +288,12 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
+         id_map: dict[uuid.UUID, uuid.UUID] = {source_issue.id: top_copy.id}
+         copied_sub_issues: list[CopiedSubIssueSummary] = []
+ 
+-        for r in readable_rows:
++        for idx, r in enumerate(readable_rows):
+             sub_parent_id = id_map.get(r.parent_issue_id, top_copy.id)
+             sub_summary = f"[Copy] {r.summary}"[:500]
+             sub_desc = _normalize_description(r.description_markdown)
+ 
+-            sub_seq_id = (
+-                await session.execute(
+-                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
+-                )
+-            ).scalar_one()
++            sub_seq_id = allocated_seqs[idx + 1]
+             sub_canonical_key = f"{project.identifier}-{sub_seq_id}"
+             sub_rank = initial_board_rank(sub_seq_id)
+ 
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 5509d18a..6cc69abc 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -745,15 +745,37 @@ async def create_issue(
+ 
+     try:
+         async with session.begin_nested():
+-            seq_id = (
++            seq_row = (
+                 await session.execute(
+-                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
++                    text(
++                        "SELECT allocated_sequences, skipped_sequences "
++                        "FROM allocate_issue_sequences(:proj, 1, false)"
++                    ),
++                    {"proj": project.id},
+                 )
+-            ).scalar_one()
++            ).one()
++            allocated_seqs: list[int] = list(seq_row[0])
++            skipped_seqs: list[int] = list(seq_row[1])
++            seq_id = allocated_seqs[0]
+ 
+             canonical_key = f"{project.identifier}-{seq_id}"
+             rank = initial_board_rank(seq_id)
+ 
++            if skipped_seqs:
++                await record_activity(
++                    session,
++                    workspace_id=caller.workspace_id,
++                    object_id=project.id,
++                    actor_principal_id=caller.principal_id,
++                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
++                    payload={
++                        "project_key": project.identifier,
++                        "skipped_sequences": skipped_seqs,
++                        "allocated_sequence": seq_id,
++                        "reason": "agent_safe_sequence_numbering",
++                    },
++                )
++
+             issue_id = (
+                 await session.execute(
+                     text(
+diff --git a/kanban/tests/services/test_agent_safe_sequences.py b/kanban/tests/services/test_agent_safe_sequences.py
+new file mode 100644
+index 00000000..4acd1c6f
+--- /dev/null
++++ b/kanban/tests/services/test_agent_safe_sequences.py
+@@ -0,0 +1,447 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Service tests for agent-safe sequence allocation and SEQUENCE_SKIPPED audit events."""
++
++from __future__ import annotations
++
++import os
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import create_async_engine
++
++from database.models.projects import Project
++from database.models.workspace_settings import WorkspaceSettings
++from database.session import RLSContext, RLSSessionFactory
++from database.testing.pg_harness import build_dsn
++from kanban.api.deps import PrincipalContext
++from kanban.api.v1.schemas.issue_copy import IssueCopyRequest
++from kanban.api.v1.schemas.issue_trees import IssueTreeNode
++from kanban.api.v1.schemas.issues import IssueCreate
++from kanban.issues.tree_service import create_issue_tree
++from kanban.services.activity import (
++    EVENT_CATEGORY,
++    ActivityCategory,
++    ActivityEventType,
++    clear_activity_listeners,
++)
++from kanban.services.issue_copy import copy_issue
++from kanban.services.issues import create_issue
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_project,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Iterator
++
++    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
++
++
++@pytest.fixture(autouse=True)
++def _isolated_listeners() -> Iterator[None]:
++    """Ensure clean listeners between tests."""
++    clear_activity_listeners()
++    yield
++    clear_activity_listeners()
++
++
++def test_activity_event_type_registration() -> None:
++    """Verify SEQUENCE_SKIPPED is registered and mapped to SYSTEM category."""
++    assert ActivityEventType.SEQUENCE_SKIPPED == "SEQUENCE_SKIPPED"
++    assert EVENT_CATEGORY[ActivityEventType.SEQUENCE_SKIPPED] == ActivityCategory.SYSTEM
++
++
++@pytest.mark.committed_db
++async def test_create_issue_skips_loaded_and_records_activity(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify create_issue skips sequence 13 when enabled and emits SEQUENCE_SKIPPED."""
++    ws_id = await create_workspace(committed_db_session)
++    admin_id = await create_user(
++        committed_db_session, ws_id, handle="@admin1", display_name="Admin 1"
++    )
++    proj_id = await create_project(
++        committed_db_session, ws_id, identifier="SAFE", name="Safe Project", created_by_id=admin_id
++    )
++
++    # Enable skip_loaded_sequence_numbers and set counter to 12
++    project = await committed_db_session.get(Project, proj_id)
++    assert project is not None
++    project.skip_loaded_sequence_numbers = True
++    project.issue_seq_counter = 12
++
++    # Also test workspace_settings default_skip_loaded_sequence_numbers ORM property
++    ws_settings = await committed_db_session.get(WorkspaceSettings, ws_id)
++    if ws_settings is not None:
++        ws_settings.default_skip_loaded_sequence_numbers = True
++
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        admin_id,
++        role="PROJECT_ADMIN",
++        scope_type="project",
++        project_id=proj_id,
++    )
++    await rebuild_era(committed_db_session, ws_id)
++    await committed_db_session.commit()
++
++    db_name = pg_worker_db.url.database or "kanban_test"
++    socket_dir = os.environ.get(
++        "KB_TEST_PGSOCKET_DIR", os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    )
++    app_engine = create_async_engine(
++        build_dsn(database=db_name, host=socket_dir, user="kanban_app"),
++        pool_size=5,
++        max_overflow=0,
++    )
++    factory = RLSSessionFactory(app_engine)
++    admin_ctx = PrincipalContext(
++        principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",)
++    )
++    admin_rls = RLSContext(principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",))
++
++    async with factory.session(admin_rls) as rls_sess:
++        created, _ = await create_issue(
++            rls_sess,
++            admin_ctx,
++            "SAFE",
++            IssueCreate(summary="Test Issue 1", description_markdown="Body content"),
++        )
++        await rls_sess.commit()
++
++    # Sequence 13 should have been skipped -> sequence 14 allocated
++    assert created.key == "SAFE-14"
++
++    # Verify SEQUENCE_SKIPPED event in activity_records
++    async with factory.session(admin_rls) as rls_sess:
++        act_row = (
++            await rls_sess.execute(
++                text(
++                    "SELECT event_type, payload FROM activity_records "
++                    "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
++                ),
++                {"ws": ws_id},
++            )
++        ).one()
++        assert act_row[0] == "SEQUENCE_SKIPPED"
++        payload = act_row[1]
++        assert payload["project_key"] == "SAFE"
++        assert payload["skipped_sequences"] == [13]
++        assert payload["allocated_sequence"] == 14
++        assert payload["reason"] == "agent_safe_sequence_numbering"
++
++        # Verify hash chain integrity
++        chain_res = (
++            await rls_sess.execute(
++                text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
++                {"ws": ws_id},
++            )
++        ).one()
++        assert chain_res[0] is True
++        assert chain_res[1] >= 1
++
++    await app_engine.dispose()
++
++
++@pytest.mark.committed_db
++async def test_create_issue_does_not_skip_when_disabled(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify create_issue does not skip sequence 13 when skip_loaded_sequence_numbers=False."""
++    ws_id = await create_workspace(committed_db_session)
++    admin_id = await create_user(
++        committed_db_session, ws_id, handle="@admin2", display_name="Admin 2"
++    )
++    proj_id = await create_project(
++        committed_db_session,
++        ws_id,
++        identifier="NOSKIP",
++        name="No Skip Project",
++        created_by_id=admin_id,
++    )
++
++    project = await committed_db_session.get(Project, proj_id)
++    assert project is not None
++    project.skip_loaded_sequence_numbers = False
++    project.issue_seq_counter = 12
++
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        admin_id,
++        role="PROJECT_ADMIN",
++        scope_type="project",
++        project_id=proj_id,
++    )
++    await rebuild_era(committed_db_session, ws_id)
++    await committed_db_session.commit()
++
++    db_name = pg_worker_db.url.database or "kanban_test"
++    socket_dir = os.environ.get(
++        "KB_TEST_PGSOCKET_DIR", os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    )
++    app_engine = create_async_engine(
++        build_dsn(database=db_name, host=socket_dir, user="kanban_app"),
++        pool_size=5,
++        max_overflow=0,
++    )
++    factory = RLSSessionFactory(app_engine)
++    admin_ctx = PrincipalContext(
++        principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",)
++    )
++    admin_rls = RLSContext(principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",))
++
++    async with factory.session(admin_rls) as rls_sess:
++        created, _ = await create_issue(
++            rls_sess,
++            admin_ctx,
++            "NOSKIP",
++            IssueCreate(summary="Issue 13", description_markdown="Body"),
++        )
++        await rls_sess.commit()
++
++    assert created.key == "NOSKIP-13"
++
++    # Zero SEQUENCE_SKIPPED records
++    async with factory.session(admin_rls) as rls_sess:
++        cnt = (
++            await rls_sess.execute(
++                text(
++                    "SELECT count(*) FROM activity_records "
++                    "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
++                ),
++                {"ws": ws_id},
++            )
++        ).scalar_one()
++        assert cnt == 0
++
++        chain_res = (
++            await rls_sess.execute(
++                text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
++                {"ws": ws_id},
++            )
++        ).one()
++        assert chain_res[0] is True
++
++    await app_engine.dispose()
++
++
++@pytest.mark.committed_db
++async def test_create_issue_tree_batch_sequence_and_skip_activity(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify create_issue_tree allocates batch once and emits SEQUENCE_SKIPPED."""
++    ws_id = await create_workspace(committed_db_session)
++    admin_id = await create_user(
++        committed_db_session, ws_id, handle="@admin3", display_name="Admin 3"
++    )
++    proj_id = await create_project(
++        committed_db_session, ws_id, identifier="TREE", name="Tree Project", created_by_id=admin_id
++    )
++
++    project = await committed_db_session.get(Project, proj_id)
++    assert project is not None
++    project.skip_loaded_sequence_numbers = True
++    project.issue_seq_counter = 11
++
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        admin_id,
++        role="PROJECT_ADMIN",
++        scope_type="project",
++        project_id=proj_id,
++    )
++    await rebuild_era(committed_db_session, ws_id)
++    await committed_db_session.commit()
++
++    db_name = pg_worker_db.url.database or "kanban_test"
++    socket_dir = os.environ.get(
++        "KB_TEST_PGSOCKET_DIR", os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    )
++    app_engine = create_async_engine(
++        build_dsn(database=db_name, host=socket_dir, user="kanban_app"),
++        pool_size=5,
++        max_overflow=0,
++    )
++    factory = RLSSessionFactory(app_engine)
++    admin_ctx = PrincipalContext(
++        principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",)
++    )
++    admin_rls = RLSContext(principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",))
++
++    # Tree with 3 nodes: root + 2 children
++    # Counter starts at 11:
++    # 3 items needed -> candidate 12 (ok), 13 (SKIPPED), 14 (ok), 15 (ok)
++    tree = IssueTreeNode(
++        summary="Root Issue",
++        children=[
++            IssueTreeNode(summary="Child Issue 1"),
++            IssueTreeNode(summary="Child Issue 2"),
++        ],
++    )
++
++    async with factory.session(admin_rls) as rls_sess:
++        tree_res = await create_issue_tree(rls_sess, admin_ctx, "TREE", tree)
++        await rls_sess.commit()
++
++    assert tree_res.root.key == "TREE-12"
++    assert len(tree_res.children) == 2
++    assert tree_res.children[0].key == "TREE-14"
++    assert tree_res.children[1].key == "TREE-15"
++
++    async with factory.session(admin_rls) as rls_sess:
++        act_rows = (
++            await rls_sess.execute(
++                text(
++                    "SELECT event_type, payload FROM activity_records "
++                    "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
++                ),
++                {"ws": ws_id},
++            )
++        ).all()
++        # Exactly ONE SEQUENCE_SKIPPED event emitted for the batch
++        assert len(act_rows) == 1
++        payload = act_rows[0][1]
++        assert payload["project_key"] == "TREE"
++        assert payload["skipped_sequences"] == [13]
++        assert payload["allocated_sequence"] == 12
++        assert payload["reason"] == "agent_safe_sequence_numbering"
++
++        chain_res = (
++            await rls_sess.execute(
++                text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
++                {"ws": ws_id},
++            )
++        ).one()
++        assert chain_res[0] is True
++
++    await app_engine.dispose()
++
++
++@pytest.mark.committed_db
++async def test_copy_issue_batch_sequence_and_skip_activity(
++    committed_db_session: AsyncSession,
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify copy_issue allocates batch once and emits SEQUENCE_SKIPPED."""
++    ws_id = await create_workspace(committed_db_session)
++    admin_id = await create_user(
++        committed_db_session, ws_id, handle="@admin4", display_name="Admin 4"
++    )
++    proj_id = await create_project(
++        committed_db_session, ws_id, identifier="COPYP", name="Copy Project", created_by_id=admin_id
++    )
++
++    project = await committed_db_session.get(Project, proj_id)
++    assert project is not None
++    # Start counter at 66 to create source issues 67 and 68
++    project.skip_loaded_sequence_numbers = False
++    project.issue_seq_counter = 66
++
++    await add_role_binding(
++        committed_db_session,
++        ws_id,
++        admin_id,
++        role="PROJECT_ADMIN",
++        scope_type="project",
++        project_id=proj_id,
++    )
++    await rebuild_era(committed_db_session, ws_id)
++    await committed_db_session.commit()
++
++    db_name = pg_worker_db.url.database or "kanban_test"
++    socket_dir = os.environ.get(
++        "KB_TEST_PGSOCKET_DIR", os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++    )
++    app_engine = create_async_engine(
++        build_dsn(database=db_name, host=socket_dir, user="kanban_app"),
++        pool_size=5,
++        max_overflow=0,
++    )
++    factory = RLSSessionFactory(app_engine)
++    admin_ctx = PrincipalContext(
++        principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",)
++    )
++    admin_rls = RLSContext(principal_id=admin_id, workspace_id=ws_id, token_scopes=("session",))
++
++    # Create parent issue (67) and child issue (68)
++    async with factory.session(admin_rls) as rls_sess:
++        parent_created, _ = await create_issue(
++            rls_sess,
++            admin_ctx,
++            "COPYP",
++            IssueCreate(summary="Parent to Copy", description_markdown="Parent body"),
++        )
++        child_created, _ = await create_issue(
++            rls_sess,
++            admin_ctx,
++            "COPYP",
++            IssueCreate(
++                summary="Child to Copy",
++                description_markdown="Child body",
++                parent=parent_created.key,
++            ),
++        )
++        await rls_sess.commit()
++
++    assert parent_created.key == "COPYP-67"
++    assert child_created.key == "COPYP-68"
++
++    # Now enable skip_loaded_sequence_numbers on project (counter is currently 68)
++    async with committed_db_session.begin():
++        p = await committed_db_session.get(Project, proj_id)
++        assert p is not None
++        p.skip_loaded_sequence_numbers = True
++
++    async with factory.session(admin_rls) as rls_sess:
++        copy_res, canonical_key = await copy_issue(
++            rls_sess,
++            admin_ctx,
++            parent_created.key,
++            IssueCopyRequest(include_sub_issues=True),
++        )
++        await rls_sess.commit()
++
++    # 69 was skipped, so top copy is 70, sub issue copy is 71
++    assert canonical_key == "COPYP-70"
++    assert copy_res.issue.key == "COPYP-70"
++    assert len(copy_res.copied_sub_issues) == 1
++    assert copy_res.copied_sub_issues[0].copy_key == "COPYP-71"
++
++    async with factory.session(admin_rls) as rls_sess:
++        act_rows = (
++            await rls_sess.execute(
++                text(
++                    "SELECT event_type, payload FROM activity_records "
++                    "WHERE workspace_id = :ws AND event_type = 'SEQUENCE_SKIPPED'"
++                ),
++                {"ws": ws_id},
++            )
++        ).all()
++        # Exactly ONE SEQUENCE_SKIPPED event emitted
++        assert len(act_rows) == 1
++        payload = act_rows[0][1]
++        assert payload["project_key"] == "COPYP"
++        assert payload["skipped_sequences"] == [69]
++        assert payload["allocated_sequence"] == 70
++        assert payload["reason"] == "agent_safe_sequence_numbering"
++
++        chain_res = (
++            await rls_sess.execute(
++                text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
++                {"ws": ws_id},
++            )
++        ).one()
++        assert chain_res[0] is True
++
++    await app_engine.dispose()

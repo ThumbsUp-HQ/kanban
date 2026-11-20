@@ -745,14 +745,36 @@ async def create_issue(
 
     try:
         async with session.begin_nested():
-            seq_id = (
+            seq_row = (
                 await session.execute(
-                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
+                    text(
+                        "SELECT allocated_sequences, skipped_sequences "
+                        "FROM allocate_issue_sequences(:proj, 1, false)"
+                    ),
+                    {"proj": project.id},
                 )
-            ).scalar_one()
+            ).one()
+            allocated_seqs: list[int] = list(seq_row[0])
+            skipped_seqs: list[int] = list(seq_row[1])
+            seq_id = allocated_seqs[0]
 
             canonical_key = f"{project.identifier}-{seq_id}"
             rank = initial_board_rank(seq_id)
+
+            if skipped_seqs:
+                await record_activity(
+                    session,
+                    workspace_id=caller.workspace_id,
+                    object_id=project.id,
+                    actor_principal_id=caller.principal_id,
+                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
+                    payload={
+                        "project_key": project.identifier,
+                        "skipped_sequences": skipped_seqs,
+                        "allocated_sequence": seq_id,
+                        "reason": "agent_safe_sequence_numbering",
+                    },
+                )
 
             issue_id = (
                 await session.execute(

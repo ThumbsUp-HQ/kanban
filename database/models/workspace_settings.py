@@ -62,6 +62,11 @@ class WorkspaceSettings(Base):
         nullable=False,
         server_default="false",
     )
+    default_skip_loaded_sequence_numbers: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
