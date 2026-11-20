@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary & Remediation Verification Matrix
 
-This Release Candidate 1 remediation specifically resolves all findings documented in `docs/qa/KAN-56/reality-checker-report.md`:
+This Release Candidate 1 remediation specifically resolves all findings documented in `docs/qa/KAN-56/reality-checker-report.md`, plus the live stacking context issue identified in Coordinator Directive #732:
 
 | Requirement / Invariant | Verification Method & Target | Result & Forensic Evidence | Gate Status |
 | :--- | :--- | :--- | :---: |
@@ -22,7 +22,8 @@ This Release Candidate 1 remediation specifically resolves all findings document
 | **CI Workflow Wiring** | `.github/workflows/ci.yml` `Fast smoke unit tests` | `test_brand_terminology_audit.py` and `test_wiki_media_audit.py` wired and executed in public CI | **PASS** |
 | **Unit Test Coverage** | `pytest --cov=...` | 17/17 passed in 5.13s, **98% coverage** across both audit suites | **PASS** |
 | **Vitest Workflows & DocsCenter** | `pnpm --dir kanban/web exec vitest ...` | 8/8 test files passed, 107/107 tests passed in 3.94s | **PASS** |
-| **Complete Verbatim Logs** | `docs/qa/KAN-56/unit-test-results.txt` & `build-or-typecheck.txt` | Verbatim outputs for Pytest (with coverage + fallback), Vitest (107/107), `tsc -b`, `eslint`, `vite build`, `ruff check`, `ruff format --check`, `mypy`, `lint-imports`, `check_no_dashes` | **PASS** |
+| **Z-Index Stacking Remediation** | `HelpDrawer.css` (`1200`/`1210`) & `FieldHelpHint.css` (`1220`) | Tested with `DocsCenter.test.tsx`, `FieldHelpHint.test.tsx`, `cssTokensAudit.test.ts` (62/62 passed) | **PASS** |
+| **Complete Verbatim Logs** | `docs/qa/KAN-56/unit-test-results.txt` & `build-or-typecheck.txt` | Verbatim outputs for Pytest (with coverage + fallback), Vitest (107/107 + 62/62), `tsc -b`, `eslint`, `vite build`, `ruff check`, `ruff format --check`, `mypy`, `lint-imports`, `check_no_dashes` | **PASS** |
 | **Sibling & File Boundaries** | Git diff audit | 0 edits to `thumbs-up-kanban.wiki/`, 0 edits to `DocsCenterPage.tsx` or `wikiManifest.ts` | **PASS** |
 | **Zero Em/En-Dashes** | `scripts.check_no_dashes --all` | 0 em-dashes and en-dashes | **PASS** |
 | **Repository Hygiene** | Git staging audit | `.backup_schedule.json` and `backups/` strictly unstaged | **PASS** |
@@ -52,10 +53,19 @@ This Release Candidate 1 remediation specifically resolves all findings document
    - Added `kanban/tests/platform/test_brand_terminology_audit.py` and `kanban/tests/docs/test_wiki_media_audit.py` to `Fast smoke unit tests`.
    - Verified that all 31 CI workflow structure and security checks (`scripts/tests/test_ci_workflow.py`, `tests/test_workspace_layout.py`, `kanban/tests/ci/test_github_workflows.py`) pass in 0.48s.
 
+4. **UI Z-Index Stacking Hierarchy Remediation (Coordinator Directive #732):**
+   - Remediated stacking context collision where modal dialogs (`.workflow-modal-backdrop` at `z-index: 1000`) covered help drawers (`HelpDrawer.css` previously at `500`/`510`).
+   - In `kanban/web/src/features/docs-center/HelpDrawer.css`:
+     * `.kb-help-drawer-backdrop`: `z-index: 1200;`
+     * `.kb-help-drawer`: `z-index: 1210;`
+   - In `kanban/web/src/components/help/FieldHelpHint.css`:
+     * `.field-help-hint-popover`: `z-index: 1220;`
+   - This enforces a bulletproof stacking order: Modal (1000) < HelpDrawer Backdrop (1200) < HelpDrawer Surface (1210) < FieldHelpHint Popover (1220).
+
 ---
 
 ## 3. Verbatim Verification Outputs
 
 All verbatim command outputs are recorded in:
-- `docs/qa/KAN-56/unit-test-results.txt` (Pytest with 98% coverage, Pytest nonexistent wiki fallback with 0 skips, Vitest 107/107 passed)
+- `docs/qa/KAN-56/unit-test-results.txt` (Pytest with 98% coverage, Pytest nonexistent wiki fallback with 0 skips, Vitest 107/107 passed, Vitest HelpDrawer/FieldHelpHint 62/62 passed)
 - `docs/qa/KAN-56/build-or-typecheck.txt` (tsc clean, eslint clean, vite build clean, ruff clean, ruff format clean, mypy clean, lint-imports clean, check_no_dashes clean)

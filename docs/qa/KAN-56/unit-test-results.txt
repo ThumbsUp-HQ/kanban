@@ -80,3 +80,21 @@ Not implemented: navigation to another Document
    Duration  3.94s (environment 45%, tests 36%, import 15%, transform 4%)
 
 Exit code: 0
+
+
+=== 4. Vitest HelpDrawer, FieldHelpHint, and cssTokensAudit (Z-Index Stacking Remediation) ===
+$ pnpm --dir kanban/web exec vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx src/components/help/FieldHelpHint.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan56-rc1-9e4ecafa/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+ ✓ src/components/help/FieldHelpHint.test.tsx (23 tests) 280ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (35 tests) 1655ms
+
+ Test Files  3 passed (3)
+      Tests  62 passed (62)
+   Start at  15:48:35
+   Duration  2.84s (environment 48%, tests 42%, import 7%, transform 2%, worker 1%)
+
+Exit code: 0
