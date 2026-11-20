@@ -1,0 +1,44 @@
+=== 1. DOCS TAXONOMY AUDIT (scripts.check_docs_taxonomy) ===
+Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
+OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
+
+=== 2. FORBIDDEN DASHES AUDIT (scripts.check_no_dashes --all) ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-c5645351/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== 3. FORBIDDEN DASHES AUDIT (scripts.check_no_dashes wiki) ===
+
+=== 4. PYTEST AUDIT & COVERAGE (check_docs_taxonomy, brand_terminology, wiki_media) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-c5645351
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 28 items
+
+kanban/tests/docs/test_check_docs_taxonomy.py .....................      [ 75%]
+kanban/tests/platform/test_brand_terminology_audit.py ...                [ 85%]
+kanban/tests/docs/test_wiki_media_audit.py ....                          [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+scripts/check_docs_taxonomy.py     223      3    110      4    98%   42->44, 212, 236, 386
+----------------------------------------------------------------------------
+TOTAL                              223      3    110      4    98%
+============================== 28 passed in 4.23s ==============================
+
+=== 5. VITEST DOCS CENTER & FILTER TABS SUITE (DocsCenter.test.tsx) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-c5645351/kanban/web
+
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (37 tests) 1693ms
+
+ Test Files  1 passed (1)
+      Tests  37 passed (37)
+   Start at  15:35:57
+   Duration  2.74s (tests 66%, environment 25%, import 6%, transform 2%)
+
