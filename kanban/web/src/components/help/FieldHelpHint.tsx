@@ -296,6 +296,7 @@ export function FieldHelpHint({
   const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
     if (shellPanels && docHref) {
       e.preventDefault();
+      triggerRef.current?.focus();
       ctrl.close(popupId);
       shellPanels.openPanel('help', { href: docHref, title });
     }

@@ -186,6 +186,26 @@ function detectFlavor(field: CustomFieldDefinition): FieldFlavor {
   return 'wasm';
 }
 
+export function normalizeScriptSource(flavor: FieldFlavor, source: string): string {
+  const trimmed = source.trim();
+  if (!trimmed) {
+    return source;
+  }
+  if (flavor === 'formula') {
+    if (!trimmed.startsWith('formula:') && !trimmed.startsWith('return ')) {
+      return `formula: ${trimmed}`;
+    }
+    return trimmed;
+  }
+  if (flavor === 'scalar') {
+    if (!trimmed.startsWith('scalar:')) {
+      return `scalar: ${trimmed}`;
+    }
+    return trimmed;
+  }
+  return source;
+}
+
 const DEFAULT_METADATA_BY_FORMAT: Record<OutputFormatType, Record<string, unknown>> = {
   text: { max_length: 280, prefix: '', monospace: false },
   number: { maximum_fraction_digits: 2, unit_suffix: '' },
@@ -510,13 +530,15 @@ export function CustomFieldDefinitionEditor({
       return;
     }
 
+    const effectiveScriptSource = normalizeScriptSource(flavor, scriptSource);
+
     try {
       const result = await testExecuteCustomField(projectKey, {
         issue_key: testIssueKey.trim(),
         tier,
         output_format: outputFormat,
         output_format_metadata: parsedMeta,
-        script_source: scriptSource,
+        script_source: effectiveScriptSource,
         target_scope: targetScope,
         credential_mode: credentialMode,
       });
@@ -549,13 +571,15 @@ export function CustomFieldDefinitionEditor({
       .map((s) => s.trim())
       .filter(Boolean);
 
+    const effectiveScriptSource = normalizeScriptSource(flavor, scriptSource);
+
     // If updating an approved field with elevated scope or credential mode,
     // prompt confirmation of tamper auto-revocation (S13.2)
     if (
       selectedField?.approval_status === 'APPROVED' &&
       !isTamperConfirmOpen
     ) {
-      const scriptChanged = scriptSource !== (selectedField.script_source ?? '');
+      const scriptChanged = effectiveScriptSource !== (selectedField.script_source ?? '');
       const metaChanged =
         JSON.stringify(parsedMeta) !==
         JSON.stringify(selectedField.output_format_metadata);
@@ -573,7 +597,7 @@ export function CustomFieldDefinitionEditor({
           tier,
           output_format: outputFormat,
           output_format_metadata: parsedMeta,
-          script_source: scriptSource,
+          script_source: effectiveScriptSource,
           target_scope: targetScope,
           credential_mode: credentialMode,
           egress_allowlist: egressList,
@@ -587,7 +611,7 @@ export function CustomFieldDefinitionEditor({
         tier,
         output_format: outputFormat,
         output_format_metadata: parsedMeta,
-        script_source: scriptSource,
+        script_source: effectiveScriptSource,
         target_scope: targetScope,
         credential_mode: credentialMode,
         egress_allowlist: egressList,

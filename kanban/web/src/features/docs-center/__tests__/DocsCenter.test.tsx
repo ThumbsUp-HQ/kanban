@@ -880,6 +880,36 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       expect(nameInput.value).toBe('Unsaved Critical Draft Work 1234');
       expect(timeoutInput.value).toBe('7200');
     });
+
+    it('restores document.activeElement to the (?) trigger button when closing HelpDrawer via Escape (KAN-16)', () => {
+      registerShellPanel('help', HelpDrawer);
+
+      render(
+        <MemoryRouter>
+          <UnsavedFormFixture />
+        </MemoryRouter>,
+      );
+
+      const hintBtn = screen.getByTestId('timeout-field-hint');
+      act(() => {
+        fireEvent.click(hintBtn);
+      });
+
+      const moreInfoLink = screen.getByTestId('timeout-field-hint-doc-link');
+      act(() => {
+        fireEvent.click(moreInfoLink);
+      });
+
+      expect(screen.getByTestId('help-drawer')).toBeDefined();
+
+      // Press Escape to close HelpDrawer
+      act(() => {
+        fireEvent.keyDown(window, { key: 'Escape' });
+      });
+
+      expect(screen.queryByTestId('help-drawer')).toBeNull();
+      expect(document.activeElement).toBe(hintBtn);
+    });
   });
 
   describe('Release Candidate Polish & Accessibility (KAN-16 RC1)', () => {

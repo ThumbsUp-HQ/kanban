@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { FieldHelpHint } from './FieldHelpHint';
 import { createHintController, type HintClock } from '../emoji/hintTiming';
+import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
 
 class TestClock implements HintClock {
   currentTime = 1000;
@@ -663,5 +664,44 @@ describe('FieldHelpHint Component', () => {
     act(() => {
       fireEvent.keyDown(trigger, { key: 'Tab', shiftKey: true });
     });
+  });
+
+  it('focuses trigger button before opening panel when More info link is clicked (KAN-16)', () => {
+    const MockPanel = ({ onClose }: { onClose: () => void }) => {
+      return (
+        <div data-testid="mock-panel">
+          <button type="button" onClick={onClose} data-testid="mock-panel-close">
+            Close
+          </button>
+        </div>
+      );
+    };
+    registerShellPanel('help', MockPanel);
+
+    render(
+      <ShellPanelsProvider>
+        <div>
+          <FieldHelpHint
+            title="Focus Test"
+            summary="Testing trigger focus restoration."
+            docHref="/docs/custom-fields"
+            testId="focus-test-hint"
+          />
+        </div>
+      </ShellPanelsProvider>,
+    );
+
+    const trigger = screen.getByTestId('focus-test-hint');
+    act(() => {
+      fireEvent.click(trigger);
+    });
+
+    const moreInfoLink = screen.getByTestId('focus-test-hint-doc-link');
+    act(() => {
+      fireEvent.click(moreInfoLink);
+    });
+
+    expect(screen.getByTestId('mock-panel')).toBeDefined();
+    expect(document.activeElement).toBe(trigger);
   });
 });

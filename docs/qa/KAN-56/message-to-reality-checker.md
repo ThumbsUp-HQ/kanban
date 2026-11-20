@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary & Remediation Verification Matrix
 
-This Release Candidate 1 remediation specifically resolves all findings documented in `docs/qa/KAN-56/reality-checker-report.md`, plus the live stacking context issue identified in Coordinator Directive #732:
+This Release Candidate 1 remediation specifically resolves all findings documented in `docs/qa/KAN-56/reality-checker-report.md`, plus the live stacking context and live interaction issues identified in Coordinator Directives #732 and #738:
 
 | Requirement / Invariant | Verification Method & Target | Result & Forensic Evidence | Gate Status |
 | :--- | :--- | :--- | :---: |
@@ -20,10 +20,12 @@ This Release Candidate 1 remediation specifically resolves all findings document
 | **Removed Blanket Exclusions** | `test_brand_terminology_audit.py` `DEFAULT_EXCLUDED_PATHS` | `wikiManifest.ts` and `DocsCenter.test.tsx` removed from exclusions; `WIKI_CHAPTERS` parsed & audited directly | **PASS** |
 | **Heading & Anchor Precision** | `test_wiki_media_audit.py` exact line-anchored regex & slug audit | `^### Failure Policies$` exact h3 match; `^#\s+(?:\[(?:Guide|Informational|Architectural)\]\s+)?Scripted Workflows` prefix-tolerant H1 match; internal `#anchor` fragments validated against GitHub-style heading slugs | **PASS** |
 | **CI Workflow Wiring** | `.github/workflows/ci.yml` `Fast smoke unit tests` | `test_brand_terminology_audit.py` and `test_wiki_media_audit.py` wired and executed in public CI | **PASS** |
-| **Unit Test Coverage** | `pytest --cov=...` | 17/17 passed in 5.13s, **98% coverage** across both audit suites | **PASS** |
+| **Unit Test Coverage** | `pytest --cov=...` | 17/17 passed in 5.35s, **98% coverage** across both audit suites | **PASS** |
 | **Vitest Workflows & DocsCenter** | `pnpm --dir kanban/web exec vitest ...` | 8/8 test files passed, 107/107 tests passed in 3.94s | **PASS** |
 | **Z-Index Stacking Remediation** | `HelpDrawer.css` (`1200`/`1210`) & `FieldHelpHint.css` (`1220`) | Tested with `DocsCenter.test.tsx`, `FieldHelpHint.test.tsx`, `cssTokensAudit.test.ts` (62/62 passed) | **PASS** |
-| **Complete Verbatim Logs** | `docs/qa/KAN-56/unit-test-results.txt` & `build-or-typecheck.txt` | Verbatim outputs for Pytest (with coverage + fallback), Vitest (107/107 + 62/62), `tsc -b`, `eslint`, `vite build`, `ruff check`, `ruff format --check`, `mypy`, `lint-imports`, `check_no_dashes` | **PASS** |
+| **Focus Restoration (KAN-16)** | `FieldHelpHint.tsx` `handleDocLinkClick` | Focus explicitly moved to trigger before unmounting popover; closing `HelpDrawer` on Escape restores focus to `(?)` trigger | **PASS** |
+| **Bare Formula Normalization (KAN-32)** | `CustomFieldDefinitionEditor.tsx` `normalizeScriptSource` | Auto-prefixes `formula: ` / `scalar: ` on Test Execute and Save; tested in `CustomFieldDefinitionEditor.test.tsx` | **PASS** |
+| **Complete Verbatim Logs** | `docs/qa/KAN-56/unit-test-results.txt` & `build-or-typecheck.txt` | Verbatim outputs for Pytest (with coverage + fallback), Vitest (107/107, 62/62, 106/106), `tsc -b`, `eslint`, `vite build`, `ruff check`, `ruff format --check`, `mypy`, `lint-imports`, `check_no_dashes` | **PASS** |
 | **Sibling & File Boundaries** | Git diff audit | 0 edits to `thumbs-up-kanban.wiki/`, 0 edits to `DocsCenterPage.tsx` or `wikiManifest.ts` | **PASS** |
 | **Zero Em/En-Dashes** | `scripts.check_no_dashes --all` | 0 em-dashes and en-dashes | **PASS** |
 | **Repository Hygiene** | Git staging audit | `.backup_schedule.json` and `backups/` strictly unstaged | **PASS** |
@@ -62,10 +64,25 @@ This Release Candidate 1 remediation specifically resolves all findings document
      * `.field-help-hint-popover`: `z-index: 1220;`
    - This enforces a bulletproof stacking order: Modal (1000) < HelpDrawer Backdrop (1200) < HelpDrawer Surface (1210) < FieldHelpHint Popover (1220).
 
+5. **Focus Restoration on HelpDrawer Close (KAN-16 / Coordinator Directive #738 Item 1):**
+   - In `kanban/web/src/components/help/FieldHelpHint.tsx`:
+     * Called `triggerRef.current?.focus()` before invoking `shellPanels.openPanel` and `ctrl.close(popupId)`.
+     * This ensures `document.activeElement` is set to the `(?)` `<button>` trigger prior to `HelpDrawer` mounting.
+     * When `HelpDrawer` unmounts upon pressing `Escape`, its focus restoration effect returns focus to the `(?)` button instead of dropping focus to `document.body`.
+     * Added verified unit tests in `FieldHelpHint.test.tsx` and integration test in `DocsCenter.test.tsx`.
+
+6. **Bare Formula Copy-Paste Normalization (KAN-32 / Coordinator Directive #738 Item 2):**
+   - In `kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx`:
+     * Implemented and exported `normalizeScriptSource(flavor, source)`.
+     * When `flavor === 'formula'` and the trimmed script source does not already begin with `formula:` or `return `, it automatically prefixes `` `formula: ${source.trim()}` ``.
+     * When `flavor === 'scalar'` and the trimmed script source does not already begin with `scalar:`, it automatically prefixes `` `scalar: ${source.trim()}` ``.
+     * Applied to both `Test Execute` (`handleTestExecute`) and Save (`handleSubmit`) payloads to prevent `custom_field_execution.py` from mistaking raw expressions for Wasm base64 (`422 WASM_BINARY_INVALID`).
+     * Added comprehensive unit and integration tests in `CustomFieldDefinitionEditor.test.tsx`.
+
 ---
 
 ## 3. Verbatim Verification Outputs
 
 All verbatim command outputs are recorded in:
-- `docs/qa/KAN-56/unit-test-results.txt` (Pytest with 98% coverage, Pytest nonexistent wiki fallback with 0 skips, Vitest 107/107 passed, Vitest HelpDrawer/FieldHelpHint 62/62 passed)
+- `docs/qa/KAN-56/unit-test-results.txt` (Pytest with 98% coverage, Pytest nonexistent wiki fallback with 0 skips, Vitest 107/107 passed, Vitest HelpDrawer/FieldHelpHint 62/62 passed, Vitest Full Editor/Hint/Drawer Suite 106/106 passed)
 - `docs/qa/KAN-56/build-or-typecheck.txt` (tsc clean, eslint clean, vite build clean, ruff clean, ruff format clean, mypy clean, lint-imports clean, check_no_dashes clean)
