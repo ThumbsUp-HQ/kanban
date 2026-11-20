@@ -987,14 +987,18 @@ describe('CustomFieldDefinitionEditor', () => {
     const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
     const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
     expect(nsjailFlavorOpt?.disabled).toBe(true);
-    expect(screen.getByTestId('flavor-nsjail-disabled-badge')).toBeDefined();
+    const flavorBadge = screen.getByTestId('flavor-nsjail-disabled-badge');
+    expect(flavorBadge).toBeDefined();
+    expect(flavorBadge.textContent).toContain('nsjail option requires Multi-Container Compose');
 
     // 3. Execution tier nsjail option disabled with badge in Advanced tab
     fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
     const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
     const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
     expect(nsjailTierOpt?.disabled).toBe(true);
-    expect(screen.getByTestId('tier-nsjail-disabled-badge')).toBeDefined();
+    const tierBadge = screen.getByTestId('tier-nsjail-disabled-badge');
+    expect(tierBadge).toBeDefined();
+    expect(tierBadge.textContent).toContain('nsjail option requires Multi-Container Compose');
 
     // 4. Pre-existing nsjail field selection shows warning banner
     await waitFor(() => {

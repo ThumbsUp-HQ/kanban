@@ -1,16 +1,20 @@
 === 1. RUFF CHECK ===
-$ uv run ruff check .
+$ uv run ruff check kanban database mcp agent scripts
 All checks passed!
 
 === 2. RUFF FORMAT CHECK ===
-$ uv run ruff format --check .
-1945 files already formatted
+$ uv run ruff format --check kanban database mcp agent scripts
+1004 files already formatted
 
 === 3. MYPY TYPECHECK ===
-$ uv run mypy
-Success: no issues found in 1121 source files
+$ uv run mypy kanban database mcp agent scripts
+Success: no issues found in 996 source files
 
-=== 4. LINT-IMPORTS ===
+=== 4. CHECK MIGRATIONS ===
+$ uv run kanban-ctl db check-migrations
+OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk
+
+=== 5. LINT-IMPORTS ===
 $ uv run lint-imports
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
@@ -27,7 +31,7 @@ $ uv run lint-imports
 Contracts
 ---------
 
-Analyzed 977 files, 3469 dependencies.
+Analyzed 983 files, 3499 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -35,27 +39,40 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
 
-=== 5. TYPESCRIPT TYPECHECK & VITE BUILD ===
-$ pnpm --filter @kanban/web build
+=== 6. FRONTEND TYPECHECK (tsc -b --noEmit) ===
+$ cd kanban/web && npm run typecheck
 
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+Clean: 0 errors.
+
+=== 7. ESLINT (eslint . --max-warnings 0) ===
+$ cd kanban/web && npm run lint
+
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+Clean: 0 warnings.
+
+=== 8. FRONTEND PRODUCTION BUILD (tsc -b && vite build) ===
+$ cd kanban/web && npm run build
+
+> @kanban/web@0.1.0 build
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
-transforming (709) src/editor/mermaid/mermaidClient.ts✓ 710 modules transformed.
-rendering chunks (1)...computing gzip size...
-dist/index.html                             0.51 kB │ gzip:   0.31 kB
+✓ 720 modules transformed.
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-I2brHysP.css            443.59 kB │ gzip:  62.39 kB
-dist/assets/index-DwdRrl6V.js           2,012.93 kB │ gzip: 542.69 kB
-✓ built in 1.80s
+dist/assets/index-BJiKR0z9.css            461.23 kB │ gzip:  64.86 kB
+dist/assets/index-C9tuxmQ2.js           2,380.91 kB │ gzip: 660.77 kB
+✓ built in 2.27s
 
-=== 6. ESLINT ===
-$ pnpm --filter @kanban/web lint
-
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
-> eslint . --max-warnings 0
-
-=== 7. CHECK NO DASHES (0 EM/EN-DASHES) ===
+=== 9. CHECK NO DASHES (0 EM/EN-DASHES) ===
 $ python3 -m scripts.check_no_dashes --all
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+0 forbidden unicode dashes found across repository.
+
+$ python3 -m scripts.check_no_dashes /home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md
+0 forbidden unicode dashes found across wiki.

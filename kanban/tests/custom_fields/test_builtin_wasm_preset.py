@@ -21,6 +21,11 @@ from kanban.custom_fields.builtin_wasm import (
     ECHO_CVSS_WASM_BYTES,
     resolve_wasm_module_bytes,
 )
+from kanban.custom_fields.executor import _eval_safe_formula
+from kanban.custom_fields.output_formats import (
+    SeverityPillFormatMetadata,
+    _validate_severity_pill,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -216,3 +221,101 @@ async def test_api_test_execute_preset_cvss_score_fresh_project_200(
     assert data["status"] == "SUCCESS"
     assert data["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
     assert "Executed Wasm module" in data["logs"]
+
+
+async def test_resolve_starter_templates_wasm_without_echo_cvss_comment(
+    db_session: AsyncSession,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test 8: Starter WASM without echo comment resolves via preset SHA and checks DB first."""
+    # 1. Fresh workspace without DB overrides
+    ws_id = uuid.uuid4()
+    raw_starter_source = f"// WebAssembly Tier A Module (Base64)\n{ECHO_CVSS_WASM_BASE64}"
+    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=raw_starter_source)
+    assert wasm_b == ECHO_CVSS_WASM_BYTES
+    assert sha_b == ECHO_CVSS_SHA256_BYTES
+
+    # 2. Workspace with ApprovedWasmModule DB override for ECHO_CVSS_SHA256_BYTES
+    admin = await make_user("wasm_override_admin", workspace_role="WORKSPACE_ADMIN")
+    try:
+        override_bytes = b"\x00asm\x01\x00\x00\x00\x01\x04\x01`\x00\x00\x03\x02\x01\x00"
+        db_override = ApprovedWasmModule(
+            workspace_id=admin.workspace_id,
+            name="custom_override_cvss",
+            sha256=ECHO_CVSS_SHA256_BYTES,
+            wasm_bytes=override_bytes,
+            approved_by_id=admin.id,
+        )
+        db_session.add(db_override)
+        await db_session.flush()
+
+        wasm_overridden, sha_overridden = await resolve_wasm_module_bytes(
+            db_session, admin.workspace_id, source=raw_starter_source
+        )
+        assert wasm_overridden == override_bytes
+        assert sha_overridden == ECHO_CVSS_SHA256_BYTES
+
+        # 3. Comment-only // echo_cvss.wasm path also checks DB override
+        comment_source = "// echo_cvss.wasm"
+        wasm_comment_overridden, sha_comment_overridden = await resolve_wasm_module_bytes(
+            db_session, admin.workspace_id, source=comment_source
+        )
+        assert wasm_comment_overridden == override_bytes
+        assert sha_comment_overridden == ECHO_CVSS_SHA256_BYTES
+    finally:
+        await db_session.rollback()
+
+
+async def test_guide_example_3_severity_pill_formula_and_test_execute(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """Test 9: Copy-pasting Example 3 formula passes _validate_severity_pill and test-execute."""
+    guide_formula = (
+        '{"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" '
+        'else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" '
+        'else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" '
+        'else {"level": "low", "score": 2.0, "label": "Low"}))'
+    )
+
+    # (a) Verify AST safe evaluation and _validate_severity_pill across priority levels
+    for prio, expected_lvl in [
+        ("URGENT", "critical"),
+        ("HIGH", "high"),
+        ("MEDIUM", "medium"),
+        ("LOW", "low"),
+    ]:
+        evaluated = _eval_safe_formula(guide_formula, {"priority": prio})
+        validated = _validate_severity_pill(SeverityPillFormatMetadata(), evaluated)
+        assert validated["level"] == expected_lvl
+
+    # (b) Verify test-execute returns HTTP 200 OK on fresh project
+    admin = await make_user("admin_guide_ex3", workspace_role="WORKSPACE_ADMIN")
+    _ = await make_project("GUIDE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = _as_admin_aal2(api_env, admin)
+
+    resp_issue = await client.post(
+        "/api/v1/projects/GUIDE/issues",
+        json={
+            "summary": "Urgent Security Breach",
+            "description_markdown": "Critical vulnerability",
+        },
+    )
+    assert resp_issue.status_code == 201
+    issue_key = resp_issue.json()["key"]
+
+    resp_test = await client.post(
+        "/api/v1/projects/GUIDE/custom-fields/test-execute",
+        json={
+            "issue_key": issue_key,
+            "tier": "wasm",
+            "output_format": "severity_pill",
+            "output_format_metadata": {},
+            "script_source": f"formula: {guide_formula}",
+        },
+    )
+    assert resp_test.status_code == 200, resp_test.text
+    data = resp_test.json()
+    assert data["status"] == "SUCCESS"
+    assert data["value"]["level"] in ("low", "medium", "high", "critical")

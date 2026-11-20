@@ -1,63 +1,69 @@
-=== PYTHON PYTEST & SCOPED COVERAGE (KAN-32-RC1) ===
+=== PYTHON PYTEST & COVERAGE (KAN-32-RC2) ===
 Command:
-KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py kanban/tests/custom_fields/test_builtin_wasm_preset.py --cov=kanban.custom_fields.service --cov=kanban.custom_fields.builtin_wasm --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
+PYTEST_XDIST_WORKER=gw_kan32rc2 uv run pytest kanban/tests/custom_fields/ --cov=kanban/custom_fields --cov-report=term-missing
 
 Output:
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 33 items
+collecting ... collected 78 items
 
-kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 24%]
-kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 45%]
-kanban/tests/custom_fields/test_execution_api.py ...                     [ 54%]
-kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 75%]
-.                                                                        [ 78%]
-kanban/tests/custom_fields/test_builtin_wasm_preset.py .......           [100%]
+kanban/tests/custom_fields/test_approvals_matrix.py .........            [ 11%]
+kanban/tests/custom_fields/test_builtin_wasm_preset.py .........         [ 23%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 33%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 42%]
+kanban/tests/custom_fields/test_execution_api.py ...                     [ 46%]
+kanban/tests/custom_fields/test_executor_cache.py ....                   [ 51%]
+kanban/tests/custom_fields/test_executor_unit.py .....                   [ 57%]
+kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 66%]
+.                                                                        [ 67%]
+kanban/tests/custom_fields/test_output_formats.py ......                 [ 75%]
+kanban/tests/custom_fields/test_preset_formulas_e2e.py .....             [ 82%]
+kanban/tests/custom_fields/test_safe_formula_unit.py ......              [ 89%]
+kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                                      Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------------------
-kanban/api/v1/custom_field_execution.py      99      0     18      2    98%   71->74, 109->125
-kanban/api/v1/custom_fields.py               30      0      0      0   100%
-kanban/custom_fields/builtin_wasm.py         77      0     30      0   100%
-kanban/custom_fields/service.py             163      0     42      2    99%   355->359, 361->365
--------------------------------------------------------------------------------------
-TOTAL                                       369      0     90      4    99%
-============================= 33 passed in 23.24s ==============================
+Name                                     Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------
+kanban/custom_fields/__init__.py             3      0      0      0   100%
+kanban/custom_fields/approvals.py          201      4     72      6    96%   329, 374->377, 386->388, 413->416, 437-438, 566
+kanban/custom_fields/builtin_wasm.py        89      0     32      0   100%
+kanban/custom_fields/executor.py           538     18    242     19    95%   120->158, 149->151, 154->120, 164, 258-259, 262->275, 292, 308, 332->336, 349, 353-354, 378, 384, 386, 392, 427->432, 429->432, 432->440, 434->440, 437-438, 441->477, 472-473, 749->782, 991-992
+kanban/custom_fields/manifest.py            43      0     20      0   100%
+kanban/custom_fields/output_formats.py     232      0     86      3    99%   102->110, 261->273, 349->351
+kanban/custom_fields/service.py            163      0     42      2    99%   355->359, 361->365
+------------------------------------------------------------------------------------
+TOTAL                                     1269     22    494     30    97%
+============================= 78 passed in 34.05s ==============================
 
 
-=== TYPESCRIPT VITEST & COVERAGE (KAN-32-RC1) ===
+=== TYPESCRIPT VITEST & COVERAGE (KAN-32-RC2) ===
 Command:
-COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" npx vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
 
 Output:
-> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
-> vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 21ms
- ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 75ms
- ✓ src/app/useSystemStatus.test.tsx (4 tests) 189ms
- ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 186ms
- ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 332ms
- ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 412ms
- ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 36ms
- ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 620ms
- ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 680ms
- ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 3111ms
+ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 43ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 152ms
+ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 315ms
+ ✓ src/app/useSystemStatus.test.tsx (4 tests) 345ms
+ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 465ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (33 tests) 538ms
+ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 61ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 795ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 955ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 3593ms
 
  Test Files  10 passed (10)
-      Tests  165 passed (165)
-   Start at  12:11:21
-   Duration  6.61s (environment 55%, tests 23%, import 15%, transform 4%, worker 3%)
+      Tests  166 passed (166)
+   Duration  8.74s
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -78,7 +84,7 @@ Command:
 (cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts)
 
 Output:
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/kanban/web
 
  ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
    ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
@@ -89,4 +95,4 @@ Output:
 
  Test Files  1 passed (1)
       Tests  4 passed (4)
-   Duration  1.03s
+   Duration  981ms

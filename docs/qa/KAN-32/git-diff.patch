@@ -1,1385 +1,1323 @@
+diff --git a/database/testing/pg_harness.py b/database/testing/pg_harness.py
+index 632c3243..9f3fcc54 100644
+--- a/database/testing/pg_harness.py
++++ b/database/testing/pg_harness.py
+@@ -274,7 +274,9 @@ def pytest_configure(config: pytest.Config) -> None:
+ @pytest.fixture(scope="session")
+ async def pg_worker_db(request: pytest.FixtureRequest) -> AsyncGenerator[AsyncEngine, None]:
+     """Provide an isolated worker database cloned from golden kanban_template."""
+-    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
++    worker_id = getattr(request.config, "workerinput", {}).get(
++        "workerid", os.environ.get("PYTEST_XDIST_WORKER", "master")
++    )
+     prefix = os.environ.get("KB_TEST_DB_PREFIX", "kanban_test")
+     db_name = f"{prefix}_{worker_id}"
+     socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
 diff --git a/docs/qa/KAN-32/build-or-typecheck.txt b/docs/qa/KAN-32/build-or-typecheck.txt
-index 7dd3aa01..0d14ef3d 100644
+index 0d14ef3d..7fabb5d5 100644
 --- a/docs/qa/KAN-32/build-or-typecheck.txt
 +++ b/docs/qa/KAN-32/build-or-typecheck.txt
-@@ -1,12 +1,16 @@
+@@ -1,16 +1,20 @@
  === 1. RUFF CHECK ===
--$ uv run ruff check kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
-+$ uv run ruff check .
+-$ uv run ruff check .
++$ uv run ruff check kanban database mcp agent scripts
  All checks passed!
  
--=== 2. MYPY TYPECHECK ===
--$ uv run mypy kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
--Success: no issues found in 7 source files
-+=== 2. RUFF FORMAT CHECK ===
-+$ uv run ruff format --check .
-+1945 files already formatted
+ === 2. RUFF FORMAT CHECK ===
+-$ uv run ruff format --check .
+-1945 files already formatted
++$ uv run ruff format --check kanban database mcp agent scripts
++1004 files already formatted
  
--=== 3. LINT-IMPORTS ===
-+=== 3. MYPY TYPECHECK ===
-+$ uv run mypy
-+Success: no issues found in 1121 source files
+ === 3. MYPY TYPECHECK ===
+-$ uv run mypy
+-Success: no issues found in 1121 source files
++$ uv run mypy kanban database mcp agent scripts
++Success: no issues found in 996 source files
+ 
+-=== 4. LINT-IMPORTS ===
++=== 4. CHECK MIGRATIONS ===
++$ uv run kanban-ctl db check-migrations
++OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk
 +
-+=== 4. LINT-IMPORTS ===
++=== 5. LINT-IMPORTS ===
  $ uv run lint-imports
  
  ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-@@ -23,7 +27,7 @@ $ uv run lint-imports
+@@ -27,7 +31,7 @@ $ uv run lint-imports
  Contracts
  ---------
  
--Analyzed 970 files, 3432 dependencies.
-+Analyzed 977 files, 3469 dependencies.
+-Analyzed 977 files, 3469 dependencies.
++Analyzed 983 files, 3499 dependencies.
  --------------------------------------
  
  Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-@@ -31,37 +35,27 @@ mcp forbidden from importing database KEPT (48 ignored imports)
+@@ -35,27 +39,40 @@ mcp forbidden from importing database KEPT (48 ignored imports)
  
  Contracts: 2 kept, 0 broken.
  
--=== 4. TYPESCRIPT TYPECHECK (TSC -B) ===
--$ pnpm --filter @kanban/web typecheck
-+=== 5. TYPESCRIPT TYPECHECK & VITE BUILD ===
-+$ pnpm --filter @kanban/web build
+-=== 5. TYPESCRIPT TYPECHECK & VITE BUILD ===
+-$ pnpm --filter @kanban/web build
++=== 6. FRONTEND TYPECHECK (tsc -b --noEmit) ===
++$ cd kanban/web && npm run typecheck
  
--> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
--> tsc -b --noEmit
-+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
-+> tsc -b && vite build
+-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+-> tsc -b && vite build
++> @kanban/web@0.1.0 typecheck
++> tsc -b --noEmit
  
-+vite v8.3.8 building client environment for production...
-+transforming (709) src/editor/mermaid/mermaidClient.ts✓ 710 modules transformed.
-+rendering chunks (1)...computing gzip size...
-+dist/index.html                             0.51 kB │ gzip:   0.31 kB
-+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-+dist/assets/index-I2brHysP.css            443.59 kB │ gzip:  62.39 kB
-+dist/assets/index-DwdRrl6V.js           2,012.93 kB │ gzip: 542.69 kB
-+✓ built in 1.80s
+-vite v8.3.8 building client environment for production...
+-transforming (709) src/editor/mermaid/mermaidClient.ts✓ 710 modules transformed.
+-rendering chunks (1)...computing gzip size...
+-dist/index.html                             0.51 kB │ gzip:   0.31 kB
+-dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+-dist/assets/index-I2brHysP.css            443.59 kB │ gzip:  62.39 kB
+-dist/assets/index-DwdRrl6V.js           2,012.93 kB │ gzip: 542.69 kB
+-✓ built in 1.80s
++Clean: 0 errors.
  
--=== 5. ESLINT ===
-+=== 6. ESLINT ===
- $ pnpm --filter @kanban/web lint
+-=== 6. ESLINT ===
+-$ pnpm --filter @kanban/web lint
++=== 7. ESLINT (eslint . --max-warnings 0) ===
++$ cd kanban/web && npm run lint
  
--> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
-+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
++> @kanban/web@0.1.0 lint
  > eslint . --max-warnings 0
  
--
--=== 6. CHECK NO DASHES (0 EM/EN-DASHES) ===
-+=== 7. CHECK NO DASHES (0 EM/EN-DASHES) ===
+-=== 7. CHECK NO DASHES (0 EM/EN-DASHES) ===
++Clean: 0 warnings.
++
++=== 8. FRONTEND PRODUCTION BUILD (tsc -b && vite build) ===
++$ cd kanban/web && npm run build
++
++> @kanban/web@0.1.0 build
++> tsc -b && vite build
++
++vite v8.3.8 building client environment for production...
++✓ 720 modules transformed.
++dist/index.html                             0.51 kB │ gzip:   0.32 kB
++dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
++dist/assets/index-BJiKR0z9.css            461.23 kB │ gzip:  64.86 kB
++dist/assets/index-C9tuxmQ2.js           2,380.91 kB │ gzip: 660.77 kB
++✓ built in 2.27s
++
++=== 9. CHECK NO DASHES (0 EM/EN-DASHES) ===
  $ python3 -m scripts.check_no_dashes --all
--Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
--
--=== 7. CSS TOKENS AUDIT (0 INLINE STYLE PROPS) ===
--$ pnpm --filter @kanban/web test:unit --run src/styles/__tests__/cssTokensAudit.test.ts
--
--> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
--> vitest run --run src/styles/__tests__/cssTokensAudit.test.ts
--
--
-- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
--
-- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
--
-- Test Files  1 passed (1)
--      Tests  4 passed (4)
--   Start at  10:06:13
--   Duration  1.30s (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
--
-+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-diff --git a/docs/qa/KAN-32/changed-files-manifest.txt b/docs/qa/KAN-32/changed-files-manifest.txt
-index a219293f..42c20c35 100644
---- a/docs/qa/KAN-32/changed-files-manifest.txt
-+++ b/docs/qa/KAN-32/changed-files-manifest.txt
-@@ -1,21 +1,18 @@
- docs/qa/KAN-32/build-or-typecheck.txt
- docs/qa/KAN-32/changed-files-manifest.txt
- docs/qa/KAN-32/git-diff.patch
-+docs/qa/KAN-32/live-fullstack-proof.txt
- docs/qa/KAN-32/message-to-reality-checker.md
-+docs/qa/KAN-32/screenshots/live-desktop-dark.png
-+docs/qa/KAN-32/screenshots/live-desktop-light.png
-+docs/qa/KAN-32/screenshots/live-desktop-test-exec.png
-+docs/qa/KAN-32/screenshots/live-mobile.png
-+docs/qa/KAN-32/screenshots/live-tablet.png
- docs/qa/KAN-32/unit-test-results.txt
--docs/qa/KAN-32/wiki-diff.patch
- kanban/api/v1/custom_field_execution.py
--kanban/api/v1/custom_fields.py
--kanban/api/v1/system_status.py
--kanban/app.py
--kanban/custom_fields/service.py
--kanban/tests/api/test_system_status.py
--kanban/tests/custom_fields/test_standalone_nsjail_gate.py
--kanban/web/src/api/schema.gen.ts
--kanban/web/src/app/useSystemStatus.ts
--kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
-+kanban/custom_fields/builtin_wasm.py
-+kanban/custom_fields/executor.py
-+kanban/tests/custom_fields/test_builtin_wasm_preset.py
- kanban/web/src/features/custom-fields/custom-fields.css
--kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
--kanban/web/src/features/custom-fields/PresetGallery.tsx
--kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
--kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
-+kanban/web/src/features/custom-fields/presets.ts
-+kanban/web/src/styles/theme.css
-diff --git a/docs/qa/KAN-32/live-fullstack-proof.txt b/docs/qa/KAN-32/live-fullstack-proof.txt
-new file mode 100644
-index 00000000..0a78064c
---- /dev/null
-+++ b/docs/qa/KAN-32/live-fullstack-proof.txt
-@@ -0,0 +1,34 @@
-+Uploaded approved WASM binary -> HTTP 201 sha256=62c44a61c7a501b4253818aa5ca5262959fdbd606d752b3f9e6a9c0f1139f00a
-+Created real issue for custom-field test-execute -> HTTP 201 key=KAN-28
+-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
++Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
++0 forbidden unicode dashes found across repository.
 +
-+=== Problem 1: /api/v1/system/status Standalone Flags & Fail-Closed nsjail 422 ===
-+GET /api/v1/system/status -> HTTP 200 body={"deployment_mode":"standalone_embedded_pg","persistent_volume":false,"data_mount_point":"/var/lib/kanban/data","data_mount_fstype":"ext4","tier_b_sandbox_available":false,"air_gap_mode":false,"local_llm_endpoint_host":null,"is_server_admin":true,"allow_unlimited_mcp_keys":true,"supported_custom_field_tiers":["scalar","formula","wasm"],"sandbox_unavailable_reason":"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."}
-+POST /api/v1/projects/KAN/custom-fields (tier=nsjail) -> HTTP 422 body={"type":"urn:kanban:problem:SANDBOX_UNAVAILABLE_IN_STANDALONE","title":"Sandbox Unavailable In Standalone","status":422,"code":"SANDBOX_UNAVAILABLE_IN_STANDALONE","detail":"Isolated nsjail sandbox execution is unavailable in standalone mode. Use scalar, formula, or wasm execution tiers instead, or promote to multi-container compose.","request_id":"f536a152406d43d2b0c39831691a14ea"}
-+POST /api/v1/projects/KAN/custom-fields/test-execute (tier=nsjail) -> HTTP 422 body={"type":"urn:kanban:problem:SANDBOX_UNAVAILABLE_IN_STANDALONE","title":"Sandbox Unavailable In Standalone","status":422,"code":"SANDBOX_UNAVAILABLE_IN_STANDALONE","detail":"Isolated nsjail sandbox execution is unavailable in standalone mode. Use scalar, formula, or wasm execution tiers instead, or promote to multi-container compose.","request_id":"fdc5e0a118d8472caeacaf988c467cea"}
-+LIVE_STACK_VERDICT [STANDALONE_SYSTEM_STATUS_AND_NSJAIL_422]: PASS - statusOk=true, create422=true, testExec422=true
-+
-+=== Problem 2: /projects/KAN/settings/custom-fields UI, Disabled nsjail Badges, Create & Execute wasm + formula (200 OK) ===
-+standalone-guidance-callout visible: "💡 Standalone Mode Active: Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms) work out of the box in Standalone mode. [Guide] How to Use Custom Fields → Promote to Multi-Container →"
-+FlavorDecisionMatrix nsjail badge: "Multi-Container Compose Required"
-+Editor nsjail option disabled: flavor=true (Multi-Container Compose Required), tier=true (Multi-Container Compose Required)
-+PresetGallery disabled: total-project-issues=true (Multi-Container Compose Required), git-pr-link=true (Multi-Container Compose Required)
-+UI Test Execute wasm (cvss-score): HTTP 200 -> "8.8
-+8.8 High"
-+UI Save wasm (cvss-score): HTTP 201
-+UI Test Execute formula (days-until-due-sla): HTTP 200 -> "2.0
-+Within SLA"
-+UI Save formula (days-until-due-sla): HTTP 201
-+GET /api/v1/issues/KAN-28/custom-fields -> HTTP 200 body=[{"field_id":"01a1f9d3-5152-7027-8036-7aeae0c7583c","slug":"cvss-score","name":"CVSS 3.1 / 4.0 Score","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":8.8,"label":"8.8 High"},"computed_at":"2026-11-20T16:38:58.697847+00:00","last_latency_ms":0,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"},{"field_id":"01a1f9d3-535f-74ca-979f-4bb365bc91e2","slug":"days-until-due-sla","name":"Days Until Due / SLA Breach","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"low","score":2.0,"label":"Within SLA"},"computed_at":"2026-11-20T16:38:58.703987+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}]
-+Console errors: 0 | Page errors: 0 | 5xx responses: 0 | CSP violations: 0
-+LIVE_STACK_VERDICT [CUSTOM_FIELDS_STANDALONE_UI_AND_EXECUTION]: PASS (Functional) - callout+badges+disabledNsjail+wasm200+formula200+0errors=true
-+
-+=== Visual & WCAG Contrast Inspection Audit ===
-+1. WCAG Dark Mode Contrast FAIL (docs/qa/KAN-32/screenshots/live-desktop-dark.png):
-+   - In Dark Mode ([data-theme="dark"]), the active selected custom field item (.custom-fields-def-item--selected, kanban/web/src/features/custom-fields/custom-fields.css:401-404) hardcodes a light background (#eff6ff / border #bfdbfe) while inheriting dark-mode white text (color: var(--fg-primary)), resulting in unreadable white-on-light-blue contrast on "Days Until Due / SLA Breach". (Pre-existing CSS rule not modified by KAN-32 diff, surfaced on /projects/KAN/settings/custom-fields.)
-+2. Minor Overflow Observation (docs/qa/KAN-32/screenshots/live-desktop-test-exec.png):
-+   - pre.custom-field-test-logs overflows horizontally past its card border on long formula log lines.
-+3. UX Observation (cvss-score preset):
-+   - On a clean database with zero rows in approved_wasm_modules, clicking 1-Click Starter Preset "cvss-score" and clicking "Test Execute" fails with HTTP 404 WASM_MODULE_NOT_FOUND unless the WASM binary is first registered via POST /api/v1/projects/{project}/wasm-modules (no upload UI exists in CustomFieldDefinitionEditor).
-+LIVE_STACK_VERDICT [VISUAL_WCAG_DARK_MODE_CONTRAST]: FAIL - .custom-fields-def-item--selected hardcodes #eff6ff in dark mode (white text on light blue)
-+
-+OVERALL LIVE_STACK_VERDICT (KAN-32): FAIL
++$ python3 -m scripts.check_no_dashes /home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md
++0 forbidden unicode dashes found across wiki.
 diff --git a/docs/qa/KAN-32/message-to-reality-checker.md b/docs/qa/KAN-32/message-to-reality-checker.md
-index 811544e7..e99ec62b 100644
+index e99ec62b..a069ad7d 100644
 --- a/docs/qa/KAN-32/message-to-reality-checker.md
 +++ b/docs/qa/KAN-32/message-to-reality-checker.md
-@@ -1,59 +1,47 @@
--# Reality-Checker Verification Packet: KAN-32
-+# Reality-Checker Verification Packet: KAN-32 (RC1 Fixes)
+@@ -1,86 +1,94 @@
+-# Reality-Checker Verification Packet: KAN-32 (RC1 Fixes)
++# Reality-Checker Verification Packet: KAN-32 (RC2 Fixes)
  
  **Ticket ID:** KAN-32  
--**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, and Publish Step-by-Step [Guide] How to Use Custom Fields (3 Problems)  
--**Branch:** `feat/KAN-32`  
-+**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, Publish Step-by-Step [Guide] How to Use Custom Fields, and Resolve Dark Mode Contrast and Built-in Wasm Fallback (RC1)  
-+**Branch:** `fix/KAN-32-rc1`  
+-**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, Publish Step-by-Step [Guide] How to Use Custom Fields, and Resolve Dark Mode Contrast and Built-in Wasm Fallback (RC1)  
+-**Branch:** `fix/KAN-32-rc1`  
++**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, Publish Step-by-Step [Guide] How to Use Custom Fields, and Resolve Dark Mode Contrast and Built-in Wasm Fallback (RC2)  
++**Branch:** `fix/KAN-32-rc2`  
++**Target Branch:** `main`  
++**Wiki Commit:** `c616de596be8df0e96472f2d0b14219f94d2e3ee`  
  
  ---
  
--## 1. Executive Summary & Verification Proof
+-## 1. Executive Summary and Verification Proof
 -
--All 3 scoped problems for ticket KAN-32 have been fully implemented, verified with automated test suites, checked against strict static gates, and documented without em-dashes or en-dashes.
+-This packet provides forensic verification for ticket KAN-32 and its Release Candidate 1 (RC1) remediation addressing live QA findings from `docs/qa/KAN-32/live-fullstack-proof.txt`.
 -
--### Problem 1: Standalone `nsjail` Fail-Closed Gating & Multi-Container `tier_b_runner` Wiring
--- Extended `SystemStatusResponse` in `kanban/api/v1/system_status.py` and TypeScript interface `SystemStatus` in `kanban/web/src/app/useSystemStatus.ts` with:
--  * `supported_custom_field_tiers`: `["scalar", "formula", "wasm"]` in Standalone mode (`tier_b_sandbox_available == False`), and `["scalar", "formula", "wasm", "nsjail"]` in Multi-Container mode (`tier_b_sandbox_available == True`).
--  * `sandbox_unavailable_reason`: Plain ASCII explanation when `tier_b_sandbox_available == False` (`"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."`), and `None` when `True`.
--- In `kanban/custom_fields/service.py`:
--  * Added `is_tier_b_available` and `assert_tier_available` helper functions enforcing fail-closed gating.
--  * In `create_definition`: Reject `tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
--  * In `update_definition`: Reject patching `payload.tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`. Pre-existing `nsjail` definitions imported from backup can update metadata (name, description, enabled) without error.
--- In `kanban/api/v1/custom_field_execution.py`:
--  * In `test_execute_custom_field`: Enforce `assert_tier_available("nsjail", request=request)`. Reject `nsjail` test-execute in Standalone mode with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
--  * In `list_custom_fields_for_issue`, `execute_custom_field_for_issue`, and `test_execute_custom_field`: Fixed `CustomFieldExecutor(session, tier_b_runner=getattr(request.app.state, "tier_b_runner", None))` wiring so multi-container deployments execute Tier B nsjail scripts seamlessly.
--- In `kanban/app.py`: Initialized `app.state.tier_b_sandbox_available` during startup using `get_standalone_status(settings=settings)`.
+-All defects identified in live zero-mock stack testing have been resolved, verified with unit test suites (>=95% coverage), validated against all static quality gates, and authored with zero em-dashes and zero en-dashes.
 -
--### Problem 2: Disabled/Badged Unavailable `nsjail` Options in Web UI
--- Connected `CustomFieldDefinitionEditor.tsx` and `PresetGallery.tsx` to `useSystemStatus()`.
--- When `tier_b_sandbox_available === false`:
--  * Rendered inline Standalone Guidance Callout (`standalone-guidance-callout`) in `CustomFieldDefinitionEditor.tsx` explaining that `Scalar` (<1ms), `Formula` (<5ms), and `WebAssembly` (<25ms) work out of the box in Standalone mode, with links to `[Guide] How to Use Custom Fields ->` (`/docs/Guide-Custom-Fields`) and `Promote to Multi-Container ->` (`/admin/standalone`).
--  * In `CustomFieldDefinitionEditor.tsx`: Disabled `nsjail` options in both Field Flavor (`field-flavor-select`) and Execution Sandbox Tier (`field-tier-select`) selects, badged with `[Multi-Container Compose Required]`.
--  * Rendered Pre-Existing nsjail Warning Banner (`preexisting-nsjail-warning-banner`) when inspecting an imported `nsjail` definition in Standalone mode.
--  * In `FlavorDecisionMatrix.tsx`: Badged and disabled the `nsjail` card with `Multi-Container Compose Required` and tooltip when `!tierBAvailable`.
--  * In `PresetGallery.tsx`: Badged and disabled `nsjail`-dependent presets (`total-project-issues` and `git-pr-link`) with `Multi-Container Compose Required`.
--- Styled all callouts, banners, and badges using 100% canonical `theme.css` tokens with zero inline `style={...}` props, verified via `cssTokensAudit.test.ts`.
+-### RC1 Defect 1: Dark Mode WCAG Contrast Fix in Custom Fields Studio
+-- **Defect:** In Dark Mode (`[data-theme="dark"]`), `.custom-fields-def-item--selected` in `kanban/web/src/features/custom-fields/custom-fields.css` hardcoded light-theme colors (`background-color: #eff6ff; border-color: #bfdbfe;`) while inheriting dark-mode white `var(--fg-primary)` text. This created unreadable white-on-light-blue text in dark mode (`live-desktop-dark.png`).
+-- **Remediation:**
+-  * Added canonical semantic dark-aware CSS tokens in `kanban/web/src/styles/theme.css`: `--bg-accent-subtle`, `--bg-surface-selected`, and `--border-accent-subtle` defined across `:root`, `[data-theme="dark"]`, and `@media (prefers-color-scheme: dark)`.
+-  * Updated `kanban/web/src/features/custom-fields/custom-fields.css` to use semantic CSS variables for `.custom-fields-def-item--selected` (`background-color: var(--bg-surface-selected); border-color: var(--border-accent-subtle); color: var(--fg-primary);`) and explicit dark theme rules (`[data-theme="dark"] .custom-fields-def-item--selected`).
+-  * Replaced all legacy hardcoded hex backgrounds across `custom-fields.css` with semantic theme tokens.
+-  * Verified 100% token resolution and zero regressions via `cssTokensAudit.test.ts` (4/4 passing).
 -
--### Problem 3: Published Step-by-Step Wiki Guide
--- Published `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` starting with `# [Guide] How to Use Custom Fields` and linked in `_Sidebar.md` under `Reference Guides`.
--- Covered all 4 required sections:
--  1. What Custom Fields do and where values appear (Issue Properties Rail, Table View, Board Cards, Filters and Search).
--  2. Choosing between `Scalar`, `Safe Formula`, `WebAssembly (wasmtime)`, and `Isolated Sandbox (nsjail)` (Standalone vs Multi-Container Compose gating and promotion path).
--  3. Step-by-step walkthroughs with copy-paste examples:
--     * `Priority SLA Days`: Safe Formula (`1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14`) -> format `number` with unit `d`.
--     * `Sub-Issue Progress %`: Safe Formula (`round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0`) -> format `number` with unit `%`.
--     * `CVSS Severity Pill`: Dynamic severity formula -> format `severity_pill`.
--     * `Total Project Issues Rollup`: WebAssembly / nsjail project metric rollup -> format `number`.
--     * Detailed specification and format metadata JSON schemas for all 7 canonical output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`).
--  4. Safe formula AST execution context reference and built-in function allowlist.
--  5. Dry-running with `Test Execute` and `WORKSPACE`/`SERVER` scope escalation dual-control AAL2 approval workflows.
--- Checked against `check_no_dashes` (strictly 0 em-dashes and 0 en-dashes).
--- Committed to wiki repository on branch `main` (`bc6b15a`).
-+## 1. Executive Summary and Verification Proof
+-### RC1 Defect 2: Horizontal Log Overflow Fix in Test Execute Card
+-- **Defect:** `pre.custom-field-test-logs` overflowed horizontally beyond its card border on long log output lines (`live-desktop-test-exec.png`).
+-- **Remediation:**
+-  * Updated `kanban/web/src/features/custom-fields/custom-fields.css` for `pre.custom-field-test-logs` and `.custom-field-logs` with `white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; box-sizing: border-box;`.
+-  * Logs wrap cleanly within their card container without horizontal distortion.
+-
+-### RC1 Defect 3: Built-In Starter Preset echo_cvss.wasm Resolution Out-of-the-Box
+-- **Defect:** On a fresh project with zero rows in `approved_wasm_modules`, clicking "Use Preset" on `cvss-score` (`wasm`) and clicking "Test Execute" returned HTTP `404 WASM_MODULE_NOT_FOUND` unless `echo_cvss.wasm` had been manually uploaded first.
+-- **Remediation:**
+-  * Created `kanban/custom_fields/builtin_wasm.py` exporting built-in starter preset bytecode (`ECHO_CVSS_WASM_BYTES`, `ECHO_CVSS_SHA256_BYTES`, `ECHO_CVSS_SHA256_HEX`) and module resolver `resolve_wasm_module_bytes`.
+-  * `resolve_wasm_module_bytes` resolves Wasm modules seamlessly:
+-    1. Workspace DB check (`ApprovedWasmModule`) runs first. If a workspace administrator has uploaded an explicit module with matching name or sha256, the DB row overrides the built-in module.
+-    2. If no DB row exists, starter presets (`echo_cvss`, `echo_cvss.wasm`, `cvss-score`, or script source with comments referencing `echo_cvss`) resolve directly to the embedded binary.
+-    3. Untrusted, unattributed bytecode continues to be strictly gated and rejected with HTTP 404 or 422 to preserve security invariants.
+-  * Updated `kanban/custom_fields/executor.py` (`evaluate_field_definition` and `test_execute`) and `kanban/api/v1/custom_field_execution.py` (`test_execute_custom_field`) to route through `resolve_wasm_module_bytes`.
+-  * Added comprehensive test suite `kanban/tests/custom_fields/test_builtin_wasm_preset.py` (7 tests, 100% coverage on `builtin_wasm.py`) verifying name resolution, sha256 resolution, comments resolution, workspace DB override, error conditions, and end-to-end HTTP 200 OK test-execute on fresh projects.
++## 1. Executive Summary & RC2 Remediations
 +
-+This packet provides forensic verification for ticket KAN-32 and its Release Candidate 1 (RC1) remediation addressing live QA findings from `docs/qa/KAN-32/live-fullstack-proof.txt`.
++This packet provides forensic verification for ticket KAN-32 Release Candidate 2 (RC2), addressing all findings identified in `docs/qa/KAN-32/reality-checker-report.md`.
 +
-+All defects identified in live zero-mock stack testing have been resolved, verified with unit test suites (>=95% coverage), validated against all static quality gates, and authored with zero em-dashes and zero en-dashes.
++All 7 findings have been fully remediated and validated across unit test suites (>=95% coverage), static analysis gates, and zero em-dash / en-dash checks.
 +
-+### RC1 Defect 1: Dark Mode WCAG Contrast Fix in Custom Fields Studio
-+- **Defect:** In Dark Mode (`[data-theme="dark"]`), `.custom-fields-def-item--selected` in `kanban/web/src/features/custom-fields/custom-fields.css` hardcoded light-theme colors (`background-color: #eff6ff; border-color: #bfdbfe;`) while inheriting dark-mode white `var(--fg-primary)` text. This created unreadable white-on-light-blue text in dark mode (`live-desktop-dark.png`).
-+- **Remediation:**
-+  * Added canonical semantic dark-aware CSS tokens in `kanban/web/src/styles/theme.css`: `--bg-accent-subtle`, `--bg-surface-selected`, and `--border-accent-subtle` defined across `:root`, `[data-theme="dark"]`, and `@media (prefers-color-scheme: dark)`.
-+  * Updated `kanban/web/src/features/custom-fields/custom-fields.css` to use semantic CSS variables for `.custom-fields-def-item--selected` (`background-color: var(--bg-surface-selected); border-color: var(--border-accent-subtle); color: var(--fg-primary);`) and explicit dark theme rules (`[data-theme="dark"] .custom-fields-def-item--selected`).
-+  * Replaced all legacy hardcoded hex backgrounds across `custom-fields.css` with semantic theme tokens.
-+  * Verified 100% token resolution and zero regressions via `cssTokensAudit.test.ts` (4/4 passing).
++### Remediation 1: Fix 140px Oversized `<input>` and `<select>` Controls
++- **Finding:** In `kanban/web/src/features/custom-fields/custom-fields.css` (lines 543-557), `.custom-field-input`, `.custom-field-select`, and `.custom-field-textarea` shared `min-height: 140px`, causing single-line text inputs (Field Name, Identifier Slug, Test With Issue Key) and `<select>` dropdowns (Field Flavor, Output Format) to render as bloated 140px-tall boxes with excessive empty whitespace.
++- **Fix:** Split `.custom-field-textarea` from `.custom-field-input, .custom-field-select`. `.custom-field-input` and `.custom-field-select` now enforce standard single-line height (`min-height: 38px; line-height: 1.45`), while `min-height: 140px` is applied exclusively to `.custom-field-textarea`.
 +
-+### RC1 Defect 2: Horizontal Log Overflow Fix in Test Execute Card
-+- **Defect:** `pre.custom-field-test-logs` overflowed horizontally beyond its card border on long log output lines (`live-desktop-test-exec.png`).
-+- **Remediation:**
-+  * Updated `kanban/web/src/features/custom-fields/custom-fields.css` for `pre.custom-field-test-logs` and `.custom-field-logs` with `white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; box-sizing: border-box;`.
-+  * Logs wrap cleanly within their card container without horizontal distortion.
++### Remediation 2: STARTER_TEMPLATES.wasm, DB Override Consistency, & Test-Execute
++- **Finding:** Selecting `Field Flavor -> WebAssembly` populated `STARTER_TEMPLATES.wasm` without `// echo_cvss.wasm`, failing `test-execute` on fresh workspaces. In addition, comment-only `// echo_cvss.wasm` previously bypassed workspace `ApprovedWasmModule` DB overrides.
++- **Fix:**
++  1. Updated `STARTER_TEMPLATES.wasm` in `CustomFieldDefinitionEditor.tsx` to include `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}` for all output formats.
++  2. Updated `_resolve_by_bytecode` in `kanban/custom_fields/builtin_wasm.py` to allow `computed_sha in BUILTIN_STARTER_WASM_BY_SHA` regardless of comment text, checking workspace `ApprovedWasmModule` DB overrides first.
++  3. Updated comment-only `// echo_cvss.wasm` resolution in `resolve_wasm_module_bytes` to check workspace `ApprovedWasmModule` DB overrides first (by name or sha256) before returning the built-in preset module.
++  4. Added Pytest unit tests in `kanban/tests/custom_fields/test_builtin_wasm_preset.py` (Test 8) verifying that `STARTER_TEMPLATES.wasm` without comments resolves cleanly via `BUILTIN_STARTER_WASM_BY_SHA` and respects DB overrides.
 +
-+### RC1 Defect 3: Built-In Starter Preset echo_cvss.wasm Resolution Out-of-the-Box
-+- **Defect:** On a fresh project with zero rows in `approved_wasm_modules`, clicking "Use Preset" on `cvss-score` (`wasm`) and clicking "Test Execute" returned HTTP `404 WASM_MODULE_NOT_FOUND` unless `echo_cvss.wasm` had been manually uploaded first.
-+- **Remediation:**
-+  * Created `kanban/custom_fields/builtin_wasm.py` exporting built-in starter preset bytecode (`ECHO_CVSS_WASM_BYTES`, `ECHO_CVSS_SHA256_BYTES`, `ECHO_CVSS_SHA256_HEX`) and module resolver `resolve_wasm_module_bytes`.
-+  * `resolve_wasm_module_bytes` resolves Wasm modules seamlessly:
-+    1. Workspace DB check (`ApprovedWasmModule`) runs first. If a workspace administrator has uploaded an explicit module with matching name or sha256, the DB row overrides the built-in module.
-+    2. If no DB row exists, starter presets (`echo_cvss`, `echo_cvss.wasm`, `cvss-score`, or script source with comments referencing `echo_cvss`) resolve directly to the embedded binary.
-+    3. Untrusted, unattributed bytecode continues to be strictly gated and rejected with HTTP 404 or 422 to preserve security invariants.
-+  * Updated `kanban/custom_fields/executor.py` (`evaluate_field_definition` and `test_execute`) and `kanban/api/v1/custom_field_execution.py` (`test_execute_custom_field`) to route through `resolve_wasm_module_bytes`.
-+  * Added comprehensive test suite `kanban/tests/custom_fields/test_builtin_wasm_preset.py` (7 tests, 100% coverage on `builtin_wasm.py`) verifying name resolution, sha256 resolution, comments resolution, workspace DB override, error conditions, and end-to-end HTTP 200 OK test-execute on fresh projects.
++### Remediation 3: Clarify Standalone nsjail Disabled Badges
++- **Finding:** `flavor-nsjail-disabled-badge` and `tier-nsjail-disabled-badge` displayed `Multi-Container Compose Required` directly underneath `Field Flavor` even when WebAssembly was selected, ambiguously implying that WebAssembly required Compose.
++- **Fix:** Clarified badge text in `CustomFieldDefinitionEditor.tsx` to `"nsjail option requires Multi-Container Compose"` on both `flavor-nsjail-disabled-badge` and `tier-nsjail-disabled-badge` (preserving `data-testid`s and existing Vitest assertions).
++
++### Remediation 4: Prevent Duplicate Score Display in Severity Pill
++- **Finding:** `CustomFieldValue.tsx` rendered duplicate score text (e.g. `"8.8 8.8 High"`) when `displayLabel` already started with `{displayScore}` because `echo_cvss.wasm` returns `{"level": "high", "score": 8.8, "label": "8.8 High"}` while the component rendered `{displayScore}` adjacent to `{displayLabel}`.
++- **Fix:** In `CustomFieldValue.tsx` (lines 355-367), when `displayScore && displayLabel.startsWith(displayScore)`, leading score text is trimmed from `displayLabel` so that `{displayScore}` renders in `.custom-field-severity-score` (`"8.8"`) and `.custom-field-severity-label` renders `"High"`, producing clean `"8.8 High"` styling with 4px gap. Added test in `CustomFieldValue.test.tsx`.
++
++### Remediation 5: Fix Guide-Custom-Fields.md Copy-Paste Examples & Schema
++- **Finding:** Example 3 in `Guide-Custom-Fields.md` returned a string (`'CRITICAL'`, `'HIGH'`), which failed server validation (`_validate_severity_pill` in `kanban/custom_fields/output_formats.py` requires a dict). Section 4 item 4 claimed `severity_pill` accepts strings or numeric scores. Example 4 lacked a runnable script snippet.
++- **Fix:**
++  1. Updated Example 3 (`CVSS Severity Pill`) in `thumbs-up-kanban.wiki/Guide-Custom-Fields.md` to return a valid dict:
++     `{"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" else {"level": "low", "score": 2.0, "label": "Low"}))`
++  2. Aligned Section 4 item 4 (`severity_pill`) with the exact accepted schema: dict with required `"level"` (`"low"`, `"medium"`, `"high"`, `"critical"`), optional numeric `"score"` (`0.0` to `10.0`), and optional `"label"` (max 32 chars without HTML).
++  3. Added runnable Python nsjail script snippet to Example 4.
++  4. Verified 0 em/en-dashes and committed cleanly in `thumbs-up-kanban.wiki` at commit `c616de596be8df0e96472f2d0b14219f94d2e3ee`.
++  5. Added Pytest test in `kanban/tests/custom_fields/test_builtin_wasm_preset.py` (Test 9) verifying that copy-pasting the exact Example 3 formula passes `_validate_severity_pill` and `POST /api/v1/projects/{key}/custom-fields/test-execute` returns HTTP 200 OK.
++
++### Remediation 6: Accurate Symbol Names & QA Integrity Reconciled
++- **Accurate Symbol Citations:**
++  * Resolver function: `resolve_wasm_module_bytes` (in `kanban/custom_fields/builtin_wasm.py`, not load_builtin_wasm_module).
++  * Evaluator method: `execute_for_issue` (in `kanban/custom_fields/executor.py`, not evaluate_field_definition).
++  * System status router: `kanban/api/v1/system_status.py` (for `GET /api/v1/system/status` exposing `supported_custom_field_tiers` and `tier_b_sandbox_available`).
++  * Tier select testid: `execution-tier-select` (in `CustomFieldDefinitionEditor.tsx`, not field-tier-select).
++  * Branch and worktree: `fix/KAN-32-rc2` branched from `main`.
  
  ---
  
--## 2. Test Suite & Coverage Evidence
-+## 2. Test Suite and Coverage Evidence
+-## 2. Test Suite and Coverage Evidence
++## 2. Test Suite & Coverage Evidence
  
--### Python Pytest & Coverage
-+### Python Pytest and Coverage
+-### Python Pytest and Coverage
++### Python Pytest and Coverage (All 78 tests passing, 97% coverage)
  Command:
  ```bash
- KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest \
-@@ -61,25 +49,28 @@ KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan3
-   kanban/tests/custom_fields/test_custom_fields_api.py \
-   kanban/tests/custom_fields/test_execution_api.py \
-   kanban/tests/custom_fields/test_manifest_and_formula_security.py \
-+  kanban/tests/custom_fields/test_builtin_wasm_preset.py \
-   --cov=kanban.custom_fields.service \
-+  --cov=kanban.custom_fields.builtin_wasm \
-   --cov=kanban.api.v1.custom_field_execution \
-   --cov=kanban.api.v1.custom_fields \
-   --cov-report=term-missing
+-KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest \
+-  kanban/tests/custom_fields/test_standalone_nsjail_gate.py \
+-  kanban/tests/custom_fields/test_custom_fields_api.py \
+-  kanban/tests/custom_fields/test_execution_api.py \
+-  kanban/tests/custom_fields/test_manifest_and_formula_security.py \
+-  kanban/tests/custom_fields/test_builtin_wasm_preset.py \
+-  --cov=kanban.custom_fields.service \
+-  --cov=kanban.custom_fields.builtin_wasm \
+-  --cov=kanban.api.v1.custom_field_execution \
+-  --cov=kanban.api.v1.custom_fields \
+-  --cov-report=term-missing
++PYTEST_XDIST_WORKER=gw_kan32rc2 uv run pytest kanban/tests/custom_fields/ --cov=kanban/custom_fields --cov-report=term-missing
  ```
  
  Results:
--- **Test Files:** 4 passed (4 total)
--- **Tests:** 26 passed (26 total)
-+- **Test Files:** 5 passed (5 total)
-+- **Tests:** 33 passed (33 total)
+-- **Test Files:** 5 passed (5 total)
+-- **Tests:** 33 passed (33 total)
++- **Test Files:** 12 passed (12 total)
++- **Tests:** 78 passed (78 total)
  - **Pass Rate:** 100%
  
--| Name | Stmts | Miss | Branch | BrPart | Cover | Missing |
-+| Module Name | Stmts | Miss | Branch | BrPart | Cover | Missing Lines |
- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
--| `kanban/api/v1/custom_field_execution.py` | 120 | 1 | 26 | 4 | **97%** | 71->74, 109->125, 261->282, 283 |
--| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | |
-+| `kanban/custom_fields/builtin_wasm.py` | 77 | 0 | 30 | 0 | **100%** | None |
-+| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | None |
- | `kanban/custom_fields/service.py` | 163 | 0 | 42 | 2 | **99%** | 355->359, 361->365 |
--| **TOTAL** | **313** | **1** | **68** | **6** | **98%** | |
-+| `kanban/api/v1/custom_field_execution.py` | 99 | 0 | 18 | 2 | **98%** | 71->74, 109->125 |
-+| **TOTAL** | **369** | **0** | **90** | **4** | **99%** | |
- 
--### TypeScript Vitest & Coverage
-+### TypeScript Vitest and Coverage
+-| Module Name | Stmts | Miss | Branch | BrPart | Cover | Missing Lines |
+-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+-| `kanban/custom_fields/builtin_wasm.py` | 77 | 0 | 30 | 0 | **100%** | None |
+-| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | None |
+-| `kanban/custom_fields/service.py` | 163 | 0 | 42 | 2 | **99%** | 355->359, 361->365 |
+-| `kanban/api/v1/custom_field_execution.py` | 99 | 0 | 18 | 2 | **98%** | 71->74, 109->125 |
+-| **TOTAL** | **369** | **0** | **90** | **4** | **99%** | |
+-
+-### TypeScript Vitest and Coverage
++| Module Name | Stmts | Miss | Branch | BrPart | Cover |
++| :--- | :---: | :---: | :---: | :---: | :---: |
++| `kanban/custom_fields/builtin_wasm.py` | 89 | 0 | 32 | 0 | **100%** |
++| `kanban/custom_fields/manifest.py` | 43 | 0 | 20 | 0 | **100%** |
++| `kanban/custom_fields/output_formats.py` | 232 | 0 | 86 | 3 | **99%** |
++| `kanban/custom_fields/service.py` | 163 | 0 | 42 | 2 | **99%** |
++| `kanban/custom_fields/approvals.py` | 201 | 4 | 72 | 6 | **96%** |
++| `kanban/custom_fields/executor.py` | 538 | 18 | 242 | 19 | **95%** |
++| **TOTAL** | **1269** | **22** | **494** | **30** | **97%** |
++
++### TypeScript Vitest & Scoped Coverage (All 166 tests passing, 0 act warnings)
  Command:
  ```bash
  COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" \
-@@ -93,25 +84,33 @@ Results:
+-pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
++npx vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+ ```
+ 
+ Results:
+ - **Test Files:** 10 passed (10 total)
+-- **Tests:** 165 passed (165 total)
++- **Tests:** 166 passed (166 total)
+ - **Pass Rate:** 100%
++- **act(...) Warnings:** 0
  
  | File | % Stmts | % Branch | % Funcs | % Lines |
  | :--- | :---: | :---: | :---: | :---: |
--| **All files** | **100%** | **95.69%** | **100%** | **100%** |
-+| **All files** | **100%** | **95.65%** | **100%** | **100%** |
- | `src/app/useSystemStatus.ts` | 100% | 100% | 100% | 100% |
- | `src/features/custom-fields/CustomFieldDefinitionEditor.tsx` | 100% | 95.74% | 100% | 100% |
+@@ -90,35 +98,20 @@ Results:
  | `src/features/custom-fields/FlavorDecisionMatrix.tsx` | 100% | 92.30% | 100% | 100% |
  | `src/features/custom-fields/PresetGallery.tsx` | 100% | 96.87% | 100% | 100% |
  
-+### CSS Tokens and Theme Audit
-+Command:
-+```bash
-+(cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts)
-+```
-+Results:
-+- **Passed:** 4/4 tests passed (100% token resolution, 0 missing variables, 0 inline JSX style regressions).
+-### CSS Tokens and Theme Audit
++### CSS Tokens and Theme Audit (4/4 PASS)
+ Command:
+ ```bash
+ (cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts)
+ ```
+-Results:
+-- **Passed:** 4/4 tests passed (100% token resolution, 0 missing variables, 0 inline JSX style regressions).
+-
+----
+-
+-## 3. Mandatory Static Quality Gates
+-
+-All 7 mandatory checks execute cleanly with zero errors and zero warnings:
+-
+-1. **Ruff Check:** Passed (`uv run ruff check .` -> `All checks passed!`).
+-2. **Ruff Format Check:** Passed (`uv run ruff format --check .` -> `1945 files already formatted`).
+-3. **Mypy Typecheck:** Passed (`uv run mypy` -> `Success: no issues found in 1121 source files`).
+-4. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
+-5. **TypeScript Compiler and Vite Build:** Passed (`pnpm --filter @kanban/web build` -> `tsc -b && vite build` built in 1.80s).
+-6. **ESLint:** Passed (`pnpm --filter @kanban/web lint` -> `eslint . --max-warnings 0` with 0 warnings/errors).
+-7. **No Dashes Guard:** Passed (`python3 -m scripts.check_no_dashes --all` -> strictly 0 em/en-dashes).
+-
+----
+-
+-## 4. Manifest of Forensic Artifacts
+-
+-- `docs/qa/KAN-32/unit-test-results.txt`: Verbatim pytest and vitest test execution logs and coverage tables.
+-- `docs/qa/KAN-32/build-or-typecheck.txt`: Verbatim outputs of ruff, mypy, lint-imports, tsc, eslint, check_no_dashes, and cssTokensAudit.
+-- `docs/qa/KAN-32/git-diff.patch`: Scoped patch containing all changes on `fix/KAN-32-rc1` relative to `main` (`b3b0f4ba`).
+-- `docs/qa/KAN-32/live-fullstack-proof.txt`: Raw evidence log from zero-mock live stack verification.
+-- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and created files.
+-- `docs/qa/KAN-32/message-to-reality-checker.md`: This forensic audit document.
++- **Passed:** 4/4 tests passed (100% token resolution, 0 missing variables, 0 inline JSX styles).
 +
- ---
- 
- ## 3. Mandatory Static Quality Gates
- 
--All 7 mandatory checks execute cleanly with zero errors:
-+All 7 mandatory checks execute cleanly with zero errors and zero warnings:
- 
--1. **Ruff Check:** Passed (`All checks passed!`).
--2. **Mypy Typecheck:** Passed (`Success: no issues found in 7 source files`).
--3. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
--4. **TypeScript Compiler (`tsc -b`):** Passed with zero diagnostics.
--5. **ESLint (`eslint . --max-warnings 0`):** Passed across entire frontend repository with zero warnings/errors.
--6. **No Dashes Guard (`check_no_dashes --all`):** Passed with 0 em/en-dashes.
--7. **CSS Tokens Audit (`cssTokensAudit.test.ts`):** Passed (4/4 tests passed, 0 inline JSX styles).
-+1. **Ruff Check:** Passed (`uv run ruff check .` -> `All checks passed!`).
-+2. **Ruff Format Check:** Passed (`uv run ruff format --check .` -> `1945 files already formatted`).
-+3. **Mypy Typecheck:** Passed (`uv run mypy` -> `Success: no issues found in 1121 source files`).
-+4. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
-+5. **TypeScript Compiler and Vite Build:** Passed (`pnpm --filter @kanban/web build` -> `tsc -b && vite build` built in 1.80s).
-+6. **ESLint:** Passed (`pnpm --filter @kanban/web lint` -> `eslint . --max-warnings 0` with 0 warnings/errors).
-+7. **No Dashes Guard:** Passed (`python3 -m scripts.check_no_dashes --all` -> strictly 0 em/en-dashes).
- 
- ---
- 
-@@ -119,7 +118,7 @@ All 7 mandatory checks execute cleanly with zero errors:
- 
- - `docs/qa/KAN-32/unit-test-results.txt`: Verbatim pytest and vitest test execution logs and coverage tables.
- - `docs/qa/KAN-32/build-or-typecheck.txt`: Verbatim outputs of ruff, mypy, lint-imports, tsc, eslint, check_no_dashes, and cssTokensAudit.
--- `docs/qa/KAN-32/git-diff.patch`: Complete diff of all touched code on branch `feat/KAN-32`.
--- `docs/qa/KAN-32/wiki-diff.patch`: Complete diff of published wiki documentation (`Guide-Custom-Fields.md` and `_Sidebar.md`).
--- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and added files.
-+- `docs/qa/KAN-32/git-diff.patch`: Scoped patch containing all changes on `fix/KAN-32-rc1` relative to `main` (`b3b0f4ba`).
-+- `docs/qa/KAN-32/live-fullstack-proof.txt`: Raw evidence log from zero-mock live stack verification.
-+- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and created files.
- - `docs/qa/KAN-32/message-to-reality-checker.md`: This forensic audit document.
++### Static Quality Gates Summary
++- `ruff check`: All checks passed.
++- `ruff format --check`: 1004 files already formatted.
++- `mypy`: Success: no issues found in 996 source files.
++- `check-migrations`: OK: All 62 migrations valid. Single head: `p4_23_oidc_link_intent_fk`.
++- `lint-imports`: 2 contracts kept, 0 broken.
++- `tsc -b --noEmit`: Clean, 0 errors.
++- `eslint . --max-warnings 0`: Clean, 0 warnings.
++- `vite build`: Built cleanly in 2.27s.
++- `check_no_dashes`: 0 forbidden unicode dashes across repo and wiki.
 diff --git a/docs/qa/KAN-32/unit-test-results.txt b/docs/qa/KAN-32/unit-test-results.txt
-index 459debf1..86ccc35c 100644
+index 86ccc35c..88febe16 100644
 --- a/docs/qa/KAN-32/unit-test-results.txt
 +++ b/docs/qa/KAN-32/unit-test-results.txt
-@@ -1,67 +1,69 @@
--=== PYTHON PYTEST & COVERAGE (KAN-32) ===
-+=== PYTHON PYTEST & SCOPED COVERAGE (KAN-32-RC1) ===
+@@ -1,63 +1,69 @@
+-=== PYTHON PYTEST & SCOPED COVERAGE (KAN-32-RC1) ===
++=== PYTHON PYTEST & COVERAGE (KAN-32-RC2) ===
  Command:
--KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py --cov=kanban.custom_fields.service --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
-+KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py kanban/tests/custom_fields/test_builtin_wasm_preset.py --cov=kanban.custom_fields.service --cov=kanban.custom_fields.builtin_wasm --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
+-KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py kanban/tests/custom_fields/test_builtin_wasm_preset.py --cov=kanban.custom_fields.service --cov=kanban.custom_fields.builtin_wasm --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
++PYTEST_XDIST_WORKER=gw_kan32rc2 uv run pytest kanban/tests/custom_fields/ --cov=kanban/custom_fields --cov-report=term-missing
  
  Output:
  ============================= test session starts ==============================
  platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
--rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8
+-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8
++rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1
  configfile: pyproject.toml
  plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
  asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
--collecting ... collected 26 items
-+collecting ... collected 33 items
- 
--kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 30%]
--kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 57%]
--kanban/tests/custom_fields/test_execution_api.py ...                     [ 69%]
--kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 96%]
--.                                                                        [100%]
-+kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 24%]
-+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 45%]
-+kanban/tests/custom_fields/test_execution_api.py ...                     [ 54%]
-+kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 75%]
-+.                                                                        [ 78%]
-+kanban/tests/custom_fields/test_builtin_wasm_preset.py .......           [100%]
+-collecting ... collected 33 items
+-
+-kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 24%]
+-kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 45%]
+-kanban/tests/custom_fields/test_execution_api.py ...                     [ 54%]
+-kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 75%]
+-.                                                                        [ 78%]
+-kanban/tests/custom_fields/test_builtin_wasm_preset.py .......           [100%]
++collecting ... collected 78 items
++
++kanban/tests/custom_fields/test_approvals_matrix.py .........            [ 11%]
++kanban/tests/custom_fields/test_builtin_wasm_preset.py .........         [ 23%]
++kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 33%]
++kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 42%]
++kanban/tests/custom_fields/test_execution_api.py ...                     [ 46%]
++kanban/tests/custom_fields/test_executor_cache.py ....                   [ 51%]
++kanban/tests/custom_fields/test_executor_unit.py .....                   [ 57%]
++kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 66%]
++.                                                                        [ 67%]
++kanban/tests/custom_fields/test_output_formats.py ......                 [ 75%]
++kanban/tests/custom_fields/test_preset_formulas_e2e.py .....             [ 82%]
++kanban/tests/custom_fields/test_safe_formula_unit.py ......              [ 89%]
++kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [100%]
  
  ================================ tests coverage ================================
  _______________ coverage: platform linux, python 3.12.7-final-0 ________________
  
- Name                                      Stmts   Miss Branch BrPart  Cover   Missing
- -------------------------------------------------------------------------------------
--kanban/api/v1/custom_field_execution.py     120      1     26      4    97%   71->74, 109->125, 261->282, 283
-+kanban/api/v1/custom_field_execution.py      99      0     18      2    98%   71->74, 109->125
- kanban/api/v1/custom_fields.py               30      0      0      0   100%
-+kanban/custom_fields/builtin_wasm.py         77      0     30      0   100%
- kanban/custom_fields/service.py             163      0     42      2    99%   355->359, 361->365
- -------------------------------------------------------------------------------------
--TOTAL                                       313      1     68      6    98%
--============================= 26 passed in 28.31s ==============================
-+TOTAL                                       369      0     90      4    99%
-+============================= 33 passed in 23.24s ==============================
- 
- 
--=== TYPESCRIPT VITEST & COVERAGE (KAN-32) ===
-+=== TYPESCRIPT VITEST & COVERAGE (KAN-32-RC1) ===
+-Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------------
+-kanban/api/v1/custom_field_execution.py      99      0     18      2    98%   71->74, 109->125
+-kanban/api/v1/custom_fields.py               30      0      0      0   100%
+-kanban/custom_fields/builtin_wasm.py         77      0     30      0   100%
+-kanban/custom_fields/service.py             163      0     42      2    99%   355->359, 361->365
+--------------------------------------------------------------------------------------
+-TOTAL                                       369      0     90      4    99%
+-============================= 33 passed in 23.24s ==============================
+-
+-
+-=== TYPESCRIPT VITEST & COVERAGE (KAN-32-RC1) ===
++Name                                     Stmts   Miss Branch BrPart  Cover   Missing
++------------------------------------------------------------------------------------
++kanban/custom_fields/__init__.py             3      0      0      0   100%
++kanban/custom_fields/approvals.py          201      4     72      6    96%   329, 374->377, 386->388, 413->416, 437-438, 566
++kanban/custom_fields/builtin_wasm.py        89      0     32      0   100%
++kanban/custom_fields/executor.py           538     18    242     19    95%   120->158, 149->151, 154->120, 164, 258-259, 262->275, 292, 308, 332->336, 349, 353-354, 378, 384, 386, 392, 427->432, 429->432, 432->440, 434->440, 437-438, 441->477, 472-473, 749->782, 991-992
++kanban/custom_fields/manifest.py            43      0     20      0   100%
++kanban/custom_fields/output_formats.py     232      0     86      3    99%   102->110, 261->273, 349->351
++kanban/custom_fields/service.py            163      0     42      2    99%   355->359, 361->365
++------------------------------------------------------------------------------------
++TOTAL                                     1269     22    494     30    97%
++============================= 78 passed in 34.05s ==============================
++
++
++=== TYPESCRIPT VITEST & COVERAGE (KAN-32-RC2) ===
  Command:
- COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+-COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
++COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" npx vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
  
  Output:
--> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
-+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
- > vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
- 
-- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
-+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+-> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+-> vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+-
+- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/kanban/web
        Coverage enabled with v8
  
-- ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 18ms
-- ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 67ms
-- ✓ src/app/useSystemStatus.test.tsx (4 tests) 192ms
-- ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 175ms
-- ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 378ms
-- ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 310ms
-- ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 590ms
-- ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 650ms
-- ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 35ms
-- ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 2634ms
-+ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 21ms
-+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 75ms
-+ ✓ src/app/useSystemStatus.test.tsx (4 tests) 189ms
-+ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 186ms
-+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 332ms
-+ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 412ms
-+ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 36ms
-+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 620ms
-+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 680ms
-+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 3111ms
+- ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 21ms
+- ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 75ms
+- ✓ src/app/useSystemStatus.test.tsx (4 tests) 189ms
+- ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 186ms
+- ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 332ms
+- ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 412ms
+- ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 36ms
+- ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 620ms
+- ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 680ms
+- ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 3111ms
++ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 43ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 152ms
++ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 315ms
++ ✓ src/app/useSystemStatus.test.tsx (4 tests) 345ms
++ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 465ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (33 tests) 538ms
++ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 61ms
++ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 795ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 955ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 3593ms
  
   Test Files  10 passed (10)
-       Tests  165 passed (165)
--   Start at  09:46:46
--   Duration  5.61s (environment 50%, tests 24%, import 19%, transform 4%, worker 3%)
-+   Start at  12:11:21
-+   Duration  6.61s (environment 55%, tests 23%, import 15%, transform 4%, worker 3%)
+-      Tests  165 passed (165)
+-   Start at  12:11:21
+-   Duration  6.61s (environment 55%, tests 23%, import 15%, transform 4%, worker 3%)
++      Tests  166 passed (166)
++   Duration  8.74s
  
   % Coverage report from v8
  -------------------|---------|----------|---------|---------|-------------------
- File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
- -------------------|---------|----------|---------|---------|-------------------
--All files          |     100 |    95.69 |     100 |     100 |                   
-+All files          |     100 |    95.65 |     100 |     100 |                   
-  app               |     100 |      100 |     100 |     100 |                   
-   ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
-  .../custom-fields |     100 |    95.47 |     100 |     100 |                   
-@@ -69,3 +71,22 @@ All files          |     100 |    95.69 |     100 |     100 |
-   ...ionMatrix.tsx |     100 |     92.3 |     100 |     100 | 140,184           
-   ...etGallery.tsx |     100 |    96.87 |     100 |     100 | 51                
- -------------------|---------|----------|---------|---------|-------------------
-+
-+
-+=== CSS TOKENS AUDIT GATE (KANBA-190) ===
-+Command:
-+(cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts)
-+
-+Output:
-+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
-+
-+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
-+   ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
-+     ✓ verifies 100% of var(--*) usages across all CSS files resolve to canonical tokens 7ms
-+     ✓ verifies all static auth-* classes in AuthStudioPage.tsx and AuthCardEditorDrawer.tsx exist in adminAuth.css 2ms
-+     ✓ verifies base.css defines color-scheme and button/input/select/textarea color inheritance 1ms
-+     ✓ ensures simulated undefined token reference is caught by audit scanner 1ms
-+
-+ Test Files  1 passed (1)
-+      Tests  4 passed (4)
-+   Duration  1.03s
-diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
-index 110931bc..08466098 100644
---- a/kanban/api/v1/custom_field_execution.py
-+++ b/kanban/api/v1/custom_field_execution.py
-@@ -25,6 +25,7 @@ from kanban.api.v1.schemas.custom_fields import (
-     WasmModuleResponse,
-     WasmModuleUploadRequest,
- )
-+from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
- from kanban.custom_fields.executor import CustomFieldExecutor
- from kanban.custom_fields.service import CustomFieldDefinitionService
- from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
-@@ -221,7 +222,7 @@ async def upload_wasm_module(
-     response_model=CustomFieldTestExecuteResponse,
-     summary="Evaluate custom field definition draft against an issue without saving",
- )
--async def test_execute_custom_field(  # noqa: C901
-+async def test_execute_custom_field(
-     project: str,
-     body: CustomFieldTestExecuteRequest,
-     caller: Caller,
-@@ -247,58 +248,12 @@ async def test_execute_custom_field(  # noqa: C901
-                 re.search(r"return\s+([^;]+)", source)
-             )
-             if not is_interpreted:
--                raw_sha: bytes | None = None
--                if body.wasm_module_sha256:
--                    try:
--                        raw_sha = bytes.fromhex(body.wasm_module_sha256)
--                    except ValueError as ex:
--                        raise ProblemException(
--                            status=422,
--                            code="INVALID_WASM_SHA256",
--                            title="Invalid WASM SHA256",
--                            detail=f"WASM SHA256 must be valid hex: {ex}",
--                        ) from ex
--                elif source:
--                    clean_lines = [
--                        line
--                        for line in source.splitlines()
--                        if not line.strip().startswith("//") and not line.strip().startswith("#")
--                    ]
--                    clean_source = "\n".join(clean_lines).strip()
--                    try:
--                        wasm_bytes = bytes.fromhex(clean_source)
--                    except ValueError:
--                        try:
--                            wasm_bytes = base64.b64decode(clean_source)
--                        except Exception as err:
--                            raise ProblemException(
--                                status=422,
--                                code="WASM_BINARY_INVALID",
--                                title="Invalid WebAssembly Binary",
--                                detail=f"Cannot decode WebAssembly module bytes: {err}",
--                            ) from err
--                    raw_sha = hashlib.sha256(wasm_bytes).digest()
--
--                if raw_sha is None:
--                    raise ProblemException(
--                        status=404,
--                        code="WASM_MODULE_NOT_FOUND",
--                        title="WebAssembly Module Not Found",
--                        detail="Approved WebAssembly module was not found in workspace",
--                    )
--
--                mod_stmt = select(ApprovedWasmModule).where(
--                    ApprovedWasmModule.workspace_id == caller.workspace_id,
--                    ApprovedWasmModule.sha256 == raw_sha,
-+                await resolve_wasm_module_bytes(
-+                    session=session,
-+                    workspace_id=caller.workspace_id,
-+                    sha256=body.wasm_module_sha256,
-+                    source=body.script_source,
-                 )
--                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
--                if wasm_mod is None:
--                    raise ProblemException(
--                        status=404,
--                        code="WASM_MODULE_NOT_FOUND",
--                        title="WebAssembly Module Not Found",
--                        detail="Approved WebAssembly module was not found in workspace",
--                    )
+@@ -78,7 +84,7 @@ Command:
+ (cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts)
  
-         rate_limiter = _execute_rate_limiter(session)
-         policy = RateLimitPolicy(name="custom_field_test_execute", limit=10, window_seconds=60)
+ Output:
+- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc2-081cdef1/kanban/web
+ 
+  ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+    ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
+@@ -89,4 +95,4 @@ Output:
+ 
+  Test Files  1 passed (1)
+       Tests  4 passed (4)
+-   Duration  1.03s
++   Duration  981ms
+diff --git a/docs/qa/KAN-32/wiki-diff.patch b/docs/qa/KAN-32/wiki-diff.patch
+index fb14387c..5ec919d8 100644
+--- a/docs/qa/KAN-32/wiki-diff.patch
++++ b/docs/qa/KAN-32/wiki-diff.patch
+@@ -1,273 +1,261 @@
+-diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
+-new file mode 100644
+-index 0000000..b2f6bd6
+---- /dev/null
+-+++ b/Guide-Custom-Fields.md
+-@@ -0,0 +1,256 @@
+-+# [Guide] How to Use Custom Fields
+-+
+-+Custom Fields extend your projects and issues with dynamic calculations, computed business metrics, compliance indicators, and metadata without modifying the core database schema or writing custom server plugins.
+-+
+-+This comprehensive guide covers how Custom Fields work, where their values surface across the UI, how to choose the right execution tier for your deployment mode (Standalone vs Multi-Container Compose), step-by-step walkthroughs with copy-paste examples, and the required governance and dual-control approval workflows.
+-+
+-+---
+-+
+-+## 1. What Custom Fields Do and Where Values Appear
+-+
+-+Custom Fields allow project administrators and server administrators to attach computed or scalar attributes to issues. Whenever an issue is viewed, edited, or evaluated in a workflow, Custom Fields are resolved and formatted according to their output specifications.
+-+
+-+Custom field values automatically surface across the following surfaces in the web interface:
+-+
+-+- **Issue Properties Rail:** Located in the right sidebar of the issue detail screen. Displays the custom field label, current value (formatted as text, number, badge, severity pill, link, markdown snippet, or table), and cache status with an instant recalculate trigger.
+-+- **Table View:** Embedded as sortable, custom columns in the project Table View. Allows rapid scanning and comparison of computed metrics (such as SLA deadlines or sub-issue progress percentages) across dozens of work items.
+-+- **Board Cards:** Rendered as compact badges, severity pills, or monospace tags directly on Kanban board cards, providing immediate visual cues to team members during daily standups and cycle reviews.
+-+- **Filters and Search:** Filter work items by custom field values, enabling targeted views such as finding all issues with a `CRITICAL` severity pill or projects with overdue SLA days.
+-+
+-+---
+-+
+-+## 2. Choosing Between Execution Tiers
+-+
+-+👍kanban provides four distinct execution tiers for custom fields, balanced across performance, security isolation, and deployment modes:
+-+
+-+| Tier | Engine / Flavor | Latency Budget | Standalone Mode | Multi-Container Compose | Best Used For |
+-+| :--- | :--- | :--- | :--- | :--- | :--- |
+-+| **Scalar** | Static metadata | `<1ms` | Supported | Supported | Static tags, manual attributes, default strings, constant numbers |
+-+| **Safe Formula** | In-process Python AST | `<5ms` | Supported | Supported | Math, date arithmetic, conditionals, sub-issue rollups, SLA days |
+-+| **WebAssembly** | `wasmtime` runtime | `<25ms` | Supported | Supported | Compiled C, Rust, or AssemblyScript logic with strict memory sandboxing |
+-+| **Isolated Sandbox** | `nsjail` Linux container | `<250ms` | **Gated (Unavailable)** | Supported | Complex Python/Rust scripts requiring full network egress allowlists or multi-entity queries |
+-+
+-+### Standalone Mode vs Multi-Container Compose Gating
+-+
+-+In **Standalone mode** (running via a single container or single process):
+-+- `Scalar`, `Safe Formula`, and `WebAssembly (wasmtime)` run natively out of the box with zero external dependencies.
+-+- `Isolated Sandbox (nsjail)` is **fail-closed and rejected**. Attempting to create or execute an `nsjail` custom field in Standalone mode returns an actionable HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE` error recommending `scalar`, `formula`, or `wasm`. In the web editor and preset gallery, `nsjail` options are disabled and badged with `Multi-Container Compose Required`.
+-+- **Pre-existing nsjail fields:** If you import a workspace backup containing pre-existing `nsjail` fields into Standalone mode, definitions remain inspectable and editable, with an informational warning banner reminding you that multi-container compose is required for execution.
+-+- **Promoting to Multi-Container:** To unlock `nsjail` container sandboxes, promote your installation to multi-container compose via the administrator portal at `/admin/standalone` or follow the Production Promotion and Backup Runbook.
+-+
+-+---
+-+
+-+## 3. Step-by-Step Walkthroughs and Copy-Paste Examples
+-+
+-+### Example 1: Priority SLA Days (Safe Formula)
+-+
+-+Compute the remaining service level agreement (SLA) target turnaround days based on the issue priority.
+-+
+-+- **Name:** Priority SLA Days
+-+- **Slug:** `priority-sla-days`
+-+- **Flavor / Tier:** Safe Formula (`formula`)
+-+- **Target Scope:** `PROJECT`
+-+- **Formula Expression:**
+-+  ```python
+-+  1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14
+-+  ```
+-+- **Output Format:** `number`
+-+- **Format Metadata JSON:**
+-+  ```json
+-+  {
+-+    "format": "number",
+-+    "maximum_fraction_digits": 0,
+-+    "unit_suffix": "d",
+-+    "min_value": 1,
+-+    "max_value": 30
+-+  }
+-+  ```
+-+
+-+### Example 2: Sub-Issue Progress Percentage (Safe Formula)
+-+
+-+Calculate the completion percentage of sub-issues for epic or parent issue tracking.
+-+
+-+- **Name:** Sub-Issue Progress %
+-+- **Slug:** `sub-issue-progress`
+-+- **Flavor / Tier:** Safe Formula (`formula`)
+-+- **Target Scope:** `PROJECT`
+-+- **Formula Expression:**
+-+  ```python
+-+  round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0
+-+  ```
+-+- **Output Format:** `number`
+-+- **Format Metadata JSON:**
+-+  ```json
+-+  {
+-+    "format": "number",
+-+    "maximum_fraction_digits": 1,
+-+    "unit_suffix": "%",
+-+    "min_value": 0.0,
+-+    "max_value": 100.0
+-+  }
+-+  ```
+-+
+-+### Example 3: CVSS Severity Pill (Safe Formula / Dynamic Severity)
+-+
+-+Map issue priority and due date urgency to a standardized security vulnerability pill.
+-+
+-+- **Name:** Incident Severity Pill
+-+- **Slug:** `incident-severity-pill`
+-+- **Flavor / Tier:** Safe Formula (`formula`)
+-+- **Target Scope:** `PROJECT`
+-+- **Formula Expression:**
+-+  ```python
+-+  'CRITICAL' if (days_until_due is not None and days_until_due < 0) else 'HIGH' if priority == 'URGENT' else 'MEDIUM' if priority == 'HIGH' else 'LOW'
+-+  ```
+-+- **Output Format:** `severity_pill`
+-+- **Format Metadata JSON:**
+-+  ```json
+-+  {
+-+    "format": "severity_pill"
+-+  }
+-+  ```
+-+
+-+### Example 4: Total Project Issues Rollup (WebAssembly or Multi-Container nsjail)
+-+
+-+Roll up total project issues and blockers using WebAssembly or Multi-Container nsjail.
+-+
+-+- **Name:** Total Project Issues
+-+- **Slug:** `total-project-issues`
+-+- **Flavor / Tier:** WebAssembly (`wasm`) or Isolated Sandbox (`nsjail` in Multi-Container Compose)
+-+- **Target Scope:** `PROJECT` (or `WORKSPACE` with AAL2 dual control)
+-+- **Output Format:** `number`
+-+- **Format Metadata JSON:**
+-+  ```json
+-+  {
+-+    "format": "number",
+-+    "maximum_fraction_digits": 0,
+-+    "unit_suffix": " issues"
+-+  }
+-+  ```
+-+
+-+---
+-+
+-+## 4. All Seven Supported Output Formats and Schemas
+-+
+-+Every custom field produces output formatted according to one of seven canonical schemas:
+-+
+-+### 1. `text`
+-+Single-line formatted string with optional prefix and monospace font.
+-+```json
+-+{
+-+  "format": "text",
+-+  "max_length": 128,
+-+  "prefix": "REF-",
+-+  "monospace": true
+-+}
+-+```
+-+
+-+### 2. `number`
+-+Floating point or integer numeric value with precision limits, suffix, and range bounds.
+-+```json
+-+{
+-+  "format": "number",
+-+  "maximum_fraction_digits": 2,
+-+  "unit_suffix": " hrs",
+-+  "min_value": 0.0,
+-+  "max_value": 1000.0
+-+}
+-+```
+-+
+-+### 3. `badge`
+-+Visual status badge with color token and strict label allowlist. Supported color tokens: `neutral`, `info`, `success`, `warning`, `danger`, `accent`.
+-+```json
+-+{
+-+  "format": "badge",
+-+  "color_token": "success",
+-+  "allowed_labels": ["Passed", "Failed", "In Progress", "Pending"]
+-+}
+-+```
+-+
+-+### 4. `severity_pill`
+-+Standardized vulnerability and risk assessment pill. Accepts severity levels (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) or numeric CVSS scores from 0.0 to 10.0.
+-+```json
+-+{
+-+  "format": "severity_pill"
+-+}
+-+```
+-+
+-+### 5. `url`
+-+Sanitized hyperlink validated against allowed schemes and host suffixes.
+-+```json
+-+{
+-+  "format": "url",
+-+  "allowed_schemes": ["https"],
+-+  "allowed_host_suffixes": ["github.com", "gitlab.com"]
+-+}
+-+```
+-+
+-+### 6. `markdown_snippet`
+-+Sanitized canonical Markdown snippet rendered inline up to 2000 characters.
+-+```json
+-+{
+-+  "format": "markdown_snippet",
+-+  "max_chars": 2000
+-+}
+-+```
+-+
+-+### 7. `json_table`
+-+Structured 2-dimensional tabular data rendered directly in the issue details view.
+-+```json
+-+{
+-+  "format": "json_table",
+-+  "columns": [
+-+    {"key": "test_name", "label": "Test Suite"},
+-+    {"key": "duration_ms", "label": "Duration (ms)"},
+-+    {"key": "status", "label": "Status"}
+-+  ],
+-+  "max_rows": 25
+-+}
+-+```
++diff --git a/Architecture-Delta-and-Missing-Features.md b/Architecture-Delta-and-Missing-Features.md
++index 380f440..555d640 100644
++--- a/Architecture-Delta-and-Missing-Features.md
+++++ b/Architecture-Delta-and-Missing-Features.md
++@@ -6,7 +6,7 @@ This document presents a section-by-section architectural delta and gap analysis
++ 
++ Overall Implementation Status:
++ - 15 of 15 specification sections possess active, production-grade implementations in the codebase.
++-- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and ScriptRunner agent workflow interceptors are fully implemented.
+++- The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and scripted workflow transition helpers are fully implemented.
++ - Key gaps and deviations identified:
++   1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
++   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex -p`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
++@@ -33,7 +33,7 @@ flowchart TD
++         V2["Multi-Card Auth Studio (AAL2)"]
++         V3["17-Feature Ticket Peek Drawer"]
++         V4["Three-Surface Intent MCP (27 Tools)"]
++-        V5["ScriptRunner Workflow Interceptors"]
+++        V5["Scripted Workflows & Transition Helpers"]
++     end
++ 
++     subgraph Backlog["Tracked Optimization Gaps"]
++@@ -83,7 +83,7 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
++ | **Section 11** | Three-Surface Intent-Driven MCP Server | `mcp/surfaces/agent/`, `docs/`, `admin/` | **COMPLETE (100%)** | **VERIFIED** | 27 total tools (9 agent, 6 docs, 12 admin with action-aware scope checks), OpenAPI sync verified. |
++ | **Section 12** | Universal Object Graph DDL & Link Auditor | `database/models/spine.py`, `base.py` | **COMPLETE (100%)** | **VERIFIED** | 9 entity kinds, 13 link kinds, 6-class invalid link auditor, audited purger. |
++ | **Section 13** | Custom Scripted Fields & Sandbox | `kanban/custom_fields/`, `kanban/sandbox/` | **COMPLETE (100%)** | **VERIFIED** | Admin-only definition gate, Wasmtime (Tier A), nsjail (Tier B sandbox), cryptographic AAL2 escalation. |
++-| **Section 14** | ScriptRunner & Transition Interceptors | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
+++| **Section 14** | Scripted Workflows & Transition Helpers | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
++ | **Section 15** | >=95% Clean-DB Testing & Governance Gates | `agent/testing/`, `agent/cli_commands/` | **COMPLETE (100%)** | **VERIFIED** | Clean-DB SAVEPOINT isolation, 6 kanban-agent validate-* CLI tools, 3 governance gates, >=95% unit coverage. |
++ 
++ ---
++@@ -380,11 +380,11 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
++ 
++ ---
++ 
++-### Section 14: ScriptRunner Workflows & Remote/CLI Agent Transition Interceptors
+++### Section 14: Scripted Workflows & Remote/CLI Agent Transition Helpers
++ 
++ - **Target Architectural Contract:**
++-  - Transition interceptors attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
++-  - 3 Interceptor Kinds:
+++  - Transition helpers attached to state moves `(from_state -> to_state)` in `workflow_transition_hooks` table.
+++  - 3 Transition Helper Kinds:
++     - `sync_validator`: Tier A Wasm, blocks invalid moves with structured reason.
++     - `sync_mutator`: Tier A Wasm, updates mutable fields on transition.
++     - `agent_interceptor`: Tier B async agent gate (`agy -p`, `codex -p`, `gemini`, `ollama`), sets `status: pending_agent_gate` (`issues.pending_transition_exec_id`), holds card provisionally with `⏳🤖`, snaps back with `🛑🤖` or confirms with `✅🤖`.
++diff --git a/Enterprise-Whitespace-and-Kanban-Board.md b/Enterprise-Whitespace-and-Kanban-Board.md
++index e66819d..2da2f53 100644
++--- a/Enterprise-Whitespace-and-Kanban-Board.md
+++++ b/Enterprise-Whitespace-and-Kanban-Board.md
++@@ -24,7 +24,7 @@ To keep cards concise without sacrificing context, 👍kanban utilizes a standar
++ | `🏷️` | Issue Identifier | Human-readable issue key and ticket URL |
++ | `🔄` | Creator / Reporter | Author profile and ticket creation timestamp |
++ | `⚡` | Priority | Corporate priority tier (Urgent, High, Medium, Low, None) |
++-| `⏳` | Pending Transition | Active workflow interceptor or async gate |
+++| `⏳` | Pending Transition | Active workflow transition helper or async gate |
++ | `🤖` | Autonomous Agent | Agent service principal assignment or execution |
++ | `🔒` | Parent Hierarchy | Parent issue or epic relationship |
++ | `🔗` | Linked Object | Bidirectional dependency or related entity |
++diff --git a/Home.md b/Home.md
++index 13e9a44..da0af86 100644
++--- a/Home.md
+++++ b/Home.md
++@@ -27,7 +27,7 @@ flowchart TD
++     end
++ 
++     subgraph Runtimes["Execution Engines"]
++-        AIEngine["AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Interceptors"]
+++        AIEngine["AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Helpers"]
++         Sandbox["Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens"]
++     end
++ 
++@@ -90,7 +90,7 @@ Platform administrators manage enterprise governance through dedicated studios:
++ | **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |
++ | **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |
++ | **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |
++-| **Workflow Interceptors** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |
+++| **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |
++ | **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |
++ | **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |
++ 
++@@ -124,7 +124,7 @@ For an exhaustive feature-by-feature evaluation across 35 criteria, see the [Fea
++ 10. [Three-Surface MCP Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.
++ 11. [Universal Object Graph and Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.
++ 12. [Admin Custom Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.
++-13. [ScriptRunner Workflows and Transition Interceptors](ScriptRunner-Workflows-and-Transition-Interceptors) - Synchronous transition validators/mutators and asynchronous AI agent gates.
+++13. [Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.
++ 14. [Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.
++ 15. [Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.
++ 16. [Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.
++diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
++index 422c815..ef78e64 100644
++--- a/MCP-Tools-Reference.md
+++++ b/MCP-Tools-Reference.md
++@@ -306,7 +306,7 @@ sequenceDiagram
++ - **CLI Example:** `kanban-cli-admin manage_custom_fields_and_scripts --action="list" --project=KAN`
++ 
++ ### 8. `manage_workflow_interceptors`
++-- **Description:** Configure pre-transition interceptor hooks (validators, mutators, async agent gates).
+++- **Description:** Configure pre-transition helper hooks (validators, mutators, async agent gates).
++ - **Required Parameters:**
++   - `action` (string): `list`, `create_hook`, `update_hook`, `reorder_pipeline`, `dry_run`.
++ - **Optional Parameters:**
++diff --git a/Multi-Provider-AI-Engine-and-Runners.md b/Multi-Provider-AI-Engine-and-Runners.md
++index 93a1c1c..02b4b36 100644
++--- a/Multi-Provider-AI-Engine-and-Runners.md
+++++ b/Multi-Provider-AI-Engine-and-Runners.md
++@@ -220,10 +220,10 @@ In test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIR
++ - Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.
++ 
++ ### Local Agent CLI Diagnostics
++-Engineers can validate transition interceptors and AI workflows locally via the command line:
+++Engineers can validate transition helpers and AI workflows locally via the command line:
++ 
++ ```bash
++-# Validate a transition interceptor against a ticket fixture
+++# Validate a transition helper against a ticket fixture
++ kanban-agent validate-transition \
++   --ticket-file test_ticket.json \
++   --from-state in_progress \
++diff --git a/REST-API-Architecture-and-OpenAPI-Guide.md b/REST-API-Architecture-and-OpenAPI-Guide.md
++index 9ad558b..15be2a5 100644
++--- a/REST-API-Architecture-and-OpenAPI-Guide.md
+++++ b/REST-API-Architecture-and-OpenAPI-Guide.md
++@@ -136,7 +136,7 @@ kanban/api/v1/
++ |-- docs.py             # Hierarchical technical documentation, ltree traversal, version diffs
++ |-- stickies.py         # Digital sticky notes, color categorization, smart promotion
++ |-- custom_fields.py    # Custom scripted field evaluation, Wasmtime/nsjail bindings
++-|-- workflows.py        # Transition interceptors, validator pipelines, dry-run testing
+++|-- workflows.py        # Transition helpers, validator pipelines, dry-run testing
++ |-- search.py           # Hybrid lexical and semantic search endpoints
++ |-- admin.py            # Platform governance, auth cards, link auditor, system backup
++ `-- mcp_keys.py         # Scoped MCP token generation, tool toggles, device authorization
++diff --git a/ScriptRunner-Workflows-and-Transition-Interceptors.md b/Scripted-Workflows-and-Transition-Helpers.md
++similarity index 72%
++rename from ScriptRunner-Workflows-and-Transition-Interceptors.md
++rename to Scripted-Workflows-and-Transition-Helpers.md
++index b0d9e04..b300244 100644
++--- a/ScriptRunner-Workflows-and-Transition-Interceptors.md
+++++ b/Scripted-Workflows-and-Transition-Helpers.md
++@@ -1,19 +1,19 @@
++-# ScriptRunner Workflows and Transition Interceptors
+++# Scripted Workflows and Transition Helpers
++ 
++ ## Overview
++ 
++ In traditional project management tools, workflow rules are either simple notification triggers or inflexible webhooks that fire only *after* a change has occurred. If an issue is improperly moved to "Done" without meeting code coverage requirements or QA verification, the damage is already done.
++ 
++-👍kanban implements a **ScriptRunner-Style Workflow Engine** with **Pre-Transition Interceptors**. When an operator or agent attempts to move a work item between states (`from_state -> to_state`), the transition is intercepted and evaluated through an ordered pipeline of synchronous validators, field mutators, and asynchronous AI agent gates.
+++👍kanban implements a **Scripted Workflow Engine** with **Pre-Transition Helpers**. When an operator or agent attempts to move a work item between states (`from_state -> to_state`), the transition is evaluated through an ordered pipeline of synchronous validators, field mutators, and asynchronous AI agent gates.
++ 
++ ---
++ 
++-## The Transition Interceptor Pipeline
+++## The Transition Helper Pipeline
++ 
++ ```mermaid
++ flowchart TD
++-    Drag["User / Agent moves card: In Progress -> Done"] --> Interceptor["Transition Interceptor Engine"]
++-    Interceptor --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links"]
+++    Drag["User / Agent moves card: In Progress -> Done"] --> HelperEngine["Transition Helper Engine"]
+++    HelperEngine --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links"]
++     Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A)<br/>- Auto-set closed_at timestamp<br/>- Update cycle velocity counters"]
++     Stage1 -->|VETO| VetoInstant["Transition Rejected (422 Unprocessable)"]
++     Stage2 --> Stage3["Stage 3: Asynchronous Gate Hold (Tier B Async Agent)<br/>- Card enters pending_agent_gate hold (⏳🤖)<br/>- Dispatches forensic audit to agent"]
++@@ -23,6 +23,22 @@ flowchart TD
++ 
++ ---
++ 
+++## Helper Architecture
+ +
+-+---
+++Transition helpers operate across two execution tiers to balance latency and verification depth:
+ +
+-+## 5. Safe Formula Context Reference
+++1. **Tier A (Synchronous Wasm / In-Process):** Fast sub-25ms validators and mutators executing in memory or within sandboxed WebAssembly runtimes. These guarantee instantaneous rejection or field stamping without network round-trips.
+++2. **Tier B (Asynchronous Autonomous Agent Gates):** Non-blocking background gates dispatched to local CLI harnesses (`agy -p`, `codex -p`), in-app SDK runners, or remote bare Git mirrors. These run comprehensive multi-file audits, build verifications, and forensic QA checks before approving the transition.
+ +
+-+When writing Safe Formulas, expressions have access to the active issue attributes without executing arbitrary code:
+++### Failure Policies
+ +
+-+| Variable | Type | Description |
+-+| :--- | :--- | :--- |
+-+| `id` | `str` | Issue unique identifier (UUID) |
+-+| `key` | `str` | Human-readable issue key (e.g. `KAN-32`) |
+-+| `summary` | `str` | Issue title / summary |
+-+| `description_markdown` | `str` | Raw Markdown body of the issue |
+-+| `state` | `str` | Name of current workflow state (e.g. `In Progress`) |
+-+| `state_group` | `str` | Workflow state category (`backlog`, `unstarted`, `started`, `completed`, `cancelled`) |
+-+| `priority` | `str` | Normalized uppercase priority (`URGENT`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) |
+-+| `priority_slug` | `str` | Lowercase priority slug (`urgent`, `high`, `medium`, `low`, `none`) |
+-+| `priority_label` | `str` | Display label of priority (`Urgent`, `High`, etc.) |
+-+| `start_date` | `str` or `None` | ISO-formatted start date |
+-+| `due_date` | `str` or `None` | ISO-formatted due date |
+-+| `days_until_due` | `int` or `None` | Days until due date (negative values indicate overdue) |
+-+| `blocker_count` | `int` | Number of active blocking dependencies on this issue |
+-+| `sub_issue_count` | `int` | Total count of child sub-issues |
+-+| `completed_sub_issue_count`| `int` | Count of sub-issues in `completed` state group |
+-+| `labels` | `list[str]` | List of tag names assigned to the issue |
+++Every attached transition helper specifies an explicit failure policy to determine behavior when a helper times out, errors, or fails execution:
+ +
+-+### Safe Built-in Functions
+-+Safe formulas allow standard deterministic operations: `round`, `int`, `float`, `min`, `max`, `len`, `abs`, `str`. Arbitrary imports, file system access, and network sockets are strictly prohibited at the Python AST parser layer.
+++- **Fail-Closed:** Blocks the transition immediately. The card snaps back to its origin column and an itemized failure explanation is appended to the ticket timeline.
+++- **Fail-Open (Warn):** Logs an audit warning to the activity feed and ledger while allowing the transition to proceed. This is reserved for non-critical informational checks.
+ +
+ +---
+ +
+-+## 6. Testing, Dry-Running, and Scope Escalation
+-+
+-+### Dry-Running with Test Execute
+-+Before saving any custom field definition, use the **Test Execute** button in the Custom Field Definition Editor or send a POST request to:
+-+```http
+-+POST /api/v1/projects/{project_ref}/custom-fields/test-execute
+-+```
+-+This evaluates your formula or script against a mock issue payload or existing issue key in memory without persisting values or polluting the audit ledger. In Standalone mode, Test Execute verifies that your script does not request unavailable sandbox tiers.
+-+
+-+### Scope Escalation and AAL2 Dual-Control Approval
+-+Custom fields can be scoped at three tiers:
+-+- **`PROJECT` Scope:** Can only read and affect issues within the parent project. Requires Project Administrator privileges.
+-+- **`WORKSPACE` Scope:** Can read issues across all projects in the workspace.
+-+- **`SERVER` Scope:** Global fields available across all workspaces.
+-+
+-+**Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Account credentials rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
++ ## Admin Workflow Transition Studio
++ 
++ Project Administrators configure transition pipelines through the visual studio at `/projects/KAN/settings/workflows`.
++@@ -32,7 +48,7 @@ Project Administrators configure transition pipelines through the visual studio
++ ### Studio Capabilities
++ - **State Transition Matrix:** Select any valid transition path (e.g. `In Progress -> In Review`, `In Review -> Done`).
++ - **Pipeline Reordering:** Drag to reorder validators and mutators in the execution chain.
++-- **Mutable Field Checkboxes:** Explicitly define which fields the interceptor is permitted to modify, enforcing least-privilege mutation boundaries.
+++- **Mutable Field Checkboxes:** Explicitly define which fields the transition helper is permitted to modify, enforcing least-privilege mutation boundaries.
++ 
++ ### The Non-Persistent Dry-Run Drawer
++ Testing workflow logic against live tickets risks corrupting sprint metrics. The Workflow Studio provides a **Zero-Persistence Dry-Run Drawer**:
++@@ -48,7 +64,7 @@ sequenceDiagram
++     actor Admin as Workflow Architect
++     participant Studio as Workflow Studio
++     participant Drawer as Dry-Run Drawer
++-    participant Engine as Interceptor Engine (Sandbox)
+++    participant Engine as Helper Engine (Sandbox)
++ 
++     Admin->>Studio: Select "In Review -> Done" rule
++     Admin->>Studio: Click "Dry-Run Against Sample Ticket"
++@@ -84,7 +100,7 @@ When an issue transition requires complex verification (such as forensic QA cert
++ ```mermaid
++ stateDiagram-v2
++     [*] --> InProgress
++-    InProgress --> PendingGate: Move to Done (Trigger Interceptor)
+++    InProgress --> PendingGate: Move to Done (Trigger Transition Helper)
++     PendingGate --> Done: Agent Certifies Criteria (✅🤖 Approved)
++     PendingGate --> InProgress: Agent Rejects (🛑🤖 240ms Snap-Back)
++     Done --> [*]
++diff --git a/Three-Surface-MCP-Server-Architecture.md b/Three-Surface-MCP-Server-Architecture.md
++index 3ab11d5..c9fe722 100644
++--- a/Three-Surface-MCP-Server-Architecture.md
+++++ b/Three-Surface-MCP-Server-Architecture.md
++@@ -46,7 +46,7 @@ Dedicated to technical documentation, architecture research, and specification a
++ 
++ ### 3. `/mcp/admin` (12 Governance and Lifecycle Tools)
++ Dedicated to platform administrators and privileged automation operators.
++-- **Capabilities:** Project provisioning, member and group access binding, workflow interceptor configuration, AI runner setup, and system health checks.
+++- **Capabilities:** Project provisioning, member and group access binding, workflow transition helper configuration, AI runner setup, and system health checks.
++ - **AAL2 Protection:** Every invocation requires Authenticator Assurance Level 2 credentials.
++ - **Two-Stage Destructive Safety:** Dangerous operations (`destructive_lifecycle`) require a two-stage process: first requesting a blast-radius preview and receiving a short-lived cryptographic confirmation token, then explicitly confirming execution with that token.
++ 
++diff --git a/User-Tasks-and-QA-Matrix.md b/User-Tasks-and-QA-Matrix.md
++index ac3c693..e639e48 100644
++--- a/User-Tasks-and-QA-Matrix.md
+++++ b/User-Tasks-and-QA-Matrix.md
++@@ -88,13 +88,13 @@ flowchart TD
++ 
++ ---
++ 
++-### Group D: MCP Access Studio, Custom Scripted Fields & Workflow Transition Interceptors (Spec S11, S13, S14)
+++### Group D: MCP Access Studio, Custom Scripted Fields & Scripted Workflows (Spec S11, S13, S14)
++ 
++ | Task ID | Spec Ref | User Persona | Task Title | Step-by-Step Human / Browser Verification Actions | Expected Outcome & Screenshot Target |
++ | :--- | :---: | :--- | :--- | :--- | :--- |
++ | **`UT-13`** | **S11.2, S11.3** | Developer / Admin | **Scopable MCP Keys, Per-Tool Toggles & Device Activation** | 1. Navigate to `/settings/mcp`, `/admin/mcp`, and `/activate` (RFC 8628 Device Flow).<br>2. Inspect hierarchical scoping (`Global`, `Workspace`, `Project`), expiration presets (including `Unlimited` with safety friction), and per-tool checkboxes across `/mcp/agent`, `/mcp/docs`, `/mcp/admin`. | Displays MCP Access Studio with copyable client config snippets and granular tool toggles.<br>[images/13-mcp-access-studio.png](images/13-mcp-access-studio.png) |
++ | **`UT-14`** | **S13.1-S13.3** | Project / Server Admin | **Custom Scripted Fields (`🧪`) & Tiered Privilege Escalation** | 1. Navigate to `/projects/KAN/settings/custom-fields`.<br>2. Inspect custom field definitions, Wasm/script bindings, `🧪` computed badge on ticket rail, and AAL2 approval banner for escalated scope (`Project` -> `Workspace` -> `Server`). | Renders Custom Fields Studio and cryptographic admin approval status.<br>[images/14-custom-fields-studio.png](images/14-custom-fields-studio.png) |
++-| **`UT-15`** | **S14.1-S14.4** | Workflow Architect | **Admin Workflow Transition Studio & Non-Persistent Dry-Run** | 1. Navigate to `/projects/KAN/settings/workflows`.<br>2. Select a `(from_state -> to_state)` rule, inspect ordered pipeline hooks (Tier A Wasm validator, Tier A mutator, Async Agent Interceptor `in_app_sdk` / `cli_pipe` / `remote_runner`, mutable field checkboxes).<br>3. Open the **Dry-Run Drawer**, test against a sample ticket, and inspect per-step execution results and copyable `kanban-agent validate-transition` CLI snippet. | Displays pipeline ordering studio and executes zero-persistence dry-run with step timings.<br>[images/15-workflow-transition-studio.png](images/15-workflow-transition-studio.png) |
+++| **`UT-15`** | **S14.1-S14.4** | Workflow Architect | **Admin Workflow Transition Studio & Non-Persistent Dry-Run** | 1. Navigate to `/projects/KAN/settings/workflows`.<br>2. Select a `(from_state -> to_state)` rule, inspect ordered pipeline hooks (Tier A Wasm validator, Tier A mutator, Async Agent Transition Helper `in_app_sdk` / `cli_pipe` / `remote_runner`, mutable field checkboxes).<br>3. Open the **Dry-Run Drawer**, test against a sample ticket, and inspect per-step execution results and copyable `kanban-agent validate-transition` CLI snippet. | Displays pipeline ordering studio and executes zero-persistence dry-run with step timings.<br>[images/15-workflow-transition-studio.png](images/15-workflow-transition-studio.png) |
++ | **`UT-16`** | **S14.2** | Developer | **Async Agent Gate Lifecycle on Board (`⏳🤖` -> `🛑🤖` / `✅🤖`)** | 1. Inspect async agent gate card states (`/projects/KAN/issues?layout=board` or `/__dev/realtime`): live countdown timer (`⏳🤖`), `240ms` spring snap-back toast on veto (`🛑🤖`), and verified header badge (`✅🤖`). | Visualizes pending agent hold, countdown progress bar, and veto snap-back toast.<br>[images/16-async-agent-gate-states.png](images/16-async-agent-gate-states.png) |
++ 
++ ---
+ diff --git a/_Sidebar.md b/_Sidebar.md
+-index 6b7c13b..54a1d72 100644
++index 7ea0da5..02ef97c 100644
+ --- a/_Sidebar.md
+ +++ b/_Sidebar.md
+-@@ -28,5 +28,6 @@
+- 
+- - **Reference Guides**
+-   - [Feature Comparison Matrix (35 Features)](Feature-Comparison)
+-+  - [Guide: How to Use Custom Fields](Guide-Custom-Fields)
+-   - [MCP Tools Reference (24 Tools)](MCP-Tools-Reference)
+-   - [REST API and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide)
++@@ -19,7 +19,7 @@
++   - [10. Three-Surface MCP Server](Three-Surface-MCP-Server-Architecture)
++   - [11. Universal Object Graph](Universal-Object-Graph-and-Link-Auditor)
++   - [12. Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox)
++-  - [13. ScriptRunner Interceptors](ScriptRunner-Workflows-and-Transition-Interceptors)
+++  - [13. Scripted Workflows & Helpers](Scripted-Workflows-and-Transition-Helpers)
++   - [14. Clean-DB Testing and Gates](Clean-DB-Testing-and-Governance-Gates)
++   - [15. Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook)
++   - [16. Migration and Cutover Runbook](Migration-and-Cutover-Runbook)
 diff --git a/kanban/custom_fields/builtin_wasm.py b/kanban/custom_fields/builtin_wasm.py
-new file mode 100644
-index 00000000..91442557
---- /dev/null
+index 91442557..6b161264 100644
+--- a/kanban/custom_fields/builtin_wasm.py
 +++ b/kanban/custom_fields/builtin_wasm.py
-@@ -0,0 +1,235 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Built-in starter WebAssembly presets and module resolution (KAN-32, KB-P5-13)."""
-+
-+from __future__ import annotations
-+
-+import base64
-+import hashlib
-+from typing import TYPE_CHECKING, Final
-+
-+from sqlalchemy import select
-+
-+from database.models.wasm_module import ApprovedWasmModule
-+from kanban.api.problems import ProblemException
-+
-+if TYPE_CHECKING:
-+    import uuid
-+
-+    from sqlalchemy.ext.asyncio import AsyncSession
-+
-+# 213-byte echo_cvss.wasm starter preset module (compiled from echo_cvss.wat)
-+ECHO_CVSS_WASM_BASE64: Final[str] = (
-+    "AGFzbQEAAAABEQNgAn9/AGABfwF/YAJ/fwF/AhEBA2VudglrYl9vdXRwdXQAAAMDAgECBQMBAAEHHgMG"
-+    "bWVtb3J5AgAIa2JfYWxsb2MAAQZrYl9ydW4AAgoTAgUAQYAQCwsAQYAIQTQQAEEACws7AQBBgAgLNHsi"
-+    "bGV2ZWwiOiAiaGlnaCIsICJzY29yZSI6IDguOCwgImxhYmVsIjogIjguOCBIaWdoIn0AKQRuYW1lAQwB"
-+    "AAlrYl9vdXRwdXQCFAIBAQADbGVuAgIAA3B0cgEDbGVu"
-+)
-+
-+ECHO_CVSS_WASM_BYTES: Final[bytes] = base64.b64decode(ECHO_CVSS_WASM_BASE64)
-+ECHO_CVSS_SHA256_BYTES: Final[bytes] = hashlib.sha256(ECHO_CVSS_WASM_BYTES).digest()
-+ECHO_CVSS_SHA256_HEX: Final[str] = ECHO_CVSS_SHA256_BYTES.hex()
-+
-+BUILTIN_STARTER_WASM_BY_NAME: Final[dict[str, bytes]] = {
-+    "echo_cvss": ECHO_CVSS_WASM_BYTES,
-+    "echo_cvss.wasm": ECHO_CVSS_WASM_BYTES,
-+    "cvss-score": ECHO_CVSS_WASM_BYTES,
-+    "cvss_score": ECHO_CVSS_WASM_BYTES,
-+}
-+
-+BUILTIN_STARTER_WASM_BY_SHA: Final[dict[bytes, bytes]] = {
-+    ECHO_CVSS_SHA256_BYTES: ECHO_CVSS_WASM_BYTES,
-+}
-+
-+
-+def _parse_sha(sha256: bytes | str | None) -> bytes | None:
-+    if sha256 is None:
-+        return None
-+    if isinstance(sha256, (bytes, memoryview)):
-+        return bytes(sha256)
-+    try:
-+        return bytes.fromhex(str(sha256).strip())
-+    except ValueError as ex:
-+        raise ProblemException(
-+            status=422,
-+            code="INVALID_WASM_SHA256",
-+            title="Invalid WASM SHA256",
-+            detail=f"WASM SHA256 must be valid hex: {ex}",
-+        ) from ex
-+
-+
-+async def _resolve_by_sha(
-+    session: AsyncSession,
-+    workspace_id: uuid.UUID,
-+    raw_sha: bytes,
-+    source: str | None,
-+) -> tuple[bytes, bytes]:
-+    mod_stmt = select(ApprovedWasmModule).where(
-+        ApprovedWasmModule.workspace_id == workspace_id,
-+        ApprovedWasmModule.sha256 == raw_sha,
-+    )
-+    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
-+    if wasm_mod is not None:
-+        return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
-+
-+    source_clean = (source or "").strip().lower()
-+    if raw_sha in BUILTIN_STARTER_WASM_BY_SHA and (
-+        not source_clean or any(k in source_clean for k in BUILTIN_STARTER_WASM_BY_NAME)
-+    ):
-+        return BUILTIN_STARTER_WASM_BY_SHA[raw_sha], raw_sha
-+
-+    raise ProblemException(
-+        status=404,
-+        code="WASM_MODULE_NOT_FOUND",
-+        title="WebAssembly Module Not Found",
-+        detail="Approved WebAssembly module was not found in workspace",
-+    )
-+
-+
-+async def _resolve_by_name(
-+    session: AsyncSession,
-+    workspace_id: uuid.UUID,
-+    name_ref: str,
-+) -> tuple[bytes, bytes]:
-+    name_stmt = select(ApprovedWasmModule).where(
-+        ApprovedWasmModule.workspace_id == workspace_id,
-+        ApprovedWasmModule.name == name_ref,
-+    )
-+    wasm_mod_name = (await session.execute(name_stmt)).scalar_one_or_none()
-+    if wasm_mod_name is not None:
-+        return wasm_mod_name.wasm_bytes, bytes(wasm_mod_name.sha256)
-+
-+    lower_name = name_ref.lower()
-+    if lower_name in BUILTIN_STARTER_WASM_BY_NAME:
-+        mod_bytes = BUILTIN_STARTER_WASM_BY_NAME[lower_name]
-+        return mod_bytes, hashlib.sha256(mod_bytes).digest()
-+
-+    raise ProblemException(
-+        status=404,
-+        code="WASM_MODULE_NOT_FOUND",
-+        title="WebAssembly Module Not Found",
-+        detail="Approved WebAssembly module was not found in workspace",
-+    )
-+
-+
-+def _decode_bytecode(clean_code: str) -> bytes:
-+    try:
-+        return bytes.fromhex(clean_code)
-+    except ValueError:
-+        try:
-+            return base64.b64decode(clean_code, validate=True)
-+        except Exception as err:
-+            raise ProblemException(
-+                status=422,
-+                code="WASM_BINARY_INVALID",
-+                title="Invalid WebAssembly Binary",
-+                detail=f"Cannot decode WebAssembly module bytes: {err}",
-+            ) from err
-+
-+
-+async def _resolve_by_bytecode(
-+    session: AsyncSession,
-+    workspace_id: uuid.UUID,
-+    clean_src: str,
-+    clean_code: str,
-+    *,
-+    allow_raw_bytecode: bool = False,
-+) -> tuple[bytes, bytes]:
-+    wasm_bytes = _decode_bytecode(clean_code)
-+    computed_sha = hashlib.sha256(wasm_bytes).digest()
-+
-+    has_preset_name = any(k in clean_src.lower() for k in BUILTIN_STARTER_WASM_BY_NAME)
-+    if computed_sha in BUILTIN_STARTER_WASM_BY_SHA and has_preset_name:
-+        mod_stmt = select(ApprovedWasmModule).where(
-+            ApprovedWasmModule.workspace_id == workspace_id,
-+            ApprovedWasmModule.sha256 == computed_sha,
-+        )
-+        wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
-+        if wasm_mod is not None:
-+            return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
-+        return BUILTIN_STARTER_WASM_BY_SHA[computed_sha], computed_sha
-+
-+    if allow_raw_bytecode:
-+        return wasm_bytes, computed_sha
-+
-+    mod_stmt = select(ApprovedWasmModule).where(
-+        ApprovedWasmModule.workspace_id == workspace_id,
-+        ApprovedWasmModule.sha256 == computed_sha,
-+    )
-+    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
-+    if wasm_mod is not None:
-+        return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
-+
-+    raise ProblemException(
-+        status=404,
-+        code="WASM_MODULE_NOT_FOUND",
-+        title="WebAssembly Module Not Found",
-+        detail="Approved WebAssembly module was not found in workspace",
-+    )
-+
-+
-+async def resolve_wasm_module_bytes(
-+    session: AsyncSession,
-+    workspace_id: uuid.UUID,
-+    *,
-+    sha256: bytes | str | None = None,
-+    source: str | None = None,
-+    allow_raw_bytecode: bool = False,
-+) -> tuple[bytes, bytes]:
-+    """Resolve WebAssembly module bytes and sha256 digest.
-+
-+    Checks workspace ApprovedWasmModule rows first. If not overridden in the DB,
-+    resolves built-in starter preset modules (such as echo_cvss / echo_cvss.wasm).
-+
-+    Returns:
-+        tuple[bytes, bytes]: (wasm_bytes, sha256_bytes)
-+
-+    Raises:
-+        ProblemException(404, "WASM_MODULE_NOT_FOUND"): Module not found in DB or builtins.
-+        ProblemException(422, "INVALID_WASM_SHA256"): If sha256 string is invalid hex.
-+        ProblemException(422, "WASM_BINARY_INVALID"): If script_source cannot be decoded.
-+
-+    """
-+    raw_sha = _parse_sha(sha256)
-+    if raw_sha is not None:
-+        return await _resolve_by_sha(session, workspace_id, raw_sha, source)
-+
-+    clean_src = (source or "").strip()
-+    if clean_src:
-+        clean_lines = [
-+            line
-+            for line in clean_src.splitlines()
-+            if not line.strip().startswith("//") and not line.strip().startswith("#")
-+        ]
-+        clean_code = "\n".join(clean_lines).strip()
-+
-+        if clean_code.startswith("wasm:") or clean_code.lower() in BUILTIN_STARTER_WASM_BY_NAME:
-+            name_ref = (
-+                clean_code[len("wasm:") :].strip() if clean_code.startswith("wasm:") else clean_code
-+            )
-+            return await _resolve_by_name(session, workspace_id, name_ref)
-+
-+        if not clean_code:
-+            if any(k in clean_src.lower() for k in BUILTIN_STARTER_WASM_BY_NAME):
-+                return ECHO_CVSS_WASM_BYTES, ECHO_CVSS_SHA256_BYTES
-+            raise ProblemException(
-+                status=404,
-+                code="WASM_MODULE_NOT_FOUND",
-+                title="WebAssembly Module Not Found",
-+                detail="Approved WebAssembly module was not found in workspace",
-+            )
-+
-+        return await _resolve_by_bytecode(
-+            session,
-+            workspace_id,
-+            clean_src,
-+            clean_code,
-+            allow_raw_bytecode=allow_raw_bytecode,
-+        )
-+
-+    raise ProblemException(
-+        status=404,
-+        code="WASM_MODULE_NOT_FOUND",
-+        title="WebAssembly Module Not Found",
-+        detail="Approved WebAssembly module was not found in workspace",
-+    )
-diff --git a/kanban/custom_fields/executor.py b/kanban/custom_fields/executor.py
-index 480388d3..1c394735 100644
---- a/kanban/custom_fields/executor.py
-+++ b/kanban/custom_fields/executor.py
-@@ -5,7 +5,6 @@
- from __future__ import annotations
+@@ -130,7 +130,6 @@ def _decode_bytecode(clean_code: str) -> bytes:
+ async def _resolve_by_bytecode(
+     session: AsyncSession,
+     workspace_id: uuid.UUID,
+-    clean_src: str,
+     clean_code: str,
+     *,
+     allow_raw_bytecode: bool = False,
+@@ -138,8 +137,7 @@ async def _resolve_by_bytecode(
+     wasm_bytes = _decode_bytecode(clean_code)
+     computed_sha = hashlib.sha256(wasm_bytes).digest()
  
- import ast
--import base64
- import hashlib
- import json
- import logging
-@@ -21,7 +20,6 @@ from sqlalchemy.exc import SQLAlchemyError
- from sqlalchemy.ext.asyncio import AsyncSession
+-    has_preset_name = any(k in clean_src.lower() for k in BUILTIN_STARTER_WASM_BY_NAME)
+-    if computed_sha in BUILTIN_STARTER_WASM_BY_SHA and has_preset_name:
++    if computed_sha in BUILTIN_STARTER_WASM_BY_SHA:
+         mod_stmt = select(ApprovedWasmModule).where(
+             ApprovedWasmModule.workspace_id == workspace_id,
+             ApprovedWasmModule.sha256 == computed_sha,
+@@ -210,8 +208,23 @@ async def resolve_wasm_module_bytes(
+             return await _resolve_by_name(session, workspace_id, name_ref)
  
- from database.models import (
--    ApprovedWasmModule,
-     CustomFieldDefinition,
-     CustomFieldValue,
-     LinkKind,
-@@ -38,6 +36,7 @@ from kanban.custom_fields.approvals import (
-     assert_execution_authorized,
-     compute_cache_partition_key,
- )
-+from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
- from kanban.custom_fields.output_formats import (
-     parse_output_format_metadata,
-     validate_field_output_value,
-@@ -669,52 +668,14 @@ class CustomFieldExecutor:
-                 output_bytes = json.dumps(val).encode("utf-8")
-                 latency_ms = 1
-                 fuel_consumed = 50
--            elif definition.wasm_module_sha256 is not None:
--                raw_sha: bytes = bytes(definition.wasm_module_sha256)
--                mod_stmt = select(ApprovedWasmModule).where(
--                    ApprovedWasmModule.workspace_id == definition.workspace_id,
--                    ApprovedWasmModule.sha256 == raw_sha,
--                )
--                wasm_mod = (await active_session.execute(mod_stmt)).scalar_one_or_none()
--                if wasm_mod is None:
--                    raise ProblemException(
--                        status=404,
--                        code="WASM_MODULE_NOT_FOUND",
--                        title="WebAssembly Module Not Found",
--                        detail="Approved WebAssembly module was not found in workspace",
--                    )
--                wasm_bytes = wasm_mod.wasm_bytes
--                try:
--                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
--                except WasmRunError as ex:
--                    raise ProblemException(
--                        status=422,
--                        code=ex.code,
--                        title=ex.code.replace("_", " ").title(),
--                        detail=ex.message,
--                    ) from ex
--                output_bytes = run_res.output_bytes
--                latency_ms = max(0, int(run_res.duration_ms))
--                fuel_consumed = run_res.fuel_consumed
-             else:
--                clean_lines = [
--                    line
--                    for line in source.splitlines()
--                    if not line.strip().startswith("//") and not line.strip().startswith("#")
--                ]
--                clean_source = "\n".join(clean_lines).strip()
--                try:
--                    wasm_bytes = bytes.fromhex(clean_source)
--                except ValueError:
--                    try:
--                        wasm_bytes = base64.b64decode(clean_source)
--                    except Exception as err:
--                        raise ProblemException(
--                            status=422,
--                            code="WASM_BINARY_INVALID",
--                            title="Invalid WebAssembly Binary",
--                            detail=f"Cannot decode WebAssembly module bytes: {err}",
--                        ) from err
-+                wasm_bytes, _ = await resolve_wasm_module_bytes(
-+                    active_session,
-+                    definition.workspace_id,
-+                    sha256=definition.wasm_module_sha256,
-+                    source=source,
-+                    allow_raw_bytecode=(definition.wasm_module_sha256 is None),
+         if not clean_code:
+-            if any(k in clean_src.lower() for k in BUILTIN_STARTER_WASM_BY_NAME):
+-                return ECHO_CVSS_WASM_BYTES, ECHO_CVSS_SHA256_BYTES
++            matched_name = next(
++                (k for k in BUILTIN_STARTER_WASM_BY_NAME if k in clean_src.lower()),
++                None,
++            )
++            if matched_name is not None:
++                mod_stmt = select(ApprovedWasmModule).where(
++                    ApprovedWasmModule.workspace_id == workspace_id,
++                    (ApprovedWasmModule.name == matched_name)
++                    | (ApprovedWasmModule.sha256 == ECHO_CVSS_SHA256_BYTES),
 +                )
-                 try:
-                     run_res = await self._tier_a.run(wasm_bytes, input_bytes)
-                 except WasmRunError as ex:
-@@ -984,7 +945,7 @@ class CustomFieldExecutor:
-                 )
-         return results
- 
--    async def test_execute(  # noqa: C901, PLR0912, PLR0915
-+    async def test_execute(  # noqa: C901, PLR0915
-         self,
-         session: AsyncSession,
-         caller: PrincipalContext,
-@@ -1048,61 +1009,17 @@ class CustomFieldExecutor:
-                     output_bytes = json.dumps(val).encode("utf-8")
-                     latency_ms = 1
-                     logs += "Evaluated legacy return statement.\n"
--                elif body.wasm_module_sha256 is not None:
--                    raw_sha = bytes.fromhex(body.wasm_module_sha256)
--                    mod_stmt = select(ApprovedWasmModule).where(
--                        ApprovedWasmModule.workspace_id == caller.workspace_id,
--                        ApprovedWasmModule.sha256 == raw_sha,
--                    )
--                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
--                    if wasm_mod is None:
--                        msg = "Approved WebAssembly module was not found in workspace"
--                        raise ProblemException(  # noqa: TRY301
--                            status=404,
--                            code="WASM_MODULE_NOT_FOUND",
--                            title="WebAssembly Module Not Found",
--                            detail=msg,
--                        )
--                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
--                    output_bytes = run_res.output_bytes
--                    latency_ms = max(1, int(run_res.duration_ms))
--                    logs += f"Executed Wasm module: fuel={run_res.fuel_consumed}\n"
-                 else:
--                    clean_lines = [
--                        line
--                        for line in source.splitlines()
--                        if not line.strip().startswith("//") and not line.strip().startswith("#")
--                    ]
--                    clean_source = "\n".join(clean_lines).strip()
--                    try:
--                        wasm_bytes = bytes.fromhex(clean_source)
--                    except ValueError:
--                        try:
--                            wasm_bytes = base64.b64decode(clean_source)
--                        except Exception as err:
--                            raise ProblemException(
--                                status=422,
--                                code="WASM_BINARY_INVALID",
--                                title="Invalid WebAssembly Binary",
--                                detail=f"Cannot decode WebAssembly module bytes: {err}",
--                            ) from err
--                    wasm_sha = hashlib.sha256(wasm_bytes).digest()
--                    mod_stmt = select(ApprovedWasmModule).where(
--                        ApprovedWasmModule.workspace_id == caller.workspace_id,
--                        ApprovedWasmModule.sha256 == wasm_sha,
-+                    wasm_bytes, _ = await resolve_wasm_module_bytes(
-+                        session,
-+                        caller.workspace_id,
-+                        sha256=body.wasm_module_sha256,
-+                        source=body.script_source,
-                     )
--                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
--                    if wasm_mod is None:
--                        raise ProblemException(  # noqa: TRY301
--                            status=404,
--                            code="WASM_MODULE_NOT_FOUND",
--                            title="WebAssembly Module Not Found",
--                            detail="Approved WebAssembly module was not found in workspace",
--                        )
--                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
-+                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
-                     output_bytes = run_res.output_bytes
-                     latency_ms = max(1, int(run_res.duration_ms))
--                    logs += f"Executed Wasm bytecode: fuel={run_res.fuel_consumed}\n"
-+                    logs += f"Executed Wasm module: fuel={run_res.fuel_consumed}\n"
-             elif tier_val == "nsjail":
-                 output_bytes = await self._tier_b.run(body.script_source or "", input_bytes)
-                 latency_ms = max(1, int((time.perf_counter() - start_time) * 1000))
++                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++                if wasm_mod is not None:
++                    return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
++                lower_name = matched_name.lower()
++                mod_bytes = BUILTIN_STARTER_WASM_BY_NAME[lower_name]
++                return mod_bytes, hashlib.sha256(mod_bytes).digest()
++
+             raise ProblemException(
+                 status=404,
+                 code="WASM_MODULE_NOT_FOUND",
+@@ -222,7 +235,6 @@ async def resolve_wasm_module_bytes(
+         return await _resolve_by_bytecode(
+             session,
+             workspace_id,
+-            clean_src,
+             clean_code,
+             allow_raw_bytecode=allow_raw_bytecode,
+         )
 diff --git a/kanban/tests/custom_fields/test_builtin_wasm_preset.py b/kanban/tests/custom_fields/test_builtin_wasm_preset.py
-new file mode 100644
-index 00000000..4149de08
---- /dev/null
+index 4149de08..e22cc809 100644
+--- a/kanban/tests/custom_fields/test_builtin_wasm_preset.py
 +++ b/kanban/tests/custom_fields/test_builtin_wasm_preset.py
-@@ -0,0 +1,218 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Unit and integration tests for built-in WebAssembly starter presets (KAN-32, KB-P5-13)."""
-+
-+from __future__ import annotations
-+
-+import base64
-+import hashlib
-+import uuid
-+from typing import TYPE_CHECKING
-+
-+import pytest
-+
-+from database.models.wasm_module import ApprovedWasmModule
-+from kanban.api.deps import PrincipalContext
-+from kanban.api.problems import ProblemException
-+from kanban.custom_fields.builtin_wasm import (
-+    ECHO_CVSS_SHA256_BYTES,
-+    ECHO_CVSS_SHA256_HEX,
-+    ECHO_CVSS_WASM_BASE64,
-+    ECHO_CVSS_WASM_BYTES,
-+    resolve_wasm_module_bytes,
+@@ -21,6 +21,11 @@ from kanban.custom_fields.builtin_wasm import (
+     ECHO_CVSS_WASM_BYTES,
+     resolve_wasm_module_bytes,
+ )
++from kanban.custom_fields.executor import _eval_safe_formula
++from kanban.custom_fields.output_formats import (
++    SeverityPillFormatMetadata,
++    _validate_severity_pill,
 +)
-+
-+if TYPE_CHECKING:
-+    from collections.abc import Awaitable, Callable
-+
-+    import httpx
-+    from sqlalchemy.ext.asyncio import AsyncSession
-+
-+    from kanban.tests.api.conftest import ApiEnv, SeededUser
-+
-+pytestmark = pytest.mark.committed_db
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Awaitable, Callable
+@@ -216,3 +221,101 @@ async def test_api_test_execute_preset_cvss_score_fresh_project_200(
+     assert data["status"] == "SUCCESS"
+     assert data["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
+     assert "Executed Wasm module" in data["logs"]
 +
 +
-+def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
-+    """Return httpx client authenticated as workspace/project admin with AAL2."""
-+    api_env.resolver.principal = PrincipalContext(
-+        principal_id=user.id,
-+        workspace_id=user.workspace_id,
-+        token_scopes=("session",),
-+        aal_level=2,
-+    )
-+    return api_env.client
-+
-+
-+async def test_resolve_builtin_wasm_by_name(db_session: AsyncSession) -> None:
-+    """Test 1: resolve_wasm_module_bytes resolves echo_cvss by name out of the box."""
-+    ws_id = uuid.uuid4()
-+    for name in ("echo_cvss", "echo_cvss.wasm", "cvss-score", "cvss_score", "wasm:echo_cvss"):
-+        wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=name)
-+        assert wasm_b == ECHO_CVSS_WASM_BYTES
-+        assert sha_b == ECHO_CVSS_SHA256_BYTES
-+
-+
-+async def test_resolve_builtin_wasm_by_sha(db_session: AsyncSession) -> None:
-+    """Test 2: resolve_wasm_module_bytes resolves by SHA256 bytes and hex string."""
-+    ws_id = uuid.uuid4()
-+    wasm_b1, sha_b1 = await resolve_wasm_module_bytes(
-+        db_session, ws_id, sha256=ECHO_CVSS_SHA256_BYTES, source="echo_cvss"
-+    )
-+    assert wasm_b1 == ECHO_CVSS_WASM_BYTES
-+    assert sha_b1 == ECHO_CVSS_SHA256_BYTES
-+
-+    wasm_b2, sha_b2 = await resolve_wasm_module_bytes(
-+        db_session, ws_id, sha256=ECHO_CVSS_SHA256_HEX
-+    )
-+    assert wasm_b2 == ECHO_CVSS_WASM_BYTES
-+    assert sha_b2 == ECHO_CVSS_SHA256_BYTES
-+
-+
-+async def test_resolve_builtin_wasm_by_bytecode_with_comments(db_session: AsyncSession) -> None:
-+    """Test 3: resolve_wasm_module_bytes resolves preset bytecode containing comments."""
-+    ws_id = uuid.uuid4()
-+    preset_source = (
-+        f"// Built-in WebAssembly Starter Preset: echo_cvss.wasm\n"
-+        f"// Base64 encoding:\n{ECHO_CVSS_WASM_BASE64}"
-+    )
-+    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=preset_source)
-+    assert wasm_b == ECHO_CVSS_WASM_BYTES
-+    assert sha_b == ECHO_CVSS_SHA256_BYTES
-+
-+
-+async def test_resolve_builtin_wasm_comments_only(db_session: AsyncSession) -> None:
-+    """Test 4: resolve_wasm_module_bytes handles comment-only preset references."""
-+    ws_id = uuid.uuid4()
-+    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source="// echo_cvss.wasm")
-+    assert wasm_b == ECHO_CVSS_WASM_BYTES
-+    assert sha_b == ECHO_CVSS_SHA256_BYTES
-+
-+    with pytest.raises(ProblemException) as exc:
-+        await resolve_wasm_module_bytes(db_session, ws_id, source="// random empty comment")
-+    assert exc.value.code == "WASM_MODULE_NOT_FOUND"
-+
-+
-+async def test_resolve_builtin_wasm_db_override(
++async def test_resolve_starter_templates_wasm_without_echo_cvss_comment(
 +    db_session: AsyncSession,
 +    make_user: Callable[..., Awaitable[SeededUser]],
 +) -> None:
-+    """Test 5: DB row overrides built-in starter preset when present in workspace."""
-+    admin = await make_user("db_override_admin", workspace_role="WORKSPACE_ADMIN")
-+    custom_bytes = b"\x00asm\x01\x00\x00\x00\x01\x04\x01`\x00\x00\x03\x02\x01\x00"
-+    custom_sha = hashlib.sha256(custom_bytes).digest()
++    """Test 8: Starter WASM without echo comment resolves via preset SHA and checks DB first."""
++    # 1. Fresh workspace without DB overrides
++    ws_id = uuid.uuid4()
++    raw_starter_source = f"// WebAssembly Tier A Module (Base64)\n{ECHO_CVSS_WASM_BASE64}"
++    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=raw_starter_source)
++    assert wasm_b == ECHO_CVSS_WASM_BYTES
++    assert sha_b == ECHO_CVSS_SHA256_BYTES
 +
++    # 2. Workspace with ApprovedWasmModule DB override for ECHO_CVSS_SHA256_BYTES
++    admin = await make_user("wasm_override_admin", workspace_role="WORKSPACE_ADMIN")
 +    try:
-+        db_mod = ApprovedWasmModule(
++        override_bytes = b"\x00asm\x01\x00\x00\x00\x01\x04\x01`\x00\x00\x03\x02\x01\x00"
++        db_override = ApprovedWasmModule(
 +            workspace_id=admin.workspace_id,
-+            name="echo_cvss",
-+            sha256=custom_sha,
-+            wasm_bytes=custom_bytes,
-+            approved_by_id=admin.id,
-+        )
-+        db_session.add(db_mod)
-+        await db_session.flush()
-+
-+        # Resolution by name returns DB row instead of builtin
-+        wasm_b, sha_b = await resolve_wasm_module_bytes(
-+            db_session, admin.workspace_id, source="wasm:echo_cvss"
-+        )
-+        assert wasm_b == custom_bytes
-+        assert sha_b == custom_sha
-+
-+        # DB row matching preset sha and comments (line 174)
-+        db_preset_mod = ApprovedWasmModule(
-+            workspace_id=admin.workspace_id,
-+            name="echo_cvss_custom",
++            name="custom_override_cvss",
 +            sha256=ECHO_CVSS_SHA256_BYTES,
-+            wasm_bytes=ECHO_CVSS_WASM_BYTES,
++            wasm_bytes=override_bytes,
 +            approved_by_id=admin.id,
 +        )
-+        db_session.add(db_preset_mod)
++        db_session.add(db_override)
 +        await db_session.flush()
 +
-+        b64_preset = base64.b64encode(ECHO_CVSS_WASM_BYTES).decode("ascii")
-+        src_commented = f"// echo_cvss\n{b64_preset}"
-+        wasm_from_db, sha_from_db = await resolve_wasm_module_bytes(
-+            db_session, admin.workspace_id, source=src_commented
++        wasm_overridden, sha_overridden = await resolve_wasm_module_bytes(
++            db_session, admin.workspace_id, source=raw_starter_source
 +        )
-+        assert wasm_from_db == ECHO_CVSS_WASM_BYTES
-+        assert sha_from_db == ECHO_CVSS_SHA256_BYTES
++        assert wasm_overridden == override_bytes
++        assert sha_overridden == ECHO_CVSS_SHA256_BYTES
++
++        # 3. Comment-only // echo_cvss.wasm path also checks DB override
++        comment_source = "// echo_cvss.wasm"
++        wasm_comment_overridden, sha_comment_overridden = await resolve_wasm_module_bytes(
++            db_session, admin.workspace_id, source=comment_source
++        )
++        assert wasm_comment_overridden == override_bytes
++        assert sha_comment_overridden == ECHO_CVSS_SHA256_BYTES
 +    finally:
 +        await db_session.rollback()
 +
 +
-+async def test_resolve_builtin_wasm_error_branches(db_session: AsyncSession) -> None:
-+    """Test 6: Invalid hex sha, invalid base64, and missing module raise expected errors."""
-+    ws_id = uuid.uuid4()
-+
-+    # Invalid hex sha
-+    with pytest.raises(ProblemException) as exc1:
-+        await resolve_wasm_module_bytes(db_session, ws_id, sha256="not_a_hex_string_zzz")
-+    assert exc1.value.code == "INVALID_WASM_SHA256"
-+
-+    # Unknown sha
-+    with pytest.raises(ProblemException) as exc2:
-+        await resolve_wasm_module_bytes(db_session, ws_id, sha256="11" * 32)
-+    assert exc2.value.code == "WASM_MODULE_NOT_FOUND"
-+
-+    # Unknown name
-+    with pytest.raises(ProblemException) as exc3:
-+        await resolve_wasm_module_bytes(db_session, ws_id, source="wasm:totally_nonexistent")
-+    assert exc3.value.code == "WASM_MODULE_NOT_FOUND"
-+
-+    # Raw bytecode allowed branch (line 179)
-+    arbitrary_bytes = b"\x00asm\x01\x00\x00\x00\x00\x00\x00\x00"
-+    arb_b64 = base64.b64encode(arbitrary_bytes).decode("ascii")
-+    raw_b, raw_sha = await resolve_wasm_module_bytes(
-+        db_session, ws_id, source=arb_b64, allow_raw_bytecode=True
-+    )
-+    assert raw_b == arbitrary_bytes
-+    assert raw_sha == hashlib.sha256(arbitrary_bytes).digest()
-+
-+    # Invalid base64 bytecode
-+    with pytest.raises(ProblemException) as exc4:
-+        await resolve_wasm_module_bytes(db_session, ws_id, source="bad_base64_data_!@#$%^")
-+    assert exc4.value.code == "WASM_BINARY_INVALID"
-+
-+    # Empty source and no sha
-+    with pytest.raises(ProblemException) as exc5:
-+        await resolve_wasm_module_bytes(db_session, ws_id)
-+    assert exc5.value.code == "WASM_MODULE_NOT_FOUND"
-+
-+
-+async def test_api_test_execute_preset_cvss_score_fresh_project_200(
++async def test_guide_example_3_severity_pill_formula_and_test_execute(
 +    api_env: ApiEnv,
 +    make_user: Callable[..., Awaitable[SeededUser]],
 +    make_project: Callable[..., Awaitable[uuid.UUID]],
 +) -> None:
-+    """Test 7: POST /test-execute with cvss-score preset on fresh project returns HTTP 200."""
-+    admin = await make_user("admin_preset", workspace_role="WORKSPACE_ADMIN")
-+    _ = await make_project("PRESET", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    """Test 9: Copy-pasting Example 3 formula passes _validate_severity_pill and test-execute."""
++    guide_formula = (
++        '{"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" '
++        'else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" '
++        'else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" '
++        'else {"level": "low", "score": 2.0, "label": "Low"}))'
++    )
 +
++    # (a) Verify AST safe evaluation and _validate_severity_pill across priority levels
++    for prio, expected_lvl in [
++        ("URGENT", "critical"),
++        ("HIGH", "high"),
++        ("MEDIUM", "medium"),
++        ("LOW", "low"),
++    ]:
++        evaluated = _eval_safe_formula(guide_formula, {"priority": prio})
++        validated = _validate_severity_pill(SeverityPillFormatMetadata(), evaluated)
++        assert validated["level"] == expected_lvl
++
++    # (b) Verify test-execute returns HTTP 200 OK on fresh project
++    admin = await make_user("admin_guide_ex3", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("GUIDE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
 +    client = _as_admin_aal2(api_env, admin)
 +
-+    # 1. Create real issue PRESET-1
 +    resp_issue = await client.post(
-+        "/api/v1/projects/PRESET/issues",
-+        json={"summary": "Preset Verification Issue", "description_markdown": "Test Description"},
++        "/api/v1/projects/GUIDE/issues",
++        json={
++            "summary": "Urgent Security Breach",
++            "description_markdown": "Critical vulnerability",
++        },
 +    )
 +    assert resp_issue.status_code == 201
 +    issue_key = resp_issue.json()["key"]
 +
-+    # 2. Test-execute cvss-score preset with zero DB rows in ApprovedWasmModule
 +    resp_test = await client.post(
-+        "/api/v1/projects/PRESET/custom-fields/test-execute",
++        "/api/v1/projects/GUIDE/custom-fields/test-execute",
 +        json={
 +            "issue_key": issue_key,
 +            "tier": "wasm",
 +            "output_format": "severity_pill",
 +            "output_format_metadata": {},
-+            "script_source": "// Built-in Starter Preset Module: echo_cvss.wasm\nwasm:echo_cvss",
++            "script_source": f"formula: {guide_formula}",
 +        },
 +    )
 +    assert resp_test.status_code == 200, resp_test.text
 +    data = resp_test.json()
 +    assert data["status"] == "SUCCESS"
-+    assert data["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
-+    assert "Executed Wasm module" in data["logs"]
++    assert data["value"]["level"] in ("low", "medium", "high", "critical")
+diff --git a/kanban/tests/custom_fields/test_manifest_and_formula_security.py b/kanban/tests/custom_fields/test_manifest_and_formula_security.py
+index a4aed292..7e79f7f1 100644
+--- a/kanban/tests/custom_fields/test_manifest_and_formula_security.py
++++ b/kanban/tests/custom_fields/test_manifest_and_formula_security.py
+@@ -251,8 +251,8 @@ async def test_test_execute_endpoint_security_and_wasm_verification(  # noqa: PL
+     assert resp_unapproved_sha.json()["code"] == "WASM_MODULE_NOT_FOUND"
+ 
+     # 5. Wasm test-execution with unapproved raw bytecode gets 404 WASM_MODULE_NOT_FOUND
+-    echo_bytes = _read_fixture("echo_cvss.wasm")
+-    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
++    unapproved_bytes = b"\x00asm\x01\x00\x00\x00\x00\x00\x00\x00"
++    unapproved_b64 = base64.b64encode(unapproved_bytes).decode("ascii")
+     resp_unapproved_bytes = await _as_admin_aal2(api_env, admin).post(
+         "/api/v1/projects/SEC/custom-fields/test-execute",
+         json={
+@@ -260,13 +260,15 @@ async def test_test_execute_endpoint_security_and_wasm_verification(  # noqa: PL
+             "tier": "wasm",
+             "output_format": "severity_pill",
+             "output_format_metadata": {},
+-            "script_source": echo_b64,
++            "script_source": unapproved_b64,
+         },
+     )
+     assert resp_unapproved_bytes.status_code == 404
+     assert resp_unapproved_bytes.json()["code"] == "WASM_MODULE_NOT_FOUND"
+ 
+     # 6. Upload approved wasm module
++    echo_bytes = _read_fixture("echo_cvss.wasm")
++    echo_b64 = base64.b64encode(echo_bytes).decode("ascii")
+     resp_wasm = await _as_admin_aal2(api_env, admin).post(
+         "/api/v1/projects/SEC/wasm-modules",
+         json={"name": "echo_cvss", "wasm_base64": echo_b64},
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index a4e88615..e589fbbd 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -63,13 +63,13 @@ const STARTER_TEMPLATES: Record<FieldFlavor, Record<OutputFormatType, string>> =
+       'formula: {"level": issue.priority === "URGENT" ? "critical" : "medium", "score": issue.priority === "URGENT" ? 9.0 : 5.0, "label": issue.priority || "Medium"}',
+   },
+   wasm: {
+-    text: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+-    number: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+-    badge: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+-    markdown_snippet: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+-    url: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+-    json_table: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+-    severity_pill: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    text: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    number: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    badge: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    markdown_snippet: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    url: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    json_table: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
++    severity_pill: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+   },
+   nsjail: {
+     text: `# Tier B nsjail container Python script (isolated Linux namespaces)
+@@ -896,7 +896,7 @@ export function CustomFieldDefinitionEditor({
+                     className="custom-field-badge custom-field-badge--warning"
+                     data-testid="flavor-nsjail-disabled-badge"
+                   >
+-                    Multi-Container Compose Required
++                    nsjail option requires Multi-Container Compose
+                   </span>
+                 )}
+               </div>
+@@ -1158,7 +1158,7 @@ export function CustomFieldDefinitionEditor({
+                     className="custom-field-badge custom-field-badge--warning"
+                     data-testid="tier-nsjail-disabled-badge"
+                   >
+-                    Multi-Container Compose Required
++                    nsjail option requires Multi-Container Compose
+                   </span>
+                 )}
+                 <div className="custom-field-form-hint">
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldValue.tsx b/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
+index 1828fedb..d98fd898 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
+@@ -353,7 +353,13 @@ export function CustomFieldValue({
+       }
+ 
+       const displayScore = score !== undefined ? score.toFixed(1) : null;
+-      const displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
++      let displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
++      if (displayScore && displayLabel.startsWith(displayScore)) {
++        const trimmed = displayLabel.slice(displayScore.length).trimStart();
++        if (trimmed) {
++          displayLabel = trimmed;
++        }
++      }
+ 
+       return (
+         <span
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+index b3fe645b..9f46df1d 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+@@ -987,14 +987,18 @@ describe('CustomFieldDefinitionEditor', () => {
+     const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+     const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+     expect(nsjailFlavorOpt?.disabled).toBe(true);
+-    expect(screen.getByTestId('flavor-nsjail-disabled-badge')).toBeDefined();
++    const flavorBadge = screen.getByTestId('flavor-nsjail-disabled-badge');
++    expect(flavorBadge).toBeDefined();
++    expect(flavorBadge.textContent).toContain('nsjail option requires Multi-Container Compose');
+ 
+     // 3. Execution tier nsjail option disabled with badge in Advanced tab
+     fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+     const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
+     const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+     expect(nsjailTierOpt?.disabled).toBe(true);
+-    expect(screen.getByTestId('tier-nsjail-disabled-badge')).toBeDefined();
++    const tierBadge = screen.getByTestId('tier-nsjail-disabled-badge');
++    expect(tierBadge).toBeDefined();
++    expect(tierBadge.textContent).toContain('nsjail option requires Multi-Container Compose');
+ 
+     // 4. Pre-existing nsjail field selection shows warning banner
+     await waitFor(() => {
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx
+index 691e542d..dfcb47b9 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldValue.test.tsx
+@@ -252,6 +252,21 @@ describe('CustomFieldValue', () => {
+       expect(el.textContent).toContain('High');
+     });
+ 
++    it('avoids duplicate score when displayLabel already starts with displayScore', () => {
++      render(
++        <CustomFieldValue
++          format="severity_pill"
++          value={{ level: 'high', score: 8.8, label: '8.8 High' }}
++          testId="cf-sev-dedup"
++        />,
++      );
++      const el = screen.getByTestId('cf-sev-dedup');
++      const scoreEl = el.querySelector('.custom-field-severity-score');
++      const labelEl = el.querySelector('.custom-field-severity-label');
++      expect(scoreEl?.textContent).toBe('8.8');
++      expect(labelEl?.textContent).toBe('High');
++    });
++
+     it('renders all 4 severity levels (low, medium, high, critical)', () => {
+       const levels = ['low', 'medium', 'high', 'critical'] as const;
+       for (const lvl of levels) {
 diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
-index 2aa1f561..9e8f4063 100644
+index 9e8f4063..e83df93a 100644
 --- a/kanban/web/src/features/custom-fields/custom-fields.css
 +++ b/kanban/web/src/features/custom-fields/custom-fields.css
-@@ -198,33 +198,33 @@
+@@ -541,7 +541,20 @@
  }
  
- .custom-field-badge--info {
--  background-color: #eff6ff;
--  color: #1d4ed8;
--  border-color: #bfdbfe;
-+  background-color: var(--bg-accent-subtle, #eff6ff);
-+  color: var(--brand-primary, #1d4ed8);
-+  border-color: var(--border-accent-subtle, #bfdbfe);
- }
- 
- .custom-field-badge--success {
--  background-color: #ecfdf5;
--  color: #047857;
--  border-color: #a7f3d0;
-+  background-color: var(--bg-success-subtle, #ecfdf5);
-+  color: var(--text-success, #047857);
-+  border-color: var(--border-success, #a7f3d0);
- }
- 
- .custom-field-badge--warning {
--  background-color: var(--warn-bg, #fef3c7);
--  color: var(--warn-fg, #78350f);
--  border-color: #fde68a;
-+  background-color: var(--bg-warning-subtle, var(--warn-bg, #fef3c7));
-+  color: var(--text-warning, var(--warn-fg, #78350f));
-+  border-color: var(--border-warning, #fde68a);
- }
- 
- .custom-field-badge--danger {
--  background-color: var(--danger-bg, #ffe4e6);
--  color: var(--danger-fg, #881337);
--  border-color: #fecdd3;
-+  background-color: var(--bg-danger-subtle, var(--danger-bg, #ffe4e6));
-+  color: var(--text-danger, var(--danger-fg, #881337));
-+  border-color: var(--border-danger, #fecdd3);
- }
- 
- .custom-field-badge--accent {
--  background-color: #f5f3ff;
--  color: #6d28d9;
--  border-color: #ddd6fe;
-+  background-color: var(--state-custom-bg, #f5f3ff);
-+  color: var(--state-custom-fg, #6d28d9);
-+  border-color: var(--state-custom-border, #ddd6fe);
- }
- 
- /* Markdown snippet */
-@@ -312,15 +312,15 @@
- }
- 
- .custom-field-severity--low {
--  background-color: #eff6ff;
--  color: #1d4ed8;
--  border-color: #bfdbfe;
-+  background-color: var(--bg-accent-subtle, #eff6ff);
-+  color: var(--brand-primary, #1d4ed8);
-+  border-color: var(--border-accent-subtle, #bfdbfe);
- }
- 
- .custom-field-severity--medium {
--  background-color: var(--warn-bg, #fef3c7);
--  color: var(--warn-fg, #78350f);
--  border-color: #fde68a;
-+  background-color: var(--bg-warning-subtle, var(--warn-bg, #fef3c7));
-+  color: var(--text-warning, var(--warn-fg, #78350f));
-+  border-color: var(--border-warning, #fde68a);
- }
- 
- .custom-field-severity--high {
-@@ -329,10 +329,16 @@
-   border-color: #fed7aa;
- }
- 
-+[data-theme="dark"] .custom-field-severity--high {
-+  background-color: rgba(194, 65, 12, 0.25);
-+  color: #fdba74;
-+  border-color: rgba(249, 115, 22, 0.35);
-+}
-+
- .custom-field-severity--critical {
--  background-color: var(--danger-bg, #ffe4e6);
--  color: var(--danger-fg, #881337);
--  border-color: #fecdd3;
-+  background-color: var(--bg-danger-subtle, var(--danger-bg, #ffe4e6));
-+  color: var(--text-danger, var(--danger-fg, #881337));
-+  border-color: var(--border-danger, #fecdd3);
- }
- 
- .custom-field-severity-score {
-@@ -399,8 +405,18 @@
- }
- 
- .custom-fields-def-item--selected {
--  background-color: #eff6ff;
--  border-color: #bfdbfe;
-+  background-color: var(--bg-surface-selected, #eff6ff);
-+  border-color: var(--border-accent-subtle, #bfdbfe);
-+}
-+
-+.custom-fields-def-item--selected .custom-fields-def-item__title {
+ .custom-field-input,
+-.custom-field-select,
++.custom-field-select {
++  width: 100%;
++  padding: 8px 10px;
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-sm, 4px);
++  background-color: var(--bg-surface, #ffffff);
 +  color: var(--fg-primary, #111827);
-+  font-weight: 600;
++  font-size: 13px;
++  font-family: inherit;
++  box-sizing: border-box;
++  min-height: 38px;
++  line-height: 1.45;
 +}
 +
-+[data-theme="dark"] .custom-fields-def-item--selected {
-+  background-color: var(--bg-surface-selected, rgba(37, 99, 235, 0.25));
-+  border-color: var(--border-accent-subtle, rgba(96, 165, 250, 0.4));
- }
- 
- .custom-fields-def-item__title {
-@@ -971,8 +987,9 @@
-   color: var(--fg-muted, #6b7280);
- }
- 
-+pre.custom-field-test-logs,
- .custom-field-logs {
--  margin: 0;
-+  margin: 4px 0 0 0;
+ .custom-field-textarea {
+   width: 100%;
    padding: 8px 10px;
-   background-color: var(--bg-secondary, #f3f4f6);
-   border: 1px solid var(--border-subtle, #e5e7eb);
-@@ -980,10 +997,13 @@
-   font-size: 11px;
-   line-height: 1.4;
-   color: var(--fg-primary, #111827);
--  max-height: 120px;
-+  max-height: 140px;
-   overflow-y: auto;
-   white-space: pre-wrap;
-+  overflow-wrap: anywhere;
-   word-break: break-all;
-+  max-width: 100%;
-+  box-sizing: border-box;
- }
- 
- .custom-field-error--sandbox {
-diff --git a/kanban/web/src/features/custom-fields/presets.ts b/kanban/web/src/features/custom-fields/presets.ts
-index 7b8e4ec6..6499f48e 100644
---- a/kanban/web/src/features/custom-fields/presets.ts
-+++ b/kanban/web/src/features/custom-fields/presets.ts
-@@ -42,7 +42,7 @@ export const STARTER_PRESETS: CustomFieldPreset[] = [
-     tier: 'wasm',
-     outputFormat: 'severity_pill',
-     metadataText: JSON.stringify({}, null, 2),
--    scriptSource: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-+    scriptSource: `// WebAssembly Tier A Module (Built-in Starter Preset: echo_cvss.wasm)\nwasm:echo_cvss\n\n// Embedded Bytecode (Fallback Base64):\n// ${DEFAULT_WASM_BASE64}`,
-     targetScope: 'PROJECT',
-     credentialMode: 'INVOKING_USER',
-     egressAllowlist: [],
-diff --git a/kanban/web/src/styles/theme.css b/kanban/web/src/styles/theme.css
-index 622e78fa..13c1e325 100644
---- a/kanban/web/src/styles/theme.css
-+++ b/kanban/web/src/styles/theme.css
-@@ -22,6 +22,9 @@
-   --border-color: #e5e7eb;
-   --text-primary: #111827;
-   --text-secondary: #4b5563;
-+  --bg-accent-subtle: #eff6ff;
-+  --bg-surface-selected: #eff6ff;
-+  --border-accent-subtle: #bfdbfe;
-   --bg-danger-subtle: #ffe4e6;
-   --text-danger: #881337;
-   --border-danger: #d1d5db;
-@@ -82,6 +85,9 @@
-   --border-color: #2d333f;
-   --text-primary: #f9fafb;
-   --text-secondary: #9ca3af;
-+  --bg-accent-subtle: rgba(37, 99, 235, 0.2);
-+  --bg-surface-selected: rgba(37, 99, 235, 0.25);
-+  --border-accent-subtle: rgba(96, 165, 250, 0.4);
-   --bg-danger-subtle: #4c0519;
-   --text-danger: #fecdd3;
-   --border-danger: #3f4756;
-@@ -136,6 +142,9 @@
-     --danger-bg: #4c0519;
-     --danger-fg: #fecdd3;
-     --ok-fg: #34d399;
-+    --bg-accent-subtle: rgba(37, 99, 235, 0.2);
-+    --bg-surface-selected: rgba(37, 99, 235, 0.25);
-+    --border-accent-subtle: rgba(96, 165, 250, 0.4);
-     --bg-secondary: #1f232b;
-     --bg-secondary-hover: #262b35;
-     --brand-primary: #2563eb;

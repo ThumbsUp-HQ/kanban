@@ -63,13 +63,13 @@ const STARTER_TEMPLATES: Record<FieldFlavor, Record<OutputFormatType, string>> =
       'formula: {"level": issue.priority === "URGENT" ? "critical" : "medium", "score": issue.priority === "URGENT" ? 9.0 : 5.0, "label": issue.priority || "Medium"}',
   },
   wasm: {
-    text: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-    number: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-    badge: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-    markdown_snippet: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-    url: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-    json_table: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
-    severity_pill: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    text: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    number: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    badge: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    markdown_snippet: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    url: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    json_table: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    severity_pill: `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
   },
   nsjail: {
     text: `# Tier B nsjail container Python script (isolated Linux namespaces)
@@ -896,7 +896,7 @@ export function CustomFieldDefinitionEditor({
                     className="custom-field-badge custom-field-badge--warning"
                     data-testid="flavor-nsjail-disabled-badge"
                   >
-                    Multi-Container Compose Required
+                    nsjail option requires Multi-Container Compose
                   </span>
                 )}
               </div>
@@ -1158,7 +1158,7 @@ export function CustomFieldDefinitionEditor({
                     className="custom-field-badge custom-field-badge--warning"
                     data-testid="tier-nsjail-disabled-badge"
                   >
-                    Multi-Container Compose Required
+                    nsjail option requires Multi-Container Compose
                   </span>
                 )}
                 <div className="custom-field-form-hint">

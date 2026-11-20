@@ -130,7 +130,6 @@ def _decode_bytecode(clean_code: str) -> bytes:
 async def _resolve_by_bytecode(
     session: AsyncSession,
     workspace_id: uuid.UUID,
-    clean_src: str,
     clean_code: str,
     *,
     allow_raw_bytecode: bool = False,
@@ -138,8 +137,7 @@ async def _resolve_by_bytecode(
     wasm_bytes = _decode_bytecode(clean_code)
     computed_sha = hashlib.sha256(wasm_bytes).digest()
 
-    has_preset_name = any(k in clean_src.lower() for k in BUILTIN_STARTER_WASM_BY_NAME)
-    if computed_sha in BUILTIN_STARTER_WASM_BY_SHA and has_preset_name:
+    if computed_sha in BUILTIN_STARTER_WASM_BY_SHA:
         mod_stmt = select(ApprovedWasmModule).where(
             ApprovedWasmModule.workspace_id == workspace_id,
             ApprovedWasmModule.sha256 == computed_sha,
@@ -210,8 +208,23 @@ async def resolve_wasm_module_bytes(
             return await _resolve_by_name(session, workspace_id, name_ref)
 
         if not clean_code:
-            if any(k in clean_src.lower() for k in BUILTIN_STARTER_WASM_BY_NAME):
-                return ECHO_CVSS_WASM_BYTES, ECHO_CVSS_SHA256_BYTES
+            matched_name = next(
+                (k for k in BUILTIN_STARTER_WASM_BY_NAME if k in clean_src.lower()),
+                None,
+            )
+            if matched_name is not None:
+                mod_stmt = select(ApprovedWasmModule).where(
+                    ApprovedWasmModule.workspace_id == workspace_id,
+                    (ApprovedWasmModule.name == matched_name)
+                    | (ApprovedWasmModule.sha256 == ECHO_CVSS_SHA256_BYTES),
+                )
+                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+                if wasm_mod is not None:
+                    return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
+                lower_name = matched_name.lower()
+                mod_bytes = BUILTIN_STARTER_WASM_BY_NAME[lower_name]
+                return mod_bytes, hashlib.sha256(mod_bytes).digest()
+
             raise ProblemException(
                 status=404,
                 code="WASM_MODULE_NOT_FOUND",
@@ -222,7 +235,6 @@ async def resolve_wasm_module_bytes(
         return await _resolve_by_bytecode(
             session,
             workspace_id,
-            clean_src,
             clean_code,
             allow_raw_bytecode=allow_raw_bytecode,
         )
