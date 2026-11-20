@@ -1,12 +1,16 @@
 === 1. RUFF CHECK ===
-$ uv run ruff check kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
+$ uv run ruff check .
 All checks passed!
 
-=== 2. MYPY TYPECHECK ===
-$ uv run mypy kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
-Success: no issues found in 7 source files
+=== 2. RUFF FORMAT CHECK ===
+$ uv run ruff format --check .
+1945 files already formatted
 
-=== 3. LINT-IMPORTS ===
+=== 3. MYPY TYPECHECK ===
+$ uv run mypy
+Success: no issues found in 1121 source files
+
+=== 4. LINT-IMPORTS ===
 $ uv run lint-imports
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
@@ -23,7 +27,7 @@ $ uv run lint-imports
 Contracts
 ---------
 
-Analyzed 970 files, 3432 dependencies.
+Analyzed 977 files, 3469 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -31,37 +35,27 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
 
-=== 4. TYPESCRIPT TYPECHECK (TSC -B) ===
-$ pnpm --filter @kanban/web typecheck
+=== 5. TYPESCRIPT TYPECHECK & VITE BUILD ===
+$ pnpm --filter @kanban/web build
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
-> tsc -b --noEmit
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
+> tsc -b && vite build
 
+vite v8.3.8 building client environment for production...
+transforming (709) src/editor/mermaid/mermaidClient.ts✓ 710 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-I2brHysP.css            443.59 kB │ gzip:  62.39 kB
+dist/assets/index-DwdRrl6V.js           2,012.93 kB │ gzip: 542.69 kB
+✓ built in 1.80s
 
-=== 5. ESLINT ===
+=== 6. ESLINT ===
 $ pnpm --filter @kanban/web lint
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/kanban/web
 > eslint . --max-warnings 0
 
-
-=== 6. CHECK NO DASHES (0 EM/EN-DASHES) ===
+=== 7. CHECK NO DASHES (0 EM/EN-DASHES) ===
 $ python3 -m scripts.check_no_dashes --all
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-
-=== 7. CSS TOKENS AUDIT (0 INLINE STYLE PROPS) ===
-$ pnpm --filter @kanban/web test:unit --run src/styles/__tests__/cssTokensAudit.test.ts
-
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
-> vitest run --run src/styles/__tests__/cssTokensAudit.test.ts
-
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
-
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
-
- Test Files  1 passed (1)
-      Tests  4 passed (4)
-   Start at  10:06:13
-   Duration  1.30s (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
-
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-rc1-a2aa76a8/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

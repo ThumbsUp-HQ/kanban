@@ -42,7 +42,7 @@ export const STARTER_PRESETS: CustomFieldPreset[] = [
     tier: 'wasm',
     outputFormat: 'severity_pill',
     metadataText: JSON.stringify({}, null, 2),
-    scriptSource: `// WebAssembly Tier A Module (Base64)\n${DEFAULT_WASM_BASE64}`,
+    scriptSource: `// WebAssembly Tier A Module (Built-in Starter Preset: echo_cvss.wasm)\nwasm:echo_cvss\n\n// Embedded Bytecode (Fallback Base64):\n// ${DEFAULT_WASM_BASE64}`,
     targetScope: 'PROJECT',
     credentialMode: 'INVOKING_USER',
     egressAllowlist: [],
