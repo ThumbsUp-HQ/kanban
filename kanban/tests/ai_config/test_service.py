@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import uuid
 from typing import TYPE_CHECKING
 from unittest import mock
@@ -800,3 +801,101 @@ async def test_budget_additional_branches(
     budgets = await service.get_budgets(cfg.id, project_id=proj_id)
     assert len(budgets) == 1
     assert budgets[0].project_id == proj_id
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_zero_rebinding_and_ssrf_rejection(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Explicitly verify TOCTOU zero-rebinding target pinning and SSRF rejection."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    # (i) probe_provider() connects to literal pinned_ip URL with Host header + sni_hostname
+    mock_resp = mock.MagicMock(spec=httpx.Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"data": [{"id": "model-1"}]}
+
+    async def mock_custom_resolver(host: str, _port: int) -> list[str]:
+        if host == "ai.example.internal":
+            return ["10.0.5.10"]
+        if host == "secure-llm.example.com":
+            return ["93.184.216.34"]
+        return ["127.0.0.1"]
+
+    # Test HTTPS: connects to pinned_ip URL with Host and sni_hostname
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+        res = await service.probe_provider(
+            provider_kind="openai",
+            base_url="https://secure-llm.example.com:8443/v1",
+            api_key="sk-test",
+            resolver=mock_custom_resolver,
+        )
+        assert res["ok"] is True
+        assert res["models"] == ["model-1"]
+        called_url = mock_get.call_args[0][0]
+        # Literal pinned IP is in URL, NOT raw hostname!
+        assert called_url == "https://93.184.216.34:8443/v1/models"
+        headers = mock_get.call_args[1].get("headers", {})
+        assert headers.get("Host") == "secure-llm.example.com:8443"
+        extensions = mock_get.call_args[1].get("extensions", {})
+        assert extensions.get("sni_hostname") == "secure-llm.example.com"
+
+    # Test HTTP private LAN: connects to pinned_ip URL with Host, no sni_hostname
+    mock_ollama_resp = mock.MagicMock(spec=httpx.Response)
+    mock_ollama_resp.status_code = 200
+    mock_ollama_resp.json.return_value = {"models": [{"name": "qwen2.5-coder:7b"}]}
+
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        mock_get.return_value = mock_ollama_resp
+        res = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://ai.example.internal:11434",
+            resolver=mock_custom_resolver,
+        )
+        assert res["ok"] is True
+        assert res["models"] == ["qwen2.5-coder:7b"]
+        called_url = mock_get.call_args[0][0]
+        assert called_url == "http://10.0.5.10:11434/api/tags"
+        headers = mock_get.call_args[1].get("headers", {})
+        assert headers.get("Host") == "ai.example.internal:11434"
+        extensions = mock_get.call_args[1].get("extensions", {})
+        assert "sni_hostname" not in extensions
+
+    # (ii) http://evil.local:11434 resolving via DNS to 93.184.216.34 (public IP) is rejected
+    # before any HTTP socket opens!
+    async def mock_evil_resolver(host: str, _port: int) -> list[str]:
+        if host == "evil.local":
+            return ["93.184.216.34"]
+        return ["127.0.0.1"]
+
+    with mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get:
+        res_evil = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://evil.local:11434",
+            resolver=mock_evil_resolver,
+        )
+        assert res_evil["ok"] is False
+        assert res_evil["error_code"] in ("OLLAMA_CIDR_DENIED", "SSRF_BLOCKED")
+        assert "outside allowed CIDRs" in res_evil["message"] or "public IP" in res_evil["message"]
+        # Indisputable proof: ZERO HTTP requests initiated!
+        mock_get.assert_not_called()
+
+    # (iii) Additional assertion: SSRFBlockedError triggered if pinned IP is non-private on http://
+    with (
+        mock.patch(
+            "kanban.ai_config.service.resolve_and_pin",
+            new_callable=mock.AsyncMock,
+            return_value=ipaddress.ip_address("93.184.216.34"),
+        ),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        res_public_http = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://custom.lan:11434",
+        )
+        assert res_public_http["ok"] is False
+        assert res_public_http["error_code"] == "SSRF_BLOCKED"
+        mock_get.assert_not_called()

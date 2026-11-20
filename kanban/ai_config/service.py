@@ -17,7 +17,10 @@ from sqlalchemy import delete, select, text
 
 from database.models.ai import AIProviderConfig, AITokenLedger
 from kanban.ai_config.net_guard import (
+    LOCAL_AND_PRIVATE_CIDRS,
     EgressDeniedError,
+    Resolver,
+    SSRFBlockedError,
     is_hard_denied,
     is_local_base_url,
     is_local_or_private_ip,
@@ -48,6 +51,7 @@ _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localho
 
 _MAX_DISPLAY_NAME_LEN: Final[int] = 80
 _MAX_MODELS_LEN: Final[int] = 32
+_IPV6_VERSION: Final[int] = 6
 _MAX_TOKEN_CAP: Final[int] = 10_000_000_000
 _HTTP_200: Final[int] = 200
 _HTTP_401: Final[int] = 401
@@ -229,10 +233,12 @@ class AIProviderConfigService:
         self,
         session: AsyncSession,
         kek_provider: KekProvider | None = None,
+        resolver: Resolver | None = None,
     ) -> None:
         """Initialize service with active database session and KEK provider."""
         self._session = session
         self._kek = kek_provider if kek_provider is not None else _DEFAULT_KEK_FALLBACK
+        self._resolver = resolver
 
     @staticmethod
     def _seal_key_material(
@@ -649,7 +655,7 @@ class AIProviderConfigService:
         await self._session.flush()
         return ledger
 
-    async def probe_provider(  # noqa: C901, PLR0911, PLR0912, PLR0915
+    async def probe_provider(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915
         self,
         provider_kind: str,
         *,
@@ -657,6 +663,7 @@ class AIProviderConfigService:
         api_key: str | None = None,
         config_id: uuid.UUID | None = None,
         air_gap_mode: bool | None = None,
+        resolver: Resolver | None = None,
     ) -> dict[str, Any]:
         """Probe upstream provider models and latency with zeroize key cleanup and SSRF defense."""
         norm_kind = provider_kind.strip().lower()
@@ -705,12 +712,33 @@ class AIProviderConfigService:
                 "message": str(exc),
             }
 
-        # 3. SSRF defense via resolve_and_pin
+        # 3. SSRF defense via resolve_and_pin and target reconstruction
         parsed = urllib.parse.urlsplit(resolved_base_url)
         host = (parsed.hostname or "").strip("[]")
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        is_https = parsed.scheme == "https"
+        default_port = 443 if is_https else 80
+        port = parsed.port or default_port
         try:
-            await resolve_and_pin(host, port)
+            allowed_cidrs = None if is_https else LOCAL_AND_PRIVATE_CIDRS
+            active_resolver = resolver if resolver is not None else self._resolver
+            raw_pinned: Any = await resolve_and_pin(
+                host,
+                port,
+                allowed_cidrs=allowed_cidrs,
+                resolver=active_resolver,
+            )
+            pinned_ip: ipaddress.IPv4Address | ipaddress.IPv6Address
+            if isinstance(raw_pinned, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
+                pinned_ip = raw_pinned
+            else:
+                pinned_ip = ipaddress.ip_address("127.0.0.1")
+
+            if not is_https and not is_local_or_private_ip(pinned_ip):
+                msg = (
+                    f"HTTP endpoint '{host}' resolved to public IP '{pinned_ip}'; "
+                    "cleartext HTTP is restricted to local/private addresses"
+                )
+                raise SSRFBlockedError(msg, code="SSRF_BLOCKED")
         except EgressDeniedError as exc:
             return {
                 "ok": False,
@@ -720,6 +748,21 @@ class AIProviderConfigService:
                 "error_code": exc.code,
                 "message": str(exc),
             }
+
+        # Zero DNS rebinding: construct literal pinned IP target URL and headers
+        host_repr = f"[{pinned_ip}]" if pinned_ip.version == _IPV6_VERSION else str(pinned_ip)
+        port_suffix = f":{port}" if (parsed.port and parsed.port != default_port) else ""
+        base_path = parsed.path.rstrip("/")
+        pinned_base_url = f"{parsed.scheme}://{host_repr}{port_suffix}{base_path}"
+
+        host_in_header = f"[{host}]" if ":" in host and not host.startswith("[") else host
+        host_header = (
+            f"{host_in_header}:{port}"
+            if (parsed.port and parsed.port != default_port)
+            else host_in_header
+        )
+        base_headers: dict[str, str] = {"Host": host_header}
+        extensions: dict[str, Any] = {"sni_hostname": host} if is_https else {}
 
         # 4. Resolve API key with zeroize cleanup in finally
         key_material: bytearray | None = None
@@ -742,8 +785,8 @@ class AIProviderConfigService:
                 timeout=5.0,
             ) as client:
                 if norm_kind == "ollama":
-                    tags_url = f"{resolved_base_url.rstrip('/')}/api/tags"
-                    resp = await client.get(tags_url)
+                    tags_url = f"{pinned_base_url.rstrip('/')}/api/tags"
+                    resp = await client.get(tags_url, headers=base_headers, extensions=extensions)
                     latency = (time.monotonic() - start_time) * 1000.0
                     if resp.status_code != _HTTP_OK:
                         body_snip = resp.text[:200]
@@ -772,9 +815,11 @@ class AIProviderConfigService:
                     }
 
                 if norm_kind == "gemini":
-                    models_url = f"{resolved_base_url.rstrip('/')}/v1beta/models"
-                    headers = {"x-goog-api-key": active_key} if active_key else {}
-                    resp = await client.get(models_url, headers=headers)
+                    models_url = f"{pinned_base_url.rstrip('/')}/v1beta/models"
+                    headers = dict(base_headers)
+                    if active_key:
+                        headers["x-goog-api-key"] = active_key
+                    resp = await client.get(models_url, headers=headers, extensions=extensions)
                     latency = (time.monotonic() - start_time) * 1000.0
                     if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
                         return {
@@ -812,12 +857,18 @@ class AIProviderConfigService:
                     }
 
                 # Default: openai-compatible inference endpoints
-                base = resolved_base_url.rstrip("/")
+                base = pinned_base_url.rstrip("/")
                 models_url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
-                headers = {"Authorization": f"Bearer {active_key}"} if active_key else {}
-                resp = await client.get(models_url, headers=headers)
+                headers = dict(base_headers)
+                if active_key:
+                    headers["Authorization"] = f"Bearer {active_key}"
+                resp = await client.get(models_url, headers=headers, extensions=extensions)
                 if resp.status_code == _HTTP_NOT_FOUND and not base.endswith("/v1"):
-                    resp = await client.get(f"{base}/models", headers=headers)
+                    resp = await client.get(
+                        f"{base}/models",
+                        headers=headers,
+                        extensions=extensions,
+                    )
                 latency = (time.monotonic() - start_time) * 1000.0
                 if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
                     return {

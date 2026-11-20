@@ -82,7 +82,28 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 
 ---
 
+## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-15)
+
+- Target Branch: `fix/KAN-21-liveqa`
+- Remediation Head Commit: `d62fb30`
+- Remediation Scope:
+  1. Zero DNS-Rebinding TOCTOU Defense:
+     - In `kanban/ai_config/net_guard.py`: Added and exported `LOCAL_AND_PRIVATE_CIDRS` and `SSRFBlockedError(EgressDeniedError)`.
+     - In `kanban/ai_config/service.py`: Enforced that `http://` endpoints are restricted to `LOCAL_AND_PRIVATE_CIDRS` and verified with `is_local_or_private_ip(pinned_ip)` prior to opening network sockets.
+     - Captured `pinned_ip = await resolve_and_pin(...)` and reconstructed the HTTP target using the literal pinned IP (`pinned_base_url = f"{parsed.scheme}://{host_repr}{port_suffix}{base_path}"`).
+     - Passed explicit `Host` header and `extensions={"sni_hostname": host}` (for HTTPS), guaranteeing zero DNS rebinding on subsequent request execution.
+  2. Coverage & Measurement Verification:
+     - Eliminated coverage warnings by running source-scoped test execution, achieving 97% total coverage across 1898 statements in `kanban.ai_config` and `agent.providers`.
+     - Verified 197 passing tests, including explicit tests for pinned IP reconstruction, `Host` header propagation, and pre-socket SSRF rejection of public HTTP domains.
+  3. Static Analysis & Gate Cleanliness:
+     - Zero new dependencies.
+     - Strict 0 em/en-dashes verified.
+     - `ruff check`, `mypy`, and `lint-imports` clean.
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for API-to-UI contract verification (backend-only ticket; 1-line API path fix in `aiAdminApi.ts` verified via unit/Vitest tests).
+

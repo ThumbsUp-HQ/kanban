@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from kanban.ai_config.net_guard import (
+    LOCAL_AND_PRIVATE_CIDRS,
     EgressDeniedError,
+    SSRFBlockedError,
     _extract_ip,
     is_hard_denied,
     is_local_base_url,
@@ -219,3 +221,20 @@ def test_extract_ip_helper() -> None:
 
     with pytest.raises(ValueError, match="Unable to parse IP address"):
         _extract_ip(12345)
+
+
+def test_local_and_private_cidrs_and_ssrf_blocked_error() -> None:
+    """Verify LOCAL_AND_PRIVATE_CIDRS completeness and SSRFBlockedError hierarchy."""
+    # Must cover loopback, RFC1918, IPv6 ULA
+    assert ipaddress.ip_address("127.0.0.1") in LOCAL_AND_PRIVATE_CIDRS[0]
+    assert ipaddress.ip_address("::1") in LOCAL_AND_PRIVATE_CIDRS[1]
+    assert ipaddress.ip_address("10.0.0.1") in LOCAL_AND_PRIVATE_CIDRS[2]
+    assert ipaddress.ip_address("172.16.0.1") in LOCAL_AND_PRIVATE_CIDRS[3]
+    assert ipaddress.ip_address("192.168.1.1") in LOCAL_AND_PRIVATE_CIDRS[4]
+    assert ipaddress.ip_address("fc00::1") in LOCAL_AND_PRIVATE_CIDRS[5]
+
+    # SSRFBlockedError inherits from EgressDeniedError
+    err = SSRFBlockedError("SSRF attempt rejected")
+    assert isinstance(err, EgressDeniedError)
+    assert err.code == "SSRF_BLOCKED"
+    assert str(err) == "SSRF attempt rejected"
