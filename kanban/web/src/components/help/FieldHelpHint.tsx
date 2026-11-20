@@ -63,6 +63,15 @@ export function FieldHelpHint({
   const popupRef = useRef<HTMLDivElement | null>(null);
   const isPointerDownRef = useRef(false);
   const isTouchRef = useRef(false);
+  const suppressNextFocusRef = useRef(false);
+
+  const prevActivePanelRef = useRef(shellPanels?.activePanel);
+  useEffect(() => {
+    if (prevActivePanelRef.current?.id === 'help' && !shellPanels?.activePanel) {
+      suppressNextFocusRef.current = true;
+    }
+    prevActivePanelRef.current = shellPanels?.activePanel;
+  }, [shellPanels?.activePanel]);
 
   const [hintState, setHintState] = useState(() => ctrl.getState());
 
@@ -164,6 +173,10 @@ export function FieldHelpHint({
   };
 
   const handleFocus = (): void => {
+    if (suppressNextFocusRef.current) {
+      suppressNextFocusRef.current = false;
+      return;
+    }
     if (!isPointerDownRef.current) {
       ctrl.focus(popupId);
     }
@@ -296,6 +309,7 @@ export function FieldHelpHint({
   const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
     if (shellPanels && docHref) {
       e.preventDefault();
+      suppressNextFocusRef.current = true;
       triggerRef.current?.focus();
       ctrl.close(popupId);
       shellPanels.openPanel('help', { href: docHref, title });

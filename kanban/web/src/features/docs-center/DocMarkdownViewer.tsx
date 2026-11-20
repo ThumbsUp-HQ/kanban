@@ -28,6 +28,9 @@ function isSafeUrl(url: string): boolean {
 
 export function resolveSafeDocImageUrl(url: string): string | null {
   const trimmed = url.trim();
+  if (trimmed.includes('..') || trimmed.includes('\\')) {
+    return null;
+  }
   const lower = trimmed.toLowerCase();
   // 0 external URLs allowed!
   if (

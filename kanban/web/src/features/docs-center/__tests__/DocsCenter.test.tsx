@@ -1036,6 +1036,8 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       expect(resolveSafeDocImageUrl('data:image/png;base64,...')).toBeNull();
       expect(resolveSafeDocImageUrl('javascript:alert(1)')).toBeNull();
       expect(resolveSafeDocImageUrl('other/unknown/path.png')).toBeNull();
+      expect(resolveSafeDocImageUrl('images/../secret.png')).toBeNull();
+      expect(resolveSafeDocImageUrl('images\\windows\\secret.png')).toBeNull();
     });
 
     it('safely renders markdown images mapping images/... to /docs-images/..., rejecting external URLs', () => {
@@ -1293,6 +1295,14 @@ Paragraph with inline ![Inline Icon](./images/01-first-boot-setup.png) media, ![
       const homeLink = sidebar.querySelector('a[href="/docs/home"]');
       expect(homeLink).not.toBeNull();
       expect(homeLink?.textContent).toContain('[Informational]');
+
+      // Sidebar link text strips redundant category prefix (KAN-16)
+      const guideLink = sidebar.querySelector('a[href="/docs/guide-custom-fields"]');
+      expect(guideLink).not.toBeNull();
+      const guideText = guideLink?.querySelector('.kb-docs-nav-link-text');
+      expect(guideText?.textContent).toBe('How to Use Custom Fields');
+      expect(guideText?.textContent).not.toContain('[Guide]');
+      expect(guideLink?.textContent).toContain('[Guide]');
     });
 
     it('strips empty anchor tags and formats inline code spans in headings (KAN-33)', () => {

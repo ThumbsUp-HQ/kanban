@@ -57,6 +57,15 @@ export function DocsCenterPage(): JSX.Element {
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const mobileChaptersBtnRef = useRef<HTMLButtonElement | null>(null);
+  const wasMobileChaptersOpenRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (wasMobileChaptersOpenRef.current && !isMobileChaptersOpen) {
+      mobileChaptersBtnRef.current?.focus();
+    }
+    wasMobileChaptersOpenRef.current = isMobileChaptersOpen;
+  }, [isMobileChaptersOpen]);
 
   // Close mobile chapters drawer on Escape
   useEffect(() => {
@@ -152,6 +161,9 @@ export function DocsCenterPage(): JSX.Element {
     return '[Informational]';
   };
 
+  const stripCategoryPrefix = (title: string): string =>
+    title.replace(/^\[(Guide|Informational|Architectural)\]\s+/i, '');
+
   const renderFilterTabs = (): JSX.Element => (
     <div
       className="kb-docs-filter-tabs docs-category-filter-bar"
@@ -226,6 +238,7 @@ export function DocsCenterPage(): JSX.Element {
           </div>
 
           <button
+            ref={mobileChaptersBtnRef}
             type="button"
             className="kb-docs-mobile-chapters-btn"
             data-testid="docs-mobile-chapters-btn"
@@ -346,7 +359,7 @@ export function DocsCenterPage(): JSX.Element {
                               setIsMobileChaptersOpen(false);
                             }}
                           >
-                            <span className="kb-docs-nav-link-text">{ch.title}</span>
+                            <span className="kb-docs-nav-link-text">{stripCategoryPrefix(ch.title)}</span>
                             <span
                               className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
                             >
@@ -386,7 +399,7 @@ export function DocsCenterPage(): JSX.Element {
                         className={`kb-docs-nav-link ${isActive ? 'active' : ''}`}
                         aria-current={isActive ? 'page' : undefined}
                       >
-                        <span className="kb-docs-nav-link-text">{ch.title}</span>
+                        <span className="kb-docs-nav-link-text">{stripCategoryPrefix(ch.title)}</span>
                         <span
                           className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
                         >
