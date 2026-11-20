@@ -1,0 +1,84 @@
+================================================================================
+KAN-27 LIVE FULL-STACK BLACK-BOX VERIFICATION PROOF
+Target: http://localhost:18951 (container: kanban-liveqa-1, commit: 5998e9ab)
+Database: Real PostgreSQL 16 with FORCE ROW LEVEL SECURITY
+Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
+================================================================================
+
+1. SETUP & ADMIN AAL2 BOOTSTRAP
+--------------------------------------------------------------------------------
+GET /api/v1/setup/status -> HTTP 200 {"initialized":false}
+POST /api/v1/setup/claim -> HTTP 200 status=enrollment_required (workspace=kanban, project=KAN, user=admin)
+POST /api/v1/auth/mfa/totp/enroll -> HTTP 200
+POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 aal_level=2
+GET /api/v1/auth/session -> {"authenticated":true,"principal_id":"01a1f8f9-d1f3-72be-9bbe-f700067640a2","workspace_id":"01a1f8f9-d1f2-705c-a43a-1f2cd7443af9","session_id":"01a1f8ff-f892-7cb9-8949-0ad012014d8e","aal_level":2,"mfa_pending":false,...}
+
+2. EMPTY PROVIDERS VIEW ON /settings/profile (BEFORE EXTERNAL CARDS)
+--------------------------------------------------------------------------------
+Visited http://localhost:18951/settings/profile as @admin (1440x900 Light)
+- Empty providers notice: "No external identity providers (OIDC, OAuth2, LDAP) are currently enabled in this workspace.\n\nConfigure Providers in Admin Auth Studio ->"
+- Admin Auth Studio link: text="Configure Providers in Admin Auth Studio ->", href="/admin/auth"
+- Screenshot: docs/qa/KAN-27/screenshots/live-kan27-empty-providers-desktop-light.png
+
+3. REAL HTTPS OIDC PROVIDER + ENABLED OIDC & LDAP AUTH CARDS
+--------------------------------------------------------------------------------
+Real Node HTTPS OIDC provider listening on Docker bridge gateway https://172.17.0.1:37465
+- Endpoints served: /.well-known/openid-configuration, /jwks (RS256 JWK), /authorize, /token
+POST /api/v1/admin/auth-cards (corp-sso, OIDC) -> HTTP 201 id=749d1eba-3efe-4b02-a7c9-a0f4d67bb5ae
+POST /api/v1/admin/auth-cards (corp-ldap, LDAP) -> HTTP 201 id=37730a1d-f13f-4da2-b895-3d26c24fd412
+
+4. BACKEND SECURITY INVARIANTS
+--------------------------------------------------------------------------------
+a) Unauthenticated link_intent_id spoof probes:
+- GET /api/v1/auth/oidc/corp-sso/start?link_intent_id=00000000-0000-0000-0000-000000000001
+  -> HTTP 302, Location=https://172.17.0.1:37465/authorize?response_type=code&client_id=kanban-liveqa-client&redirect_uri=http%3A%2F%2Flocalhost%3A18951%2Fapi%2Fv1%2Fauth%2Foidc%2Fcorp-sso%2Fcallback&scope=openid+profile+email&state=9RvlLVvhDB6bdPYvtGKxgg&code_challenge=hvmUn9vSj1zhHGBtBvgrpG9GzlLMXxVGHk1iXXN1aos&code_challenge_method=S256&nonce=Le5g064kFFMEAhGjRruLug
+  (link_intent_id query parameter ignored; login-only flow created)
+- GET /api/v1/auth/cards/corp-sso/start?link_intent_id=00000000-0000-0000-0000-000000000001
+  -> HTTP 302, Location=https://172.17.0.1:37465/authorize?response_type=code&client_id=kanban-liveqa-client&redirect_uri=http%3A%2F%2Flocalhost%3A18951%2Fapi%2Fv1%2Fauth%2Foidc%2Fcorp-sso%2Fcallback&scope=openid+profile+email&state=CuZCFIkD6Z67we_oOCmErQ&code_challenge=ZpEgEQRfze9aYOyGA1qYgt00_HsXc-Z6O9ZHlr8X_TQ&code_challenge_method=S256&nonce=eGfTnSHGfgUcx1Qum7PKIw
+  (link_intent_id query parameter ignored; login-only flow created)
+
+b) Admin AAL1 rejection:
+- Provisioned @projadmin with PROJECT_ADMIN on KAN (no MFA enrolled).
+- @projadmin local login -> HTTP 200 aal_level=1
+- POST /api/v1/auth/identities/link/start {"card_slug":"corp-sso"}
+  -> HTTP 403 {"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Authentication Required","status":403,"code":"AAL2_REQUIRED","detail":"This operation requires multi-factor authentication (AAL2).","request_id":"441ee38387ab4ecf8c2fac161c97db12"}
+
+c) Zero-factor MEMBER (@alice, AAL1) link initiation -> LIVE BLOCKER (HTTP 500):
+- Provisioned @alice (WORKSPACE_MEMBER, no MFA enrolled).
+- @alice local login -> HTTP 200 session_id=72de3ae6-f1f4-4231-a53e-3eaa04ff9b08 aal_level=1
+- POST /api/v1/auth/identities/link/start {"card_slug":"corp-sso"}
+  -> HTTP 500 {"type":"urn:kanban:problem:INTERNAL_ERROR","title":"Internal Server Error","status":500,"code":"INTERNAL_ERROR","request_id":"ab583291f5d84d64af6c7875b1c51109"}
+  Set-Cookie: []
+
+5. UI VERIFICATION & SCREENSHOTS (PLAYWRIGHT)
+--------------------------------------------------------------------------------
+- Desktop Light (1440x900) Connect Buttons: docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-desktop-light.png
+- Desktop Dark (1440x900) Connect Buttons: docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-desktop-dark.png
+- Mobile Light (390x844) Connect Buttons: docs/qa/KAN-27/screenshots/live-kan27-connect-buttons-mobile-light.png (scrollWidth=390)
+- Desktop Light (1440x900) LDAP Credentials Modal: docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-light.png
+- Desktop Dark (1440x900) LDAP Credentials Modal: docs/qa/KAN-27/screenshots/live-kan27-ldap-modal-desktop-dark.png
+- UI click "+ Connect Corp SSO" in browser:
+  -> POST /api/v1/auth/identities/link/start returned HTTP 500 {"type":"urn:kanban:problem:INTERNAL_ERROR","title":"Internal Server Error","status":500,"code":"INTERNAL_ERROR","request_id":"bc122ad953c94bd791cc08cf6ef585dc"}
+  -> Browser alert-error displayed: "Internal Server Error"
+  -> Failure screenshot: docs/qa/KAN-27/screenshots/live-kan27-link-start-500-failure-desktop-light.png
+- Downstream OIDC callback, session preservation, ?linked= banner screenshots, and duplicate (issuer, sub) IDENTITY_ALREADY_LINKED check are BLOCKED by the HTTP 500 above.
+
+6. VERBATIM SERVER TRACEBACK & POSTGRES SCHEMA PROOF
+--------------------------------------------------------------------------------
+Container log excerpt (kanban-liveqa-1):
+[ERROR] [user=4e62d0bb-b1a8-4ad6-a040-abf9c948e8df] [kanban.api.problems] [req=ab583291f5d84d64af6c7875b1c51109] Unhandled server exception on POST /api/v1/auth/identities/link/start [request_id=ab583291f5d84d64af6c7875b1c51109]: IntegrityError: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "oidc_auth_requests" violates foreign key constraint "oidc_auth_requests_link_intent_id_fkey"
+DETAIL:  Key is not present in table "principals".
+[SQL: SELECT kb_auth.oidc_request_create(    $1,     $2,     $3,     $4,     $5,     $6,     $7,     $8,     NULL,     $9)]
+
+Postgres constraint inspection (\d oidc_auth_requests):
+Foreign-key constraints:
+    "oidc_auth_requests_card_id_fkey" FOREIGN KEY (card_id) REFERENCES auth_provider_cards(id) ON DELETE CASCADE
+    "oidc_auth_requests_link_intent_id_fkey" FOREIGN KEY (link_intent_id) REFERENCES principals(id) ON DELETE SET NULL
+
+Root Cause:
+kanban/auth/identity_service.py:708-731 creates intent_id via kb_auth.identity_link_intent_create(...) (an identity_link_intents.id UUID) and passes link_intent_id=intent_id into oidc_flow.start() -> kb_auth.oidc_request_create(). However, database/migrations/sql/p2_06_oidc_auth_requests.up.sql:12 defines oidc_auth_requests.link_intent_id as REFERENCES principals(id) instead of REFERENCES identity_link_intents(id), causing an unconditional ForeignKeyViolationError (HTTP 500) on real PostgreSQL 16 whenever any user initiates OIDC/OAuth2 identity linking.
+
+LIVE_STACK_VERDICT: FAIL
+- Problem 1 (IdentityLinkService.start_link OIDC flow): FAIL (HTTP 500 ForeignKeyViolationError on oidc_auth_requests_link_intent_id_fkey)
+- Problem 2 (OIDC callback session preservation & conflict): BLOCKED by Problem 1 failure (note: AAL2 enforcement on @projadmin and unauth link_intent_id ignore passed)
+- Problem 3 (Frontend + Connect controls on /settings/profile): PARTIAL PASS (UI buttons, empty state, and LDAP modal render cleanly; live OIDC click hits backend 500)

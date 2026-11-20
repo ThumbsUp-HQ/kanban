@@ -179,7 +179,7 @@ class OidcAuthRequest(Base):
         Text, nullable=False, default="/", server_default=text("'/'")
     )
     link_intent_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("identity_link_intents.id", ondelete="SET NULL"), nullable=True
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

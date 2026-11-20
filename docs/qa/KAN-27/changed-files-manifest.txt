@@ -1,3 +1,8 @@
+database/migrations/sql/p4_23_oidc_link_intent_fk.down.sql
+database/migrations/sql/p4_23_oidc_link_intent_fk.up.sql
+database/migrations/versions/p4_23_oidc_link_intent_fk.py
+database/models/auth.py
+database/tests/migrations/test_p4_23_oidc_link_intent_fk_migration.py
 kanban/api/v1/auth_cards_public.py
 kanban/api/v1/auth_identities.py
 kanban/api/v1/auth_oidc.py
@@ -5,6 +10,7 @@ kanban/auth/identity_service.py
 kanban/auth/oidc/flow.py
 kanban/tests/auth/test_auth_cards_public_api.py
 kanban/tests/auth/test_identity_linking.py
+kanban/tests/auth/test_identity_linking_real_pg_e2e.py
 kanban/tests/auth/test_oidc_flow.py
 kanban/web/src/features/settings/PersonalSettingsPage.css
 kanban/web/src/features/settings/PersonalSettingsPage.tsx
