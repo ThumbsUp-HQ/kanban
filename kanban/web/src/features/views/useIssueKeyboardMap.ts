@@ -89,6 +89,8 @@ export function useIssueKeyboardMap({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (typeof e.key !== 'string' || e.key.length === 0) return;
+
       // 1. Ignore if typing in text inputs, textareas, selects, or contenteditable
       const target = e.target as HTMLElement | null;
       if (

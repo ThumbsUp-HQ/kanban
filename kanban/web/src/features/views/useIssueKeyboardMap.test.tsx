@@ -543,4 +543,29 @@ describe('useIssueKeyboardMap (KB-P3-40, S6.4 item 4, S1.3 item 3)', () => {
     fireEvent.keyDown(window, { key: 'l' });
     expect(result.current.focusedKey).toBe('KAN-140');
   });
+
+  it('guards against invalid e.key (undefined, empty string) without throwing exceptions', () => {
+    renderHook(() => {
+      const [sel, setSel] = useState<string[]>([]);
+      return useIssueKeyboardMap({
+        issues: FIXTURE_12_ISSUES,
+        layout: 'board',
+        selectedIds: sel,
+        setSelectedIds: setSel,
+      });
+    });
+
+    // 1. Dispatch synthetic keydown with key: undefined
+    expect(() => {
+      const evUndefined = new KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+      Object.defineProperty(evUndefined, 'key', { value: undefined });
+      window.dispatchEvent(evUndefined);
+    }).not.toThrow();
+
+    // 2. Dispatch synthetic keydown with key: ''
+    expect(() => {
+      const evEmpty = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: '' });
+      window.dispatchEvent(evEmpty);
+    }).not.toThrow();
+  });
 });
