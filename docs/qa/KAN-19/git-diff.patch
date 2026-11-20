@@ -534,10 +534,10 @@ index 9844e36..757cf95 100644
 +                            cli_example=cli_example,
 +                        )
 diff --git a/mcp/surfaces/admin/manage_cycles_and_modules.py b/mcp/surfaces/admin/manage_cycles_and_modules.py
-index f6d6d66..8d7f74a 100644
+index f6d6d66..b2e6e2b 100644
 --- a/mcp/surfaces/admin/manage_cycles_and_modules.py
 +++ b/mcp/surfaces/admin/manage_cycles_and_modules.py
-@@ -166,11 +166,37 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
+@@ -166,11 +166,38 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
      code_str = exc.code.value if hasattr(exc.code, "value") else str(exc.code)
      msg = exc.message
      if code_str in ("INVALID_CYCLE_TRANSITION", "INVALID_TRANSITION"):
@@ -572,7 +572,8 @@ index f6d6d66..8d7f74a 100644
 +            msg,
 +            fix_hint="Cycle or module not found. Verify identifier or list project cycles/modules.",
 +            cli_example=(
-+                'kanban-cli-admin manage_cycles_and_modules --action=list --project="<project>"'
++                "kanban-cli-admin manage_cycles_and_modules "
++                '--action=list_cycles --project="<project>"'
 +            ),
 +        )
      return exc
@@ -796,7 +797,7 @@ index d885d7f..05a1d39 100644
          doc_patch_payload["body_markdown"] = content
  
 diff --git a/mcp/tests/admin/test_manage_cycles_and_modules.py b/mcp/tests/admin/test_manage_cycles_and_modules.py
-index 8f397cb..dc9117e 100644
+index 8f397cb..d746a40 100644
 --- a/mcp/tests/admin/test_manage_cycles_and_modules.py
 +++ b/mcp/tests/admin/test_manage_cycles_and_modules.py
 @@ -1,5 +1,6 @@
@@ -806,7 +807,18 @@ index 8f397cb..dc9117e 100644
  """Feature unit tests for /mcp/admin tool: manage_cycles_and_modules (KB-P4-10 / S11.4)."""
  
  from __future__ import annotations
-@@ -846,3 +847,226 @@ async def test_manage_cycles_and_modules_direct_unit_branches() -> None:  # noqa
+@@ -582,6 +583,10 @@ async def test_manage_cycles_and_modules_direct_unit_branches() -> None:  # noqa
+     assert e1.code == McpErrorCode.MODULES_DISABLED
+     e2 = _map_cycle_error(KbMcpError(McpErrorCode.NOT_FOUND, "not found"))
+     assert e2.code == McpErrorCode.NOT_FOUND
++    assert (
++        e2.cli_example
++        == 'kanban-cli-admin manage_cycles_and_modules --action=list_cycles --project="<project>"'
++    )
+     e3 = _map_cycle_error(KbMcpError(McpErrorCode.VALIDATION_FAILED, "other"))
+     assert e3.code == McpErrorCode.VALIDATION_FAILED
+ 
+@@ -846,3 +851,226 @@ async def test_manage_cycles_and_modules_direct_unit_branches() -> None:  # noqa
      assert exc_info.value.code == McpErrorCode.VALIDATION_FAILED
  
      set_current_mcp_context(None)
