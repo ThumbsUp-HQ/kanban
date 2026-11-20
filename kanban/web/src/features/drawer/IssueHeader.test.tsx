@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
@@ -99,9 +99,10 @@ describe('IssueHeader', () => {
     expect(screen.getByRole('button', { name: 'Return to side panel' })).toBeDefined();
   });
 
-  it('renders correctly for medium, low, and unknown priorities', () => {
+  it('renders correctly for high, medium, low, and unknown priorities', () => {
     const { Wrapper } = createWrapper();
     const priorities = [
+      { slug: 'high', label: 'High', sort_order: 2 },
       { slug: 'medium', label: 'Medium', sort_order: 3 },
       { slug: 'low', label: 'Low', sort_order: 4 },
       { slug: 'unknown', label: 'Unknown', sort_order: 9 },
@@ -134,6 +135,7 @@ describe('IssueHeader', () => {
   });
 
   it('handles issue key copy and issue link copy with visible feedback', async () => {
+    vi.useFakeTimers();
     /* eslint-disable @typescript-eslint/no-deprecated */
     document.execCommand = vi.fn().mockReturnValue(true);
     /* eslint-enable @typescript-eslint/no-deprecated */
@@ -152,22 +154,38 @@ describe('IssueHeader', () => {
 
     const copyKeyBtn = screen.getByTestId('copy-issue-key-btn');
     expect(copyKeyBtn.getAttribute('title')).toBe('Copy issue key');
-    fireEvent.click(copyKeyBtn);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('Copied!');
-      expect(screen.getByTestId('copy-issue-key-btn').getAttribute('title')).toBe('Copied!');
+    await act(async () => {
+      fireEvent.click(copyKeyBtn);
+      await Promise.resolve();
     });
+
+    expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('Copied!');
+    expect(screen.getByTestId('copy-issue-key-btn').getAttribute('title')).toBe('Copied!');
+
+    // Advance timer past 2000ms
+    act(() => {
+      vi.advanceTimersByTime(2100);
+    });
+    expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('📋');
 
     const copyLinkBtn = screen.getByTestId('copy-issue-link-btn');
     expect(copyLinkBtn.getAttribute('title')).toBe('Copy issue link');
-    fireEvent.click(copyLinkBtn);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('Copied!');
-      expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copied!');
+    await act(async () => {
+      fireEvent.click(copyLinkBtn);
+      await Promise.resolve();
     });
+
+    expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('Copied!');
+    expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copied!');
+
+    act(() => {
+      vi.advanceTimersByTime(2100);
+    });
+    expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('🔗');
+    expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copy issue link');
+
     unmount();
+    vi.useRealTimers();
 
     // False branch when copyToClipboard returns false
     vi.spyOn(clipboardUtils, 'copyToClipboard').mockResolvedValue(false);
@@ -183,5 +201,42 @@ describe('IssueHeader', () => {
     );
     fireEvent.click(screen.getByTestId('copy-issue-key-btn'));
     fireEvent.click(screen.getByTestId('copy-issue-link-btn'));
+  });
+
+  it('resolves issue.object_id ?? issue.id for AccessPill when object_id is omitted', () => {
+    const fallbackId = '33333333-3333-3333-3333-333333333333';
+    const issueWithIdOnly: IssueDetail = {
+      id: fallbackId,
+      key: 'KAN-999',
+      project_key: 'KAN',
+      project_name: 'Platform Core',
+      summary: 'Task with id only',
+    };
+    const { Wrapper } = createWrapper();
+    const eventSpy = vi.fn();
+    window.addEventListener('kb:open-access-inspector', eventSpy);
+
+    render(
+      <Wrapper>
+        <IssueHeader
+          issue={issueWithIdOnly}
+          mode="drawer"
+          onClose={vi.fn()}
+          toggleFullScreen={vi.fn()}
+        />
+      </Wrapper>,
+    );
+
+    const hintTrigger = screen.getByTestId('access-hint');
+    fireEvent.focus(hintTrigger);
+
+    const actionBtn = screen.getByRole('button', { name: 'Open Access Inspector' });
+    fireEvent.click(actionBtn);
+
+    expect(eventSpy).toHaveBeenCalledTimes(1);
+    const customEvent = eventSpy.mock.calls[0]?.[0] as CustomEvent<{ objectId: string }>;
+    expect(customEvent.detail.objectId).toBe(fallbackId);
+
+    window.removeEventListener('kb:open-access-inspector', eventSpy);
   });
 });

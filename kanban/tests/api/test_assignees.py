@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from kanban.api.deps import PrincipalContext
 from kanban.api.v1.schemas.assignees import FREE_TEXT_HINT, AssigneeCreate
-from kanban.services.assignees import add_assignee
+from kanban.services.assignees import add_assignee, get_assignee_suggestions
 from kanban.tests.security.helpers import add_acl_entry, add_role_binding, rebuild_era
 
 if TYPE_CHECKING:
@@ -231,6 +231,20 @@ async def test_case_3_enumeration_suggestions_isolation(
     items_b = resp_sugg_b.json()["items"]
     handles_b = [item["handle"] for item in items_b]
     assert "bob" not in handles_b
+
+    # 2b. Query suggestions in Project A with empty q="" and without q parameter
+    resp_empty_q = await client_admin.get("/api/v1/projects/PRJA/assignee-suggestions?q=")
+    assert resp_empty_q.status_code == 200, resp_empty_q.text
+    items_empty = resp_empty_q.json()["items"]
+    handles_empty = [item["handle"] for item in items_empty]
+    assert "admin" in handles_empty
+    assert "alice" in handles_empty
+    assert "bob" not in handles_empty
+
+    resp_no_q = await client_admin.get("/api/v1/projects/PRJA/assignee-suggestions")
+    assert resp_no_q.status_code == 200, resp_no_q.text
+    items_no_q = resp_no_q.json()["items"]
+    assert items_no_q == items_empty
 
     # 3. Verify zero email key or sensitive attribute in response items
     for item in items_a + items_b:
@@ -672,3 +686,24 @@ async def test_extra_permissions_and_payload_validations(
     )
     assert direct_res.kind == "principal"
     assert direct_res.id is not None
+
+    # 6. Direct get_assignee_suggestions service call with empty q and boundary check
+    direct_sugg = await get_assignee_suggestions(
+        api_env.seed,
+        caller,
+        "PRJX",
+        "",
+        limit=10,
+    )
+    assert len(direct_sugg.items) >= 2
+
+    from kanban.api.problems import ProblemException  # noqa: PLC0415
+
+    with pytest.raises(ProblemException) as exc_info:
+        await get_assignee_suggestions(
+            api_env.seed,
+            caller,
+            "PRJX",
+            "x" * 65,
+        )
+    assert exc_info.value.code == "INVALID_QUERY"

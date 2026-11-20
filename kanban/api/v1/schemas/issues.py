@@ -236,6 +236,9 @@ class IssueResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: uuid.UUID = Field(description="Unique issue UUID identifier")
+    object_id: uuid.UUID = Field(
+        description="Spine object record UUID identifier matching issue.id",
+    )
     key: str = Field(description="Canonical issue key (e.g. KAN-101)")
     summary: str = Field(description="Issue summary title")
     description_markdown: str = Field(description="Canonical UTF-8 Markdown description body")

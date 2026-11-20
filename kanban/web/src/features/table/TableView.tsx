@@ -51,19 +51,19 @@ export function TableView({
     setLocalIssues(issues);
   }
 
-  const effectiveCaps = capabilities ?? currentUserCapabilities ?? [];
-  const isViewerOnly =
-    effectiveCaps.includes('VIEWER') &&
-    !effectiveCaps.includes('EDIT') &&
-    !effectiveCaps.includes('ADMIN');
+  const effectiveCaps = capabilities ?? currentUserCapabilities;
+  const isViewerOnly = Boolean(
+    effectiveCaps &&
+      (effectiveCaps.includes('VIEWER') ||
+        (!effectiveCaps.includes('EDIT') && !effectiveCaps.includes('ADMIN'))),
+  );
 
   const canEditIssue = (issue: IssueItem): boolean => {
     if (isViewerOnly) return false;
     if (issue.capabilities && issue.capabilities.length > 0) {
       if (
-        issue.capabilities.includes('VIEWER') &&
-        !issue.capabilities.includes('EDIT') &&
-        !issue.capabilities.includes('ADMIN')
+        issue.capabilities.includes('VIEWER') ||
+        (!issue.capabilities.includes('EDIT') && !issue.capabilities.includes('ADMIN'))
       ) {
         return false;
       }

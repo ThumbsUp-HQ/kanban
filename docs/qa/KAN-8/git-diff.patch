@@ -1,0 +1,995 @@
+diff --git a/kanban/api/v1/assignees.py b/kanban/api/v1/assignees.py
+index 8c83e427..255aabfa 100644
+--- a/kanban/api/v1/assignees.py
++++ b/kanban/api/v1/assignees.py
+@@ -68,7 +68,14 @@ async def get_assignee_suggestions(
+     project_ref: str,
+     caller: Caller,
+     session: Session,
+-    q: Annotated[str, Query(description="Case-insensitive prefix query (1..64 chars)")],
++    q: Annotated[
++        str,
++        Query(
++            description="Case-insensitive prefix query (0..64 chars)",
++            min_length=0,
++            max_length=64,
++        ),
++    ] = "",
+     limit: Annotated[int, Query(description="Max suggestions to return (1..20)", ge=1, le=20)] = 10,
+ ) -> AssigneeSuggestionsResponse:
+     """Return autocomplete suggestions of active project viewers with zero cross-scope leakage."""
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index 93e0159c..b0dd7bd8 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -236,6 +236,9 @@ class IssueResponse(BaseModel):
+     model_config = ConfigDict(extra="forbid")
+ 
+     id: uuid.UUID = Field(description="Unique issue UUID identifier")
++    object_id: uuid.UUID = Field(
++        description="Spine object record UUID identifier matching issue.id",
++    )
+     key: str = Field(description="Canonical issue key (e.g. KAN-101)")
+     summary: str = Field(description="Issue summary title")
+     description_markdown: str = Field(description="Canonical UTF-8 Markdown description body")
+diff --git a/kanban/services/assignees.py b/kanban/services/assignees.py
+index 0fd999be..337b3493 100644
+--- a/kanban/services/assignees.py
++++ b/kanban/services/assignees.py
+@@ -39,7 +39,7 @@ MAX_TOTAL_ASSIGNEES: Final[int] = 20
+ MAX_FREE_TEXT_ASSIGNEES: Final[int] = 10
+ MIN_FREE_TEXT_LENGTH: Final[int] = 1
+ MAX_FREE_TEXT_LENGTH: Final[int] = 120
+-MIN_QUERY_LENGTH: Final[int] = 1
++MIN_QUERY_LENGTH: Final[int] = 0
+ MAX_QUERY_LENGTH: Final[int] = 64
+ DEFAULT_SUGGESTION_LIMIT: Final[int] = 10
+ MAX_SUGGESTION_LIMIT: Final[int] = 20
+@@ -400,52 +400,65 @@ async def get_assignee_suggestions(
+             code="INVALID_QUERY",
+             status=422,
+             title="Invalid Query Parameter",
+-            detail="Query string 'q' must be between 1 and 64 characters",
++            detail="Query string 'q' must be between 0 and 64 characters",
+         )
+ 
+     clamped_limit = max(1, min(MAX_SUGGESTION_LIMIT, limit))
+-    escaped_q = escape_like(q)
+-    pattern = f"{escaped_q}%"
++    params: dict[str, Any] = {
++        "project_id": project.id,
++        "workspace_id": caller.workspace_id,
++        "limit": clamped_limit,
++    }
++    if q:
++        escaped_q = escape_like(q)
++        params["pattern"] = f"{escaped_q}%"
++        query_sql = (
++            "SELECT "
++            "  p.id AS id, "
++            "  o.canonical_key AS handle, "
++            "  p.display_name AS display_name, "
++            "  p.principal_type AS type "
++            "FROM principals p "
++            "JOIN objects o ON o.id = p.id "
++            "JOIN effective_resource_access era ON era.principal_id = p.id "
++            "WHERE era.object_id = :project_id "
++            "  AND era.workspace_id = :workspace_id "
++            "  AND (era.allow_mask & 1) = 1 "
++            "  AND (era.deny_mask & 1) = 0 "
++            "  AND p.workspace_id = :workspace_id "
++            "  AND p.status = 'ACTIVE' "
++            "  AND p.principal_type IN ('USER', 'AGENT') "
++            "  AND ( "
++            "    o.canonical_key ILIKE :pattern ESCAPE '\\' "
++            "    OR p.display_name ILIKE :pattern ESCAPE '\\' "
++            "  ) "
++            "ORDER BY p.display_name ASC, o.canonical_key ASC "
++            "LIMIT :limit"
++        )
++    else:
++        query_sql = (
++            "SELECT "
++            "  p.id AS id, "
++            "  o.canonical_key AS handle, "
++            "  p.display_name AS display_name, "
++            "  p.principal_type AS type "
++            "FROM principals p "
++            "JOIN objects o ON o.id = p.id "
++            "JOIN effective_resource_access era ON era.principal_id = p.id "
++            "WHERE era.object_id = :project_id "
++            "  AND era.workspace_id = :workspace_id "
++            "  AND (era.allow_mask & 1) = 1 "
++            "  AND (era.deny_mask & 1) = 0 "
++            "  AND p.workspace_id = :workspace_id "
++            "  AND p.status = 'ACTIVE' "
++            "  AND p.principal_type IN ('USER', 'AGENT') "
++            "ORDER BY p.display_name ASC, o.canonical_key ASC "
++            "LIMIT :limit"
++        )
+ 
+-    stmt = text(
+-        "SELECT "
+-        "  p.id AS id, "
+-        "  o.canonical_key AS handle, "
+-        "  p.display_name AS display_name, "
+-        "  p.principal_type AS type "
+-        "FROM principals p "
+-        "JOIN objects o ON o.id = p.id "
+-        "JOIN effective_resource_access era ON era.principal_id = p.id "
+-        "WHERE era.object_id = :project_id "
+-        "  AND era.workspace_id = :workspace_id "
+-        "  AND (era.allow_mask & 1) = 1 "
+-        "  AND (era.deny_mask & 1) = 0 "
+-        "  AND p.workspace_id = :workspace_id "
+-        "  AND p.status = 'ACTIVE' "
+-        "  AND p.principal_type IN ('USER', 'AGENT') "
+-        "  AND ( "
+-        "    o.canonical_key ILIKE :pattern ESCAPE '\\' "
+-        "    OR p.display_name ILIKE :pattern ESCAPE '\\' "
+-        "  ) "
+-        "ORDER BY p.display_name ASC, o.canonical_key ASC "
+-        "LIMIT :limit"
+-    )
++    stmt = text(query_sql)
+ 
+-    rows = (
+-        (
+-            await session.execute(
+-                stmt,
+-                {
+-                    "project_id": project.id,
+-                    "workspace_id": caller.workspace_id,
+-                    "pattern": pattern,
+-                    "limit": clamped_limit,
+-                },
+-            )
+-        )
+-        .mappings()
+-        .all()
+-    )
++    rows = (await session.execute(stmt, params)).mappings().all()
+ 
+     items = [
+         AssigneeSuggestionItem(
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 015fa759..a7d07a00 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -665,6 +665,7 @@ async def serialize_issue(
+ 
+     res = IssueResponse(
+         id=issue.id,
++        object_id=issue.id,
+         key=f"{project.identifier}-{issue.sequence_id}",
+         summary=issue.summary,
+         description_markdown=(
+diff --git a/kanban/tests/api/test_assignees.py b/kanban/tests/api/test_assignees.py
+index 13041622..5d2659fc 100644
+--- a/kanban/tests/api/test_assignees.py
++++ b/kanban/tests/api/test_assignees.py
+@@ -13,7 +13,7 @@ from sqlalchemy import text
+ 
+ from kanban.api.deps import PrincipalContext
+ from kanban.api.v1.schemas.assignees import FREE_TEXT_HINT, AssigneeCreate
+-from kanban.services.assignees import add_assignee
++from kanban.services.assignees import add_assignee, get_assignee_suggestions
+ from kanban.tests.security.helpers import add_acl_entry, add_role_binding, rebuild_era
+ 
+ if TYPE_CHECKING:
+@@ -232,6 +232,20 @@ async def test_case_3_enumeration_suggestions_isolation(
+     handles_b = [item["handle"] for item in items_b]
+     assert "bob" not in handles_b
+ 
++    # 2b. Query suggestions in Project A with empty q="" and without q parameter
++    resp_empty_q = await client_admin.get("/api/v1/projects/PRJA/assignee-suggestions?q=")
++    assert resp_empty_q.status_code == 200, resp_empty_q.text
++    items_empty = resp_empty_q.json()["items"]
++    handles_empty = [item["handle"] for item in items_empty]
++    assert "admin" in handles_empty
++    assert "alice" in handles_empty
++    assert "bob" not in handles_empty
++
++    resp_no_q = await client_admin.get("/api/v1/projects/PRJA/assignee-suggestions")
++    assert resp_no_q.status_code == 200, resp_no_q.text
++    items_no_q = resp_no_q.json()["items"]
++    assert items_no_q == items_empty
++
+     # 3. Verify zero email key or sensitive attribute in response items
+     for item in items_a + items_b:
+         assert "email" not in item
+@@ -672,3 +686,24 @@ async def test_extra_permissions_and_payload_validations(
+     )
+     assert direct_res.kind == "principal"
+     assert direct_res.id is not None
++
++    # 6. Direct get_assignee_suggestions service call with empty q and boundary check
++    direct_sugg = await get_assignee_suggestions(
++        api_env.seed,
++        caller,
++        "PRJX",
++        "",
++        limit=10,
++    )
++    assert len(direct_sugg.items) >= 2
++
++    from kanban.api.problems import ProblemException  # noqa: PLC0415
++
++    with pytest.raises(ProblemException) as exc_info:
++        await get_assignee_suggestions(
++            api_env.seed,
++            caller,
++            "PRJX",
++            "x" * 65,
++        )
++    assert exc_info.value.code == "INVALID_QUERY"
+diff --git a/kanban/tests/api/test_issues.py b/kanban/tests/api/test_issues.py
+index 83e5dc2c..1209d704 100644
+--- a/kanban/tests/api/test_issues.py
++++ b/kanban/tests/api/test_issues.py
+@@ -101,6 +101,8 @@ async def test_case_1_positive_create_get_etag_304_and_activity(  # noqa: PLR091
+ 
+     body = resp.json()
+     assert body["key"] == "POS-1"
++    assert body["object_id"] == body["id"]
++    assert str(uuid.UUID(body["object_id"])) == body["object_id"]
+     assert body["summary"] == "Fix authentication bug"
+     assert body["description_markdown"] == desc
+     assert body["description_sha256"] == expected_sha256
+diff --git a/kanban/web/src/features/drawer/AccessPill.test.tsx b/kanban/web/src/features/drawer/AccessPill.test.tsx
+index ac6a8b48..108a1abb 100644
+--- a/kanban/web/src/features/drawer/AccessPill.test.tsx
++++ b/kanban/web/src/features/drawer/AccessPill.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, act } from '@testing-library/react';
++import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { AccessPill } from './AccessPill';
+@@ -13,14 +13,14 @@ const mockIssue: IssueDetail = {
+   summary: 'Auth Studio',
+ };
+ 
+-function createWrapper(initialData?: unknown) {
++function createWrapper(initialData?: unknown, objectId: string = mockIssue.object_id ?? '') {
+   const queryClient = new QueryClient({
+     defaultOptions: {
+       queries: { retry: false },
+     },
+   });
+   if (initialData) {
+-    queryClient.setQueryData(['access', mockIssue.object_id], initialData);
++    queryClient.setQueryData(['access', objectId], initialData);
+   }
+   const Wrapper = ({ children }: { children: React.ReactNode }) => (
+     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+@@ -148,5 +148,117 @@ describe('AccessPill', () => {
+ 
+       window.removeEventListener('kb:open-access-inspector', eventSpy);
+     });
++
++    it('falls back to issue.id when issue.object_id is omitted or null', () => {
++      const fallbackId = '22222222-2222-2222-2222-222222222222';
++      const issueWithIdOnly: IssueDetail = {
++        id: fallbackId,
++        key: 'KAN-FALLBACK',
++        project_key: 'KAN',
++        project_name: 'Platform Core',
++        summary: 'Fallback task',
++      };
++      const { Wrapper } = createWrapper();
++
++      const eventSpy = vi.fn();
++      window.addEventListener('kb:open-access-inspector', eventSpy);
++
++      render(<AccessPill issue={issueWithIdOnly} />, { wrapper: Wrapper });
++
++      const hintTrigger = screen.getByTestId('access-hint');
++      act(() => {
++        hintTrigger.focus();
++      });
++
++      const actionBtn = screen.getByRole('button', { name: 'Open Access Inspector' });
++      fireEvent.click(actionBtn);
++
++      expect(eventSpy).toHaveBeenCalledTimes(1);
++      const customEvent = eventSpy.mock.calls[0]?.[0] as CustomEvent<{ objectId: string }>;
++      expect(customEvent.detail.objectId).toBe(fallbackId);
++
++      window.removeEventListener('kb:open-access-inspector', eventSpy);
++    });
++
++    it('handles array and fallback counts, empty project_name, and fetch queryFn error and success', async () => {
++      const fetchSpy = vi.spyOn(globalThis, 'fetch');
++
++      // Test fetch failure
++      fetchSpy.mockResolvedValueOnce({
++        ok: false,
++        status: 500,
++      } as Response);
++
++      const issueNoProject: IssueDetail = {
++        id: '44444444-4444-4444-4444-444444444444',
++        key: 'KAN-NOPROJECT',
++        project_key: 'KAN',
++        project_name: '',
++        summary: 'No project name',
++      };
++      const { Wrapper: ErrWrapper } = createWrapper(undefined, issueNoProject.id);
++      const { unmount: unmountErr } = render(<AccessPill issue={issueNoProject} />, { wrapper: ErrWrapper });
++      const hintTriggerErr = screen.getByTestId('access-hint');
++      act(() => {
++        hintTriggerErr.focus();
++      });
++      // While loading
++      expect(screen.getByText('Loading access summary...')).toBeDefined();
++      // After rejected fetch
++      await waitFor(() => {
++        expect(screen.getByText('Access summary unavailable.')).toBeDefined();
++      });
++      unmountErr();
++
++      // Test fetch success and array counts
++      const mockData = {
++        scope_label: 'Project',
++        explicit_grant_count: 0,
++        users: [1, 2],
++        groups: [1],
++        agents: [],
++        deny_rules: 'invalid' as unknown as number,
++      };
++
++      const { Wrapper: SuccessWrapper } = createWrapper(mockData, issueNoProject.id);
++      const { unmount: unmountSuccess } = render(<AccessPill issue={issueNoProject} />, { wrapper: SuccessWrapper });
++
++      const hintTrigger = screen.getByTestId('access-hint');
++      act(() => {
++        hintTrigger.focus();
++      });
++
++      const popup = screen.getByRole('dialog');
++      expect(popup.textContent).toContain('2 users, 1 group, 0 agents, 0 deny rules');
++      unmountSuccess();
++
++      // Test live queryFn execution (covers line 52 return await res.json())
++      fetchSpy.mockResolvedValueOnce({
++        ok: true,
++        json: () => Promise.resolve(mockData),
++      } as Response);
++      const liveId = '55555555-5555-5555-5555-555555555555';
++      const { Wrapper: LiveWrapper } = createWrapper(undefined, liveId);
++      const { unmount: unmountLive } = render(
++        <AccessPill issue={{ ...mockIssue, object_id: liveId }} />,
++        { wrapper: LiveWrapper },
++      );
++      await waitFor(() => {
++        expect(screen.getByTestId('access-hint')).toBeDefined();
++      });
++      unmountLive();
++
++      // Test issue with no object_id, no id, and fallback project_name (covers fallback branches 37-38)
++      const issueEmpty: IssueDetail = {
++        key: 'KAN-EMPTY',
++        project_key: 'KAN',
++        summary: 'Empty id test',
++      };
++      const { Wrapper: EmptyWrapper } = createWrapper(undefined, '');
++      const { unmount: unmountEmpty } = render(<AccessPill issue={issueEmpty} />, { wrapper: EmptyWrapper });
++      unmountEmpty();
++
++      fetchSpy.mockRestore();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/drawer/AccessPill.tsx b/kanban/web/src/features/drawer/AccessPill.tsx
+index 5e9e793e..6cd95737 100644
+--- a/kanban/web/src/features/drawer/AccessPill.tsx
++++ b/kanban/web/src/features/drawer/AccessPill.tsx
+@@ -34,7 +34,7 @@ function getCount(val: unknown): number {
+ }
+ 
+ export function AccessPill({ issue }: AccessPillProps): JSX.Element {
+-  const objectId = issue.object_id ?? '';
++  const objectId = issue.object_id ?? issue.id ?? '';
+   const rawName = issue.project_name ?? '';
+   const projectName = rawName.length > 0 ? rawName : 'Project';
+ 
+diff --git a/kanban/web/src/features/drawer/IssueHeader.test.tsx b/kanban/web/src/features/drawer/IssueHeader.test.tsx
+index 14b6a3b4..af98a6c3 100644
+--- a/kanban/web/src/features/drawer/IssueHeader.test.tsx
++++ b/kanban/web/src/features/drawer/IssueHeader.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, act } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+@@ -99,9 +99,10 @@ describe('IssueHeader', () => {
+     expect(screen.getByRole('button', { name: 'Return to side panel' })).toBeDefined();
+   });
+ 
+-  it('renders correctly for medium, low, and unknown priorities', () => {
++  it('renders correctly for high, medium, low, and unknown priorities', () => {
+     const { Wrapper } = createWrapper();
+     const priorities = [
++      { slug: 'high', label: 'High', sort_order: 2 },
+       { slug: 'medium', label: 'Medium', sort_order: 3 },
+       { slug: 'low', label: 'Low', sort_order: 4 },
+       { slug: 'unknown', label: 'Unknown', sort_order: 9 },
+@@ -134,6 +135,7 @@ describe('IssueHeader', () => {
+   });
+ 
+   it('handles issue key copy and issue link copy with visible feedback', async () => {
++    vi.useFakeTimers();
+     /* eslint-disable @typescript-eslint/no-deprecated */
+     document.execCommand = vi.fn().mockReturnValue(true);
+     /* eslint-enable @typescript-eslint/no-deprecated */
+@@ -152,22 +154,38 @@ describe('IssueHeader', () => {
+ 
+     const copyKeyBtn = screen.getByTestId('copy-issue-key-btn');
+     expect(copyKeyBtn.getAttribute('title')).toBe('Copy issue key');
+-    fireEvent.click(copyKeyBtn);
++    await act(async () => {
++      fireEvent.click(copyKeyBtn);
++      await Promise.resolve();
++    });
++
++    expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('Copied!');
++    expect(screen.getByTestId('copy-issue-key-btn').getAttribute('title')).toBe('Copied!');
+ 
+-    await waitFor(() => {
+-      expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('Copied!');
+-      expect(screen.getByTestId('copy-issue-key-btn').getAttribute('title')).toBe('Copied!');
++    // Advance timer past 2000ms
++    act(() => {
++      vi.advanceTimersByTime(2100);
+     });
++    expect(screen.getByTestId('copy-issue-key-btn').textContent).toBe('📋');
+ 
+     const copyLinkBtn = screen.getByTestId('copy-issue-link-btn');
+     expect(copyLinkBtn.getAttribute('title')).toBe('Copy issue link');
+-    fireEvent.click(copyLinkBtn);
++    await act(async () => {
++      fireEvent.click(copyLinkBtn);
++      await Promise.resolve();
++    });
+ 
+-    await waitFor(() => {
+-      expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('Copied!');
+-      expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copied!');
++    expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('Copied!');
++    expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copied!');
++
++    act(() => {
++      vi.advanceTimersByTime(2100);
+     });
++    expect(screen.getByTestId('copy-issue-link-btn').textContent).toBe('🔗');
++    expect(screen.getByTestId('copy-issue-link-btn').getAttribute('title')).toBe('Copy issue link');
++
+     unmount();
++    vi.useRealTimers();
+ 
+     // False branch when copyToClipboard returns false
+     vi.spyOn(clipboardUtils, 'copyToClipboard').mockResolvedValue(false);
+@@ -184,4 +202,41 @@ describe('IssueHeader', () => {
+     fireEvent.click(screen.getByTestId('copy-issue-key-btn'));
+     fireEvent.click(screen.getByTestId('copy-issue-link-btn'));
+   });
++
++  it('resolves issue.object_id ?? issue.id for AccessPill when object_id is omitted', () => {
++    const fallbackId = '33333333-3333-3333-3333-333333333333';
++    const issueWithIdOnly: IssueDetail = {
++      id: fallbackId,
++      key: 'KAN-999',
++      project_key: 'KAN',
++      project_name: 'Platform Core',
++      summary: 'Task with id only',
++    };
++    const { Wrapper } = createWrapper();
++    const eventSpy = vi.fn();
++    window.addEventListener('kb:open-access-inspector', eventSpy);
++
++    render(
++      <Wrapper>
++        <IssueHeader
++          issue={issueWithIdOnly}
++          mode="drawer"
++          onClose={vi.fn()}
++          toggleFullScreen={vi.fn()}
++        />
++      </Wrapper>,
++    );
++
++    const hintTrigger = screen.getByTestId('access-hint');
++    fireEvent.focus(hintTrigger);
++
++    const actionBtn = screen.getByRole('button', { name: 'Open Access Inspector' });
++    fireEvent.click(actionBtn);
++
++    expect(eventSpy).toHaveBeenCalledTimes(1);
++    const customEvent = eventSpy.mock.calls[0]?.[0] as CustomEvent<{ objectId: string }>;
++    expect(customEvent.detail.objectId).toBe(fallbackId);
++
++    window.removeEventListener('kb:open-access-inspector', eventSpy);
++  });
+ });
+diff --git a/kanban/web/src/features/drawer/IssueHeader.tsx b/kanban/web/src/features/drawer/IssueHeader.tsx
+index 7461005a..16c07199 100644
+--- a/kanban/web/src/features/drawer/IssueHeader.tsx
++++ b/kanban/web/src/features/drawer/IssueHeader.tsx
+@@ -132,7 +132,12 @@ export function IssueHeader({
+         </button>
+       </div>
+ 
+-      <AccessPill issue={issue} />
++      <AccessPill
++        issue={{
++          ...issue,
++          object_id: issue.object_id ?? issue.id,
++        }}
++      />
+ 
+       <div className="issue-header__slots">
+         {SubscribeSlot && <SubscribeSlot issue={issue} />}
+diff --git a/kanban/web/src/features/drawer/slots.tsx b/kanban/web/src/features/drawer/slots.tsx
+index ca9ae336..a936db97 100644
+--- a/kanban/web/src/features/drawer/slots.tsx
++++ b/kanban/web/src/features/drawer/slots.tsx
+@@ -34,6 +34,7 @@ export interface ParentIssueInfo {
+ }
+ 
+ export interface IssueDetail {
++  id?: string | undefined;
+   key: string;
+   object_id?: string | undefined;
+   project_key: string;
+diff --git a/kanban/web/src/features/table/TableView.test.tsx b/kanban/web/src/features/table/TableView.test.tsx
+index 1a87ddc9..72e409ce 100644
+--- a/kanban/web/src/features/table/TableView.test.tsx
++++ b/kanban/web/src/features/table/TableView.test.tsx
+@@ -159,9 +159,11 @@ describe('TableView', () => {
+ 
+     // Sort by start_date and created_by
+     const startSortBtn = screen.getByRole('button', { name: 'Start date' });
+-    fireEvent.click(startSortBtn);
++    fireEvent.click(startSortBtn); // asc
++    fireEvent.click(startSortBtn); // desc
+     const createdBySortBtn = screen.getByRole('button', { name: 'Created by' });
+-    fireEvent.click(createdBySortBtn);
++    fireEvent.click(createdBySortBtn); // asc
++    fireEvent.click(createdBySortBtn); // desc
+   });
+ 
+   it('handles row selection toggle, future due dates, and priority variants', () => {
+@@ -443,6 +445,44 @@ describe('TableView', () => {
+       assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]) as unknown as Record<string, unknown>[],
+     }));
+ 
++    // 6b. Assignee toggle when adam is already assigned (unassign)
++    const firstIssue = testIssues[0];
++    if (!firstIssue) throw new Error('Expected firstIssue');
++    const issuesWithAdam: IssueItem[] = [
++      {
++        id: firstIssue.id,
++        key: firstIssue.key,
++        summary: firstIssue.summary,
++        state: firstIssue.state,
++        priority: firstIssue.priority,
++        assignees: [
++          {
++            id: 'asg-me',
++            kind: 'principal',
++            principal: {
++              id: 'u-me',
++              handle: 'adam',
++              display_name: 'Adam Outler',
++              type: 'USER',
++            },
++          },
++        ],
++      },
++    ];
++    rerender(
++      <TableView
++        issues={issuesWithAdam}
++        projectKey="KAN"
++        modulesEnabled={true}
++        capabilities={['ADMIN']}
++        onUpdateIssue={onUpdateIssue}
++      />,
++    );
++    fireEvent.click(screen.getByRole('button', { name: 'Assign issue KAN-99' }));
++    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
++      assignees: [],
++    }));
++
+     // 7. VIEWER capability gates out inline editing
+     rerender(
+       <TableView
+@@ -460,4 +500,125 @@ describe('TableView', () => {
+ 
+     dispatchSpy.mockRestore();
+   });
++
++  it('renders exactly 0 select elements and read-only cells for callers with VIEW or VIEW/COMMENT capabilities', () => {
++    const testIssues: IssueItem[] = [
++      {
++        id: 'read-1',
++        key: 'KAN-VIEWER-1',
++        summary: 'Viewer read-only task',
++        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'medium', label: 'Medium' },
++        assignees: [],
++        start_date: '2026-11-01',
++        due_date: '2026-11-15',
++        cycle_id: 'cycle-1',
++        cycle: { id: 'cycle-1', name: 'Cycle 1' },
++      },
++      {
++        id: 'read-2',
++        key: 'KAN-VIEWER-2',
++        summary: 'Second read-only task',
++        state: { id: 's-prog', name: 'In Progress', group: 'started' },
++        priority: { slug: 'high', label: 'High' },
++        assignees: [],
++        cycle_id: null,
++      },
++    ];
++
++    // 1. Caller with capabilities=['VIEW']
++    const { container: containerView, rerender } = render(
++      <TableView
++        issues={testIssues}
++        projectKey="KAN"
++        modulesEnabled={true}
++        capabilities={['VIEW']}
++      />,
++    );
++    expect(containerView.querySelectorAll('select').length).toBe(0);
++    expect(containerView.querySelectorAll('input.table-inline-input').length).toBe(0);
++    expect(containerView.querySelectorAll('.table-inline-assign-btn').length).toBe(0);
++
++    // 2. Caller with currentUserCapabilities=['VIEW', 'COMMENT']
++    rerender(
++      <TableView
++        issues={testIssues}
++        projectKey="KAN"
++        modulesEnabled={true}
++        currentUserCapabilities={['VIEW', 'COMMENT']}
++      />,
++    );
++    expect(containerView.querySelectorAll('select').length).toBe(0);
++    expect(containerView.querySelectorAll('input.table-inline-input').length).toBe(0);
++    expect(containerView.querySelectorAll('.table-inline-assign-btn').length).toBe(0);
++
++    // 3. Issue-level capabilities=['VIEW'] prevents editing on that issue even if caller has EDIT
++    const baseFirst = testIssues[0];
++    if (!baseFirst) throw new Error('Expected baseFirst');
++    const mixedIssues: IssueItem[] = [
++      {
++        id: baseFirst.id,
++        key: baseFirst.key,
++        summary: baseFirst.summary,
++        state: baseFirst.state,
++        priority: baseFirst.priority,
++        capabilities: ['VIEW'],
++      },
++    ];
++    rerender(
++      <TableView
++        issues={mixedIssues}
++        projectKey="KAN"
++        modulesEnabled={true}
++        capabilities={['EDIT']}
++      />,
++    );
++    expect(containerView.querySelectorAll('select').length).toBe(0);
++    expect(containerView.querySelectorAll('input.table-inline-input').length).toBe(0);
++  });
++
++  it('handles row click and issue key link click to trigger onOpenPeek and renders read-only start date', () => {
++    const onOpenPeek = vi.fn();
++    const testIssues: IssueItem[] = [
++      {
++        id: 'read-3',
++        key: 'KAN-PEEK-1',
++        summary: 'Peek test task',
++        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'medium', label: 'Medium' },
++        assignees: [],
++        start_date: '2026-11-01',
++        due_date: '2026-11-15',
++      },
++    ];
++
++    // Store column configuration with start_date enabled
++    localStorage.setItem('kb.tableCols.KAN', JSON.stringify(['key', 'summary', 'state', 'priority', 'start_date', 'due_date']));
++
++    const { container } = render(
++      <TableView
++        issues={testIssues}
++        projectKey="KAN"
++        modulesEnabled={false}
++        capabilities={['VIEW']}
++        onOpenPeek={onOpenPeek}
++      />,
++    );
++
++    // Verify read-only start date rendered
++    expect(screen.getByText('2026-11-01')).toBeDefined();
++
++    // Click key link
++    const keyLink = screen.getByRole('link', { name: 'KAN-PEEK-1' });
++    fireEvent.click(keyLink);
++    expect(onOpenPeek).toHaveBeenCalledWith('KAN-PEEK-1');
++
++    // Click table row (outside interactive elements)
++    const row = container.querySelector('tr[data-issue-key="KAN-PEEK-1"]');
++    if (!row) throw new Error('Expected row');
++    fireEvent.click(row);
++    expect(onOpenPeek).toHaveBeenCalledTimes(2);
++
++    localStorage.removeItem('kb.tableCols.KAN');
++  });
+ });
+diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
+index 296508c6..fa4ca98a 100644
+--- a/kanban/web/src/features/table/TableView.tsx
++++ b/kanban/web/src/features/table/TableView.tsx
+@@ -51,19 +51,19 @@ export function TableView({
+     setLocalIssues(issues);
+   }
+ 
+-  const effectiveCaps = capabilities ?? currentUserCapabilities ?? [];
+-  const isViewerOnly =
+-    effectiveCaps.includes('VIEWER') &&
+-    !effectiveCaps.includes('EDIT') &&
+-    !effectiveCaps.includes('ADMIN');
++  const effectiveCaps = capabilities ?? currentUserCapabilities;
++  const isViewerOnly = Boolean(
++    effectiveCaps &&
++      (effectiveCaps.includes('VIEWER') ||
++        (!effectiveCaps.includes('EDIT') && !effectiveCaps.includes('ADMIN'))),
++  );
+ 
+   const canEditIssue = (issue: IssueItem): boolean => {
+     if (isViewerOnly) return false;
+     if (issue.capabilities && issue.capabilities.length > 0) {
+       if (
+-        issue.capabilities.includes('VIEWER') &&
+-        !issue.capabilities.includes('EDIT') &&
+-        !issue.capabilities.includes('ADMIN')
++        issue.capabilities.includes('VIEWER') ||
++        (!issue.capabilities.includes('EDIT') && !issue.capabilities.includes('ADMIN'))
+       ) {
+         return false;
+       }
+diff --git a/kanban/web/src/features/views/ProjectSavedViewsView.test.tsx b/kanban/web/src/features/views/ProjectSavedViewsView.test.tsx
+index c4d108a8..cb580ccf 100644
+--- a/kanban/web/src/features/views/ProjectSavedViewsView.test.tsx
++++ b/kanban/web/src/features/views/ProjectSavedViewsView.test.tsx
+@@ -147,6 +147,74 @@ describe('ProjectSavedViewsView (KANBA-221)', () => {
+     expect(screen.getByTestId('error-views').textContent).toContain('Network error loading views');
+   });
+ 
++  it('displays empty state when project has no custom saved views (items envelope)', async () => {
++    const apiFetchMock = vi.mocked(clientModule.apiFetch);
++    apiFetchMock.mockResolvedValueOnce({ items: [] });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/projects/KAN/views']}>
++          <Routes>
++            <Route path="/projects/:projectKey/views" element={<ProjectSavedViewsView />} />
++          </Routes>
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    expect(await screen.findByTestId('no-saved-views')).toBeDefined();
++    expect(screen.getByText(/No custom saved views found for KAN/i)).toBeDefined();
++  });
++
++  it('renders list of saved views from items array envelope', async () => {
++    const apiFetchMock = vi.mocked(clientModule.apiFetch);
++    apiFetchMock.mockResolvedValueOnce({
++      items: [
++        {
++          id: 'view-items-1',
++          name: 'Items Envelope View',
++          layout: 'list',
++          is_shared: true,
++        },
++      ],
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter>
++          <ProjectSavedViewsViewInner projectKey="KAN" />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    expect(await screen.findByText('Items Envelope View')).toBeDefined();
++    expect(screen.getByTestId('saved-view-card-view-items-1')).toBeDefined();
++  });
++
++  it('renders list of saved views from views array envelope', async () => {
++    const apiFetchMock = vi.mocked(clientModule.apiFetch);
++    apiFetchMock.mockResolvedValueOnce({
++      views: [
++        {
++          id: 'view-views-1',
++          name: 'Views Envelope View',
++          layout: 'table',
++          is_shared: false,
++        },
++      ],
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter>
++          <ProjectSavedViewsViewInner projectKey="KAN" />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    expect(await screen.findByText('Views Envelope View')).toBeDefined();
++    expect(screen.getByTestId('saved-view-card-view-views-1')).toBeDefined();
++  });
++
+   it('renders default error message when rejection is not an Error instance', async () => {
+     const apiFetchMock = vi.mocked(clientModule.apiFetch);
+     apiFetchMock.mockRejectedValueOnce('raw string rejection');
+diff --git a/kanban/web/src/features/views/ProjectSavedViewsView.tsx b/kanban/web/src/features/views/ProjectSavedViewsView.tsx
+index 984bdee4..359ff269 100644
+--- a/kanban/web/src/features/views/ProjectSavedViewsView.tsx
++++ b/kanban/web/src/features/views/ProjectSavedViewsView.tsx
+@@ -31,6 +31,7 @@ export interface SavedViewRecord {
+ }
+ 
+ interface SavedViewsResponse {
++  items?: SavedViewRecord[];
+   views?: SavedViewRecord[];
+ }
+ 
+@@ -59,7 +60,7 @@ export function ProjectSavedViewsViewInner({ projectKey }: { projectKey: string
+ 
+   const views: SavedViewRecord[] = Array.isArray(data)
+     ? data
+-    : (data?.views ?? []);
++    : (data?.items ?? data?.views ?? []);
+ 
+   return (
+     <section data-testid="project-views-view" className="kb-workspace-section kb-views-view">
+diff --git a/kanban/web/src/features/views/viewsApi.test.ts b/kanban/web/src/features/views/viewsApi.test.ts
+index 717e4925..64b54326 100644
+--- a/kanban/web/src/features/views/viewsApi.test.ts
++++ b/kanban/web/src/features/views/viewsApi.test.ts
+@@ -11,6 +11,8 @@ import {
+   normalizeStateKey,
+   resolveStateUuid,
+   isUuidString,
++  extractSavedViews,
++  fetchProjectSavedViews,
+ } from './viewsApi';
+ 
+ describe('viewsApi', () => {
+@@ -274,4 +276,66 @@ describe('viewsApi', () => {
+     const emptyBody = await ensureCsrfToken();
+     expect(emptyBody).toBeNull();
+   });
++
++  it('normalizes saved views from items, views, or raw array envelopes', async () => {
++    const mockView = {
++      id: 'v1',
++      name: 'Test View',
++      layout: 'board' as const,
++      group_by: 'state' as const,
++      sub_group_by: 'none' as const,
++    };
++
++    expect(extractSavedViews(null)).toEqual([]);
++    expect(extractSavedViews(undefined)).toEqual([]);
++    expect(extractSavedViews([mockView])).toEqual([mockView]);
++    expect(extractSavedViews({ items: [mockView] })).toEqual([mockView]);
++    expect(extractSavedViews({ views: [mockView] })).toEqual([mockView]);
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ items: [mockView] }),
++    });
++    const fromItems = await fetchProjectSavedViews('KAN');
++    expect(fromItems).toEqual([mockView]);
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ views: [mockView] }),
++    });
++    const fromViews = await fetchProjectSavedViews('KAN');
++    expect(fromViews).toEqual([mockView]);
++
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: false,
++      status: 500,
++      statusText: 'Internal Error',
++    });
++    await expect(fetchProjectSavedViews('KAN')).rejects.toThrow(
++      'Failed to fetch project views: 500 Internal Error'
++    );
++
++    // Empty project states guard
++    const emptyStates = await fetchProjectStates('');
++    expect(emptyStates).toEqual([]);
++
++    // fetchProjectIssues with non-empty items array (covers line 306)
++    globalThis.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({
++        items: [
++          {
++            id: '01931234-5678-7000-8000-000000000099',
++            key: 'KAN-99',
++            summary: 'Item map test',
++            state: { id: 's-1', name: 'To Do', group: 'unstarted' },
++          },
++        ],
++        total: 1,
++      }),
++    });
++    const issuesRes = await fetchProjectIssues('KAN');
++    expect(issuesRes.items).toHaveLength(1);
++    expect(issuesRes.total).toBe(1);
++  });
+ });
+diff --git a/kanban/web/src/features/views/viewsApi.ts b/kanban/web/src/features/views/viewsApi.ts
+index bcd1d2a6..e0c4456c 100644
+--- a/kanban/web/src/features/views/viewsApi.ts
++++ b/kanban/web/src/features/views/viewsApi.ts
+@@ -129,6 +129,19 @@ export interface SavedView {
+   };
+ }
+ 
++export interface SavedViewsEnvelope {
++  items?: SavedView[];
++  views?: SavedView[];
++}
++
++export function extractSavedViews(
++  data: SavedViewsEnvelope | SavedView[] | null | undefined,
++): SavedView[] {
++  if (!data) return [];
++  if (Array.isArray(data)) return data;
++  return data.items ?? data.views ?? [];
++}
++
+ export interface IssueQueryParams {
+   tab?: string;
+   layout?: ViewLayout;
+@@ -452,3 +465,22 @@ export async function deleteProjectIssue(issueKey: string): Promise<void> {
+     throw new Error(`Failed to delete issue: ${String(response.status)} ${response.statusText}`);
+   }
+ }
++
++/**
++ * Fetch saved views for a project, normalizing items and views envelopes.
++ */
++export async function fetchProjectSavedViews(projectKey: string): Promise<SavedView[]> {
++  const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/views`;
++  const response = await fetch(url, {
++    headers: {
++      Accept: 'application/json',
++    },
++  });
++
++  if (!response.ok) {
++    throw new Error(`Failed to fetch project views: ${String(response.status)} ${response.statusText}`);
++  }
++
++  const data = (await response.json()) as SavedViewsEnvelope | SavedView[];
++  return extractSavedViews(data);
++}

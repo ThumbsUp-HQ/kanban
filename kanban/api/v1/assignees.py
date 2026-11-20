@@ -68,7 +68,14 @@ async def get_assignee_suggestions(
     project_ref: str,
     caller: Caller,
     session: Session,
-    q: Annotated[str, Query(description="Case-insensitive prefix query (1..64 chars)")],
+    q: Annotated[
+        str,
+        Query(
+            description="Case-insensitive prefix query (0..64 chars)",
+            min_length=0,
+            max_length=64,
+        ),
+    ] = "",
     limit: Annotated[int, Query(description="Max suggestions to return (1..20)", ge=1, le=20)] = 10,
 ) -> AssigneeSuggestionsResponse:
     """Return autocomplete suggestions of active project viewers with zero cross-scope leakage."""

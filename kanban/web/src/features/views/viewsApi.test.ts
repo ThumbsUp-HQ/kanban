@@ -11,6 +11,8 @@ import {
   normalizeStateKey,
   resolveStateUuid,
   isUuidString,
+  extractSavedViews,
+  fetchProjectSavedViews,
 } from './viewsApi';
 
 describe('viewsApi', () => {
@@ -273,5 +275,67 @@ describe('viewsApi', () => {
     });
     const emptyBody = await ensureCsrfToken();
     expect(emptyBody).toBeNull();
+  });
+
+  it('normalizes saved views from items, views, or raw array envelopes', async () => {
+    const mockView = {
+      id: 'v1',
+      name: 'Test View',
+      layout: 'board' as const,
+      group_by: 'state' as const,
+      sub_group_by: 'none' as const,
+    };
+
+    expect(extractSavedViews(null)).toEqual([]);
+    expect(extractSavedViews(undefined)).toEqual([]);
+    expect(extractSavedViews([mockView])).toEqual([mockView]);
+    expect(extractSavedViews({ items: [mockView] })).toEqual([mockView]);
+    expect(extractSavedViews({ views: [mockView] })).toEqual([mockView]);
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ items: [mockView] }),
+    });
+    const fromItems = await fetchProjectSavedViews('KAN');
+    expect(fromItems).toEqual([mockView]);
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ views: [mockView] }),
+    });
+    const fromViews = await fetchProjectSavedViews('KAN');
+    expect(fromViews).toEqual([mockView]);
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Error',
+    });
+    await expect(fetchProjectSavedViews('KAN')).rejects.toThrow(
+      'Failed to fetch project views: 500 Internal Error'
+    );
+
+    // Empty project states guard
+    const emptyStates = await fetchProjectStates('');
+    expect(emptyStates).toEqual([]);
+
+    // fetchProjectIssues with non-empty items array (covers line 306)
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        items: [
+          {
+            id: '01931234-5678-7000-8000-000000000099',
+            key: 'KAN-99',
+            summary: 'Item map test',
+            state: { id: 's-1', name: 'To Do', group: 'unstarted' },
+          },
+        ],
+        total: 1,
+      }),
+    });
+    const issuesRes = await fetchProjectIssues('KAN');
+    expect(issuesRes.items).toHaveLength(1);
+    expect(issuesRes.total).toBe(1);
   });
 });

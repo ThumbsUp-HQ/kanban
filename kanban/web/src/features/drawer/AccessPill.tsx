@@ -34,7 +34,7 @@ function getCount(val: unknown): number {
 }
 
 export function AccessPill({ issue }: AccessPillProps): JSX.Element {
-  const objectId = issue.object_id ?? '';
+  const objectId = issue.object_id ?? issue.id ?? '';
   const rawName = issue.project_name ?? '';
   const projectName = rawName.length > 0 ? rawName : 'Project';
 
