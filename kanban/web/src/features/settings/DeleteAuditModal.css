@@ -18,7 +18,7 @@
   width: 100%;
   max-width: 580px;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
@@ -30,6 +30,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .kb-modal-title {
@@ -59,6 +60,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .kb-audit-loading {
@@ -131,7 +135,13 @@
   font-size: 12px;
   color: var(--fg-muted);
   font-family: monospace;
-  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.kb-audit-hook-notice {
+  font-size: 12px;
+  color: var(--fg-muted);
+  overflow-wrap: break-word;
 }
 
 .kb-audit-section {
@@ -171,4 +181,5 @@
   justify-content: flex-end;
   gap: 10px;
   background-color: var(--bg-canvas);
+  flex-shrink: 0;
 }

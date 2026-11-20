@@ -1,55 +1,58 @@
+==========================================
+BACKEND PYTEST UNIT TESTS & COVERAGE (KAN-29 RC2)
+==========================================
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 13 items
+collected 15 items
 
-kanban/tests/api/test_project_config.py::test_case_1_admin_creates_state_with_wip_limits_and_activity PASSED [  7%]
-kanban/tests/api/test_project_config.py::test_case_2_capability_and_anti_enumeration_discipline PASSED [ 15%]
-kanban/tests/api/test_project_config.py::test_case_3_exclusive_group_and_label_validation PASSED [ 23%]
-kanban/tests/api/test_project_config.py::test_case_4_boundary_state_transitions_and_migrations PASSED [ 30%]
-kanban/tests/api/test_project_config.py::test_case_5_default_invariants_and_priority_management PASSED [ 38%]
-kanban/tests/api/test_project_config.py::test_state_crud_and_edge_cases PASSED [ 46%]
-kanban/tests/api/test_project_config.py::test_priority_crud_and_edge_cases PASSED [ 53%]
-kanban/tests/api/test_project_config.py::test_label_crud_and_edge_cases PASSED [ 61%]
-kanban/tests/api/test_project_config.py::test_schema_validators_and_direct_edge_cases PASSED [ 69%]
-kanban/tests/api/test_project_config.py::test_full_branch_coverage_and_404_preconditions PASSED [ 76%]
-kanban/tests/api/test_project_config.py::test_state_reverse_audit_impact_and_deletion_guards PASSED [ 84%]
-kanban/tests/api/test_project_config.py::test_label_reverse_audit_impact_and_safe_reassignment PASSED [ 92%]
-kanban/tests/api/test_project_config.py::test_saved_view_full_filters_migrated_on_state_and_label_deletion PASSED [100%]
+kanban/tests/api/test_project_config.py ...............                  [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                                Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------------
-kanban/services/project_config.py     443     14    216     14    95%   104, 121-124, 126-129, 165->170, 170->164, 552->555, 644->653, 736->749, 789-790, 793->812, 1003-1004, 1078, 1102->1134, 1461->1482
--------------------------------------------------------------------------------
-TOTAL                                 443     14    216     14    95%
-============================= 13 passed in 11.36s ==============================
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/project_config.py              74      0      0      0   100%
+kanban/api/v1/schemas/project_config.py     146      0      8      0   100%
+kanban/services/project_config.py           443     14    216     14    95%   104, 121-124, 126-129, 165->170, 170->164, 549->552, 641->650, 733->746, 786-787, 790->809, 1000-1001, 1075, 1099->1131, 1458->1479
+kanban/workflows/builtins.py                 83      1     14      1    98%   215
+-------------------------------------------------------------------------------------
+TOTAL                                       746     15    238     15    96%
+============================= 15 passed in 13.49s ==============================
 
-================================================================================
-FRONTEND UNIT TESTS (Vitest)
-================================================================================
+==========================================
+FRONTEND VITEST UNIT TESTS & COVERAGE (KAN-29 RC2)
+==========================================
+
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c/kanban/web
+> vitest run --coverage src/features/settings/__tests__/ColorPresetPicker.test.tsx src/features/settings/__tests__/DeleteAuditModal.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/DeleteAuditModal.test.tsx (11 tests) 238ms
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (34 tests) 2604ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
+ ✓ src/features/settings/__tests__/ColorPresetPicker.test.tsx (7 tests) 205ms
+ ✓ src/features/settings/__tests__/DeleteAuditModal.test.tsx (11 tests) 373ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (34 tests) 2959ms
+   ✓ ProjectSettingsPage (KANBA-202) (34)
+     ✓ renders project settings page tabs and switches between them 331ms
 
- Test Files  2 passed (2)
-      Tests  45 passed (45)
-   Start at  08:46:34
-   Duration  3.99s (tests 58%, environment 33%, import 7%, worker 1%, transform 1%)
+ Test Files  4 passed (4)
+      Tests  56 passed (56)
+   Start at  10:11:48
+   Duration  4.41s (tests 47%, environment 42%, import 7%, worker 3%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   98.88 |    97.24 |     100 |     100 |                   
+All files          |   99.14 |    95.58 |     100 |   99.68 |                   
+ ...esetPicker.tsx |     100 |      100 |     100 |     100 |                   
  ...AuditModal.tsx |   98.88 |    97.24 |     100 |     100 | 103,123,132       
+ ...ttingsPage.tsx |   99.13 |    94.89 |     100 |   99.61 | 1004-1005         
 -------------------|---------|----------|---------|---------|-------------------

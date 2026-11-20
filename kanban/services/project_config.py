@@ -470,15 +470,12 @@ async def get_state_audit_impact(
     if state is None:
         not_found()
 
-    # 1. Issues count and sample keys
+    # 1. Issues count and sample keys (including archived and soft-deleted issues for FK parity)
     issues_res = await session.execute(
         select(Issue.sequence_id)
-        .join(ObjectRecord, ObjectRecord.id == Issue.id)
         .where(
             Issue.project_id == project.id,
             Issue.state_id == state_id,
-            ObjectRecord.archived_at.is_(None),
-            ObjectRecord.deleted_at.is_(None),
         )
         .order_by(Issue.sequence_id.desc())
     )

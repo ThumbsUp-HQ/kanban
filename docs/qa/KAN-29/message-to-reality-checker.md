@@ -1,8 +1,8 @@
 # Verification Proof Packet: Wave P3-5 Ticket KAN-29
 
 **Ticket Summary:** `[KB-P3-AUDIT-23] Add 12-Color Palette + Advanced Color Picker and Pre-Delete Reverse-Audit & Safe Migration for Workflow States & Labels (4 Problems)`
-**Branch:** `fix/KAN-29-rc1`
-**Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469`
+**Branch:** `fix/KAN-29-rc2`
+**Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c`
 
 ---
 
@@ -86,14 +86,16 @@ Name                                      Stmts   Miss Branch BrPart  Cover   Mi
 -------------------------------------------------------------------------------------
 kanban/api/v1/project_config.py              74      0      0      0   100%
 kanban/api/v1/schemas/project_config.py     146      0      8      0   100%
-kanban/services/project_config.py           406      5    200     16    96%
+kanban/services/project_config.py           443     14    216     14    95%   104, 121-124, 126-129, 165->170, 170->164, 549->552, 641->650, 733->746, 786-787, 790->809, 1000-1001, 1075, 1099->1131, 1458->1479
+kanban/workflows/builtins.py                 83      1     14      1    98%   215
 -------------------------------------------------------------------------------------
-TOTAL                                       626      5    208     16    97%
-============================== 12 passed in 9.38s ==============================
+TOTAL                                       746     15    238     15    96%
+============================= 15 passed in 13.49s ==============================
 ```
 - `kanban/api/v1/project_config.py`: **100%**
 - `kanban/api/v1/schemas/project_config.py`: **100%**
-- `kanban/services/project_config.py`: **96%**
+- `kanban/services/project_config.py`: **95%**
+- `kanban/workflows/builtins.py`: **98%**
 
 ### Frontend Web Modules (Vitest)
 ```
@@ -101,18 +103,18 @@ TOTAL                                       626      5    208     16    97%
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.14 |    95.27 |     100 |   99.68 |                   
+All files          |   99.14 |    95.58 |     100 |   99.68 |                   
  ...esetPicker.tsx |     100 |      100 |     100 |     100 |                   
- ...AuditModal.tsx |    98.9 |    95.65 |     100 |     100 | ...17-124,128-135 
+ ...AuditModal.tsx |   98.88 |    97.24 |     100 |     100 | 103,123,132       
  ...ttingsPage.tsx |   99.13 |    94.89 |     100 |   99.61 | 1004-1005         
 -------------------|---------|----------|---------|---------|-------------------
-Test Files: 3 passed (3)
-Tests: 51 passed (51)
+Test Files: 4 passed (4)
+Tests: 56 passed (56)
 ```
 - `ColorPresetPicker.tsx`: **100% Stmts / 100% Branch / 100% Funcs / 100% Lines**
-- `DeleteAuditModal.tsx`: **98.90% Stmts / 95.65% Branch / 100% Funcs / 100% Lines**
+- `DeleteAuditModal.tsx`: **98.88% Stmts / 97.24% Branch / 100% Funcs / 100% Lines**
 - `ProjectSettingsPage.tsx`: **99.13% Stmts / 94.89% Branch / 100% Funcs / 99.61% Lines**
-- Overall Web Workspace: **99.14% Stmts / 95.27% Branch / 100% Funcs / 99.68% Lines**
+- Overall Web Workspace: **99.14% Stmts / 95.58% Branch / 100% Funcs / 99.68% Lines**
 
 ---
 
@@ -194,3 +196,51 @@ Tests: 51 passed (51)
   - Unsafe `DELETE /api/v1/projects/KAN/states/{id}` without replacement returns `409 ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE`.
   - Opening `DeleteAuditModal` on `"QA Gate"` displays `qa-gate-proof-check (Enabled)` (fixed from `(Disabled)`), `1 active hook(s) require migration`, and omits the empty `"None (Delete without reassignment)"` option (`requiresReplacement` enforced) across Light and Dark (`live-kan29-delete-audit-modal-desktop-light.png`, `live-kan29-delete-audit-modal-desktop-dark.png`).
   - Confirming reassignment deletion in UI for both `"QA Gate"` (`-> In Progress`) and `"sec-review"` (`-> verified-clean`) migrates `KAN-4`, `qa-gate-proof-check` (`from_state="In Progress"`, `is_enabled=true`), and `GET /api/v1/views/{view_id}` + PostgreSQL `views.filters_json` / `views.display_props_json["full_filters"]` with zero references to the deleted IDs.
+
+---
+
+## 8. Clean-Room Reality-Checker Remediations (`fix/KAN-29-rc2`)
+
+Following clean-room forensic QA review (`docs/qa/KAN-29/reality-checker-report.md`), all findings were rigorously remediated:
+
+### Finding 1: `DeleteAuditModal` Footer Button Clipping & Mid-Word Wrap
+- **Issue:** In `DeleteAuditModal.css`, the modal footer buttons (`Cancel` and `Confirm Delete`) were sliced in half on smaller viewport heights, and the active-hooks warning text experienced mid-word breaks (`word-break: break-all`).
+- **Remediation:**
+  - In `DeleteAuditModal.css`, updated `.kb-modal-dialog` with `display: flex; flex-direction: column; max-height: 90vh; overflow: hidden;`.
+  - Added `flex-shrink: 0;` to `.kb-modal-header` and `.kb-modal-footer`.
+  - Configured `.kb-modal-body` with `flex: 1 1 auto; min-height: 0; overflow-y: auto;` so modal contents scroll smoothly inside the body without clipping the action buttons.
+  - Removed `word-break: break-all;` and introduced `.kb-audit-hook-notice` with `overflow-wrap: break-word;` (and updated `.kb-audit-sample-keys` with `overflow-wrap: break-word;`), preventing mid-word text slicing.
+
+### Finding 2: Tablet (`768x1024`) Responsive Overflow & `<ColorPresetPicker />` Truncation
+- **Issue:** On tablet viewports (`768x1024`), tables caused horizontal page blowout, tabs did not wrap, and the dropdown select truncated `"Advanced Color Picker..."` to `"Advanced Color P"`.
+- **Remediation:**
+  - Wrapped `states-table`, `priorities-table`, `labels-table`, `members-table`, and `trash-items-table` in `<div className="kb-table-scroll-container">` in `ProjectSettingsPage.tsx`.
+  - Added `flex-wrap: wrap;` to `.kb-settings-tabs` in `ProjectSettingsPage.css`.
+  - Added `flex-wrap: wrap;` to `.kb-color-picker-wrapper` and widened `.kb-color-preset-select` from `max-width: 150px` to `min-width: 190px; max-width: 220px;` in `ColorPresetPicker.css`, ensuring `"Advanced Color Picker..."` text renders fully without truncation.
+
+### Finding 3: Archived/Soft-Deleted Issue Count Parity in `kanban/services/project_config.py`
+- **Issue:** `get_state_audit_impact` filtered out archived and soft-deleted issues (`ObjectRecord.archived_at.is_(None)` and `ObjectRecord.deleted_at.is_(None)`), whereas `delete_state` checked `Issue.state_id == state.id` across all issues regardless of soft-delete or archive status. This mismatch caused `issues_count` in the audit modal to report `0` when soft-deleted issues referenced the state, while deletion subsequently failed with `409 STATE_IN_USE`.
+- **Remediation:**
+  - In `get_state_audit_impact`, aligned the count query with `delete_state` by counting all issues referencing `state.id`.
+  - Added comprehensive test in `kanban/tests/api/test_project_config.py`: `test_state_audit_impact_archived_and_deleted_issues_parity`, verifying that soft-deleted issues referencing `state_id` are reported in `impact.issues_count` and `sample_issue_keys`.
+
+### Finding 4: Complete Coverage (`>=95%`) & Static Verification
+- **Pytest:** 15 passed in 13.49s across `kanban/tests/api/test_project_config.py`.
+  - `kanban/api/v1/project_config.py`: 100%
+  - `kanban/api/v1/schemas/project_config.py`: 100%
+  - `kanban/services/project_config.py`: 95%
+  - `kanban/workflows/builtins.py`: 98%
+- **Vitest:** 56 passed in 4.41s across 4 test suites (`ColorPresetPicker.test.tsx`, `DeleteAuditModal.test.tsx`, `ProjectSettingsPage.test.tsx`, `cssTokensAudit.test.ts`).
+  - `ColorPresetPicker.tsx`: 100% Stmts / 100% Branch / 100% Funcs / 100% Lines
+  - `DeleteAuditModal.tsx`: 98.88% Stmts / 97.24% Branch / 100% Funcs / 100% Lines
+  - `ProjectSettingsPage.tsx`: 99.13% Stmts / 94.89% Branch / 100% Funcs / 99.61% Lines
+  - Overall Web Workspace: 99.14% Stmts / 95.58% Branch / 100% Funcs / 99.68% Lines
+- **Static Tooling:**
+  - `ruff check .`: 0 errors
+  - `ruff format --check .`: Clean (1924 files checked)
+  - `mypy`: 0 type errors (1106 source files checked)
+  - `lint-imports`: 2 contracts kept, 0 broken
+  - `pnpm typecheck`: 0 errors
+  - `pnpm lint`: 0 warnings, 0 errors
+  - `pnpm build`: Clean production bundle built in 1.24s
+  - `python3 -m scripts.check_no_dashes`: 0 em/en-dashes across all repository files

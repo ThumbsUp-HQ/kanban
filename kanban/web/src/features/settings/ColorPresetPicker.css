@@ -5,6 +5,7 @@
   align-items: center;
   gap: 6px;
   position: relative;
+  flex-wrap: wrap;
 }
 
 .kb-color-swatch-badge {
@@ -30,7 +31,8 @@
   border: 1px solid var(--border-subtle);
   background-color: var(--bg-surface);
   color: var(--fg-primary);
-  max-width: 150px;
+  min-width: 190px;
+  max-width: 220px;
 }
 
 .kb-color-native-input {
