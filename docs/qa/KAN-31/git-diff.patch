@@ -2788,10 +2788,21 @@ index 20ce461..a1ea9b7 100644
                  path: 'imports',
                  element: <PlaneImportStudio />,
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
-index 683a41f..1b17857 100644
+index 683a41f..1e5d28a 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.css
 +++ b/kanban/web/src/features/settings/McpAccessStudio.css
-@@ -344,7 +344,183 @@
+@@ -256,6 +256,10 @@
+   line-height: 1.4;
+ }
+ 
++.kb-mcp-mint-error--banner {
++  margin: var(--space-3, 12px) 0;
++}
++
+ .kb-mcp-form-row {
+   display: flex;
+   flex-direction: column;
+@@ -344,7 +348,183 @@
    font-weight: 500;
  }
  
@@ -2976,7 +2987,7 @@ index 683a41f..1b17857 100644
    .kb-mcp-studio-container {
      padding: 16px 12px;
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
-index 30817b9..0a14eb1 100644
+index 30817b9..693cca5 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.tsx
 +++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
 @@ -1,19 +1,27 @@
@@ -3565,7 +3576,7 @@ index 30817b9..0a14eb1 100644
        </header>
  
 +      {studioError && (
-+        <div className="kb-mcp-mint-error" role="alert" data-testid="studio-error-banner" style={{ margin: '12px 0' }}>
++        <div className="kb-mcp-mint-error kb-mcp-mint-error--banner" role="alert" data-testid="studio-error-banner">
 +          {studioError}
 +        </div>
 +      )}

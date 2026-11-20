@@ -635,7 +635,7 @@ export function McpAccessStudio({
       </header>
 
       {studioError && (
-        <div className="kb-mcp-mint-error" role="alert" data-testid="studio-error-banner" style={{ margin: '12px 0' }}>
+        <div className="kb-mcp-mint-error kb-mcp-mint-error--banner" role="alert" data-testid="studio-error-banner">
           {studioError}
         </div>
       )}
