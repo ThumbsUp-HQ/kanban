@@ -2,7 +2,7 @@
 All checks passed!
 
 === RUFF FORMAT CHECK ===
-4 files already formatted
+1857 files already formatted
 
 === LINT IMPORTS ===
 
@@ -20,7 +20,7 @@ All checks passed!
 Contracts
 ---------
 
-Analyzed 953 files, 3327 dependencies.
+Analyzed 954 files, 3338 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -48,12 +48,13 @@ Success: 0 errors, 0 warnings
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
-✓ 694 modules transformed.
-dist/index.html                             0.51 kB │ gzip:   0.32 kB
-dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
-dist/assets/index-CbA-da6U.css            401.93 kB │ gzip:  56.90 kB
-dist/assets/index-DaEPUMJ4.js           1,915.15 kB │ gzip: 520.20 kB
-✓ built in 1.40s
+transforming (693) src/editor/mermaid/mermaidClient.ts✓ 694 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-CEFqsaYn.css            403.09 kB │ gzip:  57.10 kB
+dist/assets/index-BvXsCI-Y.js           1,916.79 kB │ gzip: 520.57 kB
+✓ built in 1.18s
 
 === CHECK NO DASHES ===
 python3 -m scripts.check_no_dashes --all
