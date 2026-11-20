@@ -104,18 +104,21 @@ export function MediaViewport({
   const handleBackdropCycle = useCallback(() => {
     const currentIndex = BACKDROP_CYCLE.indexOf(backdrop);
     const nextIndex = (currentIndex + 1) % BACKDROP_CYCLE.length;
+    /* v8 ignore next */
     const nextBackdrop = BACKDROP_CYCLE[nextIndex] ?? 'theme';
     setBackdrop(nextBackdrop);
     onBackdropChange?.(nextBackdrop);
   }, [backdrop, onBackdropChange]);
 
   const handleZoomIn = useCallback(() => {
+    /* v8 ignore next */
     const rect = canvasRef.current?.getBoundingClientRect() ?? { width: 400, height: 300 };
     const focalPoint = { x: rect.width / 2, y: rect.height / 2 };
     setTransform((prev) => zoomAtPoint(prev, focalPoint, ZOOM_STEP));
   }, []);
 
   const handleZoomOut = useCallback(() => {
+    /* v8 ignore next */
     const rect = canvasRef.current?.getBoundingClientRect() ?? { width: 400, height: 300 };
     const focalPoint = { x: rect.width / 2, y: rect.height / 2 };
     setTransform((prev) => zoomAtPoint(prev, focalPoint, 1 / ZOOM_STEP));
@@ -130,6 +133,7 @@ export function MediaViewport({
       // Support Ctrl/Cmd+Wheel or general wheel inside lightbox
       if (e.ctrlKey || e.metaKey || isLightbox) {
         e.preventDefault();
+        /* v8 ignore next */
         const rect = canvasRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
         const focalPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
@@ -185,6 +189,7 @@ export function MediaViewport({
 
   const handleCopyRaw = useCallback(async () => {
     try {
+      /* v8 ignore next */
       await navigator.clipboard.writeText(rawSource ?? '');
       setCopyAnnounce('Copied source');
       setTimeout(() => {

@@ -1,26 +1,45 @@
 === 1. TypeScript Check ===
-
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan13-ab1c6dc7/kanban/web
-> tsc -b --noEmit
-
+> cd kanban/web && npx tsc -b --noEmit
 
 === 2. ESLint Check ===
+> cd kanban/web && npm run lint
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan13-ab1c6dc7/kanban/web
+> @kanban/web@0.1.0 lint
 > eslint . --max-warnings 0
 
 
-=== 3. CSS Tokens Audit Gate ===
+=== 3. Vite Build Check ===
+> cd kanban/web && npx vite build
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 694 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-BDt50BYn.css            400.09 kB │ gzip:  56.65 kB
+dist/assets/index-ByUNMQyI.js           1,909.32 kB │ gzip: 518.50 kB
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan13-ab1c6dc7/kanban/web
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.33s
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 11ms
+=== 4. CSS Tokens Audit Gate ===
+> cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan13-fix-998d8c2f/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
 
  Test Files  1 passed (1)
       Tests  4 passed (4)
-   Start at  17:22:14
-   Duration  868ms (environment 94%, import 2%, tests 2%, worker 1%, transform 1%)
+   Start at  22:18:35
+   Duration  889ms (environment 93%, import 3%, tests 2%, worker 1%, transform 1%)
 
 
-=== 4. Dash Sanitization Gate ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan13-ab1c6dc7/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== 5. Dash Sanitization Gate ===
+> python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan13-fix-998d8c2f/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

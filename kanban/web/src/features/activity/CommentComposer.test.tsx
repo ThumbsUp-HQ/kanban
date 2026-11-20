@@ -12,6 +12,8 @@ import {
 import * as activityApi from './activityApi';
 import { ApiProblem } from '../../api/problem';
 import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
+import { sanitizeAndValidateMermaid } from '../../editor/mermaid/mermaidFirewall';
+import { renderMermaidSVG } from 'beautiful-mermaid';
 
 vi.mock('./activityApi', async () => {
   const actual = await vi.importActual<typeof import('./activityApi')>('./activityApi');
@@ -478,7 +480,7 @@ describe('CommentComposer', () => {
       expect(textarea.value).toContain('*italic text*');
 
       fireEvent.click(screen.getByRole('button', { name: 'Insert Mermaid diagram' }));
-      expect(textarea.value).toContain('```mermaid\ngraph TD;\n  A-->B;\n```');
+      expect(textarea.value).toContain('```mermaid\ngraph TD\n  A[Start] --> B[End]\n```');
     });
 
     it('fence newlines: prepends newline when start > 0 and appends trailing newline after closing fence', () => {
@@ -493,14 +495,14 @@ describe('CommentComposer', () => {
       const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
       fireEvent.click(mermaidBtn);
 
-      expect(textarea.value).toBe('existing text\n```mermaid\ngraph TD;\n  A-->B;\n```\n');
+      expect(textarea.value).toBe('existing text\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n');
 
       // Click Mermaid button again without cursor move: should not glue lines together
       textarea.setSelectionRange(textarea.value.length, textarea.value.length);
       fireEvent.click(mermaidBtn);
 
       expect(textarea.value).toBe(
-        'existing text\n```mermaid\ngraph TD;\n  A-->B;\n```\n```mermaid\ngraph TD;\n  A-->B;\n```\n',
+        'existing text\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
       );
 
       // Click Code button
@@ -510,6 +512,57 @@ describe('CommentComposer', () => {
 
       expect(textarea.value).toContain('```\ncode\n```\n');
       expect(textarea.value.endsWith('\n')).toBe(true);
+    });
+
+    it('clicking Mermaid button twice in a row produces two separate closed blocks and both validate and render', () => {
+      render(<CommentComposer issueKey="KAN-142" projectKey="KAN" />);
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
+      const mermaidBtn = screen.getByRole('button', { name: 'Insert Mermaid diagram' });
+
+      // First click: inserts first block on empty textarea, cursor lands after closing fence
+      fireEvent.click(mermaidBtn);
+      const expectedBlock1 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
+      expect(textarea.value).toBe(expectedBlock1);
+      expect(textarea.selectionStart).toBe(expectedBlock1.length);
+      expect(textarea.selectionEnd).toBe(expectedBlock1.length);
+
+      // Second click: immediately inserts second block separated by newline
+      fireEvent.click(mermaidBtn);
+      const expectedBlock2 = '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n';
+      const expectedFull = `${expectedBlock1}\n${expectedBlock2}`;
+      expect(textarea.value).toBe(expectedFull);
+      expect(textarea.selectionStart).toBe(expectedFull.length);
+      expect(textarea.selectionEnd).toBe(expectedFull.length);
+
+      // Validate both blocks using the real Mermaid parser/validator and renderer
+      const matches = Array.from(textarea.value.matchAll(/```mermaid\n([\s\S]*?)```/g));
+      expect(matches).toHaveLength(2);
+
+      for (const match of matches) {
+        const diagramSource = match[1]?.trim() ?? '';
+        expect(diagramSource).toBeTruthy();
+        const firewallResult = sanitizeAndValidateMermaid(diagramSource);
+        expect(firewallResult.ok).toBe(true);
+        if (firewallResult.ok) {
+          expect(firewallResult.diagramType).toBe('graph');
+          expect(firewallResult.nodeCount).toBeGreaterThanOrEqual(2);
+          expect(firewallResult.edgeCount).toBeGreaterThanOrEqual(1);
+
+          // Verify with real renderer that SVG renders with 0 errors
+          const rawSvg = renderMermaidSVG(firewallResult.sanitizedSource, {
+            bg: '#ffffff',
+            fg: '#111827',
+            border: '#d1d5db',
+            accent: '#1d4ed8',
+            line: '#d1d5db',
+            surface: '#ffffff',
+            transparent: false,
+          });
+          expect(rawSvg).toContain('<svg');
+          expect(rawSvg).toContain('Start');
+          expect(rawSvg).toContain('End');
+        }
+      }
     });
 
     it('handles ApiProblem with empty message on submit', async () => {
