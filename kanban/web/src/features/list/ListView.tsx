@@ -26,6 +26,7 @@ export interface ListViewProps {
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   activeKey?: string | null | undefined;
   canManageWorkflows?: boolean | undefined;
+  capabilities?: ReadonlySet<string> | readonly string[] | undefined;
   onOpenFieldPopover?: ((field: 'state', issue: IssueItem, rect: DOMRect) => void) | undefined;
   onStateSelect?: ((issueKey: string, stateId: string) => void) | undefined;
   onRefresh?: (() => void) | undefined;
@@ -64,6 +65,7 @@ export function ListView({
   onLoadMore,
   isLoading = false,
   focusedKey,
+  capabilities,
   onOpenPeek,
   activeKey,
   onOpenFieldPopover,
@@ -274,7 +276,8 @@ export function ListView({
       </div>
 
       {/* 2-Line Issue List Cards */}
-      <div className="issue-card-list list-rows" role="rowgroup">
+      <div className="list-table" role="table" aria-label="Work items">
+        <div className="issue-card-list list-rows" role="rowgroup">
         {sortedIssues.map((issue) => {
           const isFav = favoriteKeys.has(issue.key);
           const isSelected = selectedSet.has(issue.key);
@@ -313,7 +316,7 @@ export function ListView({
               }}
             >
               {/* Line 1: Priority Icon, Monospace Key, Right-aligned interactive state pill & Favorite star */}
-              <div className="issue-card-line-1">
+              <div className="issue-card-line-1" role="cell">
                 <div className="issue-card-meta-left">
                   {onToggleSelect && (
                     <input
@@ -336,20 +339,61 @@ export function ListView({
                 </div>
 
                 <div className="issue-card-meta-right">
-                  <button
-                    type="button"
-                    className="list-row-state-btn"
-                    data-testid={`list-row-state-btn-${issue.key}`}
-                    aria-label={`Status: ${issue.state.name}`}
-                    title={`Status: ${issue.state.name}`}
-                    onClick={handleStateClick}
-                  >
-                    <StateBadge
-                      state={issue.state}
-                      showLabel={false}
-                      className="list-row-state-icon"
-                    />
-                  </button>
+                  {(() => {
+                    const rawCaps = issue.capabilities ?? capabilities;
+                    let canTransition = true;
+                    if (rawCaps !== undefined) {
+                      if (Array.isArray(rawCaps)) {
+                        canTransition = (rawCaps as readonly unknown[]).some((c) => {
+                          const str = typeof c === 'string' ? c.toUpperCase() : '';
+                          return str === 'TRANSITION' || str === 'EDIT' || str === 'ADMIN';
+                        });
+                      } else {
+                        const set = rawCaps as ReadonlySet<string>;
+                        canTransition =
+                          set.has('TRANSITION') ||
+                          set.has('EDIT') ||
+                          set.has('ADMIN') ||
+                          set.has('transition') ||
+                          set.has('edit') ||
+                          set.has('admin');
+                      }
+                    }
+
+                    if (!canTransition) {
+                      return (
+                        <span
+                          className="list-row-state-readonly"
+                          data-testid={`list-row-state-readonly-${issue.key}`}
+                          aria-label={`Status: ${issue.state.name}`}
+                          title={`Status: ${issue.state.name}`}
+                        >
+                          <StateBadge
+                            state={issue.state}
+                            showLabel={false}
+                            className="list-row-state-icon"
+                          />
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        className="list-row-state-btn"
+                        data-testid={`list-row-state-btn-${issue.key}`}
+                        aria-label={`Status: ${issue.state.name}`}
+                        title={`Status: ${issue.state.name}`}
+                        onClick={handleStateClick}
+                      >
+                        <StateBadge
+                          state={issue.state}
+                          showLabel={false}
+                          className="list-row-state-icon"
+                        />
+                      </button>
+                    );
+                  })()}
 
                   <button
                     type="button"
@@ -367,12 +411,13 @@ export function ListView({
               </div>
 
               {/* Line 2: Summary */}
-              <div className="issue-card-line-2">
+              <div className="issue-card-line-2" role="cell">
                 <span className="issue-card-summary">{issue.summary}</span>
               </div>
             </div>
           );
         })}
+        </div>
       </div>
 
       {nextCursor && (

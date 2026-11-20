@@ -1038,7 +1038,8 @@
   gap: 4px;
 }
 
-.issue-list-card {
+.issue-list-card,
+.issue-list-card.list-row {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1048,7 +1049,8 @@
   border-radius: var(--radius-md, 6px);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
-  min-height: 52px;
+  height: auto;
+  min-height: 68px;
   box-sizing: border-box;
 }
 

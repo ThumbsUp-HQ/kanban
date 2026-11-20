@@ -41,6 +41,20 @@ export function QuickFieldPopover({
 }: QuickFieldPopoverProps): JSX.Element | null {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [prevTrigger, setPrevTrigger] = useState<{
+    isOpen: boolean;
+    field: QuickFieldType | null;
+    issueKey: string | undefined;
+  }>({ isOpen, field, issueKey: issue?.key });
+
+  if (
+    prevTrigger.isOpen !== isOpen ||
+    prevTrigger.field !== field ||
+    prevTrigger.issueKey !== issue?.key
+  ) {
+    setPrevTrigger({ isOpen, field, issueKey: issue?.key });
+    setFocusedIndex(0);
+  }
 
   // Compute whether popover should be active
   const isEligible =
@@ -120,14 +134,13 @@ export function QuickFieldPopover({
     if (popoverRef.current) {
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const top = Math.min(
-        viewportHeight - 250,
-        Math.max(10, anchorRect ? anchorRect.bottom + 6 : 10)
-      );
-      const left = Math.min(
-        viewportWidth - 240,
-        Math.max(10, anchorRect ? anchorRect.left : 10)
-      );
+      const maxTop = Math.max(8, viewportHeight - 250);
+      const desiredTop = anchorRect ? anchorRect.bottom + 6 : 10;
+      const top = Math.max(8, Math.min(maxTop, desiredTop));
+
+      const maxLeft = Math.max(8, viewportWidth - 240);
+      const desiredLeft = anchorRect ? anchorRect.left : 10;
+      const left = Math.max(8, Math.min(maxLeft, desiredLeft));
       popoverRef.current.style.setProperty('--popover-top', `${String(top)}px`);
       popoverRef.current.style.setProperty('--popover-left', `${String(left)}px`);
     }

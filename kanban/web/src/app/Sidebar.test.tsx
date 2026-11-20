@@ -324,6 +324,93 @@ describe('Sidebar', () => {
     });
   });
 
+  it('covers CreateProjectModal onCreated callback duplicate and modules_enabled branches', async () => {
+    let postCallCount = 0;
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/projects')) {
+        if (init?.method === 'POST') {
+          postCallCount++;
+          if (postCallCount === 1) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ identifier: 'ALPHA', name: 'Alpha Project' }),
+                { status: 201, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ identifier: 'ALPHA', name: 'Alpha Project', modules_enabled: true }),
+              { status: 201, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ identifier: 'KAN', name: 'kanban', modules_enabled: true }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
+    });
+    expect(screen.getByTestId('create-project-modal')).toBeDefined();
+
+    document.cookie = 'csrf_token=test-csrf-token';
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    const idInput = screen.getByLabelText(/Identifier/i);
+    act(() => {
+      fireEvent.change(nameInput, { target: { value: 'Alpha Project' } });
+      fireEvent.change(idInput, { target: { value: 'ALPHA' } });
+    });
+    const form = screen.getByTestId('create-project-submit').closest('form');
+    expect(form).not.toBeNull();
+    if (form) {
+      act(() => {
+        fireEvent.submit(form);
+      });
+    }
+    await waitFor(() => {
+      expect(screen.queryByTestId('create-project-modal')).toBeNull();
+    });
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-create-project'));
+    });
+    expect(screen.getByTestId('create-project-modal')).toBeDefined();
+    const dupNameInput = screen.getByLabelText(/Project Name/i);
+    const dupIdInput = screen.getByLabelText(/Identifier/i);
+    act(() => {
+      fireEvent.change(dupNameInput, { target: { value: 'Alpha Project' } });
+      fireEvent.change(dupIdInput, { target: { value: 'ALPHA' } });
+    });
+    const dupForm = screen.getByTestId('create-project-submit').closest('form');
+    if (dupForm) {
+      act(() => {
+        fireEvent.submit(dupForm);
+      });
+    }
+    await waitFor(() => {
+      expect(screen.queryByTestId('create-project-modal')).toBeNull();
+    });
+
+    unmount();
+    fetchSpy.mockRestore();
+  });
+
   it('fetches workspaces, toggles dropdown menu, switches workspace, and opens CreateWorkspaceModal', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;

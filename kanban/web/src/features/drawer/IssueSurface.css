@@ -837,6 +837,48 @@
 @media (max-width: 900px) {
   .split-body-grid {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .split-main-col {
+    overflow-y: visible;
+  }
+}
+
+@media (max-width: 768px) {
+  .split-action-toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .split-toolbar-btn {
+    min-height: 44px;
+    height: 44px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .split-state-select {
+    min-height: 44px;
+    height: 44px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  /* Hide redundant duplicate state selects in split view on mobile */
+  .surface__header--split .header-state-select {
+    display: none;
+  }
+
+  .surface--split .split-side-col [data-testid="quick-props-state-select"] {
+    display: none;
+  }
+
+  .surface__header--split {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
   }
 }
 

@@ -148,7 +148,7 @@ export function BoardColumn({
   }, [state.id, dropTargetFactory]);
 
   // Synchronize custom state color on column container
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = colRef.current;
     /* v8 ignore next 3 */
     if (!el) {

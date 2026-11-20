@@ -601,7 +601,7 @@ async def get_state_audit_impact(
     if state.is_default:
         blocking_reasons.append("Default State: Default workflow state cannot be deleted.")
 
-    if state.state_group in ("completed", "cancelled", "backlog"):
+    if state.state_group in ("completed", "cancelled", "backlog", "started"):
         grp_cnt_res = await session.execute(
             select(func.count(WorkflowState.id)).where(
                 WorkflowState.project_id == project.id,

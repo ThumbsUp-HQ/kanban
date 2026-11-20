@@ -96,11 +96,11 @@ In `api_admin_list_trash`:
 limit: Annotated[
     int,
     Query(ge=1, le=500, description="Page size limit (1-500)"),
-] = 100,
+] = (100,)
 offset: Annotated[
     int,
     Query(ge=0, description="Page offset"),
-] = 0,
+] = (0,)
 ```
 - Query Statement: `.order_by(ObjectRecord.deleted_at.desc()).offset(offset).limit(limit)`.
 - Enforces strict validation: `limit` bounds [1, 500] and `offset >= 0`. Out-of-bounds requests return HTTP 422.

@@ -183,4 +183,27 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     // Popover is open
     expect(screen.getByRole('dialog')).toBeDefined();
   });
+
+  it('enforces VIEWER RBAC gating with static StateBadge when TRANSITION/EDIT is absent', () => {
+    // 1. Read-only viewer capabilities
+    const { rerender } = render(
+      <ListView
+        issues={mockIssues}
+        capabilities={['VIEW']}
+      />,
+    );
+
+    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
+    expect(screen.queryByTestId('list-row-state-btn-KAN-101')).toBeNull();
+
+    // 2. Interactive with TRANSITION capability
+    rerender(
+      <ListView
+        issues={mockIssues}
+        capabilities={['TRANSITION']}
+      />,
+    );
+    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
+    expect(screen.queryByTestId('list-row-state-readonly-KAN-101')).toBeNull();
+  });
 });
