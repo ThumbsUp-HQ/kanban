@@ -2257,14 +2257,18 @@ index 81e00af..8121ba1 100644
              <div className="kb-device-actions-row">
                <button
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-index 00f0f26..f63c82d 100644
+index 00f0f26..dfb420e 100644
 --- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 +++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-@@ -4,11 +4,22 @@
+@@ -3,12 +3,27 @@
+ 
  .kb-oauth-gov-container {
    padding: var(--prose-pad);
-   max-width: 1100px;
+-  max-width: 1100px;
++  width: 100%;
++  max-width: min(1100px, 100%);
 +  min-width: 0;
++  overflow-x: hidden;
 +  box-sizing: border-box;
    margin: 0 auto;
    color: var(--kb-color-text-primary, var(--fg-primary));
@@ -2276,45 +2280,73 @@ index 00f0f26..f63c82d 100644
 +  flex-wrap: wrap;
 +  gap: 8px;
 +  margin-bottom: var(--section-gap);
++  width: 100%;
 +  max-width: 100%;
++  min-width: 0;
 +  box-sizing: border-box;
 +}
 +
  .kb-oauth-gov-header {
    margin-bottom: var(--section-gap);
    display: flex;
-@@ -58,6 +69,9 @@
+@@ -16,6 +31,14 @@
+   justify-content: space-between;
+   gap: 20px;
+   flex-wrap: wrap;
++  width: 100%;
++  min-width: 0;
++  box-sizing: border-box;
++}
++
++.kb-oauth-gov-header > div {
++  min-width: 0;
++  flex: 1 1 auto;
+ }
+ 
+ .kb-oauth-gov-title {
+@@ -58,6 +81,10 @@
    border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
    border-radius: 8px;
    padding: 24px 32px;
 +  min-width: 0;
++  width: 100%;
 +  max-width: 100%;
 +  box-sizing: border-box;
  }
  
  .kb-oauth-gov-section-header {
-@@ -65,6 +79,8 @@
+@@ -65,6 +92,11 @@
    align-items: center;
    justify-content: space-between;
    margin-bottom: 16px;
 +  flex-wrap: wrap;
 +  gap: 12px;
++  width: 100%;
++  min-width: 0;
++  box-sizing: border-box;
  }
  
  .kb-oauth-gov-section-title {
-@@ -78,8 +94,11 @@
+@@ -74,12 +106,16 @@
+   display: flex;
+   align-items: center;
+   gap: 8px;
++  min-width: 0;
+ }
  
  .kb-oauth-gov-table-wrap {
-   overflow-x: auto;
++  width: 100%;
 +  max-width: 100%;
++  min-width: 0;
+   overflow-x: auto;
+-  margin: 0 -32px;
+-  padding: 0 32px;
 +  box-sizing: border-box;
-   margin: 0 -32px;
-   padding: 0 32px;
 +  -webkit-overflow-scrolling: touch;
  }
  
  .kb-oauth-gov-table {
-@@ -350,6 +369,115 @@
+@@ -350,13 +386,241 @@
    color: var(--kb-color-text-primary, #f0f6fc);
  }
  
@@ -2428,43 +2460,136 @@ index 00f0f26..f63c82d 100644
 +}
 +
  @media (max-width: 768px) {
++  .kb-oauth-gov-container {
++    width: 100%;
++    max-width: 100%;
++    overflow-x: hidden;
++    box-sizing: border-box;
++  }
++
    .kb-oauth-gov-header {
      flex-direction: column;
-@@ -360,3 +488,34 @@
-     padding: 0 16px;
+     align-items: stretch;
++    width: 100%;
++    min-width: 0;
++  }
++
++  .kb-oauth-gov-header > div {
++    width: 100%;
++    min-width: 0;
    }
- }
++
++  .kb-oauth-gov-section {
++    padding: 16px 14px;
++    width: 100%;
++    max-width: 100%;
++    min-width: 0;
++    box-sizing: border-box;
++  }
++
++  .kb-oauth-gov-section-header {
++    width: 100%;
++    min-width: 0;
++  }
++
+   .kb-oauth-gov-table-wrap {
+-    margin: 0 -16px;
+-    padding: 0 16px;
++    width: 100%;
++    max-width: 100%;
++    min-width: 0;
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++  }
++}
 +
 +@media (max-width: 640px) {
 +  .kb-oauth-gov-container {
 +    padding: 16px 12px;
++    width: 100%;
++    max-width: 100%;
++    overflow-x: hidden;
++    box-sizing: border-box;
++  }
++
++  .kb-oauth-gov-header {
++    flex-direction: column;
++    align-items: stretch;
++    gap: 12px;
++    width: 100%;
++    min-width: 0;
++  }
++
++  .kb-oauth-gov-header > div {
++    width: 100%;
++    min-width: 0;
++  }
++
++  .kb-oauth-gov-title {
++    width: 100%;
++    white-space: normal;
++    overflow-wrap: break-word;
++    word-break: break-word;
++  }
++
++  .kb-oauth-gov-subtitle {
++    width: 100%;
++    white-space: normal;
++    overflow-wrap: break-word;
++    word-break: break-word;
++  }
++
++  .kb-oauth-gov-refresh-btn {
++    width: 100%;
++    justify-content: center;
++    white-space: normal;
++  }
++
++  .kb-mcp-admin-subnav {
++    width: 100%;
++    min-width: 0;
++    gap: 6px;
 +  }
 +
 +  .kb-oauth-gov-section {
-+    padding: 16px 14px;
++    padding: 16px 12px;
 +    border-radius: 6px;
++    width: 100%;
++    max-width: 100%;
++    min-width: 0;
++    box-sizing: border-box;
 +  }
 +
 +  .kb-oauth-gov-section-header {
 +    flex-direction: column;
-+    align-items: flex-start;
++    align-items: stretch;
 +    gap: 12px;
++    width: 100%;
++    min-width: 0;
++  }
++
++  .kb-oauth-gov-section-title {
++    width: 100%;
++    white-space: normal;
++    min-width: 0;
 +  }
 +
 +  .kb-oauth-gov-table-wrap {
-+    margin: 0 -14px;
-+    padding: 0 14px;
++    width: 100%;
++    max-width: 100%;
++    min-width: 0;
++    overflow-x: auto;
++    margin: 0;
++    padding: 0;
++    box-sizing: border-box;
 +  }
 +
 +  .kb-oauth-gov-register-btn {
 +    width: 100%;
 +    justify-content: center;
-+  }
-+
-+  .kb-mcp-admin-subnav {
-+    gap: 6px;
-+  }
-+}
++    white-space: normal;
+   }
+ }
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
 index de15977..7532c4e 100644
 --- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx

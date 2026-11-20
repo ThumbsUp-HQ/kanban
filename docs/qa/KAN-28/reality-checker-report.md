@@ -144,6 +144,34 @@ All 16 visual screenshots confirm WCAG AA contrast compliance, correct component
 
 ---
 
+---
+
+## Round-3 Live-Stack Forensic Verification (Mobile Container Fix)
+
+### Defect Remediation: /admin/oauth Mobile 390x844 Horizontal Containment
+- Finding: On `/admin/oauth` at `390x844` viewport, `<main>` has `overflow: hidden`, but child `.kb-oauth-gov-container` had `max-width: 1100px; min-width: 0;` without `width: 100%; overflow-x: hidden;`, causing the wide inner `<table>` to expand `.kb-oauth-gov-container` to `982.47px` (`main.scrollWidth = 1014px`), clipping the title, subnav, and `+ Register OAuth Client` button off the right edge.
+- Remediation:
+  - In `kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css`:
+    * Added `width: 100%; max-width: min(1100px, 100%); overflow-x: hidden; box-sizing: border-box; min-width: 0;` on `.kb-oauth-gov-container`.
+    * Added `width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; box-sizing: border-box;` on `.kb-oauth-gov-table-wrap`, isolating table horizontal scrolling strictly to the table wrap.
+    * Added `min-width: 0; width: 100%; box-sizing: border-box;` on flex parents (`.kb-oauth-gov-header`, `.kb-mcp-admin-subnav`, `.kb-oauth-gov-section-header`).
+    * Under `@media (max-width: 640px)`, ensured `width: 100%; white-space: normal;` on mobile header text, buttons, and sections.
+  - Measured DOM bounding rects at 390x844:
+    * `document.documentElement.scrollWidth = 390` (<= 390)
+    * `main.scrollWidth = 390` (<= 390)
+    * `.kb-oauth-gov-container.width = 358px` (<= 390)
+    * `.kb-oauth-gov-container.right = 374px` (<= 390)
+    * `.kb-oauth-gov-title.right = 362px` (<= 390)
+    * `[data-testid="register-client-btn"].right = 349px` (<= 390)
+    * `.kb-mcp-admin-subnav.right = 362px` (<= 390)
+    * Horizontal clipping: 0px (ZERO clipping).
+  - Screenshots updated and visually verified:
+    * `docs/qa/KAN-28/screenshots/live-admin-oauth-mobile-light.png`
+    * `docs/qa/KAN-28/screenshots/live-admin-oauth-mobile-dark.png`
+- Status: VERIFIED RESOLVED
+
+---
+
 ## Final Gate Certification
 - Overall Quality Rating: A
 - Production Readiness: READY
