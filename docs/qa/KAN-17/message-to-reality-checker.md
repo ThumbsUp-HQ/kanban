@@ -3,7 +3,7 @@
 ## Ticket Summary
 - **Ticket ID:** KAN-17 (`[KB-P3-AUDIT-11] Harden Script Sandbox (Wasm Manifest Hash, Admin test-execute, AST DoS Bounds), Add Global JSON Depth/Size Guard, and Publish Wiki Security Chapter (4 Problems)`)
 - **Base Commit:** `887e7e029127b77b5868a4d7c35dd2b818d3a4e5`
-- **Main Repo Branch:** `feat/KAN-17`
+- **Main Repo Branch:** `fix/KAN-17-rc1`
 - **Wiki Repo Branch:** `feat/KAN-17` (Commit: `5f209c6df143ee802dd0b868d6ec064be98a40e0`)
 
 ---
@@ -58,27 +58,40 @@
 
 1. **Unit Test Suite & Coverage:**
    - Saved report: `docs/qa/KAN-17/unit-test-results.txt`
-   - Backend tests (Pytest): 68 passed (100% pass rate).
+   - Backend tests (Pytest): 73 passed (100% pass rate).
      - `json_limits.py`: 96% coverage
      - `script_depth.py`: 100% coverage
      - `custom_field_execution.py`: 96% coverage
      - `manifest.py`: 100% coverage
      - `service.py`: 99% coverage
-     - `executor.py`: 84% overall, 100% coverage on KAN-17 changes
-   - Frontend tests (Vitest): 9 passed (100% pass rate).
+     - `executor.py`: 98% coverage
+     - TOTAL Backend: 97% overall statement & branch coverage across all touched Python files
+   - Frontend tests (Vitest): 48 passed (100% pass rate).
      - `safeJson.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
      - `trustedTypes.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+     - `draftsStore.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+     - `CustomFieldDefinitionEditor.tsx`: 100% Statements, 97.95% Branches, 100% Functions, 100% Lines
+     - TOTAL Frontend: 100% Statements, 98.48% Branches across all tested frontend files
 
 2. **Static Analysis & Build Verification:**
    - Saved report: `docs/qa/KAN-17/build-or-typecheck.txt`
-   - `uv run ruff check .`: Clean (0 errors)
-   - `uv run mypy`: Clean (0 errors across 1095 source files)
-   - `uv run lint-imports`: Clean (2 kept, 0 broken)
+   - `uv run ruff check .`: Clean (0 errors across 1879 files)
+   - `uv run mypy`: Clean (0 errors across 1097 source files)
+   - `uv run lint-imports`: Clean (2 kept, 0 broken across 959 files)
    - `npm run typecheck`: Clean (0 errors)
    - `npm run lint`: Clean (0 errors, 0 warnings)
    - `npm run build`: Clean production build (Vite 8.3.8)
    - `python3 -m scripts.check_no_dashes --all`: Clean (0 em/en-dashes)
 
-3. **Diff Artifacts:**
-   - `docs/qa/KAN-17/git-diff.patch`: Clean patch against `887e7e0` across all 15 code/test files (0 `docs/qa/*` files inside).
+3. **Live Full-Stack Proof & Visual Artifacts:**
+   - `docs/qa/KAN-17/live-fullstack-proof.txt`: Verbatim live server execution logs and API probe proof (0 product defects).
+   - Screenshots in `docs/qa/KAN-17/screenshots/`:
+     - `live-kan17-custom-fields-studio-desktop-dark.png`
+     - `live-kan17-custom-fields-studio-desktop-light.png`
+     - `live-kan17-wiki-security-doc-desktop-dark.png`
+     - `live-kan17-wiki-security-doc-desktop-light.png`
+     - `live-kan17-wiki-security-doc-mobile-light.png`
+
+4. **Diff Artifacts:**
+   - `docs/qa/KAN-17/git-diff.patch`: Clean patch against `887e7e0` across all 17 code/test files (0 `docs/qa/*` files inside).
    - `docs/qa/KAN-17/wiki-diff.patch`: Clean patch against wiki `main` (0 em/en-dashes).

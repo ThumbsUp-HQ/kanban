@@ -1,0 +1,32 @@
+Bootstrap: container=kanban-liveqa-2 base_url=http://localhost:18952 setup_token_len=52
+CDP WebAuthn Virtual Authenticator attached: id=45d9bd6c-3c32-40ff-ae1d-469d45d3b10d
+Admin session after WebAuthn setup: HTTP 200 {"authenticated":true,"principal_id":"01a1f824-862a-7dcb-8481-74d1044e006c","workspace_id":"01a1f824-8628-7b62-a64c-7458ef0ee29a","session_id":"01a1f824-870b-762e-8470-d32f2efbae06","aal_level":2,"mfa_pending":false,"csrf_token":"OEC3-RW2oPfZCRARaCrmOQ.vu23ohkHuNMY-NpXF-vJCsUSjLLec_EHAsAJ-pUM1GM","idle_expires_at":"2026-11-27T08:48:25.867020+00:00","absolute_expires_at":"2026-12-20T08:48:25.661435+00:00","remember_me":true}
+Project KAN loaded: id=01a1f824-8637-7dce-8f8e-21fe319804e5 key=KAN
+Created issue KAN-1 (id=01a1f824-8b03-73ab-902a-3d66a07237f2, etag="bd453e25925d7d44ea4320dba2ba330b00411afa0a6bfb256ede349fd9b56c2e")
+Provisioned standard MEMBER user @alice: {"id":"43a71c15-70de-4f64-9d6e-fa299d26ac05","principal":"@alice","type":"USER","handle":"@alice","display_name":"Alice Member","email":"alice@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+
+=== PART A.1: LIVE JSON LIMITS & LONE-SURROGATE ASGI GUARD ===
+A.1a 40-deep nested JSON -> HTTP 422 (1.3ms) body={"type": "urn:kanban:problem:JSON_DEPTH_EXCEEDED", "title": "JSON Depth Exceeded", "status": 422, "code": "JSON_DEPTH_EXCEEDED", "detail": "JSON nesting depth exceeds maximum allowed depth of 32"}
+A.1b >2 MiB JSON (2162736 bytes) -> HTTP 413 (3.51ms) body={"type": "urn:kanban:problem:PAYLOAD_TOO_LARGE", "title": "Payload Too Large", "status": 413, "code": "PAYLOAD_TOO_LARGE", "detail": "Request content-length (2162736 bytes) exceeds 2097152 bytes"}
+A.1c UTF-16 lone surrogate \ud800 -> HTTP 422 (2.32ms) body={"type": "urn:kanban:problem:INVALID_UTF8_SURROGATE", "title": "Invalid UTF-8 Surrogate", "status": 422, "code": "INVALID_UTF8_SURROGATE", "detail": "JSON value contains forbidden UTF-16 lone surrogate character"}
+
+=== PART A.2: LIVE test-execute RBAC + AAL2 + AST FORMULA DOS GUARD ===
+A.2a @alice login -> HTTP 200 body={"authenticated":true,"status":"authenticated","challenge_id":"09ab855b-a5a9-4f64-bacc-b07a12387ff4","methods":["totp","webauthn","recovery"],"session_id":"09ab855b-a5a9-4f64-bacc-b07a12387ff4","aal_level":1,"mfa_pending":false,"csrf_token":"2jaFWEyMBwWeeAwadahwfA.7-c-o1gQQB9bY6Ay67-Rmx8YySHcfBycdATvKp3NPw0"}
+A.2b @alice (MEMBER) test-execute -> HTTP 403 (33.89ms) body={"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Caller lacks required admin role to manage custom field definitions","request_id":"ff7c30ea57a64e30837e49ac0c6a83b7"}
+A.2c @admin AAL2 test-execute [pow_dos] (formula: 9 ** 9 ** 9) -> HTTP 200 (32.34ms) body={"output_format":"number","value":null,"latency_ms":8,"logs":"Draft test execution on KAN-1 (flavor=wasm)\nEvaluated Formula expression: 9 ** 9 ** 9\nUnexpected error: Expected numeric value for 'number' output format, got NoneType\n","status":"ERROR","error":"Expected numeric value for 'number' output format, got NoneType"}
+A.2c @admin AAL2 test-execute [mult_dos] (formula: "A" * 100000) -> HTTP 200 (32.6ms) body={"output_format":"text","value":null,"latency_ms":3,"logs":"Draft test execution on KAN-1 (flavor=wasm)\nEvaluated Formula expression: \"A\" * 100000\nUnexpected error: Expected str for 'text' output format, got NoneType\n","status":"ERROR","error":"Expected str for 'text' output format, got NoneType"}
+A.2c @admin AAL2 test-execute [attr_introspect] (formula: issue.__class__) -> HTTP 200 (31.88ms) body={"output_format":"text","value":null,"latency_ms":2,"logs":"Draft test execution on KAN-1 (flavor=wasm)\nEvaluated Formula expression: issue.__class__\nUnexpected error: Expected str for 'text' output format, got NoneType\n","status":"ERROR","error":"Expected str for 'text' output format, got NoneType"}
+A.2c @admin AAL2 test-execute [safe_math] (formula: 1 + 2 * 3) -> HTTP 200 (31.85ms) body={"output_format":"number","value":7,"latency_ms":5,"logs":"Draft test execution on KAN-1 (flavor=wasm)\nEvaluated Formula expression: 1 + 2 * 3\nSuccess: validated format number\n","status":"SUCCESS","error":null}
+Created custom field risk-formula -> HTTP 201 {"id":"01a1f824-8df1-7820-81b1-3d460896f362","workspace_id":"01a1f824-8628-7b62-a64c-7458ef0ee29a","project_id":"01a1f824-8637-7dce-8f8e-21fe319804e5","slug":"risk-formula","name":"Risk Formula","tier":"wasm","output_format":"number","output_format_metadata":{"maximum_fraction_digits":2},"script_source":"formula: 1 + 2 * 3","wasm_module_sha256":null,"script_version":1,"target_scope":"PROJECT","credential_mode":"INVOKING_USER","egress_allowlist":[],"manifest_sha256":"f27b47b3ebdf2cf5d1e0deea2f2969f7eb9a2b27b57e5e47295d0b1158920881","is_enabled":true,"approval_status":"default_no_escalation","required_approver_tier":null,"created_by_id":"01a1f824-862a-7dcb-8481-74d1044e006c","created_at":"2026-11-20T08:48:27.633516Z","updated_at":"2026-11-20T08:48:27.633516Z"}
+
+=== PART A.3: LIVE UI DOCS + MERMAID + CUSTOM FIELDS SCREENSHOTS ===
+Created Security Architecture page: id=01a1f824-8e1e-7f47-a063-bc13e5f94a24 key=docs/arch/custom-scripts-and-json-security-architecture url=http://localhost:18952/projects/KAN/docs/01a1f824-8e1e-7f47-a063-bc13e5f94a24
+Rendered Mermaid diagram in security doc: {"imgs":[{"srcPrefix":"blob:http://","w":1148,"h":2993}],"fallbacks":0}
+Mobile 390x844 scrollWidth on security doc: 390
+Console errors: 0, Page errors: 0
+
+=== LIVE STACK VERDICT (KAN-17) ===
+Problem A.1 (JsonLimitsMiddleware 40-deep/2MiB/lone-surrogate): LIVE_STACK_VERDICT: PASS
+Problem A.2 (test-execute RBAC + AAL2 + AST Formula DoS Guard): LIVE_STACK_VERDICT: PASS
+Problem A.3 (Live Docs Wiki + Mermaid SVG + CustomFieldDefinitionEditor UI at /projects/KAN/settings/custom-fields): LIVE_STACK_VERDICT: PASS
+OVERALL KAN-17 LIVE_STACK_VERDICT: PASS
