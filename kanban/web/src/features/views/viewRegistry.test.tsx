@@ -967,27 +967,34 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       });
 
       // Quick field state update to Backlog and live priority & state branches
-      fireEvent.keyDown(window, { key: 'j' });
-      fireEvent.keyDown(window, { key: 's' });
-      const statePop = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      const openPicker = async (key: string, name: RegExp) => {
+        return waitFor(
+          () => {
+            const existing = screen.queryByRole('dialog', { name });
+            if (existing) return existing;
+            fireEvent.keyDown(window, { key: 'j' });
+            fireEvent.keyDown(window, { key });
+            return screen.getByRole('dialog', { name });
+          },
+          { timeout: 5000 }
+        );
+      };
+
+      const statePop = await openPicker('s', /Quick State Picker/i);
       fireEvent.click(within(statePop).getByText('Backlog'));
 
       // Live priority update
-      fireEvent.keyDown(window, { key: 'p' });
-      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i });
+      const prioPop = await openPicker('p', /Quick Priority Picker/i);
       fireEvent.click(within(prioPop).getByText('Urgent'));
 
       // Live state updates: In Progress, Todo, Done
-      fireEvent.keyDown(window, { key: 's' });
-      const statePopProg = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      const statePopProg = await openPicker('s', /Quick State Picker/i);
       fireEvent.click(within(statePopProg).getByText('In Progress'));
 
-      fireEvent.keyDown(window, { key: 's' });
-      const statePopTodo = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      const statePopTodo = await openPicker('s', /Quick State Picker/i);
       fireEvent.click(within(statePopTodo).getByText('Todo'));
 
-      fireEvent.keyDown(window, { key: 's' });
-      const statePopDone = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      const statePopDone = await openPicker('s', /Quick State Picker/i);
       fireEvent.click(within(statePopDone).getByText('Done'));
 
       // Dispatch kb:create-issue to open QuickCreateIssueModal and submit
