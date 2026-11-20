@@ -66,7 +66,24 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 
 ---
 
+## 5. Surgical Live-QA Remediation Audit (KB-P3-AUDIT-04)
+
+- Target Branch: `fix/KAN-10-liveqa`
+- Remediation Head Commit: `765adfa3`
+- Remediation Scope:
+  1. Root Cause: Dockerfile Stage 3 (`runtime-slim`) omitted the `git` package, which caused `POST /api/v1/projects/{key}/repo-bindings` in the standalone container to fail with `[Errno 2] No such file or directory` during initial mirror clone attempts under UID 65532.
+  2. Remediation Verification:
+     - `Dockerfile` Stage 3 (`runtime-slim`) now installs `git` and `ca-certificates` via `apt-get install -y --no-install-recommends` under pinned Debian Bookworm.
+     - `Dockerfile` Stage 4 (`agent-runner`) simplified with redundant `apt-get install git` removed.
+     - Added `test_dockerfile_runtime_slim_git_and_ca_certificates` to `tests/deploy/test_dockerfile_agent_runner.py` asserting package presence in `runtime-slim`.
+     - Verified `tests/deploy/` and `tests/security/test_stride_standalone_misconfig.py` pass (74 tests passing, 98% coverage).
+     - Verified `kanban/tests/repos/` pass (65 tests passing, 96% coverage on `kanban.repos`).
+     - Zero new external Python/Node dependencies, zero em-dashes and en-dashes, clean ruff and mypy.
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-10/screenshots/`.
+
