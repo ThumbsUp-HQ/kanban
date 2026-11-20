@@ -173,12 +173,10 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
             field="action",
             valid_options=valid_opts,
             fix_hint=(
-                "Cycle state transition must follow monotonicity: "
-                "upcoming -> started -> completed"
+                "Cycle state transition must follow monotonicity: upcoming -> started -> completed"
             ),
             cli_example=(
-                'kanban-cli-admin manage_cycles_and_modules --action=update_cycle '
-                '--cycle="<id>"'
+                'kanban-cli-admin manage_cycles_and_modules --action=update_cycle --cycle="<id>"'
             ),
         )
     if code_str == "MODULES_DISABLED":
@@ -186,8 +184,7 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
             McpErrorCode.MODULES_DISABLED,
             msg,
             fix_hint=(
-                "Modules are disabled for this project. "
-                "Enable modules in project settings first."
+                "Modules are disabled for this project. Enable modules in project settings first."
             ),
             cli_example='kanban-cli-admin architect_project --action=update --project="<project>"',
         )
@@ -197,8 +194,7 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
             msg,
             fix_hint="Cycle or module not found. Verify identifier or list project cycles/modules.",
             cli_example=(
-                'kanban-cli-admin manage_cycles_and_modules --action=list '
-                '--project="<project>"'
+                'kanban-cli-admin manage_cycles_and_modules --action=list --project="<project>"'
             ),
         )
     return exc

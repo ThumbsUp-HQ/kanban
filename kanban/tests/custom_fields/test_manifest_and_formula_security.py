@@ -73,9 +73,7 @@ def test_manifest_sha256_binds_wasm_module_sha256() -> None:
     hash_none = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=None)
     hash_mod1 = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=b"\x01" * 32)
     hash_mod2 = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=b"\x02" * 32)
-    hash_hex1 = compute_field_manifest_sha256(
-        **base_kwargs, wasm_module_sha256=("01" * 32).upper()
-    )
+    hash_hex1 = compute_field_manifest_sha256(**base_kwargs, wasm_module_sha256=("01" * 32).upper())
 
     assert hash_none != hash_mod1
     assert hash_mod1 != hash_mod2
@@ -465,4 +463,3 @@ def test_eval_safe_formula_comprehensive_coverage() -> None:
 
     # Dict literal
     assert _eval_safe_formula("{'key': 'val'}['key']", ctx) == "val"
-

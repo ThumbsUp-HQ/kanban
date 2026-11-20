@@ -360,4 +360,3 @@ async def test_json_limits_asgi_edge_cases() -> None:
         capture_send,  # type: ignore[arg-type]
     )
     assert any(m.get("status") == 413 for m in response_starts)
-

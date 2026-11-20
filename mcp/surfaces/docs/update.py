@@ -547,8 +547,7 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
                 hint=f"Current fresh ETag is {current_sha}",
                 extra={"current_etag": current_sha},
                 fix_hint=(
-                    "Sticky was modified concurrently. "
-                    f"Retry with current ETag: {current_sha}"
+                    f"Sticky was modified concurrently. Retry with current ETag: {current_sha}"
                 ),
                 cli_example=(
                     f'kanban-cli-docs update --id="{clean_id}" --type=DOC '
@@ -646,12 +645,10 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
                     hint=f"Current fresh ETag is {current_sha}",
                     extra={"current_etag": current_sha},
                     fix_hint=(
-                        "Sticky was modified concurrently. "
-                        f"Retry with current ETag: {current_sha}"
+                        f"Sticky was modified concurrently. Retry with current ETag: {current_sha}"
                     ),
                     cli_example=(
-                        f'kanban-cli-docs update --id="{clean_id}" '
-                        f'--if-match="{current_sha}"'
+                        f'kanban-cli-docs update --id="{clean_id}" --if-match="{current_sha}"'
                     ),
                 )
             patch_payload["body_markdown"] = content
@@ -730,12 +727,10 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
                 hint=f"Current fresh ETag is {current_sha}",
                 extra={"current_etag": current_sha},
                 fix_hint=(
-                    "Document was modified concurrently. "
-                    f"Retry with current ETag: {current_sha}"
+                    f"Document was modified concurrently. Retry with current ETag: {current_sha}"
                 ),
                 cli_example=(
-                    f'kanban-cli-docs update --id="{clean_id}" '
-                    f'--if-match="{current_sha}"'
+                    f'kanban-cli-docs update --id="{clean_id}" --if-match="{current_sha}"'
                 ),
             )
         doc_patch_payload["body_markdown"] = content

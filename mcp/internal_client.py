@@ -278,9 +278,7 @@ class KanbanApiClient:
         if "unauthorized_mentions" in problem:
             extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
 
-        enriched = self._enrich_progressive_disclosure(
-            mapped_code, problem, hint_str, extra_dict
-        )
+        enriched = self._enrich_progressive_disclosure(mapped_code, problem, hint_str, extra_dict)
         raise KbMcpError(
             mapped_code,
             error_message,
@@ -306,10 +304,14 @@ class KanbanApiClient:
         """Extract and synthesize self-correcting progressive disclosure error fields."""
         fix_hint = problem.get("fix_hint") or hint_str
         cli_example = problem.get("cli_example")
-        raw_options = problem.get("valid_options") or problem.get("valid_states") or (
-            problem["extra"].get("valid_states")
-            if isinstance(problem.get("extra"), dict)
-            else None
+        raw_options = (
+            problem.get("valid_options")
+            or problem.get("valid_states")
+            or (
+                problem["extra"].get("valid_states")
+                if isinstance(problem.get("extra"), dict)
+                else None
+            )
         )
         valid_options = list(raw_options) if isinstance(raw_options, (list, tuple)) else None
         raw_mean = problem.get("did_you_mean")
@@ -322,8 +324,7 @@ class KanbanApiClient:
             fix_hint = fix_hint or f"Allowed target states: {opts_str}"
             first_opt = valid_options[0]
             cli_example = cli_example or (
-                'kanban-cli-agent transition_ticket --identifier="<key>" '
-                f'--to-state="{first_opt}"'
+                f'kanban-cli-agent transition_ticket --identifier="<key>" --to-state="{first_opt}"'
             )
         elif mapped_code == McpErrorCode.CONFLICT_ETAG:
             current_etag = (
@@ -332,8 +333,7 @@ class KanbanApiClient:
             if current_etag:
                 extra_dict["current_etag"] = str(current_etag)
                 fix_hint = (
-                    fix_hint
-                    or f"Concurrency conflict. Retry with current ETag: {current_etag}"
+                    fix_hint or f"Concurrency conflict. Retry with current ETag: {current_etag}"
                 )
                 cli_example = cli_example or (
                     'kanban-cli-agent update_ticket --identifier="<key>" '
@@ -348,13 +348,11 @@ class KanbanApiClient:
             if target_doc:
                 extra_dict["target_doc_key"] = str(target_doc)
                 fix_hint = fix_hint or (
-                    f"Sticky has already been promoted to Doc '{target_doc}'. "
-                    "Use update instead."
+                    f"Sticky has already been promoted to Doc '{target_doc}'. Use update instead."
                 )
                 cli_example = cli_example or f'kanban-cli-docs update --id="{target_doc}"'
         elif (
-            mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND)
-            and not fix_hint
+            mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND) and not fix_hint
         ):
             fix_hint = "Verify identifier or use search tool to discover valid entities."
 

@@ -150,9 +150,7 @@ def _validate_json_structure_iterative(root: Any) -> None:  # noqa: C901, PLR091
         if isinstance(node, dict):
             total_keys += len(node)
             if total_keys > MAX_JSON_KEYS:
-                keys_msg = (
-                    f"JSON object key count ({total_keys}) exceeds maximum ({MAX_JSON_KEYS})"
-                )
+                keys_msg = f"JSON object key count ({total_keys}) exceeds maximum ({MAX_JSON_KEYS})"
                 raise JsonKeysLimitError(keys_msg)
 
             for k, v in node.items():
@@ -188,9 +186,7 @@ def _validate_json_structure_iterative(root: Any) -> None:  # noqa: C901, PLR091
         elif isinstance(node, str):
             for ch in node:
                 if SURROGATE_MIN <= ord(ch) <= SURROGATE_MAX:
-                    surr_str_msg = (
-                        "JSON string contains forbidden UTF-16 lone surrogate character"
-                    )
+                    surr_str_msg = "JSON string contains forbidden UTF-16 lone surrogate character"
                     raise JsonSurrogateLimitError(surr_str_msg)
 
 

@@ -230,9 +230,8 @@ async def test_execute_custom_field(  # noqa: C901
 
         if str(body.tier) == "wasm":
             source = (body.script_source or "").strip()
-            is_interpreted = (
-                source.startswith(("scalar:", "formula:", "return "))
-                or bool(re.search(r"return\s+([^;]+)", source))
+            is_interpreted = source.startswith(("scalar:", "formula:", "return ")) or bool(
+                re.search(r"return\s+([^;]+)", source)
             )
             if not is_interpreted:
                 raw_sha: bytes | None = None

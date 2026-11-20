@@ -630,9 +630,7 @@ async def test_protocol_pre_dispatch_special_cases() -> None:
 
     # 1. 'state' in update_ticket hints use transition_ticket
     with pytest.raises(KbMcpError) as exc_state:
-        handler._validate_tool_arguments_schema(
-            spec, {"identifier": "KAN-1", "state": "Done"}
-        )
+        handler._validate_tool_arguments_schema(spec, {"identifier": "KAN-1", "state": "Done"})
     assert exc_state.value.hint == "use transition_ticket"
     assert "use transition_ticket" in (exc_state.value.fix_hint or "")
 
@@ -668,9 +666,7 @@ async def test_protocol_pre_dispatch_special_cases() -> None:
     assert "Valid options: ['ACTIVE', 'INACTIVE']" in (exc_enum.value.fix_hint or "")
 
     # 6. Nullable union with None passes
-    handler._validate_tool_arguments_schema(
-        spec, {"identifier": "KAN-1", "optional_note": None}
-    )
+    handler._validate_tool_arguments_schema(spec, {"identifier": "KAN-1", "optional_note": None})
 
 
 @pytest.mark.asyncio
@@ -775,6 +771,3 @@ async def test_docs_update_sticky_diff_patch_and_links_coverage() -> None:
     assert res["status"] == "updated"
     assert res["kind"] == "sticky"
     assert res["links"] == [{"action": "added", "target": "KAN-10", "link_type": "RELATES_TO"}]
-
-
-
