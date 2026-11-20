@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes, useNavigate, createMemoryRouter, RouterProvider, type NavigateFunction } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import * as breakpoints from '../../styles/breakpoints';
 import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
 import * as hiddenDomPrunerMod from '../../editor/clipboard/hiddenDomPruner';
 import * as viewsApi from '../views/viewsApi';
+import * as railApi from '../drawer-rail/railApi';
 
 const validIssue: IssueDetail = {
   key: 'KAN-142',
@@ -123,7 +124,9 @@ describe('IssueSurface', () => {
       // Perform 5 round-trip toggles: drawer -> full -> drawer -> full ...
       for (let i = 0; i < 5; i++) {
         // Toggle to full screen
-        void navigate('/projects/KAN/issues/KAN-142');
+        act(() => {
+          void navigate('/projects/KAN/issues/KAN-142');
+        });
         await waitFor(() => {
           const current = container.querySelector('section');
           expect(current?.className).toBe('surface--full');
@@ -132,7 +135,9 @@ describe('IssueSurface', () => {
         });
 
         // Toggle back to drawer
-        void navigate('/projects/KAN/issues?peek=KAN-142');
+        act(() => {
+          void navigate('/projects/KAN/issues?peek=KAN-142');
+        });
         await waitFor(() => {
           const current = container.querySelector('section');
           expect(current?.className).toBe('surface--drawer');
@@ -1313,6 +1318,476 @@ describe('IssueSurface', () => {
       expect(textarea.value).toBe(
         '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
       );
+    });
+  });
+
+  describe('Mobile & Split Surface State Controls (KAN-44)', () => {
+    it('calls onClose when split-surface-close-btn is clicked in split mode', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const onClose = vi.fn();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+              onClose={onClose}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-surface-close-btn')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('split-surface-close-btn'));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders split-surface-close-btn and invokes onClose in loading and error states', async () => {
+      let resolvePromise: (val: unknown) => void = () => {
+        /* no-op */
+      };
+      const pendingFetch = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+      vi.spyOn(apiClient, 'get').mockReturnValue(pendingFetch);
+      const queryClient1 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const onCloseLoading = vi.fn();
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient1}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-LOADING"
+              projectKey="KAN"
+              onClose={onCloseLoading}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const closeLoadingBtn = screen.getByTestId('split-surface-close-btn');
+      fireEvent.click(closeLoadingBtn);
+      expect(onCloseLoading).toHaveBeenCalledTimes(1);
+      resolvePromise(validIssue);
+      unmount();
+
+      // Error state
+      vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Load failed'));
+      const queryClient2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const onCloseError = vi.fn();
+
+      render(
+        <QueryClientProvider client={queryClient2}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-ERR"
+              projectKey="KAN"
+              onClose={onCloseError}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Could not load KAN-ERR.')).toBeDefined();
+      });
+
+      const closeErrorBtn = screen.getByTestId('split-surface-close-btn');
+      fireEvent.click(closeErrorBtn);
+      expect(onCloseError).toHaveBeenCalledTimes(1);
+    });
+
+    it('transitions state via header-state-select in split mode, calling patchIssue and handling success', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+      });
+      const patchSpy = vi.spyOn(railApi, 'patchIssue').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-in-progress', name: 'In Progress', group: 'started' },
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-state-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId('header-state-select');
+      expect(within(select).getByRole('option', { name: 'In Progress' })).toBeDefined();
+      fireEvent.change(select, { target: { value: 'state-in-progress' } });
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledWith('KAN-142', { state_id: 'state-in-progress' }, validIssue.etag);
+      });
+      patchSpy.mockRestore();
+    });
+
+    it('reverts state and displays conflict banner when patchIssue rejects with ApiProblem', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+      });
+      const problem = new ApiProblem(412, {
+        title: 'Precondition Failed',
+        status: 412,
+        detail: 'ETag conflict: modified by another session',
+      });
+      const patchSpy = vi.spyOn(railApi, 'patchIssue').mockRejectedValue(problem);
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-state-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId('header-state-select');
+      expect(within(select).getByRole('option', { name: 'Done' })).toBeDefined();
+      fireEvent.change(select, { target: { value: 'state-done' } });
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeDefined();
+        expect(screen.getByText(/ETag conflict/i)).toBeDefined();
+      });
+      patchSpy.mockRestore();
+    });
+
+    it('reverts state and displays error banner when patchIssue rejects with standard Error', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+      });
+      const patchSpy = vi.spyOn(railApi, 'patchIssue').mockRejectedValue(new Error('WIP limit exceeded'));
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-state-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId('header-state-select');
+      expect(within(select).getByRole('option', { name: 'Done' })).toBeDefined();
+      fireEvent.change(select, { target: { value: 'state-done' } });
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeDefined();
+        expect(screen.getByText(/WIP limit exceeded/i)).toBeDefined();
+      });
+      patchSpy.mockRestore();
+    });
+
+    it('renders quick properties bar and allows state change via quick-props-state-select', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+      });
+      const patchSpy = vi.spyOn(railApi, 'patchIssue').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-done', name: 'Done', group: 'completed' },
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="drawer"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('quick-properties-bar')).toBeDefined();
+      });
+
+      const quickSelect = screen.getByTestId('quick-props-state-select');
+      fireEvent.change(quickSelect, { target: { value: 'state-done' } });
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledWith('KAN-142', { state_id: 'state-done' }, validIssue.etag);
+      });
+      patchSpy.mockRestore();
+    });
+
+    it('renders read-only badges in quick properties bar and split header when user is VIEWER', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        capabilities: ['VIEWER'],
+      });
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-state-badge')).toBeDefined();
+        expect(screen.queryByTestId('header-state-select')).toBeNull();
+        expect(screen.queryByTestId('quick-props-state-select')).toBeNull();
+      });
+    });
+
+    it('covers IssueSurfaceRoot props: issueId, object_id, and DescriptionSlot override', async () => {
+      const issueWithAssignees: IssueDetail = {
+        ...validIssue,
+        priority: undefined,
+        assignees: [
+          { id: 'u1', kind: 'free_text', free_text: 'User One', notify: false, hint: '' },
+        ],
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithAssignees);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      const customSlots = {
+        description: () => <div data-testid="custom-desc-slot">Custom Description</div>,
+      };
+
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceSlotsContext.Provider value={customSlots}>
+              <IssueSurfaceRoot
+                mode="drawer"
+                issueKey="KAN-142"
+                issueId="id-1111"
+                projectKey="KAN"
+              />
+            </IssueSurfaceSlotsContext.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('custom-desc-slot')).toBeDefined();
+        expect(screen.getByText('None')).toBeDefined();
+        expect(screen.getByText('User One')).toBeDefined();
+      });
+
+      // Test with object_id and other assignee types: display_name, handle, free_text, principal, and fallback
+      const variations = [
+        { assignees: [{ id: 'u2', display_name: 'Display Name' }], expected: 'Display Name' },
+        { assignees: [{ id: 'u3', handle: '@handle' }], expected: '@handle' },
+        { assignees: [{ id: 'u4', free_text: 'Contractor' }], expected: 'Contractor' },
+        { assignees: [{ id: 'u5' }], expected: 'Assigned' },
+        { assignees: [{ id: 'u6', principal: { id: 'p1', handle: 'phandle', display_name: 'Principal Name', type: 'USER' } }], expected: 'Principal Name' },
+        { assignees: [{ id: 'u7', principal: { id: 'p2', handle: 'onlyhandle', display_name: '', type: 'USER' } }], expected: 'onlyhandle' },
+        { assignees: [{ id: 'u8', name: 'User Name' }], expected: 'User Name' },
+        { assignees: [{ id: 'u9', display_name: '', name: '', handle: '', free_text: '', principal: { id: 'p3', display_name: '', handle: '' } }], expected: 'Assigned' },
+      ];
+
+      for (const variation of variations) {
+        vi.spyOn(apiClient, 'get').mockResolvedValue({
+          ...validIssue,
+          assignees: variation.assignees,
+        });
+        queryClient.clear();
+        rerender(
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <IssueSurfaceRoot
+                mode="drawer"
+                issueKey="KAN-142"
+                object_id="obj-2222"
+                projectKey="KAN"
+              />
+            </MemoryRouter>
+          </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByText(variation.expected)).toBeDefined();
+        });
+      }
+    });
+
+    it('covers projectStates matching, non-matching optimistic states, null patchIssue response, and title-only error', async () => {
+      const mockProjectStates = [
+        { id: 'st-ready', name: 'Ready', group: 'unstarted' as const, color_hex: '#10b981' },
+        { id: 'st-prog', name: 'In Prog', group: 'started' as const, color_hex: '#3b82f6' },
+      ];
+      vi.spyOn(viewsApi, 'fetchProjectStates').mockResolvedValueOnce(mockProjectStates);
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'st-custom', name: 'Custom', group: 'unstarted' },
+      });
+      // Return null from patchIssue
+      vi.spyOn(railApi, 'patchIssue').mockResolvedValueOnce(null as unknown as IssueDetail);
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('header-state-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId('header-state-select');
+      expect(within(select).getByRole('option', { name: 'Ready' })).toBeDefined();
+      expect(within(select).getByRole('option', { name: 'Custom' })).toBeDefined();
+      // Change to st-prog
+      fireEvent.change(select, { target: { value: 'st-prog' } });
+
+      // Error with title only in ApiProblem
+      const titleOnlyProblem = new ApiProblem(409, { title: 'Concurrent Conflict', status: 409 });
+      vi.spyOn(railApi, 'patchIssue').mockRejectedValueOnce(titleOnlyProblem);
+
+      fireEvent.change(select, { target: { value: 'st-unknown' } });
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeDefined();
+        expect(screen.getByText('Concurrent Conflict')).toBeDefined();
+      });
+
+      // Error with message only (no title, no detail) in ApiProblem
+      const msgOnlyProblem = new ApiProblem(500, { code: 'SERVER_ERR' });
+      vi.spyOn(railApi, 'patchIssue').mockRejectedValueOnce(msgOnlyProblem);
+      fireEvent.change(select, { target: { value: 'st-unknown-2' } });
+      await waitFor(() => {
+        expect(screen.getByText('API error 500 (SERVER_ERR)')).toBeDefined();
+      });
+
+      // Generic error without message
+      vi.spyOn(railApi, 'patchIssue').mockRejectedValueOnce({ status: 422 });
+      fireEvent.change(select, { target: { value: 'st-unknown-3' } });
+      await waitFor(() => {
+        expect(screen.getByText('State transition failed')).toBeDefined();
+      });
+
+      // Test when issue state matches one of projectStates
+      act(() => {
+        queryClient.setQueryData(['issue', 'KAN-142'], {
+          ...validIssue,
+          state: { id: 'st-ready', name: 'Ready', group: 'unstarted' },
+        });
+      });
+      expect(screen.getByTestId('header-state-select')).toBeDefined();
+
+      // Test when issue state is null with projectStates populated
+      act(() => {
+        queryClient.setQueryData(['issue', 'KAN-142'], {
+          ...validIssue,
+          state: null,
+        });
+      });
+      expect(screen.getByTestId('header-state-select')).toBeDefined();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-surface-close-btn')).toBeDefined();
+      });
+    });
+
+    it('covers empty description preview and fallback project_key in RailSlotWithMeta', async () => {
+      const issueWithoutProjKey: IssueDetail = {
+        ...validIssue,
+        project_key: '',
+        project_name: undefined,
+        description_markdown: '',
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithoutProjKey);
+      let capturedMeta: { key: string } | undefined;
+      const customSlots = {
+        rail: (({ projectMetadata }: { issue: IssueDetail; projectMetadata?: { key: string } }) => {
+          capturedMeta = projectMetadata;
+          return <div data-testid="custom-rail">Custom Rail</div>;
+        }) as React.ComponentType<{ issue: IssueDetail }>,
+      };
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/FALLBACK_KEY/issues']}>
+            <IssueSurfaceSlotsContext.Provider value={customSlots}>
+              <IssueSurfaceRoot
+                mode="drawer"
+                issueKey="KAN-142"
+                projectKey="FALLBACK_KEY"
+              />
+            </IssueSurfaceSlotsContext.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('custom-rail')).toBeDefined();
+      });
+      expect(capturedMeta?.key).toBe('FALLBACK_KEY');
+
+      // Edit description, set to empty, and toggle preview
+      fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Description' });
+      fireEvent.change(textarea, { target: { value: '' } });
+      fireEvent.click(screen.getByTestId('description-editor-tool-raw'));
+
+      await waitFor(() => {
+        expect(screen.getByText('No description')).toBeDefined();
+      });
     });
   });
 });

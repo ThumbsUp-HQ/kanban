@@ -6,6 +6,7 @@ import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/ad
 import * as clientModule from '../../api/client.ts';
 import { BoardView } from './BoardView.tsx';
 import * as boardApiModule from './boardApi.ts';
+import * as gatesModule from '../gates/index.ts';
 import { applyOptimisticMove, type BoardIssue, type BoardWorkflowState } from './boardApi.ts';
 import { midpointRank } from './fractionalRank.ts';
 
@@ -830,6 +831,7 @@ describe('BoardView Component', () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
       if (path === '/api/v1/projects/{project_ref}') {
         return Promise.resolve({
+          id: 'proj-obj-123',
           states: [
             { id: 'st-fetched', name: 'Fetched Lane', group: 'started', sort_order: 1 },
           ],
@@ -1017,5 +1019,84 @@ describe('BoardView Component', () => {
     expect(screen.getByText('Equal 2')).toBeDefined();
     expect(screen.getByTestId('board-canvas')).toBeDefined();
     unmount();
+  });
+
+  it('handles card state button transition calling moveIssueApi via handlePerformMove (KAN-44)', async () => {
+    const moveSpy = vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
+      issue_key: 'KAN-1',
+      state_id: 'st-done',
+      board_rank: '99',
+      rebalance_scheduled: false,
+    });
+
+    const issues: BoardIssue[] = [
+      { id: 'i1', key: 'KAN-1', summary: 'Item 1', state_id: 'st-todo', board_rank: '01' },
+    ];
+
+    renderWithClient(
+      <BoardView
+        projectKey="KAN"
+        states={mockStates}
+        issues={issues}
+        currentUserCapabilities={['ADMIN', 'TRANSITION']}
+      />,
+    );
+
+    const stateBtn = screen.getByTestId('board-card-state-btn-KAN-1');
+    fireEvent.click(stateBtn);
+
+    const popover = screen.getByRole('dialog', { name: 'Quick State Picker' });
+    expect(popover).toBeDefined();
+
+    const doneOption = screen.getByRole('option', { name: 'Done' });
+    fireEvent.click(doneOption);
+
+    await waitFor(() => {
+      expect(moveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issueKey: 'KAN-1',
+          targetStateId: 'st-done',
+        }),
+      );
+    });
+  });
+
+  it('covers onCancelGate calling cancelGateTransitionApi and keyboard move unknown state', async () => {
+    const cancelSpy = vi.spyOn(gatesModule, 'cancelGateTransitionApi').mockResolvedValue(undefined);
+
+    const gateIssue: BoardIssue = {
+      id: 'gate-1',
+      key: 'KAN-GATE',
+      summary: 'Gate item',
+      state_id: 'st-todo',
+      board_rank: '01',
+      is_gate_pending: true,
+      pending_gate: {
+        execution_id: 'exec-123',
+        hook_name: 'Audit Gate',
+        agent_slug: 'reality-checker',
+        harness_label: 'Harness',
+        started_at: '2026-11-20T12:00:00Z',
+      },
+    };
+
+    renderWithClient(
+      <BoardView
+        projectKey="KAN"
+        states={mockStates}
+        issues={[gateIssue]}
+        currentUserCapabilities={['ADMIN']}
+      />,
+    );
+
+    const gateTrigger = screen.getByTestId('gate-pending-KAN-GATE');
+    fireEvent.click(gateTrigger);
+
+    const cancelBtn = screen.getByTestId('cancel-gate-btn-KAN-GATE');
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(cancelSpy).toHaveBeenCalledWith('exec-123');
+    });
   });
 });

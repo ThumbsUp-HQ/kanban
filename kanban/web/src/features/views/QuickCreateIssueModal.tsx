@@ -114,9 +114,10 @@ export function QuickCreateIssueModal({
   // Focus input on open or when resetting to form
   useEffect(() => {
     if (isOpen && !postCreateData) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         summaryInputRef.current?.focus();
       }, 50);
+      return () => { clearTimeout(timer); };
     }
   }, [isOpen, postCreateData]);
 

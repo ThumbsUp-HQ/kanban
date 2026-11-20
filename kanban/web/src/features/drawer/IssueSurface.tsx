@@ -27,6 +27,8 @@ import { getOpenerElement, setOpenerElement } from './IssueKeyLink';
 import { useIssueSurfaceSlots, type IssueDetail } from './slots';
 import { IssueHeader } from './IssueHeader';
 import { AccessPill } from './AccessPill';
+import { StateBadge } from '../../components/state/StateBadge';
+import * as railApi from '../drawer-rail/railApi';
 import { SummaryField } from './SummaryField';
 import { useFocusTrap } from './useFocusTrap';
 import {
@@ -108,6 +110,7 @@ export interface IssueSurfaceRootProps {
   projectKey: string | null;
   issueId?: string;
   object_id?: string;
+  onClose?: () => void;
 }
 
 interface IssueSurfaceContentProps extends IssueSurfaceRootProps {
@@ -121,6 +124,7 @@ function IssueSurfaceContent({
   projectKey,
   location,
   navigate,
+  onClose: onCloseProp,
 }: IssueSurfaceContentProps): JSX.Element {
   const [mountId] = useState(() => safeRandomUUID());
   const [mountSeq] = useState(() => {
@@ -143,7 +147,7 @@ function IssueSurfaceContent({
   const descFileInputRef = useRef<HTMLInputElement | null>(null);
   const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [conflictError, setConflictError] = useState<{
-    status: 412 | 428;
+    status: number;
     message: string;
   } | null>(null);
   const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
@@ -193,10 +197,9 @@ function IssueSurfaceContent({
 
   const resolvedProjectForAux =
     issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
-  const hasRailOrActivity = Boolean(slots.rail ?? slots.activity);
 
   useEffect(() => {
-    if (!hasRailOrActivity || !resolvedProjectForAux) {
+    if (!resolvedProjectForAux) {
       return;
     }
     let active = true;
@@ -213,9 +216,10 @@ function IssueSurfaceContent({
     return () => {
       active = false;
     };
-  }, [hasRailOrActivity, resolvedProjectForAux]);
+  }, [resolvedProjectForAux]);
 
   const handleClose = useCallback((): void => {
+    onCloseProp?.();
     void navigate(toPeekPath(location, null));
     const opener =
       getOpenerElement() ??
@@ -237,7 +241,7 @@ function IssueSurfaceContent({
         main?.focus();
       }
     }
-  }, [location, navigate, issueKey]);
+  }, [location, navigate, issueKey, onCloseProp]);
 
   const handleToggleFullScreen = useCallback((): void => {
     if (mode === 'drawer') {
@@ -303,7 +307,19 @@ function IssueSurfaceContent({
       return (
         <>
           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
-            {mode !== 'split' && (
+            {mode === 'split' ? (
+              <button
+                type="button"
+                className="issue-header__btn split-surface-close-btn"
+                data-testid="split-surface-close-btn"
+                aria-label="Back to issues list"
+                title="Back to list"
+                onClick={handleClose}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">←</span>
+                <span className="sr-only">Back</span>
+              </button>
+            ) : (
               <button
                 type="button"
                 className="issue-header__btn"
@@ -332,6 +348,19 @@ function IssueSurfaceContent({
       return (
         <>
           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
+            {mode === 'split' && (
+              <button
+                type="button"
+                className="issue-header__btn split-surface-close-btn"
+                data-testid="split-surface-close-btn"
+                aria-label="Back to issues list"
+                title="Back to list"
+                onClick={handleClose}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">←</span>
+                <span className="sr-only">Back</span>
+              </button>
+            )}
             {mode !== 'split' && (
               <>
                 <button
@@ -578,6 +607,84 @@ function IssueSurfaceContent({
         }>
       | undefined;
 
+    const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
+    const canTransition =
+      capabilities.includes('TRANSITION') ||
+      capabilities.includes('EDIT') ||
+      capabilities.includes('ADMIN');
+
+    const headerStates = (() => {
+      if (projectStates.length > 0) {
+        const list = [...projectStates];
+        const curState = currentIssue.state;
+        if (curState?.id) {
+          if (!list.some((s) => s.id === curState.id)) {
+            list.push({
+              id: curState.id,
+              name: curState.name,
+              group: curState.group,
+              color_hex: (curState as { color_hex?: string | null }).color_hex ?? null,
+            });
+          }
+        }
+        return list;
+      }
+      return [
+        { id: 'state-backlog', name: 'Backlog', group: 'backlog' as const },
+        { id: 'state-todo', name: 'Todo', group: 'unstarted' as const },
+        { id: 'state-in-progress', name: 'In Progress', group: 'started' as const },
+        { id: 'state-in-review', name: 'In Review', group: 'started' as const },
+        { id: 'state-done', name: 'Done', group: 'completed' as const },
+        { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled' as const },
+      ];
+    })();
+
+    const handleHeaderStateChange = async (targetStateId: string): Promise<void> => {
+      const previousIssue = currentIssue;
+      const targetState = projectStates.find((s) => s.id === targetStateId);
+      const optimisticState = targetState
+        ? {
+            id: targetState.id,
+            name: targetState.name,
+            group: targetState.group,
+            color_hex: targetState.color_hex,
+          }
+        : { id: targetStateId, name: targetStateId, group: 'started' as const };
+      const updated: IssueDetail = {
+        ...currentIssue,
+        state: optimisticState,
+      };
+      handleIssueUpdate(updated);
+
+      try {
+        const res = await railApi.patchIssue(
+          currentIssue.key,
+          { state_id: targetStateId },
+          currentIssue.etag,
+        );
+        handleIssueUpdate(normalizeIssueDetail(res, projectKey));
+      } catch (err: unknown) {
+        handleIssueUpdate(previousIssue);
+        const errObj = typeof err === 'object' && err !== null ? (err as Record<string, unknown>) : null;
+        const errStatus =
+          err instanceof ApiProblem
+            ? err.status
+            : typeof errObj?.status === 'number'
+              ? errObj.status
+              : 400;
+        const errMsg =
+          err instanceof ApiProblem
+            ? err.detail ?? err.title ?? err.message
+            : err instanceof Error
+              ? err.message
+              : 'State transition failed';
+        setConflictError({
+          status: errStatus,
+          message: errMsg,
+        });
+      }
+    };
+
     const proseBody = (
       <>
         {conflictError && (
@@ -646,6 +753,53 @@ function IssueSurfaceContent({
           </div>
         )}
         <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
+        <div className="surface__quick-props" data-testid="quick-properties-bar">
+          <div className="quick-props__group">
+            <span className="quick-props__label">State:</span>
+            {canTransition ? (
+              <select
+                data-testid="quick-props-state-select"
+                className="quick-props__select"
+                aria-label="Quick State"
+                value={currentIssue.state?.id ?? ''}
+                onChange={(e) => {
+                  void handleHeaderStateChange(e.target.value);
+                }}
+              >
+                {headerStates.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <StateBadge state={currentIssue.state ?? undefined} showRing={false} />
+            )}
+          </div>
+          <div className="quick-props__group">
+            <span className="quick-props__label">Priority:</span>
+            <span className="quick-props__value">
+              {currentIssue.priority?.label ?? 'None'}
+            </span>
+          </div>
+          <div className="quick-props__group">
+            <span className="quick-props__label">Assignee:</span>
+            <span className="quick-props__value">
+              {(() => {
+                const first = currentIssue.assignees?.[0];
+                if (!first) return 'Unassigned';
+                if (typeof first === 'string') return first;
+                const rec = first as unknown as Record<string, unknown>;
+                const p = typeof rec.principal === 'object' && rec.principal !== null ? (rec.principal as Record<string, unknown>) : null;
+                const candidates = [rec.display_name, rec.name, rec.handle, rec.free_text, p?.display_name, p?.handle];
+                for (const c of candidates) {
+                  if (typeof c === 'string' && c.length > 0) return c;
+                }
+                return 'Assigned';
+              })()}
+            </span>
+          </div>
+        </div>
         {DescriptionSlot ? (
           <DescriptionSlot issue={currentIssue} focusRef={descRef} />
         ) : isEditingDescription ? (
@@ -830,6 +984,18 @@ function IssueSurfaceContent({
       <>
         {mode === 'split' ? (
           <header className="surface__header surface__header--split">
+            <button
+              type="button"
+              className="issue-header__btn split-surface-close-btn"
+              data-testid="split-surface-close-btn"
+              aria-label="Back to issues list"
+              title="Back to list"
+              onClick={handleClose}
+            >
+              <span aria-hidden="true" className="issue-header__glyph">←</span>
+              <span className="sr-only">Back</span>
+            </button>
+
             <a
               href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
               target="_blank"
@@ -843,6 +1009,27 @@ function IssueSurfaceContent({
             </a>
 
             <span className="mono issue-header__key">#{currentIssue.key}</span>
+
+            {canTransition ? (
+              <select
+                data-testid="header-state-select"
+                className="header-state-select"
+                aria-label="Workflow State"
+                value={currentIssue.state?.id ?? ''}
+                onChange={(e) => {
+                  void handleHeaderStateChange(e.target.value);
+                }}
+              >
+                {headerStates.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <StateBadge state={currentIssue.state ?? undefined} testId="header-state-badge" />
+            )}
+
             <AccessPill issue={currentIssue} />
           </header>
         ) : (
@@ -851,26 +1038,29 @@ function IssueSurfaceContent({
             mode={mode}
             onClose={handleClose}
             toggleFullScreen={handleToggleFullScreen}
+            projectStates={projectStates}
+            onStateChange={handleHeaderStateChange}
+            currentUserCapabilities={capabilities}
           />
         )}
         <div className="surface__body">
           <div className="surface__prose">
             <div className="surface__prose-inner">{proseBody}</div>
           </div>
-          <aside className="surface__rail" aria-label="Properties">
-            {RailSlotWithMeta ? (
-              <RailSlotWithMeta
-                key={`rail-${currentIssue.key}-${String(projectStates.length)}`}
-                issue={currentIssue}
-                projectMetadata={{
-                  key: currentIssue.project_key || resolvedProjectForAux,
-                  name: currentIssue.project_name ?? currentIssue.project_key,
-                  states: projectStates,
-                }}
-                onIssueUpdate={handleIssueUpdate}
-              />
-            ) : null}
-          </aside>
+          {RailSlotWithMeta ? (
+            <RailSlotWithMeta
+              key={`rail-${currentIssue.key}-${String(projectStates.length)}`}
+              issue={currentIssue}
+              projectMetadata={{
+                key: currentIssue.project_key,
+                name: currentIssue.project_name ?? currentIssue.project_key,
+                states: projectStates,
+              }}
+              onIssueUpdate={handleIssueUpdate}
+            />
+          ) : (
+            <aside className="surface__rail" aria-label="Properties" />
+          )}
         </div>
       </>
     );

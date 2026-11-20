@@ -134,4 +134,110 @@ describe('ListRow', () => {
     fireEvent.click(keyLink);
     fireEvent.keyDown(row, { key: 'Enter' });
   });
+
+  describe('Touch & Mobile State Button (KAN-44)', () => {
+    const baseIssue: IssueItem = {
+      id: 'row-base',
+      key: 'KAN-142',
+      summary: 'Touch state transition item',
+      state: { id: 's-1', name: 'In Review', group: 'started' },
+      priority: { slug: 'high', label: 'High', sort_order: 20 },
+    };
+
+    it('renders state button and forwards to onOpenFieldPopover with stopPropagation', () => {
+      const onOpenPeek = vi.fn();
+      const onOpenFieldPopover = vi.fn();
+
+      render(
+        <ListRow
+          issue={baseIssue}
+          onOpenPeek={onOpenPeek}
+          onOpenFieldPopover={onOpenFieldPopover}
+        />,
+      );
+
+      const stateBtn = screen.getByTestId('list-row-state-btn-KAN-142');
+      expect(stateBtn).toBeDefined();
+
+      fireEvent.click(stateBtn);
+      expect(onOpenPeek).not.toHaveBeenCalled();
+      expect(onOpenFieldPopover).toHaveBeenCalledWith(
+        'state',
+        baseIssue,
+        expect.anything(),
+      );
+    });
+
+    it('opens local QuickFieldPopover when onOpenFieldPopover is omitted and triggers onStateSelect', () => {
+      const onOpenPeek = vi.fn();
+      const onStateSelect = vi.fn();
+      const projectStates = [
+        { id: 'st-todo', name: 'Todo', group: 'unstarted' as const },
+        { id: 'st-done', name: 'Done', group: 'completed' as const },
+      ];
+
+      const { rerender } = render(
+        <ListRow
+          issue={baseIssue}
+          onOpenPeek={onOpenPeek}
+          onStateSelect={onStateSelect}
+          projectStates={projectStates}
+        />,
+      );
+
+      const stateBtn = screen.getByTestId('list-row-state-btn-KAN-142');
+      fireEvent.click(stateBtn);
+
+      expect(onOpenPeek).not.toHaveBeenCalled();
+      const popover = screen.getByRole('dialog', { name: 'Quick State Picker' });
+      expect(popover).toBeDefined();
+
+      // Select 'Done' option
+      const doneOption = screen.getByRole('option', { name: 'Done' });
+      fireEvent.click(doneOption);
+
+      expect(onStateSelect).toHaveBeenCalledWith('KAN-142', 'st-done');
+      expect(screen.queryByRole('dialog', { name: 'Quick State Picker' })).toBeNull();
+
+      // Open again and close via backdrop
+      fireEvent.click(stateBtn);
+      const backdrop = screen.getByTestId('quick-field-backdrop');
+      fireEvent.click(backdrop);
+      expect(screen.queryByRole('dialog', { name: 'Quick State Picker' })).toBeNull();
+
+      // Read-only user lacking capability renders read-only badge
+      const readOnlyIssue = {
+        ...baseIssue,
+        capabilities: ['VIEWER'],
+      };
+      rerender(
+        <ListRow
+          issue={readOnlyIssue}
+          onOpenPeek={onOpenPeek}
+        />,
+      );
+      expect(screen.queryByTestId('list-row-state-btn-KAN-142')).toBeNull();
+    });
+
+    it('covers labels with LabelDot colorHex, label overflow, and free_text assignee', () => {
+      const richIssue: IssueItem = {
+        ...baseIssue,
+        labels: [
+          { id: 'l1', name: 'Security', color_hex: '#ef4444' },
+          { id: 'l2', name: 'Frontend', color_hex: '#3b82f6' },
+          { id: 'l3', name: 'Backend', color_hex: '#10b981' },
+        ],
+        assignees: [
+          { id: 'ext-1', kind: 'free_text', free_text: 'External Auditor', notify: false, hint: '' },
+        ],
+      };
+
+      render(<ListRow issue={richIssue} isFocused={true} isActive={true} isSelected={true} />);
+
+      expect(screen.getByText('Security')).toBeDefined();
+      expect(screen.getByText('Frontend')).toBeDefined();
+      expect(screen.getByText('+1')).toBeDefined();
+      expect(screen.getByText('External Auditor')).toBeDefined();
+    });
+  });
 });

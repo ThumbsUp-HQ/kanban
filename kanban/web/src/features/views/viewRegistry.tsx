@@ -126,7 +126,7 @@ export function ViewHost({
   return <Component {...props} />;
 }
 
-const defaultQueryClient = new QueryClient({
+export const defaultQueryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: false,
@@ -151,7 +151,7 @@ export interface IssuesWorkspaceRouteProps {
  * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
  * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
  */
-function computeStateSummary(
+export function computeStateSummary(
   sId: string,
   projectStates?: StateSummary[],
 ): StateSummary {
@@ -306,15 +306,24 @@ export function IssuesWorkspaceRoute({
     };
   }, []);
 
+  const [closedSplitKey, setClosedSplitKey] = useState<string | null>(null);
+
   const handleOpenPeek = useCallback(
-    (issueKey: string) => {
+    (issueKey: string | null) => {
       setPeekParam(issueKey);
+      if (issueKey) {
+        setClosedSplitKey(null);
+      }
       if (propOnOpenPeek) {
-        propOnOpenPeek(issueKey);
+        if (issueKey) propOnOpenPeek(issueKey);
         return;
       }
       const url = new URL(window.location.href);
-      url.searchParams.set('peek', issueKey);
+      if (issueKey) {
+        url.searchParams.set('peek', issueKey);
+      } else {
+        url.searchParams.delete('peek');
+      }
       window.history.pushState({}, '', url.toString());
       window.dispatchEvent(new PopStateEvent('popstate'));
     },
@@ -836,13 +845,21 @@ export function IssuesWorkspaceRoute({
   // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
   const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
 
-  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
+  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
+
+  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
   const activePeekKey = useMemo(() => {
     if (peekParam) {
       return peekParam;
     }
+    if (isMobileViewport) {
+      return null;
+    }
+    if (closedSplitKey && closedSplitKey === filteredIssues[0]?.key) {
+      return null;
+    }
     return filteredIssues[0]?.key ?? null;
-  }, [peekParam, filteredIssues]);
+  }, [peekParam, isMobileViewport, closedSplitKey, filteredIssues]);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -905,6 +922,14 @@ export function IssuesWorkspaceRoute({
               onOpenPeek={handleOpenPeek}
               activeKey={activePeekKey}
               canManageWorkflows={canAdmin}
+              onOpenFieldPopover={(field, issue, rect) => {
+                setPopoverState({
+                  isOpen: true,
+                  field,
+                  issue,
+                  anchorRect: rect,
+                });
+              }}
             />
           </div>
           {activePeekKey && (
@@ -912,6 +937,10 @@ export function IssuesWorkspaceRoute({
               mode="split"
               issueKey={activePeekKey}
               projectKey={projectKey}
+              onClose={() => {
+                setClosedSplitKey(activePeekKey);
+                handleOpenPeek(null);
+              }}
             />
           )}
         </div>

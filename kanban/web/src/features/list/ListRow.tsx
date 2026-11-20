@@ -1,9 +1,10 @@
-import React, { useRef, useLayoutEffect, type JSX } from 'react';
+import React, { useRef, useLayoutEffect, useState, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { StateBadge } from '../../components/state/StateBadge';
 import { PriorityIcon } from '../../components/icons/KanbanIcons';
 import { setOpenerElement } from '../drawer/IssueKeyLink';
-import type { IssueItem } from '../views/viewsApi';
+import { QuickFieldPopover } from '../views/QuickFieldPopover';
+import type { IssueItem, StateSummary } from '../views/viewsApi';
 
 export interface ListRowProps {
   issue: IssueItem;
@@ -13,6 +14,9 @@ export interface ListRowProps {
   isFocused?: boolean | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   isActive?: boolean | undefined;
+  onOpenFieldPopover?: ((field: 'state', issue: IssueItem, rect: DOMRect) => void) | undefined;
+  onStateSelect?: ((issueKey: string, stateId: string) => void) | undefined;
+  projectStates?: StateSummary[] | undefined;
 }
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
@@ -38,8 +42,30 @@ export function ListRow({
   isFocused = false,
   onOpenPeek,
   isActive = false,
+  onOpenFieldPopover,
+  onStateSelect,
+  projectStates,
 }: ListRowProps): JSX.Element {
   const rowRef = useRef<HTMLDivElement>(null);
+  const [isLocalPopoverOpen, setIsLocalPopoverOpen] = useState(false);
+  const [localAnchor, setLocalAnchor] = useState<DOMRect | null>(null);
+
+  const capabilities = issue.capabilities ?? ['EDIT', 'TRANSITION'];
+  const canTransition =
+    capabilities.includes('TRANSITION') ||
+    capabilities.includes('EDIT') ||
+    capabilities.includes('ADMIN');
+
+  const handleStateBtnClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (onOpenFieldPopover) {
+      onOpenFieldPopover('state', issue, rect);
+    } else {
+      setLocalAnchor(rect);
+      setIsLocalPopoverOpen(true);
+    }
+  };
 
   // Priority EmojiHint kind mapping
   let priorityKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
@@ -115,11 +141,28 @@ export function ListRow({
           </span>
         )}
 
-        <StateBadge
-          state={issue.state}
-          showLabel={false}
-          className="list-row-state-icon"
-        />
+        {canTransition ? (
+          <button
+            type="button"
+            className="list-row-state-btn"
+            data-testid={`list-row-state-btn-${issue.key}`}
+            title={`Status: ${issue.state.name} (${issue.state.group})`}
+            aria-label={`Status: ${issue.state.name} (${issue.state.group})`}
+            onClick={handleStateBtnClick}
+          >
+            <StateBadge
+              state={issue.state}
+              showLabel={false}
+              className="list-row-state-icon"
+            />
+          </button>
+        ) : (
+          <StateBadge
+            state={issue.state}
+            showLabel={false}
+            className="list-row-state-icon"
+          />
+        )}
         <span hidden aria-hidden="true">
           ●
         </span>
@@ -215,6 +258,21 @@ export function ListRow({
           );
         })}
       </div>
+      {isLocalPopoverOpen && (
+        <QuickFieldPopover
+          isOpen={isLocalPopoverOpen}
+          field="state"
+          anchorRect={localAnchor}
+          issue={issue}
+          onClose={() => { setIsLocalPopoverOpen(false); }}
+          onSelect={(field, value) => {
+            if (field === 'state' && typeof value === 'string') {
+              onStateSelect?.(issue.key, value);
+            }
+          }}
+          states={projectStates}
+        />
+      )}
     </div>
   );
 }

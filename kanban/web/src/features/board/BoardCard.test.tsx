@@ -337,11 +337,91 @@ describe('BoardCard Component', () => {
 
     // Modifier clicks with shiftKey and altKey and metaKey
     const keyLink = screen.getByTestId('board-card-key-');
+    const preventNav = (e: MouseEvent) => { e.preventDefault(); };
+    keyLink.addEventListener('click', preventNav);
     const shiftClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, shiftKey: true });
     const altClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, altKey: true });
     const metaClick = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, metaKey: true });
     keyLink.dispatchEvent(shiftClick);
     keyLink.dispatchEvent(altClick);
     keyLink.dispatchEvent(metaClick);
+    keyLink.removeEventListener('click', preventNav);
+  });
+
+  describe('Touch & Mobile State Transition Button (KAN-44)', () => {
+    it('renders state move button, opens QuickFieldPopover on click with stopPropagation, and triggers onStateTransition', () => {
+      const onOpenPeek = vi.fn();
+      const onStateTransition = vi.fn();
+      const projectStates = [
+        { id: 'st-todo', name: 'Todo', group: 'unstarted' as const, sort_order: 1 },
+        { id: 'st-progress', name: 'In Progress', group: 'started' as const, sort_order: 2 },
+        { id: 'st-done', name: 'Done', group: 'completed' as const, sort_order: 3 },
+      ];
+
+      const { rerender } = render(
+        <BoardCard
+          issue={baseIssue}
+          stateGroup="started"
+          onOpenPeek={onOpenPeek}
+          onStateTransition={onStateTransition}
+          projectStates={projectStates}
+          currentUserCapabilities={['TRANSITION']}
+        />,
+      );
+
+      const stateBtn = screen.getByTestId('board-card-state-btn-KAN-142');
+      expect(stateBtn).toBeDefined();
+
+      // Clicking state button opens popover and does NOT open peek
+      fireEvent.click(stateBtn);
+      expect(onOpenPeek).not.toHaveBeenCalled();
+
+      // QuickFieldPopover is open
+      const popover = screen.getByRole('dialog', { name: 'Quick State Picker' });
+      expect(popover).toBeDefined();
+
+      // Select 'Done' state option
+      const doneOption = screen.getByRole('option', { name: 'Done' });
+      fireEvent.click(doneOption);
+
+      expect(onStateTransition).toHaveBeenCalledWith('KAN-142', 'st-done');
+      expect(screen.queryByRole('dialog', { name: 'Quick State Picker' })).toBeNull();
+
+      // Test popover onClose by opening and clicking backdrop
+      fireEvent.click(stateBtn);
+      const backdrop = screen.getByTestId('quick-field-backdrop');
+      fireEvent.click(backdrop);
+      expect(screen.queryByRole('dialog', { name: 'Quick State Picker' })).toBeNull();
+
+      // Read-only user lacking transition capability does not render state button
+      rerender(
+        <BoardCard
+          issue={baseIssue}
+          stateGroup="started"
+          currentUserCapabilities={['VIEWER']}
+        />,
+      );
+      expect(screen.queryByTestId('board-card-state-btn-KAN-142')).toBeNull();
+    });
+
+    it('exercises canDrag callback when gate_status is pending', () => {
+      let canDragFn: ((...args: unknown[]) => boolean) | undefined;
+      const mockDraggable: typeof draggable = (opts) => {
+        canDragFn = opts.canDrag as ((...args: unknown[]) => boolean) | undefined;
+        return () => {
+          /* cleanup */
+        };
+      };
+
+      render(
+        <BoardCard
+          issue={{ ...baseIssue, gate_status: 'pending' }}
+          stateGroup="started"
+          draggableFactory={mockDraggable}
+        />,
+      );
+
+      expect(canDragFn?.()).toBe(false);
+    });
   });
 });

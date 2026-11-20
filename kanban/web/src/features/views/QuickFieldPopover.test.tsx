@@ -202,4 +202,80 @@ describe('QuickFieldPopover (KB-P3-40, S6.4 item 4, S1.3 item 3, S7.2 8f)', () =
     expect(container.firstChild).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  describe('Mobile & Custom State Popover (KAN-44)', () => {
+    it('populates options from custom states prop when field is state', () => {
+      const handleSelect = vi.fn();
+      const customStates = [
+        { id: 'st-triage', name: 'Triage', group: 'unstarted' as const },
+        { id: 'st-qa', name: 'QA Review', group: 'started' as const },
+      ];
+
+      render(
+        <QuickFieldPopover
+          isOpen={true}
+          field="state"
+          anchorRect={dummyRect}
+          issue={FIXTURE_12_ISSUES[0]}
+          onClose={vi.fn()}
+          onSelect={handleSelect}
+          states={customStates}
+        />,
+      );
+
+      expect(screen.getByRole('option', { name: 'Triage' })).toBeDefined();
+      expect(screen.getByRole('option', { name: 'QA Review' })).toBeDefined();
+
+      fireEvent.click(screen.getByRole('option', { name: 'QA Review' }));
+      expect(handleSelect).toHaveBeenCalledWith('state', 'st-qa');
+    });
+
+    it('closes when clicking quick-field-backdrop', () => {
+      const handleClose = vi.fn();
+
+      render(
+        <QuickFieldPopover
+          isOpen={true}
+          field="priority"
+          anchorRect={dummyRect}
+          issue={FIXTURE_12_ISSUES[0]}
+          onClose={handleClose}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      const backdrop = screen.getByTestId('quick-field-backdrop');
+      fireEvent.click(backdrop);
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('sets CSS custom properties --popover-top and --popover-left for viewport clamping without inline styles', () => {
+      const edgeRect = {
+        top: 800,
+        bottom: 840,
+        left: 1200,
+        right: 1300,
+        width: 100,
+        height: 40,
+        x: 1200,
+        y: 800,
+        toJSON: () => ({}),
+      } as DOMRect;
+
+      render(
+        <QuickFieldPopover
+          isOpen={true}
+          field="state"
+          anchorRect={edgeRect}
+          issue={FIXTURE_12_ISSUES[0]}
+          onClose={vi.fn()}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      const popover = screen.getByTestId('quick-field-popover');
+      expect(popover.style.getPropertyValue('--popover-top')).toBeTruthy();
+      expect(popover.style.getPropertyValue('--popover-left')).toBeTruthy();
+    });
+  });
 });

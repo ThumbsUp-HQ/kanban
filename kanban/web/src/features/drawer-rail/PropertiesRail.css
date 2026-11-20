@@ -570,6 +570,15 @@
   }
 }
 
+@media (max-width: 768px) {
+  .prop-row__select,
+  .prop-row__input {
+    min-height: 44px;
+    height: 44px;
+    font-size: var(--text-base, 14px);
+  }
+}
+
 .prop-row__value > .gate-status-pill,
 .prop-row__value > [data-testid^='drawer-gate-'] {
   flex: 0 0 auto;
