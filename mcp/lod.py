@@ -11,6 +11,7 @@ from mcp.errors import KbMcpError, McpErrorCode
 __all__ = [
     "Lod",
     "_compact_access_manifest",
+    "extract_issue_sequence",
     "parse_lod",
     "project_doc",
     "project_entity",
@@ -49,6 +50,8 @@ def parse_lod(value: str | Lod | None) -> Lod:
 
 _SUMMARY_ISSUE_KEYS: Final[tuple[str, ...]] = (
     "key",
+    "issue_key",
+    "sequence_number",
     "summary",
     "state",
     "priority",
@@ -80,6 +83,61 @@ _FULL_ISSUE_KEYS: Final[tuple[str, ...]] = (
 )
 
 
+def _parse_seq_from_key(key: str | None) -> int:
+    if not key:
+        return 0
+    if "-" in key:
+        part = key.rsplit("-", 1)[-1]
+        if part.isdigit():
+            return int(part)
+    elif key.isdigit():
+        return int(key)
+    return 0
+
+
+def extract_issue_sequence(raw: dict[str, Any] | None = None, key: str | None = None) -> int:
+    """Extract or parse sequence_number as int from raw dict or issue key."""
+    if raw is not None:
+        for field in ("sequence_number", "sequence_id"):
+            val = raw.get(field)
+            if val is not None:
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+        if not key:
+            raw_key = raw.get("key") or raw.get("issue_key")
+            key = str(raw_key) if raw_key is not None else None
+    return _parse_seq_from_key(key)
+
+
+def _project_child_issue(child: dict[str, Any]) -> dict[str, Any]:
+    """Project a nested child issue with typed key, issue_key, sequence_number."""
+    c_key = str(child.get("key") or child.get("issue_key") or "")
+    c_seq = extract_issue_sequence(child, c_key)
+    res: dict[str, Any] = {
+        "key": c_key,
+        "issue_key": c_key,
+        "sequence_number": c_seq,
+    }
+    for field in ("summary", "state", "priority", "parent"):
+        if field in child:
+            res[field] = str(child[field]) if child[field] is not None else ""
+    return res
+
+
+def _normalize_issue_data(raw: dict[str, Any]) -> dict[str, Any]:
+    """Ensure key, issue_key, and sequence_number are populated if key/issue_key exists."""
+    if "key" not in raw and "issue_key" not in raw:
+        return raw
+    data = dict(raw)
+    key_val = str(data.get("key") or data.get("issue_key") or "")
+    data["key"] = key_val
+    data["issue_key"] = key_val
+    data["sequence_number"] = extract_issue_sequence(data, key_val)
+    return data
+
+
 def _is_gate_pending(gate: object) -> bool:
     """Check if gate status is pending."""
     if isinstance(gate, str):
@@ -91,28 +149,38 @@ def _is_gate_pending(gate: object) -> bool:
 
 
 def _project_issue_summary(raw: dict[str, Any]) -> dict[str, Any]:
+    raw_norm = _normalize_issue_data(raw)
     result: dict[str, Any] = {}
     for k in _SUMMARY_ISSUE_KEYS:
-        if k in raw:
-            result[k] = raw[k]
-    if raw.get("workspace"):
-        result["workspace"] = raw["workspace"]
-    gate = raw.get("gate")
+        if k in raw_norm:
+            result[k] = raw_norm[k]
+    if raw_norm.get("workspace"):
+        result["workspace"] = raw_norm["workspace"]
+    gate = raw_norm.get("gate")
     if _is_gate_pending(gate):
         result["gate"] = gate
+    if "children" in raw_norm and isinstance(raw_norm["children"], list):
+        result["children"] = [
+            _project_child_issue(c) if isinstance(c, dict) else c for c in raw_norm["children"]
+        ]
     return result
 
 
 def _project_issue_standard(raw: dict[str, Any]) -> dict[str, Any]:
+    raw_norm = _normalize_issue_data(raw)
     result: dict[str, Any] = {}
     for k in _STANDARD_ISSUE_KEYS:
-        if k in raw:
-            result[k] = raw[k]
-    if raw.get("workspace"):
-        result["workspace"] = raw["workspace"]
-    gate = raw.get("gate")
+        if k in raw_norm:
+            result[k] = raw_norm[k]
+    if raw_norm.get("workspace"):
+        result["workspace"] = raw_norm["workspace"]
+    gate = raw_norm.get("gate")
     if _is_gate_pending(gate):
         result["gate"] = gate
+    if "children" in raw_norm and isinstance(raw_norm["children"], list):
+        result["children"] = [
+            _project_child_issue(c) if isinstance(c, dict) else c for c in raw_norm["children"]
+        ]
     return result
 
 
@@ -269,13 +337,18 @@ def _project_issue_full_field(k: str, raw: dict[str, Any], result: dict[str, Any
 
 
 def _project_issue_full(raw: dict[str, Any]) -> dict[str, Any]:
+    raw_norm = _normalize_issue_data(raw)
     result: dict[str, Any] = {}
     for k in _FULL_ISSUE_KEYS:
-        _project_issue_full_field(k, raw, result)
+        _project_issue_full_field(k, raw_norm, result)
 
-    gate = raw.get("gate")
+    gate = raw_norm.get("gate")
     if gate is not None:
         result["gate"] = gate
+    if "children" in raw_norm and isinstance(raw_norm["children"], list):
+        result["children"] = [
+            _project_child_issue(c) if isinstance(c, dict) else c for c in raw_norm["children"]
+        ]
     return result
 
 

@@ -147,6 +147,9 @@ async def test_case_1_positive_append(agent_test_env: AgentTestEnv) -> None:
     parsed_update = yaml.safe_load(update_res["content"][0]["text"])
 
     assert parsed_update["key"] == "KAN-142"
+    assert parsed_update["issue_key"] == "KAN-142"
+    assert parsed_update["sequence_number"] == 142
+    assert isinstance(parsed_update["sequence_number"], int)
     assert "description_markdown" in parsed_update["changed"]
     new_etag = parsed_update["etag"]
     assert new_etag != old_etag

@@ -99,12 +99,24 @@ async def test_case_1_positive_create_tree(agent_test_env: AgentTestEnv) -> None
     assert parsed["created"] == 3
     root = parsed["root"]
     assert root["key"].startswith("KAN-")
+    assert root["issue_key"] == root["key"]
+    assert isinstance(root["sequence_number"], int)
+    assert root["sequence_number"] > 0
     assert root["summary"] == "Root Feature Tree"
     assert root["priority"] == "high"
 
     children = parsed["children"]
     assert len(children) == 2
+    assert children[0]["key"].startswith("KAN-")
+    assert children[0]["issue_key"] == children[0]["key"]
+    assert isinstance(children[0]["sequence_number"], int)
+    assert children[0]["sequence_number"] > 0
     assert children[0]["parent"] == root["key"]
+
+    assert children[1]["key"].startswith("KAN-")
+    assert children[1]["issue_key"] == children[1]["key"]
+    assert isinstance(children[1]["sequence_number"], int)
+    assert children[1]["sequence_number"] > 0
     assert children[1]["parent"] == root["key"]
 
 

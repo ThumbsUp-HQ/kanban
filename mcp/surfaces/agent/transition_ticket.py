@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
+from mcp.lod import extract_issue_sequence
 from mcp.surfaces.agent.proof import (
     VERIFICATION_PROOF_SCHEMA,
     VerificationProof,
@@ -168,6 +169,9 @@ async def transition_ticket(
         msg = "Invalid response from upstream transition endpoint"
         raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
 
+    key = str(resp_data.get("key", identifier))
+    seq_num = extract_issue_sequence(resp_data, key)
+
     # Check for 202 Accepted pending_agent_gate hold
     if "execution_id" in resp_data and "active_agent" in resp_data:
         from_val = resp_data.get("from_state")
@@ -176,7 +180,9 @@ async def transition_ticket(
         to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
         return {
             "status": "pending_agent_gate",
-            "key": str(resp_data.get("key", identifier)),
+            "key": key,
+            "issue_key": key,
+            "sequence_number": seq_num,
             "from_state": from_str,
             "to_state": to_str,
             "execution_id": str(resp_data.get("execution_id", "")),
@@ -184,7 +190,6 @@ async def transition_ticket(
             "hint": "transition is held; poll read_ticket for the gate verdict",
         }
 
-    key = str(resp_data.get("key", identifier))
     state_val = resp_data.get("state")
     state_str = (
         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
@@ -197,6 +202,8 @@ async def transition_ticket(
     return {
         "status": "transitioned",
         "key": key,
+        "issue_key": key,
+        "sequence_number": seq_num,
         "from_state": from_state or "In Progress",
         "to_state": resp_data.get("target_state") or state_str or to_state,
     }

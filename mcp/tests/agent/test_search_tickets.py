@@ -5,12 +5,24 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
 
+from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
-from mcp.surfaces.agent.search_tickets import _validate_search_arguments, search_tickets
+from mcp.registry import Surface
+from mcp.resolver import EntityResolver
+from mcp.surfaces.agent.search_tickets import (
+    _compose_search_filters,
+    _execute_search_request,
+    _resolve_assignees,
+    _resolve_project_key,
+    _validate_keys,
+    _validate_search_arguments,
+    search_tickets,
+)
 
 if TYPE_CHECKING:
     from mcp.tests.agent.conftest import AgentTestEnv
@@ -110,6 +122,9 @@ async def test_case_1_positive_search_tickets(agent_test_env: AgentTestEnv) -> N
     assert len(parsed["items"]) == 1
     item = parsed["items"][0]
     assert item["key"] == "KAN-142"
+    assert item["issue_key"] == "KAN-142"
+    assert item["sequence_number"] == 142
+    assert isinstance(item["sequence_number"], int)
     assert item["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
     assert item["state"] == "In Progress"
     assert item["priority"] == "urgent"
@@ -232,6 +247,8 @@ async def test_case_4_lod_hybrid_mode_and_gate_status(agent_test_env: AgentTestE
     parsed_sum = yaml.safe_load(res_sum["content"][0]["text"])
     for it in parsed_sum["items"]:
         assert "description_markdown" not in it
+        assert it["issue_key"] == it["key"]
+        assert isinstance(it["sequence_number"], int)
 
     # 2. standard LOD contains description_markdown
     res_std = await _call_search_tickets(
@@ -242,6 +259,9 @@ async def test_case_4_lod_hybrid_mode_and_gate_status(agent_test_env: AgentTestE
     parsed_std = yaml.safe_load(res_std["content"][0]["text"])
     assert len(parsed_std["items"]) == 2
     kan_142_item = next(it for it in parsed_std["items"] if it["key"] == "KAN-142")
+    assert kan_142_item["issue_key"] == "KAN-142"
+    assert kan_142_item["sequence_number"] == 142
+    assert isinstance(kan_142_item["sequence_number"], int)
     assert "description_markdown" in kan_142_item
     assert "# OIDC Architecture" in kan_142_item["description_markdown"]
 
@@ -386,3 +406,117 @@ async def test_tools_list_agent_surface(agent_test_env: AgentTestEnv) -> None:
         "add_comment",
         "link_objects",
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_tickets_helper_and_request_coverage() -> None:
+    """Test helper functions in search_tickets for full unit coverage."""
+    # 1. _validate_keys
+    with pytest.raises(KbMcpError) as exc_keys:
+        _validate_keys({"bogus_key": 1})
+    assert exc_keys.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # 2. _execute_search_request edge cases
+    no_client_ctx = McpRequestContext(surface=Surface.AGENT, client=None)
+    with pytest.raises(KbMcpError) as exc_no_client:
+        await _execute_search_request(no_client_ctx, {}, "summary")
+    assert exc_no_client.value.code == McpErrorCode.INTERNAL
+
+    mock_client = AsyncMock()
+    client_ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
+    mock_client.request.return_value = "invalid-payload"
+    with pytest.raises(KbMcpError) as exc_bad_res:
+        await _execute_search_request(client_ctx, {}, "summary")
+    assert exc_bad_res.value.code == McpErrorCode.UPSTREAM_ERROR
+
+    # 3. match_reason in projected items and cursor
+    mock_client.request.return_value = {
+        "items": [
+            {"key": "KAN-1", "sequence_number": 1, "match_reason": "exact_title"},
+        ],
+        "total": 1,
+        "next_cursor": "cur-123",
+    }
+    exec_res = await _execute_search_request(client_ctx, {"mode": "hybrid"}, "summary")
+    assert exec_res["mode"] == "hybrid"
+    assert exec_res["total"] == 1
+    assert exec_res["next_cursor"] == "cur-123"
+    assert exec_res["items"][0]["key"] == "KAN-1"
+    assert exec_res["items"][0]["issue_key"] == "KAN-1"
+    assert exec_res["items"][0]["sequence_number"] == 1
+    assert exec_res["items"][0]["match_reason"] == "exact_title"
+
+    # 4. _resolve_project_key with project_ref=None and NOT_FOUND
+    mock_resolver = AsyncMock()
+    found, key = await _resolve_project_key(mock_resolver, None)
+    assert found is True
+    assert key is None
+
+    mock_resolver.resolve.side_effect = KbMcpError(McpErrorCode.NOT_FOUND, "missing")
+    found, key = await _resolve_project_key(mock_resolver, "UNKNOWN")
+    assert found is False
+    assert key is None
+
+    mock_resolver.resolve.side_effect = KbMcpError(McpErrorCode.INTERNAL, "db error")
+    with pytest.raises(KbMcpError):
+        await _resolve_project_key(mock_resolver, "FAIL")
+
+    # 5. _resolve_assignees with "me" and username
+    mock_user = AsyncMock()
+    mock_user.id = "user-uuid-1"
+    mock_resolver.resolve.side_effect = None
+    mock_resolver.resolve.return_value = mock_user
+    assignee_ids = await _resolve_assignees(mock_resolver, ["me", "alice"])
+    assert assignee_ids == ["me", "user-uuid-1"]
+
+
+@pytest.mark.asyncio
+async def test_search_tickets_filters_and_missing_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test search filter resolution and missing project handling."""
+    mock_resolver = AsyncMock()
+    mock_ent = AsyncMock()
+    mock_ent.id = "ent-uuid-1"
+    mock_resolver.resolve.return_value = mock_ent
+    filters = await _compose_search_filters(
+        mock_resolver,
+        {
+            "states": ["todo"],
+            "assignees": ["me"],
+            "cycle": "cycle-1",
+            "modules": ["mod-1"],
+            "labels": ["bug"],
+            "blocked": True,
+            "gate_status": "pending",
+        },
+        "KAN",
+    )
+    assert filters["state_ids"] == ["ent-uuid-1"]
+    assert filters["assignee_ids"] == ["me"]
+    assert filters["cycle_ids"] == ["ent-uuid-1"]
+    assert filters["module_ids"] == ["ent-uuid-1"]
+    assert filters["label_ids"] == ["ent-uuid-1"]
+    assert filters["blocked"] is True
+    assert filters["gate_status"] == "pending"
+
+    mock_client = AsyncMock()
+    client_ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
+    token = set_current_mcp_context(client_ctx)
+    try:
+
+        async def mock_resolve(
+            _self: EntityResolver,
+            _entity_type: str,
+            _reference: str,
+            *,
+            _project: str | None = None,
+        ) -> None:
+            raise KbMcpError(McpErrorCode.NOT_FOUND, "not found")
+
+        monkeypatch.setattr(EntityResolver, "resolve", mock_resolve)
+        res_empty = await search_tickets({"project": "MISSING_PROJ"})
+        assert res_empty["items"] == []
+        assert res_empty["total"] == 0
+    finally:
+        reset_current_mcp_context(token)

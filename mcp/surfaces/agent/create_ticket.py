@@ -9,6 +9,7 @@ from typing import Any, Final
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
+from mcp.lod import extract_issue_sequence
 from mcp.protocol import format_cli_example
 from mcp.registry import Surface
 
@@ -358,22 +359,29 @@ async def create_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
 
     root_raw = res.get("root", {})
     children_raw = res.get("children", [])
+    root_key = str(root_raw.get("key", ""))
+    root_seq = extract_issue_sequence(root_raw, root_key)
 
     return {
         "created": res.get("created", 1),
         "root": {
-            "key": str(root_raw.get("key", "")),
+            "key": root_key,
+            "issue_key": root_key,
+            "sequence_number": root_seq,
             "summary": str(root_raw.get("summary", "")),
             "state": str(root_raw.get("state", "")),
             "priority": str(root_raw.get("priority", "")),
         },
         "children": [
             {
-                "key": str(c.get("key", "")),
+                "key": c_key,
+                "issue_key": c_key,
+                "sequence_number": extract_issue_sequence(c, c_key),
                 "summary": str(c.get("summary", "")),
                 "parent": str(c.get("parent", "")),
             }
             for c in (children_raw if isinstance(children_raw, list) else [])
             if isinstance(c, dict)
+            for c_key in [str(c.get("key", ""))]
         ],
     }

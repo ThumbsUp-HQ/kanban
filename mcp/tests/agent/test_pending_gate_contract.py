@@ -73,6 +73,9 @@ async def test_transition_ticket_pending_agent_gate_contract() -> None:
 
     assert res["status"] == "pending_agent_gate"
     assert res["key"] == "KAN-142"
+    assert res["issue_key"] == "KAN-142"
+    assert res["sequence_number"] == 142
+    assert isinstance(res["sequence_number"], int)
     assert res["from_state"] == "In Review"
     assert res["to_state"] == "Done"
     assert res["execution_id"] == execution_id
@@ -84,6 +87,9 @@ async def test_transition_ticket_pending_agent_gate_contract() -> None:
     parsed = yaml.safe_load(yaml_text)
     assert parsed["status"] == "pending_agent_gate"
     assert parsed["key"] == "KAN-142"
+    assert parsed["issue_key"] == "KAN-142"
+    assert parsed["sequence_number"] == 142
+    assert isinstance(parsed["sequence_number"], int)
     assert parsed["from_state"] == "In Review"
     assert parsed["to_state"] == "Done"
     assert parsed["execution_id"] == execution_id
@@ -133,6 +139,9 @@ async def test_complete_work_pending_agent_gate_contract() -> None:
 
     assert res["status"] == "pending_agent_gate"
     assert res["key"] == "KAN-142"
+    assert res["issue_key"] == "KAN-142"
+    assert res["sequence_number"] == 142
+    assert isinstance(res["sequence_number"], int)
     assert res["from_state"] == "In Progress"
     assert res["to_state"] == "Done"
     assert res["execution_id"] == execution_id

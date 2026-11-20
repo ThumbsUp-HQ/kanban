@@ -10,7 +10,7 @@ from kanban.security.scrubber import scrub_text
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
-from mcp.lod import _compact_access_manifest, project_issue
+from mcp.lod import _compact_access_manifest, extract_issue_sequence, project_issue
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -326,32 +326,45 @@ async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[dict[st
     return [_compact_single_activity(it) for it in raw_items if isinstance(it, dict)]
 
 
-async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Execute read_ticket tool loading issue details, links, comments, and activity."""
-    _validate_read_arguments(arguments)
+def _extract_labels(raw_labels: object) -> list[str]:
+    if not isinstance(raw_labels, list):
+        return []
+    res: list[str] = []
+    for lbl in raw_labels:
+        if isinstance(lbl, dict):
+            val = lbl.get("name")
+            if val is not None:
+                res.append(str(val))
+        elif lbl is not None:
+            res.append(str(lbl))
+    return res
 
-    identifier = arguments["identifier"].strip()
-    lod = arguments.get("lod", "standard")
-    comments_limit = arguments.get("comments_limit", 20)
 
-    ctx = get_current_mcp_context()
-    if ctx is None or ctx.client is None:
-        msg = "MCP request context unavailable"
+def _format_children(raw_children: object) -> list[dict[str, Any]] | None:
+    if not isinstance(raw_children, list):
+        return None
+    return [
+        {
+            "key": str(c.get("key", "")),
+            "issue_key": str(c.get("issue_key") or c.get("key", "")),
+            "sequence_number": extract_issue_sequence(c, str(c.get("key", ""))),
+            "summary": str(c.get("summary", "")),
+            **({"parent": str(c["parent"])} if "parent" in c else {}),
+        }
+        for c in raw_children
+        if isinstance(c, dict)
+    ]
+
+
+async def _fetch_issue_data(
+    ctx: McpRequestContext,
+    identifier: str,
+    req_params: dict[str, Any],
+    safe_identifier: str,
+) -> dict[str, Any]:
+    if ctx.client is None:
+        msg = "MCP request context client unavailable"
         raise KbMcpError(McpErrorCode.INTERNAL, msg)
-
-    if identifier == "help":
-        return await build_help(
-            "read_ticket",
-            client=ctx.client,
-            subject_token=ctx.subject_token,
-            mcp_session_id=ctx.session_id,
-        )
-
-    req_params: dict[str, Any] = {}
-    if arguments.get("workspace"):
-        req_params["workspace"] = arguments["workspace"]
-
-    safe_identifier = identifier.replace('"', '\\"')
     try:
         issue_data = await ctx.client.request(
             "GET",
@@ -399,8 +412,39 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
             ),
             cli_example=f'kanban-cli-agent search_tickets --query="{safe_identifier}"',
         )
+    return issue_data
+
+
+async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Execute read_ticket tool loading issue details, links, comments, and activity."""
+    _validate_read_arguments(arguments)
+
+    identifier = arguments["identifier"].strip()
+    lod = arguments.get("lod", "standard")
+    comments_limit = arguments.get("comments_limit", 20)
+
+    ctx = get_current_mcp_context()
+    if ctx is None or ctx.client is None:
+        msg = "MCP request context unavailable"
+        raise KbMcpError(McpErrorCode.INTERNAL, msg)
+
+    if identifier == "help":
+        return await build_help(
+            "read_ticket",
+            client=ctx.client,
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+
+    req_params: dict[str, Any] = {}
+    if arguments.get("workspace"):
+        req_params["workspace"] = arguments["workspace"]
+
+    safe_identifier = identifier.replace('"', '\\"')
+    issue_data = await _fetch_issue_data(ctx, identifier, req_params, safe_identifier)
 
     issue_key = str(issue_data.get("key", identifier))
+    seq_num = extract_issue_sequence(issue_data, issue_key)
     state_val = issue_data.get("state")
     state_str = (
         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
@@ -419,12 +463,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         comments = await _load_comments(issue_key, comments_limit, ctx)
         activity = await _load_activity(issue_key, ctx)
 
-    labels_raw = issue_data.get("labels", [])
-    labels_list = [
-        lbl.get("name") if isinstance(lbl, dict) else str(lbl)
-        for lbl in (labels_raw if isinstance(labels_raw, list) else [])
-        if lbl is not None
-    ]
+    labels_list = _extract_labels(issue_data.get("labels"))
 
     etag_raw = issue_data.get("etag") or issue_data.get("description_sha256") or ""
     etag = str(etag_raw).strip('"')
@@ -435,9 +474,12 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         access_val = access_manifest_raw.get("pill_label")
 
     compact_manifest = _compact_access_manifest(access_manifest_raw)
+    children_list = _format_children(issue_data.get("children"))
 
     normalized_issue: dict[str, Any] = {
         "key": issue_key,
+        "issue_key": issue_key,
+        "sequence_number": seq_num,
         "workspace": issue_data.get("workspace"),
         "summary": issue_data.get("summary", ""),
         "state": state_str,
@@ -462,5 +504,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         "activity": activity,
         "provenance": issue_data.get("provenance"),
     }
+    if children_list is not None:
+        normalized_issue["children"] = children_list
 
     return project_issue(normalized_issue, lod)
