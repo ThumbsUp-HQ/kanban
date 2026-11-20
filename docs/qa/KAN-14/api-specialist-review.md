@@ -61,7 +61,30 @@ All requirements for backend contract alignment, input validation, null safety, 
 
 ---
 
+## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-08)
+
+- Target Branch: `fix/KAN-14-liveqa`
+- Remediation Head Commit: `1a2f884`
+- Remediation Scope:
+  1. Modules Gating & 404 Console Error Elimination:
+     - Gated `GET /api/v1/projects/:key/modules` queries in `ProjectSettingsPage.tsx` and `PropertiesRail.tsx` behind `modules_enabled !== false`.
+     - In `railApi.ts`, gracefully handled 404 responses with code `MODULES_DISABLED` to return an empty array without browser console errors.
+  2. Mobile Viewport Overflow & Form Validation:
+     - In `ProjectSettingsPage.css`, added `.kb-table-scroll-container` (`overflow-x: auto; max-width: 100%`) wrapping wide member tables, and added responsive `@media (max-width: 640px)` stacking rules for member addition forms.
+     - In `WorkspaceSettingsPage.tsx`, updated email input placeholder to `"email@example.com"` with explicit `required` validation.
+  3. Group Handle Normalization and Persistence:
+     - In `kanban/api/v1/admin/principals.py`: When provisioning `type == "GROUP"`, normalized the supplied `body.handle` using `principal_service.normalize_handle()`, persisting the slug in principal name and returning `res["handle"] = f"@{group_name}"`.
+  4. Admin Auth Cache Synchronization:
+     - In `AuthStudioPage.tsx`, awaited user list refetch and invalidated query caches before modal close, ensuring newly provisioned members appear immediately.
+  5. Test and Quality Verification:
+     - 116 Vitest unit tests passing across touched components with >= 95% line coverage.
+     - 13 backend Pytest tests passing with 97% coverage on `kanban.api.v1.admin.principals`.
+     - Zero new dependencies, zero em-dashes or en-dashes, and clean static checks (`tsc`, `eslint`, `mypy`, `ruff`).
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts and security behaviors are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-14/screenshots/`.
+
