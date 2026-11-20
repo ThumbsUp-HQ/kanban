@@ -13,6 +13,8 @@ import {
   fetchPasskeys,
   renamePasskey,
   deletePasskey,
+  fetchWebauthnAuthenticationOptions,
+  verifyWebauthnAuthentication,
   enrollTotp,
   confirmTotp,
   deleteTotp,
@@ -25,6 +27,12 @@ import {
   type ExternalIdentityItem,
 } from './personalSettingsApi';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
+import {
+  isWebAuthnSupported,
+  prepareRequestOptions,
+  serializeAssertionCredential,
+} from '../auth/webauthn';
+import { PasskeyEnrollModal } from './PasskeyEnrollModal';
 import { ApiProblem } from '../../api/problem';
 import type { MfaMethod } from '../auth/authApi';
 import { copyToClipboard } from '../../utils/clipboard';
@@ -80,6 +88,14 @@ export function PersonalSettingsPage(): JSX.Element {
   const [totpVerificationCode, setTotpVerificationCode] = useState('');
   const [editingPasskey, setEditingPasskey] = useState<WebauthnCredentialItem | null>(null);
   const [passkeyNickname, setPasskeyNickname] = useState('');
+  const [enrollModal, setEnrollModal] = useState<{
+    isOpen: boolean;
+    initialAttachment: 'platform' | 'cross-platform';
+  }>({ isOpen: false, initialAttachment: 'platform' });
+  const [testingPasskeyId, setTestingPasskeyId] = useState<string | null>(null);
+
+  const isSecure = typeof window !== 'undefined' && window.isSecureContext;
+  const isSupported = isWebAuthnSupported();
 
   // AAL2 Step-Up state
   const [aal2Challenge, setAal2Challenge] = useState<{
@@ -119,15 +135,56 @@ export function PersonalSettingsPage(): JSX.Element {
   const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
 
   const handleInterceptAal2 = (err: unknown, retryAction: () => Promise<void>): boolean => {
-    if (err instanceof ApiProblem && err.code === 'AAL2_REQUIRED') {
+    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
       const data = err.data as { challenge_id?: string; methods?: MfaMethod[] };
       const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'stepup-challenge';
-      const methods = Array.isArray(data.methods) ? data.methods : (['webauthn', 'totp'] as MfaMethod[]);
+      const methods = Array.isArray(data.methods) && data.methods.length > 0
+        ? data.methods
+        : (['webauthn', 'totp'] as MfaMethod[]);
       setAal2Challenge({ challengeId, methods });
       setPendingAction(() => retryAction);
       return true;
     }
     return false;
+  };
+
+  const handleTestKey = async (cred: WebauthnCredentialItem): Promise<void> => {
+    setTestingPasskeyId(cred.id);
+    setErrorMsg(null);
+    try {
+      const optionsJson = await fetchWebauthnAuthenticationOptions();
+      const requestOptions = prepareRequestOptions(optionsJson);
+
+      const assertion = (await navigator.credentials.get({
+        publicKey: requestOptions,
+      })) as PublicKeyCredential | null;
+
+      if (!assertion) {
+        throw new Error('WebAuthn assertion was cancelled.');
+      }
+
+      const serialized = serializeAssertionCredential(assertion);
+      await verifyWebauthnAuthentication({ credential: serialized });
+
+      setSuccessMsg('👍 Key verified');
+      setErrorMsg(null);
+      void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
+    } catch (err: unknown) {
+      if (handleInterceptAal2(err, () => handleTestKey(cred))) {
+        return;
+      }
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        setErrorMsg('Key verification was cancelled or timed out.');
+      } else if (err instanceof ApiProblem) {
+        setErrorMsg(err.detail ?? err.title ?? 'Key verification failed.');
+      } else if (err instanceof Error) {
+        setErrorMsg(err.message.length > 0 ? err.message : 'Key verification failed.');
+      } else {
+        setErrorMsg('Key verification failed.');
+      }
+    } finally {
+      setTestingPasskeyId(null);
+    }
   };
 
   // Mutations
@@ -610,55 +667,128 @@ export function PersonalSettingsPage(): JSX.Element {
               Fast, phishing-resistant authentication with WebAuthn / FIDO2 security keys or biometrics.
             </p>
           </div>
+          <div className="kb-personal-settings-header-actions">
+            <button
+              type="button"
+              className="kb-personal-settings-btn kb-personal-settings-btn-primary kb-personal-settings-btn--mr"
+              data-testid="add-passkey-btn"
+              disabled={!isSecure || !isSupported}
+              onClick={() => {
+                setEnrollModal({ isOpen: true, initialAttachment: 'platform' });
+              }}
+            >
+              + Add Passkey
+            </button>
+            <button
+              type="button"
+              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+              data-testid="add-fido2-key-btn"
+              disabled={!isSecure || !isSupported}
+              onClick={() => {
+                setEnrollModal({ isOpen: true, initialAttachment: 'cross-platform' });
+              }}
+            >
+              + Add FIDO2 Security Key
+            </button>
+          </div>
         </div>
 
+        {!isSecure && (
+          <div
+            className="kb-personal-settings-alert kb-personal-settings-alert-warning"
+            role="status"
+            data-testid="webauthn-insecure-context-notice"
+          >
+            Browser WebAuthn requires HTTPS or localhost to register and use passkeys or security keys.
+          </div>
+        )}
+
         {passkeys && passkeys.length > 0 ? (
-          <table className="kb-personal-settings-table" data-testid="passkeys-table">
-            <thead>
-              <tr>
-                <th className="kb-personal-settings-th">Name</th>
-                <th className="kb-personal-settings-th">Created</th>
-                <th className="kb-personal-settings-th">Last Used</th>
-                <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {passkeys.map((pk) => (
-                <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
-                  <td className="kb-personal-settings-td">
-                    <strong>{pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}</strong>
-                  </td>
-                  <td className="kb-personal-settings-td">
-                    {new Date(pk.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="kb-personal-settings-td">
-                    {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
-                  </td>
-                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
-                    <button
-                      type="button"
-                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
-                      data-testid={`rename-passkey-${pk.id}`}
-                      onClick={() => {
-                        setEditingPasskey(pk);
-                        setPasskeyNickname(pk.nickname ?? '');
-                      }}
-                    >
-                      Rename
-                    </button>
-                    <button
-                      type="button"
-                      className="kb-personal-settings-btn kb-personal-settings-btn-danger"
-                      data-testid={`delete-passkey-${pk.id}`}
-                      onClick={() => { void handleDeletePasskey(pk.id); }}
-                    >
-                      Remove
-                    </button>
-                  </td>
+          <div className="kb-table-scroll-container">
+            <table className="kb-personal-settings-table" data-testid="passkeys-table">
+              <thead>
+                <tr>
+                  <th className="kb-personal-settings-th">Name</th>
+                  <th className="kb-personal-settings-th">Created</th>
+                  <th className="kb-personal-settings-th">Last Used</th>
+                  <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {passkeys.map((pk) => {
+                  const transports = (pk.transports ?? []).map((t) => t.toLowerCase());
+                  const isFido2Key =
+                    transports.some((t) => t === 'usb' || t === 'nfc' || t === 'ble') &&
+                    !transports.some((t) => t === 'internal' || t === 'hybrid');
+                  const badgeKind = isFido2Key ? 'security-key' : 'passkey';
+                  const badgeLabel = isFido2Key ? '🔑 FIDO2 Security Key' : '📱 Passkey';
+
+                  return (
+                    <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
+                      <td className="kb-personal-settings-td">
+                        <div className="kb-passkey-cell-title">
+                          <strong>
+                            {pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}
+                          </strong>
+                          <span
+                            className={`kb-passkey-badge kb-passkey-badge--${badgeKind}`}
+                            data-testid={`passkey-badge-${pk.id}`}
+                          >
+                            {badgeLabel}
+                          </span>
+                          {pk.suspect_clone_at && (
+                            <span
+                              className="kb-passkey-clone-warning"
+                              data-testid={`passkey-clone-warning-${pk.id}`}
+                              title={`Suspected clone recorded at ${pk.suspect_clone_at}`}
+                            >
+                              ⚠️ Suspected Clone
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="kb-personal-settings-td">
+                        {new Date(pk.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="kb-personal-settings-td">
+                        {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
+                      </td>
+                      <td className="kb-personal-settings-td kb-personal-settings-td-right">
+                        <button
+                          type="button"
+                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
+                          data-testid={`test-passkey-${pk.id}`}
+                          disabled={testingPasskeyId === pk.id}
+                          onClick={() => { void handleTestKey(pk); }}
+                        >
+                          {testingPasskeyId === pk.id ? 'Testing...' : 'Test Key'}
+                        </button>
+                        <button
+                          type="button"
+                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
+                          data-testid={`rename-passkey-${pk.id}`}
+                          onClick={() => {
+                            setEditingPasskey(pk);
+                            setPasskeyNickname(pk.nickname ?? '');
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+                          data-testid={`delete-passkey-${pk.id}`}
+                          onClick={() => { void handleDeletePasskey(pk.id); }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="kb-personal-settings-empty">
             No passkeys registered yet.
@@ -983,7 +1113,7 @@ export function PersonalSettingsPage(): JSX.Element {
 
       {/* AAL2 Step-Up Dialog */}
       {aal2Challenge && (
-        <div className="kb-personal-settings-modal-backdrop" role="presentation">
+        <div className="kb-personal-settings-modal-backdrop kb-personal-settings-modal-backdrop--stepup" role="presentation">
           <div
             className="kb-personal-settings-modal"
             role="dialog"
@@ -1035,6 +1165,21 @@ export function PersonalSettingsPage(): JSX.Element {
           </div>
         </div>
       )}
+
+      {/* Passkey / FIDO2 Security Key Enrollment Modal */}
+      <PasskeyEnrollModal
+        key={`${enrollModal.initialAttachment}-${String(enrollModal.isOpen)}`}
+        isOpen={enrollModal.isOpen}
+        initialAttachment={enrollModal.initialAttachment}
+        onClose={() => {
+          setEnrollModal((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onSuccess={(msg) => {
+          setSuccessMsg(msg);
+          setErrorMsg(null);
+        }}
+        onInterceptAal2={handleInterceptAal2}
+      />
 
       {cropFile && (
         <AvatarCropModal

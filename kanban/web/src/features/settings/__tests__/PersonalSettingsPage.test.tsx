@@ -1619,4 +1619,308 @@ describe('PersonalSettingsPage', () => {
     fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile2] } });
     expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
   });
+
+  it('renders insecure context notice when isSecureContext is false and disables enrollment buttons', async () => {
+    Object.defineProperty(window, 'isSecureContext', {
+      writable: true,
+      configurable: true,
+      value: false,
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('webauthn-insecure-context-notice')).toBeDefined();
+    });
+
+    const addPasskeyBtn = screen.getByTestId<HTMLButtonElement>('add-passkey-btn');
+    const addFido2Btn = screen.getByTestId<HTMLButtonElement>('add-fido2-key-btn');
+    expect(addPasskeyBtn.disabled).toBe(true);
+    expect(addFido2Btn.disabled).toBe(true);
+  });
+
+  it('opens PasskeyEnrollModal when clicking Add Passkey or Add FIDO2 Security Key in secure context', async () => {
+    Object.defineProperty(window, 'isSecureContext', {
+      writable: true,
+      configurable: true,
+      value: true,
+    });
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = function () {
+      return undefined;
+    };
+    Object.defineProperty(navigator, 'credentials', {
+      writable: true,
+      configurable: true,
+      value: {
+        get: vi.fn(),
+        create: vi.fn(),
+      },
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.queryByTestId('webauthn-insecure-context-notice')).toBeNull();
+    });
+
+    const addPasskeyBtn = screen.getByTestId<HTMLButtonElement>('add-passkey-btn');
+    expect(addPasskeyBtn.disabled).toBe(false);
+
+    fireEvent.click(addPasskeyBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('passkey-enroll-modal')).toBeDefined();
+    });
+
+    // Close enroll modal
+    fireEvent.click(screen.getByTestId('passkey-enroll-close-btn'));
+    expect(screen.queryByTestId('passkey-enroll-modal')).toBeNull();
+
+    // Click Add FIDO2 Key
+    const addFido2Btn = screen.getByTestId<HTMLButtonElement>('add-fido2-key-btn');
+    fireEvent.click(addFido2Btn);
+    await waitFor(() => {
+      expect(screen.getByTestId('passkey-enroll-modal')).toBeDefined();
+    });
+    const crossRadio = screen.getByTestId<HTMLInputElement>('attachment-cross-platform-radio');
+    expect(crossRadio.checked).toBe(true);
+
+    // Complete enrollment from modal to cover onSuccess in PersonalSettingsPage
+    const mockRegOptions: api.PublicKeyCredentialCreationOptionsJSON = {
+      rp: { name: 'KB' },
+      user: { id: 'u1', name: 'u', displayName: 'U' },
+      challenge: 'c1',
+      pubKeyCredParams: [],
+    };
+    vi.mocked(api.fetchWebauthnRegistrationOptions).mockResolvedValueOnce(mockRegOptions);
+    vi.mocked(api.verifyWebauthnRegistration).mockResolvedValueOnce({
+      verified: true,
+      credential_id: 'pk-new',
+      nickname: 'New YubiKey',
+    });
+    const mockCreate = vi.fn().mockResolvedValueOnce({
+      id: 'mock-reg-id',
+      rawId: new Uint8Array([1]).buffer,
+      type: 'public-key',
+      response: {
+        clientDataJSON: new TextEncoder().encode('{}').buffer,
+        attestationObject: new Uint8Array([2]).buffer,
+      },
+      getClientExtensionResults: () => ({}),
+    });
+    Object.defineProperty(navigator, 'credentials', {
+      writable: true,
+      configurable: true,
+      value: { create: mockCreate, get: vi.fn() },
+    });
+
+    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
+      target: { value: 'New YubiKey' },
+    });
+    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-success').textContent).toContain('Passkey registered successfully.');
+    });
+  });
+
+  it('renders device badges and clone warning pill in passkeys table', async () => {
+    vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([
+      {
+        id: 'pk-internal',
+        nickname: 'Mac Touch ID',
+        transports: ['internal'],
+        created_at: '2026-01-01T00:00:00Z',
+        last_used_at: '2026-02-01T00:00:00Z',
+        aaguid: '00000000-0000-0000-0000-000000000000',
+      },
+      {
+        id: 'pk-usb',
+        nickname: 'YubiKey 5C',
+        transports: ['usb', 'nfc'],
+        created_at: '2026-01-02T00:00:00Z',
+        last_used_at: null,
+        aaguid: null,
+      },
+      {
+        id: 'pk-cloned',
+        nickname: 'Suspicious Key',
+        transports: ['hybrid'],
+        suspect_clone_at: '2026-03-01T12:00:00Z',
+        created_at: '2026-01-03T00:00:00Z',
+        last_used_at: '2026-03-01T12:00:00Z',
+        aaguid: null,
+      },
+    ]);
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('passkey-row-pk-internal')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('passkey-badge-pk-internal').textContent).toContain('📱 Passkey');
+    expect(screen.getByTestId('passkey-badge-pk-usb').textContent).toContain('🔑 FIDO2 Security Key');
+    expect(screen.getByTestId('passkey-badge-pk-cloned').textContent).toContain('📱 Passkey');
+    expect(screen.getByTestId('passkey-clone-warning-pk-cloned')).toBeDefined();
+    expect(screen.getByTestId('passkey-clone-warning-pk-cloned').textContent).toContain('⚠️ Suspected Clone');
+  });
+
+  it('handles Test Key button execution and shows verified banner', async () => {
+    const mockAuthOptions: api.PublicKeyCredentialRequestOptionsJSON = { challenge: 'chall-auth', rpId: 'localhost' };
+    const mockAssertion = {
+      id: 'cred-1',
+      rawId: new Uint8Array([1, 2]).buffer,
+      type: 'public-key',
+      response: {
+        clientDataJSON: new TextEncoder().encode('{}').buffer,
+        authenticatorData: new Uint8Array([3]).buffer,
+        signature: new Uint8Array([4]).buffer,
+        userHandle: null,
+      },
+      getClientExtensionResults: () => ({}),
+    } as unknown as PublicKeyCredential;
+
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockAuthOptions);
+    vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({ verified: true, credential_id: 'pk-1', aal_level: 2 });
+
+    const mockGet = vi.fn().mockResolvedValue(mockAssertion);
+    Object.defineProperty(navigator, 'credentials', {
+      writable: true,
+      configurable: true,
+      value: {
+        get: mockGet,
+        create: vi.fn(),
+      },
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('test-passkey-pk-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+
+    await waitFor(() => {
+      expect(api.fetchWebauthnAuthenticationOptions).toHaveBeenCalled();
+      expect(mockGet).toHaveBeenCalled();
+      expect(api.verifyWebauthnAuthentication).toHaveBeenCalled();
+      expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified');
+    });
+  });
+
+  it('handles Test Key cancellation and error conditions', async () => {
+    // Null assertion returned
+    const mockCancelOptions: api.PublicKeyCredentialRequestOptionsJSON = { challenge: 'c1' };
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockCancelOptions);
+    Object.defineProperty(navigator, 'credentials', {
+      writable: true,
+      configurable: true,
+      value: { get: vi.fn().mockResolvedValue(null) },
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('test-passkey-pk-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('WebAuthn assertion was cancelled.');
+    });
+
+    // NotAllowedError
+    const notAllowed = new Error('Cancelled');
+    notAllowed.name = 'NotAllowedError';
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(notAllowed);
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Key verification was cancelled or timed out.');
+    });
+
+    // ApiProblem error
+    const problem = new ApiProblem(400, { detail: 'Custom key problem' });
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(problem);
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Custom key problem');
+    });
+
+    // Generic Error with empty message fallback
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(new Error(''));
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Key verification failed.');
+    });
+
+    // String throw
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce('raw-key-err');
+
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-error').textContent).toContain('Key verification failed.');
+    });
+  });
+
+  it('intercepts AAL2_STALE on sensitive actions and completes step-up', async () => {
+    const aal2StaleProblem = new ApiProblem(403, {
+      code: 'AAL2_STALE',
+      challenge_id: 'stale-chall',
+      methods: ['webauthn', 'totp'],
+    });
+
+    // 1. Password change with AAL2_STALE
+    vi.mocked(api.changePassword).mockRejectedValueOnce(aal2StaleProblem);
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByTestId('current-password-input')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'ValidPass123!long' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'ValidPass123!longer' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'ValidPass123!longer' } });
+
+    fireEvent.click(screen.getByTestId('change-password-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+    });
+
+    // Mock successful password change on retry after step-up
+    vi.mocked(api.changePassword).mockResolvedValueOnce({ ok: true, message: 'Password updated' });
+    fireEvent.click(screen.getByTestId('mock-2fa-success'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+      expect(api.changePassword).toHaveBeenCalledTimes(2);
+    });
+
+    // 2. Passkey delete with AAL2_STALE
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2StaleProblem);
+
+    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+    });
+
+    vi.mocked(api.deletePasskey).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByTestId('mock-2fa-success'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+      expect(api.deletePasskey).toHaveBeenCalledTimes(2);
+    });
+
+    // 3. Test Key with AAL2_STALE
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(aal2StaleProblem);
+    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-2fa-cancel'));
+    expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+
+    confirmSpy.mockRestore();
+  });
 });
