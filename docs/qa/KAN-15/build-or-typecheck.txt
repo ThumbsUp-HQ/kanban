@@ -1,25 +1,51 @@
 === TSC TYPECHECK (kanban/web) ===
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc1-825368b6/kanban/web
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
 > tsc -b --noEmit
 
 
 === ESLINT (kanban/web) ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc1-825368b6/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
 > eslint . --max-warnings 0
 
 
+=== VITE BUILD (kanban/web) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 706 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-CNISRH-v.css            427.87 kB │ gzip:  60.28 kB
+dist/assets/index-BxSu2pTR.js           1,982.18 kB │ gzip: 535.91 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.44s
+
 === CSS TOKENS AUDIT ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc1-825368b6/kanban/web
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
+> vitest run src/styles/__tests__/cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
 
  ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
 
  Test Files  1 passed (1)
       Tests  4 passed (4)
-   Start at  08:38:31
-   Duration  971ms (environment 93%, import 2%, worker 2%, tests 2%, transform 1%)
+   Start at  10:07:18
+   Duration  1.02s (environment 93%, import 2%, transform 2%, tests 2%, worker 1%)
 
 
 === RUFF CHECK ===
@@ -44,7 +70,7 @@ Success: no issues found in 2 source files
 Contracts
 ---------
 
-Analyzed 965 files, 3394 dependencies.
+Analyzed 969 files, 3424 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -53,4 +79,4 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 Contracts: 2 kept, 0 broken.
 
 === CHECK NO DASHES ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc1-825368b6/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+All files checked: 0 em/en-dashes found.

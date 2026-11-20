@@ -20,7 +20,7 @@ The ticket resolves all 3 scoped problems with outstanding frontend craftsmanshi
    - High-performance, accessible contextual popover utilizing existing `HintPortal`, `positionHint`, and `hintTiming.ts` primitives.
    - Strict CSP compliance (`style-src 'self'`): 0 inline `style={...}` JSX attributes; positioning coordinates and arrow offsets are driven purely by DOM CSS variables (`style.setProperty`).
    - Accessible interaction model: 180ms hover open delay, instantaneous 0ms keyboard `Tab` focus open, 120ms hover-bridge grace period allowing mouse traversal into the popover body without accidental dismissal, and `Escape` key dismissal with immediate focus restoration to the trigger button.
-   - Comprehensive content slots: Header with Title and close button (`aria-label="Close help popover"`), plain English summary, optional definition list (`<dl>`) for valid configuration keys, formatted example snippets, warning callout blocks, and configurable `More info ->` footer documentation link (`docHref`).
+   - Comprehensive content slots: Header with bold Title (`.field-help-hint-title`), plain English summary, optional definition list (`<dl>`) for valid configuration keys, formatted example snippets, warning callout blocks, and configurable `More info ->` footer documentation link (`docHref`).
    - Coarse pointer hit area: Expands to >= 44x44px under `@media (pointer: coarse)` while preserving compact desktop label alignment.
 2. **Contextual Studio & Issue Rail Help Integration:**
    - 10 contextual help popovers wired across `CustomFieldDefinitionEditor.tsx` (Display Name, Identifier Slug, Field Flavor, Output Format, Format Metadata JSON, Sandbox Execution Tier, Target Scope, Credential Mode, Egress Allowlist, and Script / Formula Source).

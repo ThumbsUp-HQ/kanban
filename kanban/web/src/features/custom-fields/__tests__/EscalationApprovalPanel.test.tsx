@@ -498,8 +498,13 @@ describe('EscalationApprovalPanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('submit-approval-request-btn').textContent).toBe('Submitting...');
     });
+
     act(() => {
       resolveRequest(pendingApproval);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('approval-request-modal')).toBeNull();
     });
   });
 

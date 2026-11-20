@@ -465,7 +465,13 @@ describe('CustomFieldsRailSection', () => {
       expect(api.executeCustomField).toHaveBeenCalledTimes(1);
     });
 
-    resolveExecution(firstRes);
+    act(() => {
+      resolveExecution(firstRes);
+    });
+
+    await waitFor(() => {
+      expect(refreshBtn.getAttribute('aria-busy')).toBe('false');
+    });
   });
 
   it('renders FieldHelpHint on custom field rows in properties rail', async () => {

@@ -39,7 +39,7 @@ All API contracts, security invariants, AST parser boundaries, database context 
 - Verification:
   - `_convert_js_ternary` tracks nesting depth across braces (`{}`), brackets (`[]`), and parentheses (`()`), alongside quote status (`'` and `"`). Colons inside dictionary literals or strings are ignored during ternary condition/branch splitting.
   - Safe AST evaluation supports `ast.Constant`, `ast.Name`, `ast.Attribute`, `ast.Dict`, `ast.List`, `ast.Tuple`, `ast.BinOp`, `ast.UnaryOp`, `ast.BoolOp` (`And`, `Or`), `ast.Compare`, `ast.IfExp`, and allowlisted `ast.Call` (`round`, `int`, `float`, `min`, `max`, `len`, `abs`, `str`).
-  - AST complexity bounds enforce `_MAX_FORMULA_NODES = 64` and `_MAX_FORMULA_DEPTH = 12` to prevent CPU exhaustion or algorithmic complexity attacks.
+  - AST complexity bounds enforce `_MAX_FORMULA_NODES = 64` and `_MAX_FORMULA_DEPTH = 8` to prevent CPU exhaustion or algorithmic complexity attacks.
   - Dangerous operations (module imports, arbitrary builtins, filesystem/network access, attribute mutation) fail closed with `ProblemException(400)`.
 
 ### 2.2 PostgreSQL Runtime Issue Context (`build_issue_context`)
