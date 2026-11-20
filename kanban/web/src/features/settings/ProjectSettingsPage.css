@@ -746,6 +746,27 @@
   background: #7f1d1d;
 }
 
+.kb-btn-purge:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kb-danger-purge-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kb-danger-purge-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.kb-danger-reason-input {
+  margin-top: 0.5rem;
+}
+
 .kb-danger-buttons-row {
   display: flex;
   gap: 1rem;

@@ -507,6 +507,52 @@ export function WorkspaceHomeView(): JSX.Element {
 export function DraftsWorkspaceView(): JSX.Element {
   const drafts = useDrafts();
   const navigate = useNavigate();
+  const queryClient = useContext(QueryClientContext);
+  const routeCtx = useContext(ProjectRouteContext);
+  const [projects, setProjects] = useState<{ identifier?: string; key?: string }[]>(() => {
+    if (queryClient) {
+      const cached = queryClient.getQueryData<
+        { identifier?: string; key?: string }[] | { items?: { identifier?: string; key?: string }[] }
+      >(['projects']);
+      if (cached) {
+        return Array.isArray(cached) ? cached : (cached.items ?? []);
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    let active = true;
+    async function loadProjects(): Promise<void> {
+      try {
+        const res = await fetch('/api/v1/projects', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        if (!res.ok || !active) return;
+        const data = (await res.json()) as
+          | { items?: { identifier?: string; key?: string }[] }
+          | { identifier?: string; key?: string }[];
+        const items = Array.isArray(data) ? data : (data.items ?? []);
+        setProjects(items);
+      } catch {
+        // Fallback / offline / unmocked environment
+      }
+    }
+    void loadProjects();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const activeOrFirstKey =
+    (routeCtx.projectKey && routeCtx.projectKey.trim().length > 0 ? routeCtx.projectKey : undefined) ??
+    projects[0]?.identifier ??
+    projects[0]?.key;
+  const emptyStateCtaLink = activeOrFirstKey
+    ? `/projects/${encodeURIComponent(activeOrFirstKey)}/issues?create=1`
+    : '/';
 
   const handlePublishOrResume = async (draft: IssueDraft): Promise<void> => {
     try {
@@ -582,7 +628,7 @@ export function DraftsWorkspaceView(): JSX.Element {
       {drafts.length === 0 ? (
         <div data-testid="drafts-empty" className="drafts-empty-notice">
           <p>No work item drafts found.</p>
-          <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
+          <Link to={emptyStateCtaLink}>Create a new work item →</Link>
         </div>
       ) : (
         <div className="drafts-grid" data-testid="drafts-list">

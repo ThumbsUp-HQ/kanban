@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import React from 'react';
-import { RouterProvider, MemoryRouter } from 'react-router';
+import { RouterProvider, MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 import * as client from '../api/client';
@@ -20,6 +20,10 @@ import {
   AdminRouteGuard,
   DraftsWorkspaceRouteGuard,
   NotFoundView,
+  ProjectMcpRedirect,
+  WorkspaceMcpRedirect,
+  AdminMcpRedirect,
+  ProjectRouteContext,
 } from './routes';
 import { saveDraft } from '../features/drafts/draftsStore';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -1739,6 +1743,219 @@ describe('IssuesWorkspaceRoute', () => {
         expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Cycle delete rejected');
       });
       u6();
+    });
+  });
+
+  describe('KAN-11: Drafts empty-state CTA link and Mcp redirects', () => {
+    it('resolves empty-state CTA link to first accessible project dynamically', async () => {
+      localStorage.removeItem('kb.drafts.v1');
+
+      const testQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      testQc.setQueryData(qk.projects(), [
+        { id: 'p-1', identifier: 'ALPHA', name: 'Alpha Project' },
+        { id: 'p-2', identifier: 'BETA', name: 'Beta Project' },
+      ]);
+
+      const { unmount } = render(
+        <QueryClientProvider client={testQc}>
+          <MemoryRouter initialEntries={['/drafts']}>
+            <DraftsWorkspaceView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const emptyDiv = await screen.findByTestId('drafts-empty');
+      expect(emptyDiv).toBeDefined();
+
+      const link = within(emptyDiv).getByRole('link', { name: /Create a new work item/i });
+      expect(link.getAttribute('href')).toBe('/projects/ALPHA/issues?create=1');
+      unmount();
+    });
+
+    it('resolves empty-state CTA link from active ProjectRouteContext', async () => {
+      localStorage.removeItem('kb.drafts.v1');
+
+      const testQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      const { unmount } = render(
+        <QueryClientProvider client={testQc}>
+          <MemoryRouter initialEntries={['/drafts']}>
+            <ProjectRouteContext.Provider
+              value={{
+                projectKey: 'ACTIVE',
+                projectName: 'Active Project',
+                modulesEnabled: true,
+                capabilities: ['ADMIN'],
+                isProjectAdmin: true,
+              }}
+            >
+              <DraftsWorkspaceView />
+            </ProjectRouteContext.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const emptyDiv = await screen.findByTestId('drafts-empty');
+      const link = within(emptyDiv).getByRole('link', { name: /Create a new work item/i });
+      expect(link.getAttribute('href')).toBe('/projects/ACTIVE/issues?create=1');
+      unmount();
+    });
+
+    it('falls back gracefully to / when workspace has 0 accessible projects', async () => {
+      localStorage.removeItem('kb.drafts.v1');
+
+      const testQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      testQc.setQueryData(qk.projects(), []);
+
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects')) {
+          return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+
+      const { unmount } = render(
+        <QueryClientProvider client={testQc}>
+          <MemoryRouter initialEntries={['/drafts']}>
+            <DraftsWorkspaceView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const emptyDiv = await screen.findByTestId('drafts-empty');
+      const link = within(emptyDiv).getByRole('link', { name: /Create a new work item/i });
+      expect(link.getAttribute('href')).toBe('/');
+      unmount();
+    });
+
+    it('covers ProjectMcpRedirect, WorkspaceMcpRedirect, and AdminMcpRedirect routes', async () => {
+      // 1. ProjectMcpRedirect with existing scope/project searchParams
+      const { unmount: u1 } = render(
+        <MemoryRouter initialEntries={['/projects/PRJ/settings/mcp?scope=custom&project=OVERRIDE']}>
+          <Routes>
+            <Route path="/projects/:projectKey/settings/mcp" element={<ProjectMcpRedirect />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      u1();
+
+      // 2. ProjectMcpRedirect without params (sets scope=project and project=PRJ)
+      const { unmount: u2 } = render(
+        <MemoryRouter initialEntries={['/projects/PRJ/settings/mcp']}>
+          <Routes>
+            <Route path="/projects/:projectKey/settings/mcp" element={<ProjectMcpRedirect />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      u2();
+
+      // 3. WorkspaceMcpRedirect
+      const { unmount: u3 } = render(
+        <MemoryRouter initialEntries={['/workspaces/settings/mcp']}>
+          <WorkspaceMcpRedirect />
+        </MemoryRouter>,
+      );
+      u3();
+
+      // 4. AdminMcpRedirect
+      const { unmount: u4 } = render(
+        <MemoryRouter initialEntries={['/admin/mcp']}>
+          <AdminMcpRedirect />
+        </MemoryRouter>,
+      );
+      u4();
+
+      // 5. Workspace switcher event listener while WorkspaceHomeView is mounted
+      const qcHome = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount: uHome } = render(
+        <QueryClientProvider client={qcHome}>
+          <MemoryRouter initialEntries={['/']}>
+            <WorkspaceHomeView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      act(() => {
+        window.dispatchEvent(new Event('kb:workspace-switched'));
+      });
+      uHome();
+
+      // 6. create=1 timer execution in ProjectIssuesRoute
+      const qcIssues = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const routerIssues = createAppRouter(['/projects/KAN/issues?create=1']);
+      const { unmount: uIssues } = render(
+        <QueryClientProvider client={qcIssues}>
+          <ThemeProvider>
+            <RouterProvider router={routerIssues} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      uIssues();
+
+      // 7. DraftsWorkspaceView with cached object having key instead of identifier
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects')) {
+          return Promise.resolve(new Response(JSON.stringify({ items: [{ key: 'KEY_PROJ' }] }), { status: 200 }));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+      const qcDraftsKey = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qcDraftsKey.setQueryData(['projects'], { items: [{ key: 'KEY_PROJ' }] });
+      const { unmount: uDraftsKey } = render(
+        <QueryClientProvider client={qcDraftsKey}>
+          <MemoryRouter initialEntries={['/drafts']}>
+            <DraftsWorkspaceView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      const emptyDivKey = await screen.findByTestId('drafts-empty');
+      const linkKey = within(emptyDivKey).getByRole('link', { name: /Create a new work item/i });
+      expect(linkKey.getAttribute('href')).toBe('/projects/KEY_PROJ/issues?create=1');
+      uDraftsKey();
+
+      // 8. DraftsWorkspaceView with cached object where items is undefined or null
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects')) {
+          return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+      const qcDraftsNull = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qcDraftsNull.setQueryData(['projects'], { items: null });
+      const { unmount: uDraftsNull } = render(
+        <QueryClientProvider client={qcDraftsNull}>
+          <MemoryRouter initialEntries={['/drafts']}>
+            <DraftsWorkspaceView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      const emptyDivNull = await screen.findByTestId('drafts-empty');
+      const linkNull = within(emptyDivNull).getByRole('link', { name: /Create a new work item/i });
+      expect(linkNull.getAttribute('href')).toBe('/');
+      uDraftsNull();
+
+      // 9. ProjectIssuesRoute invalid layout reset, nomodules=1, and kb:create-issue event
+      const qcIssuesInvalid = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const routerIssuesInvalid = createAppRouter(['/projects/KAN/issues?layout=invalid_custom&nomodules=1']);
+      const { unmount: uIssuesInvalid } = render(
+        <QueryClientProvider client={qcIssuesInvalid}>
+          <ThemeProvider>
+            <RouterProvider router={routerIssuesInvalid} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      act(() => {
+        window.dispatchEvent(new Event('kb:create-issue'));
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      uIssuesInvalid();
     });
   });
 });

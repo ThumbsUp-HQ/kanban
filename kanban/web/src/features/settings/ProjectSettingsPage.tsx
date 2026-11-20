@@ -13,8 +13,9 @@
  * 8. Danger Zone: 2-stage Project deletion with blast radius computation, sending mode: 'trash' and SERVER_ADMIN-only permanent purge.
  */
 
-import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
+import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import './ProjectSettingsPage.css';
@@ -30,6 +31,9 @@ export interface ProjectDetail {
   capabilities?: string[];
   is_project_admin?: boolean;
   project_role?: string | null;
+  deleted_at?: string | null;
+  trashed_at?: string | null;
+  status?: string | null;
 }
 
 export interface ProjectMember {
@@ -147,6 +151,7 @@ type SettingsTab =
 export function ProjectSettingsPage(): JSX.Element {
   const { projectKey = 'KAN' } = useParams<{ projectKey: string }>();
   const navigate = useNavigate();
+  const queryClient = useContext(QueryClientContext);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [project, setProject] = useState<ProjectDetail | null>(null);
@@ -463,6 +468,16 @@ export function ProjectSettingsPage(): JSX.Element {
         }
 
         setProject(updated);
+        if (queryClient) {
+          queryClient.setQueryData(['project', projectKey], (prev: unknown) => {
+            if (prev && typeof prev === 'object') {
+              return { ...prev, ...updated };
+            }
+            return updated;
+          });
+          await queryClient.invalidateQueries({ queryKey: ['project', projectKey] });
+          await queryClient.invalidateQueries({ queryKey: ['projects'] });
+        }
         setSuccessMessage('Project settings saved successfully.');
       } catch (err: unknown) {
         const errObj = err as { message?: string };
@@ -839,8 +854,15 @@ export function ProjectSettingsPage(): JSX.Element {
   };
 
   // Danger Zone Handlers
+  const isProjectTrashed =
+    project?.deleted_at != null || project?.trashed_at != null || project?.status === 'trashed';
+
   const handleRequestDelete = (mode: 'trash' | 'permanent_purge' = 'trash') => {
     setDangerError(null);
+    if (mode === 'permanent_purge' && !isProjectTrashed) {
+      setDangerError('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
+      return;
+    }
     void (async () => {
       try {
         const csrf = await ensureSessionCsrfToken();
@@ -1837,14 +1859,25 @@ export function ProjectSettingsPage(): JSX.Element {
                 </button>
 
                 {isServerAdmin && (
-                  <button
-                    type="button"
-                    data-testid="request-purge-btn"
-                    className="kb-btn kb-btn-danger kb-btn-purge"
-                    onClick={() => { handleRequestDelete('permanent_purge'); }}
-                  >
-                    💥 Permanently Purge Project (Irreversible)...
-                  </button>
+                  <div className="kb-danger-purge-container">
+                    <button
+                      type="button"
+                      data-testid="request-purge-btn"
+                      className="kb-btn kb-btn-danger kb-btn-purge"
+                      disabled={!isProjectTrashed}
+                      aria-disabled={!isProjectTrashed}
+                      onClick={() => {
+                        handleRequestDelete('permanent_purge');
+                      }}
+                    >
+                      💥 Permanently Purge Project (Irreversible)...
+                    </button>
+                    {!isProjectTrashed && (
+                      <p className="kb-danger-purge-hint" data-testid="purge-disabled-hint">
+                        Stage 1 (Move Project to Trash) must be completed before permanent purge.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1887,8 +1920,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 <input
                   type="text"
                   data-testid="danger-reason-input"
-                  className="kb-input"
-                  style={{ marginTop: '0.5rem' }}
+                  className="kb-input kb-danger-reason-input"
                   placeholder="Reason for deletion (optional, min 10 chars)"
                   value={dangerReason}
                   onChange={(e) => { setDangerReason(e.target.value); }}

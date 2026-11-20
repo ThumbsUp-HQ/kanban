@@ -1,0 +1,643 @@
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 1f07c68..09fe614 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -1,7 +1,7 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
+ import React from 'react';
+-import { RouterProvider, MemoryRouter } from 'react-router';
++import { RouterProvider, MemoryRouter, Routes, Route } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { qk } from '../api/queryKeys';
+ import * as client from '../api/client';
+@@ -20,6 +20,10 @@ import {
+   AdminRouteGuard,
+   DraftsWorkspaceRouteGuard,
+   NotFoundView,
++  ProjectMcpRedirect,
++  WorkspaceMcpRedirect,
++  AdminMcpRedirect,
++  ProjectRouteContext,
+ } from './routes';
+ import { saveDraft } from '../features/drafts/draftsStore';
+ import { ThemeProvider } from '../theme/ThemeProvider';
+@@ -1741,4 +1745,217 @@ describe('IssuesWorkspaceRoute', () => {
+       u6();
+     });
+   });
++
++  describe('KAN-11: Drafts empty-state CTA link and Mcp redirects', () => {
++    it('resolves empty-state CTA link to first accessible project dynamically', async () => {
++      localStorage.removeItem('kb.drafts.v1');
++
++      const testQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      testQc.setQueryData(qk.projects(), [
++        { id: 'p-1', identifier: 'ALPHA', name: 'Alpha Project' },
++        { id: 'p-2', identifier: 'BETA', name: 'Beta Project' },
++      ]);
++
++      const { unmount } = render(
++        <QueryClientProvider client={testQc}>
++          <MemoryRouter initialEntries={['/drafts']}>
++            <DraftsWorkspaceView />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      const emptyDiv = await screen.findByTestId('drafts-empty');
++      expect(emptyDiv).toBeDefined();
++
++      const link = within(emptyDiv).getByRole('link', { name: /Create a new work item/i });
++      expect(link.getAttribute('href')).toBe('/projects/ALPHA/issues?create=1');
++      unmount();
++    });
++
++    it('resolves empty-state CTA link from active ProjectRouteContext', async () => {
++      localStorage.removeItem('kb.drafts.v1');
++
++      const testQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++
++      const { unmount } = render(
++        <QueryClientProvider client={testQc}>
++          <MemoryRouter initialEntries={['/drafts']}>
++            <ProjectRouteContext.Provider
++              value={{
++                projectKey: 'ACTIVE',
++                projectName: 'Active Project',
++                modulesEnabled: true,
++                capabilities: ['ADMIN'],
++                isProjectAdmin: true,
++              }}
++            >
++              <DraftsWorkspaceView />
++            </ProjectRouteContext.Provider>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      const emptyDiv = await screen.findByTestId('drafts-empty');
++      const link = within(emptyDiv).getByRole('link', { name: /Create a new work item/i });
++      expect(link.getAttribute('href')).toBe('/projects/ACTIVE/issues?create=1');
++      unmount();
++    });
++
++    it('falls back gracefully to / when workspace has 0 accessible projects', async () => {
++      localStorage.removeItem('kb.drafts.v1');
++
++      const testQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      testQc.setQueryData(qk.projects(), []);
++
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/projects')) {
++          return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }));
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      });
++
++      const { unmount } = render(
++        <QueryClientProvider client={testQc}>
++          <MemoryRouter initialEntries={['/drafts']}>
++            <DraftsWorkspaceView />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      const emptyDiv = await screen.findByTestId('drafts-empty');
++      const link = within(emptyDiv).getByRole('link', { name: /Create a new work item/i });
++      expect(link.getAttribute('href')).toBe('/');
++      unmount();
++    });
++
++    it('covers ProjectMcpRedirect, WorkspaceMcpRedirect, and AdminMcpRedirect routes', async () => {
++      // 1. ProjectMcpRedirect with existing scope/project searchParams
++      const { unmount: u1 } = render(
++        <MemoryRouter initialEntries={['/projects/PRJ/settings/mcp?scope=custom&project=OVERRIDE']}>
++          <Routes>
++            <Route path="/projects/:projectKey/settings/mcp" element={<ProjectMcpRedirect />} />
++          </Routes>
++        </MemoryRouter>,
++      );
++      u1();
++
++      // 2. ProjectMcpRedirect without params (sets scope=project and project=PRJ)
++      const { unmount: u2 } = render(
++        <MemoryRouter initialEntries={['/projects/PRJ/settings/mcp']}>
++          <Routes>
++            <Route path="/projects/:projectKey/settings/mcp" element={<ProjectMcpRedirect />} />
++          </Routes>
++        </MemoryRouter>,
++      );
++      u2();
++
++      // 3. WorkspaceMcpRedirect
++      const { unmount: u3 } = render(
++        <MemoryRouter initialEntries={['/workspaces/settings/mcp']}>
++          <WorkspaceMcpRedirect />
++        </MemoryRouter>,
++      );
++      u3();
++
++      // 4. AdminMcpRedirect
++      const { unmount: u4 } = render(
++        <MemoryRouter initialEntries={['/admin/mcp']}>
++          <AdminMcpRedirect />
++        </MemoryRouter>,
++      );
++      u4();
++
++      // 5. Workspace switcher event listener while WorkspaceHomeView is mounted
++      const qcHome = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const { unmount: uHome } = render(
++        <QueryClientProvider client={qcHome}>
++          <MemoryRouter initialEntries={['/']}>
++            <WorkspaceHomeView />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++      act(() => {
++        window.dispatchEvent(new Event('kb:workspace-switched'));
++      });
++      uHome();
++
++      // 6. create=1 timer execution in ProjectIssuesRoute
++      const qcIssues = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const routerIssues = createAppRouter(['/projects/KAN/issues?create=1']);
++      const { unmount: uIssues } = render(
++        <QueryClientProvider client={qcIssues}>
++          <ThemeProvider>
++            <RouterProvider router={routerIssues} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      await act(async () => {
++        await new Promise((resolve) => setTimeout(resolve, 50));
++      });
++      uIssues();
++
++      // 7. DraftsWorkspaceView with cached object having key instead of identifier
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/projects')) {
++          return Promise.resolve(new Response(JSON.stringify({ items: [{ key: 'KEY_PROJ' }] }), { status: 200 }));
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      });
++      const qcDraftsKey = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      qcDraftsKey.setQueryData(['projects'], { items: [{ key: 'KEY_PROJ' }] });
++      const { unmount: uDraftsKey } = render(
++        <QueryClientProvider client={qcDraftsKey}>
++          <MemoryRouter initialEntries={['/drafts']}>
++            <DraftsWorkspaceView />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++      const emptyDivKey = await screen.findByTestId('drafts-empty');
++      const linkKey = within(emptyDivKey).getByRole('link', { name: /Create a new work item/i });
++      expect(linkKey.getAttribute('href')).toBe('/projects/KEY_PROJ/issues?create=1');
++      uDraftsKey();
++
++      // 8. DraftsWorkspaceView with cached object where items is undefined or null
++      vi.spyOn(window, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/projects')) {
++          return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }));
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      });
++      const qcDraftsNull = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      qcDraftsNull.setQueryData(['projects'], { items: null });
++      const { unmount: uDraftsNull } = render(
++        <QueryClientProvider client={qcDraftsNull}>
++          <MemoryRouter initialEntries={['/drafts']}>
++            <DraftsWorkspaceView />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++      const emptyDivNull = await screen.findByTestId('drafts-empty');
++      const linkNull = within(emptyDivNull).getByRole('link', { name: /Create a new work item/i });
++      expect(linkNull.getAttribute('href')).toBe('/');
++      uDraftsNull();
++
++      // 9. ProjectIssuesRoute invalid layout reset, nomodules=1, and kb:create-issue event
++      const qcIssuesInvalid = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const routerIssuesInvalid = createAppRouter(['/projects/KAN/issues?layout=invalid_custom&nomodules=1']);
++      const { unmount: uIssuesInvalid } = render(
++        <QueryClientProvider client={qcIssuesInvalid}>
++          <ThemeProvider>
++            <RouterProvider router={routerIssuesInvalid} />
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++      act(() => {
++        window.dispatchEvent(new Event('kb:create-issue'));
++      });
++      await act(async () => {
++        await new Promise((resolve) => setTimeout(resolve, 50));
++      });
++      uIssuesInvalid();
++    });
++  });
+ });
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index a1ea9b7..9fea6d7 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -507,6 +507,52 @@ export function WorkspaceHomeView(): JSX.Element {
+ export function DraftsWorkspaceView(): JSX.Element {
+   const drafts = useDrafts();
+   const navigate = useNavigate();
++  const queryClient = useContext(QueryClientContext);
++  const routeCtx = useContext(ProjectRouteContext);
++  const [projects, setProjects] = useState<{ identifier?: string; key?: string }[]>(() => {
++    if (queryClient) {
++      const cached = queryClient.getQueryData<
++        { identifier?: string; key?: string }[] | { items?: { identifier?: string; key?: string }[] }
++      >(['projects']);
++      if (cached) {
++        return Array.isArray(cached) ? cached : (cached.items ?? []);
++      }
++    }
++    return [];
++  });
++
++  useEffect(() => {
++    let active = true;
++    async function loadProjects(): Promise<void> {
++      try {
++        const res = await fetch('/api/v1/projects', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        });
++        if (!res.ok || !active) return;
++        const data = (await res.json()) as
++          | { items?: { identifier?: string; key?: string }[] }
++          | { identifier?: string; key?: string }[];
++        const items = Array.isArray(data) ? data : (data.items ?? []);
++        setProjects(items);
++      } catch {
++        // Fallback / offline / unmocked environment
++      }
++    }
++    void loadProjects();
++    return () => {
++      active = false;
++    };
++  }, []);
++
++  const activeOrFirstKey =
++    (routeCtx.projectKey && routeCtx.projectKey.trim().length > 0 ? routeCtx.projectKey : undefined) ??
++    projects[0]?.identifier ??
++    projects[0]?.key;
++  const emptyStateCtaLink = activeOrFirstKey
++    ? `/projects/${encodeURIComponent(activeOrFirstKey)}/issues?create=1`
++    : '/';
+ 
+   const handlePublishOrResume = async (draft: IssueDraft): Promise<void> => {
+     try {
+@@ -582,7 +628,7 @@ export function DraftsWorkspaceView(): JSX.Element {
+       {drafts.length === 0 ? (
+         <div data-testid="drafts-empty" className="drafts-empty-notice">
+           <p>No work item drafts found.</p>
+-          <Link to="/projects/KAN/issues?create=1">Create a new work item →</Link>
++          <Link to={emptyStateCtaLink}>Create a new work item →</Link>
+         </div>
+       ) : (
+         <div className="drafts-grid" data-testid="drafts-list">
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+index 47e02e2..a47bcea 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.css
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -746,6 +746,27 @@
+   background: #7f1d1d;
+ }
+ 
++.kb-btn-purge:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++
++.kb-danger-purge-container {
++  display: flex;
++  flex-direction: column;
++  gap: 0.5rem;
++}
++
++.kb-danger-purge-hint {
++  margin: 0;
++  font-size: 0.8rem;
++  color: var(--text-secondary);
++}
++
++.kb-danger-reason-input {
++  margin-top: 0.5rem;
++}
++
+ .kb-danger-buttons-row {
+   display: flex;
+   gap: 1rem;
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 0ba2e2e..36d4ee2 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -13,8 +13,9 @@
+  * 8. Danger Zone: 2-stage Project deletion with blast radius computation, sending mode: 'trash' and SERVER_ADMIN-only permanent purge.
+  */
+ 
+-import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
++import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent } from 'react';
+ import { Link, useNavigate, useParams } from 'react-router';
++import { QueryClientContext } from '@tanstack/react-query';
+ import { apiFetch } from '../../api/client';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+ import './ProjectSettingsPage.css';
+@@ -30,6 +31,9 @@ export interface ProjectDetail {
+   capabilities?: string[];
+   is_project_admin?: boolean;
+   project_role?: string | null;
++  deleted_at?: string | null;
++  trashed_at?: string | null;
++  status?: string | null;
+ }
+ 
+ export interface ProjectMember {
+@@ -147,6 +151,7 @@ type SettingsTab =
+ export function ProjectSettingsPage(): JSX.Element {
+   const { projectKey = 'KAN' } = useParams<{ projectKey: string }>();
+   const navigate = useNavigate();
++  const queryClient = useContext(QueryClientContext);
+ 
+   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+   const [project, setProject] = useState<ProjectDetail | null>(null);
+@@ -463,6 +468,16 @@ export function ProjectSettingsPage(): JSX.Element {
+         }
+ 
+         setProject(updated);
++        if (queryClient) {
++          queryClient.setQueryData(['project', projectKey], (prev: unknown) => {
++            if (prev && typeof prev === 'object') {
++              return { ...prev, ...updated };
++            }
++            return updated;
++          });
++          await queryClient.invalidateQueries({ queryKey: ['project', projectKey] });
++          await queryClient.invalidateQueries({ queryKey: ['projects'] });
++        }
+         setSuccessMessage('Project settings saved successfully.');
+       } catch (err: unknown) {
+         const errObj = err as { message?: string };
+@@ -839,8 +854,15 @@ export function ProjectSettingsPage(): JSX.Element {
+   };
+ 
+   // Danger Zone Handlers
++  const isProjectTrashed =
++    project?.deleted_at != null || project?.trashed_at != null || project?.status === 'trashed';
++
+   const handleRequestDelete = (mode: 'trash' | 'permanent_purge' = 'trash') => {
+     setDangerError(null);
++    if (mode === 'permanent_purge' && !isProjectTrashed) {
++      setDangerError('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
++      return;
++    }
+     void (async () => {
+       try {
+         const csrf = await ensureSessionCsrfToken();
+@@ -1837,14 +1859,25 @@ export function ProjectSettingsPage(): JSX.Element {
+                 </button>
+ 
+                 {isServerAdmin && (
+-                  <button
+-                    type="button"
+-                    data-testid="request-purge-btn"
+-                    className="kb-btn kb-btn-danger kb-btn-purge"
+-                    onClick={() => { handleRequestDelete('permanent_purge'); }}
+-                  >
+-                    💥 Permanently Purge Project (Irreversible)...
+-                  </button>
++                  <div className="kb-danger-purge-container">
++                    <button
++                      type="button"
++                      data-testid="request-purge-btn"
++                      className="kb-btn kb-btn-danger kb-btn-purge"
++                      disabled={!isProjectTrashed}
++                      aria-disabled={!isProjectTrashed}
++                      onClick={() => {
++                        handleRequestDelete('permanent_purge');
++                      }}
++                    >
++                      💥 Permanently Purge Project (Irreversible)...
++                    </button>
++                    {!isProjectTrashed && (
++                      <p className="kb-danger-purge-hint" data-testid="purge-disabled-hint">
++                        Stage 1 (Move Project to Trash) must be completed before permanent purge.
++                      </p>
++                    )}
++                  </div>
+                 )}
+               </div>
+             )}
+@@ -1887,8 +1920,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                 <input
+                   type="text"
+                   data-testid="danger-reason-input"
+-                  className="kb-input"
+-                  style={{ marginTop: '0.5rem' }}
++                  className="kb-input kb-danger-reason-input"
+                   placeholder="Reason for deletion (optional, min 10 chars)"
+                   value={dangerReason}
+                   onChange={(e) => { setDangerReason(e.target.value); }}
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index 9a78756..d4db967 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -804,6 +804,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+           identifier: 'KAN',
+           name: 'Kanban Platform',
+           is_project_admin: true,
++          deleted_at: '2026-11-20T00:00:00Z',
++          status: 'trashed',
+         };
+       }
+       if (url.includes('/api/v1/auth/me') && m === 'GET') {
+@@ -2202,4 +2204,178 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+     expect(container.textContent).not.toContain('@@');
+     expect((container.innerHTML.match(/@@/g) ?? []).length).toBe(0);
+   });
++
++  it('invalidates project query and projects query on saving general settings (KAN-11 Problem 1)', async () => {
++    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++    const setQueryDataSpy = vi.spyOn(queryClient, 'setQueryData');
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++          modules_enabled: true,
++        };
++      }
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'PATCH'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform Updated',
++          is_project_admin: true,
++          modules_enabled: false,
++        };
++      }
++      return {};
++    });
++
++    queryClient.setQueryData(['project', 'KAN'], {
++      id: 'p-1',
++      identifier: 'KAN',
++      name: 'Old Cache',
++      modules_enabled: true,
++    });
++
++    renderComponent('KAN');
++
++    // Toggle modules_enabled
++    const modulesToggle = await screen.findByTestId('project-modules-checkbox');
++    fireEvent.click(modulesToggle);
++
++    // Click Save General Settings
++    const saveBtn = screen.getByTestId('save-general-btn');
++    fireEvent.click(saveBtn);
++
++    await waitFor(() => {
++      expect(screen.getByText('Project settings saved successfully.')).toBeDefined();
++    });
++
++    expect(setQueryDataSpy).toHaveBeenCalledWith(['project', 'KAN'], expect.any(Function));
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
++    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] });
++  });
++
++  it('disables permanent purge button with inline guidance caption when project is active and enables when trashed (KAN-11 Problem 2)', async () => {
++    let mockProjectIsTrashed = false;
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Active Project',
++          is_project_admin: true,
++          deleted_at: mockProjectIsTrashed ? '2026-11-20T00:00:00Z' : null,
++          trashed_at: null,
++          status: mockProjectIsTrashed ? 'trashed' : 'active',
++        };
++      }
++      if (url.includes('/api/v1/auth/me') && m === 'GET') {
++        return { is_server_admin: true };
++      }
++      if (url.includes('/api/v1/admin/destructive:request') && m === 'POST') {
++        return {
++          confirmation_token: 'purge-token-active-guard',
++          confirm_phrase: 'PURGE KAN FOREVER',
++          mode: 'permanent_purge',
++          blast_summary: 'All records will be destroyed',
++        };
++      }
++      return {};
++    });
++
++    const { unmount } = renderComponent('KAN');
++
++    const dangerTab = await screen.findByTestId('tab-danger');
++    fireEvent.click(dangerTab);
++
++    // 1. When project is active (non-trashed):
++    const purgeBtn = await screen.findByTestId('request-purge-btn');
++    expect(purgeBtn.hasAttribute('disabled')).toBe(true);
++    expect(purgeBtn.getAttribute('aria-disabled')).toBe('true');
++
++    const hint = await screen.findByTestId('purge-disabled-hint');
++    expect(hint.textContent).toContain('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
++
++    // Attempting to invoke handleRequestDelete when not trashed sets dangerError
++    purgeBtn.removeAttribute('disabled');
++    fireEvent.click(purgeBtn);
++    expect(
++      await screen.findByText('Stage 1 (Move Project to Trash) must be completed before permanent purge.'),
++    ).toBeDefined();
++    expect(screen.queryByTestId('danger-confirm-card')).toBeNull();
++
++    unmount();
++
++    // 2. When project is soft-trashed:
++    mockProjectIsTrashed = true;
++    renderComponent('KAN');
++
++    const dangerTab2 = await screen.findByTestId('tab-danger');
++    fireEvent.click(dangerTab2);
++
++    const purgeBtn2 = await screen.findByTestId('request-purge-btn');
++    expect(purgeBtn2.hasAttribute('disabled')).toBe(false);
++    expect(purgeBtn2.getAttribute('aria-disabled')).toBe('false');
++    expect(screen.queryByTestId('purge-disabled-hint')).toBeNull();
++
++    // Clicking enabled button proceeds to Stage 2 confirmation
++    fireEvent.click(purgeBtn2);
++    expect(
++      await screen.findByText('Stage 2: Confirm PERMANENT Project Purge (IRREVERSIBLE)'),
++    ).toBeDefined();
++  });
++
++  it('covers handleSaveGeneral catch block without message property', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++        };
++      }
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'PATCH'
++      ) {
++        // eslint-disable-next-line @typescript-eslint/only-throw-error
++        throw {}; // No message property
++      }
++      return {};
++    });
++
++    renderComponent('KAN');
++
++    const saveBtn = await screen.findByTestId('save-general-btn');
++    fireEvent.click(saveBtn);
++
++    await waitFor(() => {
++      expect(screen.getByText('Failed to update project settings.')).toBeDefined();
++    });
++  });
+ });

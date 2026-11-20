@@ -804,6 +804,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
           identifier: 'KAN',
           name: 'Kanban Platform',
           is_project_admin: true,
+          deleted_at: '2026-11-20T00:00:00Z',
+          status: 'trashed',
         };
       }
       if (url.includes('/api/v1/auth/me') && m === 'GET') {
@@ -2201,5 +2203,179 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     expect(within(aliceOption).getByText('@alice')).toBeDefined();
     expect(container.textContent).not.toContain('@@');
     expect((container.innerHTML.match(/@@/g) ?? []).length).toBe(0);
+  });
+
+  it('invalidates project query and projects query on saving general settings (KAN-11 Problem 1)', async () => {
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const setQueryDataSpy = vi.spyOn(queryClient, 'setQueryData');
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+          modules_enabled: true,
+        };
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'PATCH'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform Updated',
+          is_project_admin: true,
+          modules_enabled: false,
+        };
+      }
+      return {};
+    });
+
+    queryClient.setQueryData(['project', 'KAN'], {
+      id: 'p-1',
+      identifier: 'KAN',
+      name: 'Old Cache',
+      modules_enabled: true,
+    });
+
+    renderComponent('KAN');
+
+    // Toggle modules_enabled
+    const modulesToggle = await screen.findByTestId('project-modules-checkbox');
+    fireEvent.click(modulesToggle);
+
+    // Click Save General Settings
+    const saveBtn = screen.getByTestId('save-general-btn');
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Project settings saved successfully.')).toBeDefined();
+    });
+
+    expect(setQueryDataSpy).toHaveBeenCalledWith(['project', 'KAN'], expect.any(Function));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] });
+  });
+
+  it('disables permanent purge button with inline guidance caption when project is active and enables when trashed (KAN-11 Problem 2)', async () => {
+    let mockProjectIsTrashed = false;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Active Project',
+          is_project_admin: true,
+          deleted_at: mockProjectIsTrashed ? '2026-11-20T00:00:00Z' : null,
+          trashed_at: null,
+          status: mockProjectIsTrashed ? 'trashed' : 'active',
+        };
+      }
+      if (url.includes('/api/v1/auth/me') && m === 'GET') {
+        return { is_server_admin: true };
+      }
+      if (url.includes('/api/v1/admin/destructive:request') && m === 'POST') {
+        return {
+          confirmation_token: 'purge-token-active-guard',
+          confirm_phrase: 'PURGE KAN FOREVER',
+          mode: 'permanent_purge',
+          blast_summary: 'All records will be destroyed',
+        };
+      }
+      return {};
+    });
+
+    const { unmount } = renderComponent('KAN');
+
+    const dangerTab = await screen.findByTestId('tab-danger');
+    fireEvent.click(dangerTab);
+
+    // 1. When project is active (non-trashed):
+    const purgeBtn = await screen.findByTestId('request-purge-btn');
+    expect(purgeBtn.hasAttribute('disabled')).toBe(true);
+    expect(purgeBtn.getAttribute('aria-disabled')).toBe('true');
+
+    const hint = await screen.findByTestId('purge-disabled-hint');
+    expect(hint.textContent).toContain('Stage 1 (Move Project to Trash) must be completed before permanent purge.');
+
+    // Attempting to invoke handleRequestDelete when not trashed sets dangerError
+    purgeBtn.removeAttribute('disabled');
+    fireEvent.click(purgeBtn);
+    expect(
+      await screen.findByText('Stage 1 (Move Project to Trash) must be completed before permanent purge.'),
+    ).toBeDefined();
+    expect(screen.queryByTestId('danger-confirm-card')).toBeNull();
+
+    unmount();
+
+    // 2. When project is soft-trashed:
+    mockProjectIsTrashed = true;
+    renderComponent('KAN');
+
+    const dangerTab2 = await screen.findByTestId('tab-danger');
+    fireEvent.click(dangerTab2);
+
+    const purgeBtn2 = await screen.findByTestId('request-purge-btn');
+    expect(purgeBtn2.hasAttribute('disabled')).toBe(false);
+    expect(purgeBtn2.getAttribute('aria-disabled')).toBe('false');
+    expect(screen.queryByTestId('purge-disabled-hint')).toBeNull();
+
+    // Clicking enabled button proceeds to Stage 2 confirmation
+    fireEvent.click(purgeBtn2);
+    expect(
+      await screen.findByText('Stage 2: Confirm PERMANENT Project Purge (IRREVERSIBLE)'),
+    ).toBeDefined();
+  });
+
+  it('covers handleSaveGeneral catch block without message property', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'PATCH'
+      ) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw {}; // No message property
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    const saveBtn = await screen.findByTestId('save-general-btn');
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to update project settings.')).toBeDefined();
+    });
   });
 });
